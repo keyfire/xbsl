@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xbsllint"
+version = "0.1.0"
+description = "Линтер исходников 1С:Элемент (пары .yaml/.xbsl)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "xbsl-lint contributors" }]
+keywords = ["1c", "1c-element", "xbsl", "linter", "static-analysis"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Russian",
+    "Programming Language :: Python :: 3",
+    "Topic :: Software Development :: Quality Assurance",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/keyfire/xbsl-lint"
+Repository = "https://github.com/keyfire/xbsl-lint"
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+mcp = ["mcp>=1.2"]
+
+[project.scripts]
+xbsllint = "xbsllint.cli:main"
+xbsllint-mcp = "xbsllint.mcp_server:main"
+xbsllint-web = "xbsllint.web:main"
+
+[tool.setuptools]
+packages = ["xbsllint", "xbsllint.rules"]
+
+[tool.setuptools.package-data]
+xbsllint = ["data/element/index.json", "data/element/*/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

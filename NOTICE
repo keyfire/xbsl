@@ -1,0 +1,36 @@
+xbsl-lint
+=========
+
+(English below, русский ниже)
+
+--- English ---
+
+This project is not affiliated with 1C and is not an official 1C product.
+
+"1C", "1C:Enterprise", "1C:Element", "1C:Fresh" and related names are trademarks and service marks
+of their respective owners. They are used here only to indicate the tool's compatibility with the
+platform.
+
+The language and type data (xbsllint/data/element/...) is NOT included in this repository. It is
+extracted by the user from their OWN, legally obtained 1C:Element distribution using the scripts
+tools/extract_grammar.py and tools/extract_stdlib.py, and stays on the user's machine. The user is
+responsible for holding the rights to the distribution and for the admissibility of extracting data
+from it.
+
+The project's source code is distributed under the MIT License (see the LICENSE file).
+
+--- Русский ---
+
+Проект не аффилирован с фирмой «1С» и не является её официальным продуктом.
+
+«1С», «1С:Предприятие», «1С:Элемент», «1С:Фреш» и связанные названия – товарные знаки и знаки
+обслуживания их правообладателей. Здесь они используются исключительно для указания
+совместимости инструмента с платформой.
+
+Данные о языке и типах (xbsllint/data/element/...) в этот репозиторий НЕ включены. Они
+извлекаются пользователем из его СОБСТВЕННОГО, законно полученного дистрибутива 1С:Элемент
+скриптами tools/extract_grammar.py и tools/extract_stdlib.py и остаются на локальной машине.
+Ответственность за наличие прав на дистрибутив и за допустимость извлечения из него данных несёт
+пользователь.
+
+Исходный код проекта распространяется по лицензии MIT (см. файл LICENSE).

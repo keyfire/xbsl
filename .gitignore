@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Локальная копия артефактов дистрибутива 1С:Элемент (вендорные файлы не коммитим)
+.refs/
+
+# Данные о языке/типах, извлекаемые из дистрибутива, генерируются локально (не публикуем)
+xbsllint/data/element/
