@@ -31,11 +31,6 @@ def test_trailing_whitespace():
     assert len(d) == 1
 
 
-def test_task_number_in_comment():
-    d = _lint("М.xbsl", "// см. SITE-482\n", select={"conventions/task-number"})
-    assert len(d) == 1 and "SITE-482" in d[0].message
-
-
 # --- Тир C ---------------------------------------------------------------------------
 
 def test_unclosed_paren():

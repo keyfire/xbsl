@@ -9,7 +9,7 @@ xbsllint.engine.register_file_rule / register_project_rule. Здесь пере�
 from . import structure, yaml_schema  # noqa: F401
 
 # Тир B – текст и конвенции:
-from . import conventions, typography, whitespace  # noqa: F401
+from . import typography, whitespace  # noqa: F401
 
 # Тир C – структура кода и локальные переменные:
 from . import code_structure, locals_usage  # noqa: F401

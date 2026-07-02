@@ -1,7 +1,7 @@
-"""Инвариант: корпус сайта проходит линтер без замечаний по умолчанию.
+"""Инвариант: реальный корпус проходит линтер без замечаний по умолчанию.
 
-Тест пропускается, если репозиторий сайта недоступен (переносимость).
-Путь можно переопределить переменной окружения XBSLLINT_CORPUS.
+Тест пропускается, если корпус недоступен (переносимость).
+Путь задаётся переменной окружения XBSLLINT_CORPUS.
 """
 
 import os
@@ -12,10 +12,10 @@ import pytest
 from xbsllint import engine
 from xbsllint.cli import discover
 
-_CORPUS = Path(os.environ.get("XBSLLINT_CORPUS", r"D:\Repos\site\e1c\site"))
+_CORPUS = os.environ.get("XBSLLINT_CORPUS")
 
 
-@pytest.mark.skipif(not _CORPUS.exists(), reason="корпус сайта недоступен")
+@pytest.mark.skipif(not (_CORPUS and Path(_CORPUS).exists()), reason="корпус недоступен (задайте XBSLLINT_CORPUS)")
 def test_corpus_no_errors_and_only_known_warnings():
     # Корпус – валидный задеплоенный код: ошибок линтера быть не должно. Допустимы только
     # известные находки code/unused-loop-var (их же выдаёт серверная компиляция); любое

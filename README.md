@@ -46,7 +46,7 @@ Flags: `--list-rules`, `--select`/`--ignore` (by rule id or tier letter), `--ele
 
 - **A. Structure and YAML** — `.xbsl`/`.yaml` pairing, schema validity, `Ид` as a UUID,
   `Ид` uniqueness, `Имя` matching the file name.
-- **B. Text and conventions** — typography (en dash, straight quotes), no issue numbers in code,
+- **B. Text and conventions** — typography (en dash, straight quotes),
   encoding/BOM/newlines/trailing whitespace.
 - **C. Code structure** — balance of blocks and `;`, brackets, unused local and loop variables.
 - **D. Semantics** — against platform data: type existence (in `новый`, `как` casts, annotations,

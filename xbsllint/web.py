@@ -4,7 +4,7 @@
 внешних зависимостей). Слушает только 127.0.0.1. Запуск: xbsllint-web (или
 python -m xbsllint.web), затем открыть http://127.0.0.1:8771/.
 
-Оформление повторяет панель edt-bridge (тёмная/светлая тема, палитра 1С:Фреш), наполнение –
+Оформление: тёмная/светлая тема; наполнение –
 под линтер: ввод пути, настройки правил по тирам, сводка, фильтры по severity и тексту.
 """
 
@@ -238,7 +238,7 @@ button.run:disabled{opacity:.5;cursor:default;transform:none;box-shadow:none;}
 
   <section class="panel">
     <div class="row">
-      <input class="path" id="path" placeholder="Путь к папке проекта, напр. D:\Repos\site\e1c\site" spellcheck="false">
+      <input class="path" id="path" placeholder="Путь к папке проекта" spellcheck="false">
       <select id="version" title="Версия данных Элемента"></select>
       <button class="run" id="run">Проверить</button>
     </div>
