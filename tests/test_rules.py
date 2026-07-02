@@ -148,3 +148,165 @@ def test_known_new_type_not_flagged(tmp_path):
     )
     d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
     assert not _has(d, "code/unknown-type")
+
+
+def test_unknown_type_in_annotation_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "структура С\n    пер поле: Стркоа\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any(x.rule_id == "code/unknown-type" and "Стркоа" in x.message for x in d)
+
+
+def test_unknown_type_in_return_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф(): Стркоа\n    возврат ничто\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any("Стркоа" in x.message for x in d)
+
+
+def test_unknown_type_in_param_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф(Значение: Стркоа): Число\n    возврат 0\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any("Стркоа" in x.message for x in d)
+
+
+def test_unknown_type_in_cast_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф(): Число\n    возврат Данные как Стркоа\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any("Стркоа" in x.message for x in d)
+
+
+def test_generic_arg_unknown_flagged(tmp_path):
+    # база (Массив) известна, аргумент (Стркоа) – нет
+    (tmp_path / "м.xbsl").write_text(
+        "структура С\n    пер список: Массив<Стркоа>\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    msgs = [x.message for x in d if x.rule_id == "code/unknown-type"]
+    assert any("Стркоа" in m for m in msgs) and not any("Массив" in m for m in msgs)
+
+
+def test_fqn_tail_not_flagged(tmp_path):
+    # корень FQN (локальная структура Кэш) известен; вложенный хвост не резолвится и не шумит
+    (tmp_path / "м.xbsl").write_text(
+        "структура Кэш\n    пер a: Число\n;\n"
+        "метод Ф(): Кэш.СтрокаДанных?\n    возврат ничто\n;\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not _has(d, "code/unknown-type")
+
+
+def test_unknown_type_in_catch_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф()\n    поймать Ошибка: НетТакого\n        ;\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any("НетТакого" in x.message for x in d)
+
+
+def test_known_type_in_catch_not_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф()\n    поймать Ошибка: Исключение\n        ;\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not _has(d, "code/unknown-type")
+
+
+def test_catch_unknown_keyword_type_not_flagged(tmp_path):
+    # 'неизвестно' – ключевое слово-тип (any), корня-идентификатора нет: не шумим
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф()\n    поймать Исключение: неизвестно\n        ;\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not _has(d, "code/unknown-type")
+
+
+def test_multi_name_declaration_flagged(tmp_path):
+    # список имён через запятую с общим типом – тип проверяется
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф()\n    знч a, b: НетТакого\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert any("НетТакого" in x.message for x in d)
+
+
+def test_multi_name_declaration_known_not_flagged(tmp_path):
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф()\n    знч a, b: Число\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not _has(d, "code/unknown-type")
+
+
+# --- Тир D (обработчики форм) --------------------------------------------------------
+
+def test_handler_missing_flagged(tmp_path):
+    (tmp_path / "Ф.yaml").write_text("Обработчик: НетТакого\n", encoding="utf-8")
+    (tmp_path / "Ф.xbsl").write_text("метод Другой()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert any(x.rule_id == "form/unknown-handler" and "НетТакого" in x.message for x in d)
+
+
+def test_handler_present_not_flagged(tmp_path):
+    (tmp_path / "Ф.yaml").write_text("ПриНажатии: Клик\n", encoding="utf-8")
+    (tmp_path / "Ф.xbsl").write_text("метод Клик()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert not _has(d, "form/unknown-handler")
+
+
+def test_handler_fqn_not_flagged(tmp_path):
+    # значение с точкой – ссылка на внешний модуль, не судим
+    (tmp_path / "Ф.yaml").write_text("Обработчик: Общий.Метод\n", encoding="utf-8")
+    (tmp_path / "Ф.xbsl").write_text("метод Клик()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert not _has(d, "form/unknown-handler")
+
+
+def test_handler_no_pair_module_not_flagged(tmp_path):
+    # форма без парного модуля – резолвить не из чего, молчим
+    (tmp_path / "Ф.yaml").write_text("Обработчик: Клик\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert not _has(d, "form/unknown-handler")
+
+
+# --- Тир D (свойства объектов по метамодели) -----------------------------------------
+
+def test_unknown_property_flagged():
+    content = (
+        "ВидЭлемента: Справочник\n"
+        "Ид: 11111111-1111-1111-1111-111111111111\n"
+        "Имя: Товары\n"
+        "Заголовок: Лишнее\n"  # свойство компонента, недопустимое у справочника
+    )
+    d = _lint("Товары.yaml", content, select={"yaml/unknown-property"})
+    assert any(x.rule_id == "yaml/unknown-property" and "Заголовок" in x.message for x in d)
+
+
+def test_known_property_not_flagged():
+    content = (
+        "ВидЭлемента: Справочник\n"
+        "Ид: 11111111-1111-1111-1111-111111111111\n"
+        "Имя: Товары\n"
+        "Реквизиты:\n"
+    )
+    d = _lint("Товары.yaml", content, select={"yaml/unknown-property"})
+    assert not _has(d, "yaml/unknown-property")
+
+
+def test_unverified_vid_not_flagged():
+    # вид не в vid2class метамодели – объект не проверяется (0 ложных на непроверенном)
+    content = (
+        "ВидЭлемента: РегистрНакопления\n"
+        "Ид: 11111111-1111-1111-1111-111111111111\n"
+        "Имя: Остатки\n"
+        "ЧтоТоЛевое: 1\n"
+    )
+    d = _lint("Остатки.yaml", content, select={"yaml/unknown-property"})
+    assert not _has(d, "yaml/unknown-property")

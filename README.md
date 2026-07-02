@@ -13,19 +13,20 @@ A linter for 1C:Element sources — it checks `Name.yaml` (element description) 
 ## Why
 
 1C:Element has no external linter: the only code check is the server-side compilation on deploy —
-it is slow and knows nothing about project conventions (typography, no issue numbers in code, and
-so on). xbsl-lint gives fast local feedback and catches what the compiler does not check at all.
+it is slow and knows nothing about project conventions. xbsl-lint gives fast local feedback and
+catches what the compiler does not check at all.
 
 ## Step 1: generate the language data
 
-The linter relies on language tables (bilingual keywords, operators) and an stdlib type catalog.
-XBSL is built on Eclipse Xtext + ANTLR; these tables are extracted from **your** 1C:Element
-distribution (the `InternalBsl.g` grammar + the documentation) and are NOT bundled in this
-repository. Generate them locally:
+The linter relies on language tables (bilingual keywords, operators), an stdlib type catalog, and
+the configuration metamodel (element properties). XBSL is built on Eclipse Xtext + ANTLR; these are
+extracted from **your** 1C:Element distribution (the `InternalBsl.g` grammar, the documentation, and
+the `.xcore` metamodel) and are NOT bundled in this repository. Generate them locally:
 
 ```sh
-python tools/extract_grammar.py --dist "<path to the 1C:Element distribution>"
-python tools/extract_stdlib.py  --dist "<path to the 1C:Element distribution>"
+python tools/extract_grammar.py   --dist "<path to the 1C:Element distribution>"
+python tools/extract_stdlib.py    --dist "<path to the 1C:Element distribution>"
+python tools/extract_metamodel.py --dist "<path to the 1C:Element distribution>"
 ```
 
 The scripts auto-detect the platform version and place the data under
@@ -48,7 +49,9 @@ Flags: `--list-rules`, `--select`/`--ignore` (by rule id or tier letter), `--ele
 - **B. Text and conventions** — typography (en dash, straight quotes), no issue numbers in code,
   encoding/BOM/newlines/trailing whitespace.
 - **C. Code structure** — balance of blocks and `;`, brackets, unused local and loop variables.
-- **D. Semantics** — existence of the type in `новый` against the stdlib catalog.
+- **D. Semantics** — against platform data: type existence (in `новый`, `как` casts, annotations,
+  method signatures), form handlers (a yaml handler exists as a method in the paired module), and
+  top-level object properties against the configuration metamodel.
 
 ## MCP server
 
@@ -82,7 +85,7 @@ The data is versioned by platform version:
 ```
 xbsllint/data/element/
     index.json            # { available: [...], default: "<version>" }
-    <version>/{language.json, stdlib.json}
+    <version>/{language.json, stdlib.json, metamodel.json}
 ```
 
 Pick a version with `--element-version` / the `XBSLLINT_ELEMENT_VERSION` env var / the index

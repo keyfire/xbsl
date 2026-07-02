@@ -10,8 +10,9 @@
 своего дистрибутива 1С:Элемент (иначе линтер и часть тестов работать не будут):
 
 ```sh
-python tools/extract_grammar.py --dist "<каталог дистрибутива>"
-python tools/extract_stdlib.py  --dist "<каталог дистрибутива>"
+python tools/extract_grammar.py   --dist "<каталог дистрибутива>"
+python tools/extract_stdlib.py    --dist "<каталог дистрибутива>"
+python tools/extract_metamodel.py --dist "<каталог дистрибутива>"
 
 pip install -e ".[dev]"     # линтер + pytest + PyYAML
 pytest                      # тесты (без данных зависящие от них пропускаются)
@@ -54,8 +55,9 @@ python -m xbsllint <путь>   # прогон на исходниках
 возьмите её дистрибутив и запустите экстракторы – версия определится сама:
 
 ```sh
-python tools/extract_grammar.py --dist "<каталог дистрибутива>"
-python tools/extract_stdlib.py  --dist "<каталог дистрибутива>"
+python tools/extract_grammar.py   --dist "<каталог дистрибутива>"
+python tools/extract_stdlib.py    --dist "<каталог дистрибутива>"
+python tools/extract_metamodel.py --dist "<каталог дистрибутива>"
 ```
 
 Вендорные файлы дистрибутива не коммитятся (кэш в `.refs/`) – только производные JSON.

@@ -10,8 +10,9 @@ Python 3.10+ is required. The language data is not part of the repository — ge
 from your own 1C:Element distribution (otherwise the linter and some tests will not work):
 
 ```sh
-python tools/extract_grammar.py --dist "<path to the distribution>"
-python tools/extract_stdlib.py  --dist "<path to the distribution>"
+python tools/extract_grammar.py   --dist "<path to the distribution>"
+python tools/extract_stdlib.py    --dist "<path to the distribution>"
+python tools/extract_metamodel.py --dist "<path to the distribution>"
 
 pip install -e ".[dev]"     # linter + pytest + PyYAML
 pytest                      # tests (data-dependent ones are skipped without data)
@@ -55,8 +56,9 @@ The data is versioned under `xbsllint/data/element/<version>/`. To add a new ver
 distribution and run the extractors — the version is detected automatically:
 
 ```sh
-python tools/extract_grammar.py --dist "<path to the distribution>"
-python tools/extract_stdlib.py  --dist "<path to the distribution>"
+python tools/extract_grammar.py   --dist "<path to the distribution>"
+python tools/extract_stdlib.py    --dist "<path to the distribution>"
+python tools/extract_metamodel.py --dist "<path to the distribution>"
 ```
 
 Vendor files from the distribution are not committed (cached under `.refs/`) — only the derived

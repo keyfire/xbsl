@@ -24,15 +24,16 @@ gitignored. The distribution is needed only by the extractors; vendor files are 
 (cached under `.refs/`). The extractors auto-detect the version and place the data in a new folder:
 
 ```sh
-python tools/extract_grammar.py --dist "<path to the distribution>"
-python tools/extract_stdlib.py  --dist "<path to the distribution>"
+python tools/extract_grammar.py   --dist "<path to the distribution>"
+python tools/extract_stdlib.py    --dist "<path to the distribution>"
+python tools/extract_metamodel.py --dist "<path to the distribution>"
 ```
 
 Invariant: never hardcode machine paths or a specific version — only via `--dist`/auto-detection.
 
 ## Rules and tiers
 
-Tiers: A (structure/YAML), B (text/conventions), C (parser/code), D (stdlib semantics). Every rule
+Tiers: A (structure/YAML), B (text/conventions), C (parser/code), D (stdlib/metamodel semantics). Every rule
 has an id, a tier, a severity, and an "enabled by default" flag. Rules that fire massively on legacy
 code (e.g. an em dash in comments) are made `info` and disabled by default — enabled via `--select`.
 Add a new rule only after running it on a real project's sources with zero false positives.

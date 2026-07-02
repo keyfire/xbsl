@@ -14,5 +14,5 @@ from . import conventions, typography, whitespace  # noqa: F401
 # Тир C – структура кода и локальные переменные:
 from . import code_structure, locals_usage  # noqa: F401
 
-# Тир D – семантика по stdlib:
-from . import semantics  # noqa: F401
+# Тир D – семантика по stdlib, формам и метамодели:
+from . import handlers, semantics, yaml_properties  # noqa: F401
