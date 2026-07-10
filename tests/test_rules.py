@@ -308,6 +308,77 @@ def test_multi_name_declaration_known_not_flagged(tmp_path):
     assert not _has(d, "code/unknown-type")
 
 
+# --- Тир D (типы, порождаемые объектами проекта) --------------------------------------
+
+_ТОВАРЫ_YAML = "ВидЭлемента: Справочник\nИмя: Товары\nТабличныеЧасти:\n    -\n        Имя: Состав\n"
+
+
+def _товары(tmp_path, code, module="метод М()\n;\n"):
+    (tmp_path / "Товары.yaml").write_text(_ТОВАРЫ_YAML, encoding="utf-8")
+    (tmp_path / "Товары.xbsl").write_text(module, encoding="utf-8")
+    (tmp_path / "м.xbsl").write_text(code, encoding="utf-8")
+    return engine.run(discover([str(tmp_path)]), select={"code/unknown-object-type"})
+
+
+def test_object_derived_type_not_flagged(tmp_path):
+    d = _товары(tmp_path, "метод Ф(Т: Товары.Ссылка): Товары.Объект?\n    возврат ничто\n;\n")
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_object_derived_type_typo_flagged(tmp_path):
+    d = _товары(tmp_path, "метод Ф(Т: Товары.Сылка)\n;\n")
+    assert any(x.rule_id == "code/unknown-object-type" and "Товары.Сылка" in x.message for x in d)
+
+
+def test_object_tabular_section_not_flagged(tmp_path):
+    d = _товары(tmp_path, "метод Ф(Строки: Массив<Товары.Состав>)\n;\n")
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_object_tabular_section_typo_flagged(tmp_path):
+    d = _товары(tmp_path, "метод Ф(Строки: Массив<Товары.Соства>)\n;\n")
+    assert any("Товары.Соства" in x.message for x in d)
+
+
+def test_object_module_structure_not_flagged(tmp_path):
+    # структура объявлена в модуле объекта и использована из другого модуля квалифицированно
+    d = _товары(
+        tmp_path,
+        "метод Ф(): Товары.Сводка?\n    возврат ничто\n;\n",
+        module="структура Сводка\n    пер Всего: Число\n;\n",
+    )
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_object_submodule_structure_not_flagged(tmp_path):
+    # структура из модуля объекта (файл <Имя>.Объект.xbsl) тоже входит в семейство типов
+    (tmp_path / "Товары.Объект.xbsl").write_text(
+        "структура Черновик\n    пер a: Число\n;\n", encoding="utf-8",
+    )
+    d = _товары(tmp_path, "метод Ф(Ч: Товары.Черновик)\n;\n")
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_unchecked_kind_skipped(tmp_path):
+    # вид вне проверяемого списка – хвосты не проверяются
+    (tmp_path / "Настройки.yaml").write_text(
+        "ВидЭлемента: Роль\nИмя: Настройки\n", encoding="utf-8",
+    )
+    (tmp_path / "м.xbsl").write_text("метод Ф(Н: Настройки.ЧтоУгодно)\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-object-type"})
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_cast_then_call_chain_not_merged(tmp_path):
+    # `как Товары` в конце выражения + вызов метода со следующей строки: точка вызова
+    # не продолжает цепочку типа – ложного 'Товары.Записать' быть не должно
+    d = _товары(
+        tmp_path,
+        "метод Ф(Б: Товары.Объект)\n    знч А = Б как Товары\n    Хранилище.Записать(А)\n;\n",
+    )
+    assert not _has(d, "code/unknown-object-type")
+
+
 # --- Тир D (обработчики форм) --------------------------------------------------------
 
 def test_handler_missing_flagged(tmp_path):
