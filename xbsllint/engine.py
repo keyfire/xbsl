@@ -178,3 +178,7 @@ def run(
 
 # Импорт пакета правил регистрирует их (декораторы выполняются при импорте модулей).
 from xbsllint import rules as _rules  # noqa: E402,F401
+from xbsllint import plugins as _plugins  # noqa: E402
+
+# Правила внешних пакетов – после встроенных, чтобы порядок реестра был предсказуем.
+_plugins.load_rules()

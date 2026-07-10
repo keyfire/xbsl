@@ -117,7 +117,9 @@ def main() -> int:
     ap.add_argument("--element-version", help="версия (если не определяется из дистрибутива)")
     ap.add_argument("--no-default", action="store_true", help="не делать эту версию версией по умолчанию")
     ap.add_argument("--out", help="переопределить путь metamodel.json")
+    _distro.add_data_dir_arg(ap)
     args = ap.parse_args()
+    _distro.set_data_root(args.data_dir)
 
     dist = Path(args.dist)
     if not dist.is_dir():

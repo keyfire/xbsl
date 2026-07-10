@@ -31,7 +31,9 @@ python tools/extract_metamodel.py --dist "<path to the 1C:Element distribution>"
 
 The scripts auto-detect the platform version and place the data under
 `xbsllint/data/element/<version>/` (this folder is gitignored). Without the data, the linter and
-the tests will tell you to generate it.
+the tests will tell you to generate it. Pass `--data-dir` (or set `XBSLLINT_DATA_DIR`) to write the
+data somewhere else – for instance into a private package that ships it, see
+[Extending](#extending-your-own-rules-and-data).
 
 ## Step 2: install and run
 
@@ -44,7 +46,7 @@ The extractors from step 1 ship with the repository, not with the PyPI package �
 repository to generate the data.
 
 Flags: `--list-rules`, `--select`/`--ignore` (by rule id, rule group — the part of the id before
-`/` — or tier letter), `--element-version`.
+`/` — or tier letter), `--element-version`, `--data-dir`.
 
 ## Rule tiers
 
@@ -77,6 +79,28 @@ xbsllint path/to/sources --ignore style     # none of them
 excluded from these checks. Not covered, and left to the author and review: indentation being a
 multiple of four, collection idioms, `Строки.Соединить()` for bulk concatenation, the `?.` / `??`
 idioms, and `выбор` instead of an `иначе если` chain.
+
+## Extending: your own rules and data
+
+Two entry point groups let a separate package extend the linter without forking it. This exists for
+teams whose rules or language data cannot be published: keep those in a private package that depends
+on `xbsllint`.
+
+```toml
+# pyproject.toml of your package
+dependencies = ["xbsllint>=0.3"]
+
+[project.entry-points."xbsllint.rules"]
+myproject = "myproject.rules"        # importing the module runs its @rule decorators
+
+[project.entry-points."xbsllint.data"]
+myproject = "myproject:data_root"    # a path, or a callable returning one
+```
+
+Install the package and the CLI, the MCP server and the web UI all pick both up – no flags, no
+config file. A failing entry point raises instead of warning: a linter that silently drops a rule
+stays green in CI and guarantees nothing. `XBSLLINT_NO_PLUGINS=1` ignores every external package
+(built-in rules and bundled data only).
 
 ## MCP server
 
@@ -116,6 +140,9 @@ xbsllint/data/element/
 Pick a version with `--element-version` / the `XBSLLINT_ELEMENT_VERSION` env var / the index
 `default`; `--version` shows what is available. Add a new version by re-running the extractors with
 a new `--dist`.
+
+The data root itself is resolved in this order: `--data-dir` > `XBSLLINT_DATA_DIR` > a root supplied
+by an installed `xbsllint.data` entry point > `xbsllint/data/element` inside the package.
 
 ## Tests
 

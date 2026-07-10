@@ -56,6 +56,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="ВЕРСИЯ",
         help="версия данных Элемента (по умолчанию – последняя из бандла)",
     )
+    parser.add_argument(
+        "--data-dir",
+        metavar="КАТАЛОГ",
+        help="корень данных Элемента (каталог с index.json); также env XBSLLINT_DATA_DIR",
+    )
     data_note = ""
     try:
         data_note = (
@@ -88,6 +93,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
+    if args.data_dir:
+        dataset.set_data_root(args.data_dir)
     if args.element_version:
         dataset.set_version(args.element_version)
     try:
