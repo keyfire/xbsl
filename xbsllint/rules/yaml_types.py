@@ -35,9 +35,9 @@ from xbsllint.diagnostics import Diagnostic, Severity
 from xbsllint.engine import SourceFile, rule
 from xbsllint.lexer import linemap
 from xbsllint.rules.semantics import (
-    _CHECKED_KINDS,
-    _MEMBER_TYPE_TAILS,
+    _checked_kinds,
     _local_type_names,
+    _member_family,
     _project_object_info,
     _stdlib_names,
 )
@@ -172,6 +172,7 @@ def unknown_yaml_type(sources: list[SourceFile]) -> Iterable[Diagnostic]:
         return []  # the catalog is not generated – skip the check
     objects = _project_object_info(sources)
     known = set(stdlib) | set(objects) | _local_type_names(sources)
+    checked = _checked_kinds()
 
     diags: list[Diagnostic] = []
     for s in sources:
@@ -191,9 +192,9 @@ def unknown_yaml_type(sources: list[SourceFile]) -> Iterable[Diagnostic]:
                     message = i18n.t("yaml/unknown-type.unknown", name=".".join(chain))
                 elif len(chain) >= 2:
                     rec = objects.get(root)
-                    if rec is not None and rec["kind"] in _CHECKED_KINDS:
+                    if rec is not None and rec["kind"] in checked:
                         seg = chain[1]
-                        if seg not in _MEMBER_TYPE_TAILS and seg not in rec["members"]:
+                        if seg not in _member_family(rec["kind"]) and seg not in rec["members"]:
                             message = i18n.t(
                                 "yaml/unknown-type.member",
                                 name=f"{root}.{seg}", root=root,

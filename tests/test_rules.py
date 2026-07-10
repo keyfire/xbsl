@@ -379,6 +379,16 @@ def test_cast_then_call_chain_not_merged(tmp_path):
     assert not _has(d, "code/unknown-object-type")
 
 
+def test_object_member_family_from_catalog():
+    # каталог версии несёт порождаемые члены по видам (object_members из дистрибутива);
+    # страховочное объединение дополняет их членами без шаблонных страниц
+    from xbsllint.rules.semantics import _checked_kinds, _member_family
+    family = _member_family("Справочник")
+    assert {"Ссылка", "Объект", "СоздатьОбъект", "АвтоматическаяФормаСписка"} <= family
+    assert "ПараметрыЗаполнения" in family  # только из страховочного списка
+    assert "Обработка" in _checked_kinds()  # вид добавлен данными каталога
+
+
 # --- Тир D (типы в yaml) --------------------------------------------------------------
 
 def _товары_yaml(tmp_path, form_yaml):

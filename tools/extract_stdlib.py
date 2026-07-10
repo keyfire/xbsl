@@ -6,7 +6,15 @@
 в <title> ("Имя | 1С:Предприятие.Элемент"), английское – в сегменте пути ("<Имя>_ru").
 Типы двуязычны (как ключевые слова), поэтому в каталог кладём обе формы.
 
-Результат – xbsllint/data/element/<версия>/stdlib.json: { "names": [...] }.
+Рядом, под `.../xbsl/DeveloperName/ProjectName/SubsystemName/**`, лежат шаблонные страницы
+типов, порождаемых объектами проекта: "{ИмяСправочника}.Ссылка",
+"{ИмяРегистраСведений}.КлючЗаписи", "{ИмяДокумента}.АвтоматическаяФормаСписка..." Из них
+собирается словарь object_members: вид объекта (по английскому имени шаблона в пути) ->
+имена порождаемых членов (второй сегмент русского заголовка). Члены-плейсхолдеры
+("{ИмяМетрики}", латинские шаблоны SOAP) пропускаются, виды вне известной карты – тоже.
+
+Результат – xbsllint/data/element/<версия>/stdlib.json:
+{ "names": [...], "object_members": {"Справочник": [...], ...} }.
 Версия определяется из дистрибутива автоматически (или задаётся --element-version).
 """
 
@@ -23,7 +31,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import _distro  # noqa: E402
 
 STD_BASE = "data/docs/help/ru/stdlib/element/xbsl/Std/"
+TEMPLATE_BASE = "data/docs/help/ru/stdlib/element/xbsl/DeveloperName/ProjectName/SubsystemName/"
 _TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.S)
+_CYRILLIC_NAME_RE = re.compile(r"^[А-ЯЁ][А-Яа-яЁё0-9]*$")
+
+# Английское имя шаблона в пути -> русское имя вида (значение ВидЭлемента в yaml).
+_TEMPLATE_KINDS = {
+    "CatalogName": "Справочник",
+    "DocumentName": "Документ",
+    "InformationRegisterName": "РегистрСведений",
+    "AccumulationRegisterName": "РегистрНакопления",
+    "ExchangePlanName": "ПланОбмена",
+    "EnumerationName": "Перечисление",
+    "AccessKeyName": "КлючДоступа",
+    "ClientWorkParametersName": "ПараметрыРаботыКлиента",
+    "ComponentName": "КомпонентИнтерфейса",
+    "EntityContractName": "КонтрактСущности",
+    "ReportName": "Отчет",
+    "ReportPanelName": "ПанельОтчетов",
+    "ProcessingName": "Обработка",
+}
 
 
 def _english_from_path(entry: str) -> str | None:
@@ -38,13 +65,14 @@ def _english_from_path(entry: str) -> str | None:
     return name if name and "." not in name else None
 
 
-def extract(dist: Path) -> set[str]:
-    """Двуязычный набор имён символов stdlib: русское из <title> + английское из пути."""
+def extract(dist: Path) -> tuple[set[str], dict[str, set[str]]]:
+    """Имена символов stdlib (двуязычно) + порождаемые члены по видам объектов."""
     car = _distro.find_car(dist)
     names: set[str] = set()
+    members: dict[str, set[str]] = {}
     with zipfile.ZipFile(car) as z:
-        docs = [n for n in z.namelist() if n.startswith(STD_BASE) and n.endswith("/index.html")]
-        for n in docs:
+        entries = z.namelist()
+        for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
             raw = z.read(n).decode("utf-8", "replace")
             mt = _TITLE_RE.search(raw)
             if mt:
@@ -54,7 +82,20 @@ def extract(dist: Path) -> set[str]:
             eng = _english_from_path(n)
             if eng:
                 names.add(eng)
-    return names
+        for n in (e for e in entries if e.startswith(TEMPLATE_BASE) and e.endswith("/index.html")):
+            dirname = n[len(TEMPLATE_BASE):].split("/")[0]
+            kind = _TEMPLATE_KINDS.get(dirname.split(".")[0])
+            if kind is None or "." not in dirname:
+                continue  # вид вне карты или страница самого типа (без члена)
+            raw = z.read(n).decode("utf-8", "replace")
+            mt = _TITLE_RE.search(raw)
+            if not mt:
+                continue
+            segs = mt.group(1).split("|")[0].strip().split(".")
+            if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
+                continue  # член-плейсхолдер или латинский шаблон
+            members.setdefault(kind, set()).add(segs[1])
+    return names, members
 
 
 def main() -> int:
@@ -72,15 +113,17 @@ def main() -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    names = extract(dist)
+    names, members = extract(dist)
     data = {
         "meta": {
             "element_version": version,
-            "source": "docs/help/ru/stdlib/element/xbsl/Std",
+            "source": "docs/help/ru/stdlib/element/xbsl",
             "count": len(names),
-            "note": "двуязычные имена символов stdlib (русское из title + английское из пути)",
+            "note": "двуязычные имена символов stdlib (русское из title + английское из пути)"
+                    " + порождаемые члены по видам объектов (шаблонные страницы)",
         },
         "names": sorted(names),
+        "object_members": {k: sorted(v) for k, v in sorted(members.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"
@@ -90,6 +133,7 @@ def main() -> int:
         _distro.update_index(version, make_default=not args.no_default)
     print(f"Записано: {out} (версия {version})")
     print(f"  имён stdlib (двуязычно): {len(names)}")
+    print(f"  видов с порождаемыми членами: {len(members)}")
     return 0
 
 
