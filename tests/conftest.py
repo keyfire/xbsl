@@ -19,6 +19,7 @@ _DATA_DEPENDENT = {
     "test_language",
     "test_rule_ns_objects",
     "test_rules",
+    "test_rule_environment",
     "test_style_rules",
     "test_mcp",
     "test_cli",
