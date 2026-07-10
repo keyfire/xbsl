@@ -30,6 +30,7 @@ from . import (  # noqa: F401
     enum_values,
     handlers,
     semantics,
+    size_stretch,
     yaml_properties,
     yaml_types,
 )
