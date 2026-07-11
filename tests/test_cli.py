@@ -37,6 +37,24 @@ def test_stdin_requires_filename(monkeypatch, capsys):
     assert "--filename" in capsys.readouterr().err
 
 
+def test_select_flags_accumulate(tmp_path, capsys):
+    # Повторённые --select суммируются (а не затирают друг друга последним значением);
+    # форма со списком через запятую продолжает работать.
+    f = tmp_path / "Ч.xbsl"
+    f.write_text("метод Ф()\n    возврат 1  \n;\n// хвост…\n", encoding="utf-8")
+
+    cli.main(["--format", "json", "--select", "whitespace/trailing",
+              "--select", "typography/ellipsis", str(f)])
+    payload = json.loads(capsys.readouterr().out)
+    assert {d["rule"] for d in payload["diagnostics"]} == {
+        "whitespace/trailing", "typography/ellipsis"}
+
+    cli.main(["--format", "json", "--select", "whitespace/trailing,typography/ellipsis", str(f)])
+    payload = json.loads(capsys.readouterr().out)
+    assert {d["rule"] for d in payload["diagnostics"]} == {
+        "whitespace/trailing", "typography/ellipsis"}
+
+
 def test_json_and_text_on_disk(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
     f.write_text("метод Ф()\n    возврат 1  \n;\n", encoding="utf-8")  # хвостовой пробел

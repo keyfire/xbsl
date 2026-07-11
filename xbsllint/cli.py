@@ -41,13 +41,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--select",
         metavar="ID/ГРУППА/ТИР",
-        help="проверять только эти правила (через запятую: id, группа – часть id до '/' "
-             "(напр. style) – или буква тира A/B/C/D)",
+        action="append",
+        help="проверять только эти правила (через запятую или повтором флага: id, группа – "
+             "часть id до '/' (напр. style) – или буква тира A/B/C/D)",
     )
     parser.add_argument(
         "--ignore",
         metavar="ID/ГРУППА/ТИР",
-        help="исключить эти правила (через запятую: id, группа или буква тира)",
+        action="append",
+        help="исключить эти правила (через запятую или повтором флага: id, группа или буква тира)",
     )
     parser.add_argument(
         "--list-rules", action="store_true", help="вывести список правил и выйти"
@@ -103,10 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def _parse_set(value: str | None) -> set[str] | None:
-    if not value:
+def _parse_set(values: list[str] | None) -> set[str] | None:
+    # action="append" collects repeated flags; each value may itself be a comma-separated list.
+    if not values:
         return None
-    return {part.strip() for part in value.split(",") if part.strip()}
+    parts = {part.strip() for value in values for part in value.split(",") if part.strip()}
+    return parts or None
 
 
 def main(argv: list[str] | None = None) -> int:
