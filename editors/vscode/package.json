@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "Syntax highlighting and on-the-fly linting for 1C:Element sources (.xbsl) via xbsllint.",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -67,6 +67,11 @@
       {
         "command": "xbsl.restartLinter",
         "title": "XBSL: перезапустить линтер",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.choosePalette",
+        "title": "XBSL: палитра кода",
         "category": "XBSL"
       }
     ],

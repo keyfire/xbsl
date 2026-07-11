@@ -108,10 +108,20 @@ newlines) are left to `xbsllint --fix` on the command line.
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
 | `xbsl.navigation.enabled` | `true` | Index-based go-to-definition and completion. |
 
+## Code palette
+
+The command **XBSL: палитра кода** (`xbsl.choosePalette`) recolors XBSL syntax with one of
+the popular palettes: the 1C:Element web IDE style (red keywords, blue strings), One Dark,
+Monokai, Dracula, GitHub Dark - or resets back to the active editor theme. The choice is
+applied via `editor.tokenColorCustomizations` rules addressing only `*.xbsl` scopes, so the
+global theme and other languages stay untouched; the extension manages only its own rules
+(prefixed `xbsl-palette`) and preserves any customizations of yours.
+
 ## Commands
 
 - **XBSL: проверить весь проект** (`xbsl.lintProject`) – lint the whole workspace.
 - **XBSL: перезапустить линтер** (`xbsl.restartLinter`) – clear and re-lint open files.
+- **XBSL: палитра кода** (`xbsl.choosePalette`) – pick a syntax palette for XBSL (see above).
 
 ## How it works
 

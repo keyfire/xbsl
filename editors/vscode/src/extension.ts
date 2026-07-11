@@ -4,6 +4,7 @@ import * as path from "path";
 import { LinterConfig, RawDiag, RawReport } from "./report";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
 import { registerNavigation } from "./navigation";
+import { registerPalettePicker } from "./palettes";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
 let collection: vscode.DiagnosticCollection;
@@ -437,6 +438,7 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   registerNavigation(context, output, (resource) => readSettings(resource).linter, projectRootFor);
+  registerPalettePicker(context);
 
   lintOpenDocuments();
   scheduleWorkspaceLintAll();
