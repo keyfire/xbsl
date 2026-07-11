@@ -72,10 +72,28 @@ server and the web panel follow the same setting (the web panel also has an in-p
 - **B. Text and conventions** — typography (en dash, straight quotes),
   encoding/BOM/newlines/trailing whitespace, indentation and line length.
 - **C. Code structure** — balance of blocks and `;`, brackets, unused local and loop variables,
-  plus the platform's code style conventions (the `style/` group, see below).
-- **D. Semantics** — against platform data: type existence (in `новый`, `как` casts, annotations,
-  method signatures), form handlers (a yaml handler exists as a method in the paired module), and
-  top-level object properties against the configuration metamodel.
+  a structure reference field that must be `обз`, plus the platform's code style conventions
+  (the `style/` group, see below).
+- **D. Semantics** — against platform data and the project itself: types, enumeration values,
+  cross-file consistency (see below).
+
+The type rules of tier D cover every type position in code (`новый`, `как` casts, annotations,
+signatures) and every `Тип:` value in yaml (unions `А|Б|?`, generics, nullable): the root must
+be a known type — stdlib, a project object or a module-declared local type — and a dotted chain
+rooted at a project object must stay within the family that object generates: the derived types
+extracted from the distribution docs (`Ссылка`, `Объект`, `СоздатьОбъект`, the automatic
+forms...), its tabular sections and module structures. Namespace-qualified references
+(`Справочник.X.Ссылка`) also check that the object exists under that kind, and the values of
+project enumerations are verified both in code and in yaml bindings.
+
+The cross-file rules of tier D catch what the compiler reports late or not at all: a yaml
+handler missing from the paired module, a foreign-subsystem type used without an `Импорт:`
+entry, a dynamic list typed by the automatic list form that misses an attribute of its object,
+a cross-component `Компоненты.X.Метод()` call to a method without a visibility annotation,
+environment mismatches (`@НаСервере` called from a client handler without `@ДоступноСКлиента`,
+a client-only module used from an HTTP service), reserved names (`Тип`/`type` as a field or
+parameter, a component property named like a built-in one), methods that nothing references,
+and top-level yaml properties against the configuration metamodel.
 
 ## Code style conventions (the `style/` rules)
 
@@ -146,10 +164,12 @@ a diagnostic opens the file in VS Code (`vscode://`).
 
 ## Editor support (VS Code)
 
-A VS Code extension in [`editors/vscode`](editors/vscode) gives `.xbsl` syntax highlighting and
-live diagnostics as you type, driving the linter through `xbsllint --stdin --format json`. Build the
-`.vsix` with `npm install && npm run package` in that folder; its
-[README](editors/vscode/README.md) covers settings and requirements.
+A VS Code extension in [`editors/vscode`](editors/vscode) gives `.xbsl` syntax highlighting,
+live diagnostics as you type (`--stdin`), workspace diagnostics on save (a full linter run in
+the background brings the project-scope rules into the editor), and index-based go-to-definition
+and completion across the project (`xbsllint --index`). Build the `.vsix` with
+`npm install && npm run package` in that folder; its [README](editors/vscode/README.md) covers
+settings, behavior and requirements.
 
 ## Element versions
 
