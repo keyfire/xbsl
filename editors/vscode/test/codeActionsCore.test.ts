@@ -2,7 +2,7 @@
 // vscode: plain Node asserts, bundled by esbuild. Run with `npm test` from editors/vscode.
 
 import * as assert from "assert";
-import { RawDiag } from "../src/report";
+import { computeRange, RawDiag } from "../src/report";
 import {
   anchorKey,
   collectFixes,
@@ -87,6 +87,30 @@ test("selectNonOverlapping: касание встык (end == next.start) не �
     diag(1, 4, "b", { start: 3, end: 5, newText: "" }),
   ]);
   assert.strictEqual(selectNonOverlapping(items).length, 2);
+});
+
+// --- контракт сопоставления: range.start из computeRange восстанавливает (line, col) ----
+// Провайдер ищет правку по anchorKey(range.start.line+1, range.start.character+1, rule).
+// Он обязан совпасть с ключом, под которым правка легла в индекс (d.line, d.col, d.rule).
+
+test("anchor round-trip: computeRange(range).start+1 == (line, col) диагностики", () => {
+  const lineText = "    возврат 1  "; // хвостовые пробелы на позиции col 14 (1-based)
+  const d = diag(2, 14, "whitespace/trailing", { start: 20, end: 22, newText: "" });
+  const span = computeRange(lineText, d.line, d.col);
+  const providerKey = anchorKey(span.sl + 1, span.sc + 1, "whitespace/trailing");
+  assert.strictEqual(providerKey, anchorKey(d.line, d.col, d.rule));
+  assert.ok(fixIndex([d]).has(providerKey));
+});
+
+test("anchor round-trip: типографский символ в комментарии", () => {
+  const lineText = "// многоточие… и текст";
+  const col = lineText.indexOf("…") + 1; // 1-based колонка символа
+  const d = diag(1, col, "typography/ellipsis", { start: col - 1, end: col, newText: "..." });
+  const span = computeRange(lineText, d.line, d.col);
+  assert.strictEqual(
+    anchorKey(span.sl + 1, span.sc + 1, "typography/ellipsis"),
+    anchorKey(d.line, d.col, d.rule)
+  );
 });
 
 // -----------------------------------------------------------------------------
