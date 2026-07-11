@@ -10,6 +10,7 @@ import {
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
+import { pipInstallCommand, runInstallTask } from "./installer";
 import { applyOverride, mergeOffRules } from "./ruleConfig";
 
 let client: LanguageClient | undefined;
@@ -87,11 +88,19 @@ export async function activateLsp(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     output.appendLine(vscode.l10n.t('XBSL LSP: the server failed to start ({0}): {1}', plan.command, msg));
-    void vscode.window.showErrorMessage(
-      vscode.l10n.t(
-        'XBSL: failed to start xbsllint-lsp. Install the linter with the [lsp] extra (pip install "xbsllint[lsp]") or set the command in the xbsl.lsp.command setting. The extension keeps working in the regular mode (CLI).'
+    const install = vscode.l10n.t("Install xbsllint[lsp]");
+    void vscode.window
+      .showErrorMessage(
+        vscode.l10n.t(
+          'XBSL: failed to start xbsllint-lsp. Install the linter with the [lsp] extra (pip install "xbsllint[lsp]") or set the command in the xbsl.lsp.command setting. The extension keeps working in the regular mode (CLI).'
+        ),
+        install
       )
-    );
+      .then((pick) => {
+        if (pick === install) {
+          runInstallTask("xbsllint[lsp]", pipInstallCommand("xbsllint[lsp]"), "workbench.action.reloadWindow");
+        }
+      });
     client = undefined;
     return false;
   }

@@ -44,5 +44,8 @@
   "Rule \"{0}\"": "Правило \"{0}\"",
   "Choose the level or an action": "Выберите уровень или действие",
   "XBSL: the override of \"{0}\" is removed": "XBSL: переопределение \"{0}\" снято",
-  "XBSL: rule \"{0}\" is set to {1}": "XBSL: правило \"{0}\" переведено в {1}"
+  "XBSL: rule \"{0}\" is set to {1}": "XBSL: правило \"{0}\" переведено в {1}",
+  "Install xbsllint": "Установить xbsllint",
+  "Install xbsllint[lsp]": "Установить xbsllint[lsp]",
+  "XBSL: installation finished, restarting the check": "XBSL: установка завершена, проверка перезапускается"
 }

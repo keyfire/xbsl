@@ -14,6 +14,8 @@ import {
 
 export interface RunResult {
   report?: RawReport;
+  // Исполняемый файл линтера не найден (ENOENT) – можно предложить установку.
+  notFound?: boolean;
   // A human-readable problem (spawn failure, non-JSON output, data error) – shown to the user once.
   error?: string;
   // The run was cancelled (a newer one superseded it) – not an error, just ignore the result.
@@ -42,7 +44,7 @@ function runProcess(command: string, args: string[], opts: RunOptions): RunHandl
     try {
       child = spawn(command, args, { cwd: opts.cwd });
     } catch (e) {
-      resolve({ error: describeSpawnError(command, e) });
+      resolve({ error: describeSpawnError(command, e), notFound: (e as NodeJS.ErrnoException)?.code === "ENOENT" });
       return;
     }
     let out = "";
@@ -65,7 +67,7 @@ function runProcess(command: string, args: string[], opts: RunOptions): RunHandl
       if (timer) {
         clearTimeout(timer);
       }
-      resolve({ error: describeSpawnError(command, e) });
+      resolve({ error: describeSpawnError(command, e), notFound: (e as NodeJS.ErrnoException)?.code === "ENOENT" });
     });
     child.stdout.on("data", (d: Buffer) => {
       if (out.length < DECODER_LIMIT) {

@@ -33,7 +33,8 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 
 The extension is a thin client over the `xbsllint` CLI – it does not bundle a checker. You need:
 
-1. **Python 3.10+** and the linter: `pip install xbsllint`.
+1. **Python 3.10+** and the linter: `pip install xbsllint`. If the linter is missing,
+   the extension offers to install it right from the error message.
 2. **Element language data** – generated once from your 1C:Element distribution, see
    [step 1 of the linter README](https://github.com/keyfire/xbsl-lint#step-1-generate-the-language-data).
    Without it most rules cannot run; the extension surfaces the linter's error once.

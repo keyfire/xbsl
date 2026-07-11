@@ -6,6 +6,7 @@ import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from ".
 import { activateLsp } from "./lspClient";
 import { registerNavigation } from "./navigation";
 import { registerPalettePicker } from "./palettes";
+import { pipInstallCommand, runInstallTask } from "./installer";
 import { mergeOffRules, registerRuleConfig, ruleOverride } from "./ruleConfig";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
@@ -121,7 +122,7 @@ async function lintDocument(doc: vscode.TextDocument): Promise<void> {
   const version = doc.version;
   const result = await lintBuffer(doc.getText(), filename, cwdFor(doc.uri), settings.linter);
   if (result.error) {
-    reportProblem(result.error);
+    reportProblem(result.error, result.notFound);
     return;
   }
   // Drop a stale result: the buffer changed while the linter was running.
@@ -133,16 +134,22 @@ async function lintDocument(doc: vscode.TextDocument): Promise<void> {
   setFixSnapshot(doc.uri, version, raw);
 }
 
-function reportProblem(message: string): void {
+function reportProblem(message: string, notFound = false): void {
   output.appendLine(message);
-  if (!warnedOnce) {
-    warnedOnce = true;
-    void vscode.window.showErrorMessage(`XBSL: ${message}`, vscode.l10n.t("Show log")).then((pick) => {
-      if (pick) {
-        output.show(true);
-      }
-    });
+  if (warnedOnce) {
+    return;
   }
+  warnedOnce = true;
+  const install = notFound ? vscode.l10n.t("Install xbsllint") : undefined;
+  const showLog = vscode.l10n.t("Show log");
+  const buttons = install ? [install, showLog] : [showLog];
+  void vscode.window.showErrorMessage(`XBSL: ${message}`, ...buttons).then((pick) => {
+    if (install && pick === install) {
+      runInstallTask("xbsllint", pipInstallCommand("xbsllint"), "xbsl.restartLinter");
+    } else if (pick) {
+      output.show(true);
+    }
+  });
 }
 
 function scheduleLint(doc: vscode.TextDocument, delay: number): void {
@@ -226,7 +233,7 @@ async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean)
   if (result.error) {
     // Graceful failure: a huge workspace or a broken linter must not spam popups on every save.
     if (notify) {
-      reportProblem(result.error);
+      reportProblem(result.error, result.notFound);
     } else {
       output.appendLine(vscode.l10n.t('XBSL: the workspace run "{0}" failed: {1}', folder.name, result.error));
     }
