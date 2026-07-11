@@ -10,7 +10,7 @@ A linter for 1C:Element sources – it checks `Name.yaml` (element description) 
 > Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
 > respective owners. Language data is generated from your own distribution. See [NOTICE](https://github.com/keyfire/xbsl-lint/blob/main/NOTICE).
 
-Development notes and updates (in Russian): the [1С × ИИ: инженерный цех](https://t.me/ceh_1c_ai) Telegram channel.
+Development notes and updates (in Russian): the [1C × AI: engineering workshop](https://t.me/ceh_1c_ai) Telegram channel.
 
 ## Why
 

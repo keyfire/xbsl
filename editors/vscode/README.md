@@ -1,6 +1,6 @@
 # XBSL for VS Code
 
-**English** | [Русский](https://github.com/keyfire/xbsl-lint/blob/main/editors/vscode/README.ru.md)
+**English** · [Русский](https://github.com/keyfire/xbsl-lint/blob/main/editors/vscode/README.ru.md)
 
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
 [xbsllint](https://github.com/keyfire/xbsl-lint) linter.
