@@ -5,7 +5,7 @@ Three channels: **VS Code Marketplace**, **Open VSX** (VSCodium / Cursor / Winds
 [`.github/workflows/vscode-publish.yml`](../../.github/workflows/vscode-publish.yml) does all three on a
 `vscode-v*` tag; the manual commands below do the same by hand.
 
-The `publisher` in `package.json` is `keyfire` — it must match your Marketplace publisher and your Open
+The `publisher` in `package.json` is `keyfire` – it must match your Marketplace publisher and your Open
 VSX namespace. Change it in one place (`package.json`) if you use a different id.
 
 ## One-time setup
@@ -26,12 +26,12 @@ VSX namespace. Change it in one place (`package.json`) if you use a different id
 3. Keep the token as `OVSX_PAT`.
 
 ### GitHub Release
-Nothing to set up — CI uses the built-in `GITHUB_TOKEN`.
+Nothing to set up – CI uses the built-in `GITHUB_TOKEN`.
 
 ## Publish via CI (recommended)
 
 1. Add the tokens as repository secrets (Settings → Secrets and variables → Actions): `VSCE_PAT`,
-   `OVSX_PAT`. Omit either one to skip that marketplace — the GitHub Release still happens.
+   `OVSX_PAT`. Omit either one to skip that marketplace – the GitHub Release still happens.
 2. Bump `version` in `editors/vscode/package.json` and update `CHANGELOG.md`.
 3. Commit, then tag and push:
    ```sh

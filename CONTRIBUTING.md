@@ -6,7 +6,7 @@ Thanks for contributing. Below is the minimum needed to add a rule or update the
 
 ## Environment
 
-Python 3.10+ is required. The language data is not part of the repository — generate it first
+Python 3.10+ is required. The language data is not part of the repository – generate it first
 from your own 1C:Element distribution (otherwise the linter and some tests will not work):
 
 ```sh
@@ -36,8 +36,8 @@ python -m xbsllint <path>   # run over sources
    ```
 
    - `tier`: `A` structure/YAML, `B` text/conventions, `C` code, `D` semantics.
-   - `scope="project"` — for cross-file rules; the function then receives `list[SourceFile]`.
-   - `enabled_by_default=False` — if the rule is noisy on legacy code (enable it via `--select`).
+   - `scope="project"` – for cross-file rules; the function then receives `list[SourceFile]`.
+   - `enabled_by_default=False` – if the rule is noisy on legacy code (enable it via `--select`).
    - Line/column positions are 1-indexed. Use `xbsllint.lexer.linemap` for positions.
 
 3. Register the module in `xbsllint/rules/__init__.py` (importing it registers the rule).
@@ -47,13 +47,13 @@ python -m xbsllint <path>   # run over sources
 5. Add a test under `tests/` (see `tests/test_rules.py` for examples).
 
 The lexer and the language/type data are extracted from the platform itself (the Xtext/ANTLR
-grammar and the distribution docs), not made up — stick to this principle: verify against the
+grammar and the distribution docs), not made up – stick to this principle: verify against the
 primary source.
 
 ## Data for a new Element version
 
 The data is versioned under `xbsllint/data/element/<version>/`. To add a new version, take its
-distribution and run the extractors — the version is detected automatically:
+distribution and run the extractors – the version is detected automatically:
 
 ```sh
 python tools/extract_grammar.py   --dist "<path to the distribution>"
@@ -61,5 +61,5 @@ python tools/extract_stdlib.py    --dist "<path to the distribution>"
 python tools/extract_metamodel.py --dist "<path to the distribution>"
 ```
 
-Vendor files from the distribution are not committed (cached under `.refs/`) — only the derived
+Vendor files from the distribution are not committed (cached under `.refs/`) – only the derived
 JSON is.

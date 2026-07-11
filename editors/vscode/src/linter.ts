@@ -13,7 +13,7 @@ import {
 
 export interface RunResult {
   report?: RawReport;
-  // A human-readable problem (spawn failure, non-JSON output, data error) — shown to the user once.
+  // A human-readable problem (spawn failure, non-JSON output, data error) – shown to the user once.
   error?: string;
   // The run was cancelled (a newer one superseded it) – not an error, just ignore the result.
   canceled?: boolean;
@@ -92,7 +92,7 @@ function runProcess(command: string, args: string[], opts: RunOptions): RunHandl
         resolve({ error: "linter produced too much output" });
         return;
       }
-      // Exit code 1 just means "errors among the diagnostics" — still valid JSON on stdout.
+      // Exit code 1 just means "errors among the diagnostics" – still valid JSON on stdout.
       // A real failure (missing data, crash) leaves stdout empty / non-JSON; surface stderr.
       try {
         resolve({ report: parseReport(out) });

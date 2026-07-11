@@ -2,7 +2,7 @@
 
 The intended flow: enable a rule (or a whole group) over a codebase with legacy debt,
 write the current findings once (`--write-baseline`), commit the file, and lint with
-`--baseline` from then on — frozen findings are suppressed, anything new surfaces.
+`--baseline` from then on – frozen findings are suppressed, anything new surfaces.
 
 A finding's identity is line-independent on purpose: (file path, rule id, message text),
 with an allowed COUNT per identity. Moving a line keeps its finding suppressed; a new
@@ -98,7 +98,7 @@ def apply(
 
     Returns (kept findings, suppressed count, unused entry count). Per identity the first
     N occurrences in line order are suppressed; the extras are kept. Unused entries are
-    frozen findings that no longer occur — a hint that the baseline is due a rewrite.
+    frozen findings that no longer occur – a hint that the baseline is due a rewrite.
     """
     budgets: dict[tuple[str, str, str], int] = {}
     for path, per_rule in data.get("files", {}).items():

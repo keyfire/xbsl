@@ -1,6 +1,6 @@
 """The machine-readable report shape, shared by the CLI (--format json), the MCP server and editors.
 
-One contract for structured output — a list of diagnostics plus a summary — so that the CLI and the
+One contract for structured output – a list of diagnostics plus a summary – so that the CLI and the
 MCP adapter cannot drift apart. Editors (the VS Code extension) consume the same JSON.
 
 CI integration lives here too: codeclimate() renders the diagnostics as a GitLab Code Quality
@@ -58,7 +58,7 @@ def report(diags: list[Diagnostic], n_files: int) -> dict:
 # --- GitLab Code Quality (Code Climate issues) ----------------------------------------
 
 # GitLab accepts info, minor, major, critical, blocker. Linter errors are broken conventions,
-# not broken builds — major, not critical/blocker.
+# not broken builds – major, not critical/blocker.
 _CODECLIMATE_SEVERITY = {
     "error": "major",
     "warning": "minor",
@@ -71,7 +71,7 @@ def _relative_posix(path: str, root: Path) -> str:
 
     GitLab matches location.path against the paths of the merge request diff, which are
     repository-relative POSIX paths without a './' prefix. A path outside the root cannot be
-    expressed that way — it is kept whole (POSIX-normalized), which at worst loses the widget
+    expressed that way – it is kept whole (POSIX-normalized), which at worst loses the widget
     link but keeps the report valid.
     """
     p = Path(path)
@@ -86,7 +86,7 @@ def codeclimate(diags: list[Diagnostic], base: Path | None = None) -> list[dict]
 
     Only the fields GitLab requires: description, check_name, fingerprint, severity,
     location.path, location.lines.begin. The fingerprint is an md5 over path, rule, line and
-    message — stable across runs; exact duplicates get an occurrence counter so every issue
+    message – stable across runs; exact duplicates get an occurrence counter so every issue
     in the report stays unique. `base` is the run root the paths are made relative to
     (default: the current directory).
     """

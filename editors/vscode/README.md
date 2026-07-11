@@ -9,7 +9,7 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 
 - **Syntax highlighting** for `.xbsl`: keywords (both Russian and English forms), declarations,
   operators, `@`-decorators, numbers, comments, and strings with `%name` / `${...}` interpolation.
-- **Live diagnostics** as you type (debounced) and on save — brackets/blocks balance, unused
+- **Live diagnostics** as you type (debounced) and on save – brackets/blocks balance, unused
   locals, typography, code-style conventions, and everything else the linter reports. Squiggles
   carry the rule id (e.g. `code/brackets`) and severity.
 - **Workspace diagnostics** – saving any `.xbsl`/`.yaml` file runs the linter over the whole
@@ -29,15 +29,15 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 
 ## Requirements
 
-The extension is a thin client over the `xbsllint` CLI — it does not bundle a checker. You need:
+The extension is a thin client over the `xbsllint` CLI – it does not bundle a checker. You need:
 
 1. **Python 3.10+** and the linter: `pip install xbsllint`.
-2. **Element language data** — generated once from your 1C:Element distribution, see
+2. **Element language data** – generated once from your 1C:Element distribution, see
    [step 1 of the linter README](https://github.com/keyfire/xbsl-lint#step-1-generate-the-language-data).
    Without it most rules cannot run; the extension surfaces the linter's error once.
 
 By default the extension calls `xbsllint` from `PATH`. Point it elsewhere with
-`xbsl.linter.command` (an executable) or `xbsl.linter.pythonPath` (an interpreter — the linter is
+`xbsl.linter.command` (an executable) or `xbsl.linter.pythonPath` (an interpreter – the linter is
 then invoked as `<python> -m xbsllint`).
 
 ## Navigation and completion
@@ -75,9 +75,9 @@ When the context is ambiguous the providers return nothing rather than guessing.
 
 Findings the linter can repair mechanically carry a fix; the extension turns it into a Quick Fix:
 
-- A **lightbulb on the diagnostic** (`Ctrl+.`) — *Исправить: `<rule>`* — applies the exact edit:
+- A **lightbulb on the diagnostic** (`Ctrl+.`) – *Исправить: `<rule>`* – applies the exact edit:
   trailing whitespace removed, em dash → en dash, `…` → `...`, curly quotes → straight.
-- A **fix-all source action** — *Исправить все (xbsllint)* — repairs every fixable finding in the
+- A **fix-all source action** – *Исправить все (xbsllint)* – repairs every fixable finding in the
   file in one edit. Run it on save by adding to your settings:
 
   ```json
@@ -85,7 +85,7 @@ Findings the linter can repair mechanically carry a fix; the extension turns it 
   ```
 
 Fixes need a linter that emits them in its JSON (`xbsllint` ≥ 0.7.1). Only unambiguous edits are
-offered, and only against the exact text they were computed on — a version-stamped snapshot guards
+offered, and only against the exact text they were computed on – a version-stamped snapshot guards
 against applying an offset to text that changed since the last lint. Whole-file fixes (mixed
 newlines) are left to `xbsllint --fix` on the command line.
 
@@ -107,8 +107,8 @@ newlines) are left to `xbsllint --fix` on the command line.
 
 ## Commands
 
-- **XBSL: проверить весь проект** (`xbsl.lintProject`) — lint the whole workspace.
-- **XBSL: перезапустить линтер** (`xbsl.restartLinter`) — clear and re-lint open files.
+- **XBSL: проверить весь проект** (`xbsl.lintProject`) – lint the whole workspace.
+- **XBSL: перезапустить линтер** (`xbsl.restartLinter`) – clear and re-lint open files.
 
 ## How it works
 
@@ -146,4 +146,4 @@ Press **F5** in VS Code to launch an Extension Development Host with the extensi
 
 ## License
 
-MIT — see the [repository](https://github.com/keyfire/xbsl-lint).
+MIT – see the [repository](https://github.com/keyfire/xbsl-lint).

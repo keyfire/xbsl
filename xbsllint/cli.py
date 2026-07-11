@@ -280,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(payload, ensure_ascii=False))
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
-        # Paths are made relative to the current directory — run from the repository root.
+        # Paths are made relative to the current directory – run from the repository root.
         print(json.dumps(report.codeclimate(diagnostics), ensure_ascii=False))
     else:
         for d in sorted(diagnostics, key=lambda x: x.sort_key()):

@@ -193,7 +193,7 @@ export class IndexLookup {
     return this.methodsByModule(module).find((m) => m.name === name);
   }
 
-  // Method by the module file path (POSIX relative to meta.root) — a robust way to say
+  // Method by the module file path (POSIX relative to meta.root) – a robust way to say
   // "in the current file" that does not depend on how the module name is derived.
   methodInFile(path: string, name: string): IndexMethod | undefined {
     return (this.fileMethods.get(path) ?? []).find((m) => m.name === name);
@@ -289,7 +289,7 @@ function pairedModulePath(filePath: string | undefined): string | undefined {
 }
 
 // Resolves the definition target for the given position, or null when the context is
-// not recognized — silence is better than jumping to the wrong place.
+// not recognized – silence is better than jumping to the wrong place.
 export function resolveDefinition(lookup: IndexLookup, q: DefinitionQuery): Target | null {
   // yaml: the value of `Обработчик:` is a method of the paired .xbsl module.
   if (q.languageId === "yaml") {
@@ -339,7 +339,7 @@ export function resolveDefinition(lookup: IndexLookup, q: DefinitionQuery): Targ
     return method ? { path: method.path, line: method.line } : null;
   }
   if (hit.at !== 1) {
-    return null; // deeper chains need type inference — out of scope
+    return null; // deeper chains need type inference – out of scope
   }
 
   const qualifier = hit.parts[hit.at - 1];
@@ -451,7 +451,7 @@ export function resolveCompletions(lookup: IndexLookup, q: CompletionQuery): Com
     }));
   }
   // <Объект>.<...> / <Модуль>.<...> -> family + tabular + local types (+ module methods);
-  // for an enum — its values.
+  // for an enum – its values.
   m = matchEnd(prefix, `(${IDENT})\\.(?:${IDENT})?`);
   if (m) {
     return objectMemberEntries(lookup, m[1]);

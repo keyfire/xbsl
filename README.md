@@ -4,7 +4,7 @@
 
 ![CI](https://github.com/keyfire/xbsl-lint/actions/workflows/ci.yml/badge.svg)
 
-A linter for 1C:Element sources — it checks `Name.yaml` (element description) and `Name.xbsl`
+A linter for 1C:Element sources – it checks `Name.yaml` (element description) and `Name.xbsl`
 (code module) pairs before the server-side compilation that happens on deploy.
 
 > Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
@@ -14,7 +14,7 @@ Development notes and updates (in Russian): the [1С × ИИ: инженерны
 
 ## Why
 
-1C:Element has no external linter: the only code check is the server-side compilation on deploy —
+1C:Element has no external linter: the only code check is the server-side compilation on deploy –
 it is slow and knows nothing about project conventions. xbsl-lint gives fast local feedback and
 catches what the compiler does not check at all.
 
@@ -44,15 +44,15 @@ pip install xbsllint            # or, from a clone: pip install -e .
 xbsllint path/to/sources        # or: python -m xbsllint path/to/sources
 ```
 
-The extractors from step 1 ship with the repository, not with the PyPI package — clone the
+The extractors from step 1 ship with the repository, not with the PyPI package – clone the
 repository to generate the data.
 
-Flags: `--list-rules`, `--select`/`--enable`/`--ignore` (by rule id, rule group — the part of the id
-before `/` — or tier letter), `--fix`, `--baseline`/`--write-baseline`, `--element-version`,
+Flags: `--list-rules`, `--select`/`--enable`/`--ignore` (by rule id, rule group – the part of the id
+before `/` – or tier letter), `--fix`, `--baseline`/`--write-baseline`, `--element-version`,
 `--data-dir`, `--lang`, `--format text|json|codeclimate`.
-`--fix` repairs the mechanical findings in place — trailing whitespace, typography characters
+`--fix` repairs the mechanical findings in place – trailing whitespace, typography characters
 (em dash → en dash, `…` → `...`, curly quotes and comment guillemets → straight), and mixed
-newlines (normalized to the dominant style) — then reports whatever is left. It only applies
+newlines (normalized to the dominant style) – then reports whatever is left. It only applies
 unambiguous edits and only for rules active in the run (so `--fix --enable typography` also pays
 down the em-dash/guillemets debt); anything needing judgment is never touched.
 For editor integration, `--stdin --filename NAME` checks a single buffer read from stdin (per-file
@@ -63,20 +63,20 @@ completion), the method declarations with their annotations and the named form c
 POSIX paths relative to the root and 1-based lines – for go-to-definition and completion in
 editors.
 `--format codeclimate` emits a GitLab Code Quality report (Code Climate issues) with paths relative
-to the current directory — run it from the repository root and save the output as the
+to the current directory – run it from the repository root and save the output as the
 `codequality` artifact.
 
 ## Output language
 
 Rule titles and diagnostic messages come in Russian and English. The language is picked by
 `--lang ru|en` > the `XBSLLINT_LANG` env var > the system locale > Russian. Type names, keywords
-and other XBSL text inside a message are never translated — only the wording around them. The MCP
+and other XBSL text inside a message are never translated – only the wording around them. The MCP
 server and the web panel follow the same setting (the web panel also has an in-page RU/EN toggle).
 
 ## Use in CI
 
 `xbsllint` exits non-zero only when a run produces an **error-severity** finding, so it works as a
-pipeline gate as-is — warnings and `info` do not fail the build. The one prerequisite is the
+pipeline gate as-is – warnings and `info` do not fail the build. The one prerequisite is the
 language data (see [Step 1](#step-1-generate-the-language-data)): generate it in the job (the
 extractors ship with the repository, so check the repo out), or depend on a package that ships the
 data via the `xbsllint.data` entry point (see [Extending](#extending-your-own-rules-and-data)) and
@@ -120,19 +120,19 @@ lint:
 
 ## Rule tiers
 
-- **A. Structure and YAML** — `.xbsl`/`.yaml` pairing, schema validity, `Ид` as a UUID,
+- **A. Structure and YAML** – `.xbsl`/`.yaml` pairing, schema validity, `Ид` as a UUID,
   `Ид` uniqueness, `Имя` matching the file name.
-- **B. Text and conventions** — typography (en dash, straight quotes),
+- **B. Text and conventions** – typography (en dash, straight quotes),
   encoding/BOM/newlines/trailing whitespace, indentation and line length.
-- **C. Code structure** — balance of blocks and `;`, brackets, unused local and loop variables,
+- **C. Code structure** – balance of blocks and `;`, brackets, unused local and loop variables,
   a structure reference field that must be `обз`, plus the platform's code style conventions
   (the `style/` group, see below).
-- **D. Semantics** — against platform data and the project itself: types, enumeration values,
+- **D. Semantics** – against platform data and the project itself: types, enumeration values,
   cross-file consistency (see below).
 
 The type rules of tier D cover every type position in code (`новый`, `как` casts, annotations,
 signatures) and every `Тип:` value in yaml (unions `А|Б|?`, generics, nullable): the root must
-be a known type — stdlib, a project object or a module-declared local type — and a dotted chain
+be a known type – stdlib, a project object or a module-declared local type – and a dotted chain
 rooted at a project object must stay within the family that object generates: the derived types
 extracted from the distribution docs (`Ссылка`, `Объект`, `СоздатьОбъект`, the automatic
 forms...), its tabular sections and module structures. Namespace-qualified references
@@ -154,7 +154,7 @@ Twenty-one rules that follow the platform documentation ("Code style conventions
 idioms"): layout and expression wrapping, naming, type descriptions and signatures, collection
 literals, string interpolation, and checks of boolean values and `Неопределено`.
 
-Rules that clean code already satisfies are enabled by default (`warning`) — they guard against
+Rules that clean code already satisfies are enabled by default (`warning`) – they guard against
 regressions. Rules that typically fire on accumulated legacy debt are `info` and disabled; enable
 them to measure the debt and pay it down:
 
@@ -179,13 +179,13 @@ To enable a rule over code that already violates it without drowning in legacy f
 current findings into a baseline and hold only new code to the rule:
 
 ```sh
-xbsllint e1c/site --enable style --write-baseline baseline.json   # freeze the debt once
-xbsllint e1c/site --enable style --baseline baseline.json         # only NEW findings surface
+xbsllint e1c/app --enable style --write-baseline baseline.json   # freeze the debt once
+xbsllint e1c/app --enable style --baseline baseline.json         # only NEW findings surface
 ```
 
 A finding's identity is `(file, rule, message)` with an allowed count, so moving a line keeps its
 finding suppressed while a genuinely new violation surfaces. The summary reports how many findings
-the baseline suppressed and how many of its entries are now stale (debt paid down) — a signal to
+the baseline suppressed and how many of its entries are now stale (debt paid down) – a signal to
 rewrite the file. Paths are stored relative to the baseline file, so commit it at the repository
 root and run the linter from anywhere.
 
@@ -222,7 +222,7 @@ claude mcp add xbsllint -- xbsllint-mcp
 ```
 
 Tools: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`. The core and the CLI
-do not require `mcp` — it lives only in the `[mcp]` extra.
+do not require `mcp` – it lives only in the `[mcp]` extra.
 
 ## Web interface
 
@@ -273,5 +273,5 @@ Data-dependent tests are skipped automatically when the data has not been genera
 
 ## License
 
-MIT — see [LICENSE](https://github.com/keyfire/xbsl-lint/blob/main/LICENSE). Trademarks and data provenance — [NOTICE](https://github.com/keyfire/xbsl-lint/blob/main/NOTICE).
-How to add a rule — [CONTRIBUTING.md](https://github.com/keyfire/xbsl-lint/blob/main/CONTRIBUTING.md).
+MIT – see [LICENSE](https://github.com/keyfire/xbsl-lint/blob/main/LICENSE). Trademarks and data provenance – [NOTICE](https://github.com/keyfire/xbsl-lint/blob/main/NOTICE).
+How to add a rule – [CONTRIBUTING.md](https://github.com/keyfire/xbsl-lint/blob/main/CONTRIBUTING.md).

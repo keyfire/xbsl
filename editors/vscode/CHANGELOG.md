@@ -3,7 +3,7 @@
 ## 0.4.0
 
 - Quick Fix for mechanical findings: a lightbulb on a fixable diagnostic (trailing whitespace,
-  typography characters — em dash → en dash, `…` → `...`, curly quotes) applies the exact edit the
+  typography characters – em dash → en dash, `…` → `...`, curly quotes) applies the exact edit the
   linter reports. Needs a linter that emits fixes in its JSON (`xbsllint` ≥ 0.7.1).
 - A *fix all* source action (`source.fixAll.xbsl`) fixes every fixable finding in the file at once;
   wire it into `editor.codeActionsOnSave` for fix-on-save. Fixes are applied only against the exact
