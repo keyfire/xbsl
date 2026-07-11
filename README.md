@@ -49,6 +49,11 @@ Flags: `--list-rules`, `--select`/`--ignore` (by rule id, rule group — the par
 `/` — or tier letter), `--element-version`, `--data-dir`, `--lang`, `--format text|json|codeclimate`.
 For editor integration, `--stdin --filename NAME` checks a single buffer read from stdin (per-file
 rules only); the JSON payload (`{diagnostics, summary}`) is the same one the MCP server returns.
+`xbsllint --index PATH` dumps a JSON index of the project to stdout instead of linting – the
+objects (with tabular sections, module-declared local types and the member families for dot
+completion), the method declarations with their annotations and the named form components, with
+POSIX paths relative to the root and 1-based lines – for go-to-definition and completion in
+editors.
 `--format codeclimate` emits a GitLab Code Quality report (Code Climate issues) with paths relative
 to the current directory — run it from the repository root and save the output as the
 `codequality` artifact.

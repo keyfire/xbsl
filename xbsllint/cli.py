@@ -81,6 +81,12 @@ def build_parser() -> argparse.ArgumentParser:
              "вид файла и путь в позициях задаёт --filename",
     )
     parser.add_argument(
+        "--index",
+        action="store_true",
+        help="вместо проверки вывести JSON-индекс проекта (объекты, методы, компоненты форм) "
+             "для навигации в редакторе; путь – корень проекта",
+    )
+    parser.add_argument(
         "--filename",
         metavar="ИМЯ",
         help="имя проверяемого буфера при --stdin (напр. Форма.xbsl); расширение задаёт вид файла",
@@ -127,6 +133,21 @@ def main(argv: list[str] | None = None) -> int:
     except dataset.DatasetError as exc:
         print(i18n.t("cli.data-error", error=exc), file=sys.stderr)
         return 2
+
+    if args.index:
+        # Index mode: a JSON dump of the project for editor navigation, nothing on stderr.
+        # The lexer (and the member families) needs the Element data, checked above.
+        from xbsllint.indexer import build_index
+
+        if len(args.paths) != 1:
+            print(i18n.t("cli.index-single-path"), file=sys.stderr)
+            return 2
+        root = Path(args.paths[0])
+        if not root.exists():
+            print(i18n.t("cli.index-missing-path", path=args.paths[0]), file=sys.stderr)
+            return 2
+        print(json.dumps(build_index(root), ensure_ascii=False))
+        return 0
 
     from xbsllint.engine import RULES, make_source, run, run_sources
 

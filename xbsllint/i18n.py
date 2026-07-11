@@ -53,6 +53,14 @@ _CORE_MESSAGES = {
         "ru": "Режиму --stdin нужен --filename (напр. Форма.xbsl): по расширению определяется вид файла.",
         "en": "--stdin needs --filename (e.g. Form.xbsl): the extension sets the file kind.",
     },
+    "cli.index-single-path": {
+        "ru": "Режиму --index нужен ровно один путь – корень индексируемого проекта.",
+        "en": "--index takes exactly one path – the root of the project to index.",
+    },
+    "cli.index-missing-path": {
+        "ru": "Путь '{path}' не существует.",
+        "en": "Path '{path}' does not exist.",
+    },
 }
 
 

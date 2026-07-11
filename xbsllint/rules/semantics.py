@@ -95,17 +95,26 @@ def _project_object_names(sources: list[SourceFile]) -> set[str]:
     return names
 
 
-def _file_local_types(s: SourceFile) -> set[str]:
-    """Names of the structures/enumerations/exceptions declared in one module."""
-    names: set[str] = set()
+def _file_local_type_decls(s: SourceFile) -> list[tuple[str, int]]:
+    """The structures/enumerations/exceptions declared in one module, as (name, line) pairs.
+
+    The position side of _file_local_types – kept separate so the rules keep their set-based
+    signature while the project index (xbsllint.indexer) gets the declaration lines.
+    """
+    decls: list[tuple[str, int]] = []
     toks = tokens(s)
     for i, t in enumerate(toks):
         if t.kind == "KEYWORD" and t.value[:1].islower() and t.canonical in _LOCAL_TYPE_KW:
             for j in range(i + 1, min(i + 3, len(toks))):
                 if toks[j].kind == "IDENT":
-                    names.add(toks[j].value)
+                    decls.append((toks[j].value, toks[j].line))
                     break
-    return names
+    return decls
+
+
+def _file_local_types(s: SourceFile) -> set[str]:
+    """Names of the structures/enumerations/exceptions declared in one module."""
+    return {name for name, _ in _file_local_type_decls(s)}
 
 
 def _local_type_names(sources: list[SourceFile]) -> set[str]:

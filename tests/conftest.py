@@ -26,6 +26,7 @@ _DATA_DEPENDENT = {
     "test_dataset",
     "test_corpus",
     "test_rule_reserved",
+    "test_index",
 }
 
 
