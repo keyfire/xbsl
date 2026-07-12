@@ -28,6 +28,7 @@ _DATA_DEPENDENT = {
     "test_rule_reserved",
     "test_index",
     "test_baseline",
+    "test_rule_query_tables",
 }
 
 
