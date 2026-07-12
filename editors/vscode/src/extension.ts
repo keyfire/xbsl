@@ -2,6 +2,7 @@ import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
 import { LinterConfig, RawDiag, RawReport } from "./report";
+import { registerDeploy } from "./deploy";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
 import { activateLsp } from "./lspClient";
 import { registerNavigation } from "./navigation";
@@ -360,9 +361,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   output = vscode.window.createOutputChannel("XBSL");
   context.subscriptions.push(collection, output);
 
-  // Общие для обоих режимов: палитра и настройка правил с находки.
+  // Общие для обоих режимов: палитра, настройка правил с находки, деплой на стенд.
   registerPalettePicker(context);
   registerRuleConfig(context);
+  registerDeploy(context, projectRootFor);
 
   // Экспериментальный LSP-режим: всё делает долгоживущий сервер xbsllint-lsp.
   // При неудачном старте сервера тихо продолжаем в обычном режиме (CLI).

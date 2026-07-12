@@ -2,6 +2,7 @@
   "cmd.lintProject": "XBSL: check the whole project",
   "cmd.restartLinter": "XBSL: restart the linter",
   "cmd.choosePalette": "XBSL: code palette",
+  "cmd.deploy": "XBSL: deploy the project (elemctl)",
   "config.linter.run": "When to run the xbsllint linter for .xbsl.",
   "config.linter.run.enum.0": "Lint as you type (debounced) and on save",
   "config.linter.run.enum.1": "Lint only on save and open",
@@ -22,5 +23,9 @@
   "config.projectRoot": "Sources root for project-wide runs and the navigation index: a path relative to the workspace folder (or absolute). Empty – the whole workspace folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (Ид uniqueness and others) cross-fire between directories.",
   "config.lsp.enabled": "Experimental: work through the long-living xbsllint-lsp server (needs the linter with the [lsp] extra: pip install \"xbsllint[lsp]\"). Brings hover and instant diagnostics; when the server is unavailable the extension falls back to the regular mode by itself. Toggling requires a window reload.",
   "config.lsp.command": "The LSP server launch command. Empty – xbsllint-lsp from PATH, or `<xbsl.linter.pythonPath> -m xbsllint.lsp` when the interpreter is set. Example: C:/Python/Scripts/xbsllint-lsp.exe.",
-  "config.rules": "Per-rule overrides. The key is a rule id (`whitespace/trailing`) or a whole group (`style`); the value is off | error | warning | info | hint. \"off\" hides the findings and skips the rule, a level replaces the rule's own severity; an exact id beats its group. The quickest way here is the \"Configure rule...\" action on any finding."
+  "config.rules": "Per-rule overrides. The key is a rule id (`whitespace/trailing`) or a whole group (`style`); the value is off | error | warning | info | hint. \"off\" hides the findings and skips the rule, a level replaces the rule's own severity; an exact id beats its group. The quickest way here is the \"Configure rule...\" action on any finding.",
+  "config.deploy.elemctlPath": "The elemctl executable (on PATH or an absolute path). The \"XBSL: deploy the project\" command runs \"elemctl deploy\" – build from sources, upload, apply, restart, and verification that the apply actually took effect – as a terminal task.",
+  "config.deploy.envFile": "A .env file with the connection and the target (ELEMENT_BASE_URL, ELEMENT_CLIENT_ID/SECRET, ELEMENT_APP_ID, ELEMENT_PROJECT_ID), passed to elemctl as --env-file; a path relative to the workspace folder or absolute. Empty – elemctl picks up the .env of the workspace folder itself. Set it e.g. in a git worktree whose .env lives in the main checkout.",
+  "config.deploy.appId": "The application to deploy to (--app-id). Empty – ELEMENT_APP_ID from the environment / .env file.",
+  "config.deploy.extraArgs": "Extra arguments appended to \"elemctl deploy\", separated by spaces (values with spaces are not supported). Example: --project-id 123 --build-version 1.0-42."
 }

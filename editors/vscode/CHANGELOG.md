@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.8.0
+
+- New command *XBSL: deploy the project (elemctl)* (`xbsl.deploy`), also a cloud button in the
+  editor title of `.xbsl` files: runs `elemctl deploy` – build from sources, upload, apply,
+  restart, and verification that the apply actually took effect – as a terminal task, after a
+  confirmation dialog showing the exact command line. The target comes from the workspace
+  folder's `.env` or the new settings `xbsl.deploy.elemctlPath` / `xbsl.deploy.envFile` /
+  `xbsl.deploy.appId` / `xbsl.deploy.extraArgs`; a set `xbsl.projectRoot` is passed as
+  `--project-dir`. Offers to install elemctl when it is missing.
+- The English README now shows the English command titles (bilingual since 0.6.1).
+
+## 0.7.1
+
+- "Install xbsllint" / "Install xbsllint[lsp]" buttons on the corresponding errors: the install
+  runs as a terminal task and the check restarts on success.
+
+## 0.7.0
+
+- New setting `xbsl.rules` – per-rule levels and disabling (`off | error | warning | info | hint`
+  by rule id or whole group), plus a "Configure rule..." action in every finding's lightbulb.
+  Works in both the CLI and the LSP mode.
+
+## 0.6.1
+
+- Bilingual UI (en/ru): the manifest and all runtime strings follow the VS Code display language.
+
+## 0.6.0
+
+- Experimental LSP mode (`xbsl.lsp.enabled`): a long-living `xbsllint-lsp` server brings hover,
+  instant as-you-type diagnostics and index navigation; on a failed server start the extension
+  falls back to the regular CLI mode by itself.
+
+## 0.5.0
+
+- New command *XBSL: code palette* – recolor XBSL syntax with one of the popular palettes
+  (the 1C:Element web IDE style, One Dark, Monokai, Dracula, GitHub Dark) or reset to the
+  editor theme; only `*.xbsl` scopes are touched.
+
+## 0.4.1
+
+- New setting `xbsl.projectRoot` – the sources root for project-wide runs and the navigation
+  index, for repositories that hold examples or copies next to the project.
+
 ## 0.4.0
 
 - Quick Fix for mechanical findings: a lightbulb on a fixable diagnostic (trailing whitespace,

@@ -18,7 +18,7 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   workspace folder in the background, so project-scope rules (`code/unknown-type`,
   `yaml/unknown-type`, `Ид` uniqueness) show up right in the editor, across all files.
   Controlled by `xbsl.workspaceLint` (on by default).
-- **Whole-project check** – the command *XBSL: проверить весь проект* runs the same
+- **Whole-project check** – the command *XBSL: check the whole project* runs the same
   workspace-wide check on demand.
 - **Go to definition and completion across the project** – powered by a project index built by
   the linter (`xbsllint --index`). See [Navigation and completion](#navigation-and-completion).
@@ -26,6 +26,10 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   whitespace, typography characters) applies the exact edit the linter reports; a *fix all*
   source action (`source.fixAll.xbsl`) fixes the whole file and can run on save via
   `editor.codeActionsOnSave`. Needs `xbsllint` ≥ 0.7.1. See [Quick Fix](#quick-fix).
+- **Deploy to the stand** – the *XBSL: deploy the project (elemctl)* command (and a cloud
+  button in the editor title of `.xbsl` files) runs `elemctl deploy` in a terminal task:
+  build from sources → upload → apply → restart → verification that the apply actually took
+  effect. See [Deploy](#deploy).
 
 `.yaml` element descriptions keep their built-in YAML highlighting.
 
@@ -78,9 +82,9 @@ When the context is ambiguous the providers return nothing rather than guessing.
 
 Findings the linter can repair mechanically carry a fix; the extension turns it into a Quick Fix:
 
-- A **lightbulb on the diagnostic** (`Ctrl+.`) – *Исправить: `<rule>`* – applies the exact edit:
+- A **lightbulb on the diagnostic** (`Ctrl+.`) – *Fix: `<rule>`* – applies the exact edit:
   trailing whitespace removed, em dash → en dash, `…` → `...`, curly quotes → straight.
-- A **fix-all source action** – *Исправить все (xbsllint)* – repairs every fixable finding in the
+- A **fix-all source action** – *Fix all (xbsllint)* – repairs every fixable finding in the
   file in one edit. Run it on save by adding to your settings:
 
   ```json
@@ -109,6 +113,10 @@ newlines) are left to `xbsllint --fix` on the command line.
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
 | `xbsl.navigation.enabled` | `true` | Index-based go-to-definition and completion. |
+| `xbsl.deploy.elemctlPath` | `elemctl` | The elemctl executable for the deploy command. |
+| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute). Empty – the workspace folder's own `.env`. |
+| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. |
+| `xbsl.deploy.extraArgs` | – | Extra `elemctl deploy` arguments, space-separated. |
 
 ## Rules: levels and disabling
 
@@ -134,18 +142,37 @@ window reload.
 
 ## Code palette
 
-The command **XBSL: палитра кода** (`xbsl.choosePalette`) recolors XBSL syntax with one of
+The command **XBSL: code palette** (`xbsl.choosePalette`) recolors XBSL syntax with one of
 the popular palettes: the 1C:Element web IDE style (red keywords, blue strings), One Dark,
 Monokai, Dracula, GitHub Dark – or resets back to the active editor theme. The choice is
 applied via `editor.tokenColorCustomizations` rules addressing only `*.xbsl` scopes, so the
 global theme and other languages stay untouched; the extension manages only its own rules
 (prefixed `xbsl-palette`) and preserves any customizations of yours.
 
+## Deploy
+
+The command **XBSL: deploy the project (elemctl)** (`xbsl.deploy`, also a cloud button in the
+editor title of `.xbsl` files) deploys the project to an application on the 1C:Element platform
+via [elemctl](https://github.com/keyfire/elemctl): build from sources → upload → apply →
+restart → **verification that the apply actually took effect**. (On a failed apply the platform
+silently rolls the application back while still reporting `Running`; elemctl does not trust the
+status and exits non-zero.)
+
+The extension shows the exact command line in a confirmation dialog, then runs it as a terminal
+task, so the progress and the final JSON report stay visible; a notification reports the outcome.
+The task's working directory is the workspace folder: elemctl reads the connection and the
+target from its `.env` (`ELEMENT_BASE_URL`, `ELEMENT_CLIENT_ID`/`SECRET`, `ELEMENT_APP_ID`,
+`ELEMENT_PROJECT_ID`) – or from the file named in `xbsl.deploy.envFile` (handy in a git worktree
+whose `.env` lives in the main checkout). When `xbsl.projectRoot` narrows the sources root, it
+is passed as `--project-dir`. Needs elemctl on `PATH` (`pip install elemctl`) or
+`xbsl.deploy.elemctlPath`; when it is missing, the extension offers to install it.
+
 ## Commands
 
-- **XBSL: проверить весь проект** (`xbsl.lintProject`) – lint the whole workspace.
-- **XBSL: перезапустить линтер** (`xbsl.restartLinter`) – clear and re-lint open files.
-- **XBSL: палитра кода** (`xbsl.choosePalette`) – pick a syntax palette for XBSL (see above).
+- **XBSL: check the whole project** (`xbsl.lintProject`) – lint the whole workspace.
+- **XBSL: restart the linter** (`xbsl.restartLinter`) – clear and re-lint open files.
+- **XBSL: code palette** (`xbsl.choosePalette`) – pick a syntax palette for XBSL (see above).
+- **XBSL: deploy the project (elemctl)** (`xbsl.deploy`) – deploy to the stand (see above).
 
 ## How it works
 

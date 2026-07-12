@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "Syntax highlighting and on-the-fly linting for 1C:Element sources (.xbsl) via xbsllint.",
-  "version": "0.7.1",
+  "version": "0.8.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -17,7 +17,9 @@
     "1c",
     "1c-element",
     "xbsl",
-    "linter"
+    "linter",
+    "elemctl",
+    "deploy"
   ],
   "repository": {
     "type": "git",
@@ -73,8 +75,23 @@
         "command": "xbsl.choosePalette",
         "title": "%cmd.choosePalette%",
         "category": "XBSL"
+      },
+      {
+        "command": "xbsl.deploy",
+        "title": "%cmd.deploy%",
+        "category": "XBSL",
+        "icon": "$(cloud-upload)"
       }
     ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "xbsl.deploy",
+          "when": "resourceLangId == xbsl",
+          "group": "navigation"
+        }
+      ]
+    },
     "configuration": {
       "title": "XBSL",
       "properties": {
@@ -199,6 +216,30 @@
           "default": true,
           "scope": "resource",
           "description": "%config.navigation.enabled%"
+        },
+        "xbsl.deploy.elemctlPath": {
+          "type": "string",
+          "default": "elemctl",
+          "scope": "machine-overridable",
+          "description": "%config.deploy.elemctlPath%"
+        },
+        "xbsl.deploy.envFile": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "%config.deploy.envFile%"
+        },
+        "xbsl.deploy.appId": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "%config.deploy.appId%"
+        },
+        "xbsl.deploy.extraArgs": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "description": "%config.deploy.extraArgs%"
         }
       }
     }

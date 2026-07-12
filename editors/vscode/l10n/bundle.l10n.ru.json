@@ -47,5 +47,15 @@
   "XBSL: rule \"{0}\" is set to {1}": "XBSL: правило \"{0}\" переведено в {1}",
   "Install xbsllint": "Установить xbsllint",
   "Install xbsllint[lsp]": "Установить xbsllint[lsp]",
-  "XBSL: installation finished, restarting the check": "XBSL: установка завершена, проверка перезапускается"
+  "XBSL: installation finished, restarting the check": "XBSL: установка завершена, проверка перезапускается",
+  "XBSL: a deploy is already running.": "XBSL: деплой уже выполняется.",
+  "XBSL: no open folder to deploy.": "XBSL: нет открытой папки для деплоя.",
+  "XBSL: the .env file \"{0}\" is not found (the xbsl.deploy.envFile setting).": "XBSL: .env-файл \"{0}\" не найден (настройка xbsl.deploy.envFile).",
+  "elemctl (\"{0}\") not found. Install it (pip install elemctl) or set the path in the xbsl.deploy.elemctlPath setting.": "Не найден elemctl (\"{0}\"). Установите его (pip install elemctl) или задайте путь в настройке xbsl.deploy.elemctlPath.",
+  "Install elemctl": "Установить elemctl",
+  "XBSL: deploy the project to the stand?": "XBSL: выполнить деплой на стенд?",
+  "Command: {0}\nFolder: {1}": "Команда: {0}\nПапка: {1}",
+  "Deploy": "Деплой",
+  "XBSL: the deploy finished – the build is applied.": "XBSL: деплой завершён – сборка применена.",
+  "XBSL: the deploy failed (exit code {0}) – see the terminal for details.": "XBSL: деплой не удался (код возврата {0}) – подробности в терминале."
 }
