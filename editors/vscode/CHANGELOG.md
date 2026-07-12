@@ -5,6 +5,9 @@
 - Fix: a clean file opened after a workspace run showed its diagnostics, but the lightbulb
   offered no Quick Fixes until the first edit. The fix snapshot is now rebuilt from the
   stored raw report of the last workspace run when such a file is opened.
+- The Deploy section of the README now defers the tool details to the
+  [elemctl](https://github.com/keyfire/elemctl) project; the two projects cross-link each
+  other (README and Marketplace pages).
 
 ## 0.11.2
 

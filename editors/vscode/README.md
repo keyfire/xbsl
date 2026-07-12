@@ -198,20 +198,18 @@ faithful, exact sizes and styles are not (explicit label colors and font sizes a
 ## Deploy
 
 The command **XBSL: deploy the project (elemctl)** (`xbsl.deploy`, also a cloud button in the
-editor title of `.xbsl` files) deploys the project to an application on the 1C:Element platform
-via [elemctl](https://github.com/keyfire/elemctl): build from sources → upload → apply →
-restart → **verification that the apply actually took effect**. (On a failed apply the platform
-silently rolls the application back while still reporting `Running`; elemctl does not trust the
-status and exits non-zero.)
+editor title of `.xbsl` files) hands the project to [elemctl](https://github.com/keyfire/elemctl)
+– build, upload, apply, restart and verification that the apply actually took effect – as a
+terminal task, after a confirmation dialog with the exact command line. The target and the
+credentials come from the workspace `.env` or the `xbsl.deploy.*` settings (table above);
+a set `xbsl.projectRoot` is passed as `--project-dir`; a missing elemctl is offered for
+installation.
 
-The extension shows the exact command line in a confirmation dialog, then runs it as a terminal
-task, so the progress and the final JSON report stay visible; a notification reports the outcome.
-The task's working directory is the workspace folder: elemctl reads the connection and the
-target from its `.env` (`ELEMENT_BASE_URL`, `ELEMENT_CLIENT_ID`/`SECRET`, `ELEMENT_APP_ID`,
-`ELEMENT_PROJECT_ID`) – or from the file named in `xbsl.deploy.envFile` (handy in a git worktree
-whose `.env` lives in the main checkout). When `xbsl.projectRoot` narrows the sources root, it
-is passed as `--project-dir`. Needs elemctl on `PATH` (`pip install elemctl`) or
-`xbsl.deploy.elemctlPath`; when it is missing, the extension offers to install it.
+The deploy cycle, the `ELEMENT_*` configuration and the platform's silent-rollback quirk are
+documented in the [elemctl project](https://github.com/keyfire/elemctl)
+([PyPI](https://pypi.org/project/elemctl/)). See also the companion
+[XBSL Debug](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl-debug) extension –
+debugging 1C:Element applications from VS Code.
 
 ## Commands
 

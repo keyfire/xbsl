@@ -261,10 +261,14 @@ a diagnostic opens the file in VS Code (`vscode://`).
 
 A VS Code extension in [`editors/vscode`](editors/vscode) gives `.xbsl` syntax highlighting,
 live diagnostics as you type (`--stdin`), workspace diagnostics on save (a full linter run in
-the background brings the project-scope rules into the editor), and index-based go-to-definition
-and completion across the project (`xbsllint --index`). Build the `.vsix` with
-`npm install && npm run package` in that folder; its [README](editors/vscode/README.md) covers
-settings, behavior and requirements.
+the background brings the project-scope rules into the editor), index-based go-to-definition
+and completion across the project (`xbsllint --index`), a form preview with a properties
+panel, and a deploy button powered by [elemctl](https://github.com/keyfire/elemctl). It is
+published on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl)
+and [Open VSX](https://open-vsx.org/extension/keyfire/xbsl); its
+[README](editors/vscode/README.md) covers settings, behavior and requirements. See also the
+companion [XBSL Debug](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl-debug)
+extension from the [elemctl](https://github.com/keyfire/elemctl) project.
 
 ## Element versions
 

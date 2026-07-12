@@ -188,9 +188,14 @@ xbsllint-web            # затем открыть http://127.0.0.1:8771/
 
 Расширение VS Code в [`editors/vscode`](editors/vscode) даёт подсветку синтаксиса `.xbsl`,
 диагностику по мере набора (`--stdin`), проектную диагностику по сохранению (полный фоновый
-прогон приносит в редактор межфайловые правила) и переходы к определению с автодополнением по
-индексу проекта (`xbsllint --index`). Сборка `.vsix` – `npm install && npm run package` в этой
-папке; настройки, поведение и требования – в её [README](editors/vscode/README.md).
+прогон приносит в редактор межфайловые правила), переходы к определению с автодополнением по
+индексу проекта (`xbsllint --index`), предпросмотр форм с панелью свойств и кнопку деплоя на
+базе [elemctl](https://github.com/keyfire/elemctl). Публикуется в
+[Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl) и
+[Open VSX](https://open-vsx.org/extension/keyfire/xbsl); настройки, поведение и требования –
+в её [README](editors/vscode/README.md). Смотрите также спутник-расширение
+[XBSL Debug](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl-debug) из
+проекта [elemctl](https://github.com/keyfire/elemctl).
 
 ## Версии Элемента
 
