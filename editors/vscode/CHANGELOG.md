@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.2
+
+- README only: animated demos of the diagnostics with Quick Fix, the form preview and the
+  properties panel, plus a pointer to the `demo/` toy project in the repository. No code
+  changes.
+
 ## 0.11.1
 
 - New rule group **query** in the settings (needs `xbsllint` with the `query/unknown-table`
