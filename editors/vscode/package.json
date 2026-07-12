@@ -476,8 +476,8 @@
     "check": "tsc --noEmit",
     "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js",
     "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
-    "publish:vsce": "vsce publish --no-dependencies",
-    "publish:ovsx": "ovsx publish xbsl-vscode.vsix"
+    "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
+    "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"
   },
   "devDependencies": {
     "@types/node": "^20",
