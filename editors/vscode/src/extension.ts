@@ -10,6 +10,7 @@ import { registerNavigation } from "./navigation";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { mergeOffRules, registerRuleConfig, ruleOverride } from "./ruleConfig";
+import { groupReportByFile } from "./workspaceCore";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
 let collection: vscode.DiagnosticCollection;
@@ -37,8 +38,17 @@ function setFixSnapshot(uri: vscode.Uri, version: number, diags: RawDiag[]): voi
 //  * the whole-workspace run (on save, debounced, one at a time) replaces the diagnostics
 //    of every other file – it sees project-scope rules a single buffer cannot.
 
-// The last completed workspace run per workspace folder: file uri -> its diagnostics.
-const workspaceResults = new Map<string, Map<string, { uri: vscode.Uri; diags: vscode.Diagnostic[] }>>();
+// One file's share of the last completed workspace run: the diagnostics converted for the
+// collection plus the raw ones they came from – the raw list rebuilds the Quick Fix
+// snapshot when the file is opened after the run.
+interface WorkspaceEntry {
+  uri: vscode.Uri;
+  diags: vscode.Diagnostic[];
+  raw: RawDiag[];
+}
+
+// The last completed workspace run per workspace folder: file uri -> its entry.
+const workspaceResults = new Map<string, Map<string, WorkspaceEntry>>();
 // Debounce timers of scheduled workspace runs, per folder.
 const workspaceTimers = new Map<string, NodeJS.Timeout>();
 // Runs waiting in the chain (not started yet), per folder – dedupes repeated saves.
@@ -171,9 +181,9 @@ function scheduleLint(doc: vscode.TextDocument, delay: number): void {
 
 // --- Workspace lint ----------------------------------------------------------------------
 
-// The last completed workspace run's diagnostics for a file: an array (possibly empty) when
-// the file's folder has been linted, undefined when no run has finished yet.
-function workspaceBaseline(uri: vscode.Uri): vscode.Diagnostic[] | undefined {
+// The last completed workspace run's result for a file: an entry (possibly with no
+// diagnostics) when the file's folder has been linted, undefined when no run has finished yet.
+function workspaceBaseline(uri: vscode.Uri): Pick<WorkspaceEntry, "diags" | "raw"> | undefined {
   const folder = vscode.workspace.getWorkspaceFolder(uri);
   if (!folder) {
     return undefined;
@@ -182,7 +192,7 @@ function workspaceBaseline(uri: vscode.Uri): vscode.Diagnostic[] | undefined {
   if (!store) {
     return undefined;
   }
-  return store.get(uri.toString())?.diags ?? [];
+  return store.get(uri.toString()) ?? { diags: [], raw: [] };
 }
 
 // Debounced entry point: repeated saves within the window collapse into one run.
@@ -258,23 +268,23 @@ function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport)
   for (const doc of vscode.workspace.textDocuments) {
     openDocs.set(doc.uri.toString(), doc);
   }
-  const fresh = new Map<string, { uri: vscode.Uri; diags: vscode.Diagnostic[] }>();
-  const rawByKey = new Map<string, RawDiag[]>();
-  for (const d of report.diagnostics ?? []) {
-    if (ruleOverride(d.rule, folder.uri) === "off") {
-      continue;
-    }
-    // The linter echoes paths as given (we pass the folder absolute, so they come back
-    // absolute with OS separators); relative ones are resolved against the folder.
-    const fsPath = path.isAbsolute(d.path) ? d.path : path.join(folder.uri.fsPath, d.path);
+  const grouped = groupReportByFile(
+    report.diagnostics ?? [],
+    folder.uri.fsPath,
+    (rule) => ruleOverride(rule, folder.uri) === "off"
+  );
+  const fresh = new Map<string, WorkspaceEntry>();
+  for (const [fsPath, raws] of grouped) {
     const uri = vscode.Uri.file(fsPath);
     const key = uri.toString();
     const doc = openDocs.get(key);
-    const diag = doc && !doc.isDirty ? toDiagnostic(d, doc) : makeDiagnostic(d, undefined);
-    const entry = fresh.get(key) ?? { uri, diags: [] };
-    entry.diags.push(diag);
+    const clean = doc && !doc.isDirty ? doc : undefined;
+    const entry = fresh.get(key) ?? { uri, diags: [], raw: [] };
+    for (const d of raws) {
+      entry.diags.push(clean ? toDiagnostic(d, clean) : makeDiagnostic(d, undefined));
+      entry.raw.push(d);
+    }
     fresh.set(key, entry);
-    (rawByKey.get(key) ?? rawByKey.set(key, []).get(key)!).push(d);
   }
   workspaceResults.set(folderKey, fresh);
   for (const [key, entry] of fresh) {
@@ -285,7 +295,7 @@ function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport)
     collection.set(entry.uri, entry.diags);
     // Offsets from a disk run match only a clean open buffer; stamp with that buffer's version.
     if (doc) {
-      setFixSnapshot(entry.uri, doc.version, rawByKey.get(key) ?? []);
+      setFixSnapshot(entry.uri, doc.version, entry.raw);
     }
   }
   // Files whose diagnostics are all gone: everything in this folder that the fresh run
@@ -387,9 +397,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
       // A clean buffer whose file a workspace run has already covered needs no `--stdin`
-      // pass: it would see only the per-file rules and wipe the project-scope ones.
-      if (settings.workspaceLint && !doc.isDirty && workspaceBaseline(doc.uri) !== undefined) {
-        return;
+      // pass: it would see only the per-file rules and wipe the project-scope ones. The
+      // Quick Fix snapshot is rebuilt from the stored run instead – the run stamps only
+      // the documents open at the time, and closing a document drops its snapshot. The
+      // buffer is clean, so the run's on-disk offsets are valid for it.
+      if (settings.workspaceLint && !doc.isDirty) {
+        const baseline = workspaceBaseline(doc.uri);
+        if (baseline !== undefined) {
+          setFixSnapshot(doc.uri, doc.version, baseline.raw);
+          return;
+        }
       }
       void lintDocument(doc);
     }),
@@ -431,7 +448,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       // back (the closed buffer may have been dirty, its `--stdin` results die with it).
       const baseline = workspaceBaseline(doc.uri);
       if (baseline !== undefined && readSettings(doc.uri).workspaceLint) {
-        collection.set(doc.uri, baseline);
+        collection.set(doc.uri, baseline.diags);
       } else {
         collection.delete(doc.uri);
       }
