@@ -189,11 +189,11 @@ the baseline suppressed and how many of its entries are now stale (debt paid dow
 rewrite the file. Paths are stored relative to the baseline file, so commit it at the repository
 root and run the linter from anywhere.
 
-## Extending: your own rules and data
+## Extending: your own rules, data and severities
 
-Two entry point groups let a separate package extend the linter without forking it. This exists for
-teams whose rules or language data cannot be published: keep those in a private package that depends
-on `xbsllint`.
+Three entry point groups let a separate package extend the linter without forking it. This exists
+for teams whose rules or language data cannot be published: keep those in a private package that
+depends on `xbsllint`.
 
 ```toml
 # pyproject.toml of your package
@@ -204,12 +204,21 @@ myproject = "myproject.rules"        # importing the module runs its @rule decor
 
 [project.entry-points."xbsllint.data"]
 myproject = "myproject:data_root"    # a path, or a callable returning one
+
+[project.entry-points."xbsllint.severity"]
+myproject = "myproject:severity_overrides"   # {rule id: "error"|"warning"|"info"|"off"}
 ```
 
-Install the package and the CLI, the MCP server and the web UI all pick both up – no flags, no
-config file. A failing entry point raises instead of warning: a linter that silently drops a rule
-stays green in CI and guarantees nothing. `XBSLLINT_NO_PLUGINS=1` ignores every external package
-(built-in rules and bundled data only).
+The severity dict (or a zero-argument callable returning one) raises or lowers the default level
+of any rule – built-in or plugin – for every run in this installation: a project may treat, say,
+`style/abbreviation-case` as a warning while the published default stays info. `"off"` removes a
+rule from the default set (an explicit `--select`/`--enable` still turns it on, at its base level).
+
+Install the package and the CLI, the MCP server and the web UI all pick everything up – no flags,
+no config file. A failing entry point raises instead of warning: a linter that silently drops a
+rule stays green in CI and guarantees nothing; an override naming an unknown rule id or level
+raises for the same reason. `XBSLLINT_NO_PLUGINS=1` ignores every external package (built-in
+rules, bundled data and default severities only).
 
 ## LSP server (experimental)
 

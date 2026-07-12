@@ -10,7 +10,7 @@ Tiers: 'A' structure/YAML, 'B' text/conventions, 'C' parser/code structure, 'D' 
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from xbsllint import i18n
@@ -152,6 +152,47 @@ def rule(
     return deco
 
 
+# Rule id -> effective severity from plugin overrides ("off" entries end up as
+# enabled_by_default=False in RULES and are not listed here). Diagnostics carry the
+# severity their rule baked in at yield time, so run_sources() recolors them by this map.
+SEVERITY_OVERRIDES: dict[str, Severity] = {}
+
+_LEVEL_OFF = "off"
+
+
+def apply_severity_overrides() -> None:
+    """Apply plugin severity overrides to the registry (idempotent, called on import).
+
+    An unknown rule id or level raises PluginError: a silently ignored override is a typo
+    nobody notices, and the linter must not pretend the project's levels are in force.
+    """
+    overrides = _plugins.severity_overrides()
+    if not overrides:
+        return
+    by_id = {info.id: i for i, info in enumerate(RULES)}
+    for rule_id, level in overrides.items():
+        if rule_id not in by_id:
+            raise _plugins.PluginError(
+                f"Переопределение уровня для неизвестного правила '{rule_id}' "
+                f"(группа {_plugins.SEVERITY_GROUP})"
+            )
+        idx = by_id[rule_id]
+        if level == _LEVEL_OFF:
+            RULES[idx] = replace(RULES[idx], enabled_by_default=False)
+            SEVERITY_OVERRIDES.pop(rule_id, None)
+            continue
+        try:
+            severity = Severity(level)
+        except ValueError:
+            raise _plugins.PluginError(
+                f"Неизвестный уровень '{level}' для правила '{rule_id}' "
+                f"(группа {_plugins.SEVERITY_GROUP}): допустимы "
+                f"error/warning/info/off"
+            ) from None
+        RULES[idx] = replace(RULES[idx], severity=severity, enabled_by_default=True)
+        SEVERITY_OVERRIDES[rule_id] = severity
+
+
 def _is_selected(
     info: RuleInfo,
     select: set[str] | None,
@@ -202,6 +243,13 @@ def run_sources(
     if "project" in scopes:
         for r in (r for r in active if r.scope == "project"):
             diags.extend(r.func(sources))
+    if SEVERITY_OVERRIDES:
+        diags = [
+            replace(d, severity=SEVERITY_OVERRIDES[d.rule_id])
+            if d.rule_id in SEVERITY_OVERRIDES and d.severity != SEVERITY_OVERRIDES[d.rule_id]
+            else d
+            for d in diags
+        ]
     return diags
 
 
@@ -222,3 +270,5 @@ from xbsllint import plugins as _plugins  # noqa: E402
 
 # Rules of external packages come after the built-in ones, to keep the registry order stable.
 _plugins.load_rules()
+# Severity overrides come last: they may target both built-in and plugin rules.
+apply_severity_overrides()
