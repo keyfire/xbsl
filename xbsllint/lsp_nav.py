@@ -190,12 +190,69 @@ def _match_end(prefix: str, pattern: str) -> Optional[re.Match]:
     return re.search(rf"(?:^|{NOT_BEFORE}){pattern}$", prefix)
 
 
+# Стандартные (выбираемые в запросе) поля по виду объекта. Виды и имена полей – по-русски намеренно:
+# метаданные в линтере русско-канонические (semantics._member_family и семейства типов везде русские).
+# Двуязычны только ключевые слова КОДА; блок Запрос{...} распознаёт лексер (query_ranges у вызывающего,
+# он передаёт in_query). Реквизиты объекта берём из индекса (поле "attributes").
+_STANDARD_QUERY_FIELDS = {
+    "Справочник": ["Ссылка", "Код", "Наименование", "ПометкаУдаления", "Предопределённый"],
+    "Документ": ["Ссылка", "Номер", "Дата", "Проведён", "ПометкаУдаления"],
+}
+
+
+def _name_of(item) -> str:
+    return item.get("name", "") if isinstance(item, dict) else str(item)
+
+
+def _query_field_entries(kind: str, attributes: list, tabular: list) -> list[dict]:
+    """Поля таблицы в запросе: стандартные поля вида + реквизиты + ТЧ, без дублей по имени."""
+    seen: set = set()
+    entries: list[dict] = []
+
+    def add(label: str, detail: str) -> None:
+        if label and label not in seen:
+            seen.add(label)
+            entries.append({"label": label, "kind": "field", "detail": detail})
+
+    for f in _STANDARD_QUERY_FIELDS.get(kind, []):
+        add(f, "стандартное поле")
+    for a in attributes:
+        add(_name_of(a), "реквизит")
+    for t in tabular:
+        add(_name_of(t), "табличная часть")
+    return entries
+
+
+def _stdlib_entries(members) -> list[dict]:
+    """Члены stdlib-типа: свойства и методы раздельно (у методов свой вид и скобки при вставке).
+
+    Датасет отдаёт {"properties": [...], "methods": [...]}; прежний плоский список имён
+    (свойства и методы вперемешку) понимаем ради совместимости со старыми данными.
+    """
+    if not isinstance(members, dict):
+        return [{"label": str(x), "kind": "field", "detail": "член"} for x in members or []]
+    entries = [
+        {"label": str(x), "kind": "field", "detail": "свойство"}
+        for x in members.get("properties") or []
+    ]
+    entries += [
+        {"label": str(x), "kind": "method", "detail": "метод", "snippet": f"{x}($0)"}
+        for x in members.get("methods") or []
+    ]
+    return entries
+
+
 def resolve_completions(
     lookup: IndexLookup,
     *,
     language_id: str,
     line_prefix: str,
     file_stem: str,
+    in_query: bool = False,
+    stdlib_members: Optional[dict] = None,
+    local_vars: Optional[dict] = None,
+    query_tables: Optional[dict] = None,
+    query_rows: Optional[dict] = None,
 ) -> Optional[list[dict]]:
     """Completion entries [{label, kind, detail}] for the context, or None when unknown."""
     m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
@@ -209,7 +266,37 @@ def resolve_completions(
         ]
     m = _match_end(line_prefix, rf"({IDENT})\.(?:{IDENT})?")
     if m:
-        return _object_member_entries(lookup, m.group(1))
+        token = m.group(1)
+        # В блоке Запрос{...} после <Таблица>. – поля таблицы (стандартные + реквизиты + ТЧ), а не
+        # члены объекта/менеджера. Контекст запроса и карту алиасов (`ИЗ Акция КАК А` – в проекте
+        # к таблицам обращаются именно так) определяет вызывающий: язык запросов разбирает лексер.
+        if in_query:
+            table = lookup.object_by_name((query_tables or {}).get(token, token))
+            if not table:
+                return None
+            return _query_field_entries(
+                table.get("kind", ""), table.get("attributes", []), table.get("tabular", [])
+            )
+        # Переменная цикла по результату запроса (`для С из Результат`) – её члены суть колонки
+        # выборки: имена считает вызывающий по алиасам ВЫБРАТЬ ... КАК.
+        columns = (query_rows or {}).get(token)
+        if columns:
+            return [{"label": str(c), "kind": "field", "detail": "колонка запроса"} for c in columns]
+        # Переменная в области видимости перекрывает всё остальное: `пер Список = новый Массив<...>()`
+        # – это про члены Массива, даже если в stdlib есть одноимённый тип Список (компонент) или в
+        # проекте объект с таким именем. Типы видимых переменных считает вызывающий (лексер, двуязычно).
+        # Тип не из stdlib (структура проекта) – подсказать нечем, молчим: пусть работает словарное
+        # дополнение редактора.
+        if local_vars and token in local_vars:
+            members = (stdlib_members or {}).get(local_vars[token])
+            return _stdlib_entries(members) if members else None
+        entries = _object_member_entries(lookup, token)
+        if entries is not None:
+            return entries
+        # Не проект-объект и не переменная – значит stdlib-тип или глобаль (КонтекстДоступа.):
+        # члены берём из type_members датасета линтера, ключ там под обеими формами имени.
+        members = (stdlib_members or {}).get(token)
+        return _stdlib_entries(members) if members else None
     if language_id == "yaml" and re.search(rf"(?:^|\s)Тип\s*:\s*(?:{IDENT})?$", line_prefix):
         return [
             {

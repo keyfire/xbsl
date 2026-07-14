@@ -35,6 +35,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
 from xbsllint import __version__, dataset, engine, i18n, indexer
 from xbsllint.diagnostics import Diagnostic, Severity
 from xbsllint.lsp_nav import IndexLookup, resolve_completions, resolve_definition, resolve_hover
+from xbsllint.rules._syntax import local_var_types, query_aliases, query_ranges, query_row_columns
 
 FILE_DEBOUNCE_S = 0.3
 PROJECT_DEBOUNCE_S = 0.7
@@ -44,6 +45,7 @@ _COMPLETION_KINDS = {
     "object": 7,  # Class
     "enum": 13,
     "family": 7,
+    "field": 5,  # Field
     "tabular": 5,  # Field
     "localType": 22,  # Struct
     "enumMember": 20,
@@ -299,8 +301,32 @@ def _make_server() -> "LanguageServer":
         if params.position.line >= len(lines):
             return None
         prefix = lines[params.position.line][: params.position.character]
+        # Контекст курсора разбираем лексером, а не по тексту: ключевые слова двуязычны.
+        # Внутри блока Запрос{...} (canonical QUERY) – поля таблицы; типы локальных переменных
+        # (canonical VAR/NEW) дают члены их типа после точки.
+        offset = sum(len(lines[k]) + 1 for k in range(params.position.line)) + params.position.character
+        try:
+            src = engine.load_text(path.name, doc.source)
+            in_query = any(a <= offset < b for a, b in query_ranges(src))
+            query_tables = query_aliases(src, offset) if in_query else {}
+            local_vars = local_var_types(src, offset)
+            query_rows = query_row_columns(src, offset)
+        except Exception:  # noqa: BLE001 - дополнение не должно падать из-за разбора
+            in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
+        try:
+            stdlib_members = dataset.load_json("stdlib.json").get("type_members") or {}
+        except Exception:  # noqa: BLE001 - датасет мог не подгрузиться, дополнение не роняем
+            stdlib_members = {}
         entries = resolve_completions(
-            STATE.lookup, language_id=language_of(path), line_prefix=prefix, file_stem=path.stem
+            STATE.lookup,
+            language_id=language_of(path),
+            line_prefix=prefix,
+            file_stem=path.stem,
+            in_query=in_query,
+            stdlib_members=stdlib_members,
+            local_vars=local_vars,
+            query_tables=query_tables,
+            query_rows=query_rows,
         )
         if entries is None:
             return None
@@ -309,6 +335,8 @@ def _make_server() -> "LanguageServer":
                 label=e["label"],
                 kind=lsp.CompletionItemKind(_COMPLETION_KINDS.get(e["kind"], 1)),
                 detail=e.get("detail"),
+                insert_text=e.get("snippet"),
+                insert_text_format=lsp.InsertTextFormat.Snippet if e.get("snippet") else None,
             )
             for e in entries
         ]

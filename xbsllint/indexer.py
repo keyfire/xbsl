@@ -255,6 +255,7 @@ def build_index(root: Path) -> dict:
                 "path": rel(s.path),
                 "line": _top_name_line(s, name),
                 "tabular": _named_items(s, data, "ТабличныеЧасти"),
+                "attributes": _named_items(s, data, "Реквизиты"),
                 "local_types": local_types.get(name, []),
             }
             entry["family"] = sorted(

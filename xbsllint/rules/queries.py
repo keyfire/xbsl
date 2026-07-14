@@ -22,7 +22,7 @@ from xbsllint import i18n
 from xbsllint.diagnostics import Diagnostic, Severity
 from xbsllint.engine import SourceFile, rule
 from xbsllint.lexer import tokens
-from xbsllint.rules._syntax import query_ranges
+from xbsllint.rules._syntax import QUERY_TABLE_INTRO, WORD_KINDS, query_ranges
 from xbsllint.rules.yaml_schema import _HAVE_YAML, _parsed
 
 MESSAGES = {
@@ -43,8 +43,10 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# Слова, вводящие таблицу: следующий словарный токен начинает табличное выражение.
-_TABLE_INTRO = frozenset({"ИЗ", "FROM", "СОЕДИНЕНИЕ", "JOIN"})
+# Слова, вводящие таблицу (следующий словарный токен начинает табличное выражение), и виды
+# словарных токенов – общие с разбором алиасов в _syntax.
+_TABLE_INTRO = QUERY_TABLE_INTRO
+_WORD_KINDS = WORD_KINDS
 # Конструкции вне поддержанного подмножества – блок с ними пропускается целиком.
 _UNSUPPORTED = frozenset({"ПОМЕСТИТЬ", "INTO", "ОБЪЕДИНИТЬ", "UNION", "ВРЕМЕННАЯ", "TEMPORARY"})
 # Виртуальные таблицы после точки – не подвергаются сомнению.
@@ -52,8 +54,6 @@ _VIRTUAL = frozenset({
     "СРЕЗПОСЛЕДНИХ", "СРЕЗПЕРВЫХ", "ОСТАТКИ", "ОБОРОТЫ", "ОСТАТКИИОБОРОТЫ",
     "SLICELAST", "SLICEFIRST", "BALANCE", "TURNOVERS", "BALANCEANDTURNOVERS",
 })
-
-_WORD_KINDS = ("IDENT", "KEYWORD")
 
 
 def _query_tables(source: SourceFile) -> Iterable[tuple]:
