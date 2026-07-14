@@ -11,6 +11,9 @@
 - New **project** rule group in the settings: the project properties per the standard "Filling in the
   project properties" – `Поставщик` and `Имя` as identifiers starting with a capital letter, a
   filled-in `Представление` and `ПредставлениеПоставщика`, and a three-number version `A.B.C`.
+- New rule in the **query** group (needs `xbsllint` >= 0.11.0): `IN` with a subquery over a field of
+  a composite type (`Строка|Число`) – per the platform standard such a condition is written with
+  `EXISTS`, because `IN` with a subquery is implemented inefficiently on most DBMSs.
 - New **naming** rule group in the settings (needs `xbsllint` >= 0.11.0): names of project elements
   per the platform standard "Names of project elements" – the number by kind (catalogs in the plural,
   enumerations in the singular), the letter `ё` and underscores, abbreviations as one word, the kind

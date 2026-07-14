@@ -151,6 +151,24 @@ parses `Запрос{ ... }` blocks and verifies the tables of `ИЗ`/`СОЕД�
 project objects and their tabular sections; a block with constructs outside the supported
 subset (temporary tables, unions, subqueries) is skipped whole rather than guessed.
 
+## Queries: `IN` with a subquery over a composite type (rule `query/in-subquery-composite`)
+
+A platform standard: `IN` with a subquery over an expression of a composite type is implemented
+inefficiently on most DBMSs, so the condition is written with `EXISTS` instead. The rule is a
+warning – the standard is mandatory:
+
+```
+WHERE T.Value IN (SELECT F.Value FROM Filters AS F)                    // warning
+WHERE EXISTS (SELECT 1 FROM Filters AS F WHERE F.Value = T.Value)      // this way
+```
+
+A type counts as composite when the yaml spells two or more alternatives (`Строка|Число|?`): the
+`?` is not a type but the admissibility of `Неопределено`, and `Массив<Строка|Число>` is not
+composite either. Only a field whose type is known for sure is questioned: `Alias.Field` or
+`Table.Field`, where the alias is unambiguous within the block and the field is found in the
+table's yaml; a list of values (`IN (1, 2, &Codes)`) is not what the standard is about. Both
+spellings of the query language are understood (`В`/`IN`, `НЕ`/`NOT`, `ВЫБРАТЬ`/`SELECT`).
+
 ## Project properties (the `project/` rules)
 
 Three rules from the standard "Filling in the project properties": `Поставщик` and `Имя` are

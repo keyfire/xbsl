@@ -81,20 +81,15 @@ def in_query(source: SourceFile, offset: int) -> bool:
     return idx >= 0 and offset < ranges[idx][1]
 
 
-def query_aliases(source: SourceFile, offset: int) -> dict[str, str]:
-    """Алиас таблицы -> имя таблицы внутри блока запроса, содержащего `offset` (вне блока – пусто).
+def query_alias_pairs(block: list[Token]) -> list[tuple[str, str]]:
+    """Пары (алиас, таблица) блока запроса, в порядке появления.
 
-    `ИЗ Акция КАК А` даёт {"А": "Акция"} – без этого автодополнению после `А.` нечего разрешать,
-    а запросы в проекте пишутся именно через алиасы. Таблицы с точкой (виртуальные вроде
+    `ИЗ Акция КАК А` даёт ("А", "Акция"). Таблицы с точкой (виртуальные вроде
     `РегистрСведений.СрезПоследних`) пропускаются: их набор полей – не набор полей объекта.
+    Пары, а не словарь: один алиас может быть переопределён в подзапросе, и тому, кто на них
+    опирается, важно уметь это заметить.
     """
-    span = next((r for r in query_ranges(source) if r[0] <= offset < r[1]), None)
-    if span is None:
-        return {}
-    start, end = span
-    block = [t for t in tokens(source) if start <= t.start < end and t.kind not in ("COMMENT", "BOM")]
-
-    out: dict[str, str] = {}
+    out: list[tuple[str, str]] = []
     i, n = 0, len(block)
     while i < n:
         t = block[i]
@@ -117,10 +112,29 @@ def query_aliases(source: SourceFile, offset: int) -> dict[str, str]:
             and block[j].kind in WORD_KINDS and block[j].value.upper() in QUERY_ALIAS_INTRO
             and block[j + 1].kind in WORD_KINDS
         ):
-            out[block[j + 1].value] = table.value
+            out.append((block[j + 1].value, table.value))
             j += 2
         i = j
     return out
+
+
+def query_block_tokens(source: SourceFile, span: tuple[int, int]) -> list[Token]:
+    """Значимые токены блока запроса [начало, конец): без комментариев и BOM."""
+    start, end = span
+    return [t for t in tokens(source) if start <= t.start < end and t.kind not in ("COMMENT", "BOM")]
+
+
+def query_aliases(source: SourceFile, offset: int) -> dict[str, str]:
+    """Алиас таблицы -> имя таблицы внутри блока запроса, содержащего `offset` (вне блока – пусто).
+
+    Без этого автодополнению после `А.` нечего разрешать: запросы в проекте пишутся через алиасы.
+    Переопределённый алиас разрешается последним вхождением – дополнению лучше предложить хоть
+    что-то, чем ничего.
+    """
+    span = next((r for r in query_ranges(source) if r[0] <= offset < r[1]), None)
+    if span is None:
+        return {}
+    return dict(query_alias_pairs(query_block_tokens(source, span)))
 
 
 def _query_columns(toks: list[Token], start: int, end: int) -> list[str]:
