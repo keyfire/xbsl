@@ -4,22 +4,38 @@
 
 import * as vscode from "vscode";
 import { spawn } from "child_process";
+import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { LinterConfig } from "./report";
 
 const SHOW_INFO = "xbsl.showVersionInfo";
+const AGE_REFRESH_MS = 60_000;
 
-// Время сборки активного расширения = mtime установленного dist/extension.js. Все дев-сборки имеют одну
-// версию (0.12.0), поэтому именно метка времени отличает свежую сборку от прежней.
-function buildStamp(context: vscode.ExtensionContext): string {
+// Сборку опознаём коротким хешем установленного бандла: у всех дев-сборок одна версия (0.12.0),
+// а хеш меняется вместе с кодом. Дату и время сборки не показываем - статус-бар попадает в
+// скриншоты и гифки README, а знать нужно лишь одно: та же это сборка или уже новая.
+function buildId(context: vscode.ExtensionContext): { hash: string; builtAt: number } | undefined {
   try {
-    const t = fs.statSync(path.join(context.extensionPath, "dist", "extension.js")).mtime;
-    const p = (n: number): string => String(n).padStart(2, "0");
-    return `${p(t.getHours())}:${p(t.getMinutes())} ${p(t.getDate())}.${p(t.getMonth() + 1)}`;
+    const file = path.join(context.extensionPath, "dist", "extension.js");
+    const hash = createHash("sha256").update(fs.readFileSync(file)).digest("hex").slice(0, 6);
+    return { hash, builtAt: fs.statSync(file).mtime.getTime() };
   } catch {
-    return "?";
+    return undefined;
   }
+}
+
+// Свежесть сборки словами, без абсолютного времени: "только что", "12 мин назад", "3 ч назад".
+function builtAgo(builtAt: number): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - builtAt) / 60_000));
+  if (minutes < 1) {
+    return vscode.l10n.t("just now");
+  }
+  if (minutes < 60) {
+    return vscode.l10n.t("{0} min ago", minutes);
+  }
+  const hours = Math.floor(minutes / 60);
+  return hours < 24 ? vscode.l10n.t("{0} h ago", hours) : vscode.l10n.t("{0} d ago", Math.floor(hours / 24));
 }
 
 function linterVersion(cfg: LinterConfig): Promise<string | undefined> {
@@ -52,7 +68,8 @@ export function registerStatusBar(
   getLinter: (resource?: vscode.Uri) => LinterConfig
 ): { setLspMode: (on: boolean) => void } {
   const extVersion = String(context.extension.packageJSON.version ?? "?");
-  const build = buildStamp(context);
+  const build = buildId(context);
+  const hash = build ? build.hash : "?";
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = SHOW_INFO;
   let linter = "…";
@@ -62,15 +79,16 @@ export function registerStatusBar(
 
   const line = (): string =>
     vscode.l10n.t(
-      "Extension XBSL {0} (build {3}) · linter xbsllint {1} · completion: {2}",
+      "Extension XBSL {0} (build {3}, built {4}) · linter xbsllint {1} · completion: {2}",
       extVersion,
       linter,
       lspOn ? vscode.l10n.t("LSP") : vscode.l10n.t("CLI index"),
-      build
+      hash,
+      build ? builtAgo(build.builtAt) : "?"
     );
 
   const render = (): void => {
-    item.text = `$(versions) XBSL ${extVersion} @${build} · lint ${linter}`;
+    item.text = `$(versions) XBSL ${extVersion} · ${hash} · lint ${linter}`;
     item.tooltip = line();
     item.show();
   };
@@ -81,8 +99,12 @@ export function registerStatusBar(
     render();
   };
 
+  // Иначе свежесть в подсказке застынет на том, чем была при запуске окна.
+  const ageTimer = setInterval(render, AGE_REFRESH_MS);
+
   context.subscriptions.push(
     item,
+    { dispose: () => clearInterval(ageTimer) },
     vscode.commands.registerCommand(SHOW_INFO, () => void vscode.window.showInformationMessage(line())),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("xbsl.linter") || e.affectsConfiguration("xbsl.lsp")) {

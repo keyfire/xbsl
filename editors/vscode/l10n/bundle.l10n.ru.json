@@ -146,7 +146,11 @@
   "Tree grouping": "Группировка дерева",
   "Standard attributes": "Стандартные реквизиты",
   "(default)": "(по умолчанию)",
-  "Extension XBSL {0} (build {3}) · linter xbsllint {1} · completion: {2}": "Расширение XBSL {0} (сборка {3}) · линтер xbsllint {1} · дополнение: {2}",
+  "Extension XBSL {0} (build {3}, built {4}) · linter xbsllint {1} · completion: {2}": "Расширение XBSL {0} (сборка {3}, собрана {4}) · линтер xbsllint {1} · дополнение: {2}",
+  "just now": "только что",
+  "{0} min ago": "{0} мин назад",
+  "{0} h ago": "{0} ч назад",
+  "{0} d ago": "{0} дн назад",
   "LSP": "LSP",
   "CLI index": "обычный (CLI-индекс)"
 }
