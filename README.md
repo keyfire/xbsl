@@ -151,6 +151,26 @@ parses `Запрос{ ... }` blocks and verifies the tables of `ИЗ`/`СОЕД�
 project objects and their tabular sections; a block with constructs outside the supported
 subset (temporary tables, unions, subqueries) is skipped whole rather than guessed.
 
+## Names of project elements (the `naming/` rules)
+
+Twelve rules from the platform standard "Names of project elements" – it is mandatory in new code,
+so all of them are warnings. They read the descriptions (`.yaml`): the name of the element itself
+and the names of its attributes, dimensions, resources, tabular sections and enumeration values.
+
+The number of a name is checked against the kind: catalogs, documents, registers and tabular
+sections are named in the plural, enumerations and structures in the singular (`naming/number`).
+This is morphology, not a guess by the ending: `Номенклатура` is singular and the standard allows
+it, while `Программы` and `Акции` without the case read as a genitive singular. Needs the `[morph]`
+extra (`pip install "xbsllint[morph]"`); without it the rule stays silent.
+
+The rest: the letter `ё` and underscores in names, an abbreviation written as one word (`Ндс`, not
+`НДС`), an English term as the original (`Xml`, not `Хмл`), `Вид` rather than `Тип` for
+enumerations, the kind inside its own name (`ОтчетЗависшиеЗадачи`), filler words (`Управление`,
+`Менеджер`), an environment suffix on a common module (`ОбменДаннымиКлиентИСервер` – the
+environment is a property, not a name), a boolean attribute named by a negation (`НетОшибок`
+instead of `Успешно`), an empty `Представление`, and the prefixes required for certain kinds
+(`КлючДоступа`, `ПравоНа`, `Навигация`).
+
 ## Code style conventions (the `style/` rules)
 
 Twenty-one rules that follow the platform documentation ("Code style conventions" and "Language

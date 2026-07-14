@@ -32,6 +32,7 @@ from . import (  # noqa: F401
     environment,
     handlers,
     local_visibility,
+    naming,
     ns_objects,
     queries,
     reserved_names,

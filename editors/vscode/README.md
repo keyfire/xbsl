@@ -156,7 +156,7 @@ newlines) are left to `xbsllint --fix` on the command line.
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
 | `xbsl.navigation.enabled` | `true` | Index-based go-to-definition and completion. |
-| `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, style, typography, whitespace, encoding, structure, form): the rules' own levels, one level for the whole group, or `off`. See [Rules](#rules-levels-and-disabling). |
+| `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, naming, style, typography, whitespace, encoding, structure, form, query): the rules' own levels, one level for the whole group, or `off`. The **naming** group covers the names of project elements per the platform standard (needs `xbsllint` >= 0.11.0). See [Rules](#rules-levels-and-disabling). |
 | `xbsl.deploy.*` | – | The deploy command settings – documented in the [XBSL Debug README](https://github.com/keyfire/elemctl/tree/main/editors/vscode#deploy-from-vs-code) of the elemctl project. |
 
 ## Rules: levels and disabling

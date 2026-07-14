@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xbsllint"
-version = "0.10.0"
+version = "0.11.0"
 description = "Линтер исходников 1С:Элемент (пары .yaml/.xbsl)"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -28,9 +28,12 @@ Homepage = "https://github.com/keyfire/xbsl-lint"
 Repository = "https://github.com/keyfire/xbsl-lint"
 
 [project.optional-dependencies]
-dev = ["pytest>=7"]
+dev = ["pytest>=7", "pymorphy3>=2.0"]
 mcp = ["mcp>=1.2"]
 lsp = ["pygls>=1.3,<2"]
+# Морфология русского языка: правило naming/number (справочники во множественном числе,
+# перечисления в единственном) без неё молчит - гадать по окончаниям нельзя.
+morph = ["pymorphy3>=2.0"]
 
 [project.scripts]
 xbsllint = "xbsllint.cli:main"

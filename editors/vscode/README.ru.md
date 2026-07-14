@@ -140,7 +140,7 @@
 | `xbsl.workspaceLint` | `true` | Полный прогон по воркспейсу при каждом сохранении `.xbsl`/`.yaml`. |
 | `xbsl.workspaceLintTimeout` | `60000` | Прервать фоновый прогон через столько мс (`0` – без предела). |
 | `xbsl.navigation.enabled` | `true` | Навигация и автодополнение на индексе. |
-| `xbsl.groups.*` | `default` | Выпадающий список на каждую группу правил (code, yaml, style, typography, whitespace, encoding, structure, form): собственные уровни правил, единый уровень на всю группу или `off`. См. [Правила](#правила-уровни-и-отключение). |
+| `xbsl.groups.*` | `default` | Выпадающий список на каждую группу правил (code, yaml, naming, style, typography, whitespace, encoding, structure, form, query): собственные уровни правил, единый уровень на всю группу или `off`. Группа **naming** – имена элементов проекта по стандарту платформы (нужен `xbsllint` >= 0.11.0). См. [Правила](#правила-уровни-и-отключение). |
 | `xbsl.deploy.*` | – | Настройки команды деплоя – описаны в [README расширения XBSL Debug](https://github.com/keyfire/elemctl/blob/main/editors/vscode/README.ru.md#деплой-из-vs-code) проекта elemctl. |
 
 ## Правила: уровни и отключение
