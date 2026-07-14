@@ -1,4 +1,11 @@
-"""Tests of the pure LSP navigation core (a port of the extension's navCore tests)."""
+"""Tests of the pure LSP navigation core (a port of the extension's navCore tests).
+
+The core itself needs no Element data - it works over the project index. The tests of the
+syntactic helpers (types of locals, query aliases and columns) do run the lexer, so they carry
+`needs_data` and are skipped in a checkout without the data bundle.
+"""
+
+import pytest
 
 from xbsllint import engine
 from xbsllint.lsp_nav import IndexLookup, chain_at, resolve_completions, resolve_definition, resolve_hover
@@ -269,6 +276,7 @@ def test_completion_yaml_type():
 """
 
 
+@pytest.mark.needs_data
 def test_query_aliases_from_and_join():
     # алиасы таблиц запроса – так к таблицам обращаются в реальном коде
     src = engine.load_text("Модуль.xbsl", МОДУЛЬ_С_ЗАПРОСОМ)
@@ -279,6 +287,7 @@ def test_query_aliases_from_and_join():
     assert query_aliases(src, outside) == {}
 
 
+@pytest.mark.needs_data
 def test_query_row_columns_for_loop():
     # `знч Результат = Запрос{...}` + `для С из Результат` -> у С колонки выборки: алиас КАК,
     # поле без алиаса (последний сегмент), вычисляемое выражение только с алиасом
@@ -287,6 +296,7 @@ def test_query_row_columns_for_loop():
     assert got == {"С": ["Заголовок", "Слаг", "Вес"]}
 
 
+@pytest.mark.needs_data
 def test_query_row_columns_only_above_cursor():
     # цикл ниже курсора ещё не виден
     src = engine.load_text("Модуль.xbsl", МОДУЛЬ_С_ЗАПРОСОМ)
@@ -306,6 +316,7 @@ def test_completion_query_row_member():
     assert all(e["kind"] == "field" for e in entries)
 
 
+@pytest.mark.needs_data
 def test_local_var_types_declarations_and_params():
     # тип берётся из инициализации (новый Массив<...>) и из аннотации; дженерик-параметр
     # отбрасывается – члены типа от него не зависят; параметры метода тоже дают тип
@@ -320,6 +331,7 @@ def test_local_var_types_declarations_and_params():
     }
 
 
+@pytest.mark.needs_data
 def test_local_var_types_scoped_to_method():
     # переменные соседнего метода в область видимости не затекают
     src = engine.load_text("Модуль.xbsl", МОДУЛЬ)
@@ -327,6 +339,7 @@ def test_local_var_types_scoped_to_method():
     assert got == {"Индекс": "Соответствие"}
 
 
+@pytest.mark.needs_data
 def test_local_var_types_only_above_cursor():
     # объявления ниже курсора ещё не видны
     src = engine.load_text("Модуль.xbsl", МОДУЛЬ)

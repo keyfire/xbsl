@@ -2,7 +2,9 @@
 
 The language/type data (xbsllint/data/element/...) is extracted from a 1C:Element distribution
 and may not have been generated (e.g. in a public checkout without a data bundle). Tests that
-need the data are skipped rather than failed.
+need the data are skipped rather than failed: either a whole module (_DATA_DEPENDENT) or a single
+test marked `@pytest.mark.needs_data` - the latter keeps the data-free tests of a mixed module
+running in a public checkout.
 
 The output language is pinned to Russian: assertions elsewhere match Russian message text, and
 without pinning the result would depend on the developer's system locale.
@@ -39,6 +41,10 @@ def _has_data() -> bool:
         return False
 
 
+def pytest_configure(config):
+    config.addinivalue_line("markers", "needs_data: тесту нужны данные Элемента (лексер, датасет)")
+
+
 def pytest_collection_modifyitems(config, items):
     if _has_data():
         return
@@ -48,5 +54,5 @@ def pytest_collection_modifyitems(config, items):
     for item in items:
         module = getattr(item, "module", None)
         name = getattr(module, "__name__", "")
-        if name in _DATA_DEPENDENT:
+        if name in _DATA_DEPENDENT or item.get_closest_marker("needs_data"):
             item.add_marker(skip)
