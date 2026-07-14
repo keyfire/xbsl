@@ -530,7 +530,7 @@ function tabularNode(tc: MetaField, yamlPath: string): XbslNode {
 }
 
 // Узел стандартного реквизита (Наименование/Код/Номер/Дата): материализован (есть в Реквизиты) – со
-// смещением записи, иначе синтетический (значения по умолчанию, серым «(по умолчанию)»). Клик открывает
+// смещением записи, иначе синтетический (значения по умолчанию, серым "(по умолчанию)"). Клик открывает
 // описание слева + панель свойств справа; правка синтетического материализует запись в yaml.
 function standardAttrNode(kind: string, name: string, yamlPath: string, internals?: MetaInternals): XbslNode {
   const offset = internals?.attributes.find((a) => a.name === name)?.offset;
