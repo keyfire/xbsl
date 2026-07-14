@@ -114,7 +114,7 @@ keywords are understood in both languages (`var`/`пер`, `new`/`новый`):
 
 The members of stdlib types come from the Element data (the `--data-dir` root), everything else
 from the project index. A name in scope beats a type of the same name: once a variable `List` is
-declared, `List.` is about its type, not about the `List` component.
+declared, `List.` is about its type, not about the `List` component. Requires `xbsllint` >= 0.10.0.
 
 Known limits – by design: outside LSP mode the index knows declarations, not types (no completion
 after variables). Type inference for arbitrary expressions and for dotted chains deeper than one

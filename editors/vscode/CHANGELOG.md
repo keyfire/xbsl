@@ -69,7 +69,7 @@
   tokens, so keywords are understood in both languages (`var`/`пер`, `new`/`новый`). Properties and
   methods are listed apart: a method carries its own icon and is inserted with parentheses. A name in
   scope beats a type of the same name (with `List` declared, `List.` is about its type, not about the
-  `List` component).
+  `List` component). Requires `xbsllint` >= 0.10.0.
 - The metadata tree labels (categories and subtrees) now follow the UI language – English or Russian
   – like the rest of the extension.
 - Clicking an object, field, module or form in the tree opens its source on the left (the description
