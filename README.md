@@ -151,6 +151,14 @@ parses `Запрос{ ... }` blocks and verifies the tables of `ИЗ`/`СОЕД�
 project objects and their tabular sections; a block with constructs outside the supported
 subset (temporary tables, unions, subqueries) is skipped whole rather than guessed.
 
+## Project properties (the `project/` rules)
+
+Three rules from the standard "Filling in the project properties": `Поставщик` and `Имя` are
+identifiers built from the presentations (every word capitalized: `КабинетСотрудника`,
+`НовыеЭлементарныеТехнологии`); `Представление` and `ПредставлениеПоставщика` are filled in – the
+official name of the project and of the company that developed it; `Версия` is three numbers
+`A.B.C` (semantic versioning), not `1.0`.
+
 ## Names of project elements (the `naming/` rules)
 
 Twelve rules from the platform standard "Names of project elements" – it is mandatory in new code,
