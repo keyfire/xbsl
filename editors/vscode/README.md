@@ -277,6 +277,8 @@ In the subtree groups a **"+"** adds an attribute / dimension / resource / value
 tabular section; a catalog/document has **Add object form** (creates the object form and registers it
 in the object).
 
+![Creating an object from the tree: a new catalog and its attribute](https://raw.githubusercontent.com/keyfire/xbsl-lint/main/editors/vscode/images/metadata-create.gif)
+
 **Subsystems.** A **Subsystems** branch lists the subsystem folders (a click opens the subsystem
 file); **Add subsystem** creates a folder with a subsystem file. The project root has **Filter by
 subsystem** (multi-select) and **Clear filter**; the active filter is shown in grey.
