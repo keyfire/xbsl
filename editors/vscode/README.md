@@ -236,6 +236,8 @@ faithful, exact sizes and styles are not (explicit label colors and font sizes a
 
 ## Metadata explorer
 
+![Metadata explorer: the tree, the properties panel, grouping by subsystem](https://raw.githubusercontent.com/keyfire/xbsl-lint/main/editors/vscode/images/metadata-tree.gif)
+
 A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata – like the
 platform designer, but inside VS Code.
 
