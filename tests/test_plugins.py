@@ -142,3 +142,23 @@ def test_no_plugins_env_disables_both(monkeypatch):
 def test_disable_flag_parsing(monkeypatch, value, expected):
     monkeypatch.setenv("XBSLLINT_NO_PLUGINS", value)
     assert plugins.disabled() is expected
+
+
+def test_data_root_source_reports_origin(tmp_path):
+    """data_root_source различает --data-dir и встроенные данные (для --where)."""
+    assert dataset.data_root_source() == "встроенные данные пакета"
+    dataset.set_data_root(_make_root(tmp_path))
+    assert dataset.data_root_source() == "--data-dir"
+
+
+def test_cli_where_shows_root(tmp_path, capsys):
+    """xbsllint --where печатает корень данных, источник и версию."""
+    from xbsllint import cli
+
+    root = _make_root(tmp_path)
+    rc = cli.main(["--where", "--data-dir", str(root)])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert str(root) in out
+    assert "--data-dir" in out
+    assert "1.0.0" in out  # версия по умолчанию из index.json

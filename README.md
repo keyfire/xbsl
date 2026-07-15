@@ -47,7 +47,7 @@ xbsllint path/to/sources        # or: python -m xbsllint path/to/sources
 The extractors from step 1 ship with the repository, not with the PyPI package – clone the
 repository to generate the data.
 
-Flags: `--list-rules`, `--select`/`--enable`/`--ignore` (by rule id, rule group – the part of the id
+Flags: `--list-rules`, `--where` (data root, source and versions), `--select`/`--enable`/`--ignore` (by rule id, rule group – the part of the id
 before `/` – or tier letter), `--fix`, `--baseline`/`--write-baseline`, `--element-version`,
 `--data-dir`, `--lang`, `--format text|json|codeclimate`.
 `--fix` repairs the mechanical findings in place – trailing whitespace, typography characters

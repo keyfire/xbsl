@@ -80,6 +80,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-rules", action="store_true", help="вывести список правил и выйти"
     )
     parser.add_argument(
+        "--where",
+        action="store_true",
+        help="показать корень данных Элемента (путь, источник, версии) и выйти",
+    )
+    parser.add_argument(
         "--element-version",
         metavar="ВЕРСИЯ",
         help="версия данных Элемента (по умолчанию – последняя из бандла)",
@@ -188,6 +193,18 @@ def main(argv: list[str] | None = None) -> int:
         dataset.set_data_root(args.data_dir)
     if args.element_version:
         dataset.set_version(args.element_version)
+
+    if args.where:
+        print(f"корень данных: {dataset.data_root()}")
+        print(f"источник: {dataset.data_root_source()}")
+        try:
+            print(f"версия по умолчанию: {dataset.default_version()}")
+            avail = dataset.available_versions()
+            print(f"доступные версии: {', '.join(avail) if avail else '–'}")
+        except dataset.DatasetError as exc:
+            print(f"индекс версий: {exc}")
+        return 0
+
     try:
         dataset.resolve_version()  # check the selected data version is available
     except dataset.DatasetError as exc:

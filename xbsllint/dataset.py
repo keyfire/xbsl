@@ -75,6 +75,18 @@ def data_root() -> Path:
     return BUNDLED_DATA_ROOT
 
 
+def data_root_source() -> str:
+    """Where the data root came from (for the --where diagnostic): CLI / env / plugin / bundle."""
+    if _root_override is not None:
+        return "--data-dir"
+    if os.environ.get(_ENV_DATA_DIR):
+        return f"env {_ENV_DATA_DIR}"
+    for root in plugins.data_roots():
+        if (root / "index.json").exists():
+            return "плагин (точка расширения xbsllint.data)"
+    return "встроенные данные пакета"
+
+
 def _read_index() -> dict:
     idx = data_root() / "index.json"
     if not idx.exists():
