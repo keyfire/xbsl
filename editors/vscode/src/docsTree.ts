@@ -7,6 +7,7 @@
 import * as vscode from "vscode";
 import { DocNode, docsSearch, docsTree } from "./docsClient";
 import { openForSymbol, openPage, setDocsOpenListener } from "./docsPanel";
+import { ruleDoc, ruleOfCode } from "./ruleDocs";
 
 const KIND_ICON: Record<string, string> = {
   section: "book",
@@ -130,6 +131,37 @@ async function searchDocs(context: vscode.ExtensionContext): Promise<void> {
   }
 }
 
+// Действие на диагностике правила-стандарта: открыть его документ в панели (и в дереве).
+class RuleDocActionProvider implements vscode.CodeActionProvider {
+  provideCodeActions(
+    _doc: vscode.TextDocument,
+    _range: vscode.Range | vscode.Selection,
+    context: vscode.CodeActionContext
+  ): vscode.CodeAction[] {
+    const actions: vscode.CodeAction[] = [];
+    const seen = new Set<string>();
+    for (const d of context.diagnostics) {
+      if (d.source !== "xbsllint") {
+        continue; // только диагностики линтера
+      }
+      const rule = ruleOfCode(d.code);
+      const doc = ruleDoc(rule);
+      if (!rule || !doc || seen.has(rule)) {
+        continue;
+      }
+      seen.add(rule);
+      const action = new vscode.CodeAction(
+        vscode.l10n.t("XBSL: documentation for the rule {0}", rule),
+        vscode.CodeActionKind.QuickFix
+      );
+      action.command = { command: "xbsl.docs.open", title: "", arguments: [doc.page] };
+      action.diagnostics = [d];
+      actions.push(action);
+    }
+    return actions;
+  }
+}
+
 export function registerDocs(context: vscode.ExtensionContext): void {
   const provider = new DocsTreeProvider();
   const view = vscode.window.createTreeView("xbslDocs", { treeDataProvider: provider });
@@ -138,6 +170,12 @@ export function registerDocs(context: vscode.ExtensionContext): void {
   setDocsOpenListener((id) => void provider.revealPage(id));
   context.subscriptions.push(
     view,
+    // Правила naming/* и project/* срабатывают на .yaml, поэтому провайдер и для yaml.
+    vscode.languages.registerCodeActionsProvider(
+      [{ language: "xbsl" }, { language: "yaml" }],
+      new RuleDocActionProvider(),
+      { providedCodeActionKinds: [vscode.CodeActionKind.QuickFix] }
+    ),
     vscode.commands.registerCommand("xbsl.docs.open", (id: string) => openPage(context, id)),
     vscode.commands.registerCommand("xbsl.docs.search", () => searchDocs(context)),
     vscode.commands.registerCommand("xbsl.docs.showForSymbol", () => openForSymbol(context)),

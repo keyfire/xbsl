@@ -6,6 +6,14 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.15.0
+
+- A link to the standard's document straight from a diagnostic. For the rules that implement
+  platform standards (`naming/*`, `project/*`, `query/in-subquery-composite`), the rule code in the
+  Problems panel is now a clickable link to the standard's page, and the lightbulb on a finding
+  offers **XBSL: documentation for the rule** – it opens the document in the Documentation view and
+  reveals it in the Contents tree.
+
 ## 0.14.1
 
 - The README now documents the Documentation view (0.14.0 only mentioned it in the changelog): the

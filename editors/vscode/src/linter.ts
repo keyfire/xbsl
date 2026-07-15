@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { spawn } from "child_process";
 import { ruleOverride, severityFor } from "./ruleConfig";
+import { docCode } from "./ruleDocs";
 import {
   buildArgs,
   buildPathArgs,
@@ -152,7 +153,7 @@ export function makeDiagnostic(d: RawDiag, lineText: string | undefined): vscode
   const severity = over && over !== "off" ? severityFor(over) : severityCode(d.severity);
   const diag = new vscode.Diagnostic(range, d.message, severity);
   diag.source = "xbsllint";
-  diag.code = d.rule;
+  diag.code = docCode(d.rule); // у правила-стандарта значок правила становится ссылкой на документ
   return diag;
 }
 

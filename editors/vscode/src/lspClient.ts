@@ -12,6 +12,7 @@ import {
 } from "vscode-languageclient/node";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { applyOverride, mergeOffRules } from "./ruleConfig";
+import { docCode } from "./ruleDocs";
 
 let client: LanguageClient | undefined;
 
@@ -94,9 +95,20 @@ export async function activateLsp(
     diagnosticCollectionName: "xbsl-lsp",
     middleware: {
       // Пер-правило переопределения xbsl.rules поверх диагностик сервера: скрыть off,
-      // заменить уровень.
+      // заменить уровень; у правила-стандарта значок правила становится ссылкой на документ.
       handleDiagnostics: (uri, diagnostics, next) => {
-        next(uri, diagnostics.map((d) => applyOverride(d, uri)).filter((d): d is vscode.Diagnostic => d !== null));
+        next(
+          uri,
+          diagnostics
+            .map((d) => applyOverride(d, uri))
+            .filter((d): d is vscode.Diagnostic => d !== null)
+            .map((d) => {
+              if (typeof d.code === "string") {
+                d.code = docCode(d.code);
+              }
+              return d;
+            })
+        );
       },
     },
   };
