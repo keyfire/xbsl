@@ -406,25 +406,40 @@ def _make_server() -> "LanguageServer":
 
     # --- документация (панель справки в расширении – тонкий клиент к этим методам) --------
 
-    def docs_symbol_name(uri: str, line: int, character: int) -> Optional[str]:
-        """Имя для поиска в документации по позиции: тип локальной переменной либо само слово."""
+    def docs_symbol_at(uri: str, line: int, character: int) -> tuple[Optional[str], str]:
+        """(имя для точного резолва, запрос для кандидатов) по позиции курсора.
+
+        Имя – тип локальной переменной либо слово под курсором. Запрос дополняем приёмником перед
+        точкой (`Задание.Настроить` -> "Задание Настроить"), чтобы кандидаты-секции метода
+        ранжировались по нужному типу, а не по случайному топику руководства.
+        """
         path = uri_to_path(uri)
         if path is None:
-            return None
+            return None, ""
         doc = server.workspace.get_text_document(uri)
         lines = doc.source.split("\n")
         if line >= len(lines):
-            return None
-        word = _word_at(lines[line].rstrip("\r"), character)
+            return None, ""
+        line_text = lines[line].rstrip("\r")
+        word = _word_at(line_text, character)
         if not word:
-            return None
+            return None, ""
+        n = len(line_text)
+        start = max(0, min(character, n))
+        while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] == "_"):
+            start -= 1
+        query = word
+        if start >= 1 and line_text[start - 1] == ".":
+            receiver = _word_at(line_text, start - 1)
+            if receiver and receiver != word:
+                query = f"{receiver} {word}"
         offset = sum(len(lines[k]) + 1 for k in range(line)) + character
         try:
             src = engine.load_text(path.name, doc.source)
             var_type = local_var_types(src, offset).get(word)
         except Exception:  # noqa: BLE001 - разбор не должен ронять запрос
             var_type = None
-        return var_type or word
+        return (var_type or word), query
 
     @server.feature("xbsl/docsAvailable")
     def _docs_available(_params: object = None) -> dict:
@@ -457,11 +472,16 @@ def _make_server() -> "LanguageServer":
         pos = _param(params, "position")
         if not uri or pos is None:
             return {}
-        name = docs_symbol_name(uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0))
+        name, query = docs_symbol_at(
+            uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0)
+        )
         if not name:
             return {}
         pid = docs.for_symbol(name)
-        return {"name": name, "page": docs.page(pid) if pid else None}
+        if pid:
+            return {"name": name, "page": docs.page(pid), "candidates": []}
+        # Уверенной страницы нет (метод-секция, неизвестный тип) – отдаём кандидатов на выбор.
+        return {"name": name, "page": None, "candidates": docs.search(query, limit=8)}
 
     return server
 

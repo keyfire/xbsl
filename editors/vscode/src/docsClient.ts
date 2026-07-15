@@ -60,11 +60,18 @@ export async function docsTree(): Promise<DocNode[]> {
   return r?.nodes ?? [];
 }
 
+// Результат "документация по символу": уверенная страница (page) либо кандидаты на выбор.
+export interface DocForSymbol {
+  name: string;
+  page: DocPage | null;
+  candidates: DocHit[];
+}
+
 export async function docsForSymbol(
   uri: string,
   position: { line: number; character: number }
-): Promise<{ name: string; page: DocPage | null } | undefined> {
-  return await lspRequest<{ name: string; page: DocPage | null }>("xbsl/docsForSymbol", { uri, position });
+): Promise<DocForSymbol | undefined> {
+  return await lspRequest<DocForSymbol>("xbsl/docsForSymbol", { uri, position });
 }
 
 export async function docsAsset(id: string): Promise<DocAsset | undefined> {

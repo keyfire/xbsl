@@ -108,10 +108,10 @@ def test_page(docs_root):
     assert docs.page("нет") is None
 
 
-def test_for_symbol_exact_then_search(docs_root):
+def test_for_symbol_confident_only(docs_root):
     assert docs.for_symbol("Массив") == _ARRAY                      # точный заголовок
     assert docs.for_symbol("Запрос") == _QUERY
-    assert docs.for_symbol("выборка") == _QUERY                     # только полнотекстом
+    assert docs.for_symbol("выборка") is None                       # только в тексте – не угадываем
     assert docs.for_symbol("такого-нет-нигде") is None
 
 

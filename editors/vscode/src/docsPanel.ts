@@ -145,9 +145,25 @@ export async function openForSymbol(context: vscode.ExtensionContext): Promise<v
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: no symbol under the cursor."));
     return;
   }
-  if (!res.page) {
+  if (res.page) {
+    await render(context, res.page);
+    return;
+  }
+  // Уверенной страницы нет (метод-секция, неизвестный тип) – предлагаем кандидатов на выбор.
+  const candidates = res.candidates ?? [];
+  if (candidates.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t('XBSL: no documentation for "{0}".', res.name));
     return;
   }
-  await render(context, res.page);
+  const pick = await vscode.window.showQuickPick(
+    candidates.map((h) => ({ label: h.title, description: h.qualified, detail: h.snippet || undefined, id: h.id })),
+    {
+      placeHolder: vscode.l10n.t('Documentation for "{0}"', res.name),
+      matchOnDescription: true,
+      matchOnDetail: true,
+    }
+  );
+  if (pick) {
+    await openPage(context, pick.id);
+  }
 }

@@ -112,9 +112,13 @@ def tree(version: str | None = None) -> list[dict]:
 
 
 def for_symbol(name: str, version: str | None = None) -> str | None:
-    """id страницы для имени символа/типа: точное совпадение заголовка сильнее, иначе – топ поиска.
+    """id страницы для имени символа/типа при УВЕРЕННОМ совпадении, иначе None.
 
-    Имя может быть простым (`Массив`) или последним сегментом квалификатора (`Стд::...::Массив`).
+    Совпадение – точный заголовок либо последний сегмент квалификатора (`Стд::...::Массив`);
+    у типа предпочитаем страницу справочника (stdlib) топику руководства с тем же заголовком.
+    Нечёткого (полнотекстового) фолбэка тут НЕТ: для метода-секции (напр. `Настроить`) точной
+    страницы нет, а угаданный по слову топик руководства сбивает с толку – кандидатов подбирает
+    вызывающий через search().
     """
     if not name:
         return None
@@ -123,8 +127,6 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     if con is None:
         return None
     try:
-        # У типа предпочитаем страницу справочника (stdlib) странице руководства с тем же заголовком:
-        # правый клик на типе должен открыть справочник, а не топик руководства.
         exact = con.execute(
             "SELECT id FROM pages WHERE title = ? "
             "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
@@ -133,15 +135,13 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
         if exact:
             return exact["id"]
         byq = con.execute(
-            "SELECT id FROM pages WHERE qualified LIKE ? ORDER BY length(qualified) LIMIT 1",
+            "SELECT id FROM pages WHERE qualified LIKE ? "
+            "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
             (f"%::{name}",),
         ).fetchone()
-        if byq:
-            return byq["id"]
+        return byq["id"] if byq else None
     finally:
         con.close()
-    hits = search(name, limit=1, version=version)
-    return hits[0]["id"] if hits else None
 
 
 def asset(asset_id: str, version: str | None = None) -> dict | None:

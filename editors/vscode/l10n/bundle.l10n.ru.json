@@ -162,5 +162,6 @@
   "XBSL: open an .xbsl file and place the cursor on a type or variable.": "XBSL: откройте файл .xbsl и поставьте курсор на тип или переменную.",
   "XBSL: no symbol under the cursor.": "XBSL: под курсором нет символа.",
   "XBSL: no documentation for \"{0}\".": "XBSL: нет документации для \"{0}\".",
-  "XBSL: nothing found for \"{0}\".": "XBSL: по запросу \"{0}\" ничего не найдено."
+  "XBSL: nothing found for \"{0}\".": "XBSL: по запросу \"{0}\" ничего не найдено.",
+  "Documentation for \"{0}\"": "Документация по \"{0}\""
 }
