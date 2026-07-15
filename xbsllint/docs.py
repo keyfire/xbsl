@@ -95,14 +95,16 @@ def tree(version: str | None = None) -> list[dict]:
     """Плоский список узлов курируемого оглавления – дерево строит потребитель.
 
     Узел: node (id узла), parent (id родителя или None у раздела-вкладки), label (подпись),
-    page (id страницы для ссылки, иначе None), kind (section/category/link).
+    page (id страницы для ссылки, иначе None), anchor (id раздела на странице для узла-заголовка),
+    kind (section/category/link/heading).
     """
     con = _open(version)
     if con is None:
         return []
     try:
         rows = con.execute(
-            "SELECT node, parent, ord, label, page, kind FROM tree ORDER BY parent IS NOT NULL, parent, ord"
+            "SELECT node, parent, ord, label, page, anchor, kind FROM tree "
+            "ORDER BY parent IS NOT NULL, parent, ord"
         ).fetchall()
         return [dict(r) for r in rows]
     except sqlite3.OperationalError:

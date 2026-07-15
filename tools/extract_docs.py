@@ -82,6 +82,18 @@ _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f​‌‍﻿­]")
 _QUALIFIED_RE = re.compile(r"<code>(Стд(?:::[^<]+)*)</code>")
 _AVAIL_RE = re.compile(r"Доступность:\s*([^<]+?)\s*</code>")
 _H1_RE = re.compile(r"<h1>(.*?)</h1>", re.S)
+# Заголовки разделов (с сохранённым id-якорем) – для оглавления страницы в дереве.
+_HEADING_RE = re.compile(r'<(h[23]) id="([^"]+)">(.*?)</\1>', re.S)
+
+
+def _headings(html: str) -> list[tuple[int, str, str]]:
+    """Разделы страницы: (уровень 2/3, id-якорь, текст) в порядке документа."""
+    out: list[tuple[int, str, str]] = []
+    for tag, anchor, inner in _HEADING_RE.findall(html):
+        text = unescape(_TAG_RE.sub("", inner)).strip()
+        if text:
+            out.append((int(tag[1]), anchor, text))
+    return out
 
 
 def _rewrite_href(href: str) -> str:
@@ -177,6 +189,7 @@ def _record(entry: str, raw: str, origin: str) -> dict | None:
         "url": f"{origin}{SITE_PREFIX}{doc_id}/",
         "html": html,
         "text": text,
+        "headings": _headings(html),
     }
 
 
@@ -275,7 +288,7 @@ CREATE TABLE pages (
 CREATE VIRTUAL TABLE pages_fts USING fts5(
     id UNINDEXED, title, qualified, text, tokenize='unicode61 remove_diacritics 0'
 );
-CREATE TABLE tree (node INTEGER PRIMARY KEY, parent INTEGER, ord INTEGER, label TEXT, page TEXT, kind TEXT);
+CREATE TABLE tree (node INTEGER PRIMARY KEY, parent INTEGER, ord INTEGER, label TEXT, page TEXT, anchor TEXT, kind TEXT);
 CREATE INDEX tree_parent ON tree(parent);
 """
 
@@ -312,6 +325,7 @@ def build(dist: Path, out: Path) -> tuple[int, int]:
                 wanted.add(e[len(SITE_ROOT):].rsplit("/", 1)[0])
 
         asset_ids: set[str] = set()
+        page_headings: dict[str, list] = {}  # id страницы -> её разделы (для оглавления в дереве)
         pages = 0
         for doc_id in sorted(wanted):
             entry = SITE_ROOT + doc_id + "/index.html"
@@ -331,28 +345,50 @@ def build(dist: Path, out: Path) -> tuple[int, int]:
                 (rec["id"], rec["title"], rec["qualified"], rec["text"]),
             )
             asset_ids.update(_ASSET_REF_RE.findall(rec["html"]))
+            if rec["headings"]:
+                page_headings[rec["id"]] = rec["headings"]
             pages += 1
 
         _write_assets(z, asset_ids, out.parent)
-        nodes = _build_tree(con, sidebars)
+        nodes = _build_tree(con, sidebars, page_headings)
     con.execute("INSERT INTO pages_fts(pages_fts) VALUES('optimize')")
     con.commit()
     con.close()
     return pages, nodes
 
 
-def _build_tree(con: sqlite3.Connection, sidebars: list[tuple[str, list]]) -> int:
-    """Разложить сайдбары в таблицу tree: раздел-вкладка -> категории -> ссылки на страницы."""
+def _build_tree(
+    con: sqlite3.Connection,
+    sidebars: list[tuple[str, list]],
+    page_headings: dict[str, list],
+) -> int:
+    """Разложить сайдбары в таблицу tree: вкладка -> категории -> страницы -> их разделы (заголовки)."""
     counter = [0]
 
-    def add(parent: int | None, ordinal: int, label: str, page: str | None, kind: str) -> int:
+    def add(parent: int | None, ordinal: int, label: str, page: str | None, anchor: str | None, kind: str) -> int:
         counter[0] += 1
         node = counter[0]
         con.execute(
-            "INSERT INTO tree(node, parent, ord, label, page, kind) VALUES(?,?,?,?,?,?)",
-            (node, parent, ordinal, label, page, kind),
+            "INSERT INTO tree(node, parent, ord, label, page, anchor, kind) VALUES(?,?,?,?,?,?,?)",
+            (node, parent, ordinal, label, page, anchor, kind),
         )
         return node
+
+    def add_headings(parent_node: int, page: str) -> None:
+        """Разделы страницы (h2/h3) под её узлом-ссылкой; h3 вкладываются в предшествующий h2."""
+        h2_node: int | None = None
+        h2_ord = h3_ord = 0
+        for level, anchor, text in page_headings.get(page, []):
+            if level == 2:
+                h2_node = add(parent_node, h2_ord, text, page, anchor, "heading")
+                h2_ord += 1
+                h3_ord = 0
+            elif h2_node is not None:
+                add(h2_node, h3_ord, text, page, anchor, "heading")
+                h3_ord += 1
+            else:
+                add(parent_node, h2_ord, text, page, anchor, "heading")  # h3 без h2 – на верхнем уровне
+                h2_ord += 1
 
     def walk(items: list, parent: int) -> None:
         for i, it in enumerate(items):
@@ -362,12 +398,14 @@ def _build_tree(con: sqlite3.Connection, sidebars: list[tuple[str, list]]) -> in
             label = (it.get("label") or "").strip()
             kids = it.get("items")
             kind = "category" if it.get("type") == "category" else "link"
-            node = add(parent, i, label, page, kind)
+            node = add(parent, i, label, page, None, kind)
             if isinstance(kids, list):
                 walk(kids, node)
+            elif page:
+                add_headings(node, page)  # у листа-ссылки раскрываем разделы страницы
 
     for i, (label, items) in enumerate(sidebars):
-        root = add(None, i, label, None, "section")
+        root = add(None, i, label, None, None, "section")
         walk(items, root)
     return counter[0]
 

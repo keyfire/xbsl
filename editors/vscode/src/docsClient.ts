@@ -25,12 +25,14 @@ export interface DocPage {
   html: string;
 }
 
-// Узел курируемого дерева "Содержание": раздел-вкладка / категория / ссылка на страницу.
+// Узел курируемого дерева "Содержание": раздел-вкладка / категория / ссылка на страницу / заголовок
+// раздела внутри страницы (kind "heading" – несёт page + anchor).
 export interface DocNode {
   node: number;
   parent: number | null;
   label: string;
   page: string | null;
+  anchor: string | null;
   kind: string;
 }
 

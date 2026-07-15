@@ -13,7 +13,11 @@ const KIND_ICON: Record<string, string> = {
   section: "book",
   category: "symbol-namespace",
   link: "symbol-file",
+  heading: "symbol-string",
 };
+
+// Узлы-заголовки (разделы внутри страницы) выделяем цветом, чтобы отличать от страниц и категорий.
+const HEADING_COLOR = new vscode.ThemeColor("charts.blue");
 
 const ROOT = -1; // ключ группы разделов-вкладок (у них parent = null)
 
@@ -44,7 +48,8 @@ class DocsTreeProvider implements vscode.TreeDataProvider<number> {
     this.byPage.clear();
     for (const n of await docsTree()) {
       this.nodes.set(n.node, n);
-      if (n.page) {
+      // Для позиционирования (reveal) страница -> узел-ССЫЛКА, а не её заголовки (у них та же page).
+      if (n.page && n.kind !== "heading") {
         this.byPage.set(n.page, n.node);
       }
       const key = n.parent ?? ROOT;
@@ -90,14 +95,23 @@ class DocsTreeProvider implements vscode.TreeDataProvider<number> {
   getTreeItem(id: number): vscode.TreeItem {
     const node = this.nodes.get(id);
     const hasChildren = (this.children.get(id) ?? []).length > 0;
+    const kind = node?.kind ?? "link";
     const item = new vscode.TreeItem(
       node?.label ?? String(id),
       hasChildren ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
     );
-    item.iconPath = new vscode.ThemeIcon(KIND_ICON[node?.kind ?? "link"] ?? "symbol-file");
-    // Клик открывает страницу только у узлов-ссылок; категория/раздел лишь разворачивается.
+    item.iconPath = new vscode.ThemeIcon(
+      KIND_ICON[kind] ?? "symbol-file",
+      kind === "heading" ? HEADING_COLOR : undefined
+    );
+    // Клик открывает страницу у узлов-ссылок и заголовков (заголовок – на своём якоре);
+    // категория/раздел лишь разворачивается.
     if (node?.page) {
-      item.command = { command: "xbsl.docs.open", title: "", arguments: [node.page] };
+      item.command = {
+        command: "xbsl.docs.open",
+        title: "",
+        arguments: node.anchor ? [node.page, node.anchor] : [node.page],
+      };
     }
     return item;
   }

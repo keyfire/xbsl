@@ -36,11 +36,12 @@ _PAGES = [
      "<h1>Запрос</h1><p>Выполнение запросов к базе данных.</p>",
      "Запрос Выполнение запросов к базе данных выборка"),
 ]
-# node, parent, ord, label, page, kind
+# node, parent, ord, label, page, anchor, kind
 _TREE = [
-    (1, None, 0, "Типы языка", None, "section"),
-    (2, 1, 0, "Массив", _ARRAY, "link"),
-    (3, 1, 1, "Запрос", _QUERY, "link"),
+    (1, None, 0, "Типы языка", None, None, "section"),
+    (2, 1, 0, "Массив", _ARRAY, None, "link"),
+    (3, 2, 0, "Иерархия", _ARRAY, "иерархия", "heading"),  # раздел страницы под узлом-ссылкой
+    (4, 1, 1, "Запрос", _QUERY, None, "link"),
 ]
 
 
@@ -55,7 +56,7 @@ def docs_root(tmp_path):
         con.execute("INSERT INTO pages VALUES(?,?,?,?,?,?,?)", p[:7])  # text – только в FTS
         con.execute("INSERT INTO pages_fts(id,title,qualified,text) VALUES(?,?,?,?)",
                     (p[0], p[2], p[3], p[7]))
-    con.executemany("INSERT INTO tree VALUES(?,?,?,?,?,?)", _TREE)
+    con.executemany("INSERT INTO tree VALUES(?,?,?,?,?,?,?)", _TREE)
     con.commit()
     con.close()
     (ver_dir / "assets").mkdir()
@@ -117,9 +118,12 @@ def test_for_symbol_confident_only(docs_root):
 
 def test_tree(docs_root):
     nodes = {n["node"]: n for n in docs.tree()}
-    assert set(nodes) == {1, 2, 3}
+    assert set(nodes) == {1, 2, 3, 4}
     assert nodes[1]["parent"] is None and nodes[1]["kind"] == "section" and nodes[1]["page"] is None
     assert nodes[2]["parent"] == 1 and nodes[2]["label"] == "Массив" and nodes[2]["page"] == _ARRAY
+    # узел-заголовок: под узлом-ссылкой, несёт страницу и якорь раздела
+    assert nodes[3]["kind"] == "heading" and nodes[3]["parent"] == 2
+    assert nodes[3]["page"] == _ARRAY and nodes[3]["anchor"] == "иерархия"
 
 
 def test_asset(docs_root):

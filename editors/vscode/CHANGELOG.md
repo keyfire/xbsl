@@ -6,6 +6,12 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.16.0
+
+- The Contents tree now includes the sections of a page (its h2/h3 headings) – handy for navigating
+  the large guide and reference documents: a page expands into its sections, and clicking one opens
+  the page at that section. Heading nodes are colored to set them apart from pages and categories.
+
 ## 0.15.2
 
 - Opening a document from a rule or a link now scrolls to the relevant section (anchor) instead of
