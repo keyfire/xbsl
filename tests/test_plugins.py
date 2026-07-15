@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from xbsllint import dataset, plugins
+from xbsllint import dataset, i18n, plugins
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +21,7 @@ def _clean_env(monkeypatch):
     dataset.set_data_root(None)
     yield
     dataset.set_data_root(None)
+    i18n.set_lang("ru")  # cli.main(--where) сбрасывает язык на locale – вернуть для других модулей
 
 
 def _make_root(path: Path, version="1.0.0", keyword="ПЕРВЫЙ") -> Path:
@@ -156,7 +157,7 @@ def test_cli_where_shows_root(tmp_path, capsys):
     from xbsllint import cli
 
     root = _make_root(tmp_path)
-    rc = cli.main(["--where", "--data-dir", str(root)])
+    rc = cli.main(["--where", "--data-dir", str(root), "--lang", "ru"])
     assert rc == 0
     out = capsys.readouterr().out
     assert str(root) in out
