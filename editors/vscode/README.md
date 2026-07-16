@@ -167,6 +167,7 @@ newlines) are left to `xbsllint --fix` on the command line.
 | `xbsl.rules` | `{}` | Per-rule levels and disabling: `{"style": "off", "code/brackets": "error"}`. See [Rules](#rules-levels-and-disabling). |
 | `xbsl.linter.debounce` | `300` | Delay (ms) before linting while typing. |
 | `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (id (`Ид`) uniqueness etc.) cross-fire between directories. |
+| `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
 | `xbsl.navigation.enabled` | `true` | Index-based go-to-definition and completion. |
@@ -188,6 +189,32 @@ the check reruns right away. The choices land in the `xbsl.rules` setting – a 
 rule id (`whitespace/trailing`) or a whole group (`style`) to a level or `off`. An exact id
 beats its group, and any `xbsl.rules` key beats the group dropdowns. Works in both the CLI
 and the LSP mode.
+
+## Excluding a finding (the baseline)
+
+Disabling a rule silences it everywhere; sometimes a single finding must stay unfixed – the
+code is right on purpose. For that, every finding carries an **"Exclude the finding (to the
+baseline): `<rule>`"** action in its lightbulb (`Ctrl+.`): type the reason, and the finding's
+identity (file + rule + message) is recorded in the baseline file together with it. The
+finding disappears from the editor, and a CI gate over the same file
+(`xbsllint ... --baseline`) stops reporting it too.
+
+The file is `.xbsllint-baseline` in the workspace folder (created on the first exclusion),
+or wherever `xbsl.baseline` points. The reason stays next to the frozen finding, and
+`xbsllint --write-baseline` keeps it on a rewrite:
+
+```json
+"e1c/site/Основное/Полезное.yaml": {
+ "naming/number": {
+  "Имя 'Полезное' в единственном числе – ...": { "count": 1, "reason": "историческое имя" }
+ }
+}
+```
+
+In the LSP mode the suppression runs on the server and needs the engine 0.15.0 or newer;
+the CLI mode works with any engine that has `--baseline`. The identity includes the message
+text, so the baseline is bound to the output language – write and check it under the same
+`xbsl.linter.lang`.
 
 ## LSP mode (default)
 

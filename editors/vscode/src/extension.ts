@@ -4,8 +4,9 @@ import * as path from "path";
 import { LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
 import { registerFormPreview } from "./formPreview";
+import { baselineForLint, registerExcludeAction } from "./excludeAction";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
-import { activateLsp } from "./lspClient";
+import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClient";
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerMetadataProps } from "./metadataProps";
@@ -86,6 +87,8 @@ function readSettings(resource?: vscode.Uri): Settings {
       select: (c.get<string>("linter.select") || "").trim() || undefined,
       // Правила и группы, выключенные в настройках (off), не запускаются вовсе.
       ignore: mergeOffRules((c.get<string>("linter.ignore") || "").trim() || undefined, resource),
+      // Существующий файл базлайна: исключённые находки гасятся в каждом прогоне.
+      baseline: baselineForLint(resource),
     },
     run: c.get<"onType" | "onSave" | "off">("linter.run") || "onType",
     debounce: c.get<number>("linter.debounce") ?? 300,
@@ -134,7 +137,15 @@ async function lintDocument(doc: vscode.TextDocument): Promise<void> {
     return;
   }
   const settings = readSettings(doc.uri);
-  const filename = doc.uri.scheme === "file" ? path.basename(doc.uri.fsPath) : "buffer.xbsl";
+  // Путь относительно папки воркспейса (cwd прогона), а не голое имя: по нему находки
+  // сопоставляются с записями базлайна, а structure/xbsl-pair видит настоящего соседа.
+  const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+  const filename =
+    doc.uri.scheme !== "file"
+      ? "buffer.xbsl"
+      : folder
+        ? path.relative(folder.uri.fsPath, doc.uri.fsPath)
+        : path.basename(doc.uri.fsPath);
   const version = doc.version;
   const result = await lintBuffer(doc.getText(), filename, cwdFor(doc.uri), settings.linter);
   if (result.error) {
@@ -381,6 +392,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // предпросмотр форм.
   registerPalettePicker(context);
   registerRuleConfig(context);
+  // Исключение находки в базлайн (лампочка). После записи: в CLI-режиме перечитываем всё
+  // с нуля; в LSP-режиме сервер перечитывает базлайн на каждом прогоне - достаточно
+  // xbsl/relint, а если файла при старте сервера не было, перезапускаем его с новым
+  // аргументом --baseline.
+  registerExcludeAction(context, async (uri) => {
+    if (lspActive()) {
+      if (lspBaselinePassed()) {
+        await lspRequest("xbsl/relint", { uri: uri.toString() });
+      } else {
+        await vscode.commands.executeCommand("xbsl.restartLinter");
+      }
+      return;
+    }
+    resetAndRelint();
+  });
   registerDeploy(context, projectRootFor);
   registerFormPreview(context);
   const metadataTree = registerMetadataTree(context, projectRootFor);

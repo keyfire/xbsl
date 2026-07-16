@@ -32,6 +32,7 @@ export interface LinterConfig {
   lang?: string; // "ru" | "en"
   select?: string;
   ignore?: string;
+  baseline?: string; // an EXISTING baseline file: excluded findings are suppressed
 }
 
 export function parseReport(stdout: string): RawReport {
@@ -71,6 +72,9 @@ export function buildArgs(filename: string, cfg: LinterConfig): string[] {
   if (cfg.ignore) {
     args.push("--ignore", cfg.ignore);
   }
+  if (cfg.baseline) {
+    args.push("--baseline", cfg.baseline);
+  }
   return args;
 }
 
@@ -89,6 +93,9 @@ export function buildPathArgs(target: string, cfg: LinterConfig): string[] {
   }
   if (cfg.ignore) {
     args.push("--ignore", cfg.ignore);
+  }
+  if (cfg.baseline) {
+    args.push("--baseline", cfg.baseline);
   }
   args.push(target);
   return args;

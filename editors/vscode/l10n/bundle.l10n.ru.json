@@ -166,5 +166,13 @@
   "Documentation for \"{0}\"": "Документация по \"{0}\"",
   "XBSL: documentation for the rule {0}": "XBSL: документация по правилу {0}",
   "Copy": "Копировать",
-  "Copied": "Скопировано"
+  "Copied": "Скопировано",
+  "Exclude the finding (to the baseline): {0}": "Исключить проверку (в базлайн): {0}",
+  "XBSL: the file is outside the workspace – there is no baseline to record the exclusion in.": "XBSL: файл вне папки воркспейса – некуда записать исключение (нет базлайна).",
+  "Why is the code right as it is? The reason is recorded in the baseline.": "Почему код правильный именно таким? Причина запишется в базлайн.",
+  "e.g.: a historical name, renaming would break the data": "напр.: историческое имя, переименование сломает данные",
+  "An exclusion needs a reason – the next reader will look for it.": "Исключению нужна причина – следующий читатель будет её искать.",
+  "XBSL: failed to write the baseline {0}: {1}": "XBSL: не удалось записать базлайн {0}: {1}",
+  "XBSL: the finding is excluded, the reason is recorded in {0}": "XBSL: находка исключена, причина записана в {0}",
+  "XBSL LSP: the server did not restart – see the XBSL output panel.": "XBSL LSP: сервер не перезапустился – подробности в панели вывода XBSL."
 }

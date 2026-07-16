@@ -10,15 +10,23 @@ import {
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
+import { baselineForLint } from "./excludeAction";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { applyOverride, mergeOffRules } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
 
 let client: LanguageClient | undefined;
+let baselineArg: string | undefined;
 
 // Активен ли LSP-режим (сервер поднят). Панель документации – тонкий клиент к серверу.
 export function lspActive(): boolean {
   return client !== undefined;
+}
+
+// Передан ли серверу --baseline при старте. Если базлайна ещё не было (первое исключение
+// только создаёт файл), серверу нужен перезапуск с новыми аргументами, а не xbsl/relint.
+export function lspBaselinePassed(): boolean {
+  return baselineArg !== undefined;
 }
 
 // Кастомный запрос к серверу (методы xbsl/docs*). Возвращает undefined, если сервер не поднят
@@ -53,11 +61,10 @@ function spawnPlan(cfg: vscode.WorkspaceConfiguration): SpawnPlan {
   return { command: "xbsllint-lsp", args: [] };
 }
 
-export async function activateLsp(
-  context: vscode.ExtensionContext,
-  output: vscode.OutputChannel,
-  chosenExplicitly = true
-): Promise<boolean> {
+// Собирает клиента по ТЕКУЩИМ настройкам и состоянию диска: перезапуск линтера создаёт
+// клиента заново, поэтому подхватывает изменившиеся наборы правил и появившийся файл
+// базлайна (аргументы старого процесса пересобрать нельзя).
+function buildClient(output: vscode.OutputChannel): { client: LanguageClient; plan: SpawnPlan; args: string[] } {
   const cfg = vscode.workspace.getConfiguration("xbsl");
   const folder = vscode.workspace.workspaceFolders?.[0];
   const plan = spawnPlan(cfg);
@@ -80,6 +87,12 @@ export async function activateLsp(
   const ignore = mergeOffRules((cfg.get<string>("linter.ignore") || "").trim() || undefined);
   if (ignore) {
     args.push("--ignore", ignore);
+  }
+  // Существующий файл базлайна: исключённые находки гасит сервер. Отсутствующий не
+  // передаём - у сервера старой версии (< 0.15) неизвестный ключ сорвал бы запуск.
+  baselineArg = folder ? baselineForLint(folder.uri) : undefined;
+  if (baselineArg) {
+    args.push("--baseline", baselineArg);
   }
 
   const serverOptions: ServerOptions = {
@@ -113,12 +126,21 @@ export async function activateLsp(
     },
   };
 
-  client = new LanguageClient("xbslLsp", "XBSL LSP", serverOptions, clientOptions);
+  return { client: new LanguageClient("xbslLsp", "XBSL LSP", serverOptions, clientOptions), plan, args };
+}
+
+export async function activateLsp(
+  context: vscode.ExtensionContext,
+  output: vscode.OutputChannel,
+  chosenExplicitly = true
+): Promise<boolean> {
+  const built = buildClient(output);
+  client = built.client;
   try {
     await client.start();
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    output.appendLine(vscode.l10n.t('XBSL LSP: the server failed to start ({0}): {1}', plan.command, msg));
+    output.appendLine(vscode.l10n.t('XBSL LSP: the server failed to start ({0}): {1}', built.plan.command, msg));
     client = undefined;
     if (!chosenExplicitly) {
       return false;  // режим не выбирали - молча работаем как раньше (CLI), подробности в панели вывода
@@ -138,14 +160,28 @@ export async function activateLsp(
       });
     return false;
   }
-  output.appendLine(vscode.l10n.t('XBSL LSP: server started ({0} {1}).', plan.command, args.join(" ")));
+  output.appendLine(vscode.l10n.t('XBSL LSP: server started ({0} {1}).', built.plan.command, built.args.join(" ")));
 
   context.subscriptions.push(
     { dispose: () => void client?.stop() },
-    // Команды сохраняют привычные идентификаторы и в LSP-режиме.
+    // Команды сохраняют привычные идентификаторы и в LSP-режиме. Перезапуск пересоздаёт
+    // клиента, а не дёргает restart(): аргументы сервера собираются заново.
     vscode.commands.registerCommand("xbsl.restartLinter", async () => {
-      await client?.restart();
-      void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL LSP: server restarted"), 3000);
+      const old = client;
+      client = undefined;
+      if (old) {
+        await old.stop().catch(() => undefined);
+      }
+      const fresh = buildClient(output);
+      try {
+        await fresh.client.start();
+        client = fresh.client;
+        void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL LSP: server restarted"), 3000);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        output.appendLine(vscode.l10n.t('XBSL LSP: the server failed to start ({0}): {1}', fresh.plan.command, msg));
+        void vscode.window.showErrorMessage(vscode.l10n.t("XBSL LSP: the server did not restart – see the XBSL output panel."));
+      }
     }),
     vscode.commands.registerCommand("xbsl.lintProject", () => {
       void vscode.window.showInformationMessage(

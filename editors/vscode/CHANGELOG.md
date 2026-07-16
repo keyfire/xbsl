@@ -6,6 +6,20 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.18.0
+
+- "Exclude the finding (to the baseline)" in every finding's lightbulb (`Ctrl+.`): type the
+  reason, and the finding's identity is recorded in the baseline file (`.xbsllint-baseline`
+  in the workspace folder, or the new `xbsl.baseline` setting) as
+  `{"count": N, "reason": "..."}`. The finding disappears from the editor and from a CI gate
+  over the same file. Works in both modes; the LSP suppression needs the engine 0.15.0+.
+- The baseline is now applied to every run the extension makes: the workspace runs, the
+  per-buffer `--stdin` runs, and the LSP server (`--baseline`).
+- Buffer runs now pass the file's workspace-relative path instead of the bare name, so
+  `structure/xbsl-pair` sees the module's real neighbours and baseline identities match.
+- "XBSL: restart the linter" in the LSP mode rebuilds the server process with fresh
+  arguments (rule sets, baseline path) instead of reusing the old command line.
+
 ## 0.17.0
 
 - "Find All References" (Shift+F12, and "Go to References"/"Find All References" in the context menu)
