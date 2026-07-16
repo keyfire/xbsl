@@ -601,8 +601,12 @@ def find_object(root: Path, name: str) -> ObjectHit:
     return hits[0]
 
 
+# Типы со значением по умолчанию: ПолеВвода<Тип> принимает их как есть. У ПолеВвода
+# "параметр типа должен иметь значение по умолчанию ИЛИ Неопределено в составе типов"
+# (stdlib ПолеВвода) – дефолта нет у ссылок и у перечислений без ПоУмолчанию, им нужен '?'.
 PRIMITIVE_TYPES = {
     "Строка", "Число", "Булево", "Дата", "ДатаВремя", "Время", "УникальныйИдентификатор",
+    "Момент", "Длительность", "Ууид",
 }
 
 # Стандартные (предопределённые платформой) реквизиты: в yaml их обычно нет, но в формах они нужны.
@@ -610,6 +614,16 @@ _STANDARD_FIELDS = {
     "Справочник": [{"name": "Наименование", "type": "Строка"}],
     "Документ": [{"name": "Номер", "type": "Строка"}, {"name": "Дата", "type": "ДатаВремя"}],
 }
+
+# Виды, у которых бывают формы объекта и списка (дочерние типы ФормаОбъекта / ФормаСписка
+# в stdlib). У регистров и набора констант формы объекта нет – только список.
+OBJECT_FORM_KINDS = ("Справочник", "Документ", "ПланОбмена", "ХранилищеНастроек")
+LIST_FORM_KINDS = OBJECT_FORM_KINDS + (
+    "РегистрСведений", "РегистрНакопления", "НаборКонстант",
+)
+# Данные регистра лежат в Измерениях и Ресурсах, а не только в Реквизитах: для списка
+# показывать нужно их все.
+_REGISTER_FIELD_SECTIONS = ("Измерения", "Ресурсы", "Реквизиты")
 
 
 def object_info(root: Path, name: str | None = None, yaml_path: Path | None = None) -> dict:
@@ -635,9 +649,15 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         hit = find_object(root, name or "")
         text = hit.text
 
-    fields = []
-    for item in section_items(text, "Реквизиты", top_level=True):
-        fields.append({"name": item.get("Имя", "?"), "type": item.get("Тип", "")})
+    # У регистра данные – это Измерения и Ресурсы, реквизиты лишь дополняют их.
+    sections = (
+        _REGISTER_FIELD_SECTIONS if hit.kind.startswith("Регистр") else ("Реквизиты",)
+    )
+    fields = [
+        {"name": item.get("Имя", "?"), "type": item.get("Тип", "")}
+        for section in sections
+        for item in section_items(text, section, top_level=True)
+    ]
     declared = {f["name"] for f in fields}
     standard = [f for f in _STANDARD_FIELDS.get(hit.kind, []) if f["name"] not in declared]
     fields = standard + fields
@@ -1445,8 +1465,16 @@ def _form_field_component(name: str, type_: str, indent: str) -> list[str]:
         return [f"{indent}-", f"{indent}    Тип: Флажок", f"{indent}    Имя: {name}",
                 f"{indent}    Значение: =Объект.{name}"]
     component_type = type_ or "Строка"
-    if component_type not in PRIMITIVE_TYPES and not component_type.endswith("?"):
-        component_type += "?"  # ссылка/перечисление в поле ввода – всегда nullable
+    # '?' добавляется только там, где у типа заведомо нет значения по умолчанию: ссылка и
+    # перечисление. Коллекции и обобщения (Массив<Строка> и т.п.) дефолт имеют – раньше им
+    # приписывалось '?', и двусторонняя привязка Значение: =Объект.X расходилась по типу.
+    needs_nullable = (
+        component_type not in PRIMITIVE_TYPES
+        and not component_type.endswith("?")
+        and "<" not in component_type
+    )
+    if needs_nullable:
+        component_type += "?"
     lines = [
         f"{indent}-",
         f"{indent}    Тип: ПолеВвода<{component_type}>",
@@ -1655,11 +1683,15 @@ def list_form_yaml(info: dict, uid: str) -> str:
         lines.append("            НачальныйУровеньРазворачивания: -1")
     lines.append("            Колонки:")
     for name in fields:
+        # ПолеЗначения задаёт не только отображаемое значение, но и сортировку по колонке
+        # ("Также это поле будет использоваться для сортировки по данной колонке" –
+        # документация компонента Таблица), поэтому пишется вместе с Заголовком.
         lines += [
             "                -",
             f"                    Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<{row_type}>>",
             f"                    Имя: {name}",
-            f"                    Значение: =ДанныеСтроки.Данные.{name}",
+            f"                    Заголовок: {name}",
+            f"                    ПолеЗначения: {name}",
         ]
     lines += [
         "            КомандыСтроки:",
@@ -1674,10 +1706,14 @@ def list_form_yaml(info: dict, uid: str) -> str:
         "            ИмяТипаДанныхСтроки: ДанныеСтрокиСписка",
     ]
     if hierarchical:
+        # Иерархия элементов: имя писать не нужно и нечего – "Если ПоУмолчанию или пустая
+        # строка, будет отображена иерархия, которая указана как иерархия по-умолчанию в
+        # справочнике" (stdlib ДинамическийСписок). Имени иерархии "Иерархия" не существует:
+        # так называется таблица языка запросов, а не иерархия справочника.
         lines += [
             "            ИспользуемаяИерархия:",
-            "                Тип: Строка",
-            "                Значение: Иерархия",
+            "                Тип: РежимИерархии",
+            "                Значение: ПоУмолчанию",
         ]
     elif extra_hierarchies:
         lines += [
@@ -2085,7 +2121,17 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     obj = info["name"]
     owner_path = Path(info["path"])
     if forms is None:
-        forms = ["report"] if kind == "Отчет" else ["object", "list"]
+        if kind == "Отчет":
+            forms = ["report"]
+        elif kind in OBJECT_FORM_KINDS:
+            forms = ["object", "list"]
+        elif kind in LIST_FORM_KINDS:
+            forms = ["list"]  # у регистров и набора констант формы объекта не бывает
+        else:
+            raise ScaffoldError(
+                f"У вида {kind} нет форм объекта и списка; они есть у: "
+                + ", ".join(LIST_FORM_KINDS) + " (и форма отчёта у Отчет)"
+            )
     unknown = [f for f in forms if f not in FORM_KINDS]
     if unknown:
         raise ScaffoldError(
@@ -2099,6 +2145,16 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         raise ScaffoldError("Для отчёта доступна только форма отчёта: forms=[\"report\"]")
     if kind != "Отчет" and "report" in forms:
         raise ScaffoldError(f"Форма отчёта неприменима к виду {kind}")
+    # Тип ФормаОбъекта<X.Объект> порождают только ссылочные сущности; у регистра его нет.
+    if "object" in forms and kind not in OBJECT_FORM_KINDS:
+        raise ScaffoldError(
+            f"У вида {kind} нет формы объекта (тип ФормаОбъекта порождают только "
+            + ", ".join(OBJECT_FORM_KINDS) + f"); для {kind} доступна форма списка"
+        )
+    if ("list" in forms or "list-cards" in forms) and kind not in LIST_FORM_KINDS:
+        raise ScaffoldError(
+            f"У вида {kind} нет формы списка; она есть у: " + ", ".join(LIST_FORM_KINDS)
+        )
 
     result = ScaffoldResult()
     generators = {

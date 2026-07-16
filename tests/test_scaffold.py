@@ -321,7 +321,11 @@ def test_add_forms_for_catalog(tmp_path):
     parsed_list = _valid_yaml(form_list)
     ns_type = "ДинамическийСписок<vendor::Приложение::Основное::ТоварыФормаСписка.ДанныеСтрокиСписка>"
     assert parsed_list["Свойства"][0]["Тип"] == ns_type
-    assert "Значение: =ДанныеСтроки.Данные.Наименование" in form_list
+    # Колонка динамического списка адресует поле строки через ПолеЗначения (оно же даёт
+    # сортировку по колонке) – как в рабочих формах проекта и эталонов.
+    columns = parsed_list["Наследует"]["Содержимое"]["Содержимое"]["Колонки"]
+    assert [c["ПолеЗначения"] for c in columns] == ["Наименование", "Цвет", "Вес"]
+    assert [c["Заголовок"] for c in columns] == ["Наименование", "Цвет", "Вес"]
 
     owner = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
     assert owner["Интерфейс"]["Объект"]["Форма"] == "ТоварыФормаОбъекта"
@@ -379,7 +383,10 @@ def test_hierarchical_list_form(tmp_path):
     form = (subsystem / "РазделыФормаСписка.yaml").read_text(encoding="utf-8")
     row = "vendor::Приложение::Основное::РазделыФормаСписка.ДанныеСтрокиСписка"
     assert f"ДинамическийСписок<{row}, {row}>" in form
-    assert "Значение: Иерархия" in form
+    # Имени иерархии "Иерархия" не существует (так называется таблица языка запросов):
+    # для иерархии элементов используется режим ПоУмолчанию.
+    hierarchy = _valid_yaml(form)["Свойства"][0]["ЗначениеПоУмолчанию"]["ИспользуемаяИерархия"]
+    assert hierarchy == {"Тип": "РежимИерархии", "Значение": "ПоУмолчанию"}
     assert "Выражение: Родитель" in form
     assert _valid_yaml(form)
 
@@ -1020,3 +1027,46 @@ def test_object_attribute_never_lands_in_tabular(tmp_path):
     apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Реквизит1", type_="Строка"))
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
     assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Контрагент", "Реквизит1"]
+
+
+# --- применимость форм к виду -------------------------------------------------------------
+
+
+def _register(tmp_path) -> Path:
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрСведений", "КурсыВалют"))
+    yaml_path = subsystem / "КурсыВалют.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "измерение", "Валюта", type_="Строка"))
+    apply_result(scaffold.op_add_field(yaml_path, "ресурс", "Курс", type_="Число"))
+    apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Источник", type_="Строка"))
+    return subsystem
+
+
+def test_register_fields_include_dimensions_and_resources(tmp_path):
+    _register(tmp_path)
+    info = scaffold.object_info(tmp_path, name="КурсыВалют")
+    # Данные регистра – Измерения и Ресурсы; раньше сводка видела только Реквизиты.
+    assert [f["name"] for f in info["fields"]] == ["Валюта", "Курс", "Источник"]
+
+
+def test_register_gets_list_form_only(tmp_path):
+    subsystem = _register(tmp_path)
+    result = scaffold.op_add_form(tmp_path, name="КурсыВалют")
+    apply_result(result)
+    # Формы объекта у регистра не бывает – по умолчанию делается только список.
+    assert not (subsystem / "КурсыВалютФормаОбъекта.yaml").exists()
+    form = _valid_yaml((subsystem / "КурсыВалютФормаСписка.yaml").read_text(encoding="utf-8"))
+    columns = form["Наследует"]["Содержимое"]["Содержимое"]["Колонки"]
+    assert [c["Имя"] for c in columns] == ["Валюта", "Курс", "Источник"]
+
+    with pytest.raises(ScaffoldError, match="нет формы объекта"):
+        scaffold.op_add_form(tmp_path, name="КурсыВалют", forms=["object"])
+
+
+def test_kinds_without_forms_are_rejected(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "ОбщийМодуль", "Хелпер"))
+    with pytest.raises(ScaffoldError, match="нет форм объекта и списка"):
+        scaffold.op_add_form(tmp_path, name="Хелпер")
+    with pytest.raises(ScaffoldError, match="нет формы списка"):
+        scaffold.op_add_form(tmp_path, name="Хелпер", forms=["list"])
