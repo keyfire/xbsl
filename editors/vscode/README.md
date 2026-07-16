@@ -205,9 +205,9 @@ or wherever `xbsl.baseline` points. The reason stays next to the frozen finding,
 `xbsllint --write-baseline` keeps it on a rewrite:
 
 ```json
-"e1c/site/Основное/Полезное.yaml": {
+"app/Полезное.yaml": {
  "naming/number": {
-  "Имя 'Полезное' в единственном числе – ...": { "count": 1, "reason": "историческое имя" }
+  "The name 'Полезное' is singular – ...": { "count": 1, "reason": "a historical name" }
  }
 }
 ```
