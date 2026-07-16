@@ -175,8 +175,20 @@ def meta_project_info(root: str) -> dict:
 
 @mcp.tool()
 def meta_object_info(root: str, name: str | None = None, yaml_path: str | None = None) -> dict:
-    """Describe one configuration object: fields (with the standard ones), tabular sections,
-    hierarchy, existing forms, suggested form layout and the object's namespace.
+    """Describe one configuration object: everything needed to write its forms and code.
+
+    Fields (with the standard ones the platform adds: Наименование / Номер+Дата, and for
+    registers Период / Регистратор / ВидЗаписи), tabular sections with their own fields,
+    hierarchy, existing forms, suggested form layout, namespace, plus:
+
+    - access – the КонтрольДоступа summary (null means no section: РазрешеноАдминистраторам)
+      and access_rights – the rights this kind has;
+    - access_handlers – whether the object's module declares ВычислитьРазрешенияДоступа
+      (level 1, needed for РазрешенияВычисляются) and ВычислитьРазрешенияДоступаДляОбъектов
+      (level 2, needed for РазрешенияВычисляютсяДляКаждогоОбъекта);
+    - register – for registers only: register_kind (Остатки/Обороты), periodicity, and
+      needs_record_type – whether a movement needs ВидЗаписи (Приход/Расход): only a
+      РегистрНакопления of kind Остатки does.
 
     Pass either the object name (searched under root; ambiguity is an error) or the
     explicit path to its .yaml.

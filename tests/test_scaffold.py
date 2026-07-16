@@ -1070,3 +1070,71 @@ def test_kinds_without_forms_are_rejected(tmp_path):
         scaffold.op_add_form(tmp_path, name="Хелпер")
     with pytest.raises(ScaffoldError, match="нет формы списка"):
         scaffold.op_add_form(tmp_path, name="Хелпер", forms=["list"])
+
+
+# --- сводка: регистры и обработчики разрешений --------------------------------------------
+
+
+def test_object_info_balance_register(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрНакопления", "ОстаткиТоваров"))
+    yaml_path = subsystem / "ОстаткиТоваров.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "измерение", "Товар", type_="Строка"))
+    apply_result(scaffold.op_add_field(yaml_path, "ресурс", "Количество", type_="Число"))
+
+    info = scaffold.object_info(tmp_path, name="ОстаткиТоваров")
+    # Остатки – значение ВидРегистра по умолчанию; движению нужен ВидЗаписи (Приход/Расход).
+    assert info["register"]["register_kind"] == "Остатки"
+    assert info["register"]["needs_record_type"] is True
+    assert [f["name"] for f in info["fields"]] == [
+        "Период", "Регистратор", "ВидЗаписи", "Товар", "Количество",
+    ]
+
+
+def test_object_info_turnover_register_has_no_record_type(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрНакопления", "ОборотыПродаж"))
+    yaml_path = subsystem / "ОборотыПродаж.yaml"
+    yaml_path.write_text(yaml_path.read_text(encoding="utf-8") + "ВидРегистра: Обороты\n",
+                         encoding="utf-8")
+    info = scaffold.object_info(tmp_path, name="ОборотыПродаж")
+    assert info["register"]["register_kind"] == "Обороты"
+    assert info["register"]["needs_record_type"] is False
+    assert "ВидЗаписи" not in [f["name"] for f in info["fields"]]
+
+
+def test_object_info_information_register_periodicity(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрСведений", "Настройки"))
+    info = scaffold.object_info(tmp_path, name="Настройки")
+    # Непериодический – Период не порождается.
+    assert info["register"]["periodicity"] == "Непериодический"
+    assert info["register"]["needs_record_type"] is False
+    assert "Период" not in [f["name"] for f in info["fields"]]
+
+    yaml_path = subsystem / "Настройки.yaml"
+    yaml_path.write_text(yaml_path.read_text(encoding="utf-8") + "Периодичность: День\n",
+                         encoding="utf-8")
+    periodic = scaffold.object_info(tmp_path, name="Настройки")
+    assert periodic["register"]["periodicity"] == "День"
+    assert [f["name"] for f in periodic["fields"]] == ["Период"]
+
+
+def test_object_info_access_handlers(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Задачи"))
+    info = scaffold.object_info(tmp_path, name="Задачи")
+    assert info["access_handlers"] == {"module": None, "level1": False, "level2": False}
+    assert info["register"] is None  # не регистр
+
+    # Обработчики разрешений живут в модуле объекта <Имя>.xbsl.
+    (subsystem / "Задачи.xbsl").write_text(
+        "@Обработчик\n"
+        "метод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n    возврат []\n;\n\n"
+        "@Обработчик\n"
+        "метод ВычислитьРазрешенияДоступаДляОбъектов(Элементы: ЧитаемыйМассив<Задачи.ДанныеРасчетаРазрешений>)\n"
+        "    возврат\n;\n",
+        encoding="utf-8",
+    )
+    both = scaffold.object_info(tmp_path, name="Задачи")
+    assert both["access_handlers"] == {"module": "Задачи.xbsl", "level1": True, "level2": True}

@@ -625,12 +625,27 @@ LIST_FORM_KINDS = OBJECT_FORM_KINDS + (
 # показывать нужно их все.
 _REGISTER_FIELD_SECTIONS = ("Измерения", "Ресурсы", "Реквизиты")
 
+# Вид регистра накопления: Остатки (умолчание) хранит и остатки, и обороты; Обороты – только
+# изменения. У записи регистра остатков есть ВидЗаписи (Приход/Расход) – у оборотного нет
+# (документация "Свойства элемента проекта РегистрНакопления" и пример проектирования).
+_REGISTER_KIND_RE = re.compile(r"^ВидРегистра:\s*(\S+)", re.M)
+BALANCE_REGISTER = "Остатки"
+_PERIODICITY_RE = re.compile(r"^Периодичность:\s*(\S+)", re.M)
 
-def object_info(root: Path, name: str | None = None, yaml_path: Path | None = None) -> dict:
+# Обработчики вычисления разрешений: уровень 1 – на элемент проекта в целом, уровень 2 –
+# на отдельные объекты (RLS). Пишутся в модуле объекта <Имя>.xbsl.
+ACCESS_HANDLER_LEVEL1 = "ВычислитьРазрешенияДоступа"
+ACCESS_HANDLER_LEVEL2 = "ВычислитьРазрешенияДоступаДляОбъектов"
+
+
+def object_info(root: Path, name: str | None = None, yaml_path: Path | None = None,
+                reader=None) -> dict:
     """Сводка объекта для генерации форм и обзора.
 
-    Реквизиты дополняются стандартными полями вида (Наименование / Номер+Дата), если их нет
-    в yaml: формы строятся по полному списку.
+    Поля дополняются стандартными реквизитами вида (Наименование / Номер+Дата, у регистров –
+    Период / Регистратор / ВидЗаписи), если их нет в yaml: формы строятся по полному списку.
+    Кроме состава отдаёт то, что нужно, чтобы писать код объекта: контроль доступа и наличие
+    обработчиков разрешений, вид регистра и признак необходимости ВидЗаписи в движениях.
     """
     if yaml_path is not None:
         yaml_path = Path(yaml_path)
@@ -650,6 +665,7 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         text = hit.text
 
     # У регистра данные – это Измерения и Ресурсы, реквизиты лишь дополняют их.
+    register = _register_info(hit.kind, text)
     sections = (
         _REGISTER_FIELD_SECTIONS if hit.kind.startswith("Регистр") else ("Реквизиты",)
     )
@@ -659,7 +675,8 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         for item in section_items(text, section, top_level=True)
     ]
     declared = {f["name"] for f in fields}
-    standard = [f for f in _STANDARD_FIELDS.get(hit.kind, []) if f["name"] not in declared]
+    standard_source = register.get("standard_fields") or _STANDARD_FIELDS.get(hit.kind, [])
+    standard = [f for f in standard_source if f["name"] not in declared]
     fields = standard + fields
 
     tabulars = [
@@ -695,6 +712,12 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         # None – секции КонтрольДоступа нет: платформа применяет РазрешеноАдминистраторам.
         "access": access_info(text),
         "access_rights": list(ACCESS_KIND_RIGHTS.get(hit.kind, ())),
+        # Обработчики вычисления разрешений в модуле объекта: нужны при РазрешенияВычисляются
+        # (уровень 1) и РазрешенияВычисляютсяДляКаждогоОбъекта (уровни 1 и 2).
+        "access_handlers": _access_handlers(hit.path, reader),
+        # Только у регистров: вид (Остатки/Обороты), периодичность и признак того, что
+        # движению нужен ВидЗаписи. Для прочих видов – null.
+        "register": register or None,
         "fields": fields,
         "tabulars": tabulars,
         "suggested_layout": layout,
@@ -709,6 +732,54 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
             kind: [i.get("Имя", "?") for i in section_items(text, _SECTION_SPECS[kind]["section"], top_level=True)]
             for kind in KIND_SECTIONS.get(hit.kind, ())
         },
+    }
+
+
+def _register_info(kind: str, text: str) -> dict:
+    """{register_kind, needs_record_type, standard_fields} регистра; для прочих видов – пусто.
+
+    needs_record_type – нужен ли ВидЗаписи (Приход/Расход) в движениях: он есть только у
+    регистра накопления вида Остатки.
+    """
+    if not kind.startswith("Регистр"):
+        return {}
+    if kind == "РегистрНакопления":
+        register_kind = (_REGISTER_KIND_RE.search(text) or [None, BALANCE_REGISTER])[1]
+        balance = register_kind == BALANCE_REGISTER
+        standard = [{"name": "Период", "type": "ДатаВремя"}, {"name": "Регистратор", "type": ""}]
+        if balance:
+            standard.append({"name": "ВидЗаписи", "type": ""})
+        return {
+            "register_kind": register_kind,
+            "needs_record_type": balance,
+            "standard_fields": standard,
+        }
+    periodicity = (_PERIODICITY_RE.search(text) or [None, "Непериодический"])[1]
+    return {
+        "register_kind": None,  # у регистра сведений вида нет – есть периодичность
+        "periodicity": periodicity,
+        "needs_record_type": False,
+        "standard_fields": (
+            [{"name": "Период", "type": "ДатаВремя"}] if periodicity != "Непериодический" else []
+        ),
+    }
+
+
+def _access_handlers(yaml_path: Path, reader=None) -> dict:
+    """Есть ли в модуле объекта обработчики вычисления разрешений (уровни 1 и 2).
+
+    Модуль объекта – <Имя>.xbsl; <Имя>.Объект.xbsl предназначен для событий записи, туда
+    эти обработчики не пишутся.
+    """
+    module = yaml_path.with_suffix(".xbsl")
+    if not module.is_file():
+        return {"module": None, "level1": False, "level2": False}
+    text = (reader or _read)(module)
+    declared = set(re.findall(r"^\s*метод\s+([A-Za-zА-Яа-яЁё0-9_]+)", text, re.M))
+    return {
+        "module": module.name,
+        "level1": ACCESS_HANDLER_LEVEL1 in declared,
+        "level2": ACCESS_HANDLER_LEVEL2 in declared,
     }
 
 
