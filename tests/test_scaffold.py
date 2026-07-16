@@ -353,8 +353,10 @@ def test_add_form_layout_with_tabulars(tmp_path):
     assert "Таблица<ИсточникДанныхМассив<Заказ.Строки>>" in form
     assert "=Компоненты.Строки.ДобавитьСтроку" in form
     assert _valid_yaml(form)
-    # Стандартные реквизиты документа попали в форму, хоть их и нет в yaml.
-    assert "Значение: =Объект.Номер" in form and "Значение: =Объект.Дата" in form
+    # Обязательный реквизит Дата документа попал в форму (он создаётся в yaml сразу).
+    # Номер опционален и по умолчанию отсутствует – фантомного поля Номер в форме быть не должно.
+    assert "Значение: =Объект.Дата" in form
+    assert "=Объект.Номер" not in form
 
 
 def test_add_report_form(tmp_path):
@@ -631,7 +633,9 @@ def test_cards_list_form_with_photo(tmp_path):
 def test_cards_document_formats_date_and_notes_hidden_fields(tmp_path):
     subsystem = _make_project(tmp_path)
     apply_result(scaffold.op_new_object(subsystem, "Документ", "Заказы"))
-    for name in ("ПолеА", "ПолеБ", "ПолеВ", "ПолеГ"):
+    # Номер у документа опционален и по умолчанию не создаётся – объявляем его явно, чтобы
+    # он стал заголовком карточки (стартовая Дата уже есть в yaml).
+    for name in ("Номер", "ПолеА", "ПолеБ", "ПолеВ", "ПолеГ"):
         apply_result(scaffold.op_add_field(subsystem / "Заказы.yaml", "реквизит", name))
     result = scaffold.op_add_form(tmp_path, name="Заказы", forms=["list-cards"])
     apply_result(result)
@@ -986,7 +990,7 @@ def test_form_section_wraps_fields_in_group(tmp_path):
     assert section["Тип"] == "РазделФормы"
     area = section["Содержимое"][0]
     assert set(area) == {"Содержимое"}  # область раздела: как в эталонных формах, без Тип
-    assert [c["Имя"] for c in area["Содержимое"]] == ["Номер", "Дата"]
+    assert [c["Имя"] for c in area["Содержимое"]] == ["Дата"]
 
 
 def test_group_section_keeps_fields_inline(tmp_path):
@@ -1016,17 +1020,18 @@ def test_object_attribute_never_lands_in_tabular(tmp_path):
                                        tabular="Товары"))
 
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
-    assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Контрагент"]
+    # Дата – стартовый реквизит документа в секции объекта; Контрагент дописан к ней.
+    assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Дата", "Контрагент"]
     assert [f["Имя"] for f in parsed["ТабличныеЧасти"][0]["Реквизиты"]] == ["Реквизит1", "Цена"]
 
     info = scaffold.object_info(tmp_path, name="Приходы")
-    assert [f["name"] for f in info["fields"]] == ["Номер", "Дата", "Контрагент"]
+    assert [f["name"] for f in info["fields"]] == ["Дата", "Контрагент"]
     assert [f["name"] for f in info["tabulars"][0]["fields"]] == ["Реквизит1", "Цена"]
 
     # Имя, занятое в табличной части, не считается дублем реквизита объекта.
     apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Реквизит1", type_="Строка"))
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
-    assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Контрагент", "Реквизит1"]
+    assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Дата", "Контрагент", "Реквизит1"]
 
 
 # --- применимость форм к виду -------------------------------------------------------------
@@ -1046,7 +1051,8 @@ def test_register_fields_include_dimensions_and_resources(tmp_path):
     _register(tmp_path)
     info = scaffold.object_info(tmp_path, name="КурсыВалют")
     # Данные регистра – Измерения и Ресурсы; раньше сводка видела только Реквизиты.
-    assert [f["name"] for f in info["fields"]] == ["Валюта", "Курс", "Источник"]
+    # Измерение1 – стартовое измерение (без него РС не компилируется), затем добавленные.
+    assert [f["name"] for f in info["fields"]] == ["Измерение1", "Валюта", "Курс", "Источник"]
 
 
 def test_register_gets_list_form_only(tmp_path):
@@ -1057,7 +1063,7 @@ def test_register_gets_list_form_only(tmp_path):
     assert not (subsystem / "КурсыВалютФормаОбъекта.yaml").exists()
     form = _valid_yaml((subsystem / "КурсыВалютФормаСписка.yaml").read_text(encoding="utf-8"))
     columns = form["Наследует"]["Содержимое"]["Содержимое"]["Колонки"]
-    assert [c["Имя"] for c in columns] == ["Валюта", "Курс", "Источник"]
+    assert [c["Имя"] for c in columns] == ["Измерение1", "Валюта", "Курс", "Источник"]
 
     with pytest.raises(ScaffoldError, match="нет формы объекта"):
         scaffold.op_add_form(tmp_path, name="КурсыВалют", forms=["object"])
@@ -1086,8 +1092,10 @@ def test_object_info_balance_register(tmp_path):
     # Остатки – значение ВидРегистра по умолчанию; движению нужен ВидЗаписи (Приход/Расход).
     assert info["register"]["register_kind"] == "Остатки"
     assert info["register"]["needs_record_type"] is True
+    # Ресурс1 – стартовый ресурс (без него РН не компилируется), стоит в секции Ресурсы
+    # перед добавленным Количеством.
     assert [f["name"] for f in info["fields"]] == [
-        "Период", "Регистратор", "ВидЗаписи", "Товар", "Количество",
+        "Период", "Регистратор", "ВидЗаписи", "Товар", "Ресурс1", "Количество",
     ]
 
 
@@ -1117,7 +1125,8 @@ def test_object_info_information_register_periodicity(tmp_path):
                          encoding="utf-8")
     periodic = scaffold.object_info(tmp_path, name="Настройки")
     assert periodic["register"]["periodicity"] == "День"
-    assert [f["name"] for f in periodic["fields"]] == ["Период"]
+    # Период (стандартное поле периодического РС) + стартовое Измерение1.
+    assert [f["name"] for f in periodic["fields"]] == ["Период", "Измерение1"]
 
 
 def test_object_info_access_handlers(tmp_path):
