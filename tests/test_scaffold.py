@@ -154,6 +154,31 @@ def test_new_http_service_routes(tmp_path):
         assert f"метод {handler}" in module
 
 
+def test_http_root_url_drops_kind_suffix(tmp_path):
+    # КорневойUrl – публичный префикс, суффикс вида HttpСервис в нём лишний.
+    result = scaffold.op_new_object(tmp_path, "HttpСервис", "КаталогHttpСервис", routes="GET /")
+    apply_result(result)
+    parsed = _valid_yaml((tmp_path / "КаталогHttpСервис.yaml").read_text(encoding="utf-8"))
+    assert parsed["КорневойUrl"] == "/Каталог"
+    # Кириллица в публичном URL – повод предупредить (боевые URL латиницей).
+    assert any("латиницей" in note for note in result.notes)
+
+
+def test_http_stub_has_no_dead_locals(tmp_path):
+    # Заготовки обработчиков не должны содержать вычисленных, но неиспользуемых переменных:
+    # живой код – валидная заглушка, развёрнутый пример идёт комментарием.
+    result = scaffold.op_new_object(
+        tmp_path, "HttpСервис", "Каталог", routes="GET /, POST /, GET /{id}, DELETE /{id}",
+    )
+    apply_result(result)
+    module = (tmp_path / "Каталог.xbsl").read_text(encoding="utf-8")
+    # Живые (не закомментированные) объявления переменной – только те, что реально читаются.
+    live = [ln for ln in module.splitlines() if not ln.lstrip().startswith("//")]
+    assert not any("пер Ограничение" in ln for ln in live)  # раньше вычислялась впустую
+    assert 'знч Ид = Запрос.Параметры.ПолучитьПервый("id")' in module
+    assert 'УстановитьТело("Не найдено: " + Ид)' in module  # Ид используется, не dead-local
+
+
 def test_http_handler_names_do_not_collide(tmp_path):
     result = scaffold.op_new_object(
         tmp_path, "HttpСервис", "Сервис", routes="GET /{id}, GET /{id}/items"
