@@ -138,3 +138,77 @@ def test_enable_respects_ignore(tmp_path, capsys):
         ["--enable", "style/line-length", "--ignore", "style/line-length", str(f)], capsys,
     )
     assert all(d["rule"] != "style/line-length" for d in payload["diagnostics"])
+
+
+# --- Причины исключений ({count, reason}) ------------------------------------------------
+
+
+def test_reason_entry_suppresses(tmp_path, capsys):
+    """Запись вида {"count": N, "reason": ...} гасит находку так же, как голое число."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_ХВОСТ, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    capsys.readouterr()
+
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    per_rule = data["files"]["Ч.xbsl"]
+    message, count = next(iter(per_rule["whitespace/trailing"].items()))
+    per_rule["whitespace/trailing"][message] = {"count": count, "reason": "проектное решение"}
+    bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
+    assert code == 0
+    assert payload["diagnostics"] == []
+    assert payload["summary"]["baselined"] == 1
+
+
+def test_rewrite_keeps_reasons(tmp_path, capsys):
+    """--write-baseline переносит причины выживших записей из прежнего файла."""
+    from xbsllint import baseline
+
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_ХВОСТ, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    capsys.readouterr()
+
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    per_message = data["files"]["Ч.xbsl"]["whitespace/trailing"]
+    message = next(iter(per_message))
+    per_message[message] = {"count": per_message[message], "reason": "так надо"}
+    bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    capsys.readouterr()
+    rewritten = baseline.load(bl)
+    entry = rewritten["files"]["Ч.xbsl"]["whitespace/trailing"][message]
+    assert entry == {"count": 1, "reason": "так надо"}
+    # причины исчезнувших находок не переносятся: чистый файл - пустой базлайн
+    f.write_text("метод Ф()\n    возврат 1\n;\n", encoding="utf-8")
+    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    capsys.readouterr()
+    assert baseline.load(bl)["files"] == {}
+
+
+def test_lsp_apply_baseline_file(tmp_path):
+    """Фильтр LSP: нет файла - без изменений, битый - проблема, валидный - гасит."""
+    from xbsllint import baseline
+    from xbsllint.diagnostics import Diagnostic, Severity
+    from xbsllint.lsp import apply_baseline_file
+
+    d = Diagnostic(str(tmp_path / "Ч.xbsl"), 2, 5, "whitespace/trailing", Severity.WARNING, "Хвостовые пробелы.")
+    kept, problem = apply_baseline_file([d], None)
+    assert kept == [d] and problem is None
+    kept, problem = apply_baseline_file([d], tmp_path / "нет.json")
+    assert kept == [d] and problem is None
+
+    bad = tmp_path / "битый.json"
+    bad.write_text("{", encoding="utf-8")
+    kept, problem = apply_baseline_file([d], bad)
+    assert kept == [d] and problem
+
+    bl = tmp_path / "baseline.json"
+    baseline.write(bl, [d])
+    kept, problem = apply_baseline_file([d], bl)
+    assert kept == [] and problem is None

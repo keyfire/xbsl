@@ -238,6 +238,14 @@ the baseline suppressed and how many of its entries are now stale (debt paid dow
 rewrite the file. Paths are stored relative to the baseline file, so commit it at the repository
 root and run the linter from anywhere.
 
+The same file also records point exclusions with their reasons: an entry's value is either a
+bare count or `{"count": N, "reason": "..."}` – the reason says why the code is right on
+purpose. Reasons are written by the "Exclude the finding" lightbulb action of the
+[VS Code extension](https://github.com/keyfire/xbsl-lint/blob/main/editors/vscode/README.md#excluding-a-finding-the-baseline) (or by hand);
+`--write-baseline` keeps the reasons of the identities that survive a rewrite. The LSP server
+accepts the same `--baseline FILE` flag, so exclusions disappear in editors too. The identity
+includes the message text: write and check the baseline under the same output language.
+
 ## Extending: your own rules, data and severities
 
 Three entry point groups let a separate package extend the linter without forking it. This exists

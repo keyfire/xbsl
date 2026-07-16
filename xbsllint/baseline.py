@@ -11,6 +11,12 @@ the extra occurrences (in line order, the last ones) are reported. Paths are sto
 POSIX paths relative to the baseline file's directory, so the file can be committed and
 the linter run from any working directory.
 
+An entry's value is either a bare count or `{"count": N, "reason": "..."}` – the reason
+records WHY the finding is excluded (a deliberate project decision, not just frozen debt).
+Reasons are written by the editor tooling (the VS Code extension's "exclude the finding"
+action) or by hand; `--write-baseline` keeps the reasons of the identities that survive
+the rewrite.
+
 The message text is part of the identity, so the baseline must be written and checked
 under the same output language (--lang / XBSLLINT_LANG); a language switch surfaces
 every frozen finding and marks the whole file's entries as unused.
@@ -52,28 +58,82 @@ def _identity_path(diag_path: str, base_dir: Path) -> str:
         return p.as_posix()
 
 
-def build(diags: list[Diagnostic], base_dir: Path) -> dict:
-    """The baseline payload for the given findings: {files: {path: {rule: {message: count}}}}."""
-    files: dict[str, dict[str, dict[str, int]]] = {}
+def _entry_count(value) -> int:
+    """The allowed count of an entry: a bare int or the 'count' of a {count, reason} dict."""
+    if isinstance(value, int):
+        return value
+    if isinstance(value, dict) and isinstance(value.get("count"), int):
+        return value["count"]
+    return 0
+
+
+def _entry_reason(value) -> str | None:
+    if isinstance(value, dict):
+        reason = value.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            return reason
+    return None
+
+
+def reasons_of(data: dict) -> dict[tuple[str, str, str], str]:
+    """(path, rule, message) -> reason for every entry of the payload that carries one."""
+    out: dict[tuple[str, str, str], str] = {}
+    for path, per_rule in data.get("files", {}).items():
+        if not isinstance(per_rule, dict):
+            continue
+        for rule_id, per_message in per_rule.items():
+            if not isinstance(per_message, dict):
+                continue
+            for message, value in per_message.items():
+                reason = _entry_reason(value)
+                if reason:
+                    out[(path, rule_id, message)] = reason
+    return out
+
+
+def build(
+    diags: list[Diagnostic], base_dir: Path,
+    reasons: dict[tuple[str, str, str], str] | None = None,
+) -> dict:
+    """The baseline payload for the given findings: {files: {path: {rule: {message: count}}}}.
+
+    An identity present in `reasons` is written as {"count": N, "reason": ...} instead of a
+    bare count – this is how a rewrite keeps the reasons of the entries that survive it.
+    """
+    files: dict[str, dict[str, dict[str, object]]] = {}
     for d in sorted(diags, key=lambda x: x.sort_key()):
         path = _identity_path(d.path, base_dir)
         per_rule = files.setdefault(path, {})
         per_message = per_rule.setdefault(d.rule_id, {})
-        per_message[d.message] = per_message.get(d.message, 0) + 1
+        per_message[d.message] = _entry_count(per_message.get(d.message, 0)) + 1
+        reason = (reasons or {}).get((path, d.rule_id, d.message))
+        if reason:
+            per_message[d.message] = {"count": per_message[d.message], "reason": reason}
     return {
         "meta": {
             "tool": "xbsllint",
             "format": _FORMAT,
-            "note": "замороженные находки легаси: путь -> правило -> сообщение -> количество;"
-                    " файл генерируется xbsllint --write-baseline, руками не редактируется",
+            "note": "исключённые находки: путь -> правило -> сообщение -> количество или"
+                    " {count, reason}; файл создаётся xbsllint --write-baseline, исключение"
+                    " с причиной добавляет расширение VS Code (или правка руками)",
         },
         "files": {p: files[p] for p in sorted(files)},
     }
 
 
 def write(path: Path, diags: list[Diagnostic]) -> dict:
-    """Write the baseline next to the code it freezes; returns the payload."""
-    data = build(diags, path.parent)
+    """Write the baseline next to the code it freezes; returns the payload.
+
+    The reasons of an existing file's surviving identities are carried over: a rewrite
+    refreshes the counts, not the recorded decisions. A corrupt file is rewritten clean.
+    """
+    reasons: dict[tuple[str, str, str], str] = {}
+    if path.is_file():
+        try:
+            reasons = reasons_of(load(path))
+        except BaselineError:
+            pass
+    data = build(diags, path.parent, reasons)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     return data
 
@@ -107,8 +167,9 @@ def apply(
         for rule_id, per_message in per_rule.items():
             if not isinstance(per_message, dict):
                 continue
-            for message, count in per_message.items():
-                if isinstance(count, int) and count > 0:
+            for message, value in per_message.items():
+                count = _entry_count(value)
+                if count > 0:
                     budgets[(path, rule_id, message)] = count
     total_budget = sum(budgets.values())
     kept: list[Diagnostic] = []

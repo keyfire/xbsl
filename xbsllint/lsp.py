@@ -13,8 +13,9 @@ CLI: данные языка и индекс проекта загружаютс
 Корень исходников по умолчанию – папка воркспейса; если проект лежит в репозитории глубже,
 передайте `--project-root PATH` (абсолютный или относительно этой папки) – это аналог настройки
 `xbsl.projectRoot` расширения. Прочие ключи: `--select`, `--ignore`, `--enable` (наборы правил
-через запятую), `--data-dir` (корень данных Элемента). Ключи, а не initializationOptions,
-позволяют одинаково просто запускать сервер из VS Code, Neovim или JetBrains.
+через запятую), `--data-dir` (корень данных Элемента), `--baseline` (файл базлайна – исключённые
+находки гасятся и здесь, как в CLI). Ключи, а не initializationOptions, позволяют одинаково
+просто запускать сервер из VS Code, Neovim или JetBrains.
 """
 
 from __future__ import annotations
@@ -32,7 +33,7 @@ except ImportError:  # pragma: no cover - extra не установлен
     lsp = None
     LanguageServer = None
 
-from xbsllint import __version__, dataset, docs, engine, i18n, indexer
+from xbsllint import __version__, baseline, dataset, docs, engine, i18n, indexer
 from xbsllint.diagnostics import Diagnostic, Severity
 from xbsllint.lsp_nav import (
     IndexLookup,
@@ -89,6 +90,8 @@ class _State:
     def __init__(self) -> None:
         self.root: Optional[Path] = None
         self.project_root_arg: Optional[str] = None
+        self.baseline_arg: Optional[str] = None
+        self.baseline: Optional[Path] = None
         self.select: Optional[set[str]] = None
         self.ignore: Optional[set[str]] = None
         self.enable: Optional[set[str]] = None
@@ -113,6 +116,23 @@ def _rule_set(raw: object) -> Optional[set[str]]:
     else:
         return None
     return {p for p in parts if p} or None
+
+
+def apply_baseline_file(diags: list[Diagnostic], path: Optional[Path]) -> tuple[list[Diagnostic], Optional[str]]:
+    """Гасит исключённые базлайном находки: (оставшиеся, текст проблемы или None).
+
+    Файл читается на каждый прогон: он мал, а внешние правки (запись исключения из
+    расширения, git pull) подхватываются без перезапуска сервера. Отсутствующий файл –
+    не ошибка: он появится с первым исключением; повреждённый – проблема, о ней сообщаем.
+    """
+    if path is None or not path.is_file():
+        return diags, None
+    try:
+        data = baseline.load(path)
+    except baseline.BaselineError as exc:
+        return diags, str(exc)
+    kept, _suppressed, _unused = baseline.apply(diags, data, path.parent)
+    return kept, None
 
 
 def _offset_to_position(text: str, offset: int) -> tuple[int, int]:
@@ -184,9 +204,14 @@ def _make_server() -> "LanguageServer":
         path = uri_to_path(uri)
         if path is None:
             return
-        src = engine.load_text(path.name, doc.source)
+        # Полный путь, а не имя: по нему находки сопоставляются с записями базлайна,
+        # а structure/xbsl-pair видит настоящего соседа модуля.
+        src = engine.load_text(str(path), doc.source)
         diags = engine.run_sources([src], select=STATE.select, ignore=STATE.ignore,
                                    enable=STATE.enable, scopes=("file",))
+        diags, problem = apply_baseline_file(diags, STATE.baseline)
+        if problem:
+            server.show_message_log(f"xbsllint-lsp: базлайн не применён: {problem}")
         server.publish_diagnostics(uri, [_to_lsp_diag(d, doc.source) for d in diags])
         STATE.published.add(uri)
 
@@ -210,6 +235,9 @@ def _make_server() -> "LanguageServer":
             files = engine.find_sources(root, "*.xbsl") + engine.find_sources(root, "*.yaml")
             sources = [engine.load(p) for p in files]
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
+            diags, problem = apply_baseline_file(diags, STATE.baseline)
+            if problem:
+                server.show_message_log(f"xbsllint-lsp: базлайн не применён: {problem}")
             by_uri: dict[str, list] = {}
             texts: dict[str, str] = {}
             for d in diags:
@@ -264,6 +292,11 @@ def _make_server() -> "LanguageServer":
             STATE.root = p if p.is_absolute() else (folder / p if folder else p)
         else:
             STATE.root = folder
+        if STATE.baseline_arg:
+            # Относительный путь – от папки воркспейса (не от корня исходников): базлайн
+            # лежит в корне репозитория, как его видит CI.
+            b = Path(STATE.baseline_arg)
+            STATE.baseline = b if b.is_absolute() else (folder / b if folder else b)
         schedule_project_lint()
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
@@ -283,6 +316,16 @@ def _make_server() -> "LanguageServer":
     @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
     def _did_close(params: lsp.DidCloseTextDocumentParams) -> None:
         STATE.dirty.discard(params.text_document.uri)
+
+    @server.feature("xbsl/relint")
+    def _relint(params: object = None) -> dict:
+        # Клиент изменил внешнее состояние (записал исключение в базлайн) – перечитываем:
+        # прогон по проекту плюс буфер, из которого исключали (его диагностика живёт отдельно).
+        uri = _param(params, "uri")
+        if uri:
+            schedule_buffer_lint(str(uri))
+        schedule_project_lint()
+        return {"ok": True}
 
     # --- навигация ---------------------------------------------------------------------
 
@@ -522,6 +565,11 @@ def main() -> None:
     parser.add_argument("--select", help="только эти правила (через запятую)")
     parser.add_argument("--ignore", help="исключить правила (через запятую)")
     parser.add_argument("--enable", help="включить правила поверх набора по умолчанию")
+    parser.add_argument(
+        "--baseline",
+        help="файл базлайна (абсолютный или относительно папки воркспейса) – исключённые "
+             "находки гасятся; отсутствующий файл не ошибка, он появится с первым исключением",
+    )
     parser.add_argument("--data-dir", help="корень данных Элемента (папка с index.json)")
     parser.add_argument("--lang", choices=i18n.LANGS, help="язык текста замечаний")
     args = parser.parse_args()
@@ -529,6 +577,7 @@ def main() -> None:
         dataset.set_data_root(args.data_dir)
     i18n.set_lang(args.lang)  # None сохраняет порядок env/локаль
     STATE.project_root_arg = args.project_root
+    STATE.baseline_arg = args.baseline
     STATE.select = _rule_set(args.select)
     STATE.ignore = _rule_set(args.ignore)
     STATE.enable = _rule_set(args.enable)
