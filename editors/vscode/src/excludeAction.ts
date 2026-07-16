@@ -63,8 +63,10 @@ class ExcludeActionProvider implements vscode.CodeActionProvider {
       if (!rule) {
         continue;
       }
+      // "Эту находку", а не "проверку": исключается одна идентичность (файл + правило +
+      // сообщение), правило продолжает действовать на весь остальной проект.
       const action = new vscode.CodeAction(
-        vscode.l10n.t("Exclude the finding (to the baseline): {0}", rule),
+        vscode.l10n.t("Exclude this finding (to the baseline): {0}", rule),
         vscode.CodeActionKind.QuickFix
       );
       action.diagnostics = [diag];

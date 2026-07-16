@@ -193,11 +193,12 @@ and the LSP mode.
 ## Excluding a finding (the baseline)
 
 Disabling a rule silences it everywhere; sometimes a single finding must stay unfixed – the
-code is right on purpose. For that, every finding carries an **"Exclude the finding (to the
+code is right on purpose. For that, every finding carries an **"Exclude this finding (to the
 baseline): `<rule>`"** action in its lightbulb (`Ctrl+.`): type the reason, and the finding's
-identity (file + rule + message) is recorded in the baseline file together with it. The
-finding disappears from the editor, and a CI gate over the same file
-(`xbsllint ... --baseline`) stops reporting it too.
+identity (file + rule + message) is recorded in the baseline file together with it. Only that
+one finding is excluded – the rule keeps checking every other file and name (to silence a
+whole rule, use "Configure rule..." instead). The finding disappears from the editor, and a
+CI gate over the same file (`xbsllint ... --baseline`) stops reporting it too.
 
 The file is `.xbsllint-baseline` in the workspace folder (created on the first exclusion),
 or wherever `xbsl.baseline` points. The reason stays next to the frozen finding, and

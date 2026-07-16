@@ -8,11 +8,12 @@
 
 ## 0.18.0
 
-- "Exclude the finding (to the baseline)" in every finding's lightbulb (`Ctrl+.`): type the
-  reason, and the finding's identity is recorded in the baseline file (`.xbsllint-baseline`
-  in the workspace folder, or the new `xbsl.baseline` setting) as
-  `{"count": N, "reason": "..."}`. The finding disappears from the editor and from a CI gate
-  over the same file. Works in both modes; the LSP suppression needs the engine 0.15.0+.
+- "Exclude this finding (to the baseline)" in every finding's lightbulb (`Ctrl+.`): type the
+  reason, and the finding's identity (file + rule + message) is recorded in the baseline file
+  (`.xbsllint-baseline` in the workspace folder, or the new `xbsl.baseline` setting) as
+  `{"count": N, "reason": "..."}`. Only that one finding is excluded – the rule keeps
+  checking the rest of the project; the finding disappears from the editor and from a CI
+  gate over the same file. Works in both modes; the LSP suppression needs the engine 0.15.0+.
 - The baseline is now applied to every run the extension makes: the workspace runs, the
   per-buffer `--stdin` runs, and the LSP server (`--baseline`).
 - Buffer runs now pass the file's workspace-relative path instead of the bare name, so
