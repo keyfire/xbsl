@@ -1311,6 +1311,13 @@ def object_form_yaml(info: dict, uid: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _list_sort_field(info: dict, fields: list[str]) -> str | None:
+    """Поле сортировки списка по умолчанию: у документа – Дата, иначе Наименование."""
+    if info["kind"] == "Документ" and "Дата" in fields:
+        return "Дата"
+    return "Наименование" if "Наименование" in fields else None
+
+
 def list_form_yaml(info: dict, uid: str) -> str:
     """ФормаСписка по сводке объекта: динамический список, колонки по полям, иерархия."""
     obj = info["name"]
@@ -1395,9 +1402,244 @@ def list_form_yaml(info: dict, uid: str) -> str:
             "                    Тип: ПолеДинамическогоСписка",
             f"                    Выражение: {name}",
         ]
-    sort_field = "Дата" if info["kind"] == "Документ" and "Дата" in fields else (
-        "Наименование" if "Наименование" in fields else None
+    sort_field = _list_sort_field(info, fields)
+    if sort_field:
+        lines += [
+            "            Сортировка:",
+            "                -",
+            f"                    Поле: {sort_field}",
+            "                    НаправлениеСортировки: ПоВозрастанию",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+# --- карточная форма списка --------------------------------------------------------------
+#
+# Форма списка карточками: ПроизвольныйСписок выводит каждую запись отдельным компонентом
+# (ТипКомпонентаСтроки), а КонтейнерСтрок с матричной компоновкой раскладывает карточки
+# сеткой. Формы две: сама форма и компонент строки СтрокаСписка<Объект>.
+# Соответствие документации 9.2: ПроизвольныйСписок.ТипКомпонентаСтроки /
+# .КонтейнерСтрок, НастройкиМатричнойКомпоновки.ОписаниеАвтоматических{Колонок,Строк},
+# АвтоЗаполнениеМатричнойГруппы.ДобавлятьКолонкиИСтроки (требует определённого размера
+# колонок – поэтому у автоколонок задана МинимальнаяШирина), ФормаСписка.КомпонентТаблицы
+# принимает любой Компонент.
+
+CARD_ROW_PREFIX = "СтрокаСписка"
+_CARD_MIN_WIDTH = 400  # ширина колонки сетки; с фото карточка уже – см. _card_min_width
+_CARD_MIN_WIDTH_PHOTO = 250
+_CARD_CONTENT_LIMIT = 3  # больше трёх полей карточка не читается; остальное – вручную
+
+# Типы, чьё значение годится прямо в Строку (СтандартнаяКарточка.Содержимое: Компонент|Строка).
+_CARD_DATE_FORMATS = {
+    "Дата": "дд ММММ гггг",
+    "ДатаВремя": "дд ММММ гггг ЧЧ:мм",
+    "Время": "ЧЧ:мм",
+}
+
+
+def _is_photo_type(type_: str) -> bool:
+    return type_.replace(" ", "").startswith("ДвоичныйОбъект.Ссылка")
+
+
+def _card_roles(fields: list[dict]) -> dict:
+    """Роли полей карточки: {title, photo, content} – заголовок, фото, вторичные поля.
+
+    Заголовок – Наименование, иначе первое строковое поле, иначе первое поле. Фото – первый
+    реквизит ДвоичныйОбъект.Ссылка. Содержимое – следующие поля, не более _CARD_CONTENT_LIMIT.
+    """
+    photo = next((f for f in fields if _is_photo_type(f["type"])), None)
+    rest = [f for f in fields if f is not photo]
+    title = (
+        next((f for f in rest if f["name"] == "Наименование"), None)
+        or next((f for f in rest if f["type"] in ("Строка", "")), None)
+        or (rest[0] if rest else None)
     )
+    content = [f for f in rest if f is not title][:_CARD_CONTENT_LIMIT]
+    return {"title": title, "photo": photo, "content": content}
+
+
+def _card_fields(roles: dict) -> list[dict]:
+    """Поля, которые карточка реально показывает, в порядке заголовок – фото – содержимое."""
+    ordered = [roles["title"], roles["photo"], *roles["content"]]
+    return [f for f in ordered if f is not None]
+
+
+def _card_value(field: dict) -> str:
+    """Биндинг значения поля строки; дата/время – через Представление(Формат)."""
+    expr = f"=ДанныеСтроки.Данные.{field['name']}"
+    fmt = _CARD_DATE_FORMATS.get(field["type"])
+    return f'{expr}.Представление("{fmt}")' if fmt else expr
+
+
+def _card_is_text(field: dict) -> bool:
+    """Годится ли значение прямо в строковое свойство (Заголовок/Содержимое карточки)."""
+    return field["type"] in ("Строка", "") or field["type"] in _CARD_DATE_FORMATS
+
+
+def _card_label(field: dict, indent: str) -> list[str]:
+    return [f"{indent}Тип: Надпись", f"{indent}Значение: {_card_value(field)}"]
+
+
+def _card_content_lines(content: list[dict], indent: str) -> list[str]:
+    """Строки свойства Содержимое карточки: строка, одна Надпись или Группа надписей.
+
+    Нетекстовые значения (ссылки, перечисления, числа) в строковое свойство не годятся –
+    их выводит Надпись.
+    """
+    if not content:
+        return []
+    if len(content) == 1 and _card_is_text(content[0]):
+        return [f"{indent}Содержимое: {_card_value(content[0])}"]
+    if len(content) == 1:
+        return [f"{indent}Содержимое:"] + _card_label(content[0], indent + "    ")
+    lines = [
+        f"{indent}Содержимое:",
+        f"{indent}    Тип: Группа",
+        f"{indent}    Компоновка: Вертикальная",
+        f"{indent}    Содержимое:",
+    ]
+    for field in content:
+        lines.append(f"{indent}        -")
+        lines += _card_label(field, indent + "            ")
+    return lines
+
+
+def _card_min_width(roles: dict, min_width: int | None) -> int:
+    if min_width:
+        return min_width
+    return _CARD_MIN_WIDTH_PHOTO if roles["photo"] else _CARD_MIN_WIDTH
+
+
+def card_row_yaml(info: dict, uid: str, *, placeholder: str | None = None) -> str:
+    """Компонент строки карточного списка: СтандартнаяКарточка, с фото – ПроизвольнаяКарточка.
+
+    placeholder – выражение картинки-заглушки (напр. "Ресурс{Аккаунт.svg}.Ссылка"); без него
+    пустое фото просто не отображается (Картинка.Изображение допускает Неопределено).
+    """
+    obj = info["name"]
+    row_type = f'{info["namespace"]}::{obj}ФормаСписка.ДанныеСтрокиСписка'
+    roles = _card_roles(info["fields"])
+    title, photo = roles["title"], roles["photo"]
+    lines = [
+        "ВидЭлемента: КомпонентИнтерфейса",
+        f"Ид: {uid}",
+        f"Имя: {CARD_ROW_PREFIX}{obj}",
+        "ОбластьВидимости: ВПодсистеме",
+        "Наследует:",
+        f"    Тип: ПроизвольнаяСтрокаСписка<СтрокаДинамическогоСписка<{row_type}>>",
+        "    Содержимое:",
+    ]
+    if photo is None:
+        lines += [
+            "        Тип: СтандартнаяКарточка",
+            "        РастягиватьПоВертикали: Истина",
+            "        РастягиватьПоГоризонтали: Истина",
+        ]
+        if title is not None:
+            heading = _card_value(title) if _card_is_text(title) else f"=ДанныеСтроки.Данные.{title['name']}.ВСтроку()"
+            lines.append(f"        Заголовок: {heading}")
+        lines += _card_content_lines(roles["content"], "        ")
+        return "\n".join(lines) + "\n"
+
+    # С фото – произвольная карточка: у стандартной картинка идёт в заголовок, а нужен
+    # вертикальный стек "фото над подписью" (Группа по умолчанию горизонтальная).
+    image = _card_value(photo)
+    if placeholder:
+        image = f"{image} ?? {placeholder}"
+    lines += [
+        "        Тип: ПроизвольнаяКарточка",
+        "        РастягиватьПоВертикали: Истина",
+        "        РастягиватьПоГоризонтали: Истина",
+        "        Содержимое:",
+        "            Тип: Группа",
+        "            Компоновка: Вертикальная",
+        "            РастягиватьПоГоризонтали: Истина",
+        "            Содержимое:",
+        "                -",
+        "                    Тип: Картинка",
+        "                    Высота: 200",
+        "                    РастягиватьПоВертикали: Ложь",
+        "                    РастягиватьПоГоризонтали: Истина",
+        "                    Масштабирование: Пропорционально",
+        f"                    Изображение: {image}",
+    ]
+    for field in ([title] if title is not None else []) + roles["content"]:
+        lines += [
+            "                -",
+            "                    Тип: Надпись",
+            "                    РастягиватьПоГоризонтали: Истина",
+            f"                    Значение: {_card_value(field)}",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def cards_list_form_yaml(info: dict, uid: str, *, min_width: int | None = None) -> str:
+    """ФормаСписка карточками: ПроизвольныйСписок + матричный КонтейнерСтрок.
+
+    От list_form_yaml отличается только компонентом: вместо Таблицы с колонками – список,
+    рисующий каждую запись компонентом CARD_ROW_PREFIX+Объект. Поля динамического списка –
+    Ссылка (нужна навигации) и те, что показывает карточка.
+    """
+    obj = info["name"]
+    row_type = f'{info["namespace"]}::{obj}ФормаСписка.ДанныеСтрокиСписка'
+    list_type = f"ДинамическийСписок<{row_type}>"
+    roles = _card_roles(info["fields"])
+    shown = [f["name"] for f in _card_fields(roles)]
+    width = _card_min_width(roles, min_width)
+    lines = [
+        "ВидЭлемента: КомпонентИнтерфейса",
+        f"Ид: {uid}",
+        f"Имя: {obj}ФормаСписка",
+        "ОбластьВидимости: ВПодсистеме",
+        "Наследует:",
+        "    Тип: ФормаСписка",
+        "    ВключатьВАвтоИнтерфейс: Ложь",
+        f"    Заголовок: {obj}",
+        "    ДополнительныеКоманды:",
+        "        Тип: ФрагментКомандногоИнтерфейса",
+        "        Элементы:",
+        "            - =Обновить",
+        "    КомандыСоздания: =Компоненты.ОсновнаяТаблица.ДобавитьСтроку",
+        "    КомпонентТаблицы: =Компоненты.ОсновнаяТаблица",
+        "    Содержимое:",
+        "        Тип: ПроизвольныйШаблонФормы",
+        "        Содержимое:",
+        f"            Тип: ПроизвольныйСписок<{list_type}>",
+        "            Имя: ОсновнаяТаблица",
+        "            Источник: =Список",
+        "            ОбрабатыватьНажатие: Истина",
+        f"            ТипКомпонентаСтроки: {CARD_ROW_PREFIX}{obj}",
+        "            РастягиватьПоГоризонтали: Истина",
+        "            РастягиватьПоВертикали: Истина",
+        "            КонтейнерСтрок:",
+        "                Тип: Группа",
+        "                Имя: СеткаКарточек",
+        "                Компоновка: Матричная",
+        "                РастягиватьПоГоризонтали: Истина",
+        "                НастройкиМатричнойКомпоновки:",
+        "                    АвтоЗаполнение: ДобавлятьКолонкиИСтроки",
+        "                    ОписаниеАвтоматическихКолонок:",
+        f"                        МинимальнаяШирина: {width}",
+        "                        РастягиватьПоГоризонтали: Истина",
+        "                    ОписаниеАвтоматическихСтрок:",
+        "                        РастягиватьПоВертикали: Истина",
+        "Свойства:",
+        "    -",
+        "        Имя: Список",
+        f"        Тип: {list_type}",
+        "        ЗначениеПоУмолчанию:",
+        "            ИмяТипаДанныхСтроки: ДанныеСтрокиСписка",
+        "            ОсновнаяТаблица:",
+        f"                Таблица: {obj}",
+        "            Поля:",
+    ]
+    for name in ["Ссылка"] + shown:
+        lines += [
+            "                -",
+            "                    Тип: ПолеДинамическогоСписка",
+            f"                    Выражение: {name}",
+        ]
+    sort_field = _list_sort_field(info, shown)
     if sort_field:
         lines += [
             "            Сортировка:",
@@ -1519,14 +1761,22 @@ def _register_forms(text: str, nl: str, kind: str, obj: str, forms: list[str], r
     return text
 
 
+FORM_KINDS = ("object", "list", "list-cards", "report")
+
+
 def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = None,
                 forms: list[str] | None = None, overwrite: bool = False,
+                card_min_width: int | None = None, card_placeholder: str | None = None,
                 reader=None) -> ScaffoldResult:
     """Создать формы объекта с наполнением по его реквизитам и зарегистрировать в Интерфейс.
 
-    forms – подмножество ["object", "list", "report"]; по умолчанию обе формы для
-    объектов данных и форма отчёта для Отчет. Существующая форма не перезаписывается
-    без overwrite – вместо этого пометка в notes.
+    forms – подмножество FORM_KINDS; по умолчанию object+list для объектов данных и report
+    для Отчет. "list-cards" – та же форма списка, но карточками (ПроизвольныйСписок с
+    матричной сеткой); она несовместима с "list" (обе – файл <Объект>ФормаСписка.yaml) и
+    создаёт второй файл – компонент строки СтрокаСписка<Объект>. card_min_width задаёт
+    ширину колонки сетки (по умолчанию 400, с фото – 250), card_placeholder – выражение
+    картинки-заглушки. Существующая форма не перезаписывается без overwrite – вместо этого
+    пометка в notes.
     """
     info = object_info(Path(root), name=name, yaml_path=yaml_path)
     kind = info["kind"]
@@ -1534,6 +1784,15 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     owner_path = Path(info["path"])
     if forms is None:
         forms = ["report"] if kind == "Отчет" else ["object", "list"]
+    unknown = [f for f in forms if f not in FORM_KINDS]
+    if unknown:
+        raise ScaffoldError(
+            f"Неизвестный вид формы: {', '.join(unknown)}; доступны: {', '.join(FORM_KINDS)}"
+        )
+    if "list" in forms and "list-cards" in forms:
+        raise ScaffoldError(
+            "list и list-cards – одна и та же форма списка (<Объект>ФормаСписка): выберите одну"
+        )
     if kind == "Отчет" and forms != ["report"]:
         raise ScaffoldError("Для отчёта доступна только форма отчёта: forms=[\"report\"]")
     if kind != "Отчет" and "report" in forms:
@@ -1543,6 +1802,7 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     generators = {
         "object": ("ФормаОбъекта", object_form_yaml),
         "list": ("ФормаСписка", list_form_yaml),
+        "list-cards": ("ФормаСписка", lambda i, uid: cards_list_form_yaml(i, uid, min_width=card_min_width)),
         "report": ("ФормаОтчета", report_form_yaml),
     }
     made: list[str] = []
@@ -1556,12 +1816,48 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
             FileChange(form_path, generator(info, new_uuid()), created=not form_path.exists())
         )
         made.append(form)
+        if form == "list-cards":
+            _add_card_row(info, owner_path, overwrite, card_placeholder, result)
     if made:
         text, nl = _load_for_edit(owner_path, reader)
-        new_text = _register_forms(text, nl, kind, obj, made, result)
+        # Карточная форма списка регистрируется как обычная: тот же файл <Объект>ФормаСписка.
+        registered = ["list" if f == "list-cards" else f for f in made]
+        new_text = _register_forms(text, nl, kind, obj, registered, result)
         if new_text != text:
             result.changes.append(FileChange(owner_path, new_text, created=False))
     return result
+
+
+def _add_card_row(info: dict, owner_path: Path, overwrite: bool, placeholder: str | None,
+                  result: ScaffoldResult) -> None:
+    """Компонент строки карточного списка + пометки о том, что попало в карточку."""
+    obj = info["name"]
+    row_path = owner_path.parent / f"{CARD_ROW_PREFIX}{obj}.yaml"
+    if row_path.exists() and not overwrite:
+        result.notes.append(
+            f"{row_path.name} уже существует – пропущен (overwrite=true перезапишет)"
+        )
+    else:
+        result.changes.append(
+            FileChange(row_path, card_row_yaml(info, new_uuid(), placeholder=placeholder),
+                       created=not row_path.exists())
+        )
+    roles = _card_roles(info["fields"])
+    shown = [f["name"] for f in _card_fields(roles)]
+    result.notes.append(
+        "В карточку вынесены поля: " + (", ".join(shown) if shown else "нет реквизитов")
+    )
+    hidden = [f["name"] for f in info["fields"] if f["name"] not in shown]
+    if hidden:
+        result.notes.append(
+            "Не попали в карточку: " + ", ".join(hidden)
+            + " – добавьте вручную в " + row_path.name + " и в Поля списка"
+        )
+    if info["is_hierarchical"]:
+        result.notes.append(
+            "Объект иерархический, но карточная сетка выводит плоский список – "
+            "иерархия в форме не используется"
+        )
 
 
 # --- операция: переименование объекта ----------------------------------------------------

@@ -276,19 +276,31 @@ def meta_add_form(
     yaml_path: str | None = None,
     forms: list[str] | None = None,
     overwrite: bool = False,
+    card_min_width: int | None = None,
+    card_placeholder: str | None = None,
 ) -> dict:
     """Generate interface forms for an object and register them in its Интерфейс section.
 
-    forms – subset of ["object", "list", "report"]; default: object+list for data objects,
-    report for Отчет. The generated forms carry real content: input fields per attribute,
-    dynamic-list columns, tabular-section tables, hierarchy support. Existing form files
-    are skipped unless overwrite=true.
+    forms – subset of ["object", "list", "list-cards", "report"]; default: object+list for
+    data objects, report for Отчет. The generated forms carry real content: input fields per
+    attribute, dynamic-list columns, tabular-section tables, hierarchy support.
+
+    "list-cards" builds the list form as a card grid (ПроизвольныйСписок with a matrix
+    КонтейнерСтрок) instead of a table, and adds the row component СтрокаСписка<Имя>: the
+    card shows a title, a photo (ДвоичныйОбъект.Ссылка attribute) and up to three more
+    fields – notes report what landed on the card and what did not. It replaces "list"
+    (same form file), so passing both is an error. card_min_width – grid column width
+    (default 400, 250 with a photo); card_placeholder – image expression used when the photo
+    is empty, e.g. "Ресурс{Аккаунт.svg}.Ссылка".
+
+    Existing form files are skipped unless overwrite=true.
     """
     return _meta(
         scaffold.op_add_form,
         Path(root), name=name,
         yaml_path=Path(yaml_path) if yaml_path else None,
         forms=forms, overwrite=overwrite,
+        card_min_width=card_min_width, card_placeholder=card_placeholder,
     )
 
 

@@ -531,3 +531,131 @@ def test_rename_object_dry_dict_shape(tmp_path):
     assert any("замен" in note for note in plan["notes"])
     # Ничего не записано: операция только вычисляет изменения.
     assert (tmp_path / "vendor" / "Приложение" / "Основное" / "Склады.yaml").is_file()
+
+
+# --- карточная форма списка ---------------------------------------------------------------
+
+
+def _cards_project(tmp_path, fields: list[tuple[str, str]]) -> Path:
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Сотрудники"))
+    for name, type_ in fields:
+        apply_result(scaffold.op_add_field(subsystem / "Сотрудники.yaml", "реквизит", name,
+                                           type_=type_))
+    return subsystem
+
+
+def test_cards_list_form_without_photo(tmp_path):
+    subsystem = _cards_project(tmp_path, [("Должность", "Строка"), ("Отдел", "Отделы.Ссылка?")])
+    result = scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list-cards"])
+    apply_result(result)
+
+    form = _valid_yaml((subsystem / "СотрудникиФормаСписка.yaml").read_text(encoding="utf-8"))
+    component = form["Наследует"]["Содержимое"]["Содержимое"]
+    row_type = "vendor::Приложение::Основное::СотрудникиФормаСписка.ДанныеСтрокиСписка"
+    assert component["Тип"] == f"ПроизвольныйСписок<ДинамическийСписок<{row_type}>>"
+    assert component["ТипКомпонентаСтроки"] == "СтрокаСпискаСотрудники"
+    assert form["Наследует"]["КомпонентТаблицы"] == "=Компоненты.ОсновнаяТаблица"
+
+    grid = component["КонтейнерСтрок"]
+    assert grid["Компоновка"] == "Матричная"
+    settings = grid["НастройкиМатричнойКомпоновки"]
+    assert settings["АвтоЗаполнение"] == "ДобавлятьКолонкиИСтроки"
+    assert settings["ОписаниеАвтоматическихКолонок"]["МинимальнаяШирина"] == 400
+
+    # Поля списка: Ссылка для навигации + показанные карточкой.
+    fields = [f["Выражение"] for f in form["Свойства"][0]["ЗначениеПоУмолчанию"]["Поля"]]
+    assert fields == ["Ссылка", "Наименование", "Должность", "Отдел"]
+
+    row = _valid_yaml((subsystem / "СтрокаСпискаСотрудники.yaml").read_text(encoding="utf-8"))
+    assert row["Имя"] == "СтрокаСпискаСотрудники"
+    card = row["Наследует"]["Содержимое"]
+    assert row["Наследует"]["Тип"] == f"ПроизвольнаяСтрокаСписка<СтрокаДинамическогоСписка<{row_type}>>"
+    assert card["Тип"] == "СтандартнаяКарточка"
+    assert card["Заголовок"] == "=ДанныеСтроки.Данные.Наименование"
+    # Строковое поле идёт прямо в Содержимое, ссылка – Надписью: обе в Группе.
+    labels = card["Содержимое"]["Содержимое"]
+    assert [l["Значение"] for l in labels] == [
+        "=ДанныеСтроки.Данные.Должность", "=ДанныеСтроки.Данные.Отдел",
+    ]
+
+    owner = _valid_yaml((subsystem / "Сотрудники.yaml").read_text(encoding="utf-8"))
+    assert owner["Интерфейс"]["Список"]["Форма"] == "СотрудникиФормаСписка"
+
+
+def test_cards_single_text_field_goes_inline(tmp_path):
+    subsystem = _cards_project(tmp_path, [("Должность", "Строка")])
+    apply_result(scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list-cards"]))
+    row = _valid_yaml((subsystem / "СтрокаСпискаСотрудники.yaml").read_text(encoding="utf-8"))
+    assert row["Наследует"]["Содержимое"]["Содержимое"] == "=ДанныеСтроки.Данные.Должность"
+
+
+def test_cards_list_form_with_photo(tmp_path):
+    subsystem = _cards_project(tmp_path, [("Фото", "ДвоичныйОбъект.Ссылка?")])
+    result = scaffold.op_add_form(
+        tmp_path, name="Сотрудники", forms=["list-cards"],
+        card_placeholder="Ресурс{Аккаунт.svg}.Ссылка",
+    )
+    apply_result(result)
+
+    form = _valid_yaml((subsystem / "СотрудникиФормаСписка.yaml").read_text(encoding="utf-8"))
+    settings = form["Наследует"]["Содержимое"]["Содержимое"]["КонтейнерСтрок"]["НастройкиМатричнойКомпоновки"]
+    assert settings["ОписаниеАвтоматическихКолонок"]["МинимальнаяШирина"] == 250  # фото – уже
+
+    row = _valid_yaml((subsystem / "СтрокаСпискаСотрудники.yaml").read_text(encoding="utf-8"))
+    card = row["Наследует"]["Содержимое"]
+    assert card["Тип"] == "ПроизвольнаяКарточка"
+    stack = card["Содержимое"]
+    assert stack["Компоновка"] == "Вертикальная"
+    picture, label = stack["Содержимое"]
+    assert picture["Тип"] == "Картинка"
+    assert picture["Масштабирование"] == "Пропорционально"
+    assert picture["Изображение"] == "=ДанныеСтроки.Данные.Фото ?? Ресурс{Аккаунт.svg}.Ссылка"
+    assert picture["РастягиватьПоВертикали"] == "Ложь"  # иначе Высота растянется на остаток
+    assert label["Значение"] == "=ДанныеСтроки.Данные.Наименование"
+
+
+def test_cards_document_formats_date_and_notes_hidden_fields(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Документ", "Заказы"))
+    for name in ("ПолеА", "ПолеБ", "ПолеВ", "ПолеГ"):
+        apply_result(scaffold.op_add_field(subsystem / "Заказы.yaml", "реквизит", name))
+    result = scaffold.op_add_form(tmp_path, name="Заказы", forms=["list-cards"])
+    apply_result(result)
+
+    row = _valid_yaml((subsystem / "СтрокаСпискаЗаказы.yaml").read_text(encoding="utf-8"))
+    card = row["Наследует"]["Содержимое"]
+    # Заголовок – Номер (первое строковое), Дата форматируется, лишние поля не влезли.
+    assert card["Заголовок"] == "=ДанныеСтроки.Данные.Номер"
+    values = [l["Значение"] for l in card["Содержимое"]["Содержимое"]]
+    assert values[0] == '=ДанныеСтроки.Данные.Дата.Представление("дд ММММ гггг ЧЧ:мм")'
+    assert len(values) == 3
+    assert any("Не попали в карточку: ПолеВ, ПолеГ" in n for n in result.notes)
+    assert any("В карточку вынесены поля: Номер, Дата, ПолеА, ПолеБ" in n for n in result.notes)
+
+    form = _valid_yaml((subsystem / "ЗаказыФормаСписка.yaml").read_text(encoding="utf-8"))
+    sort = form["Свойства"][0]["ЗначениеПоУмолчанию"]["Сортировка"]
+    assert sort[0]["Поле"] == "Дата"
+
+
+def test_cards_conflicts_and_unknown_form_kind(tmp_path):
+    _cards_project(tmp_path, [])
+    with pytest.raises(ScaffoldError, match="выберите одну"):
+        scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list", "list-cards"])
+    with pytest.raises(ScaffoldError, match="Неизвестный вид формы"):
+        scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["cards"])
+
+    subsystem = tmp_path / "vendor" / "Приложение" / "Основное"
+    apply_result(scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list-cards"]))
+
+    # Форма уже есть – ни она, ни её компонент строки не трогаются.
+    again = scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list-cards"])
+    assert any("СотрудникиФормаСписка.yaml уже существует" in n for n in again.notes)
+    assert again.changes == []
+
+    # Форма удалена, компонент остался: форма создаётся заново, компонент – пропускается.
+    (subsystem / "СотрудникиФормаСписка.yaml").unlink()
+    partial = scaffold.op_add_form(tmp_path, name="Сотрудники", forms=["list-cards"])
+    created = [c.path.name for c in partial.changes if c.created]
+    assert created == ["СотрудникиФормаСписка.yaml"]
+    assert any("СтрокаСпискаСотрудники.yaml уже существует" in n for n in partial.notes)

@@ -8,6 +8,7 @@ import importlib
 import json
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -207,3 +208,31 @@ def test_cli_rename_object(capsys, tmp_path):
 
     code, err = _run_cli(capsys, "rename-object", str(tmp_path), "Склады", "Хранилища")
     assert code == 2 and "не найден" in err["error"]
+
+
+def test_mcp_meta_add_form_cards(mcp_module, tmp_path):
+    mcp_module.meta_new_object(str(tmp_path), "Справочник", "Сотрудники")
+    mcp_module.meta_add_field(str(tmp_path / "Сотрудники.yaml"), "реквизит", "Фото",
+                              type="ДвоичныйОбъект.Ссылка?")
+    res = mcp_module.meta_add_form(str(tmp_path), name="Сотрудники", forms=["list-cards"],
+                                   card_min_width=320)
+    created = [f["path"] for f in res["files"] if f["created"]]
+    assert str(tmp_path / "СотрудникиФормаСписка.yaml") in created
+    assert str(tmp_path / "СтрокаСпискаСотрудники.yaml") in created
+    assert "lint" in res
+    form = (tmp_path / "СотрудникиФормаСписка.yaml").read_text(encoding="utf-8")
+    assert "МинимальнаяШирина: 320" in form
+    assert "ТипКомпонентаСтроки: СтрокаСпискаСотрудники" in form
+
+    err = mcp_module.meta_add_form(str(tmp_path), name="Сотрудники", forms=["list", "list-cards"])
+    assert "выберите одну" in err["error"]
+
+
+def test_cli_add_form_cards(capsys, tmp_path):
+    _run_cli(capsys, "new-object", str(tmp_path), "Справочник", "Сотрудники")
+    code, out = _run_cli(capsys, "add-form", str(tmp_path), "--name", "Сотрудники",
+                         "--forms", "list-cards", "--card-min-width", "300")
+    assert code == 0
+    names = {Path(f["path"]).name for f in out["files"]}
+    assert {"СотрудникиФормаСписка.yaml", "СтрокаСпискаСотрудники.yaml"} <= names
+    assert "МинимальнаяШирина: 300" in (tmp_path / "СотрудникиФормаСписка.yaml").read_text(encoding="utf-8")

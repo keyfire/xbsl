@@ -223,7 +223,12 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("root")
     p.add_argument("--name")
     p.add_argument("--path", help="yaml объекта (вместо --name)")
-    p.add_argument("--forms", help="подмножество object,list,report через запятую")
+    p.add_argument("--forms", help="подмножество object,list,list-cards,report через запятую "
+                                   "(list-cards – список карточками, вместо list)")
+    p.add_argument("--card-min-width", type=int,
+                   help="ширина колонки сетки карточек (по умолчанию 400, с фото – 250)")
+    p.add_argument("--card-placeholder",
+                   help='выражение картинки-заглушки, напр. "Ресурс{Аккаунт.svg}.Ссылка"')
     p.add_argument("--overwrite", action="store_true")
 
     p = sub.add_parser("add-subsystem", help="создать подсистему (папка + Подсистема.yaml)")
@@ -305,6 +310,8 @@ def _scaffold_main(argv: list[str]) -> int:
                 yaml_path=Path(args.path) if args.path else None,
                 forms=args.forms.split(",") if args.forms else None,
                 overwrite=args.overwrite,
+                card_min_width=args.card_min_width,
+                card_placeholder=args.card_placeholder,
             )
         elif args.command == "add-subsystem":
             result = scaffold.op_add_subsystem(

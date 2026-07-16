@@ -596,6 +596,7 @@ def _make_server() -> "LanguageServer":
             "kinds": bare,
             "allKinds": sorted(scaffold.KIND_SPECS),
             "fieldKinds": {k: list(v) for k, v in scaffold.KIND_SECTIONS.items()},
+            "formKinds": list(scaffold.FORM_KINDS),
         }
 
     @server.feature("xbsl/metaNewObject")
@@ -628,6 +629,7 @@ def _make_server() -> "LanguageServer":
         raw_forms = _param(params, "forms")
         forms = [str(f) for f in raw_forms] if raw_forms else None
         path = _opt_str(params, "path")
+        min_width = _param(params, "cardMinWidth")
         return _meta_op(
             scaffold.op_add_form,
             _meta_root(params),
@@ -635,6 +637,8 @@ def _make_server() -> "LanguageServer":
             yaml_path=Path(path) if path else None,
             forms=forms,
             overwrite=bool(_param(params, "overwrite", False)),
+            card_min_width=int(min_width) if min_width else None,
+            card_placeholder=_opt_str(params, "cardPlaceholder"),
             reader=_buffer_reader,
         )
 
