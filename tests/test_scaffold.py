@@ -155,6 +155,18 @@ def test_new_http_service_routes(tmp_path):
         assert f"метод {handler}" in module
 
 
+def test_new_component_command_uses_component_type_property(tmp_path):
+    result = scaffold.op_new_object(tmp_path, "КомандаСКомпонентом", "КомандаЗакрытьФорму")
+    apply_result(result)
+    parsed = _valid_yaml((tmp_path / "КомандаЗакрытьФорму.yaml").read_text(encoding="utf-8"))
+    # Свойство называется ТипКомпонента: вариант "Компонент" из перечня свойств документации
+    # проверен деплоем и отвергается компилятором ("Неизвестное свойство").
+    assert parsed["ТипКомпонента"] == "Форма"
+    assert "Компонент" not in parsed
+    module = (tmp_path / "КомандаЗакрытьФорму.xbsl").read_text(encoding="utf-8")
+    assert "@Обработчик" in module and "этот.Компонент" in module
+
+
 def test_new_soap_service(tmp_path):
     result = scaffold.op_new_object(
         tmp_path, "SoapСервис", "СервисМагазина", access="РазрешеноАутентифицированным",

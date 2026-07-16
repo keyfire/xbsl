@@ -266,8 +266,12 @@ def meta_add_field(
     tabular: str | None = None,
 ) -> dict:
     """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
-    параметр, поле (structure) or табличная-часть. UUIDs, anchoring and indentation are
-    handled here; duplicates and sections invalid for the object's kind are rejected.
+    параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
+    (Обработка: also writes the @Обработчик method into the module), индекс (Имя + Поля with
+    a stub field to replace), параметр-запроса (Отчет) or строка / шаблон (ЛокализованныеСтроки:
+    key-value mapping sections, `type` carries the VALUE, defaulting to the key itself).
+    UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
+    the object's kind are rejected.
 
     tabular – target tabular-section name when adding a реквизит into it.
     """
