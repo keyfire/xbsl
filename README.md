@@ -277,6 +277,13 @@ duplicate checks and section/kind compatibility. The same operations are exposed
 CLI (subcommands, JSON output), MCP (the `meta_*` tools for agents) and LSP (the `xbsl/meta*`
 custom requests that power the VS Code metadata tree).
 
+33 kinds of project element are creatable – from Справочник and Документ to ВиртуальнаяТаблица
+(paired with its mandatory `.xbql` query), ЗапланированноеЗадание, contracts, rights and
+commands. Each kind carries what the docs make mandatory: the platform's own default scope
+(`ВПодсистеме` – widen it deliberately with `--scope`), a module stub for the handler the kind
+cannot live without, and a note for whatever the generator must not invent for you. Kinds whose
+content is drawn in the designer (ПанельОтчетов, ПроцессИнтеграции) are deliberately absent.
+
 ![The VS Code tree, AI agents and the terminal call the same scaffolding core; it writes created and point-edited yaml/xbsl files, the linter checks what was written, and the response carries files, notes and the lint report; the LSP surface returns full texts for the editor to apply](https://raw.githubusercontent.com/keyfire/xbsl/main/images/scaffolding.png)
 
 ```sh

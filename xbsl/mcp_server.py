@@ -227,7 +227,11 @@ def meta_new_object(
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
     directory – the subsystem folder; kind – one of meta_project_info().creatable_kinds
-    (Справочник, Документ, Перечисление, ОбщийМодуль, HttpСервис, Отчет, КлючДоступа ...).
+    (Справочник, Документ, Перечисление, ОбщийМодуль, HttpСервис, Отчет, КлючДоступа,
+    ПланОбмена, НаборКонстант, ВиртуальнаяТаблица, Обработка, ЗапланированноеЗадание,
+    контракты, права, команды ...). Kinds whose module has a mandatory handler get it
+    stubbed; ВиртуальнаяТаблица gets a paired empty .xbql (its query is mandatory).
+    Anything the platform will not infer is reported in notes.
     scope overrides ОбластьВидимости; environment – Окружение (ОбщийМодуль/Структура);
     access – КонтрольДоступа (РазрешеноАутентифицированным etc.); routes – HttpСервис
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
