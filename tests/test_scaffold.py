@@ -154,6 +154,44 @@ def test_new_http_service_routes(tmp_path):
         assert f"метод {handler}" in module
 
 
+def test_new_soap_service(tmp_path):
+    result = scaffold.op_new_object(
+        tmp_path, "SoapСервис", "СервисМагазина", access="РазрешеноАутентифицированным",
+    )
+    apply_result(result)
+    parsed = _valid_yaml((tmp_path / "СервисМагазина.yaml").read_text(encoding="utf-8"))
+    # Структура по документации SoapСервис: пространство имён, имя сервиса, URL, обработчики.
+    assert parsed["ИмяСервиса"] == "СервисМагазина"
+    assert parsed["КорневойUrl"] == "/СервисМагазина"
+    assert "ПространствоИменСервиса" in parsed
+    assert parsed["Обработчики"][0]["Имя"] == "Операция1"
+    assert parsed["Обработчики"][0]["Метод"] == "Операция1"
+    assert parsed["КонтрольДоступа"]["Разрешения"]["Вызов"] == "РазрешеноАутентифицированным"
+    # Метод операции объявлен в парном модуле.
+    module = (tmp_path / "СервисМагазина.xbsl").read_text(encoding="utf-8")
+    assert "метод Операция1()" in module
+
+
+def test_processing_operation_writes_handler(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "РасчетДоставки"))
+    yaml_path = tmp_path / "РасчетДоставки.yaml"
+    result = scaffold.op_add_field(yaml_path, "операция", "Рассчитать")
+    apply_result(result)
+    # Операция попала в yaml, а одноимённый @Обработчик-метод – в модуль.
+    parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    assert [o["Имя"] for o in parsed["Операции"]] == ["Рассчитать"]
+    module = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
+    assert "@Обработчик\nметод Рассчитать()" in module.replace("\r\n", "\n")
+    assert any("Рассчитать" in n for n in result.notes)
+
+    # Повторное добавление того же метода не дублирует его в модуле.
+    apply_result(scaffold.op_add_field(yaml_path, "операция", "РассчитатьПочтой"))
+    again = scaffold.op_add_field(yaml_path, "операция", "Ещё")
+    apply_result(again)
+    module = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
+    assert module.count("метод Рассчитать()") == 1
+
+
 def test_http_root_url_drops_kind_suffix(tmp_path):
     # КорневойUrl – публичный префикс, суффикс вида HttpСервис в нём лишний.
     result = scaffold.op_new_object(tmp_path, "HttpСервис", "КаталогHttpСервис", routes="GET /")

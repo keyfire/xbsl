@@ -360,8 +360,7 @@ _STUB_SERVICE_CONTRACT = """\
 # Создаваемые виды объектов. Перечень видов – Стд::Отражение::ВидЭлементаПроекта; здесь те,
 # что осмысленно создавать файлами. Не заводятся намеренно: ПанельОтчетов и ПроцессИнтеграции
 # (содержимое рисуется в дизайнере, у процесса – ещё и координаты узлов; в облаке недоступен),
-# КлиентSoapСервиса (без загруженного из IDE WSDL бесполезен), SoapСервис (нужен набор
-# параметров сервиса – как маршруты у HttpСервис, отдельная доработка), КомандаСКомпонентом
+# КлиентSoapСервиса (без загруженного из IDE WSDL бесполезен), КомандаСКомпонентом
 # (документация расходится с примерами в имени свойства Компонент/ТипКомпонента).
 # Обязательные стартовые поля: без них объект не компилируется, а платформа их не подставит.
 # Документ – реквизит Дата ("Обязан присутствовать всегда. Если реквизит отсутствует –
@@ -436,6 +435,9 @@ KIND_SPECS: dict[str, KindSpec] = {
     "ПараметрыРаботыКлиента": KindSpec(module=True, module_stub=_STUB_CLIENT_PARAMS),
     "ОбщийМодуль": KindSpec(module=True, extra=("Окружение: Сервер",)),
     "HttpСервис": KindSpec(module=True, extra=("КорневойUrl: /{name}",)),
+    # SoapСервис создаётся генератором _new_soap_service (перехват в op_new_object раньше
+    # generic-пути), как HttpСервис – спека нужна лишь чтобы вид считался создаваемым.
+    "SoapСервис": KindSpec(module=True),
     "ГлобальноеКлиентскоеСобытие": KindSpec(),
     "ФрагментКомандногоИнтерфейса": KindSpec(),
     "КомпонентИнтерфейса": KindSpec(
@@ -505,6 +507,9 @@ _SECTION_SPECS: dict[str, dict] = {
     "поле": {"section": "Поля", "lines": ("Имя: {name}", "Тип: {type}")},
     "константа": {"section": "Константы", "lines": _WITH_TYPE},
     "свойство": {"section": "Свойства", "lines": ("Имя: {name}", "Тип: {type}")},
+    # Операция обработки: имя в yaml, а одноимённый @Обработчик-метод дописывается в модуль
+    # (без него платформа выдаёт "Обязательный обработчик не определен" – см. op_add_field).
+    "операция": {"section": "Операции", "lines": ("Имя: {name}",)},
     "табличная-часть": {
         "section": "ТабличныеЧасти",
         # Табличная часть с одним стартовым реквизитом (пустая обычно бесполезна).
@@ -531,7 +536,7 @@ KIND_SECTIONS: dict[str, tuple[str, ...]] = {
     "РегистрСведений": ("измерение", "ресурс", "реквизит"),
     "РегистрНакопления": ("измерение", "ресурс", "реквизит"),
     "НаборКонстант": ("константа",),
-    "Обработка": ("реквизит",),
+    "Обработка": ("реквизит", "операция"),
     "Перечисление": ("значение",),
     "ПараметрыРаботыКлиента": ("параметр",),
     "ГлобальноеКлиентскоеСобытие": ("параметр",),
@@ -1026,6 +1031,8 @@ def op_new_object(
         )
     if kind == "HttpСервис":
         return _new_http_service(yaml_path, name, access, routes or "GET /", result, scope)
+    if kind == "SoapСервис":
+        return _new_soap_service(yaml_path, name, access, result, scope)
     if kind == "Отчет":
         return _new_report(yaml_path, name, report or {}, result, scope)
 
@@ -1107,7 +1114,29 @@ def op_add_field(
     edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
-    return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
+    result = ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
+    if field_kind == "операция":
+        _add_operation_handler(yaml_path, name, result, reader)
+    return result
+
+
+def _add_operation_handler(yaml_path: Path, operation: str, result: ScaffoldResult, reader) -> None:
+    """Дописать в модуль обработки @Обработчик-метод операции (если его там ещё нет).
+
+    Каждой операции обязан соответствовать одноимённый метод с аннотацией @Обработчик, иначе
+    платформа выдаёт "Обязательный обработчик <Имя> не определен" (документация "Обработка").
+    """
+    module_path = yaml_path.with_suffix(".xbsl")
+    module_text = (reader or _read)(module_path) if module_path.exists() else ""
+    if re.search(rf"^метод\s+{re.escape(operation)}\b", module_text, re.M):
+        return
+    nl = _dominant_nl(module_text) if module_text else "\n"
+    handler = f"@Обработчик{nl}метод {operation}(){nl}    // TODO: логика операции{nl};{nl}"
+    if module_text and not module_text.endswith(("\n", "\r")):
+        module_text += nl
+    new_text = (module_text + nl if module_text else "") + handler
+    result.changes.append(FileChange(module_path, new_text, created=not module_path.exists()))
+    result.notes.append(f"В модуль дописан @Обработчик-метод операции {operation}")
 
 
 def op_add_subsystem(
@@ -1531,6 +1560,48 @@ def _new_http_service(
     result.changes.append(FileChange(yaml_path, "\n".join(lines) + "\n", created=True))
     result.changes.append(
         FileChange(yaml_path.with_suffix(".xbsl"), "\n\n".join(blocks) + "\n", created=True)
+    )
+    return result
+
+
+def _new_soap_service(
+    yaml_path: Path, name: str, access: str | None, result: ScaffoldResult,
+    scope: str | None = None,
+) -> ScaffoldResult:
+    """Заготовка SoapСервис: сервис с одной операцией-примером + метод-обработчик в модуле.
+
+    Структура из документации "Свойства элемента проекта SoapСервис": ПространствоИменСервиса
+    (targetNamespace WSDL), ИмяСервиса (name WSDL), КорневойUrl, Обработчики (Имя операции +
+    Метод в модуле). Сигнатуру операции задаёт WSDL-контракт – метод оставлен заглушкой.
+    """
+    operation = "Операция1"
+    root_url = _root_url(name)
+    lines = [
+        "ВидЭлемента: SoapСервис",
+        f"Ид: {new_uuid()}",
+        f"Имя: {name}",
+        f"ОбластьВидимости: {scope or KIND_SPECS['SoapСервис'].scope}",
+        f"ПространствоИменСервиса: https://example.com/{root_url}",
+        f"ИмяСервиса: {name}",
+        f"КорневойUrl: /{root_url}",
+    ]
+    if access:
+        lines += ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {access}"]
+    lines += ["Обработчики:", "    -", f"        Имя: {operation}", f"        Метод: {operation}"]
+    module = (
+        f"метод {operation}()\n"
+        "    // TODO: реализовать операцию SOAP-сервиса (сигнатуру задаёт WSDL-контракт)\n;"
+    )
+    result.changes.append(FileChange(yaml_path, "\n".join(lines) + "\n", created=True))
+    result.changes.append(FileChange(yaml_path.with_suffix(".xbsl"), module + "\n", created=True))
+    if any("а" <= c.lower() <= "я" for c in root_url):
+        result.notes.append(
+            f"КорневойUrl /{root_url} и ПространствоИменСервиса содержат кириллицу – "
+            "публичные адреса SOAP-сервиса обычно задают латиницей"
+        )
+    result.notes.append(
+        f"Операция-пример {operation}: задайте её сигнатуру и опишите типы ошибок в "
+        "Обработчики.Ошибки (типы-исключения) – по контракту сервиса"
     )
     return result
 
