@@ -26,6 +26,14 @@ it is slow and knows nothing about project conventions. xbsl gives fast local fe
 what the compiler does not check at all, and takes over the metadata mechanics – creating
 objects, attributes and forms.
 
+## How it works
+
+One engine, four surfaces. The core reads the `Имя.yaml` + `Имя.xbsl` pairs, and the scaffolding
+writes them back; the CLI, the LSP server, the MCP server and the web UI are thin adapters over
+the same core, so every surface sees the same rules, data and templates:
+
+![The engine core (linter, autofixes, project index, docs search) and the metadata scaffolding read and write the project sources; a private plugin adds Element language data and custom rules via entry points; the CLI, the LSP server (VS Code), the MCP server (AI agents) and the web UI are surfaces over the same core](https://raw.githubusercontent.com/keyfire/xbsl/main/images/how-it-works.png)
+
 ## Step 1: generate the language data
 
 The linter relies on language tables (bilingual keywords, operators), an stdlib type catalog, and
@@ -260,6 +268,8 @@ The toolkit takes over the metadata mechanics: UUIDs, indentation, precise yaml 
 duplicate checks and section/kind compatibility. The same operations are exposed through the
 CLI (subcommands, JSON output), MCP (the `meta_*` tools for agents) and LSP (the `xbsl/meta*`
 custom requests that power the VS Code metadata tree).
+
+![The VS Code tree, AI agents and the terminal call the same scaffolding core; it writes created and point-edited yaml/xbsl files, the linter checks what was written, and the response carries files, notes and the lint report; the LSP surface returns full texts for the editor to apply](https://raw.githubusercontent.com/keyfire/xbsl/main/images/scaffolding.png)
 
 ```sh
 xbsl new-project . vendor App                        # Проект.yaml + Проект.xbsl + a subsystem

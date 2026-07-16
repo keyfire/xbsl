@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560">
+  <style>
+    text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+    .mono { font-family: Consolas, 'Cascadia Mono', Menlo, monospace; }
+    .zone-label { font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; fill: #7f8aa3; }
+    .box-title { font-size: 15px; font-weight: 600; fill: #eef1f8; }
+    .box-sub { font-size: 12px; fill: #7f8aa3; }
+    .box-body { font-size: 12.5px; fill: #aab3c7; }
+    .code { font-size: 11.5px; fill: #c9d4ea; }
+    .code-dim { font-size: 11.5px; fill: #8b95ab; }
+    .edge-label { font-size: 12.5px; font-weight: 600; fill: #c6cddd; }
+    .edge-sub { font-size: 11.5px; font-style: italic; fill: #8b95ab; }
+    .box { fill: #232a38; stroke: #3b445c; }
+    .edge { stroke: #6d7891; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#6d7891"/>
+    </marker>
+  </defs>
+
+  <!-- card -->
+  <rect x="0.5" y="0.5" width="819" height="559" rx="12" fill="#14171e" stroke="#262c38"/>
+
+  <!-- zones -->
+  <rect x="14" y="30" width="206" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <rect x="236" y="30" width="300" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <rect x="552" y="30" width="254" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <text x="30" y="54" class="zone-label">ИСХОДНИКИ ПРОЕКТА</text>
+  <text x="252" y="54" class="zone-label">ДВИЖОК XBSL</text>
+  <text x="520" y="54" text-anchor="end" class="mono code-dim">pip install xbsl</text>
+  <text x="568" y="54" class="zone-label">ПОВЕРХНОСТИ</text>
+
+  <!-- edges: sources / engine -->
+  <line x1="204" y1="150" x2="252" y2="150" class="edge" marker-end="url(#ah)"/>
+  <text x="228" y="138" text-anchor="middle" class="edge-sub">читает</text>
+  <path d="M252,366 H232 V190 H204" class="edge" marker-end="url(#ah)"/>
+  <text x="226" y="284" text-anchor="end" class="edge-sub">пишет</text>
+
+  <!-- edges: engine / surfaces -->
+  <line x1="520" y1="116" x2="568" y2="116" class="edge" marker-end="url(#ah)"/>
+  <line x1="520" y1="236" x2="568" y2="236" class="edge" marker-end="url(#ah)"/>
+  <line x1="520" y1="356" x2="568" y2="356" class="edge" marker-end="url(#ah)"/>
+  <path d="M520,270 H544 V476 H568" class="edge" marker-end="url(#ah)"/>
+
+  <!-- Sources -->
+  <rect x="30" y="110" width="174" height="118" rx="8" class="box"/>
+  <rect x="30" y="118" width="3" height="102" rx="1.5" fill="#56d364"/>
+  <text x="44" y="134" class="box-title">Исходники</text>
+  <text x="44" y="160" class="mono code">Имя.yaml · Имя.xbsl</text>
+  <text x="44" y="184" class="box-body">описание элемента</text>
+  <text x="44" y="202" class="box-body">+ модуль кода</text>
+
+  <!-- Baseline -->
+  <rect x="30" y="360" width="174" height="112" rx="8" class="box"/>
+  <rect x="30" y="368" width="3" height="96" rx="1.5" fill="#7f8aa3"/>
+  <text x="44" y="384" class="box-title">Базлайн</text>
+  <text x="44" y="408" class="mono code">.xbsllint-baseline</text>
+  <text x="44" y="430" class="box-body">замороженный легаси-долг,</text>
+  <text x="44" y="448" class="box-body">гасится в каждом прогоне</text>
+
+  <!-- Engine core -->
+  <rect x="252" y="68" width="268" height="230" rx="8" class="box"/>
+  <rect x="252" y="76" width="3" height="214" rx="1.5" fill="#f0883e"/>
+  <text x="266" y="92" class="box-title">Ядро движка</text>
+  <text x="266" y="118" class="box-body">линтер: тиры A–D, правила style,</text>
+  <text x="266" y="136" class="box-body">типографика, неизвестные типы</text>
+  <text x="266" y="154" class="box-body">автофиксы (--fix)</text>
+  <text x="266" y="172" class="box-body">индекс проекта: определения,</text>
+  <text x="266" y="190" class="box-body">использования, дополнение</text>
+  <text x="266" y="208" class="box-body">поиск по документации</text>
+  <text x="266" y="236" class="mono code-dim">диагностики на ru / en</text>
+
+  <!-- Metadata scaffolding -->
+  <rect x="252" y="318" width="268" height="96" rx="8" class="box"/>
+  <rect x="252" y="326" width="3" height="80" rx="1.5" fill="#f778ba"/>
+  <text x="266" y="342" class="box-title">Скаффолдинг метаданных</text>
+  <text x="266" y="362" class="box-body">объекты, реквизиты,</text>
+  <text x="266" y="380" class="box-body">маршруты, формы</text>
+  <text x="266" y="402" class="mono code">uuid + точечные правки yaml</text>
+
+  <!-- Plugin -->
+  <rect x="252" y="442" width="268" height="84" rx="8" fill="#232a38" stroke="#3b445c" stroke-dasharray="5 4"/>
+  <rect x="252" y="450" width="3" height="68" rx="1.5" fill="#ffd23f"/>
+  <text x="266" y="466" class="box-title">Ваш плагин</text>
+  <text x="266" y="488" class="box-body">языковые данные Элемента,</text>
+  <text x="266" y="506" class="box-body">приватные правила (entry points)</text>
+
+  <!-- CLI -->
+  <rect x="568" y="68" width="222" height="96" rx="8" class="box"/>
+  <rect x="568" y="76" width="3" height="80" rx="1.5" fill="#39c5cf"/>
+  <text x="582" y="92" class="box-title">CLI</text>
+  <text x="582" y="116" class="mono code">xbsl &lt;path&gt; · xbsl new-object</text>
+  <text x="582" y="140" class="box-body">терминал и гейты CI</text>
+
+  <!-- LSP -->
+  <rect x="568" y="188" width="222" height="96" rx="8" class="box"/>
+  <rect x="568" y="196" width="3" height="80" rx="1.5" fill="#3794ff"/>
+  <text x="582" y="212" class="box-title">LSP-сервер</text>
+  <text x="582" y="236" class="mono code">xbsl-lsp</text>
+  <text x="582" y="260" class="box-body">расширение keyfire.xbsl</text>
+
+  <!-- MCP -->
+  <rect x="568" y="308" width="222" height="96" rx="8" class="box"/>
+  <rect x="568" y="316" width="3" height="80" rx="1.5" fill="#a78bfa"/>
+  <text x="582" y="332" class="box-title">MCP-сервер</text>
+  <text x="582" y="356" class="mono code">xbsl-mcp</text>
+  <text x="582" y="380" class="box-body">ИИ-агенты: линт, доки, meta_*</text>
+
+  <!-- Web -->
+  <rect x="568" y="428" width="222" height="96" rx="8" class="box"/>
+  <rect x="568" y="436" width="3" height="80" rx="1.5" fill="#56d364"/>
+  <text x="582" y="452" class="box-title">Веб-панель</text>
+  <text x="582" y="476" class="mono code">xbsl-web</text>
+  <text x="582" y="500" class="box-body">локальный отчёт · 127.0.0.1</text>
+</svg>
