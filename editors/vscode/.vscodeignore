@@ -12,3 +12,5 @@ esbuild*
 icon.html
 PUBLISHING.md
 images/*.gif
+images/*.svg
+images/*.png

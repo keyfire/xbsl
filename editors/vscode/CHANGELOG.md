@@ -6,6 +6,11 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.19.1
+
+- README: a "How it works" scheme – the extension features (diagnostics, metadata tree, form
+  preview, docs panel) over the long-living `xbsl-lsp` server with the CLI fallback, the
+  project sources and the baseline (an SVG source + a 2x PNG render, en/ru). No code changes.
 ## 0.19.0
 
 - The engine (and the whole project) is renamed **xbsl-lint → xbsl**: the default engine

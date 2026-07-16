@@ -427,7 +427,14 @@ of the [elemctl](https://github.com/keyfire/elemctl) project
 
 ## How it works
 
-Two producers feed one diagnostic collection, and the split is by buffer state:
+The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine: in the
+default [LSP mode](#lsp-mode-default) every feature – diagnostics, navigation, the docs panel
+and the metadata scaffolding – talks to one long-living `xbsl-lsp` server; without the server
+the same checks and scaffolding run through the CLI:
+
+![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.png)
+
+In the CLI mode two producers feed one diagnostic collection, and the split is by buffer state:
 
 - **While you type** (dirty buffer) the extension runs
   `xbsl --stdin --filename <name> --format json` on the live text – per-file rules only,
