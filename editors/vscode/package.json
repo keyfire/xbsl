@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "Syntax highlighting and on-the-fly linting for 1C:Element sources (.xbsl) via xbsllint.",
-  "version": "0.18.0",
+  "version": "0.18.1",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",

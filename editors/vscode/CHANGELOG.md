@@ -6,6 +6,11 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.18.1
+
+- A new icon: a transparent background and a yellow center tile with the `{ }` braces
+  (the corner tiles are unchanged).
+
 ## 0.18.0
 
 - "Exclude this finding (to the baseline)" in every finding's lightbulb (`Ctrl+.`): type the
