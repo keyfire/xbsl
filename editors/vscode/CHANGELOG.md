@@ -6,6 +6,16 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.20.0
+
+- Documentation links on every rule backed by a platform requirement (54 of 78): the
+  diagnostic code in the Problems panel opens the exact documentation section right inside
+  VS Code (the Documentation panel + scroll to the anchor). Previously only some rules had links.
+- Works with the xbsl 0.18.0 engine: scaffolding creates registers and Документ valid
+  (mandatory starter fields), adds SoapСервис, Обработка operations, ЛокализованныеСтроки,
+  Индексы, report query parameters and КомандаСКомпонентом; library attachment –
+  `add-dependency`; the full rule reference – docs/RULES.md in the engine repository.
+
 ## 0.19.1
 
 - README: a "How it works" scheme – the extension features (diagnostics, metadata tree, form

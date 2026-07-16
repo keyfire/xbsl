@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.19.1",
+  "version": "0.20.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
