@@ -8,10 +8,16 @@
 
 from __future__ import annotations
 
-import tomllib
 from pathlib import Path
 
+import pytest
+
 import xbsl
+
+# tomllib есть с Python 3.11, а пакет поддерживает 3.10 (requires-python) – на ней тест
+# пропускается, а не роняет прогон. Тянуть ради него tomli в зависимости незачем: свойство
+# проверяется на остальных версиях матрицы.
+tomllib = pytest.importorskip("tomllib", reason="tomllib появился в Python 3.11")
 
 _PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
 
