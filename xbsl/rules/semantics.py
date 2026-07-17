@@ -406,66 +406,129 @@ def _type_ref_starts(toks: list) -> list[int]:
     return starts
 
 
-@rule(
-    "code/unknown-type", "code/unknown-type.title", "D",
-    scope="project", severity=Severity.WARNING,
-)
-def unknown_type(sources: list[SourceFile]) -> Iterable[Diagnostic]:
+def _type_token_facts(s: SourceFile) -> tuple[list, list]:
+    """(roots, two-segment chains) of every type position in a module - the shared
+    token sweep of the two type rules, cached per file for their mappers."""
+    cached = s.cache.get("type_token_facts")
+    if cached is not None:
+        return cached
+    roots: list[tuple[str, int, int]] = []
+    chains2: list[tuple[str, str, int, int]] = []
+    toks = tokens(s)
+    for start in _type_ref_starts(toks):
+        chains, _ = _type_chains(toks, start)
+        for chain in chains:
+            r = chain[0]
+            roots.append((r.value, r.line, r.col))
+            if len(chain) >= 2:
+                seg = chain[1]
+                chains2.append((r.value, seg.value, seg.line, seg.col))
+    facts = (roots, chains2)
+    s.cache["type_token_facts"] = facts
+    return facts
+
+
+def _unknown_type_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a yaml contributes its object name, an xbsl its local types and
+    the type roots unknown to the stdlib (the project names settle in the reduce)."""
+    if source.kind == "yaml":
+        nm = _object_name_fast(source)
+        return {"k": "y", "name": nm} if nm else None
+    if source.kind != "xbsl":
+        return None
     stdlib = _stdlib_names()
     if not stdlib:
-        return []  # the catalog is not generated – skip the check
-    known = set(stdlib) | _project_object_names(sources) | _local_type_names(sources)
+        return None  # the catalog is not generated – skip the check
+    roots, _chains2 = _type_token_facts(source)
+    cands = [(v, line, col) for v, line, col in roots if v not in stdlib]
+    local = _file_local_types(source)
+    if not cands and not local:
+        return None
+    return {"k": "x", "cands": cands, "local_types": sorted(local)}
 
-    diags: list[Diagnostic] = []
-    for s in sources:
-        if s.kind != "xbsl":
+
+@rule(
+    "code/unknown-type", "code/unknown-type.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_unknown_type_mapper,
+)
+def unknown_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    known: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "y":
+            known.add(fact["name"])
+        else:
+            known.update(fact["local_types"])
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
             continue
-        toks = tokens(s)
-        for start in _type_ref_starts(toks):
-            roots, _ = _type_roots(toks, start)
-            for r in roots:
-                if r.value not in known:
-                    diags.append(Diagnostic(
-                        s.rel, r.line, r.col, "code/unknown-type",
-                        Severity.WARNING,
-                        i18n.t("code/unknown-type.unknown", name=r.value),
-                    ))
-    return diags
+        for value, line, col in fact["cands"]:
+            if value not in known:
+                yield Diagnostic(
+                    rel, line, col, "code/unknown-type", Severity.WARNING,
+                    i18n.t("code/unknown-type.unknown", name=value),
+                )
+
+
+def _object_type_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a yaml contributes its object record, an xbsl its local types
+    (by owner) and the two-segment type chains - the reduce owns the object model."""
+    if source.kind == "yaml":
+        data, err = _parsed(source)
+        if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
+            return None
+        nm = data.get("Имя")
+        if not isinstance(nm, str):
+            return None
+        members = []
+        parts = data.get("ТабличныеЧасти")
+        if isinstance(parts, list):
+            members = [
+                p["Имя"] for p in parts
+                if isinstance(p, dict) and isinstance(p.get("Имя"), str)
+            ]
+        return {"k": "y", "name": nm, "kind": data["ВидЭлемента"], "tab_members": members}
+    if source.kind != "xbsl":
+        return None
+    _roots, chains2 = _type_token_facts(source)
+    local = _file_local_types(source)
+    if not chains2 and not local:
+        return None
+    owner = source.path.name[: -len(".xbsl")].split(".", 1)[0]
+    return {"k": "x", "owner": owner, "local_types": sorted(local), "chains2": chains2}
 
 
 @rule(
     "code/unknown-object-type", "code/unknown-object-type.title", "D",
-    scope="project", severity=Severity.WARNING,
+    scope="project", severity=Severity.WARNING, mapper=_object_type_mapper,
 )
-def unknown_object_type(sources: list[SourceFile]) -> Iterable[Diagnostic]:
-    objects = _project_object_info(sources)
+def unknown_object_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    objects: dict[str, dict] = {}
+    for fact in facts.values():
+        if fact["k"] == "y":
+            objects[fact["name"]] = {
+                "kind": fact["kind"], "members": set(fact["tab_members"]),
+            }
     if not objects:
-        return []
-
+        return
+    for fact in facts.values():
+        if fact["k"] == "x":
+            rec = objects.get(fact["owner"])
+            if rec is not None:
+                rec["members"].update(fact["local_types"])
     checked = _checked_kinds()
-    diags: list[Diagnostic] = []
-    for s in sources:
-        if s.kind != "xbsl":
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
             continue
-        toks = tokens(s)
-        for start in _type_ref_starts(toks):
-            chains, _ = _type_chains(toks, start)
-            for chain in chains:
-                if len(chain) < 2:
-                    continue
-                rec = objects.get(chain[0].value)
-                if rec is None or rec["kind"] not in checked:
-                    continue
-                seg = chain[1]
-                if seg.value in _member_family(rec["kind"]) or seg.value in rec["members"]:
-                    continue
-                diags.append(Diagnostic(
-                    s.rel, seg.line, seg.col, "code/unknown-object-type",
-                    Severity.WARNING,
-                    i18n.t(
-                        "code/unknown-object-type.unknown",
-                        name=f"{chain[0].value}.{seg.value}",
-                        root=chain[0].value, kind=rec["kind"], seg=seg.value,
-                    ),
-                ))
-    return diags
+        for root, seg, line, col in fact["chains2"]:
+            rec = objects.get(root)
+            if rec is None or rec["kind"] not in checked:
+                continue
+            if seg in _member_family(rec["kind"]) or seg in rec["members"]:
+                continue
+            yield Diagnostic(
+                rel, line, col, "code/unknown-object-type", Severity.WARNING,
+                i18n.t(
+                    "code/unknown-object-type.unknown",
+                    name=f"{root}.{seg}", root=root, kind=rec["kind"], seg=seg,
+                ),
+            )

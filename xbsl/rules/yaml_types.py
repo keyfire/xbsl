@@ -36,9 +36,8 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.rules.semantics import (
     _checked_kinds,
-    _local_type_names,
+    _file_local_types,
     _member_family,
-    _project_object_info,
     _stdlib_names,
 )
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed
@@ -160,51 +159,102 @@ def _value_positions(source: SourceFile, value: str) -> list[tuple[int, int]]:
     return [lm.linecol(m.start(2)) for m in pat.finditer(source.text)]
 
 
-@rule(
-    "yaml/unknown-type", "yaml/unknown-type.title", "D",
-    scope="project", severity=Severity.WARNING,
-)
-def unknown_yaml_type(sources: list[SourceFile]) -> Iterable[Diagnostic]:
+def _yaml_type_mapper(source: SourceFile) -> dict | None:
+    """The map phase. A yaml file contributes its object record (name, kind, tabular
+    sections) and its candidate type chains (single plain stdlib names are settled here);
+    an xbsl file contributes the local types it declares - the reduce assembles the
+    project model and judges the candidates."""
     if not _HAVE_YAML:
-        return []
+        return None
+    if source.kind == "xbsl":
+        local = _file_local_types(source)
+        if not local:
+            return None
+        owner = source.path.name[: -len(".xbsl")].split(".", 1)[0]
+        return {"k": "x", "owner": owner, "local_types": sorted(local)}
+    if source.kind != "yaml":
+        return None
     stdlib = _stdlib_names()
     if not stdlib:
-        return []  # the catalog is not generated – skip the check
-    objects = _project_object_info(sources)
-    known = set(stdlib) | set(objects) | _local_type_names(sources)
-    checked = _checked_kinds()
+        return None  # the catalog is not generated – skip the check
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
+        return None
+    nm = data.get("Имя")
+    tab_members: list[str] = []
+    parts = data.get("ТабличныеЧасти")
+    if isinstance(parts, list):
+        tab_members = [
+            p["Имя"] for p in parts
+            if isinstance(p, dict) and isinstance(p.get("Имя"), str)
+        ]
+    cands: list[tuple[list[str], list[tuple[int, int]]]] = []
+    for value in dict.fromkeys(_type_values(data)):  # unique, in document order
+        chains = _parse_type_string(value)
+        if not chains:
+            continue
+        positions: list[tuple[int, int]] | None = None
+        for chain in chains:
+            if len(chain) == 1 and chain[0] in stdlib:
+                continue  # a plain stdlib name - settled right here
+            if positions is None:
+                positions = _value_positions(source, value) or [(1, 1)]
+            cands.append((chain, positions))
+    if not cands and not isinstance(nm, str):
+        return None
+    return {
+        "k": "y",
+        "name": nm if isinstance(nm, str) else None,
+        "kind": data["ВидЭлемента"],
+        "tab_members": tab_members,
+        "cands": cands,
+    }
 
-    diags: list[Diagnostic] = []
-    for s in sources:
-        if s.kind != "yaml":
+
+@rule(
+    "yaml/unknown-type", "yaml/unknown-type.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_yaml_type_mapper,
+)
+def unknown_yaml_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    stdlib = _stdlib_names()
+    if not stdlib:
+        return
+    # The project model from the facts: object records plus the local types of their modules.
+    objects: dict[str, dict] = {}
+    all_local: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "y" and fact["name"]:
+            objects[fact["name"]] = {
+                "kind": fact["kind"], "members": set(fact["tab_members"]),
+            }
+    for fact in facts.values():
+        if fact["k"] != "x":
             continue
-        data, err = _parsed(s)
-        if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
+        all_local.update(fact["local_types"])
+        rec = objects.get(fact["owner"])
+        if rec is not None:
+            rec["members"].update(fact["local_types"])
+    known = set(stdlib) | set(objects) | all_local
+    checked = _checked_kinds()
+    for rel, fact in facts.items():
+        if fact["k"] != "y":
             continue
-        for value in dict.fromkeys(_type_values(data)):  # unique, in document order
-            chains = _parse_type_string(value)
-            if not chains:
+        for chain, positions in fact["cands"]:
+            root = chain[0]
+            message: str | None = None
+            if root not in known:
+                message = i18n.t("yaml/unknown-type.unknown", name=".".join(chain))
+            elif len(chain) >= 2:
+                rec = objects.get(root)
+                if rec is not None and rec["kind"] in checked:
+                    seg = chain[1]
+                    if seg not in _member_family(rec["kind"]) and seg not in rec["members"]:
+                        message = i18n.t(
+                            "yaml/unknown-type.member",
+                            name=f"{root}.{seg}", root=root,
+                            kind=rec["kind"], seg=seg,
+                        )
+            if message is None:
                 continue
-            for chain in chains:
-                root = chain[0]
-                message: str | None = None
-                if root not in known:
-                    message = i18n.t("yaml/unknown-type.unknown", name=".".join(chain))
-                elif len(chain) >= 2:
-                    rec = objects.get(root)
-                    if rec is not None and rec["kind"] in checked:
-                        seg = chain[1]
-                        if seg not in _member_family(rec["kind"]) and seg not in rec["members"]:
-                            message = i18n.t(
-                                "yaml/unknown-type.member",
-                                name=f"{root}.{seg}", root=root,
-                                kind=rec["kind"], seg=seg,
-                            )
-                if message is None:
-                    continue
-                positions = _value_positions(s, value) or [(1, 1)]
-                diags.extend(
-                    Diagnostic(s.rel, line, col, "yaml/unknown-type", Severity.WARNING, message)
-                    for line, col in positions
-                )
-    return diags
+            for line, col in positions:
+                yield Diagnostic(rel, line, col, "yaml/unknown-type", Severity.WARNING, message)

@@ -110,6 +110,12 @@ class RuleInfo:
     severity: Severity
     func: Callable
     enabled_by_default: bool = True
+    # Map-reduce for a project rule: mapper(source) -> a small picklable per-file fact
+    # (None = the file contributes nothing). The rule func then takes {rel: fact} instead
+    # of the source list. In a parallel run the mapper executes inside the FILE workers
+    # (where the AST is already cached), the reduce runs in the parent - such a rule
+    # never joins a project group and stops paying the whole-project preparation.
+    mapper: Callable | None = None
 
     @property
     def title(self) -> str:
@@ -138,15 +144,20 @@ def rule(
     scope: str = "file",
     severity: Severity = Severity.WARNING,
     enabled_by_default: bool = True,
+    mapper: Callable | None = None,
 ) -> Callable[[Callable], Callable]:
     """Register a rule with its metadata.
 
     `title` is a catalog key (`<rule id>.title`); a literal string still works and is used
-    verbatim, which keeps plugins written against 0.3 running.
+    verbatim, which keeps plugins written against 0.3 running. A project rule may pass
+    `mapper` to run map-reduce style (see RuleInfo.mapper); its func then receives
+    `{rel: fact}` instead of the source list.
     """
 
     def deco(fn: Callable) -> Callable:
-        RULES.append(RuleInfo(rule_id, title, tier, scope, severity, fn, enabled_by_default))
+        RULES.append(RuleInfo(
+            rule_id, title, tier, scope, severity, fn, enabled_by_default, mapper,
+        ))
         return fn
 
     return deco
@@ -242,7 +253,15 @@ def run_sources(
                 diags.extend(r.func(src))
     if "project" in scopes:
         for r in (r for r in active if r.scope == "project"):
-            diags.extend(r.func(sources))
+            if r.mapper is not None:
+                facts = {}
+                for src in sources:
+                    fact = r.mapper(src)
+                    if fact is not None:
+                        facts[src.rel] = fact
+                diags.extend(r.func(facts))
+            else:
+                diags.extend(r.func(sources))
     if SEVERITY_OVERRIDES:
         diags = [
             replace(d, severity=SEVERITY_OVERRIDES[d.rule_id])
@@ -274,10 +293,14 @@ def run(
 _PARALLEL_MIN_FILES = 120
 
 
-def _worker_lint(payload: tuple) -> list[Diagnostic]:
+def _worker_lint(payload: tuple) -> tuple[list[Diagnostic], dict[str, dict[str, object]]]:
     """A worker task: the file rules on a shard of files OR a group of project rules
-    over the whole project (kind == "project"; the rule ids arrive as a ready select)."""
-    kind, paths, select, ignore, enable, lang, element_version = payload
+    over the whole project (kind == "project"; the rule ids arrive as a ready select).
+
+    A file worker additionally runs the mappers of the map-reduce project rules
+    (mapped_ids) over its shard - the AST/yaml caches are already warm there - and
+    returns the facts as {rule_id: {rel: fact}}; the reduce runs in the parent."""
+    kind, paths, select, ignore, enable, lang, element_version, mapped_ids = payload
     from xbsl import dataset, i18n
 
     i18n.set_lang(lang)
@@ -285,7 +308,21 @@ def _worker_lint(payload: tuple) -> list[Diagnostic]:
         dataset.set_version(element_version)
     sources = [load(Path(p)) for p in paths]
     scopes = ("project",) if kind == "project" else ("file",)
-    return run_sources(sources, select=select, ignore=ignore, enable=enable, scopes=scopes)
+    diags = run_sources(sources, select=select, ignore=ignore, enable=enable, scopes=scopes)
+    facts: dict[str, dict[str, object]] = {}
+    if kind == "file" and mapped_ids:
+        by_id = {r.id: r for r in RULES if r.mapper is not None}
+        for rule_id in mapped_ids:
+            info = by_id.get(rule_id)
+            if info is None:
+                continue
+            per_file: dict[str, object] = {}
+            for src in sources:
+                fact = info.mapper(src)
+                if fact is not None:
+                    per_file[src.rel] = fact
+            facts[rule_id] = per_file
+    return diags, facts
 
 
 def resolve_jobs(jobs: int, file_count: int) -> int:
@@ -327,27 +364,48 @@ def run_parallel(
     lang = lang or i18n.current_lang()
     all_paths = [str(p) for p in paths]
 
-    # The project rules shard in groups: every group-worker loads the whole project by
-    # itself (duplicated preparation, but the heaviest rules stop being the sequential
-    # ceiling). Few groups: the preparation in each one is not free.
-    project_ids = [r.id for r in active_rules(select, ignore, enable) if r.scope == "project"]
+    # Map-reduce project rules ride inside the FILE workers (mappers collect per-file
+    # facts where the caches are already warm; the reduce runs here in the parent).
+    # The rest of the project rules shard in groups: every group-worker loads the whole
+    # project by itself (duplicated preparation, but the heaviest rules stop being the
+    # sequential ceiling). Few groups: the preparation in each one is not free.
+    active = active_rules(select, ignore, enable)
+    mapped_rules = [r for r in active if r.scope == "project" and r.mapper is not None]
+    mapped_ids = [r.id for r in mapped_rules]
+    project_ids = [r.id for r in active if r.scope == "project" and r.mapper is None]
+    # Few groups: every group pays the whole-project preparation (reading + parsing),
+    # and that cost dominates - measured on the x10 corpus, 8 groups run twice as SLOW
+    # as 4 (the preparations compete for the disk and the cores). The way to shrink the
+    # ceiling further is migrating rules to mappers, not adding groups.
     group_count = min(4, workers, len(project_ids)) if project_ids else 0
     project_groups = [set(project_ids[i::group_count]) for i in range(group_count)]
 
     file_workers = max(1, workers - group_count)
     chunks = [[str(p) for p in paths[i::file_workers]] for i in range(file_workers)]
     payloads: list[tuple] = [
-        ("file", chunk, select, ignore, enable, lang, element_version)
+        ("file", chunk, select, ignore, enable, lang, element_version, mapped_ids)
         for chunk in chunks if chunk
     ]
     payloads += [
-        ("project", all_paths, group, None, None, lang, element_version)
+        ("project", all_paths, group, None, None, lang, element_version, ())
         for group in project_groups
     ]
     diags: list[Diagnostic] = []
+    merged: dict[str, dict[str, object]] = {r.id: {} for r in mapped_rules}
     with ProcessPoolExecutor(max_workers=workers) as pool:
-        for part in pool.map(_worker_lint, payloads):
+        for part, facts in pool.map(_worker_lint, payloads):
             diags.extend(part)
+            for rule_id, per_file in facts.items():
+                merged[rule_id].update(per_file)
+    for r in mapped_rules:
+        diags.extend(r.func(merged[r.id]))
+    if SEVERITY_OVERRIDES:
+        diags = [
+            replace(d, severity=SEVERITY_OVERRIDES[d.rule_id])
+            if d.rule_id in SEVERITY_OVERRIDES and d.severity != SEVERITY_OVERRIDES[d.rule_id]
+            else d
+            for d in diags
+        ]
     return sorted(diags, key=lambda d: (d.path, d.line, d.col, d.rule_id))
 
 

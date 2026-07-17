@@ -31,7 +31,7 @@ from xbsl import dataset, i18n, parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
-from xbsl.rules.semantics import _parsed, _project_object_names, _stdlib_names
+from xbsl.rules.semantics import _object_name_fast, _parsed, _stdlib_names
 
 MESSAGES = {
     "code/undefined-name.title": {
@@ -83,16 +83,17 @@ _FIELD_SECTIONS = (
 )
 
 
-def _yaml_pair(source: SourceFile, by_dir: dict) -> SourceFile | None:
-    """The paired yaml of a module: X.xbsl -> X.yaml, X.Объект.xbsl -> X.yaml."""
-    parts = source.rel.replace("\\", "/").rsplit("/", 1)
+def _pair_key(rel: str) -> tuple[str, str, str]:
+    """(directory, paired yaml file name, module file name): X.xbsl -> X.yaml,
+    X.Объект.xbsl -> X.yaml."""
+    parts = rel.replace("\\", "/").rsplit("/", 1)
     directory = parts[0] if len(parts) == 2 else ""
     stem = parts[-1]
-    for suffix in (".Объект.xbsl", ".xbsl"):
+    for suffix in (".Объект.xbsl", ".xbsl", ".yaml"):
         if stem.endswith(suffix):
             stem = stem[: -len(suffix)]
             break
-    return by_dir.get((directory, stem + ".yaml"))
+    return directory, stem + ".yaml", parts[-1]
 
 
 def _section_names(data: dict) -> set[str]:
@@ -114,16 +115,16 @@ def _base_type_root(data: dict) -> str | None:
     return base.split("<", 1)[0].strip()
 
 
-def _component_scope(
-    data: dict, by_name: dict, type_members: dict, seen: set[str],
+def _component_scope_facts(
+    fact: dict, by_name: dict, type_members: dict, seen: set[str],
 ) -> set[str]:
     """The names a component gives its module: Свойства plus the base members up the chain.
 
     The base is either a platform type (members from type_members) or a project component
-    (its Свойства and its base, recursively); an inheritance cycle is cut by `seen`.
+    (its sections and its base, recursively); an inheritance cycle is cut by `seen`.
     """
-    names = _section_names(data)
-    root = _base_type_root(data)
+    names = set(fact["sections"])
+    root = fact["base"]
     if not root or root in seen:
         return names
     seen.add(root)
@@ -132,92 +133,106 @@ def _component_scope(
         names |= set(members.get("properties", ())) | set(members.get("methods", ()))
     parent = by_name.get(root)
     if parent is not None:
-        names |= _component_scope(parent, by_name, type_members, seen)
+        names |= _component_scope_facts(parent, by_name, type_members, seen)
     return names
 
 
-# On by default (severity error - the compiler rejects such code) since the stdlib
-# catalog carries the global context (Сообщить, ПерейтиПоСсылке...) and the kind-manager
-# methods: the whole real-world corpus (site, БизКуб, chiriker, demo - 1600+ modules)
-# runs with zero false findings.
-@rule(
-    "code/undefined-name", "code/undefined-name.title", "D",
-    scope="project", severity=Severity.ERROR,
-)
-def undefined_name(sources: list[SourceFile]) -> Iterable[Diagnostic]:
-    stdlib = _stdlib_names()
-    if not stdlib:
-        return  # without the stdlib catalog "unknown" cannot be proven
-    try:
-        catalog = dataset.load_json("stdlib.json")
-    except dataset.DatasetError:
-        return
-    type_members = catalog.get("type_members", {})
-    object_members = catalog.get("object_members", {})
-    manager_members = catalog.get("manager_members", {})
-    # The global context: members of Стд and its first-level packages (Сообщить,
-    # ПерейтиПоСсылке, ЗагрузкаФайлов...) are reachable by bare name everywhere.
-    context_globals = set(catalog.get("globals", ()))
-    known_global = (set(stdlib) | _project_object_names(sources) | _IMPLICIT
-                    | context_globals | _UNDOCUMENTED)
-
-    # Maps of the paired yaml: by (directory, file name) and by object name (for the Наследует chain).
-    by_dir: dict[tuple[str, str], SourceFile] = {}
-    by_name: dict[str, dict] = {}
-    for s in sources:
-        if s.kind != "yaml":
-            continue
-        parts = s.rel.replace("\\", "/").rsplit("/", 1)
-        directory = parts[0] if len(parts) == 2 else ""
-        by_dir[(directory, parts[-1])] = s
-        data, err = _parsed(s)
-        if err is None and isinstance(data, dict) and isinstance(data.get("Имя"), str):
-            by_name[data["Имя"]] = data
-
-    for source in sources:
-        if source.kind != "xbsl":
-            continue
-        module, errors = P.parse(source)
-        if errors:
-            continue  # a broken file has its own diagnostics (code/parse-error)
-        if any("::" in i.name for i in module.imports):
-            # an import of an external namespace (a library): its contents are not
-            # visible to the rule, any bare name may come from there - skip the file
-            continue
-        scope = set(known_global)
-        pair = _yaml_pair(source, by_dir)
-        if pair is not None:
-            data, err = _parsed(pair)
-            if err is None and isinstance(data, dict):
-                imports = data.get("Импорт")
-                if isinstance(imports, list) and any(
-                    isinstance(i, str) and "::" in i for i in imports
-                ):
-                    continue  # an external namespace in the yaml Импорт - the same blind spot
-                kind = data.get("ВидЭлемента")
-                if source.rel.endswith(".Объект.xbsl"):
-                    # an entity module: the attributes plus the standard fields and write methods
-                    scope |= _section_names(data) | _ENTITY_COMMON
-                elif kind == "КомпонентИнтерфейса":
-                    scope |= _component_scope(data, by_name, type_members, set())
-                else:
-                    # a data-kind manager module / common module: the yaml fields plus the manager members
-                    scope |= _section_names(data)
-                    scope |= set(object_members.get(kind, ()))
-                    scope |= set(manager_members.get(kind, ()))
-        yield from _check_module(source, module, scope)
+_static_cache: tuple[set[str] | None] | None = None
 
 
-def _check_module(source: SourceFile, module: P.Module, known_global: set[str]) -> Iterable[Diagnostic]:
-    module_names: set[str] = set(known_global)
+def _static_globals() -> set[str] | None:
+    """The project-independent part of the global scope (stdlib + context globals)."""
+    global _static_cache
+    if _static_cache is None:
+        stdlib = _stdlib_names()
+        if not stdlib:
+            _static_cache = (None,)  # without the stdlib catalog "unknown" cannot be proven
+        else:
+            try:
+                catalog = dataset.load_json("stdlib.json")
+            except dataset.DatasetError:
+                catalog = None
+            _static_cache = (
+                None if catalog is None
+                else set(stdlib) | set(catalog.get("globals", ())) | _IMPLICIT | _UNDOCUMENTED,
+            )
+    return _static_cache[0]
+
+
+def _undef_mapper(source: SourceFile) -> dict | None:
+    """The map phase. A yaml file contributes its slice of the project model (object
+    name, sections, the Наследует base, the external-import flag). An xbsl file
+    contributes candidates: names unknown both locally and to the static globals -
+    the reduce subtracts the project names and the paired-yaml scope."""
+    directory, pair_file, fname = _pair_key(source.rel)
+    if source.kind == "yaml":
+        fast_name = _object_name_fast(source)
+        data, err = _parsed(source)
+        if err is not None or not isinstance(data, dict):
+            data = {}
+        imports = data.get("Импорт")
+        name = data.get("Имя")
+        kind = data.get("ВидЭлемента")
+        return {
+            "k": "y",
+            "dir": directory,
+            "file": fname,
+            "fast_name": fast_name,
+            "name": name if isinstance(name, str) else None,
+            "element_kind": kind if isinstance(kind, str) else None,
+            "sections": sorted(_section_names(data)),
+            "base": _base_type_root(data),
+            "ext": isinstance(imports, list)
+                   and any(isinstance(i, str) and "::" in i for i in imports),
+        }
+    if source.kind != "xbsl":
+        return None
+    static = _static_globals()
+    if static is None:
+        return None
+    module, errors = P.parse(source)
+    if errors:
+        return None  # a broken file has its own diagnostics (code/parse-error)
+    if any("::" in i.name for i in module.imports):
+        # an import of an external namespace (a library): its contents are not
+        # visible to the rule, any bare name may come from there - skip the file
+        return None
+    findings = _module_candidates(module, static)
+    if not findings:
+        return None
+    lm = linemap(source)
+    cands = [
+        (*lm.linecol(offset), name, hint)
+        for offset, name, hint in findings
+    ]
+    return {
+        "k": "x",
+        "dir": directory,
+        "pair": pair_file,
+        "obj": source.rel.endswith(".Объект.xbsl"),
+        "cands": cands,
+    }
+
+
+def _module_candidates(
+    module: P.Module, known_global: set[str],
+) -> list[tuple[int, str, str | None]]:
+    """Names unknown to the module and to `known_global`, with a local-scope hint.
+
+    The walk collects everything unknown to the LOCAL scopes; the big static set filters
+    afterwards, and the hints are computed only for the survivors against the pool of the
+    module's own names (difflib per raw finding would dominate the whole run).
+    """
+    module_names: set[str] = set()
     for m in module.members:
         if isinstance(m, (P.Method, P.Structure, P.Enum, P.ObjectField)):
             module_names.add(m.name)
-    lm = linemap(source)
-    findings: list[tuple[int, str, str | None]] = []
+    findings: list[tuple[int, str]] = []
+    hint_pool: set[str] = set(module_names)
     for m in module.members:
         if isinstance(m, P.Method):
             scope = set(module_names) | {p.name for p in m.params}
+            hint_pool.update(p.name for p in m.params)
             for p in m.params:
                 if p.default is not None:
                     _walk_expr(p.default, scope, findings)
@@ -228,20 +243,134 @@ def _check_module(source: SourceFile, module: P.Module, known_global: set[str]) 
             inner = set(module_names) | {
                 f.name for f in m.members if isinstance(f, P.ObjectField)
             } if isinstance(m, P.Structure) else set(module_names)
+            hint_pool |= inner
             members = m.members if isinstance(m, P.Structure) else m.methods
             for sub in members:
                 if isinstance(sub, P.Method):
                     sub_scope = set(inner) | {p.name for p in sub.params} | {"этот"}
+                    hint_pool.update(p.name for p in sub.params)
                     _walk_body(sub.body, sub_scope, findings)
                 elif isinstance(sub, P.ObjectField) and sub.init is not None:
                     _walk_expr(sub.init, set(inner), findings)
-    for offset, name, hint in findings:
-        line, col = lm.linecol(offset)
-        message = (
-            i18n.t("code/undefined-name.found-hint", name=name, hint=hint)
-            if hint else i18n.t("code/undefined-name.found", name=name)
-        )
-        yield Diagnostic(source.rel, line, col, "code/undefined-name", Severity.ERROR, message)
+    if not findings:
+        return []
+    _collect_declared(module, hint_pool)
+    out: list[tuple[int, str, str | None]] = []
+    for offset, name in findings:
+        if name in known_global:
+            continue
+        out.append((offset, name, _closest(name, hint_pool)))
+    return out
+
+
+def _collect_declared(module: P.Module, pool: set[str]) -> None:
+    """All names declared in statement bodies (пер/знч/исп, loop and catch variables) -
+    the hint pool for the survivors; scoping does not matter for a spelling hint."""
+
+    def body(stmts: list[P.Stmt]) -> None:
+        for st in stmts:
+            if isinstance(st, P.VarDecl):
+                pool.add(st.name)
+            elif isinstance(st, P.If):
+                for _cond, b in st.branches:
+                    body(b)
+                if st.else_body is not None:
+                    body(st.else_body)
+            elif isinstance(st, P.Case):
+                for when in st.whens:
+                    body(when.body)
+                if st.else_body is not None:
+                    body(st.else_body)
+            elif isinstance(st, (P.While, P.Scope)):
+                body(st.body)
+            elif isinstance(st, (P.ForEach, P.ForTo)):
+                pool.add(st.var)
+                body(st.body)
+            elif isinstance(st, P.Try):
+                body(st.body)
+                for var, _type, b in st.catches:
+                    if var:
+                        pool.add(var)
+                    body(b)
+                if st.finally_body is not None:
+                    body(st.finally_body)
+
+    for m in module.members:
+        if isinstance(m, P.Method):
+            body(m.body)
+        elif isinstance(m, P.Structure):
+            for sub in m.members:
+                if isinstance(sub, P.Method):
+                    body(sub.body)
+        elif isinstance(m, P.Enum):
+            for sub in m.methods:
+                body(sub.body)
+
+
+# On by default (severity error - the compiler rejects such code) since the stdlib
+# catalog carries the global context (Сообщить, ПерейтиПоСсылке...) and the kind-manager
+# methods: the whole real-world corpus (site, БизКуб, chiriker, demo - 1600+ modules)
+# runs with zero false findings. Map-reduce: the mappers run inside the file workers
+# (the static globals filter most names there), the reduce below only knows the
+# project-wide names and the paired-yaml scopes.
+@rule(
+    "code/undefined-name", "code/undefined-name.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_undef_mapper,
+)
+def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    if _static_globals() is None:
+        return
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return
+    type_members = catalog.get("type_members", {})
+    object_members = catalog.get("object_members", {})
+    manager_members = catalog.get("manager_members", {})
+
+    # The project model from the yaml facts: names, the (directory, file) map for the
+    # module pairing, the by-name map for the Наследует chain of interface components.
+    project_names: set[str] = set()
+    by_dir: dict[tuple[str, str], dict] = {}
+    by_name: dict[str, dict] = {}
+    for fact in facts.values():
+        if fact["k"] != "y":
+            continue
+        if fact["fast_name"]:
+            project_names.add(fact["fast_name"])
+        by_dir[(fact["dir"], fact["file"])] = fact
+        if fact["name"]:
+            by_name[fact["name"]] = fact
+
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        pair = by_dir.get((fact["dir"], fact["pair"]))
+        extras: set[str] = set()
+        if pair is not None:
+            if pair["ext"]:
+                continue  # an external namespace in the yaml Импорт - the same blind spot
+            kind = pair["element_kind"]
+            if fact["obj"]:
+                # an entity module: the attributes plus the standard fields and write methods
+                extras = set(pair["sections"]) | _ENTITY_COMMON
+            elif kind == "КомпонентИнтерфейса":
+                extras = _component_scope_facts(pair, by_name, type_members, set())
+            else:
+                # a data-kind manager module / common module: the yaml fields plus the manager members
+                extras = set(pair["sections"])
+                extras |= set(object_members.get(kind, ()))
+                extras |= set(manager_members.get(kind, ()))
+        for line, col, name, hint in fact["cands"]:
+            if name in project_names or name in extras:
+                continue
+            if hint is None:
+                hint = _closest(name, project_names | extras)
+            message = (
+                i18n.t("code/undefined-name.found-hint", name=name, hint=hint)
+                if hint else i18n.t("code/undefined-name.found", name=name)
+            )
+            yield Diagnostic(rel, line, col, "code/undefined-name", Severity.ERROR, message)
 
 
 def _walk_body(stmts: list[P.Stmt], scope: set[str], findings: list) -> None:
@@ -311,10 +440,11 @@ def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
         return
     if isinstance(expr, P.Name):
         # Qualified roots (Подсистема::Имя) are not checked: the contents of foreign
-        # namespaces are not visible to this rule.
+        # namespaces are not visible to this rule. No hints here: the walk sees many
+        # names that later turn out known (project objects), and difflib per candidate
+        # would dominate the run - hints are computed after the static filter.
         if "::" not in expr.name and expr.name and expr.name not in scope:
-            hint = _closest(expr.name, scope)
-            findings.append((expr.start, expr.name, hint))
+            findings.append((expr.start, expr.name))
         return
     if isinstance(expr, P.Member):
         _walk_expr(expr.obj, scope, findings)  # the member name is a type-inference stage

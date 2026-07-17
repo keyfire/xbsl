@@ -255,11 +255,78 @@ def call_arity(source: SourceFile) -> Iterable[Diagnostic]:
             )
 
 
+def _cross_mapper(source: SourceFile) -> dict | None:
+    """The map phase: this module's signatures plus its candidate cross-module calls.
+
+    Everything local is settled here (named arguments, bases shadowed by a declaration
+    or by an own member, `::` bases, positions); the reduce only resolves base names
+    against the other modules' signatures and the stdlib shadow set.
+    """
+    if source.kind != "xbsl":
+        return None
+    stem = source.rel.replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".xbsl")
+    module, errors = parse(source)
+    if errors:
+        # A broken file gives no candidates, but its stem must still poison the name.
+        return {"stem": stem if "." not in stem else None, "sigs": None, "calls": []}
+    own: set[str] = set()
+    calls: list[P.Call] = []
+    declared: set[str] = set()
+    sigs: dict[str, tuple[int, int]] = {}
+    dupes: set[str] = set()
+    for m in module.members:
+        if isinstance(m, (P.Method, P.Structure, P.Enum, P.ObjectField)):
+            own.add(m.name)
+        if isinstance(m, P.Method):
+            if m.name in sigs:
+                dupes.add(m.name)
+            sigs[m.name] = _signature(m)
+            declared.update(p.name for p in m.params)
+            for p in m.params:
+                _walk_expr(p.default, calls, declared)
+            _walk_body(m.body, calls, declared)
+        elif isinstance(m, P.ObjectField):
+            if m.init is not None:
+                _walk_expr(m.init, calls, declared)
+        elif isinstance(m, (P.Structure, P.Enum)):
+            subs = m.members if isinstance(m, P.Structure) else m.methods
+            for sub in subs:
+                if isinstance(sub, P.Method):
+                    declared.update(p.name for p in sub.params)
+                    _walk_body(sub.body, calls, declared)
+                elif isinstance(sub, P.ObjectField) and sub.init is not None:
+                    _walk_expr(sub.init, calls, declared)
+    for d in dupes:
+        sigs.pop(d, None)
+    lm = None
+    candidates: list[tuple[str, str, int, int, int]] = []
+    for call in calls:
+        callee = call.callee
+        if not (
+            isinstance(callee, P.Member)
+            and isinstance(callee.obj, P.Name)
+            and not callee.safe
+        ):
+            continue
+        base = callee.obj.name
+        if "::" in base or base in declared or base in own:
+            continue
+        if any(arg.name is not None for arg in call.args):
+            continue
+        if lm is None:
+            lm = linemap(source)
+        line, col = lm.linecol(call.start)
+        candidates.append((base, callee.name, len(call.args), line, col))
+    if "." in stem and not candidates:
+        return None  # an object module and friends: not callable by name, nothing to check
+    return {"stem": stem if "." not in stem else None, "sigs": sigs, "calls": candidates}
+
+
 @rule(
     "code/call-arity-cross", "code/call-arity-cross.title", "D",
-    scope="project", severity=Severity.ERROR,
+    scope="project", severity=Severity.ERROR, mapper=_cross_mapper,
 )
-def call_arity_cross(sources: list[SourceFile]) -> Iterable[Diagnostic]:
+def call_arity_cross(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """`Модуль.Метод(...)` must fit the target module's method signature.
 
     Signatures come from the project's own module files (the file stem is the callable
@@ -276,89 +343,35 @@ def call_arity_cross(sources: list[SourceFile]) -> Iterable[Diagnostic]:
     # Module name -> {method: (required, total)}; None marks an unusable name
     # (a parse-broken file or twin modules in different directories).
     module_sigs: dict[str, dict[str, tuple[int, int]] | None] = {}
-    parsed: list[tuple[SourceFile, P.Module]] = []
-    for s in sources:
-        if s.kind != "xbsl":
+    for fact in facts.values():
+        stem = fact["stem"]
+        if stem is None:
             continue
-        stem = s.rel.replace("\\", "/").rsplit("/", 1)[-1].removesuffix(".xbsl")
-        module, errors = parse(s)
-        if not errors:
-            parsed.append((s, module))
-        if "." in stem:
-            continue
-        if errors or stem in module_sigs:
+        if fact["sigs"] is None or stem in module_sigs:
             module_sigs[stem] = None
-            continue
-        sigs: dict[str, tuple[int, int]] = {}
-        dupes: set[str] = set()
-        for m in module.members:
-            if isinstance(m, P.Method):
-                if m.name in sigs:
-                    dupes.add(m.name)
-                sigs[m.name] = _signature(m)
-        for d in dupes:
-            sigs.pop(d, None)
-        module_sigs[stem] = sigs
+        else:
+            module_sigs[stem] = fact["sigs"]
     if not any(module_sigs.values()):
         return
-
-    for s, module in parsed:
-        own: set[str] = set()  # this module's members: the file-scope rule's territory
-        calls: list[P.Call] = []
-        declared: set[str] = set()
-        for m in module.members:
-            if isinstance(m, (P.Method, P.Structure, P.Enum, P.ObjectField)):
-                own.add(m.name)
-            if isinstance(m, P.Method):
-                declared.update(p.name for p in m.params)
-                for p in m.params:
-                    _walk_expr(p.default, calls, declared)
-                _walk_body(m.body, calls, declared)
-            elif isinstance(m, P.ObjectField):
-                if m.init is not None:
-                    _walk_expr(m.init, calls, declared)
-            elif isinstance(m, (P.Structure, P.Enum)):
-                subs = m.members if isinstance(m, P.Structure) else m.methods
-                for sub in subs:
-                    if isinstance(sub, P.Method):
-                        declared.update(p.name for p in sub.params)
-                        _walk_body(sub.body, calls, declared)
-                    elif isinstance(sub, P.ObjectField) and sub.init is not None:
-                        _walk_expr(sub.init, calls, declared)
-        if not calls:
-            continue
-        lm = linemap(s)
-        for call in calls:
-            callee = call.callee
-            if not (
-                isinstance(callee, P.Member)
-                and isinstance(callee.obj, P.Name)
-                and not callee.safe
-            ):
-                continue
-            base = callee.obj.name
-            if "::" in base or base in declared or base in own or base in stdlib_names:
+    for rel, fact in facts.items():
+        for base, method, got, line, col in fact["calls"]:
+            if base in stdlib_names:
                 continue
             target = module_sigs.get(base)
             if not target:
                 continue
-            sig = target.get(callee.name)
+            sig = target.get(method)
             if sig is None:
                 continue  # no such method there - not this rule's business
-            if any(arg.name is not None for arg in call.args):
-                continue
             required, total = sig
-            got = len(call.args)
-            name = f"{base}.{callee.name}"
+            name = f"{base}.{method}"
             if got > total:
-                line, col = lm.linecol(call.start)
                 yield Diagnostic(
-                    s.rel, line, col, "code/call-arity-cross", Severity.ERROR,
+                    rel, line, col, "code/call-arity-cross", Severity.ERROR,
                     i18n.t("code/call-arity.too-many", name=name, got=got, max=total),
                 )
             elif got < required:
-                line, col = lm.linecol(call.start)
                 yield Diagnostic(
-                    s.rel, line, col, "code/call-arity-cross", Severity.ERROR,
+                    rel, line, col, "code/call-arity-cross", Severity.ERROR,
                     i18n.t("code/call-arity.too-few", name=name, got=got, min=required),
                 )
