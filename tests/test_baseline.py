@@ -8,7 +8,7 @@ import json
 
 from xbsl import cli
 
-_ХВОСТ = "метод Ф()\n    возврат 1  \n;\n"  # хвостовой пробел на строке 2
+_ХВОСТ = "метод Ф(): Число\n    возврат 1  \n;\n"  # хвостовой пробел на строке 2
 
 # у временных файлов нет парного yaml – это не предмет модуля
 _БЕЗ_ПАРЫ = ["--ignore", "structure/xbsl-pair"]
@@ -45,7 +45,7 @@ def test_new_same_kind_finding_surfaces(tmp_path, capsys):
 
     # второе нарушение того же правила с тем же сообщением: бюджет 1 – гасится первое
     # по порядку строк, новое всплывает
-    f.write_text("метод Ф()\n    пер А = 1  \n    возврат А  \n;\n", encoding="utf-8")
+    f.write_text("метод Ф(): Число\n    пер А = 1  \n    возврат А  \n;\n", encoding="utf-8")
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
     diags = payload["diagnostics"]
     assert len(diags) == 1 and diags[0]["line"] == 3
@@ -73,7 +73,7 @@ def test_fixed_finding_counts_as_unused(tmp_path, capsys):
     cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
     capsys.readouterr()
 
-    f.write_text("метод Ф()\n    возврат 1\n;\n", encoding="utf-8")  # долг починен
+    f.write_text("метод Ф(): Число\n    возврат 1\n;\n", encoding="utf-8")  # долг починен
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
     assert payload["diagnostics"] == []
     assert payload["summary"]["baselined"] == 0
@@ -185,7 +185,7 @@ def test_rewrite_keeps_reasons(tmp_path, capsys):
     entry = rewritten["files"]["Ч.xbsl"]["whitespace/trailing"][message]
     assert entry == {"count": 1, "reason": "так надо"}
     # причины исчезнувших находок не переносятся: чистый файл - пустой базлайн
-    f.write_text("метод Ф()\n    возврат 1\n;\n", encoding="utf-8")
+    f.write_text("метод Ф(): Число\n    возврат 1\n;\n", encoding="utf-8")
     cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
     capsys.readouterr()
     assert baseline.load(bl)["files"] == {}

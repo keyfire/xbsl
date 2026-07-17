@@ -95,11 +95,11 @@ _needs_data = pytest.mark.skipif(
 
 @_needs_data
 def test_trailing_rule_carries_fix():
-    src = _src("М.xbsl", "метод Ф()\n    возврат 1  \n;\n")
+    src = _src("М.xbsl", "метод Ф(): Число\n    возврат 1  \n;\n")
     diags = [d for d in engine.run_sources([src], select={"whitespace/trailing"})
              if d.rule_id == "whitespace/trailing"]
     assert diags and diags[0].fix is not None
-    assert fixer.fix_source(src, diags).text == "метод Ф()\n    возврат 1\n;\n"
+    assert fixer.fix_source(src, diags).text == "метод Ф(): Число\n    возврат 1\n;\n"
 
 
 @_needs_data
@@ -118,7 +118,7 @@ def test_cli_fix_writes_and_reports(tmp_path, capsys):
     from xbsl import cli
 
     f = tmp_path / "М.xbsl"
-    f.write_text("// многоточие…\nметод Ф()\n    возврат 1  \n;\n", encoding="utf-8")
+    f.write_text("// многоточие…\nметод Ф(): Число\n    возврат 1  \n;\n", encoding="utf-8")
     code = cli.main(["--fix", "--ignore", "structure/xbsl-pair", str(f)])
     err = capsys.readouterr().err
     assert code == 0

@@ -41,7 +41,7 @@ def test_select_flags_accumulate(tmp_path, capsys):
     # Повторённые --select суммируются (а не затирают друг друга последним значением);
     # форма со списком через запятую продолжает работать.
     f = tmp_path / "Ч.xbsl"
-    f.write_text("метод Ф()\n    возврат 1  \n;\n// хвост…\n", encoding="utf-8")
+    f.write_text("метод Ф(): Число\n    возврат 1  \n;\n// хвост…\n", encoding="utf-8")
 
     cli.main(["--format", "json", "--select", "whitespace/trailing",
               "--select", "typography/ellipsis", str(f)])
@@ -57,7 +57,7 @@ def test_select_flags_accumulate(tmp_path, capsys):
 
 def test_json_and_text_on_disk(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text("метод Ф()\n    возврат 1  \n;\n", encoding="utf-8")  # хвостовой пробел
+    f.write_text("метод Ф(): Число\n    возврат 1  \n;\n", encoding="utf-8")  # хвостовой пробел
 
     # json: замечание есть, только warning – код 0
     code = cli.main(["--format", "json", str(f)])
