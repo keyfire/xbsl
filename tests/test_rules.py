@@ -195,6 +195,25 @@ def test_id_unique_across_files(tmp_path):
     assert len([x for x in d if x.rule_id == "yaml/id-unique"]) == 2
 
 
+def test_xbsl_pair_module_of_generated_type(tmp_path):
+    # модуль набора записей - отдельный файл без своего yaml, его описывает Цены.yaml
+    (tmp_path / "Цены.yaml").write_text(
+        "ВидЭлемента: РегистрСведений\nИд: 44444444-4444-4444-4444-444444444444\nИмя: Цены\n",
+        encoding="utf-8",
+    )
+    for suffix in ("НаборЗаписей", "Запись", "КлючЗаписи", "Объект"):
+        (tmp_path / f"Цены.{suffix}.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"})
+    assert not _has(d, "structure/xbsl-pair")
+
+
+def test_xbsl_pair_module_of_missing_owner(tmp_path):
+    # владельца нет вовсе - модуль осиротевший, о нём и сообщаем
+    (tmp_path / "Цены.НаборЗаписей.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"})
+    assert any("Цены.yaml" in x.message for x in d)
+
+
 def test_xbsl_pair(tmp_path):
     (tmp_path / "orphan.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
     d = engine.run(discover([str(tmp_path)]), select={"structure/xbsl-pair"})
