@@ -321,8 +321,26 @@ KIND_PREFIXES = {
 }
 _VT_PREFIX_RE = re.compile(r"^(ВТ_|Таблица[А-ЯЁ])")
 
-# Words whose removal does not change the meaning of the name (1.8).
+# Words whose removal does not change the meaning of the name (1.8). The standard speaks of
+# PREFIXES and POSTFIXES ("Избегайте слов, префиксов и постфиксов..."; its own bad examples -
+# РаботаСЦветами, УправлениеЦветами, УправлениеАдресами - are all prefixes), so _filler_hit
+# matches only at a word boundary at either end: inside a name such a fragment belongs to a
+# compound term (ПанельКонтентМенеджера - a content manager's panel) and is not a filler.
 FILLER_WORDS = ("Управление", "Механизм", "Функциональность", "Менеджер", "Процедуры", "РаботаС")
+
+
+def _filler_hit(name: str) -> str | None:
+    """The filler word of the name, or None. A prefix must be followed by a new word
+    (an uppercase letter): `РаботаСЦветами` is "работа с цветами", while `РаботаСотрудника`
+    is "работа сотрудника" - the same letters, another word."""
+    for word in FILLER_WORDS:
+        if name.startswith(word):
+            rest = name[len(word):]
+            if not rest or rest[:1].isupper():
+                return word
+        if name.endswith(word) and len(name) > len(word):
+            return word
+    return None
 
 # Environment suffixes of common modules: the environment is set by a property, not by the name.
 MODULE_SUFFIXES = ("КлиентИСервер", "КлиентСервер", "Клиент", "Сервер")
@@ -515,11 +533,10 @@ def filler_word(source: SourceFile) -> Iterable[Diagnostic]:
     ref = _object_name(_names(source))
     if ref is None:
         return
-    for word in FILLER_WORDS:
-        if word in ref.name:
-            yield _diag(source, ref, "naming/filler-word", "naming/filler-word.found",
-                        word=word, name=ref.name)
-            return
+    word = _filler_hit(ref.name)
+    if word is not None:
+        yield _diag(source, ref, "naming/filler-word", "naming/filler-word.found",
+                    word=word, name=ref.name)
 
 
 @rule("naming/module-suffix", "naming/module-suffix.title", "D", severity=Severity.WARNING)
