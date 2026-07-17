@@ -41,123 +41,123 @@ __all__ = ["parse", "parse_text", "ParseError", "Module"]
 # glue, and tests/test_i18n.py checks the ru/en parity automatically.
 MESSAGES = {
     "parser.unexpected-module-code": {
-        "ru": i18n.t("parser.unexpected-module-code"),
+        "ru": "Неожиданный код на уровне модуля",
         "en": "Unexpected code at the module level",
     },
     "parser.annotation-needs-member": {
-        "ru": i18n.t("parser.annotation-needs-member"),
+        "ru": "После аннотации ожидается метод, структура, перечисление или константа",
         "en": "After an annotation expected a method, structure, enum or constant",
     },
     "parser.expected-module-member": {
-        "ru": i18n.t("parser.expected-module-member"),
+        "ru": "Ожидается импорт, метод, структура, перечисление или константа модуля",
         "en": "Expected an import, method, structure, enum or module constant",
     },
     "parser.expected-import-name": {
-        "ru": i18n.t("parser.expected-import-name"),
+        "ru": "Ожидается имя подсистемы после 'импорт'",
         "en": "Expected a subsystem name after 'импорт'",
     },
     "parser.expected-method-kw": {
-        "ru": i18n.t("parser.expected-method-kw"),
+        "ru": "Ожидается 'метод'",
         "en": "Expected 'метод'",
     },
     "parser.expected-method-name": {
-        "ru": i18n.t("parser.expected-method-name"),
+        "ru": "Ожидается имя метода",
         "en": "Expected a method name",
     },
     "parser.expected-param-name": {
-        "ru": i18n.t("parser.expected-param-name"),
+        "ru": "Ожидается имя параметра",
         "en": "Expected a parameter name",
     },
     "parser.expected-struct-name": {
-        "ru": i18n.t("parser.expected-struct-name"),
+        "ru": "Ожидается имя структуры",
         "en": "Expected a structure name",
     },
     "parser.expected-struct-member": {
-        "ru": i18n.t("parser.expected-struct-member"),
+        "ru": "Ожидается поле, конструктор или метод структуры",
         "en": "Expected a field, constructor or method of the structure",
     },
     "parser.expected-field-kw": {
-        "ru": i18n.t("parser.expected-field-kw"),
+        "ru": "Ожидается 'знч', 'пер' или 'исп'",
         "en": "Expected 'знч', 'пер' or 'исп'",
     },
     "parser.expected-field-name": {
-        "ru": i18n.t("parser.expected-field-name"),
+        "ru": "Ожидается имя поля",
         "en": "Expected a field name",
     },
     "parser.expected-enum-name": {
-        "ru": i18n.t("parser.expected-enum-name"),
+        "ru": "Ожидается имя перечисления",
         "en": "Expected an enum name",
     },
     "parser.expected-enum-value": {
-        "ru": i18n.t("parser.expected-enum-value"),
+        "ru": "Ожидается значение перечисления",
         "en": "Expected an enum value",
     },
     "parser.expected-const-name": {
-        "ru": i18n.t("parser.expected-const-name"),
+        "ru": "Ожидается имя константы модуля",
         "en": "Expected a module constant name",
     },
     "parser.expected-type-name": {
-        "ru": i18n.t("parser.expected-type-name"),
+        "ru": "Ожидается имя типа",
         "en": "Expected a type name",
     },
     "parser.statement-unparsed": {
-        "ru": i18n.t("parser.statement-unparsed"),
+        "ru": "Не удалось разобрать оператор",
         "en": "Cannot parse the statement",
     },
     "parser.duplicate-else": {
-        "ru": i18n.t("parser.duplicate-else"),
+        "ru": "Повторная ветка 'иначе'",
         "en": "Duplicate 'иначе' branch",
     },
     "parser.expected-loop-var": {
-        "ru": i18n.t("parser.expected-loop-var"),
+        "ru": "Ожидается имя переменной цикла",
         "en": "Expected a loop variable name",
     },
     "parser.expected-po-in-for": {
-        "ru": i18n.t("parser.expected-po-in-for"),
+        "ru": "Ожидается 'по' в цикле 'для'",
         "en": "Expected 'по' in the 'для' loop",
     },
     "parser.expected-catch-var": {
-        "ru": i18n.t("parser.expected-catch-var"),
+        "ru": "Ожидается имя переменной исключения",
         "en": "Expected an exception variable name",
     },
     "parser.expected-var-name": {
-        "ru": i18n.t("parser.expected-var-name"),
+        "ru": "Ожидается имя переменной",
         "en": "Expected a variable name",
     },
     "parser.decl-needs-type-or-value": {
-        "ru": i18n.t("parser.decl-needs-type-or-value"),
+        "ru": "Объявлению нужен тип или начальное значение",
         "en": "A declaration needs a type or an initial value",
     },
     "parser.expected-expr-after-assign": {
-        "ru": i18n.t("parser.expected-expr-after-assign"),
+        "ru": "Ожидается выражение после присваивания",
         "en": "Expected an expression after the assignment",
     },
     "parser.expected-dot-in-method-ref": {
-        "ru": i18n.t("parser.expected-dot-in-method-ref"),
+        "ru": "Ожидается '.' в ссылке на метод",
         "en": "Expected '.' in the method reference",
     },
     "parser.expected-name-in-method-ref": {
-        "ru": i18n.t("parser.expected-name-in-method-ref"),
+        "ru": "Ожидается имя в ссылке на метод",
         "en": "Expected a name in the method reference",
     },
     "parser.expected-name-after-colons": {
-        "ru": i18n.t("parser.expected-name-after-colons"),
+        "ru": "Ожидается имя после '::'",
         "en": "Expected a name after '::'",
     },
     "parser.expected-name-after-dot": {
-        "ru": i18n.t("parser.expected-name-after-dot"),
+        "ru": "Ожидается имя после '.'",
         "en": "Expected a name after '.'",
     },
     "parser.expected-expr": {
-        "ru": i18n.t("parser.expected-expr"),
+        "ru": "Ожидается выражение",
         "en": "Expected an expression",
     },
     "parser.expected-type-after-new": {
-        "ru": i18n.t("parser.expected-type-after-new"),
+        "ru": "Ожидается имя типа после 'новый'",
         "en": "Expected a type name after 'новый'",
     },
     "parser.expected-gt-in-type-literal": {
-        "ru": i18n.t("parser.expected-gt-in-type-literal"),
+        "ru": "Ожидается '>' в литерале типа",
         "en": "Expected '>' in the type literal",
     },
     "parser.expected-rparen-annotation": {

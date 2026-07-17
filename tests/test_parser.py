@@ -450,3 +450,15 @@ def test_undefined_name_reads_component_yaml():
         ),
     )
     assert diags == [], [d.message for d in diags]
+
+
+def test_parser_catalog_ru_texts_are_texts():
+    # Грабля локализации: глобальная замена литералов однажды подменила ru-тексты каталога
+    # вызовами i18n.t, и простые сообщения выводились сырыми ключами (en-тексты целы,
+    # поэтому смоук и тесты этого не увидели).
+    from xbsl import i18n
+
+    for key in i18n.registered_keys():
+        if key.startswith("parser."):
+            ru = i18n.translations(key)["ru"]
+            assert ru and not ru.startswith("parser."), key
