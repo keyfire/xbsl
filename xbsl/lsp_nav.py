@@ -74,6 +74,10 @@ class IndexLookup:
     def references_by_name(self, name: str) -> list[dict]:
         return self._refs_by_name.get(name, [])
 
+    def struct_by_name(self, name: str) -> Optional[dict]:
+        """Members of a module-declared type (structure/exception/enumeration)."""
+        return (self.index.get("struct_members") or {}).get(name)
+
 
 def chain_at(line_text: str, character: int) -> Optional[tuple[list[str], int]]:
     """Dot-separated identifier chain at position `character` (0-based) and the segment index."""
@@ -279,6 +283,34 @@ def _method_entry(m: dict) -> dict:
     }
 
 
+def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[dict]]:
+    """Members of a variable of a PROJECT type: a module-declared structure/exception/
+    enumeration (fields, enum values, methods) or a yaml structure object (attributes)."""
+    struct = lookup.struct_by_name(type_name)
+    if struct:
+        entries = [
+            {"label": str(x), "kind": "field", "detail": "поле"}
+            for x in struct.get("properties") or []
+        ]
+        entries += [
+            {"label": str(x), "kind": "enumMember", "detail": "значение перечисления"}
+            for x in struct.get("values") or []
+        ]
+        entries += [
+            {"label": str(x), "kind": "method", "detail": "метод", "snippet": f"{x}($0)"}
+            for x in struct.get("methods") or []
+        ]
+        return entries or None
+    obj = lookup.object_by_name(type_name)
+    if obj and obj.get("kind") in ("Структура", "ХранимаяСтруктура"):
+        entries = [
+            {"label": a.get("name", ""), "kind": "field", "detail": "реквизит"}
+            for a in obj.get("attributes") or []
+        ]
+        return entries or None
+    return None
+
+
 def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict]]:
     obj = lookup.object_by_name(name)
     methods = lookup.methods_by_module(name)
@@ -418,11 +450,14 @@ def resolve_completions(
         # A variable in scope shadows everything else: `пер Список = новый Массив<...>()` is
         # about the members of Массив, even if the stdlib has a type named Список (a component)
         # or the project has an object with that name. Types of visible variables are computed
-        # by the caller (the lexer, bilingual). A type not from the stdlib (a project structure)
-        # - nothing to suggest, stay silent: let the editor's word-based completion work.
+        # by the caller (the lexer, bilingual). A project type resolves over the index:
+        # a module-declared structure/enum or a yaml structure object.
         if local_vars and token in local_vars:
-            members = (stdlib_members or {}).get(local_vars[token])
-            return _stdlib_entries(members) if members else None
+            var_type = local_vars[token]
+            members = (stdlib_members or {}).get(var_type)
+            if members:
+                return _stdlib_entries(members)
+            return _project_type_entries(lookup, var_type)
         entries = _object_member_entries(lookup, token)
         if entries is not None:
             return entries

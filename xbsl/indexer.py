@@ -32,8 +32,10 @@ from collections import defaultdict, deque
 from pathlib import Path
 
 from xbsl import __version__
+from xbsl import parser as P
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
+from xbsl.parser import parse
 from xbsl.rules.semantics import _file_local_type_decls, _member_family
 from xbsl.rules.yaml_schema import _HAVE_YAML, _NAME_LINE_RE, _parsed
 
@@ -324,6 +326,38 @@ def build_index(root: Path) -> dict:
         for name, line in _file_local_type_decls(s):
             local_types[owner].append({"name": name, "path": module_path, "line": line})
 
+    # Members of the module-declared types (structures, exceptions, enumerations) across
+    # the project: the dot completion for variables of project types. Namesakes merge -
+    # completion is a hint, not a proof.
+    struct_members: dict[str, dict] = {}
+    for s in xbsl_sources:
+        module, errors = parse(s)
+        if errors:
+            continue
+        for m in module.members:
+            if isinstance(m, P.Structure):
+                rec = {
+                    "properties": sorted(
+                        f.name for f in m.members if isinstance(f, P.ObjectField)
+                    ),
+                    "methods": sorted(
+                        f.name for f in m.members if isinstance(f, P.Method)
+                    ),
+                }
+            elif isinstance(m, P.Enum):
+                rec = {
+                    "values": sorted(i.name for i in m.items),
+                    "methods": sorted(x.name for x in m.methods),
+                }
+            else:
+                continue
+            known = struct_members.get(m.name)
+            if known is None:
+                struct_members[m.name] = rec
+            else:
+                for k, v in rec.items():
+                    known[k] = sorted(set(known.get(k, ())) | set(v))
+
     objects: list[dict] = []
     components: list[dict] = []
     if _HAVE_YAML:
@@ -393,4 +427,5 @@ def build_index(root: Path) -> dict:
         "methods": methods,
         "components": components,
         "references": references,
+        "struct_members": struct_members,
     }

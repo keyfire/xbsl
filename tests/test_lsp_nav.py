@@ -551,3 +551,42 @@ def test_local_var_type_through_property_and_use():
     )
     assert lv.get("Ответ") == "ОтветHttp"
     assert lv.get("Данные") == "Байты"
+
+
+def test_completion_project_struct_members():
+    # переменная проектного типа: члены структуры модуля - из индекса (struct_members)
+    idx = dict(INDEX)
+    idx["struct_members"] = {
+        "ДанныеРасширения": {
+            "properties": ["Идентификатор", "ИдентификаторСеанса"],
+            "methods": ["ВСтроку2"],
+        },
+    }
+    lookup = IndexLookup(idx)
+    entries = resolve_completions(
+        lookup, language_id="xbsl", line_prefix="    знч Ид = Данные.",
+        file_stem="Модуль", local_vars={"Данные": "ДанныеРасширения"},
+    )
+    got = {e["label"]: e["kind"] for e in entries}
+    assert got == {
+        "Идентификатор": "field",
+        "ИдентификаторСеанса": "field",
+        "ВСтроку2": "method",
+    }
+
+
+def test_completion_yaml_struct_attributes():
+    # переменная типа yaml-структуры: реквизиты объекта вида Структура/ХранимаяСтруктура
+    idx = dict(INDEX)
+    idx["objects"] = list(INDEX["objects"]) + [{
+        "name": "ДанныеРасширения", "kind": "ХранимаяСтруктура",
+        "path": "Плюс/ДанныеРасширения.yaml", "line": 1,
+        "tabular": [], "local_types": [], "family": [],
+        "attributes": [{"name": "Идентификатор", "line": 5}],
+    }]
+    lookup = IndexLookup(idx)
+    entries = resolve_completions(
+        lookup, language_id="xbsl", line_prefix="    знч Ид = Данные.",
+        file_stem="Модуль", local_vars={"Данные": "ДанныеРасширения"},
+    )
+    assert [e["label"] for e in entries] == ["Идентификатор"]
