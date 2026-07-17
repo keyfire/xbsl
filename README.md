@@ -179,76 +179,9 @@ parses `Запрос{ ... }` blocks and verifies the tables of `ИЗ`/`СОЕД�
 project objects and their tabular sections; a block with constructs outside the supported
 subset (temporary tables, unions, subqueries) is skipped whole rather than guessed.
 
-## Queries: `IN` with a subquery over a composite type (rule `query/in-subquery-composite`)
-
-A platform standard: `IN` with a subquery over an expression of a composite type is implemented
-inefficiently on most DBMSs, so the condition is written with `EXISTS` instead. The rule is a
-warning – the standard is mandatory:
-
-```
-WHERE T.Value IN (SELECT F.Value FROM Filters AS F)                    // warning
-WHERE EXISTS (SELECT 1 FROM Filters AS F WHERE F.Value = T.Value)      // this way
-```
-
-A type counts as composite when the yaml spells two or more alternatives (`Строка|Число|?`): the
-`?` is not a type but the admissibility of `Неопределено`, and `Массив<Строка|Число>` is not
-composite either. Only a field whose type is known for sure is questioned: `Alias.Field` or
-`Table.Field`, where the alias is unambiguous within the block and the field is found in the
-table's yaml; a list of values (`IN (1, 2, &Codes)`) is not what the standard is about. Both
-spellings of the query language are understood (`В`/`IN`, `НЕ`/`NOT`, `ВЫБРАТЬ`/`SELECT`).
-
-## Project properties (the `project/` rules)
-
-Three rules from the standard "Filling in the project properties": `Поставщик` and `Имя` are
-identifiers built from the presentations (every word capitalized: `КабинетСотрудника`,
-`НовыеЭлементарныеТехнологии`); `Представление` and `ПредставлениеПоставщика` are filled in – the
-official name of the project and of the company that developed it; `Версия` is three numbers
-`A.B.C` (semantic versioning), not `1.0`.
-
-## Names of project elements (the `naming/` rules)
-
-Twelve rules from the platform standard "Names of project elements" – it is mandatory in new code,
-so all of them are warnings. They read the descriptions (`.yaml`): the name of the element itself
-and the names of its attributes, dimensions, resources, tabular sections and enumeration values.
-
-The number of a name is checked against the kind: catalogs, documents, registers and tabular
-sections are named in the plural, enumerations and structures in the singular (`naming/number`).
-This is morphology, not a guess by the ending: `Номенклатура` is singular and the standard allows
-it, while `Программы` and `Акции` without the case read as a genitive singular. Needs the `[morph]`
-extra (`pip install "xbsl[morph]"`); without it the rule stays silent.
-
-The rest: the letter `ё` and underscores in names, an abbreviation written as one word (`Ндс`, not
-`НДС`), an English term as the original (`Xml`, not `Хмл`), `Вид` rather than `Тип` for
-enumerations, the kind inside its own name (`ОтчетЗависшиеЗадачи`), filler words (`Управление`,
-`Менеджер`), an environment suffix on a common module (`ОбменДаннымиКлиентИСервер` – the
-environment is a property, not a name), a boolean attribute named by a negation (`НетОшибок`
-instead of `Успешно`), an empty `Представление`, and the prefixes required for certain kinds
-(`КлючДоступа`, `ПравоНа`, `Навигация`).
-
-## Code style conventions (the `style/` rules)
-
-Twenty-one rules that follow the platform documentation ("Code style conventions" and "Language
-idioms"): layout and expression wrapping, naming, type descriptions and signatures, collection
-literals, string interpolation, and checks of boolean values and `Неопределено`.
-
-Rules that clean code already satisfies are enabled by default (`warning`) – they guard against
-regressions. Rules that typically fire on accumulated legacy debt are `info` and disabled; enable
-them to measure the debt and pay it down:
-
-```sh
-xbsl path/to/sources --select style     # ONLY these rules (replaces the default set)
-xbsl path/to/sources --enable style     # the default set PLUS these
-xbsl path/to/sources --ignore style     # the default set minus these
-```
-
-`--select`, `--enable` and `--ignore` accept a rule id, a group (the part before `/`) or a tier
-letter, repeated or comma-separated. `--select` narrows to exactly the given rules; `--enable`
-switches on off-by-default rules on top of the defaults.
-
-`Запрос{ ... }` blocks (the query DSL) and string literals (HTML/CSS/SVG in web views) are
-excluded from these checks. Not covered, and left to the author and review: indentation being a
-multiple of four, collection idioms, `Строки.Соединить()` for bulk concatenation, the `?.` / `??`
-idioms, and `выбор` instead of an `иначе если` chain.
+Detailed group descriptions - `query/` (a composite type in `IN` with a subquery),
+`project/` (project properties), `naming/` (the naming standard, the `[morph]` extra) and
+`style/` (code-writing conventions and their on/off policy) - live in [docs/RULES.md](docs/RULES.md).
 
 ## Baseline: adopt a rule on a legacy codebase
 
