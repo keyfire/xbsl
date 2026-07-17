@@ -35,8 +35,40 @@ jobs:
           name: dist
           path: dist/
 
+  # Нативные колёса (mypyc-скомпилированные лексер и парсер) под три платформы.
+  # Пользователю компилятор не нужен: pip выбирает готовое колесо своей платформы,
+  # для остальных остаётся универсальное py3-none-any из job build (чистый Python).
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pypa/cibuildwheel@v4.1
+        env:
+          XBSL_MYPYC: "1"
+          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "*-musllinux_*"
+          CIBW_ARCHS_WINDOWS: "AMD64"
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_MANYLINUX_X86_64_IMAGE: "quay.io/pypa/manylinux_2_28_x86_64:latest"
+          # PEP 517-изоляция прячет установленный mypy от сборки - собираем без неё.
+          CIBW_BUILD_FRONTEND: "build; args: --no-isolation"
+          CIBW_BEFORE_BUILD: "pip install mypy setuptools wheel"
+          CIBW_TEST_COMMAND: >-
+            python -c "import xbsl.lexer, xbsl.parser;
+            assert not xbsl.lexer.__file__.endswith('.py');
+            m, e = xbsl.parser.parse_text('метод А()\n    Ф()\n;\n');
+            assert not e and m.members"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
   publish:
-    needs: build
+    needs: [build, wheels]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -45,5 +77,10 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
