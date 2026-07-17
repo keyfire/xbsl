@@ -16,11 +16,12 @@ Registration in Claude Code:
 
 from __future__ import annotations
 
+import difflib
 import re
 from html import unescape
 from pathlib import Path
 
-from xbsl import docs, report, scaffold
+from xbsl import dataset, docs, report, scaffold
 from xbsl.cli import discover
 from xbsl.engine import RULES, load, load_text, run, run_sources
 
@@ -124,6 +125,41 @@ def docs_symbol(name: str) -> dict:
     same shape as docs_page, or an empty object if nothing matches.
     """
     return _page_as_text(docs.for_symbol(name))
+
+
+@mcp.tool()
+def type_members(name: str) -> dict:
+    """Members of a stdlib type in one compact answer: what can follow the dot and what
+    the calls return.
+
+    Returns {type, properties, methods: {name: return-type root or null}, facets?} - much
+    cheaper than reading the full docs page when only the member list matters. `name`
+    takes both name forms (Массив / Array) and entity facets (ДвоичныйОбъект.Ссылка);
+    for an aggregate the `facets` list names its record/reference types. An unknown name
+    returns {"error", "close_matches"}.
+    """
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return {"error": "данные Элемента не установлены"}
+    facet_members = catalog.get("facet_members") or {}
+    members = {**(catalog.get("type_members") or {}), **facet_members}
+    rec = members.get(name)
+    if rec is None:
+        return {
+            "error": f"тип '{name}' не найден в каталоге stdlib",
+            "close_matches": difflib.get_close_matches(name, members, n=5, cutoff=0.6),
+        }
+    returns = (catalog.get("method_returns") or {}).get(name, {})
+    out = {
+        "type": name,
+        "properties": rec.get("properties", []),
+        "methods": {m: returns.get(m) for m in rec.get("methods", [])},
+    }
+    facets = sorted(k for k in facet_members if k.startswith(name + "."))
+    if facets:
+        out["facets"] = facets
+    return out
 
 
 # --- scaffolding (metadata) ------------------------------------------------------------

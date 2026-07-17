@@ -356,7 +356,9 @@ claude mcp add xbsl -- xbsl-mcp
 
 Tools: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`; documentation search –
 `docs_search(query)`, `docs_page(id)`, `docs_symbol(name)` (needs the `docs.sqlite` database, see
-above); metadata scaffolding – `meta_new_project`, `meta_new_object`, `meta_add_field`,
+above); `type_members(name)` – the members of a stdlib type with the return-type roots of its
+methods in one compact answer (cheaper than a docs page when only the member list matters);
+metadata scaffolding – `meta_new_project`, `meta_new_object`, `meta_add_field`,
 `meta_add_route`, `meta_add_form`, `meta_add_subsystem`, `meta_add_dependency`,
 `meta_rename_object` (with a `dry_run` plan mode), `meta_set_access`, `meta_object_info`,
 `meta_project_info`.

@@ -305,3 +305,14 @@ def test_cli_add_dependency(capsys, tmp_path):
     assert "Версия: 2.0" in (tmp_path / "vendor" / "Приложение" / "Проект.yaml").read_text(
         encoding="utf-8"
     )
+
+
+@pytest.mark.needs_data
+def test_mcp_type_members(mcp_module):
+    got = mcp_module.type_members("КлиентHttp")
+    assert got["type"] == "КлиентHttp"
+    assert got["methods"].get("ЗапросGet") == "ЗапросHttp"
+    aggr = mcp_module.type_members("Пользователи")
+    assert "Пользователи.Объект" in aggr.get("facets", [])
+    miss = mcp_module.type_members("НетТакогоТипа")
+    assert "error" in miss and "close_matches" in miss
