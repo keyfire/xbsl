@@ -6,6 +6,12 @@ The model is calibrated on a real corpus (openers == ';' in every module):
 - `иначе если` on one line is an else-if (a continuation of the same if, not a new block);
   a nested `если` in an `иначе` branch (on another line) is a new block;
 - `;` closes the current block; brackets () [] {} are balanced by a separate stack.
+
+The balance is counted over code_tokens - the contents of `Запрос{...}` are not code: a
+BATCH query separates its statements with `;` (`ВЫБРАТЬ ... ПОМЕСТИТЬ вт ... ; ВЫБРАТЬ
+... ИЗ вт`), and counting that `;` as a block closer shifted the whole balance and made
+the module's real `;` look extra. The query braces leave together with the contents, so
+the bracket balance is unaffected.
 """
 
 from __future__ import annotations
@@ -16,6 +22,7 @@ from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
+from xbsl.rules._syntax import code_tokens
 
 MESSAGES = {
     # Braces are doubled: every template goes through str.format (see xbsl/i18n.py).
@@ -62,14 +69,18 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
+# `конструктор` is NOT here: in a structure/exception it is a bare marker that tunes the
+# generated constructor (docs topics/structure: `@ИменованныеПараметры` + `конструктор`,
+# no body and no `;`) - counting it as a block opener ate the structure's own `;`.
 _OPENERS = {
-    "METHOD", "STRUCTURE", "ENUMERATION", "EXCEPTION", "CONSTRUCTOR",
-    "IF", "FOR", "WHILE", "TRY", "CASE",
+    "METHOD", "STRUCTURE", "ENUMERATION", "EXCEPTION",
+    "IF", "FOR", "WHILE", "TRY", "CASE", "SCOPE",
 }
 _BLOCK_WORD = {
     "METHOD": "метод", "STRUCTURE": "структура", "ENUMERATION": "перечисление",
-    "EXCEPTION": "исключение", "CONSTRUCTOR": "конструктор", "IF": "если",
+    "EXCEPTION": "исключение", "IF": "если",
     "FOR": "для", "WHILE": "пока", "TRY": "попытка", "CASE": "выбор",
+    "SCOPE": "область",
 }
 _PAIRS = {")": "(", "]": "[", "}": "{"}
 _OPEN_CH = "([{"
@@ -85,12 +96,7 @@ def _compute(source: SourceFile) -> list[Diagnostic]:
     brackets: list[tuple[str, int, int]] = []  # (char, line, col)
     prev_sig: tuple[str, str, int] | None = None  # (kind, canon|value, line)
 
-    for t in tokens(source):
-        if t.kind == "COMMENT":
-            continue
-        if t.kind == "EOF":
-            break
-
+    for t in code_tokens(source):
         if t.kind == "KEYWORD" and t.canonical in _OPENERS and t.value[:1].islower():
             is_else_if = (
                 t.canonical == "IF"
@@ -99,7 +105,15 @@ def _compute(source: SourceFile) -> list[Diagnostic]:
                 and prev_sig[1] == "ELSE"
                 and prev_sig[2] == t.line
             )
-            if not is_else_if:
+            # `абстрактный метод Имя(...)` declares a signature without a body: no `;`
+            # follows it (the parser's ruleabstractMethod), so it opens no block.
+            is_abstract = (
+                t.canonical == "METHOD"
+                and prev_sig is not None
+                and prev_sig[0] == "KEYWORD"
+                and prev_sig[1] == "ABSTRACT"
+            )
+            if not is_else_if and not is_abstract:
                 blocks.append((t.canonical, t.line, t.col))
         elif t.kind == "OP":
             v = t.value

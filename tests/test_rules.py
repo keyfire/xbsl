@@ -662,3 +662,51 @@ def test_unverified_vid_not_flagged():
     )
     d = _lint("Остатки.yaml", content, select={"yaml/unknown-property"})
     assert not _has(d, "yaml/unknown-property")
+
+
+# Четыре ложных срабатывания code/blocks, найденные на боевом корпусе БизКуба (17.07.2026):
+# правило считало блоки по СЫРЫМ токенам и не знало трёх конструкций языка.
+
+
+@pytest.mark.needs_data
+def test_blocks_batch_query_semicolon_is_not_a_block_close():
+    # ';' внутри Запрос{...} - разделитель ПАКЕТНОГО запроса, а не закрытие блока
+    content = (
+        "метод Ф(): Массив<Строка>\n"
+        "    знч Запрос = Запрос{\n"
+        "        ВЫБРАТЬ Ид ПОМЕСТИТЬ вт_Ид ИЗ Приложения\n"
+        "        ;\n"
+        "        ВЫБРАТЬ URI ИЗ вт_Ид\n"
+        "    }\n"
+        "    возврат новый Массив<Строка>()\n"
+        ";\n"
+    )
+    assert _lint("М.xbsl", content, select={"code/blocks"}) == []
+
+
+@pytest.mark.needs_data
+def test_blocks_constructor_marker_opens_nothing():
+    # `конструктор` в структуре - маркер настройки конструктора, тела и ';' у него нет
+    content = (
+        "структура Т\n"
+        "    пер Х: Число\n"
+        "    @ИменованныеПараметры\n"
+        "    конструктор\n"
+        ";\n"
+    )
+    assert _lint("М.xbsl", content, select={"code/blocks"}) == []
+
+
+@pytest.mark.needs_data
+def test_blocks_abstract_method_has_no_body():
+    content = "@НаСервере\nабстрактный метод Ф(): Число\n\nметод Г()\n;\n"
+    assert _lint("М.xbsl", content, select={"code/blocks"}) == []
+
+
+@pytest.mark.needs_data
+def test_blocks_scope_is_a_block():
+    # `область` закрывается ';' наравне с прочими блоками
+    valid = "метод Ф()\n    область\n        Г()\n    ;\n;\n"
+    assert _lint("М.xbsl", valid, select={"code/blocks"}) == []
+    broken = "метод Ф()\n    область\n        Г()\n;\n"
+    assert _has(_lint("М.xbsl", broken, select={"code/blocks"}), "code/blocks")
