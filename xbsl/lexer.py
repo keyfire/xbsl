@@ -55,9 +55,9 @@ def _operator_re() -> re.Pattern:
     return re.compile("|".join(re.escape(op) for op in _operators()))
 
 
-@dataclass(slots=True)  # миллионы экземпляров на проект - без __dict__ заметно быстрее и легче
+@dataclass(slots=True)  # millions of instances per project - noticeably faster and lighter without __dict__
 class Token:
-    kind: str  # KEYWORD | IDENT | NUMBER | STRING | COMMENT | OP | BOM | UNKNOWN | EOF
+    kind: str  # KEYWORD | IDENT | NUMBER | STRING | PATTERN | COMMENT | OP | BOM | UNKNOWN | EOF
     value: str
     start: int  # start offset (inclusive)
     end: int  # end offset (exclusive)
@@ -141,8 +141,8 @@ def _skip_interpolation(text: str, start: int) -> int:
 def tokenize(text: str, lm: "_LineMap | None" = None) -> list[Token]:
     """Parse source text into a list of tokens (whitespace and line breaks omitted).
 
-    lm – готовая карта строк файла, если она уже построена (tokens() передаёт кэшированную,
-    чтобы не считать переводы строк дважды).
+    lm - a ready line map of the file when one is already built (tokens() passes the
+    cached one so the newlines are not counted twice).
     """
     if lm is None:
         lm = _LineMap(text)
@@ -217,6 +217,30 @@ def tokenize(text: str, lm: "_LineMap | None" = None) -> list[Token]:
                 j += 1
             flags = {"unterminated": True} if unterminated else {}
             emit("STRING", i, min(j, n), flags=flags)
+            i = min(j, n)
+            continue
+
+        # Pattern literals '...' (rulepatternLiteral): the apostrophe has no other use in
+        # the grammar, and a double quote INSIDE a pattern is an ordinary character - left
+        # to the string branch it would open a phantom string that swallows code (a cascade
+        # of false brackets/blocks findings on real regex patterns like '<a href="...">').
+        if c == "'":
+            j = i + 1
+            unterminated = True
+            while j < n:
+                cj = text[j]
+                if cj == "\\":
+                    j += 2
+                    continue
+                if cj == "'":
+                    j += 1
+                    unterminated = False
+                    break
+                if cj in "\r\n":  # a pattern does not span lines - an unclosed one stops here
+                    break
+                j += 1
+            flags = {"unterminated": True} if unterminated else {}
+            emit("PATTERN", i, min(j, n), flags=flags)
             i = min(j, n)
             continue
 

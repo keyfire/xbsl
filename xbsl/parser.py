@@ -440,8 +440,8 @@ class _Parser:
     # --- cursor helpers ---
 
     def peek(self, ahead: int = 0) -> Token:
-        # Горячая точка (миллионы вызовов на проект): advance() не уводит pos за EOF,
-        # так что для ahead=0 индекс всегда в границах - без min().
+        # A hot spot (millions of calls per project): advance() never moves pos past EOF,
+        # so for ahead=0 the index is always in bounds - no min() needed.
         if ahead == 0:
             return self.toks[self.pos]
         i = min(self.pos + ahead, len(self.toks) - 1)
@@ -1397,6 +1397,9 @@ class _Parser:
         if t.kind == "STRING":
             self.advance()
             return Literal(t.start, t.end, "STRING", t.value)
+        if t.kind == "PATTERN":  # rulepatternLiteral: one lexer token since the "'" fix
+            self.advance()
+            return Literal(t.start, t.end, "PATTERN", t.value)
         if t.kind == "OP":
             if t.value == "(":
                 return self.paren_or_lambda()
@@ -1415,8 +1418,6 @@ class _Parser:
                     lit.start = t.start
                     return lit
                 self.rollback(snap)
-            if t.value == "'":
-                return self.pattern_literal()
         if self.at_name():
             # resolvableLiteral `Идент{ ... }` (e.g. Ресурс{...}) - a braced literal
             if self.peek(1).kind == "OP" and self.peek(1).value == "{" \
@@ -1596,12 +1597,3 @@ class _Parser:
             expr = self.maybe_call(expr)
         return expr
 
-    def pattern_literal(self) -> Expr:
-        # rulepatternLiteral: '...' - the lexer has no pattern token, consume to closing '
-        start_tok = self.advance()  # '
-        while not self.at_end():
-            t = self.advance()
-            if t.kind == "OP" and t.value == "'":
-                break
-        end = self.toks[self.pos - 1].end
-        return Literal(start_tok.start, end, "PATTERN", "")
