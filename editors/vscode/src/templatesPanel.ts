@@ -58,7 +58,13 @@ function run(args: string[], stdin?: string): Promise<RunResult> {
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cfg.command, args, { cwd: workspaceFolder() });
+      // PYTHONUTF8: without it Python's stdio pipes on Windows use the ANSI codepage,
+      // and the Cyrillic of template names breaks both ways (list - mojibake in the
+      // panel, save - a UnicodeError instead of writing the file).
+      child = spawn(cfg.command, args, {
+        cwd: workspaceFolder(),
+        env: { ...process.env, PYTHONUTF8: "1" },
+      });
     } catch (e) {
       resolve({ stdout: "", error: String(e), notFound: (e as NodeJS.ErrnoException)?.code === "ENOENT" });
       return;

@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from xbsl import __version__, baseline, dataset, engine, i18n, report
+from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
 def discover(paths: list[str]) -> list[Path]:
@@ -189,10 +190,6 @@ _META_COMMANDS = (
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
 
-#: The user's own templates, next to the baseline at the root of the workspace.
-DEFAULT_TEMPLATES_FILE = ".xbsl-templates.json"
-
-
 def _templates_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xbsl templates",
@@ -298,7 +295,8 @@ def _templates_main(argv: list[str]) -> int:
             path.unlink()  # nothing but the builtin set left - the file has no reason to exist
         print(json.dumps({"saved": len(fresh), "file": str(path)}, ensure_ascii=False))
         return 0
-    except (tpl.TemplateError, OSError) as exc:
+    except (tpl.TemplateError, OSError, UnicodeError) as exc:
+        # UnicodeError: a non-UTF-8 stdio pipe (Windows ANSI) - report, not a traceback.
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))
         return 2
 

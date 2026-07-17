@@ -77,6 +77,10 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
     ["--select", "linter.select"],
     ["--data-dir", "linter.dataDir"],
     ["--lang", "linter.lang"],
+    // A custom templates file: the server resolves a relative path from the workspace
+    // folder. An empty setting is not passed - the server then defaults to
+    // .xbsl-templates.json at the workspace root, the very file the panel writes.
+    ["--templates", "templates.file"],
   ] as const) {
     const value = (cfg.get<string>(key) || "").trim();
     if (value) {

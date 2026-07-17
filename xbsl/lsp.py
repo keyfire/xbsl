@@ -218,6 +218,20 @@ def _doc_key(path: Optional[Path], uri: str) -> str:
     return os.path.normcase(str(path)) if path is not None else uri
 
 
+def _resolve_templates_path(arg: Optional[str], folder: Optional[Path]) -> Optional[Path]:
+    """The user's templates file: the explicit --templates, or the CLI default.
+
+    A relative --templates is resolved from the workspace folder. Without the flag the
+    server falls back to `.xbsl-templates.json` at the workspace root - the same default
+    the CLI uses from its cwd, and the place the panel writes to: what the panel saves,
+    the next Ctrl+Space must see.
+    """
+    if arg:
+        p = Path(arg)
+        return p if p.is_absolute() else (folder / p if folder else p)
+    return folder / templates.DEFAULT_FILE if folder else None
+
+
 def _make_server() -> "LanguageServer":
     server = LanguageServer("xbsl-lsp", f"v{__version__}")
 
@@ -364,9 +378,7 @@ def _make_server() -> "LanguageServer":
             # the baseline lives at the repository root, as CI sees it.
             b = Path(STATE.baseline_arg)
             STATE.baseline = b if b.is_absolute() else (folder / b if folder else b)
-        if STATE.templates_arg:
-            p = Path(STATE.templates_arg)
-            STATE.templates_path = p if p.is_absolute() else (folder / p if folder else p)
+        STATE.templates_path = _resolve_templates_path(STATE.templates_arg, folder)
         load_templates()
         schedule_project_lint()
 
@@ -382,7 +394,7 @@ def _make_server() -> "LanguageServer":
             return
         try:
             STATE.templates = templates.merge(STATE.templates, templates.load_file(path))
-        except TemplateError as e:
+        except (TemplateError, OSError, UnicodeDecodeError) as e:
             server.show_message_log(f"xbsl-lsp: шаблоны не загружены: {e}")
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)

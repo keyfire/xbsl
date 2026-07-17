@@ -49,6 +49,10 @@ from xbsl import i18n
 
 TEMPLATE_TYPE = "xbsl.template"
 
+#: The user's own templates, next to the baseline at the root of the workspace. The CLI
+#: resolves it from its cwd, the LSP server from the workspace folder - the same file.
+DEFAULT_FILE = ".xbsl-templates.json"
+
 #: Where a template may be offered. XBSL has no "conditional compilation" or "invocation
 #: params" context of its own, so this list is shorter than the BSL one of the same shape.
 STATEMENT_CONTEXT = "STATEMENT_CONTEXT"      # inside a method body

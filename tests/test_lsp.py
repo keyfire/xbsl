@@ -59,3 +59,17 @@ def test_doc_key_meets_both_uri_spellings(tmp_path):
 
 def test_doc_key_without_path_falls_back_to_uri():
     assert lsp._doc_key(None, "untitled:Untitled-1") == "untitled:Untitled-1"
+
+
+def test_resolve_templates_path(tmp_path):
+    """Without --templates the server falls back to the panel's file at the workspace
+    root: what the panel saves, the next Ctrl+Space must see."""
+    from pathlib import Path
+
+    from xbsl.templates import DEFAULT_FILE
+
+    assert lsp._resolve_templates_path(None, tmp_path) == tmp_path / DEFAULT_FILE
+    assert lsp._resolve_templates_path(None, None) is None
+    assert lsp._resolve_templates_path("own.json", tmp_path) == tmp_path / "own.json"
+    absolute = str(tmp_path / "t.json")
+    assert lsp._resolve_templates_path(absolute, tmp_path) == Path(absolute)
