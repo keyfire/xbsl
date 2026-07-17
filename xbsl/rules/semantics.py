@@ -197,6 +197,28 @@ def _member_family(kind: str) -> frozenset[str]:
     return _object_members().get(kind, frozenset()) | _MEMBER_TYPE_TAILS
 
 
+def _row_type_names(node) -> set[str]:
+    """Type names a yaml declares for itself: the row type of a dynamic list.
+
+    A form's dynamic list names its generated row type with `ИмяТипаДанныхСтроки:
+    ДанныеСтрокиСписка` (docs topics/virtual-table, topics/accumulation-register-example),
+    and the type is then referenced as `<ИмяФормы>.<это имя>` - in the form's own yaml and
+    in its module. Such a name is not in the kind's fixed member family: it is invented in
+    the yaml, so it has to be collected from the tree.
+    """
+    names: set[str] = set()
+    if isinstance(node, dict):
+        value = node.get("ИмяТипаДанныхСтроки")
+        if isinstance(value, str) and value:
+            names.add(value)
+        for v in node.values():
+            names |= _row_type_names(v)
+    elif isinstance(node, list):
+        for item in node:
+            names |= _row_type_names(item)
+    return names
+
+
 def _project_object_info(sources: list[SourceFile]) -> dict[str, dict]:
     """Per project object: the kind and the member-type names it generates.
 
@@ -216,7 +238,7 @@ def _project_object_info(sources: list[SourceFile]) -> dict[str, dict]:
         nm = data.get("Имя")
         if not isinstance(nm, str):
             continue
-        members: set[str] = set()
+        members: set[str] = set(_row_type_names(data))
         parts = data.get("ТабличныеЧасти")
         if isinstance(parts, list):
             for p in parts:
@@ -479,10 +501,10 @@ def _object_type_mapper(source: SourceFile) -> dict | None:
         nm = data.get("Имя")
         if not isinstance(nm, str):
             return None
-        members = []
+        members = sorted(_row_type_names(data))
         parts = data.get("ТабличныеЧасти")
         if isinstance(parts, list):
-            members = [
+            members += [
                 p["Имя"] for p in parts
                 if isinstance(p, dict) and isinstance(p.get("Имя"), str)
             ]

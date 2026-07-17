@@ -233,3 +233,21 @@ def test_ns_no_project_objects_skipped(tmp_path):
     )
     d = engine.run(discover([str(tmp_path)]), select={_ПРАВИЛО})
     assert not _has(d)
+
+
+@pytest.mark.needs_data
+def test_row_type_named_by_the_form_is_known():
+    # форма именует порождаемый тип строки динсписка свойством ИмяТипаДанныхСтроки
+    # (доки topics/virtual-table): тип ФормаX.ДанныеСтрокиСписка существует, ругаться не на что
+    yaml_text = (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Ид: 6c964b22-6612-43df-aca9-588e385bd2a5\n"
+        "Имя: ФормаСписка\n"
+        "Содержимое:\n"
+        "  - Тип: ДинамическийСписок<ФормаСписка.ДанныеСтрокиСписка>\n"
+        "    ЗначениеПоУмолчанию:\n"
+        "      ИмяТипаДанныхСтроки: ДанныеСтрокиСписка\n"
+    )
+    sources = [engine.load_text("ФормаСписка.yaml", yaml_text)]
+    diags = engine.run_sources(sources, select={"yaml/unknown-type", "code/unknown-ns-object"})
+    assert [d.message for d in diags] == []

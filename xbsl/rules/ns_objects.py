@@ -44,6 +44,7 @@ from xbsl.lexer import tokens
 from xbsl.rules.semantics import (
     _file_local_types,
     _member_family,
+    _row_type_names,
     _stdlib_names,
     _type_chains,
     _type_ref_starts,
@@ -154,10 +155,14 @@ def _ns_mapper(source: SourceFile) -> dict | None:
         fact: dict = {}
         nm = data.get("Имя")
         if data.get("ВидЭлемента") and isinstance(nm, str):
-            members = [
-                p["Имя"] for p in (data.get("ТабличныеЧасти") or ())
-                if isinstance(p, dict) and isinstance(p.get("Имя"), str)
-            ] if isinstance(data.get("ТабличныеЧасти"), list) else []
+            # ИмяТипаДанныхСтроки динамического списка - такой же член формы, как
+            # табличная часть (см. semantics._row_type_names).
+            members = sorted(_row_type_names(data))
+            if isinstance(data.get("ТабличныеЧасти"), list):
+                members += [
+                    p["Имя"] for p in data["ТабличныеЧасти"]
+                    if isinstance(p, dict) and isinstance(p.get("Имя"), str)
+                ]
             fact["obj"] = (nm, data["ВидЭлемента"], members)
         if data.get("ВидЭлемента"):
             cands = []

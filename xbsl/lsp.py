@@ -111,6 +111,11 @@ class _State:
         self.lookup: Optional[IndexLookup] = None
         self.dirty: set[str] = set()  # uris changed since the last save
         self.published: set[str] = set()  # uris we have published diagnostics for
+        # Project-scope findings of the last whole-project pass, by uri. A per-file pass
+        # (on open and on every keystroke) runs file rules only - without this the
+        # project findings of the opened file would vanish from the Problems panel until
+        # the next save, which is exactly how it looked to the user.
+        self.project_diags: dict[str, list[Diagnostic]] = {}
         self.file_timers: dict[str, threading.Timer] = {}
         self.project_timer: Optional[threading.Timer] = None
         self.project_lock = threading.Lock()
@@ -226,6 +231,10 @@ def _make_server() -> "LanguageServer":
         diags, problem = apply_baseline_file(diags, STATE.baseline)
         if problem:
             server.show_message_log(f"xbsl-lsp: базлайн не применён: {problem}")
+        # The project findings of this file survive the per-file pass: they come from the
+        # last whole-project run (already baselined there) and are refreshed on save.
+        # Their positions may lag behind an edited buffer - that beats losing them.
+        diags = diags + STATE.project_diags.get(uri, [])
         server.publish_diagnostics(uri, [_to_lsp_diag(d, doc.source) for d in diags])
         STATE.published.add(uri)
 
@@ -254,6 +263,8 @@ def _make_server() -> "LanguageServer":
                 server.show_message_log(f"xbsl-lsp: базлайн не применён: {problem}")
             by_uri: dict[str, list] = {}
             texts: dict[str, str] = {}
+            project_ids = {r.id for r in engine.RULES if r.scope == "project"}
+            project_diags: dict[str, list[Diagnostic]] = {}
             for d in diags:
                 p = Path(d.path)
                 if not p.is_absolute():
@@ -265,6 +276,9 @@ def _make_server() -> "LanguageServer":
                     except OSError:
                         texts[uri] = ""
                 by_uri.setdefault(uri, []).append(_to_lsp_diag(d, texts[uri]))
+                if d.rule_id in project_ids:
+                    project_diags.setdefault(uri, []).append(d)
+            STATE.project_diags = project_diags
             open_dirty = {u for u in STATE.dirty}
             for uri in set(STATE.published) | set(by_uri):
                 if uri in open_dirty:

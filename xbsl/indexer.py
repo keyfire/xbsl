@@ -36,7 +36,7 @@ from xbsl import parser as P
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
-from xbsl.rules.semantics import _file_local_type_decls, _member_family
+from xbsl.rules.semantics import _file_local_type_decls, _member_family, _row_type_names
 from xbsl.rules.yaml_schema import _HAVE_YAML, _NAME_LINE_RE, _parsed
 
 
@@ -385,6 +385,8 @@ def build_index(root: Path) -> dict:
                 set(_member_family(kind))
                 | {t["name"] for t in entry["tabular"]}
                 | {t["name"] for t in entry["local_types"]}
+                # the row type a dynamic list names for itself (ИмяТипаДанныхСтроки)
+                | _row_type_names(data)
             )
             if kind == "Перечисление":
                 entry["values"] = _named_items(s, data, "Элементы")

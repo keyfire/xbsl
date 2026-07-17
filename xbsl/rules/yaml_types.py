@@ -38,6 +38,7 @@ from xbsl.rules.semantics import (
     _checked_kinds,
     _file_local_types,
     _member_family,
+    _row_type_names,
     _stdlib_names,
 )
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed
@@ -181,10 +182,12 @@ def _yaml_type_mapper(source: SourceFile) -> dict | None:
     if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
         return None
     nm = data.get("Имя")
-    tab_members: list[str] = []
+    # The row type a dynamic list names for itself (ИмяТипаДанныхСтроки) is a member of
+    # the form just like a tabular section - see semantics._row_type_names.
+    tab_members: list[str] = sorted(_row_type_names(data))
     parts = data.get("ТабличныеЧасти")
     if isinstance(parts, list):
-        tab_members = [
+        tab_members += [
             p["Имя"] for p in parts
             if isinstance(p, dict) and isinstance(p.get("Имя"), str)
         ]
