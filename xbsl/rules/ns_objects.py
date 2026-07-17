@@ -191,7 +191,7 @@ def _ns_mapper(source: SourceFile) -> dict | None:
     cands = []
     for start in _type_ref_starts(toks):
         chains, _ = _type_chains(toks, start)
-        for chain in chains:
+        for _ns, chain in chains:
             segs = _ns_candidate([t.value for t in chain], stdlib)
             if segs is None:
                 continue

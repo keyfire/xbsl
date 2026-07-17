@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Типы подключённых библиотек: разбор Проект.yaml, поиск архива и чтение глобальных имён."""
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -78,6 +79,19 @@ def test_archive_found_above_sources(tmp_path):
     описание.parent.mkdir(parents=True)
     описание.write_text(ПРОЕКТ, encoding="utf-8")
     assert libs.project_library_types(описание, ПРОЕКТ) == ["Интерфейс", "ОписаниеАдресата"]
+
+
+def test_archive_found_from_relative_descriptor(tmp_path, monkeypatch):
+    # running the linter from inside the project directory yields a relative descriptor
+    # path: the walk up to the archive must not end at cwd ('.'.parent == '.')
+    _архив(tmp_path / "acme-ТаймерЛиб-9.0.2.xlib", ЭЛЕМЕНТЫ)
+    descriptor = tmp_path / "acme" / "Сайт" / "Проект.yaml"
+    descriptor.parent.mkdir(parents=True)
+    descriptor.write_text(ПРОЕКТ, encoding="utf-8")
+    monkeypatch.chdir(descriptor.parent)
+    assert libs.project_library_types(Path("Проект.yaml"), ПРОЕКТ) == [
+        "Интерфейс", "ОписаниеАдресата",
+    ]
 
 
 def _проект(tmp_path):

@@ -115,6 +115,8 @@ def project_coordinates(text: str) -> Optional[tuple[str, str]]:
 def find_archive(start: Path, vendor: str, name: str, version: str) -> Optional[Path]:
     """The library archive next to the sources: the descriptor's own directory, then up."""
     filename = f"{vendor}-{name}-{version}.xlib"
+    # A relative descriptor path would end the walk right away: Path(".").parent is ".".
+    start = start.resolve()
     directory = start if start.is_dir() else start.parent
     for _ in range(_SEARCH_LEVELS + 1):
         candidate = directory / filename

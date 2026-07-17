@@ -276,15 +276,21 @@ def _next(toks: list, k: int) -> int:
     return k
 
 
-def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
+def _type_chains(toks: list, start: int) -> tuple[list[tuple[list[str], list]], int]:
     """The dotted name chains of a type expression from position start, and the index past its end.
+
+    Each chain is `(namespace, tokens)`: for a qualified name (`acme::Проект::Подсистема::Тип`)
+    the namespace holds the `::`-prefix values and the tokens hold the last segment with its
+    dotted tail; for a bare name the namespace is empty. The consumers judge the tail, and the
+    namespace tells one's own types from a library's (as query/unknown-table does).
 
     A chain starts at the IDENT opening the expression, the base of a generic or the start of
     each argument (after `<` or `,`); the FQN tail (after `.`) extends the current chain. If the
     expression does not start with an IDENT (e.g. the keyword `неизвестно` or a bracket) – there
     are no chains.
     """
-    chains: list[list] = []
+    chains: list[tuple[list[str], list]] = []
+    pending_ns: list[str] = []  # the `::` segments read so far, waiting for their chain
     depth = 0
     prev: str | None = None  # None | '<' | ',' | '.' | 'ident'
     extendable = False  # a `.` after the current position extends the last chain
@@ -296,10 +302,11 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
             continue
         if t.kind == "IDENT":
             if prev in (None, "<", ","):
-                chains.append([t])
+                chains.append((pending_ns, [t]))
+                pending_ns = []
                 extendable = True
             elif prev == "." and extendable and chains:
-                chains[-1].append(t)
+                chains[-1][1].append(t)
             else:
                 extendable = False
             prev = "ident"
@@ -312,11 +319,11 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
                 i += 1
                 continue
             if v == "::":
-                # A qualified name: `acme::Проект::Подсистема::Тип`. The namespace only says
-                # where the type lives, the type is its last segment - so the chain restarts
-                # and the prefix is dropped (`Тип` is judged exactly as a bare name would be).
+                # A qualified name: the segment just read is one more namespace part, the
+                # type is whatever follows - the chain restarts carrying the prefix along.
                 if chains:
-                    chains.pop()
+                    ns, tokens_ = chains.pop()
+                    pending_ns = ns + [x.value for x in tokens_]
                 prev = ","  # the next IDENT opens a chain of its own
                 extendable = False
                 i += 1
@@ -324,6 +331,7 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
             if v == "<":
                 depth += 1
                 prev = "<"
+                pending_ns = []
                 extendable = False
                 i += 1
                 continue
@@ -332,6 +340,7 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
                     break
                 depth -= 1
                 prev = "ident"
+                pending_ns = []
                 extendable = False  # `Массив<Число>.Х` does not extend the argument chain
                 i += 1
                 continue
@@ -339,6 +348,7 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
                 if depth == 0:
                     break
                 prev = ","
+                pending_ns = []
                 extendable = False
                 i += 1
                 continue
@@ -354,7 +364,7 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
 def _type_roots(toks: list, start: int) -> tuple[list, int]:
     """The root type names of a type expression – the first token of each chain."""
     chains, end = _type_chains(toks, start)
-    return [c[0] for c in chains], end
+    return [c[0] for _ns, c in chains], end
 
 
 def _annotation_start(toks: list, j: int) -> int | None:
@@ -466,19 +476,19 @@ def _type_token_facts(s: SourceFile) -> tuple[list, list]:
     if cached is not None:
         return cached
     roots: list[tuple[str, int, int]] = []
-    chains2: list[tuple[str, str, int, int]] = []
+    chains2: list[tuple[str, str, int, int, list[str]]] = []
     # Over code_tokens, not the raw ones: inside `Запрос{...}` the anchor words belong to the
     # query language, where `КАК` names a column alias rather than casts to a type
     # (`Количество(Идентификатор) как Количество`).
     toks = code_tokens(s)
     for start in _type_ref_starts(toks):
         chains, _ = _type_chains(toks, start)
-        for chain in chains:
+        for ns, chain in chains:
             r = chain[0]
             roots.append((r.value, r.line, r.col))
             if len(chain) >= 2:
                 seg = chain[1]
-                chains2.append((r.value, seg.value, seg.line, seg.col))
+                chains2.append((r.value, seg.value, seg.line, seg.col, ns))
     facts = (roots, chains2)
     s.cache["type_token_facts"] = facts
     return facts
@@ -536,8 +546,13 @@ def _object_type_mapper(source: SourceFile) -> dict | None:
     (by owner) and the two-segment type chains - the reduce owns the object model."""
     if source.kind == "yaml":
         data, err = _parsed(source)
-        if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
+        if err is not None or not isinstance(data, dict):
             return None
+        if not data.get("ВидЭлемента"):
+            # The project descriptor: its coordinates tell the reduce which qualified
+            # names are this very project's (mirrors query/unknown-table).
+            coords = libs.project_coordinates(source.text)
+            return {"k": "p", "coords": list(coords)} if coords else None
         nm = data.get("Имя")
         if not isinstance(nm, str):
             return None
@@ -565,11 +580,14 @@ def _object_type_mapper(source: SourceFile) -> dict | None:
 )
 def unknown_object_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     objects: dict[str, dict] = {}
+    own: set[tuple[str, str]] = set()
     for fact in facts.values():
         if fact["k"] == "y":
             objects[fact["name"]] = {
                 "kind": fact["kind"], "members": set(fact["tab_members"]),
             }
+        elif fact["k"] == "p":
+            own.add(tuple(fact["coords"]))
     if not objects:
         return
     for fact in facts.values():
@@ -581,7 +599,12 @@ def unknown_object_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
-        for root, seg, line, col in fact["chains2"]:
+        for root, seg, line, col, ns in fact["chains2"]:
+            # A qualified name is judged only when its namespace is this very project: a
+            # library object may share a project object's name, and holding it to the
+            # project's members would be a lie rather than a finding.
+            if ns and (len(ns) < 2 or (ns[0], ns[1]) not in own):
+                continue
             rec = objects.get(root)
             if rec is None or rec["kind"] not in checked:
                 continue

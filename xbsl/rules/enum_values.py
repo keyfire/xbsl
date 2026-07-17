@@ -134,8 +134,11 @@ def _code_accesses(s: SourceFile) -> dict[tuple[str, str], list[tuple[int, int]]
     for i, t in enumerate(toks):
         if t.kind != "IDENT" or t.value in shadowed:
             continue
-        if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == ".":
-            continue  # member of another object, not the enumeration
+        if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value in (".", "::"):
+            # After `.` - a member of another object, not the enumeration. After `::` - a
+            # namespace-qualified root: a library enumeration may share a project one's
+            # name, and its values are not ours to judge.
+            continue
         if not (i + 2 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
                 and toks[i + 2].kind == "IDENT"):
             continue

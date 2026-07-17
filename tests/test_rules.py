@@ -445,6 +445,30 @@ def test_unchecked_kind_skipped(tmp_path):
     assert not _has(d, "code/unknown-object-type")
 
 
+_PROJECT_YAML = "Ид: f25543fb-c726-496e-9af5-71f61527e97c\nИмя: Сайт\nПоставщик: acme\n"
+
+
+def test_object_qualified_own_namespace_judged(tmp_path):
+    # a qualified name of this very project: the tail is judged as a bare name would be
+    (tmp_path / "Проект.yaml").write_text(_PROJECT_YAML, encoding="utf-8")
+    d = _товары(tmp_path, "метод Ф(Т: acme::Сайт::Основное::Товары.Сылка)\n;\n")
+    assert any("Товары.Сылка" in x.message for x in d)
+
+
+def test_object_qualified_foreign_namespace_silent(tmp_path):
+    # a foreign namespace: a library object may share a project object's name, and its
+    # members are not the project's to judge - silence, not a guess
+    (tmp_path / "Проект.yaml").write_text(_PROJECT_YAML, encoding="utf-8")
+    d = _товары(tmp_path, "метод Ф(Т: globex::Либ::Ядро::Товары.Чужое)\n;\n")
+    assert not _has(d, "code/unknown-object-type")
+
+
+def test_object_qualified_without_descriptor_silent(tmp_path):
+    # without the project descriptor its own namespace is unknown - conservative silence
+    d = _товары(tmp_path, "метод Ф(Т: acme::Сайт::Основное::Товары.Сылка)\n;\n")
+    assert not _has(d, "code/unknown-object-type")
+
+
 def test_cast_then_call_chain_not_merged(tmp_path):
     # `как Товары` в конце выражения + вызов метода со следующей строки: точка вызова
     # не продолжает цепочку типа – ложного 'Товары.Записать' быть не должно
@@ -602,6 +626,18 @@ def test_enum_value_typo_flagged(tmp_path):
 
 def test_enum_builtin_member_not_flagged(tmp_path):
     d = _вид(tmp_path, "метод Ф(): Строка\n    возврат ВидСообщения.Важное.Представление()\n;\n")
+    assert not _has(d, "code/unknown-enum-value")
+
+
+def test_enum_qualified_root_not_judged(tmp_path):
+    # a namespace-qualified root is a library's enumeration, possibly a namesake of the
+    # project's one: its values are not ours to judge against the project's elements
+    d = _вид(
+        tmp_path,
+        "метод Ф(): Число\n"
+        "    знч В = либ::Проект::Ядро::ВидСообщения.Чужое\n"
+        "    возврат 1\n;\n",
+    )
     assert not _has(d, "code/unknown-enum-value")
 
 
