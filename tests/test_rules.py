@@ -262,6 +262,28 @@ def test_unknown_type_in_cast_flagged(tmp_path):
     assert any("Стркоа" in x.message for x in d)
 
 
+def test_entity_root_known_by_its_facets(tmp_path):
+    # у Сущность нет своей страницы в доках, но её фасеты задокументированы - тип известен
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф(Ссылка: Сущность.Ключ): Число\n    возврат 1\n;\n", encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not [x for x in d if "Сущность" in x.message]
+
+
+def test_qualified_type_judged_by_last_segment(tmp_path):
+    # квалифицированное имя: значим тип, пространство имён лишь говорит, где он лежит
+    (tmp_path / "м.xbsl").write_text(
+        "метод Ф(): Число\n"
+        "    знч x = новый Массив<acme::Проект::Подсистема::Стркоа>()\n"
+        "    возврат x.Количество()\n;\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"code/unknown-type"})
+    assert not [x for x in d if "acme" in x.message]
+    assert [x for x in d if "Стркоа" in x.message]
+
+
 def test_query_alias_not_a_cast(tmp_path):
     # внутри Запрос{...} КАК – псевдоним колонки языка запросов, а не приведение к типу
     (tmp_path / "м.xbsl").write_text(

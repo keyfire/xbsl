@@ -76,10 +76,20 @@ _LOCAL_TYPE_KW = ("STRUCTURE", "ENUMERATION", "EXCEPTION")
 
 @lru_cache(maxsize=1)
 def _stdlib_names() -> frozenset[str]:
+    """Every type name of the platform catalog, plus the roots of its facets.
+
+    An aggregate that has no page of its own still names a type when the docs describe its
+    facets: `Сущность.Ключ` is documented while `Сущность` is not, and the same holds for
+    ПравоНаДействие and СправочникИнформационныхСистем. The root is derived here rather than
+    listed in the data, so a catalog of any vintage - and a facet added later - is covered.
+    """
     try:
-        return frozenset(dataset.load_json("stdlib.json")["names"])
+        catalog = dataset.load_json("stdlib.json")
+        names = set(catalog["names"])
     except (dataset.DatasetError, KeyError, ValueError):
         return frozenset()
+    names |= {key.split(".", 1)[0] for key in (catalog.get("facet_members") or {})}
+    return frozenset(names)
 
 
 # The object name for _project_object_names comes from regexes, not a full yaml parse:
@@ -299,6 +309,16 @@ def _type_chains(toks: list, start: int) -> tuple[list[list], int]:
             v = t.value
             if v == ".":
                 prev = "."
+                i += 1
+                continue
+            if v == "::":
+                # A qualified name: `acme::Проект::Подсистема::Тип`. The namespace only says
+                # where the type lives, the type is its last segment - so the chain restarts
+                # and the prefix is dropped (`Тип` is judged exactly as a bare name would be).
+                if chains:
+                    chains.pop()
+                prev = ","  # the next IDENT opens a chain of its own
+                extendable = False
                 i += 1
                 continue
             if v == "<":
