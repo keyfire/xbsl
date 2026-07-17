@@ -108,3 +108,42 @@ def test_two_blocks_are_independent(tmp_path):
     )
     diags = _project(tmp_path, body)
     assert len(diags) == 1 and "Нечто" in diags[0].message
+
+
+def _project_with_descriptor(tmp_path, body):
+    (tmp_path / "Проект.yaml").write_text(
+        "Ид: f25543fb-c726-496e-9af5-71f61527e97c\nИмя: Сайт\nПоставщик: acme\n",
+        encoding="utf-8",
+    )
+    return _project(tmp_path, body)
+
+
+def test_qualified_own_table_resolved(tmp_path):
+    # квалифицированное имя своего проекта: судим по последнему сегменту
+    diags = _project_with_descriptor(tmp_path, _query(
+        "        ВЫБРАТЬ 1 ИЗ acme::Сайт::Основное::Товар КАК Т"
+    ))
+    assert diags == []
+
+
+def test_qualified_own_typo_flagged(tmp_path):
+    diags = _project_with_descriptor(tmp_path, _query(
+        "        ВЫБРАТЬ 1 ИЗ acme::Сайт::Основное::Тавар КАК Т"
+    ))
+    assert len(diags) == 1 and "Тавар" in diags[0].message
+
+
+def test_qualified_foreign_namespace_silent(tmp_path):
+    # чужое пространство имён - объект библиотеки, его в каталоге проекта нет
+    diags = _project_with_descriptor(tmp_path, _query(
+        "        ВЫБРАТЬ 1 ИЗ globex::ОчередьЛиб::Ядро::Сообщения КАК С"
+    ))
+    assert diags == []
+
+
+def test_platform_entity_table_silent(tmp_path):
+    # Пользователи - сущность платформы, а не объект проекта
+    diags = _project(tmp_path, _query(
+        "        ВЫБРАТЬ 1 ИЗ Пользователи КАК П"
+    ))
+    assert diags == []

@@ -2,10 +2,11 @@
 
 The code/unknown-enum-value rule: a member access on a project enumeration –
 `ВидСообщения.Важное` in code or `=ВидСообщения.Важное` in a yaml binding – must name a
-declared value of that enumeration (yaml `Элементы[].Имя`) or a built-in member of the
-generated enum type (Представление, ВСтроку, ПолучитьТип, Индекс). Only enumerations declared
-as project objects (`ВидЭлемента: Перечисление`) are checked; module-local `перечисление`
-declarations are left alone – their values live in code the compiler already sees locally.
+declared value of that enumeration (yaml `Элементы[].Имя`), a built-in member reachable
+through the name (see _enum_builtin_members) or a method of the enumeration's own paired
+module. Only enumerations declared as project objects (`ВидЭлемента: Перечисление`) are
+checked; module-local `перечисление` declarations are left alone – their values live in code
+the compiler already sees locally.
 
 Zero-false-positive guards. In code, an identifier may shadow the enumeration (a local
 variable, a parameter, a loop variable – the platform resolves the name to the nearest
@@ -22,12 +23,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
-from xbsl.rules._syntax import code_tokens
+from xbsl.rules._syntax import code_tokens, signatures
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed
 
 MESSAGES = {
@@ -42,8 +44,38 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# Built-in members of the generated enum type (stdlib: {ИмяПеречисления}, Стд::Перечисление).
-_ENUM_BUILTIN_MEMBERS = frozenset({"Представление", "ВСтроку", "ПолучитьТип", "Индекс"})
+
+@lru_cache(maxsize=1)
+def _enum_builtin_members() -> frozenset[str]:
+    """Members reachable through the bare enumeration name, from the stdlib catalog.
+
+    Two sources, because the name stands for two things. `Стд::Перечисление` is the base type
+    of an element, so its members answer `СостояниеЗаказов.Открыт.Представление`. And the name
+    itself resolves to the type object `Стд::Тип<ТипЗначения>`, whose enum-only members answer
+    `СостояниеЗаказов.ПоИмени("Открыт")` and `.Элементы()` - the docs spell them
+    `<ValueType это Перечисление>`. Taken from the catalog rather than listed by hand: the
+    platform grows members, and a stale list would report them as unknown values.
+    """
+    members: set[str] = set()
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return frozenset({"Представление", "ВСтроку", "ПолучитьТип", "Индекс"})
+    for type_name in ("Перечисление", "Тип"):
+        entry = (catalog.get("type_members") or {}).get(type_name) or {}
+        if isinstance(entry, dict):
+            members |= {str(x) for x in entry.get("properties") or ()}
+            members |= {str(x) for x in entry.get("methods") or ()}
+        else:
+            members |= {str(x) for x in entry}
+    return frozenset(members)
+
+
+def _static_method_names(s: SourceFile) -> list[str]:
+    """Names of the methods a module declares - the paired module of an enumeration adds
+    them to the members reachable through the enumeration name."""
+    return sorted({sig.name.value for sig in signatures(code_tokens(s))})
+
 
 # Declaration keywords that bind a name (shadowing the enumeration in the whole module).
 _DECL_KW = ("VAL", "VAR", "CONST", "REQ", "CATCH", "FOR")
@@ -108,7 +140,7 @@ def _code_accesses(s: SourceFile) -> dict[tuple[str, str], list[tuple[int, int]]
                 and toks[i + 2].kind == "IDENT"):
             continue
         seg = toks[i + 2]
-        if seg.value in _ENUM_BUILTIN_MEMBERS:
+        if seg.value in _enum_builtin_members():
             continue
         out.setdefault((t.value, seg.value), []).append((seg.line, seg.col))
     return out
@@ -150,7 +182,7 @@ def _yaml_accesses(s: SourceFile, data: dict) -> dict[tuple[str, str], list[tupl
             r"(?<![\wА-Яа-яЁё.])([А-ЯЁ][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
             binding,
         ):
-            if root in local_names or seg in _ENUM_BUILTIN_MEMBERS:
+            if root in local_names or seg in _enum_builtin_members():
                 continue
             pairs.add((root, seg))
     out: dict[tuple[str, str], list[tuple[int, int]]] = {}
@@ -168,9 +200,16 @@ def _enum_values_mapper(source: SourceFile) -> dict | None:
         return None
     if source.kind == "xbsl":
         accesses = _code_accesses(source)
-        if not accesses:
+        methods = _static_method_names(source)
+        if not accesses and not methods:
             return None
-        return {"k": "x", "acc": [(r, s2, pos) for (r, s2), pos in accesses.items()]}
+        # The owner is the stem before the first dot (`Товар.Объект.xbsl` belongs to Товар),
+        # the same pairing the other project rules use.
+        owner = source.path.name[: -len(".xbsl")].split(".", 1)[0]
+        return {
+            "k": "x", "owner": owner, "methods": methods,
+            "acc": [(r, s2, pos) for (r, s2), pos in accesses.items()],
+        }
     if source.kind != "yaml":
         return None
     data, err = _parsed(source)
@@ -205,6 +244,11 @@ def unknown_enum_value(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             enums[name] = set(values)
     if not enums:
         return []
+    # An enumeration may carry a module, and its methods are addressed through the very same
+    # name: `ПродуктыПеречисление.ПолучитьНазвание(Продукт)` is a call, not a value.
+    for fact in facts.values():
+        if fact["k"] == "x" and fact["owner"] in enums:
+            enums[fact["owner"]].update(fact["methods"])
 
     diags: list[Diagnostic] = []
     for rel, fact in facts.items():

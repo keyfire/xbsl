@@ -25,9 +25,10 @@ The parsing is deliberately conservative (the zero-false-positives invariant):
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Iterable, Iterator, Optional
 
-from xbsl import i18n
+from xbsl import dataset, i18n, libs
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token, tokens
@@ -97,7 +98,12 @@ _FIELD_SECTIONS = ("Реквизиты", "Измерения", "Ресурсы")
 
 
 def _query_tables(source: SourceFile) -> Iterable[tuple]:
-    """Table expressions of all query blocks of a file: (segment tokens,) one per table.
+    """Table expressions of all query blocks of a file: (namespace tokens, segment tokens).
+
+    A table may be addressed by its qualified name - `acme::Проект::Подсистема::Заказы` - so
+    the `::` prefix is parsed away from the name: the namespace goes first, the dotted chain
+    (the object and its tabular section) second. For an unqualified name the namespace is
+    empty.
 
     A block where ИЗ/СОЕДИНЕНИЕ is followed by something other than a name (a subquery, an
     interpolation) or where an unsupported word occurs yields no expressions at all - silence
@@ -119,8 +125,17 @@ def _query_tables(source: SourceFile) -> Iterable[tuple]:
                 if j >= n or block[j].kind not in _WORD_KINDS:
                     supported = False  # a subquery/interpolation in the table position
                     break
+                ns: list = []
                 segs = [block[j]]
                 j += 1
+                while (
+                    j + 1 < n
+                    and block[j].kind == "OP" and block[j].value == "::"
+                    and block[j + 1].kind in _WORD_KINDS
+                ):
+                    ns.append(segs.pop())  # everything before the last :: segment is the namespace
+                    segs.append(block[j + 1])
+                    j += 2
                 while (
                     j + 1 < n
                     and block[j].kind == "OP" and block[j].value == "."
@@ -128,7 +143,7 @@ def _query_tables(source: SourceFile) -> Iterable[tuple]:
                 ):
                     segs.append(block[j + 1])
                     j += 2
-                tables.append(segs)
+                tables.append((ns, segs))
                 i = j
                 continue
             i += 1
@@ -247,17 +262,38 @@ def _in_subqueries(source: SourceFile) -> Iterator[tuple[Token, Token, bool, dic
             yield prefix, field, negated, aliases
 
 
+@lru_cache(maxsize=1)
+def _entity_tables() -> frozenset[str]:
+    """Entity types of the platform, which are queryable tables just like a project object.
+
+    They are recognized by their facets in the catalog (`Пользователи.Объект`,
+    `ДвоичныйОбъект.Ссылка`): an entity is exactly the type that generates them. Their
+    structure is the platform's, so only the name is checked here, not the sections.
+    """
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return frozenset()
+    return frozenset(
+        key.split(".", 1)[0] for key in (catalog.get("facet_members") or {})
+    )
+
+
 def _query_table_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a yaml contributes its catalog slice, a module its query table
-    references with per-segment positions."""
+    """The map phase: a yaml contributes its catalog slice (or, if it is the project
+    descriptor, the project's own coordinates), a module its query table references with
+    per-segment positions."""
     if source.kind == "yaml":
         got = _catalog_slice(source)
-        return {"k": "y", "slice": got} if got else None
+        if got:
+            return {"k": "y", "slice": got}
+        coords = libs.project_coordinates(source.text)
+        return {"k": "p", "coords": list(coords)} if coords else None
     if source.kind != "xbsl":
         return None
     tables = [
-        [(t.value, t.line, t.col) for t in segs]
-        for segs in _query_tables(source)
+        ([t.value for t in ns], [(t.value, t.line, t.col) for t in segs])
+        for ns, segs in _query_tables(source)
     ]
     return {"k": "x", "tables": tables} if tables else None
 
@@ -268,16 +304,26 @@ def _query_table_mapper(source: SourceFile) -> dict | None:
 )
 def unknown_query_table(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     catalog: dict[str, dict] = {}
+    own: set[tuple[str, str]] = set()
     for fact in facts.values():
         if fact["k"] == "y":
             name, rec = fact["slice"]
             catalog[name] = rec
+        elif fact["k"] == "p":
+            own.add(tuple(fact["coords"]))
     if not catalog:
         return  # yaml not parsed (no PyYAML) or a project with no objects - stay silent
     for rel, fact in facts.items():
-        for segs in fact.get("tables", ()):
+        for ns, segs in fact.get("tables", ()):
+            # A qualified name is judged only when its namespace is this very project: the
+            # objects of a library are not in the catalog, and calling them unknown would be
+            # a lie rather than a finding.
+            if ns and (len(ns) < 2 or (ns[0], ns[1]) not in own):
+                continue
             root_value, root_line, root_col = segs[0]
             name = ".".join(v for v, _l, _c in segs)
+            if root_value in _entity_tables():
+                continue  # an entity of the platform, its structure is not the project's
             rec = catalog.get(root_value)
             if len(segs) == 1:
                 if rec is None:

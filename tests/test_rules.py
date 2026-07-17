@@ -527,6 +527,33 @@ def test_enum_value_known_not_flagged(tmp_path):
     assert not _has(d, "code/unknown-enum-value")
 
 
+
+def test_enum_module_method_not_a_value(tmp_path):
+    # у перечисления есть парный модуль: ВидСообщения.ПолучитьЗаголовок(...) - вызов, не значение
+    (tmp_path / "ВидСообщения.xbsl").write_text(
+        "статический метод ПолучитьЗаголовок(Вид: ВидСообщения): Строка\n"
+        "    возврат Вид.Представление()\n;\n",
+        encoding="utf-8",
+    )
+    d = _вид(
+        tmp_path,
+        "метод Ф(): Строка\n"
+        "    возврат ВидСообщения.ПолучитьЗаголовок(ВидСообщения.Важное)\n;\n",
+    )
+    assert not _has(d, "code/unknown-enum-value")
+
+
+def test_enum_type_object_members_not_values(tmp_path):
+    # имя перечисления - это ещё и тип-объект Стд::Тип<>: ПоИмени и Элементы - его члены
+    d = _вид(
+        tmp_path,
+        "метод Ф(): ВидСообщения\n"
+        "    знч Все = ВидСообщения.Элементы()\n"
+        '    возврат ВидСообщения.ПоИмени("Важное")\n;\n',
+    )
+    assert not _has(d, "code/unknown-enum-value")
+
+
 def test_enum_value_typo_flagged(tmp_path):
     d = _вид(tmp_path, "метод Ф(): ВидСообщения\n    возврат ВидСообщения.Важнейшее\n;\n")
     assert any(x.rule_id == "code/unknown-enum-value" and "Важнейшее" in x.message for x in d)
