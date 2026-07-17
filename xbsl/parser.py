@@ -205,7 +205,7 @@ class ForTo(Stmt):  # ruleforToStatement: для Х = А [вниз] по Б [ш�
 @dataclass
 class Try(Stmt):  # ruletryStatement
     body: list[Stmt]
-    catches: list[tuple[str, TypeRef, list[Stmt]]]  # (var, type, body)
+    catches: list[tuple[str, "TypeRef | None", list[Stmt]]]  # (var, type, body)
     finally_body: list[Stmt] | None
 
 
@@ -409,6 +409,27 @@ def parse(source) -> tuple[Module, list[ParseError]]:
     return cached
 
 
+# A word usable as a name: identifiers plus the keywords the grammar lists in
+# `ruleident` (обз/импорт/по/из/Тип/Запрос... may be plain names) and `метод`.
+_NAME_KEYWORDS = frozenset({
+    "EXCEPTION", "ENUMERATION", "STRUCTURE", "ABSTRACT", "CONST", "REQ", "IMPORT",
+    "TO", "IN", "TYPE", "QUERY", "DOWN", "STEP", "METHOD", "DEFAULT", "STATIC",
+    "GLOBAL_EN",
+})
+
+# Control keywords whose CAPITALIZED forms are legal names per ruleident: `Выбор`,
+# `Если`, `И`, `Или`... are identifiers, while the lowercase forms are operators only
+# (the grammar keeps them as separate *_KW_UP tokens; our lexer canonicalizes both
+# forms, so the parser checks the letter case of the token value).
+_UPPER_NAME_KEYWORDS = frozenset({
+    "WHILE", "FOR", "IF", "TRY", "CASE", "WHEN", "CATCH", "AND", "OR",
+    "CONSTRUCTOR",
+})
+
+# Keywords that can never start a return value - a bare `возврат` before them.
+_RETURN_STOP = frozenset({"ELSE", "WHEN", "CATCH", "FINALLY"})
+
+
 class _Parser:
     def __init__(self, toks: list[Token]) -> None:
         # Comments and the BOM are trivia for the parser; UNKNOWN chars are reported once.
@@ -471,21 +492,6 @@ class _Parser:
         self.pos, n = snap
         del self.errors[n:]
 
-    # A word usable as a name: identifiers plus the keywords the grammar lists in
-    # `ruleident` (обз/импорт/по/из/Тип/Запрос... may be plain names) and `метод`.
-    _NAME_KEYWORDS = frozenset({
-        "EXCEPTION", "ENUMERATION", "STRUCTURE", "ABSTRACT", "CONST", "REQ", "IMPORT",
-        "TO", "IN", "TYPE", "QUERY", "DOWN", "STEP", "METHOD", "DEFAULT", "STATIC",
-        "GLOBAL_EN",
-    })
-    # Control keywords whose CAPITALIZED forms are legal names per ruleident: `Выбор`,
-    # `Если`, `И`, `Или`... are identifiers, while the lowercase forms are operators only
-    # (the grammar keeps them as separate *_KW_UP tokens; our lexer canonicalizes both
-    # forms, so the parser checks the letter case of the token value).
-    _UPPER_NAME_KEYWORDS = frozenset({
-        "WHILE", "FOR", "IF", "TRY", "CASE", "WHEN", "CATCH", "AND", "OR",
-        "CONSTRUCTOR",
-    })
 
     def at_name(self) -> bool:
         t = self.peek()
@@ -493,9 +499,9 @@ class _Parser:
             return True
         if t.kind != "KEYWORD":
             return False
-        if t.canonical in self._NAME_KEYWORDS:
+        if t.canonical in _NAME_KEYWORDS:
             return True
-        return t.canonical in self._UPPER_NAME_KEYWORDS and t.value[:1].isupper()
+        return t.canonical in _UPPER_NAME_KEYWORDS and t.value[:1].isupper()
 
     def eat_name(self) -> Token | None:
         if self.at_name():
@@ -694,7 +700,7 @@ class _Parser:
             self.error("Ожидается имя поля")
         ftype = self.compound_type() if self.eat_op(":") else None
         init = self.expression() if self.eat_op("=") else None
-        return ObjectField(start, self.toks[self.pos - 1].end, kind,
+        return ObjectField(start, self.toks[self.pos - 1].end, kind or "VAL",
                            name_tok.value if name_tok else "", ftype, init,
                            required=required, annotations=annotations)
 
@@ -792,7 +798,7 @@ class _Parser:
         # dotted segments: Справочник.Ссылка, and Неопределено is a legal segment
         while self.at_op(".") and (self.peek(1).kind == "IDENT"
                                    or (self.peek(1).kind == "KEYWORD"
-                                       and self.peek(1).canonical in (self._NAME_KEYWORDS | {"UNDEFINED"}))):
+                                       and self.peek(1).canonical in (_NAME_KEYWORDS | {"UNDEFINED"}))):
             self.advance()
             segs.append(self.advance().value)
         text = "".join(t.value for t in self.toks[start:self.pos])
@@ -880,7 +886,7 @@ class _Parser:
             c = t.canonical
             # A capitalized control word followed by an expression continuation is a
             # NAME (`Выбор = ...`, `Если.Поле`), not a statement keyword.
-            if c in self._UPPER_NAME_KEYWORDS and t.value[:1].isupper():
+            if c in _UPPER_NAME_KEYWORDS and t.value[:1].isupper():
                 nxt = self.peek(1)
                 if nxt.kind == "OP" and nxt.value in (
                     "=", "+=", "-=", "*=", "/=", ".", "?.", "[", "(", "::", "!",
@@ -1003,7 +1009,7 @@ class _Parser:
     def try_statement(self) -> Try:
         start = self.advance().start  # TRY
         body = self.block_until("CATCH", "FINALLY")
-        catches: list[tuple[str, TypeRef, list[Stmt]]] = []
+        catches: list[tuple[str, TypeRef | None, list[Stmt]]] = []
         while self.at_kw("CATCH"):
             self.advance()
             name_tok = self.eat_name()
@@ -1026,8 +1032,6 @@ class _Parser:
         body = self.statements_until_semicolon("'область'")
         return Scope(start, self.toks[self.pos - 1].end, body)
 
-    # Keywords that can never start a return value - a bare `возврат` before them.
-    _RETURN_STOP = frozenset({"ELSE", "WHEN", "CATCH", "FINALLY"})
 
     def return_statement(self) -> Return:
         tok = self.advance()
@@ -1039,7 +1043,7 @@ class _Parser:
     def starts_new_statement(self, prev_line: int) -> bool:
         """A bare `возврат`: the next token opens a branch or a new statement."""
         t = self.peek()
-        if t.kind == "KEYWORD" and t.canonical in self._RETURN_STOP:
+        if t.kind == "KEYWORD" and t.canonical in _RETURN_STOP:
             return True
         if t.line == prev_line:
             return False
@@ -1236,7 +1240,7 @@ class _Parser:
                 break
         while self.at_op(".") and (self.peek(1).kind == "IDENT"
                                    or (self.peek(1).kind == "KEYWORD"
-                                       and self.peek(1).canonical in self._NAME_KEYWORDS | {"NEW"})):
+                                       and self.peek(1).canonical in _NAME_KEYWORDS | {"NEW"})):
             self.advance()
             self.advance()
         if self.at_op("<"):

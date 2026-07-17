@@ -229,15 +229,15 @@ def tokenize(text: str, lm: "_LineMap | None" = None) -> list[Token]:
             continue
 
         # Identifiers and keywords (longest match, then a keyword check)
-        if c == "_" or _IDENT_RE.match(text, i):
-            m = _IDENT_RE.match(text, i)
-            word = m.group(0)
+        ident = _IDENT_RE.match(text, i)
+        if ident is not None:
+            word = ident.group(0)
             canon = kwforms.get(word)
             if canon is not None:
-                emit("KEYWORD", i, m.end(), canonical=canon)
+                emit("KEYWORD", i, ident.end(), canonical=canon)
             else:
-                emit("IDENT", i, m.end())
-            i = m.end()
+                emit("IDENT", i, ident.end())
+            i = ident.end()
             continue
 
         # Operators and punctuation (longest match by alternation order)

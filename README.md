@@ -71,6 +71,12 @@ In an editable install from a clone the command refuses – `git pull` updates t
 The extractors from step 1 ship with the repository, not with the PyPI package – clone the
 repository to generate the data.
 
+The hot modules (the lexer and the parser) can be compiled by mypyc into C extensions:
+`XBSL_MYPYC=1` at build time (needs mypy and a C compiler: MSVC Build Tools on Windows,
+Xcode CLT on macOS, gcc on Linux). Users never need a compiler: the ready-made native
+wheels are built by CI (`native-wheels.yml`), and without a matching wheel the package
+runs as plain Python – no compiler, no loss of functionality.
+
 Flags: `--list-rules`, `--where` (data root, source and versions), `--select`/`--enable`/`--ignore` (by rule id, rule group – the part of the id
 before `/` – or tier letter), `--fix`, `--baseline`/`--write-baseline`, `--element-version`,
 `--data-dir`, `--lang`, `--format text|json|codeclimate`.
