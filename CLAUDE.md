@@ -82,7 +82,7 @@ When adding or renaming a rule, update in the same change: the rule table in `do
 `docs/RULES.ru.md` (id, severity, default, scope, one-line description, docs link) and its docs
 mapping in `editors/vscode/src/ruleDocs.ts` (if a platform documentation section stands behind it).
 `docs/RULES.*` and the rule-count numbers in it and in the READMEs must stay in sync with
-`xbsl list-rules`.
+`xbsl --list-rules`.
 
 `xbsl/lexer.py` and `xbsl/parser.py` are compiled by mypyc into C extensions
 (`XBSL_MYPYC=1`, `.github/workflows/native-wheels.yml`): keep them clean under

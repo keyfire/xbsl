@@ -3,7 +3,7 @@
 **English** · [Русский](https://github.com/keyfire/xbsl/blob/main/docs/RULES.ru.md)
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl list-rules` (or the MCP `list_rules`). Currently there are 87 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 87 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
