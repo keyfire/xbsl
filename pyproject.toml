@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xbsl"
-version = "0.21.0"
+# Единственный источник версии – xbsl/__init__.py (__version__): её печатают CLI, LSP и
+# статус-бар расширения. Раньше версия дублировалась здесь, разъехалась при бампах, и
+# пакеты 0.20/0.21 представлялись как 0.19.0.
+dynamic = ["version"]
 description = "Инструментарий XBSL (1С:Элемент): линтер, LSP, документация, индекс проекта, скаффолдинг метаданных"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -50,6 +53,9 @@ xbsllint-lsp = "xbsl.lsp:main"
 [tool.setuptools]
 # xbsllint – пакет-псевдоним: импорт xbsllint/xbsllint.X отдаёт модули xbsl (см. его __init__).
 packages = ["xbsl", "xbsl.rules", "xbsllint"]
+
+[tool.setuptools.dynamic]
+version = {attr = "xbsl.__version__"}
 
 [tool.setuptools.package-data]
 xbsl = ["data/element/index.json", "data/element/*/*.json"]

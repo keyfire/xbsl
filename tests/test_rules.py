@@ -710,3 +710,13 @@ def test_blocks_scope_is_a_block():
     assert _lint("М.xbsl", valid, select={"code/blocks"}) == []
     broken = "метод Ф()\n    область\n        Г()\n;\n"
     assert _has(_lint("М.xbsl", broken, select={"code/blocks"}), "code/blocks")
+
+
+@pytest.mark.needs_data
+def test_trailing_blank_line_message():
+    # строка из одних пробелов - тот же фикс, но сообщение про пустую строку, а не про
+    # "хвост в конце строки" (на такой строке кода нет вовсе)
+    d = _lint("М.xbsl", "метод Ф()\n    Г()   \n        \n;\n", select={"whitespace/trailing"})
+    msgs = {x.line: x.message for x in d}
+    assert "Хвостовые" in msgs[2]
+    assert "только из пробелов" in msgs[3]

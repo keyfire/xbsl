@@ -19,6 +19,12 @@ MESSAGES = {
         "ru": "Хвостовые пробелы в конце строки.",
         "en": "Trailing whitespace at the end of the line.",
     },
+    # Строка целиком из пробелов – формально тот же хвост, но говорить про "конец строки"
+    # там не о чем: кода на строке нет вовсе, и сообщение сбивало с толку.
+    "whitespace/trailing.blank": {
+        "ru": "Строка состоит только из пробелов – убрать отступ у пустой строки.",
+        "en": "The line contains nothing but whitespace – drop the indent of a blank line.",
+    },
     "whitespace/mixed-newline.title": {
         "ru": "Смешанные переводы строк",
         "en": "Mixed newlines",
@@ -46,9 +52,11 @@ def trailing_whitespace(source: SourceFile) -> Iterable[Diagnostic]:
     lm = linemap(source)
     for m in _TRAILING_RE.finditer(source.text):
         line, col = lm.linecol(m.start())
+        # col == 1 - the run starts the line, so the whole line is whitespace.
+        key = "whitespace/trailing.blank" if col == 1 else "whitespace/trailing.msg"
         yield Diagnostic(
             source.rel, line, col, "whitespace/trailing", Severity.WARNING,
-            i18n.t("whitespace/trailing.msg"),
+            i18n.t(key),
             fix=TextEdit(m.start(), m.end(), ""),  # delete the trailing run
         )
 
