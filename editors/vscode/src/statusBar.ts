@@ -88,7 +88,9 @@ export function registerStatusBar(
     );
 
   const render = (): void => {
-    item.text = `$(versions) XBSL ${extVersion} · ${hash} · lint ${linter}`;
+    // "engine", а не "lint": с 0.16 это инструментарий целиком (линт, LSP, скаффолдинг),
+    // и тултип рядом говорит "движок xbsl" - подписи должны совпадать.
+    item.text = `$(versions) XBSL ${extVersion} · ${hash} · engine ${linter}`;
     item.tooltip = line();
     item.show();
   };
