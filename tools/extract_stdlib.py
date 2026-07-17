@@ -58,6 +58,9 @@ _LINK_RE = re.compile(r"<a[^>]*>(.*?)</a>", re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _JUNK_RE = re.compile(r"[\x00-\x1f​﻿]")  # управляющие символы и якоря Docusaurus
 _PROP_NAME_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*$")
+# Фасет сущностного типа: "Пользователи.Объект", "ДвоичныйОбъект.Ссылка" – члены записи
+# и ссылки живут на этих страницах, а не на странице самого типа (менеджерской).
+_FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*$")
 
 # Английское имя шаблона в пути -> русское имя вида (значение ВидЭлемента в yaml).
 _TEMPLATE_KINDS = {
@@ -181,19 +184,32 @@ def package_members(raw: str) -> set[str]:
 
 def _english_from_path(entry: str) -> str | None:
     """Английское имя типа из сегмента пути `.../<Имя>_ru/index.html` (без точек)."""
+    name = _path_name(entry)
+    return name if name and "." not in name else None
+
+
+def _english_facet_from_path(entry: str) -> str | None:
+    """Английское имя фасета из пути (`BinaryObject.Reference_ru` -> с точкой)."""
+    name = _path_name(entry)
+    return name if name and name.count(".") == 1 else None
+
+
+def _path_name(entry: str) -> str | None:
     seg = entry[len(STD_BASE):].split("/")
     if len(seg) < 2:
         return None
     dirname = seg[-2]
     if not dirname.endswith("_ru"):
         return None
-    name = dirname[:-3]
-    return name if name and "." not in name else None
+    return dirname[:-3] or None
 
 
 def extract(
     dist: Path,
-) -> tuple[set[str], dict[str, set[str]], dict[str, set[str]], dict[str, dict[str, set[str]]], set[str], dict[str, set[str]]]:
+) -> tuple[
+    set[str], dict[str, set[str]], dict[str, set[str]], dict[str, dict[str, set[str]]],
+    set[str], dict[str, set[str]], dict[str, dict[str, set[str]]],
+]:
     """Имена stdlib (двуязычно), порождаемые члены по видам, свойства компонентов, члены типов."""
     car = _distro.find_car(dist)
     names: set[str] = set()
@@ -202,6 +218,7 @@ def extract(
     types: dict[str, dict[str, set[str]]] = {}
     globals_: set[str] = set()
     managers: dict[str, set[str]] = {}
+    facets: dict[str, dict[str, set[str]]] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -234,6 +251,15 @@ def extract(
                     slot = types.setdefault(key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
+                # Фасеты сущностных типов (Пользователи.Объект, ДвоичныйОбъект.Ссылка):
+                # члены записи и ссылки – отдельным словарём, под обеими формами имени.
+                eng_facet = _english_facet_from_path(n)
+                for key in (title if _FACET_TITLE_RE.match(title) else "", eng_facet or ""):
+                    if not key:
+                        continue
+                    slot = facets.setdefault(key, {"properties": set(), "methods": set()})
+                    slot["properties"] |= props
+                    slot["methods"] |= methods
             got = component_props(n, raw)
             if got is not None:
                 comp, props = got
@@ -263,7 +289,7 @@ def extract(
             if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
                 continue  # член-плейсхолдер или латинский шаблон
             members.setdefault(kind, set()).add(segs[1])
-    return names, members, components, types, globals_, managers
+    return names, members, components, types, globals_, managers, facets
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -286,7 +312,7 @@ def main() -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    names, members, components, types, globals_, managers = extract(dist)
+    names, members, components, types, globals_, managers, facets = extract(dist)
     data = {
         "meta": {
             "element_version": version,
@@ -306,6 +332,9 @@ def main() -> int:
         "globals": sorted(globals_),
         # Методы менеджеров видов (страница шаблона <Kind>Name_ru): голые имена в модуле менеджера.
         "manager_members": {k: sorted(v) for k, v in sorted(managers.items())},
+        # Фасеты сущностных типов (Пользователи.Объект, ДвоичныйОбъект.Ссылка): члены записи
+        # и ссылки, не попадающие на страницу самого типа.
+        "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"
@@ -322,6 +351,7 @@ def main() -> int:
     print(f"  типов с членами: {len(types)}"
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
           f" с методами {sum(1 for v in types.values() if v['methods'])})")
+    print(f"  фасетов сущностных типов: {len(facets)}")
     return 0
 
 

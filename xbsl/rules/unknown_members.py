@@ -3,15 +3,19 @@
 First-hop only, negatives only. A variable counts as typed when every declaration of that
 name in the method (parameters, `пер`/`знч` with an explicit type, `поймать`) names the
 same single non-generic stdlib type; the member is then checked against the type's
-properties + methods from the stdlib catalog. Everything else is skipped: project types,
-generic and compound types, chains beyond the first hop, Latin member spellings (the
-bilingual stdlib is cataloged under Russian member names), names redeclared with
+properties + methods from the stdlib catalog. Entity aggregates (Пользователи,
+ДвоичныйОбъект...) keep their record and reference members on facet pages - the catalog's
+facet_members - so the aggregate name covers the union of its facets, and a facet itself
+(ДвоичныйОбъект.Ссылка) works as a nominal type. Everything else is skipped: project
+types, generic and compound types, chains beyond the first hop, Latin member spellings
+(the bilingual stdlib is cataloged under Russian member names), names redeclared with
 different or absent types anywhere in the method (lambda parameters included).
 """
 
 from __future__ import annotations
 
 import difflib
+import re
 from collections.abc import Iterable
 
 from xbsl import dataset, i18n
@@ -40,37 +44,46 @@ i18n.register(MESSAGES)
 # Undocumented members seen on every instance (the object protocol).
 _COMMON_MEMBERS = frozenset({"ПолучитьТип", "ВСтроку", "Представление"})
 
-# Entity aggregates (Пользователи, ДвоичныйОбъект, register records...) carry an
-# undocumented record protocol (Ид, Ссылка, Загрузить, ЗагрузитьОбъект...) on top of
-# their documented page - their member lists are incomplete, so they are not checked.
-_ENTITY_MARKERS = frozenset({"Записать", "Ссылка", "ПолучитьСсылку"})
+# A plain name or a one-dot facet name (ДвоичныйОбъект.Ссылка).
+_NOMINAL_RE = re.compile(r"[А-Яа-яЁёA-Za-z0-9_]+(?:\.[А-Яа-яЁёA-Za-z0-9_]+)?")
 
 _members_cache: dict[str, frozenset[str]] | None = None
 
 
 def _stdlib_members() -> dict[str, frozenset[str]]:
+    """Type name -> members. Entity aggregates carry their record and reference members
+    on facet pages (Пользователи.Объект, ДвоичныйОбъект.Ссылка) - facet_members of the
+    catalog; a variable typed with the bare aggregate name may hold any facet, so the
+    aggregate's set is the union, and every facet is also usable as a nominal type."""
     global _members_cache
     if _members_cache is None:
         try:
-            raw = dataset.load_json("stdlib.json").get("type_members") or {}
+            data = dataset.load_json("stdlib.json")
         except Exception:  # noqa: BLE001 - no data, no rule
-            raw = {}
-        _members_cache = {}
+            data = {}
+        raw = data.get("type_members") or {}
+        facets = data.get("facet_members") or {}
+        facet_union: dict[str, set[str]] = {}
+        result: dict[str, frozenset[str]] = {}
+        for fname, fm in facets.items():
+            members = frozenset(fm.get("properties", ())) | frozenset(fm.get("methods", ()))
+            result[fname] = members
+            facet_union.setdefault(fname.split(".", 1)[0], set()).update(members)
         for name, m in raw.items():
             members = frozenset(m.get("properties", ())) | frozenset(m.get("methods", ()))
-            if not (_ENTITY_MARKERS & members):
-                _members_cache[name] = members
+            result[name] = members | frozenset(facet_union.get(name, ()))
+        _members_cache = result
     return _members_cache
 
 
 def _nominal(tref: P.TypeRef | None) -> str | None:
-    """The single plain type name of a declaration, or None when anything is fancy."""
+    """The single plain (or one-dot facet) type name of a declaration, or None."""
     if tref is None or len(tref.names) != 1:
         return None
-    name = tref.names[0]
-    if "::" in name or "." in name or "<" in tref.text:
+    text = tref.text.strip().removesuffix("?").strip()
+    if not _NOMINAL_RE.fullmatch(text):
         return None
-    return name
+    return text
 
 
 class _Scope:

@@ -75,11 +75,34 @@ def test_redeclared_name_is_silent():
     assert diags == []
 
 
-def test_entity_type_is_silent():
-    # сущностный агрегат: протокол записи в доках не полон
+def test_entity_members_come_from_facets():
+    # члены записи и ссылки сущности живут на фасетных страницах (Пользователи.Объект);
+    # имя агрегата покрывает объединение фасетов
     diags = _lint(
         "метод Тест(Пользователь: Пользователи)\n"
         "    Сообщить(Пользователь.Ид)\n"
+        "    Сообщить(Пользователь.РазрешенДоступПоТокену)\n"
         ";\n"
     )
-    assert diags == []
+    assert diags == [], [d.message for d in diags]
+    diags = _lint(
+        "метод Тест(Пользователь: Пользователи)\n"
+        "    Сообщить(Пользователь.НетТакогоЧлена)\n"
+        ";\n"
+    )
+    assert len(diags) == 1
+
+
+def test_facet_name_works_as_nominal_type():
+    diags = _lint(
+        "метод Тест(Данные: ДвоичныйОбъект.Ссылка)\n"
+        "    Данные.Загрузить()\n"
+        ";\n"
+    )
+    assert diags == [], [d.message for d in diags]
+    diags = _lint(
+        "метод Тест(Данные: ДвоичныйОбъект.Ссылка)\n"
+        "    Данные.НетТакого()\n"
+        ";\n"
+    )
+    assert len(diags) == 1
