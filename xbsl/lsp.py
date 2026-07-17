@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import re
 import threading
 from pathlib import Path
 from typing import Optional
@@ -43,7 +44,13 @@ from xbsl.lsp_nav import (
     resolve_hover,
     resolve_references,
 )
-from xbsl.rules._syntax import local_var_types, query_aliases, query_ranges, query_row_columns
+from xbsl.rules._syntax import (
+    chain_type_at,
+    local_var_types,
+    query_aliases,
+    query_ranges,
+    query_row_columns,
+)
 
 
 def _word_at(line_text: str, character: int) -> str:
@@ -407,17 +414,35 @@ def _make_server() -> "LanguageServer":
         # (canonical VAR/NEW) give the members of their type after the dot.
         offset = sum(len(lines[k]) + 1 for k in range(params.position.line)) + params.position.character
         try:
+            catalog = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - the dataset may have failed to load, do not break completion
+            catalog = {}
+        # Entity facets (Пользователи.Объект) complete like any other type; method
+        # returns feed the chain-type inference of variables and dotted calls.
+        stdlib_members = {
+            **(catalog.get("type_members") or {}),
+            **(catalog.get("facet_members") or {}),
+        }
+        returns = catalog.get("method_returns") or {}
+        try:
             src = engine.load_text(path.name, doc.source)
             in_query = any(a <= offset < b for a, b in query_ranges(src))
             query_tables = query_aliases(src, offset) if in_query else {}
-            local_vars = local_var_types(src, offset)
+            local_vars = local_var_types(
+                src, offset, returns=returns, static_roots=stdlib_members.keys(),
+            )
             query_rows = query_row_columns(src, offset)
+            # `ЗапросКБД.Выполнить().` - the dot follows a call, the chain type gives
+            # the members (the identifier-before-dot path below cannot see it).
+            expr_type = None
+            if re.search(r"[)\]}]\s*\.\s*[\wА-Яа-яЁё]*$", prefix):
+                expr_type = chain_type_at(
+                    src, offset, var_types=local_vars,
+                    returns=returns, static_roots=stdlib_members.keys(),
+                )
         except Exception:  # noqa: BLE001 - completion must not fail because of parsing
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
-        try:
-            stdlib_members = dataset.load_json("stdlib.json").get("type_members") or {}
-        except Exception:  # noqa: BLE001 - the dataset may have failed to load, do not break completion
-            stdlib_members = {}
+            expr_type = None
         entries = resolve_completions(
             STATE.lookup,
             language_id=language_of(path),
@@ -428,6 +453,7 @@ def _make_server() -> "LanguageServer":
             local_vars=local_vars,
             query_tables=query_tables,
             query_rows=query_rows,
+            expr_type=expr_type,
         )
         if entries is None:
             return None

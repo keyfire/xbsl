@@ -7,7 +7,7 @@ syntactic helpers (types of locals, query aliases and columns) do run the lexer,
 
 import pytest
 
-from xbsl import engine
+from xbsl import dataset, engine
 from xbsl.lsp_nav import (
     IndexLookup,
     _query_field_entries,
@@ -17,7 +17,12 @@ from xbsl.lsp_nav import (
     resolve_hover,
     resolve_references,
 )
-from xbsl.rules._syntax import local_var_types, query_aliases, query_row_columns
+from xbsl.rules._syntax import (
+    chain_type_at,
+    local_var_types,
+    query_aliases,
+    query_row_columns,
+)
 
 INDEX = {
     "meta": {"root": "/project/src", "version": "test"},
@@ -478,3 +483,49 @@ def test_query_fields_include_register_sections():
     )
     got = {e["label"]: e["detail"] for e in entries}
     assert got == {"Настройка": "измерение", "Значение": "ресурс"}
+
+
+@pytest.mark.needs_data
+def test_local_var_type_from_call_chain():
+    # тип из возврата метода: статическая фабрика и цепочка на переменной
+    code = (
+        "метод А(Путь: Строка)\n"
+        "    знч Клиент = КлиентHttp.СБазовымUrl(\"http://адрес\")\n"
+        "    знч Ответ = Клиент.ЗапросGet(Путь).Выполнить()\n"
+        "    знч Хвост = Ответ.\n"
+        ";\n"
+    )
+    src = engine.load_text("Модуль.xbsl", code)
+    catalog = dataset.load_json("stdlib.json")
+    members = {**catalog["type_members"], **catalog["facet_members"]}
+    returns = catalog["method_returns"]
+    lv = local_var_types(
+        src, code.index("Ответ.\n") + len("Ответ."),
+        returns=returns, static_roots=members.keys(),
+    )
+    assert lv.get("Клиент") == "КлиентHttp"
+    assert lv.get("Ответ") == "ОтветHttp"
+
+
+@pytest.mark.needs_data
+def test_chain_type_at_dot_after_call():
+    # точка после вызова: `ЗапросКБД.Выполнить().` - тип цепочки слева от курсора
+    code = (
+        "метод А()\n"
+        "    знч ЗапросКБД = Запрос{ ВЫБРАТЬ Значение ИЗ Настройки }\n"
+        "    знч Строка1 = ЗапросКБД.Выполнить().\n"
+        ";\n"
+    )
+    src = engine.load_text("Модуль.xbsl", code)
+    catalog = dataset.load_json("stdlib.json")
+    members = {**catalog["type_members"], **catalog["facet_members"]}
+    returns = catalog["method_returns"]
+    offset = code.index("Выполнить().\n") + len("Выполнить().")
+    lv = local_var_types(src, offset, returns=returns, static_roots=members.keys())
+    t = chain_type_at(src, offset, var_types=lv, returns=returns, static_roots=members.keys())
+    assert t == "РезультатЗапроса"
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    знч Строка1 = ЗапросКБД.Выполнить().",
+        file_stem="Модуль", stdlib_members=members, expr_type=t,
+    )
+    assert any(e["label"] == "ПервыйИлиНеопределено" for e in entries)

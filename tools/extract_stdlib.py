@@ -156,6 +156,56 @@ def page_members(raw: str) -> tuple[set[str], set[str]]:
     return props, methods
 
 
+# Сигнатура в блоке кода после H3-заголовка метода: `Имя(Параметры): ТипВозврата`.
+_SIG_CODE_RE = re.compile(r"<pre class=\"highlight\"><code>(.*?)</code></pre>", re.S)
+# Корень типа возврата: голова до generic-скобки/альтернативы/nullable; допускает
+# фасетное имя с точкой (Пользователи.Объект).
+_RETURN_HEAD_RE = re.compile(r"^\s*([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*(?:\.[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)?)")
+
+
+def page_method_returns(raw: str) -> dict[str, str]:
+    """Метод страницы -> корень типа возврата (для вывода типа цепочек вызовов).
+
+    Сигнатуры лежат в блоках кода после H3-заголовков секции "Методы"; у перегрузок с
+    разными возвратами метод пропускается (вывести общий тип нельзя). Унаследованные
+    методы сигнатур на странице не имеют и не собираются.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return {}
+    out: dict[str, str] = {}
+    dropped: set[str] = set()
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        head = _plain_text(section[:200])
+        if not head.startswith("Методы"):
+            continue
+        # Куски между H3: первый – заголовок секции, дальше по методу на кусок.
+        parts = _H3_RE.split(section)
+        # _H3_RE captures the heading text: parts = [до, имя1, тело1, имя2, тело2...]
+        for k in range(1, len(parts) - 1, 2):
+            name = _plain_text(parts[k])
+            if not _PROP_NAME_RE.match(name):
+                continue
+            body = parts[k + 1]
+            for m in _SIG_CODE_RE.finditer(body):
+                sig = _plain_text(m.group(1))
+                paren = sig.rfind("):")
+                if paren < 0:
+                    continue
+                ret = _RETURN_HEAD_RE.match(sig[paren + 2:])
+                if not ret:
+                    continue
+                root = ret.group(1)
+                if name in dropped:
+                    continue
+                if name in out and out[name] != root:
+                    del out[name]
+                    dropped.add(name)  # перегрузки с разными возвратами
+                elif name not in dropped:
+                    out[name] = root
+    return out
+
+
 _H1_OPEN_RE = re.compile(r"<h1[^>]*>")
 _H2_RE = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
 
@@ -219,6 +269,7 @@ def extract(
     globals_: set[str] = set()
     managers: dict[str, set[str]] = {}
     facets: dict[str, dict[str, set[str]]] = {}
+    returns: dict[str, dict[str, str]] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -245,12 +296,15 @@ def extract(
             if rest == "index.html" or (rest.count("/") == 1 and not top.endswith("_ru")):
                 globals_ |= package_members(raw)
             if props or methods:
+                rets = page_method_returns(raw)
                 for key in (title if _PROP_NAME_RE.match(title) else "", eng or ""):
                     if not key:
                         continue
                     slot = types.setdefault(key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
+                    if rets:
+                        returns.setdefault(key, {}).update(rets)
                 # Фасеты сущностных типов (Пользователи.Объект, ДвоичныйОбъект.Ссылка):
                 # члены записи и ссылки – отдельным словарём, под обеими формами имени.
                 eng_facet = _english_facet_from_path(n)
@@ -260,6 +314,8 @@ def extract(
                     slot = facets.setdefault(key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
+                    if rets:
+                        returns.setdefault(key, {}).update(rets)
             got = component_props(n, raw)
             if got is not None:
                 comp, props = got
@@ -289,7 +345,7 @@ def extract(
             if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
                 continue  # член-плейсхолдер или латинский шаблон
             members.setdefault(kind, set()).add(segs[1])
-    return names, members, components, types, globals_, managers, facets
+    return names, members, components, types, globals_, managers, facets, returns
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -312,7 +368,7 @@ def main() -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    names, members, components, types, globals_, managers, facets = extract(dist)
+    names, members, components, types, globals_, managers, facets, returns = extract(dist)
     data = {
         "meta": {
             "element_version": version,
@@ -335,6 +391,8 @@ def main() -> int:
         # Фасеты сущностных типов (Пользователи.Объект, ДвоичныйОбъект.Ссылка): члены записи
         # и ссылки, не попадающие на страницу самого типа.
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
+        # Корни типов возвратов методов (сигнатуры со страниц): вывод типа цепочек вызовов.
+        "method_returns": {k: dict(sorted(v.items())) for k, v in sorted(returns.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"
@@ -352,6 +410,8 @@ def main() -> int:
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
           f" с методами {sum(1 for v in types.values() if v['methods'])})")
     print(f"  фасетов сущностных типов: {len(facets)}")
+    print(f"  типов с возвратами методов: {len(returns)}"
+          f" (методов с возвратом: {sum(len(v) for v in returns.values())})")
     return 0
 
 

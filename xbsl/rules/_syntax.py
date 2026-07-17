@@ -553,27 +553,177 @@ def _type_head(toks: list[Token], start: int) -> str | None:
     return "".join(parts).strip(".") or None
 
 
-def _constructed_type(toks: list[Token], start: int) -> str | None:
-    """The type of a `новый Массив<Строка>()` or `Запрос{...}` initializer, or None."""
+def _skip_balanced(toks: list[Token], i: int, open_op: str, close_op: str) -> int:
+    """Index just past the bracket pair opening at i (i must sit on `open_op`)."""
+    depth = 0
+    n = len(toks)
+    while i < n:
+        t = toks[i]
+        if t.kind == "OP":
+            if t.value == open_op:
+                depth += 1
+            elif t.value == close_op:
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+        i += 1
+    return n
+
+
+def chain_type(
+    toks: list[Token],
+    start: int,
+    resolve_root,
+    returns: dict | None,
+    stop_offset: int | None = None,
+) -> str | None:
+    """The type of a call chain `Корень.Метод(...).Метод2(...)` starting at `start`.
+
+    The root is a constructor (`новый Тип`), a query literal (`Запрос{...}` ->
+    ТипизированныйЗапрос) or a name resolved by `resolve_root` (a local variable's type
+    or a stdlib type used statically). Every further link must be a CALL - property types
+    are not in the catalog, an unresolved link ends the inference. Links starting at or
+    past `stop_offset` are not consumed (completion looks at an unfinished chain whose
+    tail is already typed to the right of the cursor).
+    """
     i = _skip_comments(toks, start)
-    if i >= len(toks) or toks[i].kind != "KEYWORD":
+    n = len(toks)
+    if i >= n:
         return None
-    if toks[i].canonical == "QUERY":
-        # A query literal constructs a typed query (docs topics/query-literal):
-        # `знч З = Запрос{...}` -> З.Выполнить() and friends.
-        return "ТипизированныйЗапрос"
-    if toks[i].canonical != "NEW":
+    t = toks[i]
+    current: str | None = None
+    if t.kind == "KEYWORD" and t.canonical == "QUERY":
+        # A query literal constructs a typed query (docs topics/query-literal).
+        current = "ТипизированныйЗапрос"
+        i += 1
+        if i < n and toks[i].kind == "OP" and toks[i].value == "{":
+            i = _skip_balanced(toks, i, "{", "}")
+    elif t.kind == "KEYWORD" and t.canonical == "NEW":
+        j = _skip_comments(toks, i + 1)
+        te = type_expr(toks, j)
+        current = _type_head(toks, j)
+        if te is None or current is None:
+            return None
+        # past the type expression (dots inside generics are not chain links),
+        # then past the constructor parentheses
+        j = te.end
+        i = _skip_balanced(toks, j, "(", ")") if (
+            j < n and toks[j].kind == "OP" and toks[j].value == "("
+        ) else j
+    elif t.kind == "IDENT":
+        current = resolve_root(t.value)
+        if current is None:
+            return None
+        i += 1
+    else:
         return None
-    return _type_head(toks, _skip_comments(toks, i + 1))
+    # the call links: .Имя(...) each
+    while i < n and toks[i].kind == "OP" and toks[i].value == ".":
+        if stop_offset is not None and toks[i].start >= stop_offset:
+            break
+        j = _skip_comments(toks, i + 1)
+        if j >= n or toks[j].kind != "IDENT":
+            break
+        k = _skip_comments(toks, j + 1)
+        if k >= n or toks[k].kind != "OP" or toks[k].value != "(":
+            return None  # a property link - its type is not in the catalog
+        current = (returns or {}).get(current, {}).get(toks[j].value)
+        if current is None:
+            return None
+        i = _skip_balanced(toks, k, "(", ")")
+    return current
 
 
-def local_var_types(source: SourceFile, offset: int) -> dict[str, str]:
+def _constructed_type(
+    toks: list[Token], start: int,
+    resolve_root=None, returns: dict | None = None,
+) -> str | None:
+    """The type of an initializer: `новый Массив<Строка>()`, `Запрос{...}` or a call
+    chain over a known root (`КлиентHttp.СБазовымUrl(...)`), or None."""
+    return chain_type(toks, start, resolve_root or (lambda _name: None), returns)
+
+
+def chain_type_at(
+    source: SourceFile, offset: int,
+    var_types: dict | None = None,
+    returns: dict | None = None,
+    static_roots=None,
+) -> str | None:
+    """The type of the call chain to the LEFT of the dot at `offset` (the cursor sits
+    right after the dot, possibly with a partially typed name): the completion context
+    of `ЗапросКБД.Выполнить().|`. Walks back to the chain root, then forward via
+    `chain_type`, not consuming the links to the right of the cursor."""
+    toks = code_tokens(source)
+    idx = -1
+    for k, t in enumerate(toks):
+        if t.end <= offset:
+            idx = k
+        else:
+            break
+    if idx < 0:
+        return None
+    if toks[idx].kind == "IDENT" and idx > 0:
+        idx -= 1  # a partially typed member name after the dot
+    if not (toks[idx].kind == "OP" and toks[idx].value == "."):
+        return None
+    stop = toks[idx].start
+    j = idx - 1
+    root_i: int | None = None
+    while j >= 0:
+        t = toks[j]
+        if t.kind == "OP" and t.value in (")", "}"):
+            close, open_ = (")", "(") if t.value == ")" else ("}", "{")
+            depth = 0
+            while j >= 0:
+                tk = toks[j]
+                if tk.kind == "OP" and tk.value == close:
+                    depth += 1
+                elif tk.kind == "OP" and tk.value == open_:
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j -= 1
+            j -= 1  # onto the method name / the query keyword / the type head
+            continue
+        if t.kind == "IDENT":
+            if j > 0 and toks[j - 1].kind == "OP" and toks[j - 1].value == ".":
+                j -= 2
+                continue
+            root_i = j - 1 if (
+                j > 0 and toks[j - 1].kind == "KEYWORD" and toks[j - 1].canonical == "NEW"
+            ) else j
+            break
+        if t.kind == "KEYWORD" and t.canonical in ("QUERY", "NEW"):
+            root_i = j
+            break
+        return None
+    if root_i is None:
+        return None
+    vt = var_types or {}
+
+    def resolve_root(name: str) -> str | None:
+        got = vt.get(name)
+        if got is not None:
+            return got
+        if static_roots is not None and name in static_roots:
+            return name
+        return None
+
+    return chain_type(toks, root_i, resolve_root, returns, stop_offset=stop)
+
+
+def local_var_types(
+    source: SourceFile, offset: int,
+    returns: dict | None = None, static_roots=None,
+) -> dict[str, str]:
     """Variable name -> type head for the names visible at `offset`.
 
     Collects the parameters of the enclosing method and the declarations above the offset
-    within it; the type comes either from the annotation (`пер Список: Массив<Строка>`) or
-    from the initializer (`пер Список = новый Массив<Строка>()`). Keywords are bilingual, so
-    the walk goes over tokens (canonical VAR/NEW), not over the raw text.
+    within it; the type comes from the annotation (`пер Список: Массив<Строка>`) or from
+    the initializer - a constructor, a query literal or, when the caller passes the
+    method-return catalog (`returns`) and the set of static type roots (`static_roots`,
+    e.g. the stdlib type names), a call chain like `КлиентHttp.СБазовымUrl(...)`.
+    Keywords are bilingual, so the walk goes over tokens, not over the raw text.
 
     A method is taken to extend from its signature to the next one: without an AST the body
     has no boundary, and for visibility it is enough not to mix the local variables of
@@ -588,6 +738,15 @@ def local_var_types(source: SourceFile, offset: int) -> dict[str, str]:
     start = enclosing.keyword.start if enclosing else 0
 
     out: dict[str, str] = {}
+
+    def resolve_root(name: str) -> str | None:
+        got = out.get(name)
+        if got is not None:
+            return got
+        if static_roots is not None and name in static_roots:
+            return name
+        return None
+
     if enclosing is not None:
         for p in enclosing.params:
             name = _type_head(toks, p.type_start) if p.type_start is not None else None
@@ -599,7 +758,7 @@ def local_var_types(source: SourceFile, offset: int) -> dict[str, str]:
         if d.type_start is not None:
             name = _type_head(toks, d.type_start)
         elif d.value_start is not None:
-            name = _constructed_type(toks, d.value_start)
+            name = _constructed_type(toks, d.value_start, resolve_root, returns)
         else:
             continue
         if not name:

@@ -377,8 +377,15 @@ def resolve_completions(
     local_vars: Optional[dict] = None,
     query_tables: Optional[dict] = None,
     query_rows: Optional[dict] = None,
+    expr_type: Optional[str] = None,
 ) -> Optional[list[dict]]:
     """Completion items [{label, kind, detail}] for the context, or None if it is unknown."""
+    # A dot after a call: `ЗапросКБД.Выполнить().` - the caller inferred the chain type
+    # (expr_type), the identifier-before-dot paths below cannot see through the brackets.
+    if expr_type and re.search(rf"[)\]}}]\s*\.\s*(?:{IDENT})?$", line_prefix):
+        members = (stdlib_members or {}).get(expr_type)
+        if members:
+            return _stdlib_entries(members)
     m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
     if m:
         return [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
