@@ -10,7 +10,16 @@ transport on top of it.
 from __future__ import annotations
 
 import re
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
+
+from xbsl.templates import (
+    CODE_CONTEXTS,
+    OBJECT_FULL_NAME_VAR,
+    QUERY_CONTEXT,
+    Template,
+    expand,
+    offered,
+)
 
 IDENT = r"[A-Za-zА-Яа-яЁё_][A-Za-z0-9А-Яа-яЁё_]*"
 # A character that cannot appear immediately before a recognized identifier chain.
@@ -438,6 +447,50 @@ def _stdlib_entries(members) -> list[dict]:
     return entries
 
 
+def _object_resolver(lookup: IndexLookup):
+    """Feed `${ИмяОбъектаМетаданного(Справочник)}` from the index: the catalogs of this project.
+
+    The kind is the `ВидЭлемента` of the yaml, exactly as the index stores it, so a template
+    names the kind the way the platform does. The full-name variable inserts `Вид.Имя`, which
+    is how a type is written in code.
+    """
+
+    def resolve(variable: str, kind: str) -> list[str]:
+        if not kind:
+            return []
+        names = [
+            n for n in sorted(
+                o.get("name", "") for o in lookup.objects() if o.get("kind") == kind
+            ) if n
+        ]
+        if variable == OBJECT_FULL_NAME_VAR:
+            return [f"{kind}.{n}" for n in names]
+        return names
+
+    return resolve
+
+
+def _template_entries(
+    templates: Optional[Sequence[Template]],
+    lookup: IndexLookup,
+    in_query: bool,
+) -> list[dict]:
+    """Template completions for the cursor: the trigger as the label, the code as a snippet."""
+    if not templates:
+        return []
+    contexts = (QUERY_CONTEXT,) if in_query else CODE_CONTEXTS
+    resolver = _object_resolver(lookup)
+    return [
+        {
+            "label": t.trigger,
+            "kind": "snippet",
+            "detail": t.title,
+            "snippet": expand(t.pattern, resolver),
+        }
+        for t in offered(templates, contexts=contexts)
+    ]
+
+
 def resolve_completions(
     lookup: IndexLookup,
     *,
@@ -452,6 +505,7 @@ def resolve_completions(
     query_rows: Optional[dict] = None,
     expr_type: Optional[str] = None,
     stdlib_names: Optional[Any] = None,
+    templates: Optional[Sequence["Template"]] = None,
 ) -> Optional[list[dict]]:
     """Completion items [{label, kind, detail}] for the context, or None if it is unknown."""
     # A dot after a call: `ЗапросКБД.Выполнить().` - the caller inferred the chain type
@@ -509,13 +563,17 @@ def resolve_completions(
         return _stdlib_entries(members) if members else None
     if language_id == "yaml" and _YAML_TYPE_RE.search(line_prefix):
         return _yaml_type_entries(lookup, stdlib_names or stdlib_members) or None
-    # A bare name (no dot before it): the top-level scope - visible variables, the
-    # module's own methods, project objects and module types, stdlib types and globals.
+    # A bare name (no dot before it): the top-level scope - code templates, visible variables,
+    # the module's own methods, project objects and module types, stdlib types and globals.
     # The editor filters by the typed prefix itself.
     if language_id == "xbsl" and re.search(
         rf"(?:^|[^.\wА-Яа-яЁё])(?:{IDENT})?$", line_prefix,
     ):
-        entries: list[dict] = []
+        # Templates come first and outrank the rest (lsp.py sorts by kind): a construct the
+        # author is typing out is a likelier target than a name that merely starts the same.
+        # They are outside the dedup below on purpose - several templates legitimately share
+        # a trigger (`мет` reaches every flavour of a method), told apart by their title.
+        entries: list[dict] = _template_entries(templates, lookup, in_query)
         seen: set = set()
 
         def add(label: str, kind: str, detail: str, snippet: Optional[str] = None) -> None:

@@ -20,6 +20,13 @@ the new entry points, and the legacy env vars / entry-point groups are read afte
   by the CLI `--format json`, the MCP server, and editors. `xbsl --stdin --filename NAME` checks
   one buffer (per-file rules only) – this is what the VS Code extension in `editors/vscode/` drives.
 - Lexer `xbsl/lexer.py` – follows the platform grammar; rules live in `xbsl/rules/`.
+- Code templates `xbsl/templates.py` (the store and the expansion into editor snippets) plus
+  `xbsl/templates_builtin.py` (the shipped set). The format is the export file of 1C:EDT
+  templates, so a dump made there imports as is. Surfaces: LSP completion (the templates rank
+  ahead of the rest - `lsp.py` sorts by kind), the `xbsl templates` CLI subcommands, and the
+  VS Code panel, which is a client of those subcommands. A new builtin template must parse:
+  `tests/test_templates.py` runs each one through the parser, which is what keeps BSL habits
+  (`Тогда`, `КонецЕсли`, `умолчание` as the default branch) out of the set.
 - Metadata scaffolding `xbsl/scaffold.py`: the single source of yaml/xbsl templates and precise
   text edits (new objects, fields, routes, generated forms, subsystems, projects). Three surfaces
   expose it – CLI subcommands (`xbsl new-object ...`, JSON output, `--dry-run` computes without

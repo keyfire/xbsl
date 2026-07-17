@@ -6,6 +6,21 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.22.0
+
+- Code templates - the mechanism of 1C:EDT, with its export file. Type an abbreviation,
+  press Ctrl+Space and get the whole construct with edit points; templates are offered
+  ahead of the other completions. `${ИмяОбъектаМетаданного(Справочник)}` expands into the
+  catalogs of your own project, from the index. 51 builtin templates, each one parsed by the
+  engine's parser, so none of them inserts code that does not compile.
+- The "XBSL: code templates" panel, laid out like the EDT dialog: the list with the call
+  context, the description and the pattern, and buttons to add, edit, delete, import, export
+  and restore the defaults. Saving re-reads the set in the running server - no restart.
+- Your own templates live in `.xbsl-templates.json` (the `xbsl.templates.file` setting) and
+  extend the builtin set; the file format is the one 1C:EDT exports.
+- Templates need the LSP mode (`xbsl.lsp.enabled`, on by default); the CLI-index mode does
+  not offer them.
+
 ## 0.21.1
 
 - The properties view follows the tree selection (mouse, arrow keys, reveal from the

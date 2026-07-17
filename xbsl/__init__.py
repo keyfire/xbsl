@@ -1,3 +1,3 @@
 """xbsl – the XBSL (1C:Element) toolkit: linter, LSP, docs, project index and scaffolding."""
 
-__version__ = "0.21.1"
+__version__ = "0.22.0"

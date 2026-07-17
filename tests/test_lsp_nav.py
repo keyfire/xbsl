@@ -8,6 +8,7 @@ syntactic helpers (types of locals, query aliases and columns) do run the lexer,
 import pytest
 
 from xbsl import dataset, engine
+from xbsl import templates as tpl
 from xbsl.lsp_nav import (
     IndexLookup,
     _query_field_entries,
@@ -646,3 +647,67 @@ def test_completion_bare_name_not_after_dot():
         file_stem="ГлавнаяФорма", stdlib_members={"Массив": {}}, stdlib_globals=["Сообщить"],
     )
     assert entries is None
+
+
+# ------------------------------------------------------------------------- шаблоны кода
+
+def _tmpl(name, pattern, contexts=(tpl.STATEMENT_CONTEXT,)):
+    return tpl.Template(name=name, pattern=pattern, contexts=contexts)
+
+
+def ct(prefix, templates, in_query=False):
+    return resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix=prefix, file_stem="ГлавнаяФорма",
+        in_query=in_query, templates=templates,
+    ) or []
+
+
+def test_completion_offers_templates_on_a_bare_name():
+    entries = ct("    ", [_tmpl("если - Если", 'если ${Редактировать("Условие")}')])
+    first = entries[0]
+    assert (first["label"], first["kind"], first["detail"]) == ("если", "snippet", "Если")
+    assert first["snippet"] == "если ${1:Условие}"
+
+
+def test_templates_come_before_the_other_completions():
+    # Ctrl+Space показывает шаблоны до имён - порядок задаёт сервер, ранг довершает sortText.
+    entries = ct("    ", [_tmpl("тов[ар] - Товар шаблоном", "товар")])
+    kinds = [e["kind"] for e in entries]
+    assert kinds[0] == "snippet"
+    assert "snippet" not in kinds[1:]
+
+
+def test_template_object_variable_is_filled_from_the_project_index():
+    entries = ct("    ", [_tmpl("обх - Обход", "для Э из Справочник.${ИмяОбъектаМетаданного(Справочник)}")])
+    assert entries[0]["snippet"] == "для Э из Справочник.${1|Товар|}"
+
+
+def test_template_full_object_variable_inserts_kind_and_name():
+    entries = ct("    ", [_tmpl("пер - Перечисление", '${ПолноеИмяОбъектаМетаданного("Перечисление")}')])
+    assert entries[0]["snippet"] == "${1|Перечисление.ВидТовара|}"
+
+
+def test_template_object_variable_of_an_absent_kind_prompts_instead():
+    entries = ct("    ", [_tmpl("док - Документ", "${ИмяОбъектаМетаданного(Документ)}")])
+    assert entries[0]["snippet"] == "${1:Документ}"
+
+
+def test_query_templates_are_offered_only_inside_a_query():
+    items = [
+        _tmpl("если - Если", "если", contexts=(tpl.STATEMENT_CONTEXT,)),
+        _tmpl("выбрать - ВЫБРАТЬ", "ВЫБРАТЬ", contexts=(tpl.QUERY_CONTEXT,)),
+    ]
+    assert [e["label"] for e in ct("    ", items) if e["kind"] == "snippet"] == ["если"]
+    assert [e["label"] for e in ct("    ", items, in_query=True) if e["kind"] == "snippet"] == ["выбрать"]
+
+
+def test_templates_do_not_leak_after_a_dot():
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="знч Х = Товар.", file_stem="ГлавнаяФорма",
+        templates=[_tmpl("если - Если", "если")],
+    )
+    assert "snippet" not in {e["kind"] for e in entries}
+
+
+def test_completion_without_templates_is_unchanged():
+    assert [e["kind"] for e in ct("    ", None) if e["kind"] == "snippet"] == []

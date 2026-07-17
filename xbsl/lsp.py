@@ -36,8 +36,9 @@ except ImportError:  # pragma: no cover - the extra is not installed
     lsp = None
     LanguageServer = None
 
-from xbsl import __version__, baseline, dataset, docs, engine, i18n, indexer, scaffold
+from xbsl import __version__, baseline, dataset, docs, engine, i18n, indexer, scaffold, templates
 from xbsl.diagnostics import Diagnostic, Severity
+from xbsl.templates import Template, TemplateError
 from xbsl.lsp_nav import (
     IndexLookup,
     resolve_completions,
@@ -97,7 +98,13 @@ _COMPLETION_KINDS = {
     "enumMember": 20,
     "method": 2,  # Method
     "component": 6,  # Variable
+    "snippet": 15,  # Snippet - a code template
 }
+
+#: Templates are offered ahead of everything else, the way EDT lists them first: the editor
+#: sorts by sortText, and without one it would rank a template against names alphabetically.
+_SORT_TEMPLATE = "0"
+_SORT_REST = "1"
 
 
 class _State:
@@ -110,6 +117,12 @@ class _State:
         self.ignore: Optional[set[str]] = None
         self.enable: Optional[set[str]] = None
         self.lookup: Optional[IndexLookup] = None
+        # The builtin templates plus the user's file, merged once at startup. The file is
+        # re-read on the xbsl/templatesReload request, so the panel's edits show up without
+        # a restart of the server.
+        self.templates_arg: Optional[str] = None
+        self.templates_path: Optional[Path] = None
+        self.templates: list[Template] = []
         self.dirty: set[str] = set()  # keys changed since the last save
         # key -> the uri diagnostics were published at (see uri_key)
         self.published: dict[str, str] = {}
@@ -351,7 +364,26 @@ def _make_server() -> "LanguageServer":
             # the baseline lives at the repository root, as CI sees it.
             b = Path(STATE.baseline_arg)
             STATE.baseline = b if b.is_absolute() else (folder / b if folder else b)
+        if STATE.templates_arg:
+            p = Path(STATE.templates_arg)
+            STATE.templates_path = p if p.is_absolute() else (folder / p if folder else p)
+        load_templates()
         schedule_project_lint()
+
+    def load_templates() -> None:
+        """The builtin set plus the user's file, if it has one.
+
+        A broken user file must not cost the author the builtin templates - it is reported
+        and skipped, exactly as a broken baseline is.
+        """
+        STATE.templates = templates.load_builtin()
+        path = STATE.templates_path
+        if path is None or not path.exists():
+            return
+        try:
+            STATE.templates = templates.merge(STATE.templates, templates.load_file(path))
+        except TemplateError as e:
+            server.show_message_log(f"xbsl-lsp: шаблоны не загружены: {e}")
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_OPEN)
     def _did_open(params: lsp.DidOpenTextDocumentParams) -> None:
@@ -438,8 +470,9 @@ def _make_server() -> "LanguageServer":
         lsp.CompletionOptions(trigger_characters=[".", ":"]),
     )
     def _completion(params: lsp.CompletionParams) -> Optional[lsp.CompletionList]:
-        if STATE.lookup is None:
-            return None
+        # Templates need no index - they must work in a file opened outside a project too,
+        # so an absent index degrades to an empty one rather than silencing completion.
+        lookup = STATE.lookup if STATE.lookup is not None else IndexLookup({})
         uri = params.text_document.uri
         path = uri_to_path(uri)
         if path is None:
@@ -484,7 +517,7 @@ def _make_server() -> "LanguageServer":
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
             expr_type = None
         entries = resolve_completions(
-            STATE.lookup,
+            lookup,
             language_id=language_of(path),
             line_prefix=prefix,
             file_stem=path.stem,
@@ -498,6 +531,7 @@ def _make_server() -> "LanguageServer":
             query_tables=query_tables,
             query_rows=query_rows,
             expr_type=expr_type,
+            templates=STATE.templates,
         )
         if entries is None:
             return None
@@ -508,6 +542,7 @@ def _make_server() -> "LanguageServer":
                 detail=e.get("detail"),
                 insert_text=e.get("snippet"),
                 insert_text_format=lsp.InsertTextFormat.Snippet if e.get("snippet") else None,
+                sort_text=(_SORT_TEMPLATE if e["kind"] == "snippet" else _SORT_REST) + e["label"],
             )
             for e in entries
         ]
@@ -625,6 +660,13 @@ def _make_server() -> "LanguageServer":
         except Exception:  # noqa: BLE001 - parsing must not break the request
             var_type = None
         return (var_type or word), query
+
+    @server.feature("xbsl/templatesReload")
+    def _templates_reload(_params: object = None) -> dict:
+        # The panel wrote the user's file - re-read it, so the next Ctrl+Space already offers
+        # the edited template (a restart of the server would lose the built index with it).
+        load_templates()
+        return {"ok": True, "count": len(STATE.templates)}
 
     @server.feature("xbsl/docsAvailable")
     def _docs_available(_params: object = None) -> dict:
@@ -792,6 +834,11 @@ def main() -> None:
         help="файл базлайна (абсолютный или относительно папки воркспейса) – исключённые "
              "находки гасятся; отсутствующий файл не ошибка, он появится с первым исключением",
     )
+    parser.add_argument(
+        "--templates",
+        help="файл шаблонов кода (абсолютный или относительно папки воркспейса) – "
+             "дополняет встроенный набор, одноимённые шаблоны замещает",
+    )
     parser.add_argument("--data-dir", help="корень данных Элемента (папка с index.json)")
     parser.add_argument("--lang", choices=i18n.LANGS, help="язык текста замечаний")
     args = parser.parse_args()
@@ -800,6 +847,7 @@ def main() -> None:
     i18n.set_lang(args.lang)  # None keeps the env/locale precedence
     STATE.project_root_arg = args.project_root
     STATE.baseline_arg = args.baseline
+    STATE.templates_arg = args.templates
     STATE.select = _rule_set(args.select)
     STATE.ignore = _rule_set(args.ignore)
     STATE.enable = _rule_set(args.enable)

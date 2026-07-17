@@ -12,6 +12,7 @@ import { registerMetadataTree } from "./metadataTree";
 import { registerMetadataProps } from "./metadataProps";
 import { registerDocs } from "./docsTree";
 import { registerStatusBar } from "./statusBar";
+import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { mergeOffRules, registerRuleConfig, ruleOverride } from "./ruleConfig";
@@ -414,6 +415,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Документация Элемента: дерево справки, поиск и показ страницы по символу под курсором.
   // Данные тянет от LSP-сервера линтера; в CLI-режиме (сервер не поднят) команды сообщают об этом.
   registerDocs(context);
+  // Шаблоны кода: панель управления работает в обоих режимах (данные и запись – через движок),
+  // а предложение шаблонов по Ctrl+Space даёт LSP-сервер.
+  registerTemplates(context);
   // Версии расширения/линтера и режим дополнения в статус-баре (до LSP-ветки – виден в обоих режимах).
   const statusBar = registerStatusBar(context, (resource) => readSettings(resource).linter);
 
@@ -427,6 +431,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (lspChosen ?? lspSetting?.defaultValue ?? true) {
     if (await activateLsp(context, output, lspChosen !== undefined)) {
       statusBar.setLspMode(true);
+      // Правку шаблонов сервер подхватывает по запросу - без перезапуска и потери индекса.
+      setTemplatesReload(async () => {
+        await lspRequest("xbsl/templatesReload", {});
+      });
       return;
     }
   }

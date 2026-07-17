@@ -335,6 +335,48 @@ and quick-fix code actions - without paying the interpreter start-up cost per ca
 `--project-root` (the sources root relative to the workspace folder), `--select`/`--ignore`/
 `--enable`, `--data-dir`. Any LSP-capable editor (VS Code, Neovim, JetBrains) can spawn it.
 
+## Code templates
+
+A template is a short trigger plus a construct: type `есл`, press Ctrl+Space, pick `если` and get
+the whole statement with edit points to tab through. The mechanism mirrors the one in 1C:EDT
+(`Параметры - Шаблоны`), the file format included.
+
+Templates are offered **ahead of the other completions** - the construct you are typing out ranks
+above a name that merely starts the same. They need no Element data, only the LSP server
+(`xbsl.lsp.enabled`, on by default): the CLI-index mode of the extension does not offer them.
+
+The builtin set is 51 templates (`xbsl/templates_builtin.py`): the control statements, the
+declarations (methods with their annotations, structures, enumerations, exception types), queries
+and the applied idioms - walking a catalog, register movements, an HTTP service handler,
+per-object access permissions, object events, form handlers. Every pattern is parsed by the same
+parser the linter runs (`tests/test_templates.py`), so a template cannot insert code that does
+not compile.
+
+A pattern holds edit points and choices:
+
+| Variable | Expands to |
+|---|---|
+| `${Редактировать("подсказка")}` | an edit point; the prompt is the pre-selected text |
+| `${Выбрать("а", "б")}` | a dropdown of fixed variants |
+| `${ИмяОбъектаМетаданного(Справочник)}` | a dropdown of **this project's** catalogs, from the index |
+| `${ПолноеИмяОбъектаМетаданного("Перечисление")}` | the same, inserted as `Вид.Имя` |
+
+Your own templates live in `.xbsl-templates.json` at the workspace root (`--file` / the
+`xbsl.templates.file` setting): the file extends the builtin set, and a template with the same
+name replaces the builtin one. Only what differs from the builtin set is stored, so the next
+release still reaches you.
+
+```sh
+xbsl templates list                        # the whole set: builtin plus your own (* marks yours)
+xbsl templates export --output my.json     # a dump (to carry your templates to another machine)
+xbsl templates import dump.json            # merge a dump into your file
+```
+
+In VS Code the same thing is a panel - **XBSL: code templates** - laid out like the EDT dialog:
+the list with the call context, the description and the pattern, and buttons to add, edit, delete,
+import, export and restore the defaults. Saving re-reads the set in the running server, so the
+next Ctrl+Space already offers the edited template.
+
 ## Documentation (searching the Element reference)
 
 `tools/extract_docs.py` extracts the Element reference from a distribution (the server-with-IDE

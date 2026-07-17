@@ -189,6 +189,119 @@ _META_COMMANDS = (
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
 
+#: The user's own templates, next to the baseline at the root of the workspace.
+DEFAULT_TEMPLATES_FILE = ".xbsl-templates.json"
+
+
+def _templates_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="xbsl templates",
+        description="шаблоны кода: встроенный набор и файл пользователя (формат выгрузки EDT)",
+    )
+    sub = parser.add_subparsers(dest="action", required=True)
+
+    p = sub.add_parser("list", help="перечислить шаблоны (встроенные и пользовательские)")
+    p.add_argument("--format", choices=("text", "json"), default="text")
+
+    p = sub.add_parser("export", help="выгрузить шаблоны в файл формата EDT")
+    p.add_argument("--output", required=True, help="куда писать выгрузку")
+    p.add_argument("--custom-only", action="store_true",
+                   help="только шаблоны пользователя, без встроенных")
+
+    p = sub.add_parser("import", help="влить выгрузку в файл шаблонов пользователя")
+    p.add_argument("source", help="выгрузка (наша или из 1С:EDT)")
+
+    sub.add_parser("save", help="заменить файл шаблонов пользователя (конверт JSON из stdin)")
+
+    # Every subcommand takes --file: on the parent, argparse would demand it BEFORE the
+    # subcommand ("templates --file X import Y") - that reads backwards and is easy to forget.
+    for sp in sub.choices.values():
+        sp.add_argument(
+            "--file", default=DEFAULT_TEMPLATES_FILE,
+            help=f"файл шаблонов пользователя (по умолчанию {DEFAULT_TEMPLATES_FILE}); "
+                 "дополняет встроенный набор, одноимённые шаблоны замещает",
+        )
+    return parser
+
+
+def _template_row(t, builtin_names: set[str]) -> dict:
+    from xbsl import templates as tpl
+
+    return {
+        "name": t.name,
+        "trigger": t.trigger,
+        "prefix": t.prefix,
+        "title": t.title,
+        "description": t.description,
+        "category": t.category,
+        "contexts": list(t.contexts),
+        "environments": list(t.environments),
+        "pattern": t.pattern,
+        "preview": tpl.preview(t.pattern),
+        "isAutoinsertable": t.autoinsertable,
+        "builtin": t.name in builtin_names,
+    }
+
+
+def _templates_main(argv: list[str]) -> int:
+    from xbsl import templates as tpl
+
+    args = _templates_parser().parse_args(argv)
+    path = Path(args.file)
+    try:
+        builtin = tpl.load_builtin()
+        custom = tpl.load_file(path) if path.exists() else []
+        merged = tpl.merge(builtin, custom)
+        builtin_names = {t.name for t in builtin} - {t.name for t in custom}
+
+        if args.action == "list":
+            rows = [_template_row(t, builtin_names) for t in merged]
+            if args.format == "json":
+                print(json.dumps({"templates": rows, "file": str(path)}, ensure_ascii=False))
+                return 0
+            for row in rows:
+                mark = " " if row["builtin"] else "*"
+                print(f"{mark} {row['trigger']:<20} {row['title']:<40} {row['category']}")
+            print(f"\nВсего: {len(rows)} (пользовательских: "
+                  f"{sum(0 if r['builtin'] else 1 for r in rows)}); файл: {path}")
+            return 0
+
+        if args.action == "export":
+            chosen = custom if args.custom_only else merged
+            Path(args.output).write_text(tpl.dumps(chosen), encoding="utf-8")
+            print(json.dumps({"exported": len(chosen), "output": args.output}, ensure_ascii=False))
+            return 0
+
+        if args.action == "import":
+            incoming = tpl.load_file(Path(args.source))
+            # Only what differs from the builtin set is stored: an import of our own export
+            # must not freeze a copy of every builtin template into the user's file, or the
+            # next release would not reach them.
+            builtin_by_name = {t.name: t for t in builtin}
+            fresh = [t for t in incoming if builtin_by_name.get(t.name) != t]
+            saved = tpl.merge(custom, fresh)
+            path.write_text(tpl.dumps(saved), encoding="utf-8")
+            print(json.dumps(
+                {"imported": len(fresh), "skipped": len(incoming) - len(fresh),
+                 "total": len(saved), "file": str(path)},
+                ensure_ascii=False,
+            ))
+            return 0
+
+        # save - the panel sends the whole set it edited; we validate before writing.
+        incoming = tpl.loads(sys.stdin.read(), path="<stdin>")
+        builtin_by_name = {t.name: t for t in builtin}
+        fresh = [t for t in incoming if builtin_by_name.get(t.name) != t]
+        if fresh:
+            path.write_text(tpl.dumps(fresh), encoding="utf-8")
+        elif path.exists():
+            path.unlink()  # nothing but the builtin set left - the file has no reason to exist
+        print(json.dumps({"saved": len(fresh), "file": str(path)}, ensure_ascii=False))
+        return 0
+    except (tpl.TemplateError, OSError) as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        return 2
+
 
 def _scaffold_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -445,6 +558,8 @@ def main(argv: list[str] | None = None) -> int:
             from xbsl.web import main as server_main
         server_main()
         return 0
+    if argv[:1] == ["templates"]:
+        return _templates_main(argv[1:])
     if argv and argv[0] in _META_COMMANDS:
         return _scaffold_main(argv)
     if argv[:1] == ["lint"]:

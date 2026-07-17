@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.21.1",
+  "version": "0.22.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -311,6 +311,22 @@
         "title": "%cmd.previewForm%",
         "category": "XBSL",
         "icon": "$(open-preview)"
+      },
+      {
+        "command": "xbsl.templates.manage",
+        "title": "%cmd.templates.manage%",
+        "category": "XBSL",
+        "icon": "$(symbol-snippet)"
+      },
+      {
+        "command": "xbsl.templates.import",
+        "title": "%cmd.templates.import%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.templates.export",
+        "title": "%cmd.templates.export%",
+        "category": "XBSL"
       },
       {
         "command": "xbsl.docs.search",
@@ -760,6 +776,12 @@
             "scope": "resource",
             "description": "%config.baseline%"
           },
+          "xbsl.templates.file": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.templates.file%"
+          },
           "xbsl.lsp.enabled": {
             "type": "boolean",
             "default": true,
@@ -1089,7 +1111,7 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "check": "tsc --noEmit",
-    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js",
+    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js",
     "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
     "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
     "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"
