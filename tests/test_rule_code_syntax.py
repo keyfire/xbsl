@@ -28,7 +28,7 @@ def test_param_without_type_and_default_is_error():
 
 
 def test_param_without_type_but_with_default_is_allowed():
-    # Тип выводится из значения по умолчанию – так пишет рабочий код (эталон БизКуб).
+    # Тип выводится из значения по умолчанию – так пишет рабочий код.
     code = "метод Тест(Имя: Строка, ЭтоЛК = Истина, Флаг=Ложь)\n    возврат\n;\n"
     assert _diags(code, "code/param-type-required") == []
 

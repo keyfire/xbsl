@@ -91,11 +91,14 @@ does not support in native classes (class-level mutable/collection attribute def
 to the module level). The modules must stay runnable as plain Python - the native build
 is an optional accelerator, never a requirement.
 
-Code comments and docstrings are written in English (the owner's decision of 2026-07-17;
-the whole xbsl/ tree was brought to this canon). Russian remains in: the bilingual i18n
-MESSAGES, argparse help texts, user-facing string literals (ScaffoldError, notes),
-generated-code templates, quotes of the platform documentation inside comments, and XBSL
-citations in backticks. Tests may keep Russian docstrings.
+Code comments, docstrings and identifiers (variables, helpers, test names) are written in
+English across the whole repository - the engine, the tests and the VS Code extension alike
+(the owner's decision of 2026-07-17; this is an international project). Russian remains only
+in: the bilingual i18n MESSAGES, argparse help texts, user-facing string literals
+(ScaffoldError, notes), generated-code templates, quotes of the platform documentation inside
+comments, XBSL citations in backticks, and XBSL/yaml fixture data - the language itself is
+Russian-based. Existing Russian comments are converted opportunistically, when the line is
+touched anyway; new code must not add more.
 
 Never leave mypyc build artifacts (`xbsl/*.pyd`, the top-level `*__mypyc.pyd`) in this
 editable checkout: the shared mypyc runtime lands in the repo ROOT, outside the package,
