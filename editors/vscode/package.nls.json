@@ -87,5 +87,6 @@
   "config.groups.form": "Forms: a yaml Обработчик: must point to an existing method. Default: warning.",
   "config.groups.query": "Query DSL checks (the Query{...} blocks): tables of FROM/JOIN against the project objects.",
   "config.groups.naming": "Names of project elements per the 1C:Element standard: number by kind (catalogs plural, enumerations singular), the letter ё and underscores, abbreviations, the kind inside a name, an environment suffix on common modules, the presentation. Defaults: 12 rules at warning.",
-  "config.groups.project": "Project properties per the 1C:Element standard: the vendor and the name as identifiers starting with a capital letter, a filled-in presentation and vendor presentation, and a three-number version A.B.C. Defaults: 3 rules at warning."
+  "config.groups.project": "Project properties per the 1C:Element standard: the vendor and the name as identifiers starting with a capital letter, a filled-in presentation and vendor presentation, and a three-number version A.B.C. Defaults: 3 rules at warning.",
+  "view.props": "Properties"
 }

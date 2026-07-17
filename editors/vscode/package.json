@@ -77,6 +77,11 @@
           "name": "%view.metadata%"
         },
         {
+          "id": "xbslMetaProps",
+          "type": "webview",
+          "name": "%view.props%"
+        },
+        {
           "id": "xbslDocs",
           "name": "%view.docs%"
         }

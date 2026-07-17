@@ -1,6 +1,7 @@
-// Панель свойств объекта/поля метаданных 1С:Элемент – отдельная webview-вкладка справа, как
-// панель свойств в предпросмотре формы. Описание строк даёт describeMetaNode (metadataCore),
-// правки применяются точечно через propertyEdit (formPreviewCore) – документ не переформатируется,
+// Панель свойств объекта/поля метаданных 1С:Элемент – webview-view в сайдбаре расширения,
+// под деревом метаданных и документацией (как палитра свойств в конфигураторе/EDT): код не
+// затеняется вкладками. Описание строк даёт describeMetaNode (metadataCore), правки
+// применяются точечно через propertyEdit (formPreviewCore) – документ не переформатируется,
 // undo работает. Ид и ВидЭлемента показаны только для чтения; коллекции правятся через дерево.
 
 import * as vscode from "vscode";
@@ -9,7 +10,7 @@ import { describeMetaNode, describeStandardAttr, findAttrOffset, insertItemEdit,
 
 const VIEW_TYPE = "xbslMetaProps";
 
-let panel: vscode.WebviewPanel | undefined;
+let view: vscode.WebviewView | undefined;
 // offset – смещение узла в yaml; std – стандартный реквизит (может быть синтетическим – тогда offset
 // игнорируется, а правка материализует запись в Реквизиты).
 let target: { uri: vscode.Uri; offset: number; std?: { kind: string; name: string } } | undefined;
@@ -204,7 +205,7 @@ async function targetText(): Promise<string | undefined> {
 }
 
 async function render(): Promise<void> {
-  if (!panel) {
+  if (!view) {
     return;
   }
   const text = await targetText();
@@ -220,8 +221,9 @@ async function render(): Promise<void> {
       }
     }
   }
-  panel.title = lastDesc ? vscode.l10n.t("Properties") + ": " + lastDesc.title : vscode.l10n.t("Properties");
-  void panel.webview.postMessage({ type: "props", desc: lastDesc });
+  // У view заголовок секции задан манифестом; выбранный узел показываем описанием.
+  view.description = lastDesc ? lastDesc.title : undefined;
+  void view.webview.postMessage({ type: "props", desc: lastDesc });
 }
 
 async function applyProp(key: string, value: string | null): Promise<void> {
@@ -285,43 +287,48 @@ async function revealTarget(): Promise<void> {
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
-function ensurePanel(context: vscode.ExtensionContext): void {
-  if (panel) {
-    // Активируем в СВОЕЙ колонке (не двигаем на Beside) – при перекликивании в дереве панель
-    // просто выходит на передний план там, где уже открыта.
-    panel.reveal(panel.viewColumn ?? vscode.ViewColumn.Beside, true);
+class MetaPropsViewProvider implements vscode.WebviewViewProvider {
+  constructor(private readonly context: vscode.ExtensionContext) {}
+
+  resolveWebviewView(v: vscode.WebviewView): void {
+    view = v;
+    v.webview.options = { enableScripts: true };
+    v.webview.html = shell(nonce());
+    v.onDidDispose(
+      () => {
+        view = undefined;
+      },
+      undefined,
+      this.context.subscriptions
+    );
+    v.webview.onDidReceiveMessage(
+      (m) => {
+        if (!m) {
+          return;
+        }
+        if (m.type === "setProp" && typeof m.key === "string") {
+          void applyProp(m.key, typeof m.value === "string" ? m.value : null);
+        } else if (m.type === "reveal") {
+          void revealTarget();
+        } else if (m.type === "ready") {
+          void view?.webview.postMessage({ type: "props", desc: lastDesc });
+        }
+      },
+      undefined,
+      this.context.subscriptions
+    );
+  }
+}
+
+async function ensureView(): Promise<void> {
+  if (view) {
+    // Разворачиваем секцию в сайдбаре, не забирая фокус у дерева.
+    view.show(true);
     return;
   }
-  panel = vscode.window.createWebviewPanel(
-    VIEW_TYPE,
-    vscode.l10n.t("Properties"),
-    { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-    { enableScripts: true, retainContextWhenHidden: true }
-  );
-  panel.webview.html = shell(nonce());
-  panel.onDidDispose(
-    () => {
-      panel = undefined;
-    },
-    undefined,
-    context.subscriptions
-  );
-  panel.webview.onDidReceiveMessage(
-    (m) => {
-      if (!m) {
-        return;
-      }
-      if (m.type === "setProp" && typeof m.key === "string") {
-        void applyProp(m.key, typeof m.value === "string" ? m.value : null);
-      } else if (m.type === "reveal") {
-        void revealTarget();
-      } else if (m.type === "ready") {
-        void panel?.webview.postMessage({ type: "props", desc: lastDesc });
-      }
-    },
-    undefined,
-    context.subscriptions
-  );
+  // View ещё не создан – фокусировка секции заставит VS Code вызвать провайдера;
+  // содержимое приедет по сообщению "ready" из webview.
+  await vscode.commands.executeCommand(`${VIEW_TYPE}.focus`);
 }
 
 // Открыть панель свойств для узла дерева (yamlPath + offset). typeCandidates (из провайдера
@@ -332,6 +339,9 @@ export function registerMetadataProps(
 ): void {
   typeCandidatesFn = typeCandidates;
   context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(VIEW_TYPE, new MetaPropsViewProvider(context), {
+      webviewOptions: { retainContextWhenHidden: true },
+    }),
     vscode.commands.registerCommand(
       "xbsl.metadata.props",
       async (node?: { yamlPath?: string; offset?: number; stdKind?: string; stdName?: string }) => {
@@ -345,7 +355,7 @@ export function registerMetadataProps(
         } else {
           return;
         }
-        ensurePanel(context);
+        await ensureView();
         await render();
       }
     )
