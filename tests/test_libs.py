@@ -2,6 +2,8 @@
 """Типы подключённых библиотек: разбор Проект.yaml, поиск архива и чтение глобальных имён."""
 import zipfile
 
+import pytest
+
 from xbsl import engine, libs
 from xbsl.cli import discover
 
@@ -93,6 +95,7 @@ def _проект(tmp_path):
     return корень
 
 
+@pytest.mark.needs_data
 def test_library_type_known_when_archive_present(tmp_path):
     _архив(tmp_path / "acme-ТаймерЛиб-9.0.2.xlib", ЭЛЕМЕНТЫ)
     корень = _проект(tmp_path)
@@ -100,6 +103,7 @@ def test_library_type_known_when_archive_present(tmp_path):
     assert not [x for x in d if "ОписаниеАдресата" in x.message]
 
 
+@pytest.mark.needs_data
 def test_library_type_unknown_without_archive(tmp_path):
     # архива рядом нет – судить о типах библиотеки не по чему, поведение прежнее
     корень = _проект(tmp_path)
@@ -107,6 +111,7 @@ def test_library_type_unknown_without_archive(tmp_path):
     assert [x for x in d if "ОписаниеАдресата" in x.message]
 
 
+@pytest.mark.needs_data
 def test_library_type_known_in_yaml(tmp_path):
     _архив(tmp_path / "acme-ТаймерЛиб-9.0.2.xlib", ЭЛЕМЕНТЫ)
     корень = _проект(tmp_path)
