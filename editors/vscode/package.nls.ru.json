@@ -1,5 +1,6 @@
 {
   "cmd.lintProject": "XBSL: проверить весь проект",
+  "cmd.project.new": "XBSL: новый проект 1С:Элемент",
   "cmd.forms.search": "XBSL: структурный поиск по формам",
   "cmd.restartLinter": "XBSL: перезапустить линтер",
   "cmd.choosePalette": "XBSL: палитра кода",

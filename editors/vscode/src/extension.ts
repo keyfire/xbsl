@@ -12,6 +12,7 @@ import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from ".
 import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClient";
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
+import { registerProjectWizard } from "./projectWizard";
 import { registerFormProps } from "./formProps";
 import { registerFormSearch } from "./formSearch";
 import { registerDocs } from "./docsTree";
@@ -414,6 +415,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
   registerDeploy(context, projectRootFor);
   registerFormPreview(context);
+  // Getting-started wizard: scaffold a new 1C:Element project through the engine (native prompts,
+  // no webview). Available in both modes, so it is registered before the LSP early return.
+  registerProjectWizard(context);
   const metadataTree = registerMetadataTree(context, projectRootFor);
   // The unified "Properties" panel (docs/DESIGNER.md, stage 3): follows the active editor -
   // form yamls fill it with the component under the cursor (through the LSP server; the CLI
