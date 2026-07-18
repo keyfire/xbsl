@@ -116,5 +116,7 @@
   "cmd.formPalette.insert": "Insert into the form",
   "cmd.formPalette.addFavorite": "Add to favorites",
   "cmd.formPalette.removeFavorite": "Remove from favorites",
-  "cmd.formPalette.openDocs": "Open documentation"
+  "cmd.formPalette.openDocs": "Open documentation",
+  "view.properties": "Component properties",
+  "cmd.properties.showForNode": "Component properties"
 }

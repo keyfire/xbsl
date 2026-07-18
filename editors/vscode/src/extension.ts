@@ -12,6 +12,7 @@ import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClie
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerMetadataProps } from "./metadataProps";
+import { registerFormProps } from "./formProps";
 import { registerDocs } from "./docsTree";
 import { registerStatusBar } from "./statusBar";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
@@ -413,6 +414,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerFormPreview(context);
   const metadataTree = registerMetadataTree(context, projectRootFor);
   registerMetadataProps(context, metadataTree.typeCandidates);
+  // Properties v2 of the form designer (docs/DESIGNER.md, stage 3): follows the cursor in
+  // form yamls, works through the LSP server (shows a hint in the CLI mode).
+  registerFormProps(context);
   // Element documentation: the help tree, search and showing the page for the symbol under the
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
   registerDocs(context);

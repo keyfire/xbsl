@@ -116,5 +116,7 @@
   "cmd.formPalette.insert": "Вставить в форму",
   "cmd.formPalette.addFavorite": "В избранное",
   "cmd.formPalette.removeFavorite": "Убрать из избранного",
-  "cmd.formPalette.openDocs": "Открыть документацию"
+  "cmd.formPalette.openDocs": "Открыть документацию",
+  "view.properties": "Свойства компонента",
+  "cmd.properties.showForNode": "Свойства компонента"
 }
