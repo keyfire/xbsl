@@ -857,3 +857,15 @@ export function findRow(model: PanelModel, key: string): PanelRow | undefined {
   }
   return undefined;
 }
+
+// A serial queue: jobs run strictly one after another, never overlapping. Property writes go
+// through it so rapid clicks (a tri-state toggled several times) cannot run concurrently and
+// splice edits over one another. A failing job does not break the chain for the next one.
+export function createSerialQueue(): (job: () => Promise<void>) => Promise<void> {
+  let chain: Promise<unknown> = Promise.resolve();
+  return (job) => {
+    const run = chain.then(job, job);
+    chain = run.catch(() => undefined);
+    return run;
+  };
+}

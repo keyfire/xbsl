@@ -34,6 +34,7 @@ import {
   WritePlan,
   buildAddHandlerParams,
   buildPanelModel,
+  createSerialQueue,
   defaultHandlerName,
   findRow,
   panelTarget,
@@ -935,10 +936,27 @@ function refreshFromActiveEditor(): void {
   }
 }
 
+// Writes are serialized. Rapid clicks (a tri-state toggled several times) must never run
+// concurrently: the engine computes each operation's edits against ITS copy of the buffer,
+// which lags the client between an applyEdit and the didChange that follows it, so two
+// in-flight operations splice with stale offsets and corrupt the yaml. The client version
+// guard alone does not catch this (the client version can match while the server's lags).
+// The queue also lets each operation see the node span the previous one refreshed, and
+// serializes the client-side metadata writes (which read-modify-write the same text).
+const enqueueWrite = createSerialQueue();
+
+function applyOperation(
+  op: "set_property" | "reset_property",
+  key: string,
+  plan?: WritePlan
+): Promise<void> {
+  return enqueueWrite(() => doApplyOperation(op, key, plan));
+}
+
 // One write = one engine operation: the edits are computed against the buffer the server
-// read, so a version change between the request and the response drops the stale edits and
-// re-reads instead of writing them.
-async function applyOperation(
+// read; the awaited re-read at the end forces a round trip so the next queued operation sees
+// the server buffer already synced to the applied text.
+async function doApplyOperation(
   op: "set_property" | "reset_property",
   key: string,
   plan?: WritePlan
@@ -985,15 +1003,22 @@ async function applyOperation(
     we.replace(uri, new vscode.Range(fresh.positionAt(e.start), fresh.positionAt(e.end)), e.newText);
   }
   await vscode.workspace.applyEdit(we);
-  // Node ids are positional and die with every change - re-read by the span start the
-  // engine reported for the resulting node in the NEW text.
-  void refreshForOffset(uri, res.node?.span?.start ?? tgt.nodeSpanStart);
+  // Node ids are positional and die with every change - re-read by the span start the engine
+  // reported for the resulting node in the NEW text. Awaited (not fire-and-forget): the round
+  // trip lets the server process this edit's didChange before the next queued operation runs.
+  await refreshForOffset(uri, res.node?.span?.start ?? tgt.nodeSpanStart);
 }
 
 // One metadata write: existing targeted edits (metaPropertyEdits over propertyEdit and
 // insertItemEdit) applied as a WorkspaceEdit, then a re-read of the same node. value null
 // removes the key - the Reset button, the Авто tristate and an emptied editor all land here.
-async function applyMetaProp(key: string, value: string | null): Promise<void> {
+function applyMetaProp(key: string, value: string | null): Promise<void> {
+  return enqueueWrite(() => doApplyMetaProp(key, value));
+}
+
+// Client-side read-modify-write of the yaml; serialized through the queue so rapid clicks do
+// not each compute edits against the same pre-edit text and splice over one another.
+async function doApplyMetaProp(key: string, value: string | null): Promise<void> {
   if (target?.kind !== "metadata") {
     return;
   }
@@ -1085,7 +1110,10 @@ async function reveal(offset: number | undefined): Promise<void> {
         ? findAttrOffset(doc.getText(), target.std.name) ?? 0
         : Math.max(target.offset, 0);
   const pos = doc.positionAt(Math.min(offset ?? fallback, doc.getText().length));
-  const editor = await vscode.window.showTextDocument(doc, { preview: false });
+  // Reuse the already-open editor of this file (its view column) instead of opening a second
+  // copy in the focused group - the {} button and "Show in yaml" must not duplicate the tab.
+  const existing = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === target!.uri.toString());
+  const editor = await vscode.window.showTextDocument(doc, { preview: false, viewColumn: existing?.viewColumn });
   editor.selection = new vscode.Selection(pos, pos);
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
@@ -1100,7 +1128,8 @@ function moduleUriFor(yamlUri: vscode.Uri): vscode.Uri {
 async function openAtOffset(uri: vscode.Uri, offset: number): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(uri);
   const pos = doc.positionAt(Math.min(offset, doc.getText().length));
-  const editor = await vscode.window.showTextDocument(doc, { preview: false });
+  const existing = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());
+  const editor = await vscode.window.showTextDocument(doc, { preview: false, viewColumn: existing?.viewColumn });
   editor.selection = new vscode.Selection(pos, pos);
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }

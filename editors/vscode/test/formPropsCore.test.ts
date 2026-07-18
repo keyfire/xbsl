@@ -14,6 +14,7 @@ import {
   buildCompositeYaml,
   buildPanelModel,
   chooseEditor,
+  createSerialQueue,
   colorYaml,
   defaultHandlerName,
   encodeFragmentScalar,
@@ -742,7 +743,57 @@ test("planHandlerApply: a new module file comes as full content, an existing one
   assert.ok("error" in planHandlerApply({ method: "М", moduleUri: "file:///м.xbsl", created: true }));
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed) {
-  process.exit(1);
+async function runAsyncTests(): Promise<void> {
+  // createSerialQueue: three jobs enqueued rapidly (like three quick tri-state clicks) run
+  // strictly one at a time, in order - never overlapping.
+  const q = createSerialQueue();
+  const events: string[] = [];
+  let active = 0;
+  let maxActive = 0;
+  const job = (id: number) => async (): Promise<void> => {
+    active += 1;
+    maxActive = Math.max(maxActive, active);
+    events.push(`start${id}`);
+    await new Promise((r) => setTimeout(r, id === 0 ? 15 : 1)); // the first is the slowest
+    events.push(`end${id}`);
+    active -= 1;
+  };
+  await Promise.all([q(job(0)), q(job(1)), q(job(2))]);
+  try {
+    assert.strictEqual(maxActive, 1);
+    assert.deepStrictEqual(events, ["start0", "end0", "start1", "end1", "start2", "end2"]);
+    passed += 1;
+    console.log("ok   createSerialQueue runs rapid jobs one at a time, in order");
+  } catch (e) {
+    failed += 1;
+    console.error("FAIL createSerialQueue runs rapid jobs one at a time, in order");
+    console.error(e instanceof Error ? e.message : e);
+  }
+
+  // A failing job must not break the chain for the next one.
+  const q2 = createSerialQueue();
+  const seen: number[] = [];
+  const pa = q2(async () => {
+    throw new Error("boom");
+  }).catch(() => undefined);
+  const pb = q2(async () => {
+    seen.push(2);
+  });
+  await Promise.all([pa, pb]);
+  try {
+    assert.deepStrictEqual(seen, [2]);
+    passed += 1;
+    console.log("ok   createSerialQueue survives a failing job");
+  } catch (e) {
+    failed += 1;
+    console.error("FAIL createSerialQueue survives a failing job");
+    console.error(e instanceof Error ? e.message : e);
+  }
 }
+
+void runAsyncTests().then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed) {
+    process.exit(1);
+  }
+});
