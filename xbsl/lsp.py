@@ -44,6 +44,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
 from xbsl.lsp_nav import (
     IndexLookup,
+    chain_at,
     resolve_completions,
     resolve_definition,
     resolve_hover,
@@ -672,6 +673,37 @@ def _make_server() -> "LanguageServer":
         word, var_type = hit
         return f"**{word}: {var_type}**\n\nлокальная переменная"
 
+    def _hover_type_root(params: object) -> Optional[str]:
+        """The stdlib type root to document for the hover target: a local variable's inferred type,
+        or the TYPE of a component member (Компоненты.ФлажокЗапрещенВход -> Флажок). The doc link in
+        the hover then points at that type. None when the target has no documented type."""
+        hit = _variable_type(params)
+        if hit is not None:
+            return re.split(r"[<?]", hit[1], maxsplit=1)[0].strip() or None
+        uri = _param(params, "uri")
+        pos = _param(params, "position")
+        if not uri or pos is None or STATE.lookup is None:
+            return None
+        path = uri_to_path(uri)
+        if path is None or language_of(path) != "xbsl":
+            return None
+        doc = server.workspace.get_text_document(uri)
+        lines = doc.source.split("\n")
+        line_no = int(_param(pos, "line", 0) or 0)
+        char = int(_param(pos, "character", 0) or 0)
+        if line_no >= len(lines):
+            return None
+        hit2 = chain_at(lines[line_no].rstrip("\r"), char)
+        if not hit2:
+            return None
+        parts, at = hit2
+        if at == 1 and parts[0] == "Компоненты":
+            comp = STATE.lookup.component(path.stem, parts[1])
+            ctype = comp.get("type") if comp else None
+            if ctype:
+                return re.split(r"[<?]", ctype, maxsplit=1)[0].strip() or None
+        return None
+
     @server.feature(lsp.TEXT_DOCUMENT_HOVER)
     def _hover(params: lsp.HoverParams) -> Optional[lsp.Hover]:
         q = nav_query(params.text_document.uri, params.position)
@@ -700,10 +732,9 @@ def _make_server() -> "LanguageServer":
                     pid = docs.for_symbol(name)
                     if pid:
                         return {"pageId": pid, "symbol": name}
-            hit = _variable_type(params)
-            if hit is not None:
-                root = re.split(r"[<?]", hit[1], maxsplit=1)[0].strip()
-                pid = docs.for_symbol(root) if root else None
+            root = _hover_type_root(params)
+            if root:
+                pid = docs.for_symbol(root)
                 if pid:
                     return {"pageId": pid, "symbol": root}
         except Exception:  # noqa: BLE001 - the hover must never fail

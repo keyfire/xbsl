@@ -713,6 +713,20 @@ def test_completion_without_templates_is_unchanged():
     assert [e["kind"] for e in ct("    ", None) if e["kind"] == "snippet"] == []
 
 
+def test_hover_component_carries_type_for_docs_link():
+    # The component-member hover shows the component's TYPE; the hoverDoc doc link reuses this exact
+    # resolution (chain_at + lookup.component) to point at the type's documentation page.
+    got = resolve_hover(
+        LOOKUP,
+        language_id="xbsl",
+        line_text="Компоненты.Кнопка.Активировать()",
+        character=13,
+        file_stem="ГлавнаяФорма",
+        file_path="Каталог/ГлавнаяФорма.xbsl",
+    )
+    assert got is not None and "Кнопка: Кнопка" in got
+
+
 def test_hover_doc_request_registered():
     # xbsl/hoverDoc (the doc link in the code-editor hover) is wired on the server.
     from xbsl import lsp as lsp_module
