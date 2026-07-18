@@ -283,6 +283,11 @@ back to a literal.
 It is a layout skeleton, not the platform's rendering: composition, nesting and captions are
 faithful, exact sizes and styles are not (explicit label colors and font sizes are applied).
 
+**Block presets.** In the form structure view, *Save as block preset* on a component stores its
+whole subtree under a name (kept across forms and sessions); the title-bar **+** or *Insert block
+preset* drops a saved preset into the current selection – a named, persistent version of copy/paste
+for the layouts you rebuild often. *Manage block presets* prunes the list.
+
 ## Metadata explorer
 
 ![Metadata explorer: the tree, the properties panel, grouping by subsystem](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/metadata-tree.gif)
