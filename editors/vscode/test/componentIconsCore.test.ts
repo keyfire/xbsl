@@ -48,7 +48,11 @@ test("exact type names get their dedicated icons", () => {
 test("exact names beat their families", () => {
   // diagrams: the family gives graph, the specific kinds get their own shapes
   assert.strictEqual(iconIdFor("КруговаяДиаграмма"), "pie-chart");
-  assert.strictEqual(iconIdFor("ДиаграммаГанта"), "graph-line");
+  assert.strictEqual(iconIdFor("ДиаграммаГанта"), "project");
+  assert.strictEqual(iconIdFor("ВоронкообразнаяДиаграмма"), "filter");
+  assert.strictEqual(iconIdFor("ДиаграммаСпидометр"), "dashboard");
+  assert.strictEqual(iconIdFor("ЛепестковаяДиаграмма"), "target");
+  assert.strictEqual(iconIdFor("XYДиаграмма"), "graph-scatter");
   // groups: the flavors override the layout family
   assert.strictEqual(iconIdFor("СтековаяГруппа"), "layers");
   assert.strictEqual(iconIdFor("РазделяющаяГруппа"), "split-horizontal");
@@ -112,11 +116,12 @@ test("the container flag refines only the generic fallback", () => {
 // (code.visualstudio.com/api/references/icons-in-labels). An id outside the list would
 // silently render as an EMPTY icon in a TreeItem - exactly the bug this test pins down.
 const FALLBACK_KNOWN_CODICONS = [
-  "browser", "calendar", "check", "circle-filled", "code", "device-camera-video",
-  "editor-layout", "file", "file-media", "files", "graph", "graph-line", "graph-scatter",
-  "inspect", "layers", "layout", "link", "list-flat", "list-tree", "menu", "pie-chart",
-  "split-horizontal", "symbol-event", "symbol-field", "symbol-misc", "symbol-string",
-  "table", "tools", "type-hierarchy", "versions", "window",
+  "browser", "calendar", "check", "circle-filled", "code", "dashboard",
+  "device-camera-video", "editor-layout", "file", "file-media", "files", "filter",
+  "graph", "graph-line", "graph-scatter", "inspect", "layers", "layout", "link",
+  "list-flat", "list-tree", "menu", "pie-chart", "project", "split-horizontal",
+  "symbol-event", "symbol-field", "symbol-misc", "symbol-string", "table", "target",
+  "tools", "type-hierarchy", "versions", "window",
 ];
 
 function knownCodicons(): { names: Set<string>; source: string } {

@@ -31,9 +31,14 @@ const EXACT_ICONS: Readonly<Record<string, string>> = {
   СтандартнаяКарточка: "layout",
   Страницы: "browser",
   ПроизвольныйШаблонФормы: "editor-layout",
-  // diagrams with a shape of their own (no gantt codicon exists - a line chart reads closest)
+  // diagrams: every catalog kind gets a glyph of its own shape (no gantt codicon
+  // exists - "project" draws the closest thing, offset horizontal bars)
   КруговаяДиаграмма: "pie-chart",
-  ДиаграммаГанта: "graph-line",
+  ДиаграммаГанта: "project",
+  ВоронкообразнаяДиаграмма: "filter",
+  ДиаграммаСпидометр: "dashboard",
+  ЛепестковаяДиаграмма: "target",
+  XYДиаграмма: "graph-scatter",
   // actions
   Кнопка: "inspect",
   Гиперссылка: "link",
