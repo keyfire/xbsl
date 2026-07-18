@@ -711,3 +711,16 @@ def test_templates_do_not_leak_after_a_dot():
 
 def test_completion_without_templates_is_unchanged():
     assert [e["kind"] for e in ct("    ", None) if e["kind"] == "snippet"] == []
+
+
+def test_hover_doc_request_registered():
+    # xbsl/hoverDoc (the doc link in the code-editor hover) is wired on the server.
+    from xbsl import lsp as lsp_module
+
+    server = lsp_module._make_server()
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+    assert "xbsl/hoverDoc" in features
+    # no document open in the bare workspace -> a clean empty result, never an exception
+    res = features["xbsl/hoverDoc"]({"uri": "file:///нет.xbsl", "position": {"line": 0, "character": 0}})
+    assert res == {"pageId": None, "symbol": None}

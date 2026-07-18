@@ -597,25 +597,32 @@ def _make_server() -> "LanguageServer":
         ]
         return lsp.CompletionList(is_incomplete=False, items=items)
 
-    def _variable_hover(params: lsp.HoverParams) -> Optional[str]:
-        """The inferred type of a local variable under the cursor (`Ответ: ОтветHttp`)."""
-        path = uri_to_path(params.text_document.uri)
+    def _variable_type(params: object) -> Optional[tuple[str, str]]:
+        """(variable name, inferred type) for a local variable under the cursor, or None."""
+        uri = _param(params, "uri") or getattr(getattr(params, "text_document", None), "uri", None)
+        pos = _param(params, "position")
+        if pos is None:
+            pos = getattr(params, "position", None)
+        if not uri or pos is None:
+            return None
+        path = uri_to_path(uri)
         if path is None or language_of(path) != "xbsl":
             return None
-        doc = server.workspace.get_text_document(params.text_document.uri)
+        doc = server.workspace.get_text_document(uri)
         lines = doc.source.split("\n")
-        if params.position.line >= len(lines):
+        line_no = int(_param(pos, "line", getattr(pos, "line", 0)) or 0)
+        char = int(_param(pos, "character", getattr(pos, "character", 0)) or 0)
+        if line_no >= len(lines):
             return None
-        line = lines[params.position.line]
-        ch = params.position.character
+        line = lines[line_no]
         m = next(
-            (m for m in re.finditer(r"[\wА-Яа-яЁё]+", line) if m.start() <= ch <= m.end()),
+            (m for m in re.finditer(r"[\wА-Яа-яЁё]+", line) if m.start() <= char <= m.end()),
             None,
         )
         if m is None:
             return None
         word = m.group(0)
-        offset = sum(len(lines[k]) + 1 for k in range(params.position.line)) + m.end()
+        offset = sum(len(lines[k]) + 1 for k in range(line_no)) + m.end()
         try:
             catalog = dataset.load_json("stdlib.json")
             members = {
@@ -633,6 +640,14 @@ def _make_server() -> "LanguageServer":
         var_type = local_vars.get(word)
         if var_type is None:
             return None
+        return word, var_type
+
+    def _variable_hover(params: lsp.HoverParams) -> Optional[str]:
+        """The inferred type of a local variable under the cursor (`Ответ: ОтветHttp`)."""
+        hit = _variable_type(params)
+        if hit is None:
+            return None
+        word, var_type = hit
         return f"**{word}: {var_type}**\n\nлокальная переменная"
 
     @server.feature(lsp.TEXT_DOCUMENT_HOVER)
@@ -644,6 +659,34 @@ def _make_server() -> "LanguageServer":
         if not text:
             return None
         return lsp.Hover(contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=text))
+
+    @server.feature("xbsl/hoverDoc")
+    def _hover_doc(params: object) -> dict:
+        # The documentation page id to link to from the hover of a symbol whose type is known:
+        # a type/member name directly under the cursor, or the ROOT of a local variable's
+        # inferred type (`Ответ: ОтветHttp` -> ОтветHttp). {"pageId": null} when no page exists.
+        # The client turns pageId into a trusted command link (a server MarkupContent link is
+        # untrusted and would not be clickable).
+        try:
+            uri = _param(params, "uri")
+            pos = _param(params, "position")
+            if uri and pos is not None:
+                name, _query = docs_symbol_at(
+                    uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0)
+                )
+                if name:
+                    pid = docs.for_symbol(name)
+                    if pid:
+                        return {"pageId": pid, "symbol": name}
+            hit = _variable_type(params)
+            if hit is not None:
+                root = re.split(r"[<?]", hit[1], maxsplit=1)[0].strip()
+                pid = docs.for_symbol(root) if root else None
+                if pid:
+                    return {"pageId": pid, "symbol": root}
+        except Exception:  # noqa: BLE001 - the hover must never fail
+            return {"pageId": None, "symbol": None}
+        return {"pageId": None, "symbol": None}
 
     # --- code actions (quick fixes from fix) --------------------------------------------
 

@@ -14,6 +14,7 @@ import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerFormProps } from "./formProps";
 import { registerDocs } from "./docsTree";
+import { registerHoverDocs } from "./hoverDocs";
 import { registerStatusBar } from "./statusBar";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerPalettePicker } from "./palettes";
@@ -422,6 +423,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Element documentation: the help tree, search and showing the page for the symbol under the
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
   registerDocs(context);
+  registerHoverDocs(context);
   // Visual form designer panels: the structure tree of the active form yaml and the component
   // palette. Both are thin clients of the engine (xbsl/formTree, xbsl/formEdit, xbsl/uiSchema);
   // the providers load data lazily, only when their views are visible.
