@@ -89,14 +89,14 @@
       "xbslElement": [
         {
           "id": "xbslMetadata",
-          "name": "",
+          "name": "%view.metadataContainer%",
           "icon": "$(list-tree)"
         }
       ],
       "xbslDocsContainer": [
         {
           "id": "xbslDocs",
-          "name": "",
+          "name": "%view.docsContainer%",
           "icon": "$(book)"
         }
       ],
