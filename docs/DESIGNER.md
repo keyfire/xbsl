@@ -1,8 +1,8 @@
 # Visual form designer – specification and roadmap
 
 Status: waves 1-3 delivered - stages 0-3 (ui schema, form model and operations,
-structure view, palette, properties v2) plus hooks 1-9 and 12; hooks 10 and 11
-remain in the backlog below.
+structure view, palette, properties v2) plus hooks 1-10 and 12; hook 11 remains
+in the backlog below.
 Russian counterpart: [DESIGNER.ru.md](DESIGNER.ru.md). Keep the two files in sync.
 
 The toolkit grows a visual designer for 1C:Element interface components
@@ -182,7 +182,7 @@ linter would flag as an error.
 | 7 | Color editors with project palette presets (colors already used in the form plus recent picks, as one-click swatches) | S | delivered |
 | 8 | Block presets: save a component subtree as a named preset (globalState) and insert it into any form (structure context menu + title button/QuickPick) | M | delivered |
 | 9 | Multi-select mass property edit: one property (a key from the union of the selection's own, or a new one) set or cleared on all selected components at once - structure context menu on a multi-selection | S/M | delivered |
-| 10 | Structural search across project forms (component type + property predicates) | M | 4+ |
+| 10 | Structural search across project forms: component type + `key=value` predicates; the `xbsl.forms.search` command (a button on the structure view + the command palette), the `xbsl/searchForms` engine endpoint, results in a quick pick that jumps to the node | M | delivered |
 | 11 | Read-only designer view for library forms (`.xlib`) | S/M | 4+ |
 | 12 | Designer operations for agents via MCP/CLI | S | folded into stage 0 |
 

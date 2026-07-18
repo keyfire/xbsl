@@ -38,7 +38,7 @@ except ImportError:  # pragma: no cover - the extra is not installed
 
 from xbsl import (
     __version__, baseline, dataset, docs, engine, formedits, formhandlers, formmodel,
-    i18n, indexer, scaffold, templates, uischema,
+    formsearch, i18n, indexer, scaffold, templates, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -1042,6 +1042,17 @@ def _make_server() -> "LanguageServer":
         if result.notes:
             out["notes"] = list(result.notes)
         return out
+
+    @server.feature("xbsl/searchForms")
+    def _search_forms(params: object) -> dict:
+        # Structural search across forms (hook 10). The extension gathers the form texts (live
+        # buffers) and sends two parallel arrays plus the query; the engine zips and matches them.
+        # {paths: [str], texts: [str], query: str} -> {matches: [{path, nodeId, name, type, line}]}.
+        paths = _param(params, "paths", []) or []
+        texts = _param(params, "texts", []) or []
+        query = str(_param(params, "query", "") or "")
+        forms = [{"path": str(p), "text": str(t)} for p, t in zip(paths, texts)]
+        return {"matches": formsearch.search_forms(forms, query)}
 
     # --- event handlers (hook 1: the properties panel's event rows) ----------------------
     #

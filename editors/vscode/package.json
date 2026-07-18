@@ -133,6 +133,12 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.forms.search",
+        "title": "%cmd.forms.search%",
+        "category": "XBSL",
+        "icon": "$(search)"
+      },
+      {
         "command": "xbsl.metadata.refresh",
         "title": "%cmd.metadata.refresh%",
         "category": "XBSL",
@@ -684,9 +690,14 @@
           "group": "navigation@3"
         },
         {
-          "command": "xbsl.formStructure.insertPreset",
+          "command": "xbsl.forms.search",
           "when": "view == xbslFormStructure",
           "group": "navigation@4"
+        },
+        {
+          "command": "xbsl.formStructure.insertPreset",
+          "when": "view == xbslFormStructure",
+          "group": "navigation@5"
         },
         {
           "command": "xbsl.formStructure.managePresets",

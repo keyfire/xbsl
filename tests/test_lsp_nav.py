@@ -737,3 +737,18 @@ def test_docs_by_name_request_registered():
     assert "xbsl/docsByName" in features
     assert features["xbsl/docsByName"]({"name": "нетТакогоТипа"}) == {}
     assert features["xbsl/docsByName"]({}) == {}
+
+
+def test_search_forms_request_registered():
+    # xbsl/searchForms (the structural search across forms, hook 10) is wired and zips its two
+    # parallel arrays; an empty request yields an empty match list, never an exception.
+    from xbsl import lsp as lsp_module
+
+    server = lsp_module._make_server()
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+    assert "xbsl/searchForms" in features
+    assert features["xbsl/searchForms"]({}) == {"matches": []}
+    form = "ВидЭлемента: КомпонентИнтерфейса\nИмя: Ф\nНаследует:\n    Содержимое:\n        Тип: Кнопка\n        Имя: К\n"
+    res = features["xbsl/searchForms"]({"paths": ["a.yaml"], "texts": [form], "query": "Кнопка"})
+    assert [m["name"] for m in res["matches"]] == ["К"]

@@ -1,5 +1,6 @@
 {
   "cmd.lintProject": "XBSL: check the whole project",
+  "cmd.forms.search": "XBSL: search forms by structure",
   "cmd.restartLinter": "XBSL: restart the linter",
   "cmd.choosePalette": "XBSL: code palette",
   "cmd.deploy": "XBSL: deploy the project (elemctl)",

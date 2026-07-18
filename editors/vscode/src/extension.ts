@@ -13,6 +13,7 @@ import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClie
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerFormProps } from "./formProps";
+import { registerFormSearch } from "./formSearch";
 import { registerDocs } from "./docsTree";
 import { registerHoverDocs } from "./hoverDocs";
 import { registerStatusBar } from "./statusBar";
@@ -432,6 +433,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     projectComponents: metadataTree.interfaceComponents,
     structure: formStructure,
   });
+  // Structural search across the project's forms (hook 10): find components by type and property
+  // predicates, jump to the match. A thin client of the engine's xbsl/searchForms.
+  registerFormSearch(context, { interfaceComponents: metadataTree.interfaceComponents });
   // The "Data" panel of the form designer (docs/DESIGNER.md, hook 2): the component's own
   // Свойства records plus the attributes of the form's owner object; records drag into the
   // structure view as ready input components.

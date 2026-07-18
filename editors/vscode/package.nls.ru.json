@@ -1,5 +1,6 @@
 {
   "cmd.lintProject": "XBSL: проверить весь проект",
+  "cmd.forms.search": "XBSL: структурный поиск по формам",
   "cmd.restartLinter": "XBSL: перезапустить линтер",
   "cmd.choosePalette": "XBSL: палитра кода",
   "cmd.deploy": "XBSL: деплой на стенд (elemctl)",
