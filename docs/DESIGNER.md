@@ -1,6 +1,8 @@
 # Visual form designer – specification and roadmap
 
-Status: direction approved, backlog accepted; implementation not started.
+Status: waves 1-3 delivered - stages 0-3 (ui schema, form model and operations,
+structure view, palette, properties v2) plus hooks 1, 2, 3, 4 and 12; hooks 5-11
+remain in the backlog below.
 Russian counterpart: [DESIGNER.ru.md](DESIGNER.ru.md). Keep the two files in sync.
 
 The toolkit grows a visual designer for 1C:Element interface components
@@ -171,8 +173,8 @@ linter would flag as an error.
 
 | # | Hook | Size | Wave |
 |---|------|------|------|
-| 1 | Events in the properties panel: dropdown of existing compatible handlers; "create handler" generates a stub with the right signature and annotations into `.xbsl` and jumps to it | M | 3 |
-| 2 | "Data" panel: object attributes and component `Свойства:`; dragging an attribute into the tree creates the right input component with the binding | M | 3 |
+| 1 | Events in the properties panel: dropdown of existing compatible handlers; "create handler" generates a stub with the right signature into `.xbsl` and jumps to it | M | delivered (3) |
+| 2 | "Data" panel: object attributes and component `Свойства:`; dragging an attribute into the tree creates the right input component with the binding | M | delivered (3) |
 | 3 | Designer-side validation: linter badges on tree nodes, value checks before writes | S/M | folded into stages 1/3 |
 | 4 | Hover docs in the palette and properties, jump to the docs panel | S | folded into stages 2/3 |
 | 5 | Wireframe preview upgrades: selection highlight, follow structure selection | S/M | 4 |
