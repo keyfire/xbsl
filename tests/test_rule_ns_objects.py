@@ -251,3 +251,31 @@ def test_row_type_named_by_the_form_is_known():
     sources = [engine.load_text("ФормаСписка.yaml", yaml_text)]
     diags = engine.run_sources(sources, select={"yaml/unknown-type", "code/unknown-ns-object"})
     assert [d.message for d in diags] == []
+
+
+# --- English derived-type aliases (bilingual identifiers) -----------------------------
+
+def test_member_family_includes_english_aliases():
+    # Банки.Record (= Банки.Запись) must be known: platform identifiers are bilingual, but the
+    # extracted catalog carries only the Russian derived-type names.
+    from xbsl.rules.semantics import _member_family
+
+    fam = _member_family("РегистрСведений")
+    for name in ("Запись", "Record", "Ссылка", "Reference", "НаборЗаписей", "RecordSet"):
+        assert name in fam, name
+    # a typo is still not in the family
+    assert "Recrd" not in fam
+
+
+def test_unknown_object_type_accepts_english_derived(tmp_path):
+    # a bilingual derived-type name on a project object is not flagged, a typo still is
+    (tmp_path / "Банки.yaml").write_text("ВидЭлемента: РегистрСведений\nИмя: Банки\n", encoding="utf-8")
+
+    def lint(member: str):
+        (tmp_path / "м.xbsl").write_text(f"метод Ф()\n    пер mEl: Банки.{member}\n;\n", encoding="utf-8")
+        return engine.run(discover([str(tmp_path)]), select={"code/unknown-object-type"})
+
+    assert not any(d.rule_id == "code/unknown-object-type" for d in lint("Record"))
+    assert not any(d.rule_id == "code/unknown-object-type" for d in lint("Reference"))
+    assert not any(d.rule_id == "code/unknown-object-type" for d in lint("Запись"))
+    assert any(d.rule_id == "code/unknown-object-type" for d in lint("Recrd"))

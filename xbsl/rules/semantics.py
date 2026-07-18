@@ -179,6 +179,19 @@ _MEMBER_TYPE_TAILS = frozenset({
     "АвтоматическаяФормаСписка", "АвтоматическаяФормаОбъекта", "АвтоматическаяФормаЗаписи",
 })
 
+# Element identifiers are bilingual: platform types carry English names too (`Банки.Record`
+# is `Банки.Запись`). The extracted catalog (stdlib.json object_members) holds only the Russian
+# derived-type names, so the English forms would be flagged as unknown. This hand-kept set adds
+# the English equivalents of the generated member types - the standard 1C:Element English type
+# names. The rule is built for zero FALSE POSITIVES (the server compilation on deploy is the real
+# check), so it errs generous here: an unknown-but-plausible English tail is a false negative,
+# which the union already tolerates, never a false positive.
+_MEMBER_TYPE_TAILS_EN = frozenset({
+    "Reference", "Ref", "Object", "Data", "Record", "RecordSet", "RecordManager",
+    "RecordKey", "Selection",
+    "WriteParameters", "DeleteParameters", "FillParameters", "Parameters",
+})
+
 # Object kinds whose generated type family is known. The catalog's object_members adds
 # kinds on top; kinds outside the resulting set are skipped. Structure-only kinds
 # (ОбщийМодуль, HttpСервис) generate no member types but carry module-declared ones.
@@ -204,8 +217,12 @@ def _checked_kinds() -> frozenset[str]:
 
 
 def _member_family(kind: str) -> frozenset[str]:
-    """Built-in members generated for objects of the kind: catalog data + the safety net."""
-    return _object_members().get(kind, frozenset()) | _MEMBER_TYPE_TAILS
+    """Built-in members generated for objects of the kind: catalog data + the safety net.
+
+    Both the Russian names (catalog + _MEMBER_TYPE_TAILS) and their English aliases
+    (_MEMBER_TYPE_TAILS_EN) count as known - platform identifiers are bilingual.
+    """
+    return _object_members().get(kind, frozenset()) | _MEMBER_TYPE_TAILS | _MEMBER_TYPE_TAILS_EN
 
 
 def _row_type_names(node) -> set[str]:
