@@ -186,7 +186,7 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-form",
     "add-subsystem", "add-dependency", "rename-object", "set-access",
-    "object-info", "project-info",
+    "object-info", "project-info", "form-tree", "form-edit",
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
 
@@ -396,8 +396,37 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("project-info", help="обзор исходников: проекты, подсистемы, объекты")
     p.add_argument("root")
 
+    p = sub.add_parser(
+        "form-tree", help="дерево компонента интерфейса (узлы, слоты, свойства со спанами)"
+    )
+    p.add_argument("yaml_path")
+    p.add_argument("--at", type=int, metavar="СМЕЩЕНИЕ",
+                   help="вместо дерева вернуть узел по смещению в файле (синхронизация курсора)")
+
+    p = sub.add_parser(
+        "form-edit",
+        help="операция конструктора форм: точечная правка yaml компонента интерфейса",
+    )
+    p.add_argument("yaml_path")
+    p.add_argument("op", choices=("insert", "move", "remove", "wrap", "unwrap",
+                                  "duplicate", "rename", "set-property", "reset-property"))
+    p.add_argument("--parent", help="id узла-контейнера (insert)")
+    p.add_argument("--slot", help="слот детей: Содержимое, Страницы, Колонки, ... (insert/move)")
+    p.add_argument("--type", help="Тип нового компонента (insert)")
+    p.add_argument("--name", help="Имя нового компонента (insert) или обёртки (wrap)")
+    p.add_argument("--node", help="id узла операции (move/remove/wrap/unwrap/duplicate/"
+                                  "rename/set-property/reset-property)")
+    p.add_argument("--new-parent", help="id нового контейнера (move)")
+    p.add_argument("--container", help="Тип контейнера-обёртки (wrap)")
+    p.add_argument("--new-name", help="новое Имя узла (rename; без флага Имя удаляется)")
+    p.add_argument("--before", help="id соседа: вставить/переместить ПЕРЕД ним")
+    p.add_argument("--after", help="id соседа: вставить/переместить ПОСЛЕ него")
+    p.add_argument("--key", help="имя свойства (set-property/reset-property)")
+    p.add_argument("--value", help="скалярное значение или биндинг (set-property)")
+    p.add_argument("--value-yaml", help="составное значение готовым yaml-фрагментом (set-property)")
+
     for name, sp in sub.choices.items():
-        if name.endswith("-info"):
+        if name.endswith("-info") or name == "form-tree":
             continue
         sp.add_argument("--dry-run", action="store_true",
                         help="показать изменения (с текстами файлов), ничего не записывая")
@@ -484,6 +513,48 @@ def _scaffold_main(argv: list[str]) -> int:
                 old_presentation=args.old_presentation,
                 yaml_path=Path(args.path) if args.path else None,
             )
+        elif args.command == "form-tree":
+            from xbsl import formedits, formmodel
+
+            form = formedits.load_form(Path(args.yaml_path))
+            if args.at is not None:
+                node = formmodel.node_at(form, args.at)
+                payload = {"node": formmodel.node_dict(node, deep=False) if node else None}
+            else:
+                payload = {"root": formmodel.node_dict(form.root)}
+            print(json.dumps(payload, ensure_ascii=False))
+            return 0
+        elif args.command == "form-edit":
+            from xbsl import formedits
+
+            outcome = formedits.op_component_edit(Path(args.yaml_path), args.op, {
+                "parent": args.parent, "slot": args.slot, "type": args.type,
+                "name": args.name, "node": args.node, "new_parent": args.new_parent,
+                "container": args.container, "new_name": args.new_name,
+                "before": args.before, "after": args.after,
+                "key": args.key, "value": args.value, "value_yaml": args.value_yaml,
+            })
+            if args.dry_run:
+                payload = outcome.result.as_dict()
+                payload["edits"] = [
+                    {"start": e.start, "end": e.end, "newText": e.new_text}
+                    for e in outcome.edits
+                ]
+                payload["node"] = outcome.node
+                print(json.dumps(payload, ensure_ascii=False))
+                return 0
+            written = scaffold.apply_result(outcome.result)
+            out = {
+                "files": [
+                    {"path": str(c.path), "created": c.created}
+                    for c in outcome.result.changes
+                ],
+                "notes": outcome.result.notes,
+                "node": outcome.node,
+                "lint": _scaffold_lint(written),
+            }
+            print(json.dumps(out, ensure_ascii=False))
+            return 0
         elif args.command == "object-info":
             print(json.dumps(
                 scaffold.object_info(

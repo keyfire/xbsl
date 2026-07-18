@@ -37,7 +37,8 @@ except ImportError:  # pragma: no cover - the extra is not installed
     LanguageServer = None
 
 from xbsl import (
-    __version__, baseline, dataset, docs, engine, i18n, indexer, scaffold, templates, uischema,
+    __version__, baseline, dataset, docs, engine, formedits, formmodel, i18n,
+    indexer, scaffold, templates, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -841,6 +842,70 @@ def _make_server() -> "LanguageServer":
             auto_interface=bool(_param(params, "autoInterface", True)),
             uses=[str(u) for u in uses] if uses else None,
         )
+
+    # --- form designer (the structure view is a thin client of these methods) ------------
+    #
+    # Like the meta* family, the server only computes; the editor applies the edits via
+    # WorkspaceEdit (native undo/redo) and re-reads the tree afterwards - node ids are
+    # positional and valid only until the next change. Dirty buffers come through
+    # _buffer_reader. xbsl/formTree carries the tree with COMPACT properties (key, kind,
+    # valuePreview - no spans): enough for the tree view; the full per-property spans
+    # come from xbsl/formNodeAt for one node at a time.
+
+    def _form_path(params: object) -> Path:
+        uri = _param(params, "uri")
+        path = uri_to_path(str(uri)) if uri else None
+        if path is None:
+            raise scaffold.ScaffoldError(f"Некорректный uri: {uri}")
+        return path
+
+    def _form_reader(path: Path) -> str:
+        try:
+            return _buffer_reader(path)
+        except RuntimeError:
+            # pygls raises until the workspace exists (a request racing the handshake,
+            # or a handler driven directly in tests) - fall back to the file on disk.
+            return engine.load(path).text
+
+    @server.feature("xbsl/formTree")
+    def _form_tree(params: object) -> dict:
+        try:
+            form = formedits.load_form(_form_path(params), reader=_form_reader)
+        except scaffold.ScaffoldError as exc:
+            return {"available": False, "reason": str(exc), "root": None}
+        return {
+            "available": True,
+            "root": formmodel.node_dict(form.root, property_spans=False),
+        }
+
+    @server.feature("xbsl/formNodeAt")
+    def _form_node_at(params: object) -> dict:
+        try:
+            form = formedits.load_form(_form_path(params), reader=_form_reader)
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        node = formmodel.node_at(form, int(_param(params, "offset", 0) or 0))
+        if node is None:
+            return {"node": None}
+        return {"node": formmodel.node_dict(node, property_spans=True, deep=False)}
+
+    @server.feature("xbsl/formEdit")
+    def _form_edit(params: object) -> dict:
+        # {uri, op, args} -> {edits: [{start, end, newText}], node: {id, span} | null};
+        # offsets are relative to the CURRENT buffer text the edits were computed from.
+        args = _param(params, "args") or {}
+        if not isinstance(args, dict):
+            args = vars(args) if hasattr(args, "__dict__") else dict(args)
+        try:
+            text = _form_reader(_form_path(params))
+            result = formedits.apply_operation(
+                text, str(_param(params, "op", "") or ""), args,
+            )
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        except OSError as exc:
+            return {"error": str(exc)}
+        return {"edits": result.edits_dicts(), "node": result.node_dict()}
 
     return server
 
