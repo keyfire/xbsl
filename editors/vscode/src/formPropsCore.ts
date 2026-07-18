@@ -158,6 +158,9 @@ export type RowEditor =
   // (absent inside chooseEditor; buildPanelModel enriches the row when it has the
   // xbsl/moduleHandlers payload).
   | { control: "handler"; choices?: HandlerChoices }
+  // An open combobox (typing allowed, the list only suggests) - the Тип rows of the
+  // metadata mode; the candidates come from the metadata tree provider (propsModes.ts).
+  | { control: "combo"; options: string[] }
   | { control: "readonly" };
 
 export interface PanelRow {
@@ -188,6 +191,9 @@ export interface PanelModel {
   nodeSpanStart: number;
   schemaAvailable: boolean;
   sections: PanelSection[];
+  // true - the metadata mode of the unified panel (propsModes.buildMetaPanelModel): the
+  // webview renders the rows flat, without the section chrome and the component legend.
+  meta?: boolean;
 }
 
 // -- event handlers (hook 1) --------------------------------------------------------------

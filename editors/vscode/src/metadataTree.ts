@@ -19,7 +19,7 @@ import {
   parseInternals,
   standardAttrNames,
 } from "./metadataCore";
-import { updatePropsFromSelection } from "./metadataProps";
+import { updatePropsFromSelection } from "./formProps";
 
 // Element kind -> tree group + codicon. Several kinds may share one group. The group name is an
 // English key: it both groups and serves as the l10n key (in the English UI the bundle is not loaded

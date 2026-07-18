@@ -12,7 +12,6 @@ import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from ".
 import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClient";
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
-import { registerMetadataProps } from "./metadataProps";
 import { registerFormProps } from "./formProps";
 import { registerDocs } from "./docsTree";
 import { registerStatusBar } from "./statusBar";
@@ -414,10 +413,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerDeploy(context, projectRootFor);
   registerFormPreview(context);
   const metadataTree = registerMetadataTree(context, projectRootFor);
-  registerMetadataProps(context, metadataTree.typeCandidates);
-  // Properties v2 of the form designer (docs/DESIGNER.md, stage 3): follows the cursor in
-  // form yamls, works through the LSP server (shows a hint in the CLI mode).
-  registerFormProps(context);
+  // The unified "Properties" panel (docs/DESIGNER.md, stage 3): follows the active editor -
+  // form yamls fill it with the component under the cursor (through the LSP server; the CLI
+  // mode shows a hint), other element yamls and modules with the metadata object (local
+  // targeted edits, no server needed). The metadata tree feeds it its Тип candidates and
+  // targets it via xbsl.metadata.props.
+  registerFormProps(context, metadataTree.typeCandidates);
   // Element documentation: the help tree, search and showing the page for the symbol under the
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
   registerDocs(context);

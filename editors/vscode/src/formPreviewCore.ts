@@ -289,8 +289,9 @@ function renderCommandBar(inherit: unknown): string {
 // -- targeted yaml property edits -------------------------------------------------------------
 //
 // A property value edit is turned into a targeted text replacement by yaml node ranges - the
-// document is not reformatted, undo works. Used by the metadata properties panel
-// (metadataProps.ts); the form designer edits go through the engine (xbsl/formEdit) instead.
+// document is not reformatted, undo works. Used by the metadata mode of the properties panel
+// (propsModes.metaPropertyEdits); the form designer edits go through the engine (xbsl/formEdit)
+// instead.
 
 export interface TextEdit {
   start: number;

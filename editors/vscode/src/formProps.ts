@@ -1,22 +1,27 @@
-// "Properties" v2 - the sidebar webview view (xbslProperties) of the visual form designer
-// (docs/DESIGNER.md, stage 3): the typed properties of the interface component under the
-// cursor of the active yaml editor, after the Flutter Property Editor pattern. The engine
-// owns everything: the node comes from xbsl/formNodeAt, the component schema from
-// xbsl/uiSchema, and every write is ONE xbsl/formEdit request whose text edits this module
-// applies via WorkspaceEdit (native undo/redo). The panel model - sections, typed editors,
-// validation, composite value_yaml assembly, handler dropdown content - is computed by
-// formPropsCore.ts; here lives only the thin wiring: cursor sync, LSP calls, the webview
-// shell and message routing. The EVENTS rows are interactive (hook 1): the dropdown binds
-// an existing method of the paired module (a plain set_property), "(no handler)" resets
-// the key, and "(create a handler...)" drives xbsl/addHandler - one multi-file
-// WorkspaceEdit writes the yaml binding and the module stub together, then the cursor
-// jumps to the method.
-// This panel REPLACED the older per-component tab of the wireframe preview: the structure
-// view and the preview both land here through the xbsl.properties.showForNode command.
-// The metadata properties panel (xbslMetaProps) stays separate - it serves metadata objects.
-//
-// The panel is LSP-only by design: following the cursor with per-selection CLI processes
-// would be unusable, so without the server it shows a hint instead.
+// "Properties" - the ONE sidebar webview view (xbslProperties) of the designer container
+// (docs/DESIGNER.md, stage 3: one properties engine that replaced both earlier panels).
+// The panel follows the active editor, the last signal wins; three fill modes:
+//   component - an interface component yaml: the typed properties of the form node under
+//     the cursor, after the Flutter Property Editor pattern. The engine owns everything:
+//     the node comes from xbsl/formNodeAt, the component schema from xbsl/uiSchema, and
+//     every write is ONE xbsl/formEdit request whose text edits this module applies via
+//     WorkspaceEdit (native undo/redo). The panel model - sections, typed editors,
+//     validation, composite value_yaml assembly, handler dropdown content - is computed
+//     by formPropsCore.ts. The EVENTS rows are interactive (hook 1): the dropdown binds
+//     an existing method of the paired module (a plain set_property), "(no handler)"
+//     resets the key, and "(create a handler...)" drives xbsl/addHandler - one multi-file
+//     WorkspaceEdit writes the yaml binding and the module stub together, then the cursor
+//     jumps to the method. This mode is LSP-only by design: following the cursor with
+//     per-selection CLI processes would be unusable, so without the server it shows a hint.
+//   metadata - any other element yaml (or a selection in the metadata tree, or an .xbsl
+//     module through its paired yaml): the scalar properties of the object/field map under
+//     the cursor. The rows come from describeMetaNode/describeStandardAttr (metadataCore)
+//     through the shared model (propsModes.ts); writes are targeted local replacements -
+//     propertyEdit/insertItemEdit assembled by metaPropertyEdits (no engine involved).
+//   the structure view and the preview land here through xbsl.properties.showForNode, the
+//     metadata tree - through xbsl.metadata.props (which also reveals the panel).
+// Here lives only the thin wiring: mode resolution per editor (propsModes.classifyEditor),
+// cursor sync, LSP calls, the webview shell and message routing.
 
 import * as vscode from "vscode";
 import {
@@ -35,6 +40,15 @@ import {
   planHandlerApply,
   prepareWrite,
 } from "./formPropsCore";
+import {
+  MetaSelector,
+  buildMetaPanelModel,
+  classifyEditor,
+  describeMetaSelection,
+  metaPropertyEdits,
+  pairedYamlPath,
+} from "./propsModes";
+import { findAttrOffset } from "./metadataCore";
 import { lspActive, lspRequest } from "./lspClient";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
 
@@ -42,15 +56,18 @@ const VIEW_TYPE = "xbslProperties";
 const SELECTION_DEBOUNCE_MS = 150;
 const IDENTIFIER = /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/;
 
-interface Target {
-  uri: vscode.Uri;
-  nodeId: string;
-  nodeSpanStart: number;
-  type: string;
-}
+// The panel target of the last fill. The component target carries what one xbsl/formEdit
+// call needs; the metadata target - the node offset for propertyEdit plus the standard
+// attribute identity when the panel shows one (possibly synthetic - see metaPropertyEdits).
+type Target =
+  | { kind: "component"; uri: vscode.Uri; nodeId: string; nodeSpanStart: number; type: string }
+  | { kind: "metadata"; uri: vscode.Uri; offset: number; std?: { kind: string; name: string } };
 
 let view: vscode.WebviewView | undefined;
 let target: Target | undefined;
+// Supplier of type candidates (from the metadata tree provider) for the Тип combobox of
+// the metadata mode; may be absent - the combobox then degrades to a plain input.
+let typeCandidatesFn: (() => Promise<string[]>) | undefined;
 let lastModel: PanelModel | null = null;
 let lastHint: string | null = null;
 // The sticky property: the focused row survives switching to another node of the same type
@@ -66,10 +83,9 @@ let debounceTimer: NodeJS.Timeout | undefined;
 
 function labels(): Record<string, string> {
   return {
-    hintSelect: vscode.l10n.t(
-      "Place the cursor on a form component in the yaml editor – its properties will show here."
+    hintIdle: vscode.l10n.t(
+      "Open an element yaml or module, or select a node in the metadata tree – the properties will show here."
     ),
-    hintSlot: vscode.l10n.t("The cursor is on a slot – select a component inside it."),
     noSchema: vscode.l10n.t(
       "No schema data for this component – only the set properties are shown."
     ),
@@ -178,6 +194,14 @@ ${cspMeta(nonce)}
   .cmp .subcap { font-size: .8em; opacity: .7; margin-bottom: 1px; }
   .valline { display: flex; gap: 5px; align-items: center; }
   .valline input, .valline .ro { flex: 1; min-width: 0; }
+  .combo { position: relative; }
+  .combo-list { position: absolute; left: 0; right: 0; top: 100%; margin-top: 2px; z-index: 20;
+    max-height: 220px; overflow-y: auto; background: var(--vscode-dropdown-background, var(--vscode-input-background));
+    border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, rgba(128,128,128,.5)));
+    border-radius: 3px; box-shadow: 0 2px 8px rgba(0,0,0,.28); }
+  .combo-opt { padding: 3px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+  .combo-opt:hover { background: var(--vscode-list-hoverBackground, rgba(128,128,128,.18)); }
+  .combo-opt.cur { background: var(--vscode-list-activeSelectionBackground, rgba(38,146,222,.35)); color: var(--vscode-list-activeSelectionForeground, inherit); }
 </style></head>
 <body>
 <div class="head">
@@ -262,6 +286,47 @@ ${cspMeta(nonce)}
       else { commit(row.key, sel.value); }
     });
     return sel;
+  }
+
+  // An open combobox (the metadata Тип rows): on focus ALL candidates are shown (a native
+  // datalist filters by the current value and would show only it), typing filters; a value
+  // can also be typed manually. An empty commit clears the property (the metadata route
+  // treats it as a removal - the historical panel semantics).
+  function comboEditor(row) {
+    const wrap = el("div", "combo");
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = row.set ? row.value : "";
+    const list = el("div", "combo-list");
+    list.style.display = "none";
+    const opts = row.editor.options || [];
+    let last = input.value; // guard against re-sending the same value
+    const commitValue = (v) => { if (v !== last) { last = v; commit(row.key, v); } };
+    const build = (showAll) => {
+      const q = showAll ? "" : input.value.trim().toLowerCase();
+      list.textContent = "";
+      const matches = opts.filter((o) => !q || o.toLowerCase().includes(q));
+      if (!matches.length) { list.style.display = "none"; return; }
+      for (const o of matches) {
+        const it = el("div", "combo-opt" + (o === input.value ? " cur" : ""), o);
+        // mousedown (before blur) so the click manages to pick the item.
+        it.addEventListener("mousedown", (e) => { e.preventDefault(); input.value = o; list.style.display = "none"; commitValue(o); });
+        list.appendChild(it);
+      }
+      list.style.display = "block";
+      const cur = list.querySelector(".combo-opt.cur");
+      if (cur) { cur.scrollIntoView({ block: "nearest" }); }
+    };
+    input.addEventListener("focus", () => build(true));
+    input.addEventListener("click", () => build(true));
+    input.addEventListener("input", () => build(false));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { list.style.display = "none"; commitValue(input.value); }
+      else if (e.key === "Escape") { list.style.display = "none"; }
+    });
+    input.addEventListener("blur", () => { setTimeout(() => { list.style.display = "none"; commitValue(input.value); }, 150); });
+    wrap.appendChild(input); wrap.appendChild(list);
+    return wrap;
   }
 
   function colorControls(initialHex, initialText, placeholder, onCommit) {
@@ -491,6 +556,7 @@ ${cspMeta(nonce)}
       case "composite": return compositeEditor(row);
       case "binding": return bindingEditor(row);
       case "handler": return handlerEditor(row);
+      case "combo": return comboEditor(row);
       default: return readonlyEditor(row);
     }
   }
@@ -522,7 +588,9 @@ ${cspMeta(nonce)}
         && row.editor.control !== "readonly") {
       cap.appendChild(gotoButton(row));
     }
-    if (row.set) {
+    // Read-only rows (Ид, ВидЭлемента, slots) cannot be edited - deleting them from the
+    // panel would be the only "edit" left, so they get no reset either.
+    if (row.set && row.editor.control !== "readonly") {
       const reset = el("button", "rbtn", "\\u2715");
       reset.title = L.reset;
       reset.addEventListener("click", () => post({ type: "reset", key: row.key }));
@@ -548,7 +616,15 @@ ${cspMeta(nonce)}
 
   function applyFilter() {
     const q = state.search.trim().toLowerCase();
-    for (const sec of pane.querySelectorAll("details.sec")) {
+    const secs = pane.querySelectorAll("details.sec");
+    if (!secs.length) {
+      // The metadata mode renders the rows flat, without section chrome.
+      for (const r of pane.querySelectorAll(".row")) {
+        r.style.display = !q || r.dataset.hay.includes(q) ? "" : "none";
+      }
+      return;
+    }
+    for (const sec of secs) {
       let visible = 0;
       for (const r of sec.querySelectorAll(".row")) {
         const show = !q || r.dataset.hay.includes(q);
@@ -565,7 +641,7 @@ ${cspMeta(nonce)}
     titleBox.textContent = "";
     if (!model) {
       searchInput.style.display = "none";
-      pane.appendChild(el("div", "hint", window.__hint || L.hintSelect));
+      pane.appendChild(el("div", "hint", window.__hint || L.hintIdle));
       return;
     }
     searchInput.style.display = "";
@@ -577,6 +653,17 @@ ${cspMeta(nonce)}
     toYaml.addEventListener("click", () => post({ type: "reveal" }));
     titleBox.appendChild(head);
     titleBox.appendChild(toYaml);
+    if (model.meta) {
+      // The metadata mode: one flat row list - the sections, the events and the legend are
+      // component-mode concepts; the search works over the same rows.
+      for (const section of model.sections) {
+        for (const row of section.rows) {
+          pane.appendChild(buildRow(row));
+        }
+      }
+      applyFilter();
+      return;
+    }
     if (!model.schemaAvailable) {
       pane.appendChild(el("div", "note", L.noSchema));
     }
@@ -640,7 +727,9 @@ function postModel(): void {
     type: "model",
     model: lastModel,
     hint: lastHint,
-    sticky: target ? stickyByType.get(target.type) ?? null : null,
+    // The sticky row is a component-mode habit (serial editing across same-type nodes);
+    // metadata nodes share no type, so the memory does not apply.
+    sticky: target?.kind === "component" ? stickyByType.get(target.type) ?? null : null,
   });
 }
 
@@ -653,13 +742,11 @@ function showHint(text: string): void {
   postModel();
 }
 
-// Cheap test before any LSP call: only interface component yamls have a form tree.
-function isFormYaml(doc: vscode.TextDocument): boolean {
-  if (doc.languageId !== "yaml") {
-    return false;
-  }
+// The fill mode an editor drives (a cheap text test - no LSP calls): component yamls go
+// to the form-node flow, other element yamls and .xbsl modules to the metadata flow.
+function classifyDoc(doc: vscode.TextDocument): ReturnType<typeof classifyEditor> {
   const head = doc.getText(new vscode.Range(0, 0, Math.min(50, doc.lineCount), 0));
-  return head.includes("КомпонентИнтерфейса") && doc.getText().includes("Наследует");
+  return classifyEditor(doc.languageId, doc.fileName, head, doc.getText());
 }
 
 async function getSchema(type: string): Promise<UiComponentDto | null> {
@@ -746,7 +833,7 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
   const doc = await vscode.workspace.openTextDocument(uri);
   lastModel = buildPanelModel(node, schema, doc.getText(), handlers && !handlers.error ? handlers : undefined);
   lastHint = null;
-  target = { uri, nodeId: node.id, nodeSpanStart: node.span.start, type };
+  target = { kind: "component", uri, nodeId: node.id, nodeSpanStart: node.span.start, type };
   const titleParts = [type, node.name ?? ""].filter(Boolean);
   if (shown.viaSlot) {
     titleParts.push(vscode.l10n.t("Slot {0}", shown.viaSlot));
@@ -755,26 +842,96 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
   postModel();
 }
 
-function scheduleRefresh(uri: vscode.Uri, offset: number): void {
+// -- metadata mode ----------------------------------------------------------------------------
+
+function idleHint(): string {
+  return vscode.l10n.t(
+    "Open an element yaml or module, or select a node in the metadata tree – the properties will show here."
+  );
+}
+
+// The metadata fill: the rows come from the pure core (describeMetaSelection over the open
+// buffer), the Тип combobox candidates from the metadata tree provider. No LSP involved -
+// the mode works in the CLI mode too, exactly like the historical metadata panel.
+async function refreshMetadata(uri: vscode.Uri, sel: MetaSelector): Promise<void> {
+  const my = ++seq;
+  let doc: vscode.TextDocument;
+  try {
+    doc = await vscode.workspace.openTextDocument(uri);
+  } catch {
+    return;
+  }
+  if (seq !== my || !view) {
+    return;
+  }
+  const text = doc.getText();
+  const desc = describeMetaSelection(text, sel);
+  if (!desc) {
+    showHint(idleHint());
+    return;
+  }
+  let candidates: string[] | undefined;
+  if (typeCandidatesFn && desc.rows.some((r) => r.control === "combo")) {
+    candidates = await typeCandidatesFn();
+    if (seq !== my || !view) {
+      return;
+    }
+  }
+  lastModel = buildMetaPanelModel(desc, candidates);
+  lastHint = null;
+  target = { kind: "metadata", uri, offset: desc.offset, std: sel.std };
+  view.description = [lastModel.type, lastModel.name].filter(Boolean).join(" · ") || undefined;
+  postModel();
+}
+
+// A module shows its paired yaml's object properties (the same stem; X.Объект.xbsl -> X).
+async function refreshForModule(uri: vscode.Uri): Promise<void> {
+  const pair = pairedYamlPath(uri.fsPath);
+  const pairUri = pair ? vscode.Uri.file(pair) : undefined;
+  if (pairUri) {
+    try {
+      await vscode.workspace.fs.stat(pairUri);
+      await refreshMetadata(pairUri, { cursor: 0 });
+      return;
+    } catch {
+      // fall through to the hint - the pair does not exist
+    }
+  }
+  showHint(
+    vscode.l10n.t("The module has no paired yaml description – the object properties cannot be shown.")
+  );
+}
+
+// A tree signal or an explicit command outranks a pending cursor refresh: the debounced
+// editor fill must not overwrite the fresher target ("the last signal wins").
+function cancelScheduledRefresh(): void {
   if (debounceTimer) {
     clearTimeout(debounceTimer);
+    debounceTimer = undefined;
   }
+}
+
+function scheduleRefresh(uri: vscode.Uri, offset: number, mode: "component" | "metadata"): void {
+  cancelScheduledRefresh();
   debounceTimer = setTimeout(() => {
     debounceTimer = undefined;
-    void refreshForOffset(uri, offset);
+    if (mode === "component") {
+      void refreshForOffset(uri, offset);
+    } else {
+      void refreshMetadata(uri, { cursor: offset });
+    }
   }, SELECTION_DEBOUNCE_MS);
 }
 
 function refreshFromActiveEditor(): void {
   const editor = vscode.window.activeTextEditor;
-  if (editor && isFormYaml(editor.document)) {
-    scheduleRefresh(editor.document.uri, editor.document.offsetAt(editor.selection.active));
+  const mode = editor ? classifyDoc(editor.document) : "none";
+  if (editor && (mode === "component" || mode === "metadata")) {
+    scheduleRefresh(editor.document.uri, editor.document.offsetAt(editor.selection.active), mode);
+  } else if (editor && mode === "module") {
+    void refreshForModule(editor.document.uri);
   } else if (!lastModel) {
-    showHint(
-      vscode.l10n.t(
-        "Place the cursor on a form component in the yaml editor – its properties will show here."
-      )
-    );
+    showHint(idleHint());
   }
 }
 
@@ -786,16 +943,17 @@ async function applyOperation(
   key: string,
   plan?: WritePlan
 ): Promise<void> {
-  if (!target) {
+  if (target?.kind !== "component") {
     return;
   }
-  const uri = target.uri;
+  const tgt = target; // snapshot: a concurrent refresh may retarget the panel mid-flight
+  const uri = tgt.uri;
   const doc = await vscode.workspace.openTextDocument(uri);
   const version = doc.version;
   // The operation arguments ride FLAT in params (uri, op, node, key, value...): over the
   // real pygls channel a nested args object arrives as a namedtuple, not a dict, which
   // older engines could not read at all.
-  const params: Record<string, unknown> = { uri: uri.toString(), op, node: target.nodeId, key };
+  const params: Record<string, unknown> = { uri: uri.toString(), op, node: tgt.nodeId, key };
   if (plan && plan.kind === "value") {
     params.value = plan.value;
   } else if (plan && plan.kind === "valueYaml") {
@@ -814,12 +972,12 @@ async function applyOperation(
   }
   if (res.error) {
     void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: {0}", res.error));
-    void refreshForOffset(uri, target.nodeSpanStart);
+    void refreshForOffset(uri, tgt.nodeSpanStart);
     return;
   }
   const fresh = await vscode.workspace.openTextDocument(uri);
   if (fresh.version !== version) {
-    void refreshForOffset(uri, target.nodeSpanStart);
+    void refreshForOffset(uri, tgt.nodeSpanStart);
     return;
   }
   const we = new vscode.WorkspaceEdit();
@@ -829,11 +987,41 @@ async function applyOperation(
   await vscode.workspace.applyEdit(we);
   // Node ids are positional and die with every change - re-read by the span start the
   // engine reported for the resulting node in the NEW text.
-  void refreshForOffset(uri, res.node?.span?.start ?? target.nodeSpanStart);
+  void refreshForOffset(uri, res.node?.span?.start ?? tgt.nodeSpanStart);
+}
+
+// One metadata write: existing targeted edits (metaPropertyEdits over propertyEdit and
+// insertItemEdit) applied as a WorkspaceEdit, then a re-read of the same node. value null
+// removes the key - the Reset button, the Авто tristate and an emptied editor all land here.
+async function applyMetaProp(key: string, value: string | null): Promise<void> {
+  if (target?.kind !== "metadata") {
+    return;
+  }
+  const tgt = target;
+  const doc = await vscode.workspace.openTextDocument(tgt.uri);
+  const text = doc.getText();
+  const edits = metaPropertyEdits(text, { offset: tgt.offset, std: tgt.std }, key, value);
+  if (!edits.length) {
+    return;
+  }
+  const we = new vscode.WorkspaceEdit();
+  for (const e of edits) {
+    we.replace(tgt.uri, new vscode.Range(doc.positionAt(e.start), doc.positionAt(e.end)), e.newText);
+  }
+  await vscode.workspace.applyEdit(we);
+  // The property lines live below the node start, so the node offset survives the edit;
+  // a standard attribute is re-found by name (it may have just materialized).
+  await refreshMetadata(tgt.uri, tgt.std ? { std: tgt.std } : { offset: tgt.offset });
 }
 
 function handleCommit(key: string, value: unknown, member: unknown): void {
   if (!lastModel || typeof value !== "string") {
+    return;
+  }
+  // The metadata mode: the historical panel semantics - an empty value removes the key
+  // ("not set" = the key is absent from yaml); everything else is a plain scalar write.
+  if (target?.kind === "metadata") {
+    void applyMetaProp(key, value === "" ? null : value);
     return;
   }
   const row = findRow(lastModel, key);
@@ -888,7 +1076,15 @@ async function reveal(offset: number | undefined): Promise<void> {
     return;
   }
   const doc = await vscode.workspace.openTextDocument(target.uri);
-  const pos = doc.positionAt(Math.min(offset ?? target.nodeSpanStart, doc.getText().length));
+  // The metadata mode reveals the node line; a synthetic standard attribute (no node in
+  // yaml) falls back to the materialized record by name, or the object start.
+  const fallback =
+    target.kind === "component"
+      ? target.nodeSpanStart
+      : target.std
+        ? findAttrOffset(doc.getText(), target.std.name) ?? 0
+        : Math.max(target.offset, 0);
+  const pos = doc.positionAt(Math.min(offset ?? fallback, doc.getText().length));
   const editor = await vscode.window.showTextDocument(doc, { preview: false });
   editor.selection = new vscode.Selection(pos, pos);
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
@@ -912,7 +1108,7 @@ async function openAtOffset(uri: vscode.Uri, offset: number): Promise<void> {
 // "Go to the handler method": jump to the method name in the paired module; a method the
 // module does not have gets a warning with an offer to create exactly that stub.
 async function gotoHandler(key: string, method: string): Promise<void> {
-  if (!target || !method) {
+  if (target?.kind !== "component" || !method) {
     return;
   }
   const handlers = await lspRequest<ModuleHandlersPayload>("xbsl/moduleHandlers", {
@@ -946,7 +1142,7 @@ async function gotoHandler(key: string, method: string): Promise<void> {
 // "bind to it" per the engine contract); an EMPTY input sends no method at all - the
 // engine derives <Имя|Тип><Ключ> itself and uniquifies it against the module.
 async function createHandler(key: string): Promise<void> {
-  if (!target || !lastModel) {
+  if (target?.kind !== "component" || !lastModel) {
     return;
   }
   const row = findRow(lastModel, key);
@@ -969,9 +1165,10 @@ async function createHandler(key: string): Promise<void> {
 // the method name. Versions of both buffers are pinned around the request - the engine
 // computed the edits against them.
 async function runAddHandler(key: string, method?: string, signature?: string): Promise<void> {
-  if (!target) {
+  if (target?.kind !== "component") {
     return;
   }
+  const tgt = target; // snapshot: a concurrent refresh may retarget the panel mid-flight
   if (!lspActive()) {
     void vscode.window.showWarningMessage(
       vscode.l10n.t(
@@ -980,7 +1177,7 @@ async function runAddHandler(key: string, method?: string, signature?: string): 
     );
     return;
   }
-  const uri = target.uri;
+  const uri = tgt.uri;
   const yamlVersion = (await vscode.workspace.openTextDocument(uri)).version;
   let moduleVersion: number | undefined;
   try {
@@ -990,7 +1187,7 @@ async function runAddHandler(key: string, method?: string, signature?: string): 
   }
   const res = await lspRequest<AddHandlerResponse>(
     "xbsl/addHandler",
-    buildAddHandlerParams(uri.toString(), target.nodeId, key, method, signature)
+    buildAddHandlerParams(uri.toString(), tgt.nodeId, key, method, signature)
   );
   if (!res) {
     void vscode.window.showWarningMessage(
@@ -1046,7 +1243,7 @@ async function runAddHandler(key: string, method?: string, signature?: string): 
   for (const note of plan.notes) {
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: {0}", note));
   }
-  void refreshForOffset(uri, target.nodeSpanStart);
+  void refreshForOffset(uri, tgt.nodeSpanStart);
 }
 
 // -- provider and registration ----------------------------------------------------------------
@@ -1091,14 +1288,18 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
         } else if (m.type === "commitComposite" && typeof m.key === "string") {
           handleCommitComposite(m.key, m.fields);
         } else if (m.type === "reset" && typeof m.key === "string") {
-          void applyOperation("reset_property", m.key);
+          if (target?.kind === "metadata") {
+            void applyMetaProp(m.key, null);
+          } else {
+            void applyOperation("reset_property", m.key);
+          }
         } else if (m.type === "createHandler" && typeof m.key === "string") {
           void createHandler(m.key);
         } else if (m.type === "gotoHandler" && typeof m.key === "string" && typeof m.method === "string") {
           void gotoHandler(m.key, m.method);
         } else if (m.type === "reveal") {
           void reveal(typeof m.offset === "number" ? m.offset : undefined);
-        } else if (m.type === "sticky" && typeof m.key === "string" && target) {
+        } else if (m.type === "sticky" && typeof m.key === "string" && target?.kind === "component") {
           stickyByType.set(target.type, m.key);
         }
       },
@@ -1110,29 +1311,85 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
 
 async function ensureView(): Promise<void> {
   if (view) {
+    // Expand the sidebar section without stealing focus from the caller (tree, preview).
     view.show(true);
     return;
   }
+  // The view is not created yet - focusing the section makes VS Code call the provider;
+  // the content arrives with the "ready" message from the webview.
   await vscode.commands.executeCommand(`${VIEW_TYPE}.focus`);
 }
 
-export function registerFormProps(context: vscode.ExtensionContext): void {
+// A metadata tree node as the panel target: an object/field with a yaml offset or a
+// standard attribute of a kind (the tree's XbslNode matches this shape structurally).
+export interface PropsNode {
+  yamlPath?: string;
+  offset?: number;
+  stdKind?: string;
+  stdName?: string;
+}
+
+function metaSelectorFor(node: PropsNode): MetaSelector | undefined {
+  if (!node.yamlPath) {
+    return undefined;
+  }
+  if (node.stdKind && node.stdName) {
+    return { std: { kind: node.stdKind, name: node.stdName } };
+  }
+  if (node.offset !== undefined) {
+    return { offset: node.offset };
+  }
+  return undefined;
+}
+
+// Silent update on metadata tree selection change (mouse, arrows, programmatic reveal):
+// the panel follows the selection only when already visible - selecting does not open
+// files and does not disturb the sidebar. The tree signal wins over a pending cursor
+// refresh (the selection often reveals the yaml, which fires cursor events of its own).
+export function updatePropsFromSelection(node: PropsNode | undefined): void {
+  if (!node || !view || !view.visible) {
+    return;
+  }
+  const sel = metaSelectorFor(node);
+  if (sel && node.yamlPath) {
+    cancelScheduledRefresh();
+    void refreshMetadata(vscode.Uri.file(node.yamlPath), sel);
+  }
+}
+
+// typeCandidates (from the metadata tree provider) fills the Тип combobox of the metadata
+// mode; without it the Тип field degrades to a plain text input.
+export function registerFormProps(
+  context: vscode.ExtensionContext,
+  typeCandidates?: () => Promise<string[]>
+): void {
+  typeCandidatesFn = typeCandidates;
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VIEW_TYPE, new FormPropsViewProvider(context)),
     // The cursor is the selection source: the node under it fills the panel (the structure
-    // view and the preview go through the showForNode command below). Deliberately NOT
-    // gated on activeTextEditor: the selection also changes programmatically while focus
-    // sits in a tree or a webview, and the panel must follow those too.
+    // view and the preview go through the showForNode command below, the metadata tree
+    // through xbsl.metadata.props). Deliberately NOT gated on activeTextEditor: the
+    // selection also changes programmatically while focus sits in a tree or a webview,
+    // and the panel must follow those too.
     vscode.window.onDidChangeTextEditorSelection((e) => {
-      if (!view?.visible || !isFormYaml(e.textEditor.document)) {
+      if (!view?.visible) {
         return;
       }
       const doc = e.textEditor.document;
-      scheduleRefresh(doc.uri, doc.offsetAt(e.selections[0].active));
+      const mode = classifyDoc(doc);
+      if (mode === "component" || mode === "metadata") {
+        scheduleRefresh(doc.uri, doc.offsetAt(e.selections[0].active), mode);
+      }
     }),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
-      if (view?.visible && editor && isFormYaml(editor.document)) {
-        scheduleRefresh(editor.document.uri, editor.document.offsetAt(editor.selection.active));
+      if (!view?.visible || !editor) {
+        return;
+      }
+      const mode = classifyDoc(editor.document);
+      if (mode === "component" || mode === "metadata") {
+        scheduleRefresh(editor.document.uri, editor.document.offsetAt(editor.selection.active), mode);
+      } else if (mode === "module") {
+        void refreshForModule(editor.document.uri);
       }
     }),
     // Entry point for the structure view (the parallel track) and for scripts: show the
@@ -1152,6 +1409,19 @@ export function registerFormProps(context: vscode.ExtensionContext): void {
         await ensureView();
         await refreshForOffset(uri, typeof offset === "number" ? offset : 0);
       }
-    )
+    ),
+    // Entry point for the metadata tree (a click or the "Properties" context item):
+    // reveal the panel and fill it with the node. Without a node (the command palette)
+    // the panel opens and follows the active editor.
+    vscode.commands.registerCommand("xbsl.metadata.props", async (node?: PropsNode) => {
+      await ensureView();
+      cancelScheduledRefresh();
+      const sel = node ? metaSelectorFor(node) : undefined;
+      if (node?.yamlPath && sel) {
+        await refreshMetadata(vscode.Uri.file(node.yamlPath), sel);
+      } else {
+        refreshFromActiveEditor();
+      }
+    })
   );
 }

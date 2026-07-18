@@ -1,8 +1,8 @@
 // Parsing of the internal structure of a 1C:Element object (attributes, dimensions, resources,
 // tabular sections, enumeration values, client operation parameters, HTTP service URL templates)
 // and generation of a targeted insertion of a new section item into yaml. The module is pure
-// (no vscode) so it can be checked by plain node tests; the tree/webview wiring is in
-// metadataTree.ts.
+// (no vscode) so it can be checked by plain node tests; the tree wiring is in metadataTree.ts,
+// the properties-panel row mapping and writes are in propsModes.ts.
 //
 // Sections are arrays of same-shaped descriptions. The shape depends on the section:
 // attribute/dimension/resource - { Ид, Имя, Тип }; enumeration value - { Ид, Имя }; client
@@ -188,7 +188,7 @@ const READONLY_KEYS = new Set(["Ид", "ВидЭлемента"]);
 const TYPE_KEYS = new Set(["Тип"]);
 
 // String-specific attribute properties: shown only when Тип is Строка. When the type changes
-// to another one the panel removes them from yaml (see applyProp in metadataProps).
+// to another one the panel removes them from yaml (see metaPropertyEdits in propsModes.ts).
 const STRING_ONLY_KEYS = new Set(["Многострочная"]);
 
 export function describeMetaNode(text: string, offset: number): MetaNodeDescription | undefined {

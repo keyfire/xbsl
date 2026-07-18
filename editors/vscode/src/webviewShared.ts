@@ -1,7 +1,7 @@
 // Shared helpers of the extension's webviews: HTML escaping, script nonces, the standard
 // strict CSP meta tag and SAFE inline JSON for <script> blocks. New panels must use this
-// module instead of growing per-panel copies (the older panels - metadataProps, formPreview,
-// templatesPanel - are refactored onto it separately; see docs/DESIGNER.md, stage 3).
+// module instead of growing per-panel copies (the older panels - formPreview, templatesPanel -
+// are refactored onto it separately; see docs/DESIGNER.md, stage 3).
 //
 // Why inlineJson exists: raw JSON.stringify output pasted into a <script> block is NOT safe -
 // a string value containing "</script>" terminates the block early and the rest of the data
