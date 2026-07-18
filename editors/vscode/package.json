@@ -65,8 +65,13 @@
       "activitybar": [
         {
           "id": "xbslElement",
-          "title": "%view.container%",
+          "title": "%view.metadataContainer%",
           "icon": "resources/element-tree.svg"
+        },
+        {
+          "id": "xbslDocsContainer",
+          "title": "%view.docsContainer%",
+          "icon": "resources/docs-book.svg"
         },
         {
           "id": "xbslDesigner",
@@ -86,7 +91,9 @@
           "id": "xbslMetadata",
           "name": "%view.metadata%",
           "icon": "$(list-tree)"
-        },
+        }
+      ],
+      "xbslDocsContainer": [
         {
           "id": "xbslDocs",
           "name": "%view.docs%",

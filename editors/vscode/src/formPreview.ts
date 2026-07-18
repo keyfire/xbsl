@@ -393,7 +393,10 @@ function openPreview(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
       }
     }, undefined, context.subscriptions);
   } else {
-    panel.reveal(panel.viewColumn ?? vscode.ViewColumn.Beside, true);
+    // Keep the preview to the RIGHT of the yaml: reveal Beside the active source editor (which
+    // previewForm has just focused), not in the panel's own stale column - otherwise a persistent
+    // panel stays left of a newly opened yaml. preserveFocus keeps the cursor in the yaml.
+    panel.reveal(vscode.ViewColumn.Beside, true);
   }
   render();
 }

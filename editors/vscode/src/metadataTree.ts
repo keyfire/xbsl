@@ -75,6 +75,30 @@ interface KindMeta {
 const KIND_META = new Map<string, KindMeta>();
 KIND_ROWS.forEach(([kind, group, icon], i) => KIND_META.set(kind, { group, icon, order: i }));
 
+// A tree icon in the neutral tree-foreground color. The symbol-* codicons (symbol-enum,
+// symbol-interface, ...) otherwise render in their own semantic colors, so enumerations and
+// contracts stand out from the rest; forcing icon.foreground keeps every category one color.
+function neutralIcon(id: string): vscode.ThemeIcon {
+  return new vscode.ThemeIcon(id, new vscode.ThemeColor("icon.foreground"));
+}
+
+// Every standard metadata category, shown even when empty (the 1C:Element convention: the tree
+// structure is the same regardless of content). Distinct groups from KIND_ROWS with their icon and
+// order; the structural groups (the project root and the subsystems branch) are not object
+// categories and are excluded. Multiple kinds may map to one group - the first wins.
+const ALL_CATEGORY_GROUPS: ReadonlyArray<{ group: string; icon: string; order: number }> = (() => {
+  const seen = new Map<string, { group: string; icon: string; order: number }>();
+  KIND_ROWS.forEach(([, group, icon], i) => {
+    if (group === "Project" || group === "Subsystems") {
+      return;
+    }
+    if (!seen.has(group)) {
+      seen.set(group, { group, icon, order: i });
+    }
+  });
+  return [...seen.values()];
+})();
+
 const FORM_KIND = "КомпонентИнтерфейса";
 // English label keys (see the comment at KIND_ROWS): displayed via l10n.t.
 const OTHER_GROUP = "Other";
@@ -467,7 +491,7 @@ function categoryNode(group: string, icon: string, children: XbslNode[], createK
     vscode.l10n.t(group),
     children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
-  node.iconPath = new vscode.ThemeIcon(icon);
+  node.iconPath = neutralIcon(icon);
   node.description = String(children.length);
   node.newObjectKind = createKind;
   // The newobj-<slug> token enables the right per-kind "Add <class>" command.
@@ -619,7 +643,7 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
     el.name,
     groups.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
-  node.iconPath = new vscode.ThemeIcon(metaFor(el.kind).icon);
+  node.iconPath = neutralIcon(metaFor(el.kind).icon);
   node.yamlPath = el.yamlPath;
   node.resourceUri = vscode.Uri.file(el.yamlPath); // git statuses (color/badge), keeping our own icon
   node.modulePath = el.modulePath;
@@ -709,7 +733,17 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
     cat.elements.push(node);
     cats.set(meta.group, cat);
   }
-  // Creatable kinds: mark them with "add object"; empty ones are shown only without a filter.
+  // Without a filter, show every standard category even when empty (the 1C convention: the tree
+  // structure stays the same regardless of content). Under a filter, only the categories that have
+  // matching objects are shown.
+  if (showEmptyCreatable) {
+    for (const g of ALL_CATEGORY_GROUPS) {
+      if (!cats.has(g.group)) {
+        cats.set(g.group, { icon: g.icon, order: g.order, elements: [] });
+      }
+    }
+  }
+  // Creatable kinds carry the "add object" action on their category.
   for (const kind of CREATABLE_KINDS) {
     const meta = metaFor(kind);
     const existing = cats.get(meta.group);
