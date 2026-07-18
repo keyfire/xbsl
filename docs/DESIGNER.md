@@ -186,6 +186,16 @@ linter would flag as an error.
 | 11 | Read-only designer view for library forms (`.xlib`) | S/M | 4+ |
 | 12 | Designer operations for agents via MCP/CLI | S | folded into stage 0 |
 
+## Refinement backlog (from live feedback)
+
+- **The yaml active line misses the highlighted preview block.** Selecting a node in the
+  structure view sometimes lands the yaml cursor on the list dash (`-`) BEFORE the node, and
+  `selectionForCursor` then picks the neighbouring block (СкриншотВерх instead of Надпись
+  =Текст) - an off-by-one at the list-item boundary. Aim `revealOffset`/`selectionForCursor`
+  at the node's `Тип:` line, not its dash.
+- **Group properties by dependency in the properties panel.** Only the slot indicator (bar +
+  badge) exists today; grouping dependent fields is not done.
+
 ## Delivery plan
 
 Parallel tracks; every stage ships as a normal minor release of the engine and
