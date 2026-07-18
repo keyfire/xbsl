@@ -30,11 +30,11 @@ const KIND_ROWS: ReadonlyArray<readonly [kind: string, group: string, icon: stri
   ["Документ", "Documents", "note"],
   ["Перечисление", "Enumerations", "symbol-enum"],
   ["Структура", "Structures", "symbol-structure"],
-  ["ХранимаяСтруктура", "Stored structures", "symbol-structure"],
+  ["ХранимаяСтруктура", "Stored structures", "database"],
   ["НаборКонстант", "Constant sets", "symbol-constant"],
   ["РегистрСведений", "Information registers", "table"],
   ["РегистрНакопления", "Accumulation registers", "graph"],
-  ["ВиртуальнаяТаблица", "Virtual tables", "table"],
+  ["ВиртуальнаяТаблица", "Virtual tables", "list-flat"],
   ["ОбщийМодуль", "Common modules", "file-code"],
   ["HttpСервис", "HTTP services", "globe"],
   ["SoapСервис", "SOAP services", "server"],
@@ -44,7 +44,7 @@ const KIND_ROWS: ReadonlyArray<readonly [kind: string, group: string, icon: stri
   ["КонтрактСущности", "Contracts", "symbol-interface"],
   ["ГлобальноеКлиентскоеСобытие", "Client events", "zap"],
   ["СобытиеЖурналаСобытий", "Event-log events", "history"],
-  ["ЗапланированноеЗадание", "Scheduled jobs", "clock"],
+  ["ЗапланированноеЗадание", "Scheduled jobs", "calendar"],
   ["Обработка", "Data processors", "tools"],
   ["Отчет", "Reports", "graph-line"],
   ["ПанельОтчетов", "Report panels", "dashboard"],
@@ -462,9 +462,9 @@ function subsystemModeChildren(subsystems: Subsystem[], elements: Element[]): Xb
   const buildSub = (s: Subsystem): XbslNode =>
     subsystemGroupNode(s, [
       ...(childSubs.get(s.dir) ?? []).sort(byName).map(buildSub),
-      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false),
+      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false),
     ]);
-  return [...topSubs.sort(byName).map(buildSub), ...categoriesOf(rootElems, false)];
+  return [...topSubs.sort(byName).map(buildSub), ...categoriesOf(rootElems, false, false)];
 }
 
 function projectNode(project: Project, children: XbslNode[], filterNames: string[]): XbslNode {
@@ -700,7 +700,7 @@ function formOwnerResolver(objects: Element[]): (form: Element) => string | unde
 
 // Categories (by kind) for a set of elements, including the "Common forms" section. Empty creatable
 // categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
-function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNode[] {
+function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean): XbslNode[] {
   const forms = elements.filter((e) => e.kind === FORM_KIND);
   const objects = elements.filter((e) => e.kind !== FORM_KIND);
 
@@ -733,26 +733,41 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
     cat.elements.push(node);
     cats.set(meta.group, cat);
   }
-  // Without a filter, show every standard category even when empty (the 1C convention: the tree
-  // structure stays the same regardless of content). Under a filter, only the categories that have
-  // matching objects are shown.
-  if (showEmptyCreatable) {
+  // Empty categories: without a filter, show every standard category even when empty (the 1C
+  // convention - the tree structure stays the same regardless of content), UNLESS the user hid
+  // empty categories (the toolbar toggle). Under a filter, only categories with matching objects.
+  const showEmpties = showEmptyCreatable && !hideEmpty;
+  if (showEmpties) {
     for (const g of ALL_CATEGORY_GROUPS) {
       if (!cats.has(g.group)) {
         cats.set(g.group, { icon: g.icon, order: g.order, elements: [] });
       }
     }
   }
-  // Creatable kinds carry the "add object" action on their category.
+  // Creatable kinds carry the "add object" action on their category (empty ones only when empties
+  // are shown).
   for (const kind of CREATABLE_KINDS) {
     const meta = metaFor(kind);
     const existing = cats.get(meta.group);
-    if (!existing && !showEmptyCreatable) {
+    if (!existing && !showEmpties) {
       continue;
     }
     const cat = existing ?? { icon: meta.icon, order: meta.order, elements: [] };
     cat.createKind = kind;
     cats.set(meta.group, cat);
+  }
+  // Nothing to show at all (a fresh empty project with empties hidden): show the whole tree so the
+  // panel is not blank.
+  if (!cats.size && !commonForms.length && showEmptyCreatable) {
+    for (const g of ALL_CATEGORY_GROUPS) {
+      cats.set(g.group, { icon: g.icon, order: g.order, elements: [] });
+    }
+    for (const kind of CREATABLE_KINDS) {
+      const meta = metaFor(kind);
+      const cat = cats.get(meta.group) ?? { icon: meta.icon, order: meta.order, elements: [] };
+      cat.createKind = kind;
+      cats.set(meta.group, cat);
+    }
   }
 
   const roots = [...cats.entries()].map(([group, cat]) => ({
@@ -760,10 +775,10 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
     node: categoryNode(group, cat.icon, cat.elements, cat.createKind),
   }));
 
-  // Common forms are a pseudo-category; "add" creates a form without an owner. Always shown
-  // (like creatable ones), except under an active filter with no common forms.
+  // Common forms are a pseudo-category; "add" creates a form without an owner. Shown when it has
+  // forms, or (empty) when empties are shown.
   const commonFormNodes = [...commonForms].sort(byName).map(formNode);
-  if (commonFormNodes.length || showEmptyCreatable) {
+  if (commonFormNodes.length || showEmpties) {
     roots.push({
       order: COMMON_FORMS_ORDER,
       node: categoryNode(COMMON_FORMS_GROUP, "window", commonFormNodes, FORM_KIND),
@@ -776,7 +791,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
 
 type GroupMode = "kind" | "subsystem";
 
-function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode): XbslNode[] {
+function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hideEmpty: boolean): XbslNode[] {
   const filterActive = filterDirs.size > 0;
   const underFilter = (p: string): boolean =>
     [...filterDirs].some((d) => p.toLowerCase().startsWith(d.toLowerCase() + path.sep));
@@ -788,11 +803,11 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode): Xbs
   const childrenOf = (elems: Element[], subs: Subsystem[]): XbslNode[] =>
     mode === "subsystem"
       ? subsystemModeChildren(subs, elems)
-      : [subsystemsBranchNode(subs), ...categoriesOf(elems, showEmpty)];
+      : [subsystemsBranchNode(subs), ...categoriesOf(elems, showEmpty, hideEmpty)];
 
   if (model.projects.length === 0) {
     // No Проект.yaml found - go without a project root.
-    return mode === "subsystem" ? subsystemModeChildren(model.subsystems, elements) : categoriesOf(elements, showEmpty);
+    return mode === "subsystem" ? subsystemModeChildren(model.subsystems, elements) : categoriesOf(elements, showEmpty, hideEmpty);
   }
   const projects = [...model.projects].sort(byName);
   const projectOf = (targetPath: string): Project => {
@@ -838,6 +853,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   private model?: Model;
   private filter = new Set<string>(); // subsystem directories of the active filter
   private groupMode: GroupMode = "kind"; // tree hierarchy: by classes or by subsystems
+  private hideEmpty = false; // hide empty class categories (the toolbar toggle)
   private treeView?: vscode.TreeView<XbslNode>; // for reveal (getParent is mandatory)
   private pendingReveal?: (n: XbslNode) => boolean; // reveal this node after a rebuild
 
@@ -874,6 +890,18 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     this.refresh();
   }
 
+  get emptyHidden(): boolean {
+    return this.hideEmpty;
+  }
+
+  setHideEmpty(hide: boolean): void {
+    if (this.hideEmpty === hide) {
+      return;
+    }
+    this.hideEmpty = hide;
+    this.refresh();
+  }
+
   getTreeItem(node: XbslNode): vscode.TreeItem {
     return node;
   }
@@ -885,7 +913,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   private async buildRootsIfNeeded(): Promise<XbslNode[]> {
     if (!this.roots) {
       this.model = await parseModel(this.projectRootFor);
-      this.roots = buildRoots(this.model, this.filter, this.groupMode);
+      this.roots = buildRoots(this.model, this.filter, this.groupMode, this.hideEmpty);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -1082,9 +1110,12 @@ async function previewForm(node?: XbslNode): Promise<void> {
   if (!node?.yamlPath) {
     return;
   }
-  // yaml - in the sources column (left, focused), the preview opens as a panel on the right (Beside).
-  await openFile(node.yamlPath);
-  await vscode.commands.executeCommand("xbsl.previewForm", vscode.Uri.file(node.yamlPath));
+  // The form preview on the LEFT (column One), the yaml on the RIGHT (column Two, focused) - handy
+  // for dragging components toward the form.
+  const uri = vscode.Uri.file(node.yamlPath);
+  await vscode.commands.executeCommand("xbsl.previewForm", uri);
+  const doc = await vscode.workspace.openTextDocument(uri);
+  await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Two, preview: false });
 }
 
 // Click on an object/field/module: the source on the left (the description with the cursor on the
@@ -1387,6 +1418,19 @@ async function filterBySubsystem(provider: XbslMetadataProvider): Promise<void> 
 }
 
 const GROUP_MODE_KEY = "xbsl.metadata.groupMode";
+// Persisted "hide empty categories" toggle; the context key drives which title button is shown.
+const HIDE_EMPTY_KEY = "xbsl.metadata.hideEmpty";
+const HIDE_EMPTY_CONTEXT = "xbsl.metadata.emptyHidden";
+
+async function setEmptyHidden(
+  provider: XbslMetadataProvider,
+  context: vscode.ExtensionContext,
+  hide: boolean
+): Promise<void> {
+  provider.setHideEmpty(hide);
+  await context.globalState.update(HIDE_EMPTY_KEY, hide);
+  await vscode.commands.executeCommand("setContext", HIDE_EMPTY_CONTEXT, hide);
+}
 
 // Tree hierarchy choice: by object classes or by subsystems; the choice is remembered.
 async function pickGroupMode(provider: XbslMetadataProvider, context: vscode.ExtensionContext): Promise<void> {
@@ -1420,6 +1464,9 @@ export function registerMetadataTree(
   if (savedMode === "kind" || savedMode === "subsystem") {
     provider.setGroupMode(savedMode);
   }
+  const savedHide = context.globalState.get<boolean>(HIDE_EMPTY_KEY) ?? false;
+  provider.setHideEmpty(savedHide);
+  void vscode.commands.executeCommand("setContext", HIDE_EMPTY_CONTEXT, savedHide);
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.{yaml,xbsl}");
   let timer: NodeJS.Timeout | undefined;
@@ -1469,7 +1516,9 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.addSubsystem", () => addSubsystem(provider)),
     vscode.commands.registerCommand("xbsl.metadata.filterBySubsystem", () => filterBySubsystem(provider)),
     vscode.commands.registerCommand("xbsl.metadata.clearFilter", () => provider.setFilter([])),
-    vscode.commands.registerCommand("xbsl.metadata.groupMode", () => pickGroupMode(provider, context))
+    vscode.commands.registerCommand("xbsl.metadata.groupMode", () => pickGroupMode(provider, context)),
+    vscode.commands.registerCommand("xbsl.metadata.hideEmptyCategories", () => setEmptyHidden(provider, context, true)),
+    vscode.commands.registerCommand("xbsl.metadata.showEmptyCategories", () => setEmptyHidden(provider, context, false))
   );
 
   // Per-kind "Add <class>" commands (label = the kind; creates via addObject by the node's

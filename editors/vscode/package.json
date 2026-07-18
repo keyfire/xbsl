@@ -89,14 +89,14 @@
       "xbslElement": [
         {
           "id": "xbslMetadata",
-          "name": "%view.metadata%",
+          "name": "",
           "icon": "$(list-tree)"
         }
       ],
       "xbslDocsContainer": [
         {
           "id": "xbslDocs",
-          "name": "%view.docs%",
+          "name": "",
           "icon": "$(book)"
         }
       ],
@@ -328,6 +328,18 @@
         "title": "%cmd.metadata.groupMode%",
         "category": "XBSL",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "xbsl.metadata.hideEmptyCategories",
+        "title": "%cmd.metadata.hideEmptyCategories%",
+        "category": "XBSL",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "xbsl.metadata.showEmptyCategories",
+        "title": "%cmd.metadata.showEmptyCategories%",
+        "category": "XBSL",
+        "icon": "$(eye-closed)"
       },
       {
         "command": "xbsl.restartLinter",
@@ -609,6 +621,16 @@
           "command": "xbsl.metadata.refresh",
           "when": "view == xbslMetadata",
           "group": "navigation@2"
+        },
+        {
+          "command": "xbsl.metadata.hideEmptyCategories",
+          "when": "view == xbslMetadata && !xbsl.metadata.emptyHidden",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xbsl.metadata.showEmptyCategories",
+          "when": "view == xbslMetadata && xbsl.metadata.emptyHidden",
+          "group": "navigation@3"
         },
         {
           "command": "xbsl.docs.search",

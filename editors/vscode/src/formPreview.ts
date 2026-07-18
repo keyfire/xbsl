@@ -357,8 +357,12 @@ function openPreview(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
     docUri = editor.document.uri;
   }
   setTarget(docUri);
+  // Opened from the tree (uri passed): the form preview takes the LEFT column, the yaml opens to
+  // its right (see previewForm) - handy for dragging components toward the form. From the title
+  // button (no uri): beside the active yaml.
+  const column = uri ? vscode.ViewColumn.One : vscode.ViewColumn.Beside;
   if (!panel) {
-    panel = vscode.window.createWebviewPanel(VIEW_TYPE, "XBSL", vscode.ViewColumn.Beside, {
+    panel = vscode.window.createWebviewPanel(VIEW_TYPE, "XBSL", column, {
       enableScripts: true,
       retainContextWhenHidden: true,
     });
@@ -393,10 +397,9 @@ function openPreview(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
       }
     }, undefined, context.subscriptions);
   } else {
-    // Keep the preview to the RIGHT of the yaml: reveal Beside the active source editor (which
-    // previewForm has just focused), not in the panel's own stale column - otherwise a persistent
-    // panel stays left of a newly opened yaml. preserveFocus keeps the cursor in the yaml.
-    panel.reveal(vscode.ViewColumn.Beside, true);
+    // Reveal in the intended column (One from the tree, Beside from the title button), not the
+    // panel's own stale column - otherwise a persistent panel drifts relative to the yaml.
+    panel.reveal(column, true);
   }
   render();
 }

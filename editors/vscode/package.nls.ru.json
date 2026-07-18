@@ -50,6 +50,8 @@
   "cmd.metadata.filterBySubsystem": "Отбор по подсистеме",
   "cmd.metadata.clearFilter": "Снять отбор по подсистеме",
   "cmd.metadata.groupMode": "XBSL: группировка дерева (по классам / по подсистемам)",
+  "cmd.metadata.hideEmptyCategories": "Скрыть пустые классы",
+  "cmd.metadata.showEmptyCategories": "Показать пустые классы",
   "config.linter.run": "Когда запускать линтер xbsl для .xbsl.",
   "config.linter.run.enum.0": "Проверять по мере набора (с задержкой) и при сохранении",
   "config.linter.run.enum.1": "Проверять только при сохранении и открытии",

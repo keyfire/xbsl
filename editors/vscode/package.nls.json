@@ -50,6 +50,8 @@
   "cmd.metadata.filterBySubsystem": "Filter by subsystem",
   "cmd.metadata.clearFilter": "Clear subsystem filter",
   "cmd.metadata.groupMode": "XBSL: tree grouping (by class / by subsystem)",
+  "cmd.metadata.hideEmptyCategories": "Hide empty categories",
+  "cmd.metadata.showEmptyCategories": "Show empty categories",
   "config.linter.run": "When to run the xbsl linter for .xbsl.",
   "config.linter.run.enum.0": "Lint as you type (debounced) and on save",
   "config.linter.run.enum.1": "Lint only on save and open",
