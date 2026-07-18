@@ -195,6 +195,13 @@ linter would flag as an error.
   dash/indent to the node's first key (matching the preview's `map.range[0]`).
 - **Group properties by dependency in the properties panel.** Only the slot indicator (bar +
   badge) exists today; grouping dependent fields is not done.
+- **Full dotted completion of binding expressions.** Done: enumeration values
+  (`=Перечисление.Значение`), owner-object attributes (`=Объект.Реквизит`), bindings already
+  used in the form. NOT done: `=Компоненты.<name>` and member chains
+  (`=Компоненты.Кнопка.Значение`, type members) - that is a full binding-expression completer in
+  the form context (owner object + components + the engine's type system), essentially porting the
+  code editor's `chain_type_at` / `resolve_completions` to the binding mini-expressions. A separate
+  larger task.
 
 ## Delivery plan
 
