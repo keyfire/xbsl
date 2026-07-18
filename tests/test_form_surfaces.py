@@ -4,6 +4,10 @@ The same pattern as test_meta_surfaces.py: MCP is loaded via a stub FastMCP (the
 extra is not needed), the CLI goes through cli.main, and the LSP handlers are driven
 directly when pygls is installed (skipped otherwise). All three surfaces sit on the same
 xbsl.formmodel/xbsl.formedits pair, so the shapes must agree.
+
+xbsl/formEdit is ALSO driven through the real pygls wire path (bytes in, JSON-RPC bytes
+out): pygls deserializes the params of a custom request into nested namedtuples, and a
+handler that only ever saw plain dicts from direct calls breaks exactly there.
 """
 
 import importlib
@@ -320,3 +324,98 @@ def test_lsp_form_edit_computes_only(form_file):
         "uri": _uri(form_file), "op": "explode", "args": {},
     })
     assert "Неизвестная операция" in err["error"]
+
+
+# --- LSP over the real pygls wire ----------------------------------------------------------
+#
+# Direct handler calls (above) feed plain dicts and cannot catch what the real channel
+# does to params: pygls turns every JSON object of a custom request into a namedtuple
+# (pygls.protocol._dict_to_object), which has no __dict__ and does not iterate as pairs.
+# These tests push framed JSON-RPC bytes through server.lsp.data_received and read the
+# response bytes back - serialization, deserialization and dispatch are all real.
+
+
+class _CapturingTransport:
+    """Minimal transport double: collects whatever pygls writes to the client."""
+
+    def __init__(self):
+        self.chunks: list[bytes] = []
+
+    def write(self, data) -> None:
+        self.chunks.append(data if isinstance(data, bytes) else str(data).encode("utf-8"))
+
+
+def _wire_server():
+    from xbsl import lsp as lsp_module
+
+    server = lsp_module._make_server()
+    transport = _CapturingTransport()
+    server.lsp.connection_made(transport)
+    return server, transport
+
+
+def _wire_request(server, transport, method: str, params: dict, msg_id: int) -> dict:
+    body = json.dumps(
+        {"jsonrpc": "2.0", "id": msg_id, "method": method, "params": params}
+    ).encode("utf-8")
+    server.lsp.data_received(b"Content-Length: %d\r\n\r\n%s" % (len(body), body))
+    for chunk in transport.chunks:
+        message = json.loads(chunk.split(b"\r\n\r\n", 1)[-1].decode("utf-8"))
+        if message.get("id") == msg_id:
+            return message
+    raise AssertionError(f"no response for request {msg_id}: {transport.chunks!r}")
+
+
+def test_lsp_form_edit_nested_args_over_wire(form_file):
+    """The {uri, op, args: {...}} shape: the nested args object arrives from pygls as a
+    namedtuple. The old vars()/dict() conversion raised TypeError, pygls answered with a
+    JSON-RPC error, and every write from the panels died with "engine does not answer".
+    """
+    server, transport = _wire_server()
+
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "set_property",
+        "args": {"node": LABEL, "key": "Ширина", "value": "220"},
+    }, msg_id=1)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["edits"] and msg["result"]["node"]["id"] == LABEL
+
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "insert",
+        "args": {"parent": TPL, "slot": "Содержимое", "type": "Надпись", "name": "Итог"},
+    }, msg_id=2)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["node"]["id"] == TPL + "/Содержимое[2]"
+    # the wire path computes only, exactly like the direct one
+    assert form_file.read_text(encoding="utf-8") == FORM
+
+
+def test_lsp_form_edit_flat_params_over_wire(form_file):
+    """The flat shape the VS Code panels send: op and the operation arguments directly
+    in params, no nested args object."""
+    server, transport = _wire_server()
+
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "set_property",
+        "node": LABEL, "key": "Заголовок", "value": "Привет",
+    }, msg_id=1)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["edits"] and msg["result"]["node"]["id"] == LABEL
+
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "insert",
+        "parent": TPL, "slot": "Содержимое", "type": "Флажок", "name": "Показывать",
+    }, msg_id=2)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["node"]["id"] == TPL + "/Содержимое[2]"
+
+    # engine errors stay INSIDE the result: the request itself succeeds
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "remove", "node": "Наследует",
+    }, msg_id=3)
+    assert "error" not in msg, msg
+    assert "Корневой узел" in msg["result"]["error"]

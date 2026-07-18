@@ -6,8 +6,9 @@
 // applies via WorkspaceEdit (native undo/redo). The panel model - sections, typed editors,
 // validation, composite value_yaml assembly - is computed by formPropsCore.ts; here lives
 // only the thin wiring: cursor sync, LSP calls, the webview shell and message routing.
-// The older per-component panel (xbslFormProps inside the wireframe preview) and the
-// metadata panel (xbslMetaProps) stay untouched until this panel replaces them.
+// This panel REPLACED the older per-component tab of the wireframe preview: the structure
+// view and the preview both land here through the xbsl.properties.showForNode command.
+// The metadata properties panel (xbslMetaProps) stays separate - it serves metadata objects.
 //
 // The panel is LSP-only by design: following the cursor with per-selection CLI processes
 // would be unusable, so without the server it shows a hint instead.
@@ -72,6 +73,14 @@ function labels(): Record<string, string> {
     reset: vscode.l10n.t("Reset – remove the property from the yaml"),
     notSet: vscode.l10n.t("(not set)"),
     noHandler: vscode.l10n.t("(no handler)"),
+    dotSet: vscode.l10n.t("Set in yaml"),
+    dotDefault: vscode.l10n.t("Not set – the platform default applies"),
+    dotHandler: vscode.l10n.t("A handler is assigned"),
+    dotNoHandler: vscode.l10n.t("No handler"),
+    legend: vscode.l10n.t(
+      "A filled dot – the property is set in yaml, an outlined one – the platform default applies."
+    ),
+    emptyNote: vscode.l10n.t("An empty value is not written – use Reset to clear the property."),
     defaultPrefix: vscode.l10n.t("default:"),
     readonly: vscode.l10n.t("read-only"),
     typeLabel: vscode.l10n.t("Type"),
@@ -119,6 +128,7 @@ ${cspMeta(nonce)}
   .mono { font-family: var(--vscode-editor-font-family, monospace); }
   .hint { opacity: .65; font-style: italic; margin-top: 8px; }
   .note { opacity: .6; font-size: .85em; margin: 4px 0 8px; }
+  .legend { opacity: .55; font-size: .85em; margin-top: 10px; }
   details.sec { margin-bottom: 6px; }
   details.sec > summary { cursor: pointer; font-weight: 600; font-size: .9em; text-transform: uppercase;
     letter-spacing: .04em; opacity: .8; padding: 3px 0; user-select: none; }
@@ -415,7 +425,13 @@ ${cspMeta(nonce)}
     div.dataset.key = row.key;
     div.dataset.hay = row.hay;
     const cap = el("div", "cap");
-    cap.appendChild(el("span", "dot"));
+    // The set/default indicator explains itself on hover; handler rows (events) word it
+    // in handler terms.
+    const dot = el("span", "dot");
+    dot.title = row.editor.control === "handler"
+      ? (row.set ? L.dotHandler : L.dotNoHandler)
+      : (row.set ? L.dotSet : L.dotDefault);
+    cap.appendChild(dot);
     const name = el("span", "name", row.key);
     const tipParts = [];
     if (row.doc) { tipParts.push(row.doc); }
@@ -500,6 +516,8 @@ ${cspMeta(nonce)}
       }
       pane.appendChild(details);
     }
+    // Footer: the indicator legend next to the empty-value hint.
+    pane.appendChild(el("div", "legend", L.legend + " " + L.emptyNote));
     if (sticky) {
       markSticky(sticky);
       const first = pane.querySelector(".row.sel");
@@ -689,17 +707,20 @@ async function applyOperation(
   const uri = target.uri;
   const doc = await vscode.workspace.openTextDocument(uri);
   const version = doc.version;
-  const args: Record<string, unknown> = { node: target.nodeId, key };
+  // The operation arguments ride FLAT in params (uri, op, node, key, value...): over the
+  // real pygls channel a nested args object arrives as a namedtuple, not a dict, which
+  // older engines could not read at all.
+  const params: Record<string, unknown> = { uri: uri.toString(), op, node: target.nodeId, key };
   if (plan && plan.kind === "value") {
-    args.value = plan.value;
+    params.value = plan.value;
   } else if (plan && plan.kind === "valueYaml") {
-    args.valueYaml = plan.valueYaml;
+    params.valueYaml = plan.valueYaml;
   }
   const res = await lspRequest<{
     edits?: { start: number; end: number; newText: string }[];
     node?: { id: string; span: { start: number; end: number } } | null;
     error?: string;
-  }>("xbsl/formEdit", { uri: uri.toString(), op, args });
+  }>("xbsl/formEdit", params);
   if (!res) {
     void vscode.window.showWarningMessage(
       vscode.l10n.t("The engine does not answer the form requests – update the xbsl package.")
@@ -815,6 +836,9 @@ class FormPropsViewProvider implements vscode.WebviewViewProvider {
       undefined,
       this.context.subscriptions
     );
+    // First fill right away from the active editor's cursor - the panel must not wait
+    // for the next selection event to show anything.
+    refreshFromActiveEditor();
     v.webview.onDidReceiveMessage(
       (m) => {
         if (!m) {
@@ -851,13 +875,12 @@ async function ensureView(): Promise<void> {
 export function registerFormProps(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(VIEW_TYPE, new FormPropsViewProvider(context)),
-    // The cursor is the selection source: the node under it fills the panel (two-way sync
-    // with the future structure view goes through the same command below).
+    // The cursor is the selection source: the node under it fills the panel (the structure
+    // view and the preview go through the showForNode command below). Deliberately NOT
+    // gated on activeTextEditor: the selection also changes programmatically while focus
+    // sits in a tree or a webview, and the panel must follow those too.
     vscode.window.onDidChangeTextEditorSelection((e) => {
-      if (!view?.visible || e.textEditor !== vscode.window.activeTextEditor) {
-        return;
-      }
-      if (!isFormYaml(e.textEditor.document)) {
+      if (!view?.visible || !isFormYaml(e.textEditor.document)) {
         return;
       }
       const doc = e.textEditor.document;

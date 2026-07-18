@@ -1,5 +1,5 @@
-// The "Form structure" view (native TreeView in the 1C:Element container): the node tree of
-// the active КомпонентИнтерфейса yaml, served by the engine's xbsl/formTree LSP request.
+// The "Form structure" view (native TreeView in the 1C:Element Designer container): the node
+// tree of the active КомпонентИнтерфейса yaml, served by the engine's xbsl/formTree LSP request.
 // Two-way selection sync with the editor (cursor - node via xbsl/formNodeAt, click - cursor
 // at the node span), keyboard/context-menu operations and drag-and-drop. Every operation is
 // ONE xbsl/formEdit request; the returned text edits are applied here via WorkspaceEdit (a
@@ -49,8 +49,8 @@ const DIAG_DEBOUNCE_MS = 200;
 const DOUBLE_ACTIVATE_MS = 450;
 const FOCUSED_CONTEXT = "xbsl.formStructure.focusedSubtree";
 const NAMED_CONTEXT = "xbsl.formStructure.namedOnly";
-// Soft hook into the (future) properties panel: executed only when some other module
-// contributed the command; the structure view carries no hard dependency on it.
+// Soft hook into the properties panel (formProps.ts): executed only when the command is
+// contributed; the structure view carries no hard dependency on it.
 const PROPS_HOOK_COMMAND = "xbsl.properties.showForNode";
 const IDENTIFIER = /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/;
 
@@ -397,12 +397,15 @@ class FormStructureProvider
 
   // Click on a node: cursor onto the node's yaml without stealing focus; a second activation
   // in quick succession (double click / double Enter) moves focus to the editor. The cursor
-  // lands on the first content line, not on a comment attached above the node.
+  // lands on the first content line, not on a comment attached above the node. The properties
+  // panel is filled DIRECTLY through its command - the programmatic selection change above
+  // is not a reliable channel for it (events are debounced and may be gated).
   async select(node: FormNode): Promise<void> {
     const now = Date.now();
     const double = !!this.lastActivation && this.lastActivation.id === node.id && now - this.lastActivation.at < DOUBLE_ACTIVATE_MS;
     this.lastActivation = { id: node.id, at: now };
     await this.revealInEditor(revealOffset(node), !double);
+    void this.notifyPropsPanel(revealOffset(node));
   }
 
   async revealInEditor(offset: number, preserveFocus: boolean): Promise<void> {
@@ -444,10 +447,12 @@ class FormStructureProvider
       );
       return undefined;
     }
+    // The operation arguments ride FLAT in params: over the real pygls channel a nested
+    // args object arrives as a namedtuple, not a dict, which older engines could not read.
     const res = await lspRequest<FormEditResponse>("xbsl/formEdit", {
       uri: this.target.toString(),
       op,
-      args,
+      ...args,
     });
     if (!res) {
       void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: the engine did not answer the form edit request."));
@@ -666,19 +671,19 @@ class FormStructureProvider
       after: plan.after,
     });
     if (node) {
-      void this.notifyPropsPanel(node);
+      void this.notifyPropsPanel(node.span.start);
     }
     return node;
   }
 
-  private async notifyPropsPanel(node: { id: string; span: FormSpan }): Promise<void> {
+  private async notifyPropsPanel(offset: number): Promise<void> {
     if (!this.target) {
       return;
     }
     const commands = await vscode.commands.getCommands(true);
     if (commands.includes(PROPS_HOOK_COMMAND)) {
       // The properties panel takes positional (uri, offset) - see formProps.ts.
-      void vscode.commands.executeCommand(PROPS_HOOK_COMMAND, this.target.toString(), node.span.start);
+      void vscode.commands.executeCommand(PROPS_HOOK_COMMAND, this.target.toString(), offset);
     }
   }
 

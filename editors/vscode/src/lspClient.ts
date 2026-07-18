@@ -17,6 +17,9 @@ import { docCode } from "./ruleDocs";
 
 let client: LanguageClient | undefined;
 let baselineArg: string | undefined;
+// The shared "XBSL" output channel (created in extension.ts, handed over on LSP start):
+// failed custom requests are logged there instead of vanishing without a trace.
+let outputChannel: vscode.OutputChannel | undefined;
 
 // Whether LSP mode is active (the server is up). The docs panel is a thin client to the server.
 export function lspActive(): boolean {
@@ -30,15 +33,19 @@ export function lspBaselinePassed(): boolean {
   return baselineArg !== undefined;
 }
 
-// Custom request to the server (xbsl/docs* methods). Returns undefined when the server is not
-// up or the request failed - the consumer shows this as "data unavailable" instead of crashing.
+// Custom request to the server (xbsl/docs*, xbsl/form* and friends). Returns undefined when
+// the server is not up or the request failed - the consumer shows this as "data unavailable"
+// instead of crashing. The failure itself is logged to the XBSL output channel: the callers'
+// generic messages ("the engine does not answer") are undiagnosable without the real error.
 export async function lspRequest<T>(method: string, params: unknown): Promise<T | undefined> {
   if (!client) {
     return undefined;
   }
   try {
     return await client.sendRequest<T>(method, params);
-  } catch {
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    outputChannel?.appendLine(vscode.l10n.t("XBSL LSP: the request {0} failed: {1}", method, msg));
     return undefined;
   }
 }
@@ -139,6 +146,7 @@ export async function activateLsp(
   output: vscode.OutputChannel,
   chosenExplicitly = true
 ): Promise<boolean> {
+  outputChannel = output;
   const built = buildClient(output);
   client = built.client;
   try {

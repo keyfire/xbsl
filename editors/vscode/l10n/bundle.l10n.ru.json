@@ -62,8 +62,6 @@
   "Preview: {0}": "Предпросмотр: {0}",
   "Light": "Светлая",
   "Dark": "Тёмная",
-  "Properties": "Свойства",
-  "Click an element of the wireframe to inspect and edit its properties.": "Кликните элемент каркаса, чтобы посмотреть и изменить его свойства.",
   "Auto": "Авто",
   "(auto)": "(авто)",
   "Show in yaml": "Показать в yaml",
@@ -266,5 +264,11 @@
   "The color must be in the #RRGGBB form.": "Цвет должен быть в форме #RRGGBB.",
   "An empty value is not written – use Reset to clear the property.": "Пустое значение не записывается – для очистки свойства используйте сброс.",
   "The properties panel needs the LSP mode (xbsl.lsp.enabled) and the xbsl engine with the form designer.": "Панели свойств нужен режим LSP (xbsl.lsp.enabled) и движок xbsl с конструктором форм.",
-  "The engine does not answer the form requests – update the xbsl package.": "Движок не отвечает на запросы формы – обновите пакет xbsl."
+  "The engine does not answer the form requests – update the xbsl package.": "Движок не отвечает на запросы формы – обновите пакет xbsl.",
+  "XBSL LSP: the request {0} failed: {1}": "XBSL LSP: запрос {0} не выполнился: {1}",
+  "Set in yaml": "Задано в yaml",
+  "Not set – the platform default applies": "Не задано – действует умолчание платформы",
+  "A handler is assigned": "Обработчик назначен",
+  "No handler": "Обработчика нет",
+  "A filled dot – the property is set in yaml, an outlined one – the platform default applies.": "Заполненная точка – свойство задано в yaml, контурная – действует умолчание платформы."
 }

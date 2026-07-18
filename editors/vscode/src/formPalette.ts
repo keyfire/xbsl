@@ -1,5 +1,5 @@
-// The "Component palette" view (native TreeView in the 1C:Element container): insertable
-// interface components from the engine's xbsl/uiSchema catalog plus the project's own
+// The "Component palette" view (native TreeView in the 1C:Element Designer container):
+// insertable interface components from the engine's xbsl/uiSchema catalog plus the project's own
 // КомпонентИнтерфейса elements. Sections: Frequent (insertion counters in globalState),
 // Favorites (starred, globalState), Project, then platform packages by the last package
 // segment. Insertion goes through the structure view (a double activation - double click or

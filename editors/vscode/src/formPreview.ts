@@ -1,20 +1,14 @@
-// 1C:Element form preview - TWO standalone webview panels:
-//  * "Preview" - the form wireframe from yaml (rendering - formPreviewCore.ts): follows the
-//    active yaml editor, live updates, zoom and theme (light/dark/editor) in the toolbar,
-//    switchable tabs; a click selects a component, Ctrl+click leads to yaml.
-//  * "Properties" - the panel of the selected component, like in the platform's web editor:
-//    opens as a separate tab (can be dragged down or aside), enumerations - as dropdowns,
-//    Растягивать* - Авто/Истина/Ложь, the rest as text; edits are applied to yaml as
-//    targeted replacements (undo works).
-// Component selection and every edit position the cursor in the yaml editor on the line
-// being changed (without stealing focus). The editor title button is visible only for form
-// yamls - the xbsl.formYaml context key.
+// 1C:Element form preview - a standalone webview panel with the form wireframe from yaml
+// (rendering - formPreviewCore.ts): follows the active yaml editor, live updates, zoom and
+// theme (light/dark/editor) in the toolbar, switchable tabs. A click selects a component -
+// the cursor lands on its yaml line (without stealing focus) and the designer's "Properties"
+// view shows the node through the xbsl.properties.showForNode command; Ctrl+click leads to
+// yaml. The editor title button is visible only for form yamls - the xbsl.formYaml context key.
 
 import * as vscode from "vscode";
-import { describeNode, esc, NodeDescription, propertyEdit, renderFormPreview } from "./formPreviewCore";
+import { esc, renderFormPreview } from "./formPreviewCore";
 
 const VIEW_TYPE = "xbslFormPreview";
-const PROPS_VIEW_TYPE = "xbslFormProps";
 const DEBOUNCE_MS = 300;
 const STATE_KEY = "xbsl.formPreview.view";
 
@@ -26,11 +20,9 @@ interface ViewState {
 const DEFAULT_VIEW: ViewState = { zoom: 125, theme: "light" };
 
 let panel: vscode.WebviewPanel | undefined;
-let propsPanel: vscode.WebviewPanel | undefined;
 let target: vscode.Uri | undefined;
 let timer: NodeJS.Timeout | undefined;
 let view: ViewState = DEFAULT_VIEW;
-let lastDesc: NodeDescription | undefined;
 
 // Whether the content looks like a form: an interface component with inheritance and content.
 function looksLikeForm(doc: vscode.TextDocument): boolean {
@@ -152,7 +144,6 @@ function shell(body: string, nonce: string): string {
     state.sel = off;
     vsapi.setState(state);
     if (off === undefined) {
-      vsapi.postMessage({ type: "deselect" });
       return;
     }
     const el = document.querySelector('#canvas [data-off="' + off + '"]');
@@ -193,139 +184,6 @@ function shell(body: string, nonce: string): string {
   if (state.sel !== undefined && document.querySelector('#canvas [data-off="' + state.sel + '"]')) {
     setSelection(state.sel);
   }
-</script></body></html>`;
-}
-
-// -- properties panel ---------------------------------------------------------------------------
-
-function propsShell(nonce: string): string {
-  const labels = {
-    hint: vscode.l10n.t("Click an element of the wireframe to inspect and edit its properties."),
-    auto: vscode.l10n.t("Auto"),
-    autoOption: vscode.l10n.t("(auto)"),
-    toYaml: vscode.l10n.t("Show in yaml"),
-    note: vscode.l10n.t("An empty value or (auto) removes the property from the yaml."),
-  };
-  return `<!DOCTYPE html>
-<html><head><meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-<style>
-  body { color: var(--vscode-foreground); font-family: var(--vscode-font-family, "Segoe UI", sans-serif);
-    font-size: 13px; padding: 8px 12px; margin: 0; overflow-x: hidden; overflow-wrap: anywhere; }
-  .ptitle { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 6px 8px; margin-bottom: 10px; }
-  .ptype { font-weight: 600; word-break: break-word; overflow-wrap: anywhere; min-width: 0; }
-  .plink { background: transparent; border: 1px solid var(--vscode-panel-border); color: var(--vscode-foreground);
-    border-radius: 3px; padding: 2px 8px; cursor: pointer; font-size: 11.5px; white-space: nowrap; }
-  .prow { margin-bottom: 9px; }
-  .pkey { font-size: .85em; opacity: .75; margin-bottom: 2px; word-break: break-word; overflow-wrap: anywhere; }
-  input[type=text], select { width: 100%; max-width: 100%; box-sizing: border-box; background: var(--vscode-input-background);
-    color: var(--vscode-input-foreground, var(--vscode-foreground)); border: 1px solid var(--vscode-input-border, rgba(128,128,128,.5));
-    border-radius: 3px; padding: 3px 7px; font-size: 12.5px; }
-  .tri { display: flex; border: 1px solid var(--vscode-input-border, rgba(128,128,128,.5)); border-radius: 3px; overflow: hidden; }
-  .tri button { flex: 1; background: transparent; border: none; color: var(--vscode-foreground); padding: 3px 0; cursor: pointer; font-size: 12px; opacity: .75; }
-  .tri button.on { background: var(--vscode-button-background); color: var(--vscode-button-foreground); opacity: 1; }
-  .pcomplex { opacity: .6; font-style: italic; word-break: break-word; overflow-wrap: anywhere; }
-  .pnote { opacity: .55; font-size: .85em; margin-top: 12px; }
-  .phint { opacity: .65; font-style: italic; }
-</style></head>
-<body>
-<div id="pane"></div>
-<script nonce="${nonce}">
-  const vsapi = acquireVsCodeApi();
-  const L = ${JSON.stringify(labels)};
-  const pane = document.getElementById("pane");
-
-  function field(row, off) {
-    if (row.complex) {
-      const s = document.createElement("div");
-      s.className = "pcomplex";
-      s.textContent = row.value;
-      return s;
-    }
-    const send = (value) => vsapi.postMessage({ type: "setProp", offset: off, key: row.key, value });
-    if (row.control === "tristate") {
-      const box = document.createElement("div");
-      box.className = "tri";
-      for (const v of [null, "Истина", "Ложь"]) {
-        const b = document.createElement("button");
-        b.textContent = v === null ? L.auto : v;
-        if ((v === null && !row.value) || v === row.value) { b.classList.add("on"); }
-        b.addEventListener("click", () => send(v));
-        box.appendChild(b);
-      }
-      return box;
-    }
-    if (row.control === "select") {
-      const sel = document.createElement("select");
-      const auto = document.createElement("option");
-      auto.value = "";
-      auto.textContent = L.autoOption;
-      sel.appendChild(auto);
-      for (const o of row.options || []) {
-        const opt = document.createElement("option");
-        opt.value = o;
-        opt.textContent = o;
-        sel.appendChild(opt);
-      }
-      sel.value = row.value || "";
-      sel.addEventListener("change", () => send(sel.value === "" ? null : sel.value));
-      return sel;
-    }
-    const input = document.createElement("input");
-    input.type = "text";
-    input.value = row.value;
-    const commit = () => {
-      if (input.value === row.value) { return; }
-      send(input.value === "" ? null : input.value);
-    };
-    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { commit(); } });
-    input.addEventListener("blur", commit);
-    return input;
-  }
-
-  function renderProps(desc) {
-    pane.textContent = "";
-    if (!desc) {
-      const hint = document.createElement("div");
-      hint.className = "phint";
-      hint.textContent = L.hint;
-      pane.appendChild(hint);
-      return;
-    }
-    const title = document.createElement("div");
-    title.className = "ptitle";
-    const type = document.createElement("span");
-    type.className = "ptype";
-    type.textContent = desc.typeName || "?";
-    const toYaml = document.createElement("button");
-    toYaml.className = "plink";
-    toYaml.textContent = L.toYaml;
-    toYaml.addEventListener("click", () => vsapi.postMessage({ type: "reveal", offset: desc.offset }));
-    title.appendChild(type);
-    title.appendChild(toYaml);
-    pane.appendChild(title);
-    for (const row of desc.rows) {
-      const div = document.createElement("div");
-      div.className = "prow";
-      const cap = document.createElement("div");
-      cap.className = "pkey";
-      cap.textContent = row.key;
-      div.appendChild(cap);
-      div.appendChild(field(row, desc.offset));
-      pane.appendChild(div);
-    }
-    const note = document.createElement("div");
-    note.className = "pnote";
-    note.textContent = L.note;
-    pane.appendChild(note);
-  }
-
-  window.addEventListener("message", (e) => {
-    const m = e.data;
-    if (m && m.type === "props") { renderProps(m.desc); }
-  });
-  renderProps(null);
-  vsapi.postMessage({ type: "ready" });
 </script></body></html>`;
 }
 
@@ -394,82 +252,14 @@ async function revealOffset(offset: number, preserveFocus: boolean): Promise<voi
   editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenterIfOutsideViewport);
 }
 
-// Properties panel: a separate tab next to the preview; recreated on click
-// if the user has closed it.
-function ensurePropsPanel(context: vscode.ExtensionContext): void {
-  if (propsPanel) {
-    if (!propsPanel.visible) {
-      propsPanel.reveal(propsPanel.viewColumn ?? vscode.ViewColumn.Beside, true);
-    }
-    return;
-  }
-  propsPanel = vscode.window.createWebviewPanel(
-    PROPS_VIEW_TYPE,
-    vscode.l10n.t("Properties"),
-    { viewColumn: vscode.ViewColumn.Beside, preserveFocus: true },
-    { enableScripts: true, retainContextWhenHidden: true }
-  );
-  propsPanel.webview.html = propsShell(nonce());
-  propsPanel.onDidDispose(() => {
-    propsPanel = undefined;
-  }, undefined, context.subscriptions);
-  propsPanel.webview.onDidReceiveMessage((m) => {
-    if (!m) {
-      return;
-    }
-    if (m.type === "reveal" && typeof m.offset === "number") {
-      void revealOffset(m.offset, false);
-    } else if (m.type === "setProp" && typeof m.offset === "number" && typeof m.key === "string") {
-      void applyProp(m.offset, m.key, typeof m.value === "string" ? m.value : null);
-    } else if (m.type === "ready" && lastDesc) {
-      void propsPanel?.webview.postMessage({ type: "props", desc: lastDesc });
-    }
-  }, undefined, context.subscriptions);
-}
-
-// Component selection: properties into the panel + cursor on the node's yaml line (no focus steal).
-function selectNode(context: vscode.ExtensionContext, offset: number): void {
-  const doc = targetDocument();
-  if (!doc) {
-    return;
-  }
-  lastDesc = describeNode(doc.getText(), offset);
-  ensurePropsPanel(context);
-  if (propsPanel) {
-    propsPanel.title = vscode.l10n.t("Properties") + (lastDesc?.typeName ? ": " + lastDesc.typeName : "");
-    void propsPanel.webview.postMessage({ type: "props", desc: lastDesc ?? null });
+// Component selection: cursor onto the node's yaml line (no focus steal) + the node's
+// properties into the designer's sidebar "Properties" view (formProps.ts owns the panel;
+// the command takes positional uri, offset).
+function selectNode(offset: number): void {
+  if (target) {
+    void vscode.commands.executeCommand("xbsl.properties.showForNode", target.toString(), offset);
   }
   void revealOffset(offset, true);
-}
-
-function deselectNode(): void {
-  lastDesc = undefined;
-  if (propsPanel) {
-    propsPanel.title = vscode.l10n.t("Properties");
-    void propsPanel.webview.postMessage({ type: "props", desc: null });
-  }
-}
-
-// Property edit from the panel: a targeted replacement in the document (undo works) and
-// the cursor on the line being changed in the editor.
-async function applyProp(offset: number, key: string, value: string | null): Promise<void> {
-  const doc = targetDocument();
-  if (!doc) {
-    return;
-  }
-  const edit = propertyEdit(doc.getText(), offset, key, value);
-  if (!edit) {
-    return;
-  }
-  const we = new vscode.WorkspaceEdit();
-  we.replace(doc.uri, new vscode.Range(doc.positionAt(edit.start), doc.positionAt(edit.end)), edit.newText);
-  await vscode.workspace.applyEdit(we);
-  await revealOffset(Math.min(edit.start + Math.max(edit.newText.length - 1, 0), doc.getText().length), true);
-  // Properties are refreshed immediately; the wireframe re-renders via onDidChangeTextDocument.
-  lastDesc = describeNode(doc.getText(), offset);
-  if (propsPanel && lastDesc) {
-    void propsPanel.webview.postMessage({ type: "props", desc: lastDesc });
-  }
 }
 
 function isViewState(v: unknown): v is ViewState {
@@ -498,7 +288,6 @@ function openPreview(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
     });
     panel.onDidDispose(() => {
       panel = undefined;
-      propsPanel?.dispose();
     }, undefined, context.subscriptions);
     panel.webview.onDidReceiveMessage((m) => {
       if (!m) {
@@ -507,9 +296,7 @@ function openPreview(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
       if (m.type === "reveal" && typeof m.offset === "number") {
         void revealOffset(m.offset, false);
       } else if (m.type === "select" && typeof m.offset === "number") {
-        selectNode(context, m.offset);
-      } else if (m.type === "deselect") {
-        deselectNode();
+        selectNode(m.offset);
       } else if (m.type === "view") {
         // Zoom and theme are applied inside the webview; here we only remember the choice.
         const next = { zoom: Number(m.zoom), theme: m.theme } as ViewState;
@@ -543,10 +330,7 @@ export function registerFormPreview(context: vscode.ExtensionContext): void {
       updateContext(editor);
       // The panel follows the active form yaml - like the Markdown preview.
       if (panel && editor && looksLikeForm(editor.document)) {
-        if (target?.toString() !== editor.document.uri.toString()) {
-          target = editor.document.uri;
-          deselectNode();
-        }
+        target = editor.document.uri;
         scheduleRender();
       }
     }),

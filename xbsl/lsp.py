@@ -87,6 +87,34 @@ def _opt_str(params: object, name: str) -> Optional[str]:
     value = _param(params, name)
     return str(value) if value is not None else None
 
+
+def _plain_params(value: object) -> object:
+    """Recursively convert LSP request params into plain Python data.
+
+    pygls deserializes the params of a CUSTOM request into nested namedtuples
+    (``pygls.protocol._dict_to_object``): they have neither ``__dict__`` nor
+    pair-wise iteration, so both ``vars()`` and ``dict()`` on them raise
+    TypeError. Dicts arrive from direct calls (tests, other clients) and pass
+    through; objects with ``__dict__`` cover SimpleNamespace-like spellings.
+    """
+    if isinstance(value, dict):
+        return {str(k): _plain_params(v) for k, v in value.items()}
+    if isinstance(value, tuple) and hasattr(value, "_asdict"):  # namedtuple
+        return {str(k): _plain_params(v) for k, v in value._asdict().items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain_params(v) for v in value]
+    if hasattr(value, "__dict__") and not isinstance(value, type):
+        return {str(k): _plain_params(v) for k, v in vars(value).items()}
+    return value
+
+
+# Operation-argument keys xbsl/formEdit accepts directly in params (the flat form the
+# VS Code panels send). camelCase spellings are normalized by formedits.apply_operation.
+_FORM_EDIT_ARG_KEYS = (
+    "node", "key", "value", "valueYaml", "parent", "slot", "type", "name",
+    "before", "after", "newParent", "container", "newName",
+)
+
 FILE_DEBOUNCE_S = 0.3
 PROJECT_DEBOUNCE_S = 0.7
 
@@ -901,11 +929,18 @@ def _make_server() -> "LanguageServer":
 
     @server.feature("xbsl/formEdit")
     def _form_edit(params: object) -> dict:
-        # {uri, op, args} -> {edits: [{start, end, newText}], node: {id, span} | null};
+        # {uri, op, args} or {uri, op, <arguments flat in params>} ->
+        # {edits: [{start, end, newText}], node: {id, span} | null};
         # offsets are relative to the CURRENT buffer text the edits were computed from.
-        args = _param(params, "args") or {}
-        if not isinstance(args, dict):
-            args = vars(args) if hasattr(args, "__dict__") else dict(args)
+        # Over the real pygls channel a nested args object arrives as a namedtuple,
+        # not a dict (see _plain_params) - both shapes and both spellings are accepted.
+        raw_args = _plain_params(_param(params, "args"))
+        args: dict = raw_args if isinstance(raw_args, dict) else {}
+        for key in _FORM_EDIT_ARG_KEYS:
+            if key not in args:
+                value = _plain_params(_param(params, key))
+                if value is not None:
+                    args[key] = value
         try:
             text = _form_reader(_form_path(params))
             result = formedits.apply_operation(

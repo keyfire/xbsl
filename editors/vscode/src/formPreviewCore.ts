@@ -283,90 +283,17 @@ function renderCommandBar(inherit: unknown): string {
 
 // -- entry point ----------------------------------------------------------------------------
 
-// -- properties panel: node description and targeted yaml edits ------------------------------
+// -- targeted yaml property edits -------------------------------------------------------------
 //
-// The component selected in the wireframe is described by a set of property rows for the panel
-// (like in the platform's web editor), and a value edit is turned into a targeted text
-// replacement by yaml node ranges - the document is not reformatted, undo works.
-
-export interface PropRow {
-  key: string;
-  value: string; // current value ("" - the property is not set)
-  control: "text" | "select" | "tristate";
-  options?: string[]; // for select
-  complex?: boolean; // object value: shown but not editable
-}
-
-export interface NodeDescription {
-  typeName: string;
-  offset: number;
-  rows: PropRow[];
-}
+// A property value edit is turned into a targeted text replacement by yaml node ranges - the
+// document is not reformatted, undo works. Used by the metadata properties panel
+// (metadataProps.ts); the form designer edits go through the engine (xbsl/formEdit) instead.
 
 export interface TextEdit {
   start: number;
   end: number;
   newText: string;
 }
-
-// Properties the panel always shows (by component kind), in the web editor's order.
-const COMMON_PROPS = ["Имя", "Заголовок"];
-const LAYOUT_PROPS = [
-  "Компоновка",
-  "ВыравниваниеВГруппеПоГоризонтали",
-  "ВыравниваниеВГруппеПоВертикали",
-  "ИнтервалМеждуЭлементамиПоВертикали",
-  "ИнтервалМеждуЭлементамиПоГоризонтали",
-  "РастягиватьПоГоризонтали",
-  "РастягиватьПоВертикали",
-  "ШиринаВКолонках",
-];
-const CURATED: Record<string, string[]> = {
-  Группа: [...COMMON_PROPS, ...LAYOUT_PROPS],
-  СтандартнаяКарточка: [...COMMON_PROPS, "ВидОтображения", ...LAYOUT_PROPS],
-  Надпись: ["Имя", "Значение", "РастягиватьПоГоризонтали", "РастягиватьПоВертикали"],
-  ЗаголовокСекции: ["Имя", "Заголовок"],
-  ПолеВвода: ["Имя", "Заголовок", "Значение", "РастягиватьПоГоризонтали"],
-  ВыборЗначения: ["Имя", "Заголовок", "Значение", "РастягиватьПоГоризонтали"],
-  Флажок: ["Имя", "Заголовок", "Значение"],
-  Кнопка: ["Имя", "Заголовок", "Вид", "ПриНажатии"],
-  Картинка: ["Имя", "Изображение", "МинимальнаяВысота", "МинимальнаяШирина"],
-  Страницы: ["Имя", "РастягиватьПоГоризонтали", "РастягиватьПоВертикали"],
-};
-
-// Value options of enumerable properties. The list is not exhaustive: a current value outside
-// the list is added to options, so an unfamiliar variant is not lost.
-function optionsFor(key: string): string[] | undefined {
-  if (key === "Компоновка") {
-    return ["Вертикальная", "Горизонтальная"];
-  }
-  if (key.startsWith("Выравнивание")) {
-    return ["Начало", "Центр", "Конец"];
-  }
-  if (key.startsWith("Интервал")) {
-    return ["Нулевой", "Половинный", "Одинарный", "Полуторный", "Двойной"];
-  }
-  if (key === "ШиринаВКолонках") {
-    return ["Одинарная", "Полуторная", "Двойная", "Неограниченная"];
-  }
-  if (key === "Вид") {
-    return ["Основная", "Дополнительная"];
-  }
-  if (key === "ВидОтображения") {
-    return ["Баннер"];
-  }
-  return undefined;
-}
-
-function controlFor(key: string, options: string[] | undefined): PropRow["control"] {
-  if (key.startsWith("Растягивать")) {
-    return "tristate";
-  }
-  return options ? "select" : "text";
-}
-
-// Keys under which child components live - not shown in the properties panel.
-const CHILD_KEYS = new Set(["Тип", "Содержимое", "Страницы", "Колонки", "Источник"]);
 
 function findMapAt(node: unknown, offset: number): YAMLMap | undefined {
   if (isMap(node)) {
@@ -397,42 +324,6 @@ function parsedContents(text: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-export function describeNode(text: string, offset: number): NodeDescription | undefined {
-  const node = findMapAt(parsedContents(text), offset);
-  if (!node) {
-    return undefined;
-  }
-  const typeName = prop(node, "Тип") ?? "";
-  const rows: PropRow[] = [];
-  const seen = new Set<string>();
-  const pushRow = (key: string, value: string, complex = false) => {
-    if (seen.has(key)) {
-      return;
-    }
-    seen.add(key);
-    const options = optionsFor(key);
-    const control = controlFor(key, options);
-    const opts = options && value && !options.includes(value) ? [value, ...options] : options;
-    rows.push({ key, value, control, options: opts, complex: complex || undefined });
-  };
-  for (const key of CURATED[baseType(node) ?? ""] ?? [...COMMON_PROPS, ...LAYOUT_PROPS]) {
-    pushRow(key, prop(node, key) ?? "");
-  }
-  // Remaining properties from yaml: scalars are editable, objects are shown as is.
-  for (const item of node.items) {
-    const key = isScalar(item.key) ? String(item.key.value) : "";
-    if (!key || CHILD_KEYS.has(key) || seen.has(key)) {
-      continue;
-    }
-    if (isScalar(item.value) || item.value === null || item.value === undefined) {
-      pushRow(key, str(item.value) ?? "");
-    } else {
-      pushRow(key, "{...}", true);
-    }
-  }
-  return { typeName, offset, rows };
 }
 
 // Scalar to yaml text: simple values without quotes, the rest - double quotes (JSON escaping

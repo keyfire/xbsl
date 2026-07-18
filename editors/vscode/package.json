@@ -67,6 +67,11 @@
           "id": "xbslElement",
           "title": "%view.container%",
           "icon": "resources/element-tree.svg"
+        },
+        {
+          "id": "xbslDesigner",
+          "title": "%view.designerContainer%",
+          "icon": "resources/form-designer.svg"
         }
       ]
     },
@@ -74,29 +79,37 @@
       "xbslElement": [
         {
           "id": "xbslMetadata",
-          "name": "%view.metadata%"
+          "name": "%view.metadata%",
+          "icon": "$(list-tree)"
         },
         {
           "id": "xbslMetaProps",
           "type": "webview",
-          "name": "%view.props%"
+          "name": "%view.props%",
+          "icon": "$(edit)"
         },
         {
           "id": "xbslDocs",
-          "name": "%view.docs%"
-        },
+          "name": "%view.docs%",
+          "icon": "$(book)"
+        }
+      ],
+      "xbslDesigner": [
         {
           "id": "xbslFormStructure",
-          "name": "%view.formStructure%"
+          "name": "%view.formStructure%",
+          "icon": "resources/form-structure.svg"
         },
         {
           "id": "xbslFormPalette",
-          "name": "%view.formPalette%"
+          "name": "%view.formPalette%",
+          "icon": "resources/form-palette.svg"
         },
         {
           "id": "xbslProperties",
           "type": "webview",
-          "name": "%view.properties%"
+          "name": "%view.properties%",
+          "icon": "resources/form-props.svg"
         }
       ]
     },

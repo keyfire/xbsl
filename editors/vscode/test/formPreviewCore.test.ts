@@ -1,6 +1,7 @@
-// Tests of the form wireframe rendering: yaml -> HTML. Run with plain node (see npm test).
+// Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
+// that serve the metadata properties panel. Run with plain node (see npm test).
 
-import { describeNode, propertyEdit, renderFormPreview } from "../src/formPreviewCore";
+import { propertyEdit, renderFormPreview } from "../src/formPreviewCore";
 
 let failures = 0;
 
@@ -96,27 +97,19 @@ check("не-форма распознана", !notForm.ok && notForm.reason === 
 const broken = renderFormPreview("Имя: [незакрытый\n  список");
 check("битый yaml: аккуратный отказ без исключения", !broken.ok);
 
-// -- properties panel: node description and targeted edits --------------------------------
+// -- targeted property edits (the metadata properties panel drives these) ------------------
 
 const apply = (text: string, edit: { start: number; end: number; newText: string } | undefined): string =>
   edit ? text.slice(0, edit.start) + edit.newText + text.slice(edit.end) : text;
 
 const groupOff = FORM.indexOf("Тип: Группа");
-const desc = describeNode(FORM, groupOff);
-check("описание узла: тип", !!desc && desc.typeName === "Группа");
-const layoutRow = desc?.rows.find((r) => r.key === "Компоновка");
-check("описание узла: Компоновка select со значением", layoutRow?.control === "select" && layoutRow?.value === "Вертикальная");
-const stretchRow = desc?.rows.find((r) => r.key === "РастягиватьПоГоризонтали");
-check("описание узла: Растягивать tristate, не задано", stretchRow?.control === "tristate" && stretchRow?.value === "");
-
 const replaced = apply(FORM, propertyEdit(FORM, groupOff, "Компоновка", "Горизонтальная"));
 check("правка: замена значения", replaced.includes("Компоновка: Горизонтальная") && !replaced.includes("Компоновка: Вертикальная"));
 check("правка: результат парсится", renderFormPreview(replaced).ok);
 
 const inserted = apply(FORM, propertyEdit(FORM, groupOff, "РастягиватьПоГоризонтали", "Истина"));
 check("правка: вставка нового свойства", inserted.includes("РастягиватьПоГоризонтали: Истина"));
-const insertedDesc = describeNode(inserted, inserted.indexOf("Тип: Группа"));
-check("правка: вставленное свойство читается назад", insertedDesc?.rows.find((r) => r.key === "РастягиватьПоГоризонтали")?.value === "Истина");
+check("правка: после вставки парсится", renderFormPreview(inserted).ok);
 
 const labelOff = FORM.indexOf("Тип: Надпись");
 const removed = apply(FORM, propertyEdit(FORM, labelOff, "Значение", null));
@@ -125,7 +118,7 @@ check("правка: после снятия парсится", renderFormPrevie
 
 const quoted = apply(FORM, propertyEdit(FORM, labelOff, "Значение", "Текст: с двоеточием"));
 check("правка: значение с двоеточием в кавычках", quoted.includes('Значение: "Текст: с двоеточием"'));
-check("правка: кавычки парсятся назад", describeNode(quoted, quoted.indexOf("Тип: Надпись"))?.rows.find((r) => r.key === "Значение")?.value === "Текст: с двоеточием");
+check("правка: после кавычек парсится", renderFormPreview(quoted).ok);
 
 check("правка: смещение не на узле – undefined", propertyEdit(FORM, 3, "Имя", "Х") === undefined);
 
