@@ -47,6 +47,23 @@ export function revealOffset(node: FormNode): number {
   return node.contentSpan?.start ?? node.span.start;
 }
 
+// The offset of a node's first content character: past a list-item dash and the whitespace after
+// it, to the first property key. The wireframe preview keys its blocks on the mapping start (the
+// first property line), so the yaml cursor must land THERE - a cursor left on the "-" line sits
+// before the node's data-off, and the preview then highlights the block above it.
+export function skipToNodeKey(text: string, offset: number): number {
+  let i = offset;
+  while (i < text.length) {
+    const ch = text[i];
+    if (ch === "-" || ch === " " || ch === "\t" || ch === "\r" || ch === "\n") {
+      i++;
+    } else {
+      break;
+    }
+  }
+  return i < text.length ? i : offset;
+}
+
 export interface FormTreeResponse {
   available: boolean;
   reason?: string;

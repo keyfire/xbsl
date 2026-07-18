@@ -26,6 +26,7 @@ import {
   revealOffset,
   ROOT_ID,
   siblingInfo,
+  skipToNodeKey,
   validMoveTarget,
   visibleWithNamedFilter,
 } from "../src/formStructureCore";
@@ -100,6 +101,21 @@ const ROOT = comp(ROOT_ID, "Форма", null, [0, 500], [CONTENT_SLOT, FOOTER_S
 const INDEX = indexTree(ROOT);
 
 // --- indexing -----------------------------------------------------------------------------
+
+test("skipToNodeKey moves past a list dash to the first property line (preview-sync fix)", () => {
+  // "-\n    Тип: Надпись" - the mapping (and the preview data-off) starts at "Тип", not the dash.
+  const text = "        -\n            Тип: Надпись\n";
+  const dash = text.indexOf("-");
+  assert.strictEqual(skipToNodeKey(text, dash), text.indexOf("Тип"));
+  // Same-line dash content.
+  const inline = "    - =Компоненты.Состав.Добавить\n";
+  assert.strictEqual(skipToNodeKey(inline, inline.indexOf("-")), inline.indexOf("="));
+  // A key line without a dash (a single-mapping slot): leading indent skipped to the key.
+  const nodash = "            Тип: Группа\n";
+  assert.strictEqual(skipToNodeKey(nodash, 0), nodash.indexOf("Тип"));
+  // Already at a key: unchanged.
+  assert.strictEqual(skipToNodeKey("Тип: X", 0), 0);
+});
 
 test("indexTree collects every node with its parent", () => {
   assert.strictEqual(INDEX.byId.size, 9);

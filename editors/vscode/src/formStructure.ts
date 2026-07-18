@@ -46,6 +46,7 @@ import {
   projectDiagnostics,
   remapIds,
   revealOffset,
+  skipToNodeKey,
   ROOT_ID,
   siblingInfo,
   STRUCTURE_MIME,
@@ -431,8 +432,19 @@ class FormStructureProvider
     const now = Date.now();
     const double = !!this.lastActivation && this.lastActivation.id === node.id && now - this.lastActivation.at < DOUBLE_ACTIVATE_MS;
     this.lastActivation = { id: node.id, at: now };
-    await this.revealInEditor(revealOffset(node), !double);
-    void this.notifyPropsPanel(revealOffset(node));
+    // Land the cursor on the node's first property line (not its list-item dash), so the preview
+    // highlights this block and not the one above it (the dash sits before the block's data-off).
+    let offset = revealOffset(node);
+    if (this.target) {
+      try {
+        const doc = await vscode.workspace.openTextDocument(this.target);
+        offset = skipToNodeKey(doc.getText(), offset);
+      } catch {
+        // keep the raw offset if the document cannot be opened
+      }
+    }
+    await this.revealInEditor(offset, !double);
+    void this.notifyPropsPanel(offset);
   }
 
   async revealInEditor(offset: number, preserveFocus: boolean): Promise<void> {
