@@ -1,7 +1,7 @@
 // Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
 // that serve the metadata properties panel. Run with plain node (see npm test).
 
-import { propertyEdit, renderFormPreview } from "../src/formPreviewCore";
+import { collectDataOffsets, nearestOffset, propertyEdit, renderFormPreview, selectionForCursor } from "../src/formPreviewCore";
 
 let failures = 0;
 
@@ -89,6 +89,8 @@ if (result.ok) {
   check("выравнивание Конец", html.includes("justify-content:flex-end"));
   check("узлы кликабельны (data-off)", html.includes("data-off="));
   check("нет сырых < из значений", !html.includes("Форма<Строка?>"));
+  check("node tooltip carries type and name", html.includes('title="ПолеВвода&lt;Строка&gt; · ПолеКод"'));
+  check("node tooltip without a name is the bare type", html.includes('title="Надпись"'));
 }
 
 const notForm = renderFormPreview("Ид: 1\nИмя: Просто\n");
@@ -121,6 +123,42 @@ check("правка: значение с двоеточием в кавычка�
 check("правка: после кавычек парсится", renderFormPreview(quoted).ok);
 
 check("правка: смещение не на узле – undefined", propertyEdit(FORM, 3, "Имя", "Х") === undefined);
+
+// -- selection sync: cursor -> node, restore after a re-render ------------------------------
+
+function renderedOffsets(text: string): number[] {
+  const r = renderFormPreview(text);
+  return r.ok ? collectDataOffsets(r.html) : [];
+}
+
+const offsets = renderedOffsets(FORM);
+const labelNodeOff = FORM.indexOf("Тип: Надпись");
+const fieldNodeOff = FORM.indexOf("Тип: ПолеВвода<Строка>");
+
+check("offsets are collected and ascending", offsets.length > 5 && offsets.every((o, i) => i === 0 || offsets[i - 1] < o));
+check("component starts are among the offsets", offsets.includes(labelNodeOff) && offsets.includes(fieldNodeOff));
+
+check("cursor in the file header - no node", selectionForCursor(offsets, 0) === undefined);
+check("cursor at a node start - that node", selectionForCursor(offsets, labelNodeOff) === labelNodeOff);
+// The cursor sits inside a property value object (Цвет) that is not a component itself:
+// the match is the closest data-off below, i.e. the component that contains the offset.
+check("cursor inside a node - the containing node", selectionForCursor(offsets, FORM.indexOf("RGB(595964)")) === labelNodeOff);
+check("cursor on a node property - the node", selectionForCursor(offsets, FORM.indexOf("Заголовок: Код")) === fieldNodeOff);
+check("empty offsets - no selection", selectionForCursor([], 10) === undefined);
+
+check("restore: an exact survivor is kept", nearestOffset(offsets, fieldNodeOff) === fieldNodeOff);
+check("restore: the nearest offset wins", nearestOffset([10, 52, 90], 50) === 52);
+check("restore: a tie resolves to the earlier node", nearestOffset([40, 60], 50) === 40);
+check("restore: empty offsets - undefined", nearestOffset([], 50) === undefined);
+
+// An edit above the node shifts the text: the restore lands on the shifted node start.
+const SHIFTED = FORM.replace('Значение: "Введите код:"', 'Значение: "Введите код и значение:"');
+const shiftedOffsets = renderedOffsets(SHIFTED);
+const shiftedFieldOff = SHIFTED.indexOf("Тип: ПолеВвода<Строка>");
+check(
+  "restore after an edit - the shifted node",
+  shiftedOffsets.length > 0 && shiftedFieldOff !== fieldNodeOff && nearestOffset(shiftedOffsets, fieldNodeOff) === shiftedFieldOff
+);
 
 if (failures > 0) {
   console.error(`итого: ${failures} FAIL`);

@@ -65,7 +65,10 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   const off = offsetOf(node);
   const offAttr = off !== undefined ? ` data-off="${off}"` : "";
   const styleAttr = style ? ` style="${esc(style)}"` : "";
-  return `class="${cls}"${styleAttr}${offAttr}`;
+  // Hover tooltip: the node type and name, both already at hand from the yaml map.
+  const tip = [prop(node, "Тип"), prop(node, "Имя")].filter(Boolean).join(" · ");
+  const titleAttr = tip ? ` title="${esc(tip)}"` : "";
+  return `class="${cls}"${styleAttr}${offAttr}${titleAttr}`;
 }
 
 // Property value: a binding (=Данные.Х) is shown as a monospaced chip, a literal - as text.
@@ -241,7 +244,7 @@ function renderComponent(node: unknown, horizontalParent: boolean): string {
       return `<button ${tagAttrs(node, cls, grow)}>${valueHtml(title, "Кнопка")}</button>`;
     }
     case "Картинка":
-      return `<div ${tagAttrs(node, "img", grow)} title="${esc(prop(node, "Имя") ?? "")}">🖼</div>`;
+      return `<div ${tagAttrs(node, "img", grow)}>🖼</div>`;
     case "Таблица":
     case "ПроизвольныйСписок":
       return renderTable(node);
@@ -409,4 +412,48 @@ export function renderFormPreview(text: string): PreviewResult {
     `<span class="form-type">${esc(baseTypeName)}</span></div>`;
   const body = titleHtml + renderCommandBar(inherit) + `<div class="form-body col">${renderComponent(content, false)}</div>`;
   return { ok: true, html: body, title: name || rawTitle || "форма" };
+}
+
+// -- selection sync (the preview panel drives these) ------------------------------------------
+//
+// The wireframe highlights the node selected in the yaml editor and survives re-renders.
+// The pure parts live here: the offsets a rendered wireframe exposes, the cursor-to-node
+// match and the nearest-offset restore after the text (and the offsets) shifted.
+
+// All node offsets present in a rendered wireframe (the data-off attributes), ascending.
+export function collectDataOffsets(html: string): number[] {
+  const offsets = new Set<number>();
+  const re = /data-off="(\d+)"/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) !== null) {
+    offsets.add(Number(m[1]));
+  }
+  return [...offsets].sort((a, b) => a - b);
+}
+
+// The wireframe block for a yaml cursor position: the closest data-off at or below the cursor.
+// Node maps nest, so among the nodes starting at or before the cursor the innermost (the one
+// that contains the offset) starts last. undefined when the cursor is above every node - the
+// file header carries no component.
+export function selectionForCursor(offsets: number[], cursor: number): number | undefined {
+  let best: number | undefined;
+  for (const off of offsets) {
+    if (off <= cursor && (best === undefined || off > best)) {
+      best = off;
+    }
+  }
+  return best;
+}
+
+// Restore a selection after a re-render: the same offset when it survived the edit, otherwise
+// the nearest one (the node moved with the text above it). Ties resolve to the earlier node;
+// undefined only when nothing is rendered.
+export function nearestOffset(offsets: number[], previous: number): number | undefined {
+  let best: number | undefined;
+  for (const off of offsets) {
+    if (best === undefined || Math.abs(off - previous) < Math.abs(best - previous)) {
+      best = off;
+    }
+  }
+  return best;
 }
