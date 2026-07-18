@@ -1103,6 +1103,26 @@ async function projectEnumsFor(): Promise<Record<string, string[]>> {
   return projectEnumsCache;
 }
 
+// hook 6: =Компоненты.<name> for the form's own components (via the engine's xbsl/bindingComplete).
+// Resolved once per form uri and reused, then merged into the binding autocomplete so a developer
+// completes component references after "=Компоненты.". Member chains (=Компоненты.<name>.<member>)
+// stay a follow-up - the endpoint already serves them, only the on-demand wiring is pending.
+const componentBindingsCache = new Map<string, string[]>();
+async function componentBindingsFor(uri: vscode.Uri): Promise<string[]> {
+  const key = uri.toString();
+  const cached = componentBindingsCache.get(key);
+  if (cached) {
+    return cached;
+  }
+  const res = await lspRequest<{ completions?: string[] }>("xbsl/bindingComplete", {
+    uri: key,
+    prefix: "=Компоненты.",
+  });
+  const list = res?.completions ?? [];
+  componentBindingsCache.set(key, list);
+  return list;
+}
+
 async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> {
   const my = ++seq;
   if (!lspActive()) {
@@ -1165,14 +1185,19 @@ async function refreshForOffset(uri: vscode.Uri, offset: number): Promise<void> 
   // hook 6: enrich the binding autocomplete with the owner object's attributes (the bindings
   // already used in the form come first, from buildPanelModel; the rest of the attributes follow).
   const objAttrs = await objectBindingsFor(uri);
+  const compBindings = await componentBindingsFor(uri); // hook 6: =Компоненты.<name>
   const projEnums = await projectEnumsFor(); // hook 6: =Имя.Значение completion
   const readonly = await isReadonlyDoc(uri); // hook 11
   if (seq !== my || !view) {
     return;
   }
-  if (objAttrs.length) {
+  const extraBindings = [...objAttrs, ...compBindings];
+  if (extraBindings.length) {
     const have = new Set(lastModel.formBindings ?? []);
-    lastModel.formBindings = [...(lastModel.formBindings ?? []), ...objAttrs.filter((b) => !have.has(b))];
+    lastModel.formBindings = [
+      ...(lastModel.formBindings ?? []),
+      ...extraBindings.filter((b) => !have.has(b)),
+    ];
   }
   lastModel.projectEnums = projEnums;
   lastModel.readonly = readonly;
