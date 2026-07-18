@@ -21,7 +21,7 @@ import re
 from html import unescape
 from pathlib import Path
 
-from xbsl import dataset, docs, report, scaffold
+from xbsl import dataset, docs, formedits, formmodel, report, scaffold
 from xbsl.cli import discover
 from xbsl.engine import RULES, load, load_text, run, run_sources
 
@@ -473,6 +473,124 @@ def meta_add_subsystem(
         Path(parent_dir), name,
         representation=representation, auto_interface=auto_interface, uses=uses,
     )
+
+
+# --- the form designer (the component model of interface forms) --------------------------
+#
+# meta_component_tree reads; the four editing tools compute precise text edits over the
+# form model (xbsl.formmodel / xbsl.formedits), apply them to the file and lint what they
+# wrote - the same contract as the writing meta_* tools. Node ids are positional paths
+# ("Наследует/Содержимое[0]") and stay valid only until the next edit: re-read the tree
+# after every change. The remaining designer operations (wrap/unwrap/duplicate/rename)
+# are exposed through the CLI (`xbsl form-edit`) and the LSP for now.
+
+
+def _form_write(yaml_path: str, op: str, args: dict) -> dict:
+    try:
+        outcome = formedits.op_component_edit(Path(yaml_path), op, args)
+    except scaffold.ScaffoldError as exc:
+        return {"error": str(exc)}
+    out = _apply_and_lint(outcome.result)
+    if outcome.node is not None:
+        out["node"] = outcome.node
+    return out
+
+
+@mcp.tool()
+def meta_component_tree(yaml_path: str) -> dict:
+    """The node tree of an interface component (ВидЭлемента: КомпонентИнтерфейса).
+
+    Returns {root} - components and slots with ids, types, names, source spans and
+    properties (scalars, =/$ bindings, composite values, При*/После*/Перед* handlers).
+    Children live in the slots Содержимое / Страницы / Колонки / Команды / КомандыСтроки /
+    Шапка / Подвал; other nested values are properties. Use the node ids with
+    meta_add_component / meta_move_component / meta_remove_component /
+    meta_set_component_property; ids are positional, so re-read the tree after any edit.
+    """
+    try:
+        form = formedits.load_form(Path(yaml_path))
+    except scaffold.ScaffoldError as exc:
+        return {"error": str(exc)}
+    return {"root": formmodel.node_dict(form.root)}
+
+
+@mcp.tool()
+def meta_add_component(
+    yaml_path: str,
+    parent_id: str,
+    slot: str,
+    type: str | None = None,
+    name: str | None = None,
+    before: str | None = None,
+    after: str | None = None,
+) -> dict:
+    """Insert a new component (Тип and/or Имя) into a slot of the parent node.
+
+    parent_id comes from meta_component_tree; slot is one of the child-bearing keys
+    (Содержимое, Страницы, Колонки, Команды, КомандыСтроки, Шапка, Подвал). By default
+    the component lands at the end of the slot; before/after position it against a
+    sibling node id. A missing slot is created; a slot holding a single nested mapping
+    is converted to the "-" list form. The edit touches only the affected lines -
+    formatting and comments elsewhere survive.
+    """
+    return _form_write(yaml_path, "insert", {
+        "parent": parent_id, "slot": slot, "type": type, "name": name,
+        "before": before, "after": after,
+    })
+
+
+@mcp.tool()
+def meta_move_component(
+    yaml_path: str,
+    node_id: str,
+    new_parent_id: str,
+    slot: str,
+    before: str | None = None,
+    after: str | None = None,
+) -> dict:
+    """Move a node into another (or the same) slot; comments above the node travel along.
+
+    Moving into the node's own subtree is rejected. When the node is the last child, the
+    emptied slot key is removed together with it; the destination follows the same slot
+    rules as meta_add_component (missing slot created, singleton slot converted to a
+    list). before/after position the node against a sibling in the destination slot.
+    """
+    return _form_write(yaml_path, "move", {
+        "node": node_id, "new_parent": new_parent_id, "slot": slot,
+        "before": before, "after": after,
+    })
+
+
+@mcp.tool()
+def meta_remove_component(yaml_path: str, node_id: str) -> dict:
+    """Remove a node (with its attached comments); the last child of a slot removes the
+    slot key line as well. The root node (Наследует) cannot be removed.
+    """
+    return _form_write(yaml_path, "remove", {"node": node_id})
+
+
+@mcp.tool()
+def meta_set_component_property(
+    yaml_path: str,
+    node_id: str,
+    key: str,
+    value: str | None = None,
+    value_yaml: str | None = None,
+) -> dict:
+    """Set, replace or remove a property of a component node.
+
+    value - a scalar or a binding ("=Объект.Поле", "$Строки.Ключ"): quoted automatically
+    when yaml requires it. value_yaml - a composite value as a ready yaml fragment, e.g.
+    "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)" (single-line flow fragments are written
+    inline). Passing NEITHER removes the key (a composite value goes with its whole
+    block). Slot keys (Содержимое etc.) are rejected - children are edited with the
+    component tools. A new property lands right after Тип.
+    """
+    if value is None and value_yaml is None:
+        return _form_write(yaml_path, "reset_property", {"node": node_id, "key": key})
+    return _form_write(yaml_path, "set_property", {
+        "node": node_id, "key": key, "value": value, "value_yaml": value_yaml,
+    })
 
 
 def main() -> None:
