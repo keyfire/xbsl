@@ -408,7 +408,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
         help="операция конструктора форм: точечная правка yaml компонента интерфейса",
     )
     p.add_argument("yaml_path")
-    p.add_argument("op", choices=("insert", "insert-fragment", "move", "remove", "wrap",
+    p.add_argument("op", choices=("insert", "insert-fragment", "move", "move-nodes",
+                                  "remove", "remove-nodes", "wrap",
                                   "unwrap", "duplicate", "rename",
                                   "set-property", "reset-property",
                                   "property-add", "property-retype", "property-remove",
@@ -420,7 +421,10 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                                   "или свойства секции Свойства (property-*)")
     p.add_argument("--node", help="id узла операции (move/remove/wrap/unwrap/duplicate/"
                                   "rename/set-property/reset-property)")
-    p.add_argument("--new-parent", help="id нового контейнера (move)")
+    p.add_argument("--nodes", action="append", metavar="ID[,ID...]",
+                   help="id узлов пачковой операции (move-nodes/remove-nodes): через "
+                        "запятую или повтором флага; порядок не важен")
+    p.add_argument("--new-parent", help="id нового контейнера (move/move-nodes)")
     p.add_argument("--container", help="Тип контейнера-обёртки (wrap)")
     p.add_argument("--new-name", help="новое Имя узла (rename) или свойства (property-rename); "
                                       "для rename без флага Имя удаляется")
@@ -429,7 +433,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--key", help="имя свойства узла (set-property/reset-property)")
     p.add_argument("--value", help="скалярное значение или биндинг (set-property)")
     p.add_argument("--value-yaml", help="составное значение готовым yaml-фрагментом (set-property)")
-    p.add_argument("--fragment", help="yaml-блок ОДНОГО компонента (insert-fragment)")
+    p.add_argument("--fragment", help="yaml-блок компонента или нескольких – список \"-\" "
+                                      "или блоки подряд (insert-fragment)")
     p.add_argument("--fragment-file", metavar="ФАЙЛ",
                    help="файл с yaml-блоком компонента (insert-fragment, вместо --fragment)")
     p.add_argument("--new-type", help="новый Тип свойства (property-retype)")
@@ -564,7 +569,8 @@ def _scaffold_main(argv: list[str]) -> int:
                 fragment = Path(args.fragment_file).read_text(encoding="utf-8-sig")
             outcome = formedits.op_component_edit(Path(args.yaml_path), args.op, {
                 "parent": args.parent, "slot": args.slot, "type": args.type,
-                "name": args.name, "node": args.node, "new_parent": args.new_parent,
+                "name": args.name, "node": args.node, "nodes": args.nodes,
+                "new_parent": args.new_parent,
                 "container": args.container, "new_name": args.new_name,
                 "before": args.before, "after": args.after,
                 "key": args.key, "value": args.value, "value_yaml": args.value_yaml,

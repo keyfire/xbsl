@@ -115,6 +115,10 @@ _FORM_EDIT_ARG_KEYS = (
     "before", "after", "newParent", "container", "newName",
     # wave-3 operations: insert_fragment and property_retype
     "fragment", "newType",
+    # wave-5 batch operations (move_nodes/remove_nodes): an ARRAY of node-id strings.
+    # An array of scalars survives the pygls params deserialization as is (only nested
+    # OBJECTS become namedtuples) - _plain_params passes the strings through untouched.
+    "nodes",
 )
 
 FILE_DEBOUNCE_S = 0.3

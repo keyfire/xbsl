@@ -161,6 +161,37 @@ def test_mcp_move_and_remove_component(mcp_module, form_file):
     assert "Корневой узел" in err["error"]
 
 
+def test_mcp_batch_component_tools_registered(mcp_module):
+    assert {"meta_remove_components", "meta_move_components"}.issubset(mcp_module.mcp.tools)
+
+
+def test_mcp_remove_components(mcp_module, form_file):
+    # both children of the template list in one call -> the slot key goes with them
+    res = mcp_module.meta_remove_components(str(form_file), [LABEL, BUTTON])
+    assert "node" not in res and "lint" in res
+    text = form_file.read_text(encoding="utf-8")
+    assert "Приветствие" not in text and "КнопкаОбновить" not in text
+    assert "Содержимое:" not in text.split("ПроизвольныйШаблонФормы")[1]
+
+    err = mcp_module.meta_remove_components(str(form_file.parent / "Витрина.yaml"),
+                                            ["Наследует"])
+    assert "Корневой узел" in err["error"]
+
+
+def test_mcp_move_components(mcp_module, form_file):
+    # selection order is reversed; the nodes land in document order in a fresh slot
+    res = mcp_module.meta_move_components(str(form_file), [BUTTON, LABEL], TPL, "Подвал")
+    assert res["node"]["id"] == TPL + "/Подвал[0]"
+    text = form_file.read_text(encoding="utf-8")
+    # Приветствие (LABEL) precedes КнопкаОбновить (BUTTON) - document order kept
+    assert text.index("Приветствие") < text.index("КнопкаОбновить")
+    assert "Подвал:" in text
+
+    err = mcp_module.meta_move_components(str(form_file), ["Наследует/Нет[9]"],
+                                          TPL, "Подвал")
+    assert "не найден" in err["error"].lower()
+
+
 def test_mcp_set_component_property(mcp_module, form_file):
     res = mcp_module.meta_set_component_property(
         str(form_file), LABEL, "РастягиватьПоГоризонтали", value="Истина",
@@ -202,9 +233,17 @@ def test_mcp_insert_fragment(mcp_module, form_file):
     text = form_file.read_text(encoding="utf-8")
     assert "# пояснение" in text and "Тип: Флажок" in text
 
+    # a block "-" list pastes several components at once - the first is reported
+    res = mcp_module.meta_insert_fragment(str(form_file), TPL, "Содержимое",
+                                          "- Тип: Надпись\n- Тип: Кнопка\n")
+    assert res["node"]["id"] == TPL + "/Содержимое[3]"
+    tree = mcp_module.meta_component_tree(str(form_file))
+    slot = tree["root"]["children"][0]["children"][0]["children"][0]
+    assert [c.get("type") for c in slot["children"]][-2:] == ["Надпись", "Кнопка"]
+
     err = mcp_module.meta_insert_fragment(str(form_file), TPL, "Содержимое",
-                                          "- Тип: А\n- Тип: Б\n")
-    assert "список" in err["error"]
+                                          "просто строка")
+    assert "ожидается маппинг" in err["error"]
 
 
 @pytest.mark.needs_data
@@ -338,6 +377,38 @@ def test_cli_form_edit_insert_fragment(form_file, tmp_path, capsys):
         "--fragment", "Тип: А", "--fragment-file", str(frag_file),
     )
     assert code == 2 and "один из флагов" in out["error"]
+
+
+def test_cli_form_edit_remove_nodes(form_file, capsys):
+    # --nodes as a comma-separated list (node ids never contain a comma)
+    code, out = _run_cli(
+        capsys, "form-edit", str(form_file), "remove-nodes",
+        "--nodes", f"{LABEL},{BUTTON}",
+    )
+    assert code == 0 and out["node"] is None and "lint" in out
+    text = form_file.read_text(encoding="utf-8")
+    assert "Приветствие" not in text and "КнопкаОбновить" not in text
+
+
+def test_cli_form_edit_move_nodes_repeatable_flag(form_file, capsys):
+    # --node repeated (the flag accumulates) and the document order is kept
+    code, out = _run_cli(
+        capsys, "form-edit", str(form_file), "move-nodes",
+        "--nodes", BUTTON, "--nodes", LABEL,
+        "--new-parent", TPL, "--slot", "Подвал",
+    )
+    assert code == 0 and out["node"]["id"] == TPL + "/Подвал[0]"
+    text = form_file.read_text(encoding="utf-8")
+    assert text.index("Приветствие") < text.index("КнопкаОбновить")
+    assert "Подвал:" in text
+
+
+def test_cli_form_edit_move_nodes_error_is_json(form_file, capsys):
+    code, out = _run_cli(
+        capsys, "form-edit", str(form_file), "move-nodes",
+        "--nodes", "Наследует", "--new-parent", TPL, "--slot", "Содержимое",
+    )
+    assert code == 2 and "Корневой узел" in out["error"]
 
 
 def test_cli_form_edit_property_ops(props_form_file, capsys):
@@ -501,6 +572,24 @@ def test_lsp_form_edit_computes_only(form_file):
     assert "Неизвестная операция" in err["error"]
 
 
+def test_lsp_form_edit_batch_ops(form_file):
+    _, features = _server_features()
+    # move_nodes with a list of node ids in the nested args
+    res = features["xbsl/formEdit"]({
+        "uri": _uri(form_file), "op": "move_nodes",
+        "args": {"nodes": [BUTTON, LABEL], "newParent": TPL, "slot": "Подвал"},
+    })
+    assert res["node"]["id"] == TPL + "/Подвал[0]"
+    assert res["edits"]
+    assert form_file.read_text(encoding="utf-8") == FORM  # compute only
+
+    res = features["xbsl/formEdit"]({
+        "uri": _uri(form_file), "op": "remove_nodes",
+        "args": {"nodes": [LABEL, BUTTON]},
+    })
+    assert res["node"] is None and res["edits"]
+
+
 # --- LSP over the real pygls wire ----------------------------------------------------------
 #
 # Direct handler calls (above) feed plain dicts and cannot catch what the real channel
@@ -594,6 +683,35 @@ def test_lsp_form_edit_flat_params_over_wire(form_file):
     }, msg_id=3)
     assert "error" not in msg, msg
     assert "Корневой узел" in msg["result"]["error"]
+
+
+def test_lsp_form_edit_nodes_array_over_wire(form_file):
+    """The batch operations carry `nodes` as an ARRAY of strings. Over the real pygls
+    channel a nested args object becomes a namedtuple, but a JSON array of SCALARS stays
+    a list - _plain_params must pass the list of ids through untouched, in both the
+    nested-args and the flat-params shapes.
+    """
+    server, transport = _wire_server()
+
+    # nested args: {op, args: {nodes: [...]}}
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "move_nodes",
+        "args": {"nodes": [BUTTON, LABEL], "newParent": TPL, "slot": "Подвал"},
+    }, msg_id=1)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["node"]["id"] == TPL + "/Подвал[0]"
+
+    # flat params: nodes sits directly in params next to op (the panels' shape)
+    msg = _wire_request(server, transport, "xbsl/formEdit", {
+        "uri": _uri(form_file), "op": "remove_nodes", "nodes": [LABEL, BUTTON],
+    }, msg_id=2)
+    assert "error" not in msg, msg
+    assert msg["result"].get("error") is None, msg["result"]
+    assert msg["result"]["node"] is None and msg["result"]["edits"]
+
+    # a scrambled selection still lands in document order - and computes only
+    assert form_file.read_text(encoding="utf-8") == FORM
 def test_lsp_wave3_methods_registered():
     _, features = _server_features()
     for method in ("xbsl/moduleHandlers", "xbsl/addHandler", "xbsl/objectInfo"):

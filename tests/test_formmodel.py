@@ -294,6 +294,16 @@ def slice_of(text: str, form, node_id: str) -> str:
     return text[node.span.start : node.span.end]
 
 
+def by_name(form, name):
+    """A component node found by its Имя - a positional id shifts after a batch edit."""
+    return next(n for n in form.nodes.values() if n.kind == "component" and n.name == name)
+
+
+def slot_children(node, slot_name):
+    slot = next((c for c in node.children if c.kind == "slot" and c.name == slot_name), None)
+    return [c.name for c in slot.children] if slot else None
+
+
 # --- insert -------------------------------------------------------------------------------
 
 
@@ -1074,18 +1084,149 @@ def test_insert_fragment_validation():
         formedits.insert_fragment(FORM, TPL, "Содержимое", "   \n")
     with pytest.raises(FormModelError, match="не является корректным yaml"):
         formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: [обрыв")
-    with pytest.raises(FormModelError, match="список элементов"):
-        formedits.insert_fragment(FORM, TPL, "Содержимое", "- Тип: А\n- Тип: Б\n")
     with pytest.raises(FormModelError, match="ожидается маппинг"):
         formedits.insert_fragment(FORM, TPL, "Содержимое", "просто строка")
+    with pytest.raises(FormModelError, match="ожидается маппинг"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "- Тип: А\n-\n")  # a null item
+    with pytest.raises(FormModelError, match="во flow-стиле"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "[а, б]")
     with pytest.raises(FormModelError, match="нет верхнеуровневого ключа Тип"):
         formedits.insert_fragment(FORM, TPL, "Содержимое", "Имя: БезТипа\n")
-    with pytest.raises(FormModelError, match="несколько компонентов"):
-        formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: А\nИмя: X\nТип: Б\n")
+    # two Тип keys in ONE block (a single dash item) is malformed, not two roots
+    with pytest.raises(FormModelError, match="несколько компонентов в одном блоке"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "-\n    Тип: А\n    Тип: Б\n")
     with pytest.raises(FormModelError, match="Слот не поддерживается"):
         formedits.insert_fragment(FORM, TPL, "Реквизиты", FRAGMENT)
     with pytest.raises(FormModelError, match="Узел не найден"):
         formedits.insert_fragment(FORM, "Нет", "Содержимое", FRAGMENT)
+
+
+# --- insert_fragment: several roots -------------------------------------------------------
+
+# A block "-" list of two components, each with its own attached comment.
+FRAG_LIST = """\
+# первая метка
+- Тип: Надпись
+  Имя: Метка1
+# вторая метка
+-
+    Тип: Кнопка
+    Имя: Кнопка1
+    Заголовок: Жми
+"""
+
+# Two component mappings written consecutively (the way copied blocks concatenate):
+# every block opens with its own margin-0 Тип key; the second carries a comment.
+FRAG_MAPPINGS = """\
+Тип: Надпись
+Имя: МапМетка
+# кнопка снизу
+Тип: Кнопка
+Имя: МапКнопка
+"""
+
+
+def test_insert_fragment_list_of_roots():
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAG_LIST)
+    assert unchanged_outside(FORM, res)
+    # the reported node is the FIRST of the pasted run
+    assert res.node_id == TPL + "/Содержимое[3]"
+    form = parse_form(res.new_text)
+    assert [c.name for c in form.nodes[LIST_GRP].children] == [
+        "Подсказка", "Получатель", "Разделы", "Метка1", "Кнопка1",
+    ]
+    # each root reindented to the destination, each keeps its own comment attached
+    first = form.nodes[TPL + "/Содержимое[3]"]
+    assert res.new_text[first.span.start : first.span.end] == (
+        "            # первая метка\n"
+        "            -\n"
+        "                Тип: Надпись\n"
+        "                Имя: Метка1\n"
+    )
+    second = form.nodes[TPL + "/Содержимое[4]"]
+    assert res.new_text[second.span.start : second.span.end] == (
+        "            # вторая метка\n"
+        "            -\n"
+        "                Тип: Кнопка\n"
+        "                Имя: Кнопка1\n"
+        "                Заголовок: Жми\n"
+    )
+    # removing the whole pasted run restores the source byte-for-byte
+    back = formedits.remove_nodes(
+        res.new_text, [TPL + "/Содержимое[3]", TPL + "/Содержимое[4]"]
+    )
+    assert back.new_text == FORM
+
+
+def test_insert_fragment_consecutive_mappings():
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAG_MAPPINGS, before=LABEL)
+    assert unchanged_outside(FORM, res)
+    assert res.node_id == TPL + "/Содержимое[0]"
+    form = parse_form(res.new_text)
+    assert [c.name for c in form.nodes[LIST_GRP].children] == [
+        "МапМетка", "МапКнопка", "Подсказка", "Получатель", "Разделы",
+    ]
+    # the comment written above the second mapping travels with it
+    second = form.nodes[TPL + "/Содержимое[1]"]
+    assert res.new_text[second.span.start : second.span.end].startswith(
+        "            # кнопка снизу\n            -\n"
+    )
+
+
+def test_insert_fragment_several_roots_into_missing_slot():
+    # a multi-root paste into a missing slot writes the list form outright
+    res = formedits.insert_fragment(CHAIN, CH_GRP, "Шапка", FRAG_MAPPINGS)
+    assert unchanged_outside(CHAIN, res)
+    form = parse_form(res.new_text)
+    slot = form.nodes[CH_GRP + "/Шапка"]
+    assert slot.list_style is True
+    assert [c.name for c in slot.children] == ["МапМетка", "МапКнопка"]
+    back = formedits.remove_nodes(
+        res.new_text, [CH_GRP + "/Шапка[0]", CH_GRP + "/Шапка[1]"]
+    )
+    assert back.new_text == CHAIN
+
+
+def test_insert_fragment_several_roots_convert_singleton():
+    res = formedits.insert_fragment(CHAIN, CH_GRP, "Содержимое", FRAG_LIST)
+    form = parse_form(res.new_text)
+    slot = form.nodes[CH_GRP + "/Содержимое"]
+    assert slot.list_style is True  # the singleton slot converted to the list form
+    assert [c.name for c in slot.children] == ["Текст", "Метка1", "Кнопка1"]
+
+
+def test_insert_fragment_pages_without_type():
+    # a page record (Имя and content, no Тип) is legal in the Страницы slot
+    page = "Имя: СтраницаДоставка\nЗаголовок: Доставка\n"
+    res = formedits.insert_fragment(FORM, PAGES, "Страницы", page, after=PAGE1)
+    assert unchanged_outside(FORM, res)
+    form = parse_form(res.new_text)
+    names = [c.name for c in form.nodes[PAGES + "/Страницы"].children]
+    assert names == ["СтраницаСостав", "СтраницаДоставка", "СтраницаОплата"]
+    inserted = form.nodes[PAGES + "/Страницы[1]"]
+    assert inserted.type is None and inserted.name == "СтраницаДоставка"
+
+    # several page records at once - as a block "-" list (pages have no Тип delimiter,
+    # so consecutive bare mappings are ambiguous; the list form is the way to spell them)
+    two = "- Имя: СтраницаА\n# вторая страница\n- Имя: СтраницаБ\n"
+    res = formedits.insert_fragment(FORM, PAGES, "Страницы", two)
+    form = parse_form(res.new_text)
+    assert [c.name for c in form.nodes[PAGES + "/Страницы"].children][-2:] == [
+        "СтраницаА", "СтраницаБ",
+    ]
+    # consecutive untyped mappings ARE rejected - there is no key to split them on
+    with pytest.raises(FormModelError, match="несколько записей"):
+        formedits.insert_fragment(FORM, PAGES, "Страницы",
+                                  "Имя: СтраницаА\nИмя: СтраницаБ\n")
+
+
+def test_insert_fragment_untyped_rejected_outside_pages():
+    # the same record without Тип is rejected everywhere but Страницы
+    page = "Имя: СтраницаДоставка\nЗаголовок: Доставка\n"
+    with pytest.raises(FormModelError, match="нет верхнеуровневого ключа Тип"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", page)
+    with pytest.raises(FormModelError, match="нет верхнеуровневого ключа Тип"):
+        formedits.insert_fragment(FORM, PAY_GRP, "Содержимое", page)
 
 
 @pytest.mark.parametrize("op,args", [
@@ -1118,6 +1259,178 @@ def test_apply_operation_new_ops_and_camel_op():
         formedits.apply_operation(PROPS, "property_add", {"name": "Итог"})
     with pytest.raises(FormModelError, match="не задан параметр"):
         formedits.apply_operation(PROPS, "insert_fragment", {"parent": TPL, "slot": "Содержимое"})
+
+
+# --- remove_nodes (batch) -----------------------------------------------------------------
+
+
+def test_remove_nodes_multiple_parents_one_edit_pass():
+    # FIELD sits in the top list, CHECKBOX deep in the payment group - different parents
+    res = formedits.remove_nodes(FORM, [FIELD, CHECKBOX])
+    assert unchanged_outside(FORM, res)
+    assert res.node_id is None
+    form = parse_form(res.new_text)
+    assert [c.type for c in form.nodes[LIST_GRP].children] == ["Надпись", "Страницы"]
+    # ids shifted after removing FIELD - locate the group by name
+    assert slot_children(by_name(form, "ГруппаОплаты"), "Содержимое") == ["КнопкаОплатить"]
+    # the comment attached to FIELD went with it
+    assert "# Куда уходит заказ" not in res.new_text
+
+
+def test_remove_nodes_dedup_nested_and_repeats():
+    # an ancestor and one of its descendants, plus a repeat: the nested id and the
+    # duplicate are dropped, leaving the single ancestor removal
+    batch = formedits.remove_nodes(FORM, [PAY_GRP, CHECKBOX, BUTTON, PAY_GRP])
+    single = formedits.remove_node(FORM, PAY_GRP)
+    assert batch.new_text == single.new_text
+
+
+def test_remove_nodes_empties_slot_whole():
+    # removing every child of a slot takes the slot key line with it, in one edit
+    res = formedits.remove_nodes(FORM, [CHECKBOX, BUTTON])
+    assert len(res.edits) == 1
+    assert unchanged_outside(FORM, res)
+    form = parse_form(res.new_text)
+    group = form.nodes[PAY_GRP]
+    assert group.children == [] and "Содержимое" not in group.pairs
+    assert group.type == "Группа"  # the container itself survived
+
+
+def test_remove_nodes_order_independent():
+    a = formedits.remove_nodes(FORM, [LABEL, FIELD, BUTTON])
+    b = formedits.remove_nodes(FORM, [BUTTON, LABEL, FIELD])
+    assert a.new_text == b.new_text
+
+
+def test_remove_nodes_single_matches_remove_node():
+    assert formedits.remove_nodes(FORM, [FIELD]).new_text == formedits.remove_node(FORM, FIELD).new_text
+
+
+def test_remove_nodes_guards():
+    with pytest.raises(FormModelError, match="Корневой узел"):
+        formedits.remove_nodes(FORM, [LABEL, "Наследует"])
+    with pytest.raises(FormModelError, match="пустой список|не заданы узлы"):
+        formedits.remove_nodes(FORM, [])
+    with pytest.raises(FormModelError, match="Узел не найден"):
+        formedits.remove_nodes(FORM, ["Наследует/Нет[9]"])
+
+
+# --- move_nodes (batch) -------------------------------------------------------------------
+
+
+def test_move_nodes_keeps_document_order_not_selection_order():
+    # the selection is given bottom-up; the nodes must land top-down as in the document
+    res = formedits.move_nodes(FORM, [BUTTON, CHECKBOX], TPL, "Содержимое", after=PAGES)
+    assert unchanged_outside(FORM, res)
+    form = parse_form(res.new_text)
+    assert [c.name for c in form.nodes[LIST_GRP].children] == [
+        "Подсказка", "Получатель", "Разделы", "Оплачен", "КнопкаОплатить",
+    ]
+    # the first node of the moved run is reported
+    assert res.node_id == TPL + "/Содержимое[3]"
+    # both left the payment group - its slot collapsed
+    assert "Содержимое" not in form.nodes[PAY_GRP].pairs
+
+
+def test_move_nodes_from_multiple_parents():
+    # FIELD from the top list, CHECKBOX from the deep group -> a fresh slot on a page
+    res = formedits.move_nodes(FORM, [CHECKBOX, FIELD], PAGE2, "Подвал")
+    assert unchanged_outside(FORM, res)
+    form = parse_form(res.new_text)
+    # ids shifted after FIELD left the top list - locate the page by name
+    page = by_name(form, "СтраницаОплата")
+    assert slot_children(page, "Подвал") == ["Получатель", "Оплачен"]  # document order
+    assert [c.name for c in form.nodes[LIST_GRP].children] == ["Подсказка", "Разделы"]
+    assert slot_children(by_name(form, "ГруппаОплаты"), "Содержимое") == ["КнопкаОплатить"]
+
+
+def test_move_nodes_roundtrip_byte_identical():
+    fwd = formedits.move_nodes(FORM, [FIELD, LABEL], TPL, "Содержимое", after=PAGES)
+    form = parse_form(fwd.new_text)
+    assert [c.name for c in form.nodes[LIST_GRP].children] == [
+        "Разделы", "Подсказка", "Получатель",
+    ]
+    back = formedits.move_nodes(
+        fwd.new_text, [TPL + "/Содержимое[1]", TPL + "/Содержимое[2]"],
+        TPL, "Содержимое", before=TPL + "/Содержимое[0]",
+    )
+    assert back.new_text == FORM
+
+
+def test_move_nodes_dedup_nested_matches_single_move():
+    batch = formedits.move_nodes(FORM, [PAY_GRP, CHECKBOX], TPL, "Содержимое", after=PAGES)
+    single = formedits.move_node(FORM, PAY_GRP, TPL, "Содержимое", after=PAGES)
+    assert batch.new_text == single.new_text and batch.node_id == single.node_id
+
+
+def test_move_nodes_single_matches_move_node():
+    batch = formedits.move_nodes(CHAIN, [CH_LABEL], CH_TPL, "Содержимое", after=CH_GRP)
+    single = formedits.move_node(CHAIN, CH_LABEL, CH_TPL, "Содержимое", after=CH_GRP)
+    assert batch.new_text == single.new_text
+    assert batch.node_id == single.node_id and len(batch.edits) == 1
+
+
+def test_move_nodes_into_converting_singleton_that_holds_a_moved_node():
+    # the destination's only child (TABLE) is itself among the moved nodes: the block is
+    # replaced by the payload outright, and BUTTON joins it - the slot becomes a list
+    res = formedits.move_nodes(FORM, [TABLE, BUTTON], PAGE1, "Содержимое")
+    assert unchanged_outside(FORM, res)
+    form = parse_form(res.new_text)
+    slot = form.nodes[PAGE1 + "/Содержимое"]
+    assert slot.list_style is True
+    assert [c.type for c in slot.children] == ["Таблица", "Кнопка"]
+    # only BUTTON left the payment group; the checkbox keeps it (and its slot) alive
+    assert slot_children(by_name(form, "ГруппаОплаты"), "Содержимое") == ["Оплачен"]
+
+
+def test_move_nodes_guards():
+    with pytest.raises(FormModelError, match="собственного поддерева"):
+        formedits.move_nodes(FORM, [LABEL, PAGES], PAGE1, "Содержимое")
+    with pytest.raises(FormModelError, match="относительно самого себя"):
+        formedits.move_nodes(FORM, [LABEL, FIELD], TPL, "Содержимое", before=FIELD)
+    with pytest.raises(FormModelError, match="все дочерние узлы целевого слота"):
+        formedits.move_nodes(FORM, [CHECKBOX, BUTTON], PAY_GRP, "Содержимое")
+    with pytest.raises(FormModelError, match="Корневой узел"):
+        formedits.move_nodes(FORM, ["Наследует"], TPL, "Содержимое")
+    with pytest.raises(FormModelError, match="пустой список|не заданы узлы"):
+        formedits.move_nodes(FORM, [], TPL, "Содержимое")
+
+
+def test_move_nodes_preserves_crlf():
+    crlf = FORM.replace("\n", "\r\n")
+    res = formedits.move_nodes(crlf, [BUTTON, CHECKBOX], TPL, "Содержимое", after=PAGES)
+    moved = res.new_text[res.node_span.start : res.node_span.end]
+    assert "\r\n" in moved and moved.replace("\r\n", "").find("\n") == -1
+
+
+@pytest.mark.parametrize("op,args", [
+    ("remove_nodes", {"nodes": [FIELD, CHECKBOX]}),
+    ("remove_nodes", {"nodes": [CHECKBOX, BUTTON]}),
+    ("move_nodes", {"nodes": [BUTTON, CHECKBOX], "new_parent": TPL, "slot": "Содержимое"}),
+    ("move_nodes", {"nodes": [TABLE, BUTTON], "new_parent": PAGE1, "slot": "Содержимое"}),
+])
+def test_batch_results_parse_as_yaml(op, args):
+    res = formedits.apply_operation(FORM, op, args)
+    assert pyyaml.safe_load(res.new_text)
+    assert unchanged_outside(FORM, res)
+
+
+def test_apply_operation_batch_dispatch_and_nodes_forms():
+    # a list of ids
+    res = formedits.apply_operation(FORM, "remove_nodes", {"nodes": [CHECKBOX, BUTTON]})
+    assert "Содержимое" not in parse_form(res.new_text).nodes[PAY_GRP].pairs
+    # a single comma-separated string (node ids never contain a comma)
+    res2 = formedits.apply_operation(FORM, "removeNodes", {"nodes": f"{CHECKBOX},{BUTTON}"})
+    assert res2.new_text == res.new_text
+    # camelCase op and camelCase newParent
+    res3 = formedits.apply_operation(FORM, "moveNodes", {
+        "nodes": [BUTTON, CHECKBOX], "newParent": TPL, "slot": "Содержимое", "after": PAGES,
+    })
+    assert res3.node_id == TPL + "/Содержимое[3]"
+    with pytest.raises(FormModelError, match="не задан параметр nodes"):
+        formedits.apply_operation(FORM, "remove_nodes", {})
+    with pytest.raises(FormModelError, match="не задан параметр"):
+        formedits.apply_operation(FORM, "move_nodes", {"nodes": [FIELD]})
 
 
 # --- smoke over the demo project ----------------------------------------------------------

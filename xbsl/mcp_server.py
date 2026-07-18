@@ -496,12 +496,14 @@ def meta_add_subsystem(
 
 # --- the form designer (the component model of interface forms) --------------------------
 #
-# meta_component_tree reads; the four editing tools compute precise text edits over the
-# form model (xbsl.formmodel / xbsl.formedits), apply them to the file and lint what they
+# meta_component_tree reads; the editing tools compute precise text edits over the form
+# model (xbsl.formmodel / xbsl.formedits), apply them to the file and lint what they
 # wrote - the same contract as the writing meta_* tools. Node ids are positional paths
 # ("Наследует/Содержимое[0]") and stay valid only until the next edit: re-read the tree
-# after every change. The remaining designer operations (wrap/unwrap/duplicate/rename)
-# are exposed through the CLI (`xbsl form-edit`) and the LSP for now.
+# after every change. meta_remove_components / meta_move_components are the batch
+# spellings: one call, one edit pass over several nodes. The remaining designer
+# operations (wrap/unwrap/duplicate/rename) are exposed through the CLI
+# (`xbsl form-edit`) and the LSP for now.
 
 
 def _form_write(yaml_path: str, op: str, args: dict) -> dict:
@@ -523,8 +525,9 @@ def meta_component_tree(yaml_path: str) -> dict:
     properties (scalars, =/$ bindings, composite values, При*/После*/Перед* handlers).
     Children live in the slots Содержимое / Страницы / Колонки / Команды / КомандыСтроки /
     Шапка / Подвал; other nested values are properties. Use the node ids with
-    meta_add_component / meta_move_component / meta_remove_component /
-    meta_set_component_property; ids are positional, so re-read the tree after any edit.
+    meta_add_component / meta_move_component / meta_remove_component / the batch
+    meta_move_components / meta_remove_components / meta_set_component_property;
+    ids are positional, so re-read the tree after any edit.
 
     componentProperties lists the records of the top-level Свойства section (the
     component's own properties: name, type and their spans) - they are not tree nodes.
@@ -616,6 +619,43 @@ def meta_remove_component(yaml_path: str, node_id: str) -> dict:
     slot key line as well. The root node (Наследует) cannot be removed.
     """
     return _form_write(yaml_path, "remove", {"node": node_id})
+
+
+@mcp.tool()
+def meta_remove_components(yaml_path: str, node_ids: list[str]) -> dict:
+    """Remove several nodes in ONE operation (each with its attached comments).
+
+    node_ids come from meta_component_tree, in any order; repeated ids and ids nested
+    inside another removed node are skipped silently. A slot losing ALL its children is
+    removed whole (the slot key line goes too). The root node (Наследует) cannot be
+    removed. One call = one edit pass, instead of re-reading the tree between removals.
+    """
+    return _form_write(yaml_path, "remove_nodes", {"nodes": node_ids})
+
+
+@mcp.tool()
+def meta_move_components(
+    yaml_path: str,
+    node_ids: list[str],
+    new_parent_id: str,
+    slot: str,
+    before: str | None = None,
+    after: str | None = None,
+) -> dict:
+    """Move several nodes into one slot in ONE operation, keeping their DOCUMENT order.
+
+    The nodes land as consecutive siblings ordered as they stand in the file (the order
+    of node_ids does not matter); nodes from different parents are welcome; repeated ids
+    and ids nested inside another moved node are skipped silently. A source slot losing
+    all its children is removed whole; the destination follows the same slot rules as
+    meta_add_component. before/after position the run against a sibling in the
+    destination slot and must not name a moved node. The returned node is the FIRST of
+    the moved run.
+    """
+    return _form_write(yaml_path, "move_nodes", {
+        "nodes": node_ids, "new_parent": new_parent_id, "slot": slot,
+        "before": before, "after": after,
+    })
 
 
 @mcp.tool()

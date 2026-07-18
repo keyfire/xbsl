@@ -24,11 +24,24 @@ Conventions (documented decisions):
       an empty value does not compile); the slot's own attached comments go with it.
     - The indentation step is detected from the file itself (formmodel._detect_step);
       list-item geometry is taken from the existing siblings of the target slot.
-    - insert_fragment pastes a READY yaml block of one component (what the structure
-      panel copied): the fragment is dedented to its margin and re-indented to the
-      destination; the internal relative indentation is preserved as pasted. Blank lines
-      inside the run of leading comments are dropped so the comments stay attached to
-      the inserted node (the formmodel attachment rule).
+    - insert_fragment pastes READY yaml blocks (what the structure panel copied): ONE
+      component mapping, a block "-" list of components, or several component mappings
+      written consecutively (every block opening with its own margin-0 Тип key - the way
+      copied blocks concatenate). Several roots land as consecutive siblings in the
+      pasted order, each with its own attached comments; the fragment is dedented to its
+      margin and re-indented to the destination, the internal relative indentation is
+      preserved as pasted. Blank lines inside a run of leading comments are dropped so
+      the comments stay attached to their node (the formmodel attachment rule). A record
+      without a top-level Тип (a page: Имя and content only) is allowed only when the
+      destination slot is Страницы; every other slot keeps the Тип requirement, and the
+      old errors for garbage and scalars stay.
+    - The batch operations remove_nodes / move_nodes take a LIST of node ids in ANY
+      order and land as ONE edit list (a single undo step). Repeated ids and ids nested
+      inside another listed node are dropped silently; a slot losing ALL its children is
+      removed whole (key line and its attached comments included) - except the
+      destination slot of a move, whose key survives a full reorder. move_nodes keeps
+      the DOCUMENT order of the nodes, not the order of the selection, and reports the
+      FIRST node of the moved run.
     - The property_* operations edit the top-level Свойства section only. The section is
       created right after the Наследует block - the corpus spelling (49 of 50 files put
       Свойства immediately after Наследует). property_rename does NOT rewrite the
@@ -72,8 +85,8 @@ _BARE_SCALAR_RE = re.compile(r"^[=$A-Za-zА-Яа-яЁё0-9_][A-Za-zА-Яа-яЁ�
 _YAML_AMBIGUOUS = {"true", "false", "yes", "no", "on", "off", "null", "~"}
 
 OPERATIONS = (
-    "insert", "insert_fragment", "move", "remove", "wrap", "unwrap",
-    "duplicate", "rename", "set_property", "reset_property",
+    "insert", "insert_fragment", "move", "move_nodes", "remove", "remove_nodes",
+    "wrap", "unwrap", "duplicate", "rename", "set_property", "reset_property",
     "property_add", "property_retype", "property_remove", "property_rename",
 )
 
@@ -185,18 +198,18 @@ def _as_mapping(form: Form, node: Node, dest_col: int) -> str:
     )
 
 
-def _convert_child_to_item(form: Form, child: Node, removal: Span | None) -> str:
+def _convert_child_to_item(form: Form, child: Node, removals: list[Span] | None) -> str:
     """The single nested-mapping child rewritten as a list item under its own dash.
 
     The dash lands at the child's former body column and the body goes one step deeper -
-    the reverse of how the platform spells a singleton. removal, when given, is a span
-    INSIDE the child's content that must disappear in the same edit (a node being moved
+    the reverse of how the platform spells a singleton. removals, when given, are spans
+    INSIDE the child's content that must disappear in the same edit (nodes being moved
     out of this child while the slot is converting).
     """
     if child.body_col is None:
         raise FormModelError("Слот содержит скалярный элемент – преобразование не поддерживается")
     comments, content = _split_payload(form, child)
-    if removal is not None:
+    for removal in sorted(removals or [], key=lambda s: s.start, reverse=True):
         rel_s = removal.start - child.content_span.start
         rel_e = removal.end - child.content_span.start
         if rel_s < 0 or rel_e > len(content):
@@ -277,30 +290,29 @@ def _resolve_sibling(form: Form, slot_node: Node, sib_id: str | None) -> Node | 
 class _Plan:
     edits: list[TextEdit]
     anchor: int  # offset of the resulting node's span start in the NEW text
-    removal_consumed: bool = False
+    consumed: list[Span] = field(default_factory=list)  # removals folded into the edits
 
 
 def _plan_insert(form, parent, slot_name, item_fn, map_fn, before, after,
-                 removal: Span | None) -> _Plan:
+                 removals: list[Span] | None = None) -> _Plan:
     """Where and how a new/moved block lands in the parent's slot.
 
-    item_fn(dash_col) renders the payload as a "-" list item; map_fn(body_col) renders
-    it as a slot's single nested mapping (both end with a newline). removal is the span
-    the caller is deleting in the same operation (move) - it offsets the reported anchor
-    and, when it falls inside the child of a converting slot, is folded into the
-    conversion edit (removal_consumed=True).
+    item_fn(dash_col) renders the payload as "-" list items; map_fn(body_col) renders
+    it as a slot's nested-mapping value (both end with a newline). removals are the
+    spans the caller is deleting in the same operation (move) - they offset the
+    reported anchor and, when they fall inside the child of a converting slot, are
+    folded into the conversion edit (returned in consumed).
     """
     if before is not None and after is not None:
         raise FormModelError("Укажите только один из параметров before и after")
+    cuts = list(removals or [])
     text, nl, step = form.text, form.nl, form.step
     slot_node = next(
         (c for c in parent.children if c.kind == "slot" and c.name == slot_name), None
     )
 
     def shift(pos: int) -> int:
-        if removal is not None and removal.end <= pos:
-            return -(removal.end - removal.start)
-        return 0
+        return -sum(c.end - c.start for c in cuts if c.end <= pos)
 
     def eof_fix(pos: int, fragment: str) -> tuple[str, int]:
         if pos == len(text) and text and not text.endswith("\n"):
@@ -347,16 +359,15 @@ def _plan_insert(form, parent, slot_name, item_fn, map_fn, before, after,
     child = slot_node.children[0]
     _resolve_sibling(form, slot_node, before)
     _resolve_sibling(form, slot_node, after)
-    removal_inside = removal is not None and child.content_span.encloses(removal)
-    converted = _convert_child_to_item(form, child, removal if removal_inside else None)
+    inside = [c for c in cuts if child.content_span.encloses(c)]
+    converted = _convert_child_to_item(form, child, inside)
     item = item_fn(child.body_col)
     new_first = before == child.id
     replacement = item + converted if new_first else converted + item
     region = child.span
     anchor = region.start + shift(region.start) + (0 if new_first else len(converted))
     return _Plan(
-        [TextEdit(region.start, region.end, replacement)], anchor,
-        removal_consumed=removal_inside,
+        [TextEdit(region.start, region.end, replacement)], anchor, consumed=inside,
     )
 
 
@@ -412,29 +423,141 @@ def insert_component(text: str, parent_id: str, slot: str, type_: str | None = N
     def map_fn(col: int) -> str:
         return "".join(" " * col + l + nl for l in lines0)
 
-    plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after, removal=None)
+    plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after)
     return _finish(text, plan.edits, plan.anchor)
 
 
-def _fragment_component_lines(fragment: str) -> tuple[list[str], int]:
-    """The pasted component fragment as dedented lines: (lines, leading comment count).
+def _normalized_fragment_lines(fragment: str) -> list[str]:
+    """The fragment as rstripped lines: edge blanks dropped, common margin dedented."""
+    lines = [ln.rstrip() for ln in fragment.replace("\r\n", "\n").split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    common = min(len(ln) - len(ln.lstrip(" ")) for ln in lines if ln.strip())
+    return [ln[common:] if ln.strip() else "" for ln in lines]
 
-    The fragment must be ONE yaml mapping with a top-level Тип key (what the structure
-    panel copies), optionally with attached comments above. A list, several components
-    or a scalar raise a user-facing error; the component type is deliberately NOT
-    checked against any catalog - project components are as valid as platform ones.
+
+def _lift_comment_run(chunk: list[str]) -> tuple[list[str], list[str]]:
+    """(leading comments, body) of a chunk; blank lines inside the run are dropped.
+
+    The leading comments become the node's attached comments: a blank line between
+    them and the body would detach them (the formmodel rule), so blanks go.
     """
-    if not fragment or not fragment.strip():
-        raise FormModelError("Пустой yaml-фрагмент компонента")
+    comments: list[str] = []
+    rest = list(chunk)
+    while rest and (not rest[0].strip() or rest[0].lstrip().startswith("#")):
+        line = rest.pop(0)
+        if line.strip():
+            comments.append(line)
+    return comments, rest
+
+
+_TYPE_KEY_RE = re.compile(r"Тип\s*:")
+
+
+def _split_mapping_chunks(lines: list[str]) -> list[list[str]]:
+    """Consecutive component blocks of one top-level mapping, split at margin-0 Тип keys.
+
+    Copied blocks concatenate into a single yaml mapping in which every component opens
+    with its own Тип line (the corpus spelling): the second and every following margin-0
+    Тип starts a new chunk, and the comment run directly above it (blanks skipped) moves
+    into that chunk. With zero or one Тип the mapping stays a single chunk.
+    """
+    starts = [
+        i for i, ln in enumerate(lines)
+        if ln and not ln.startswith(" ") and _TYPE_KEY_RE.match(ln)
+    ]
+    if len(starts) <= 1:
+        return [lines]
+    bounds = []
+    for idx in starts[1:]:
+        first = idx
+        while first - 1 >= 0 and (
+            not lines[first - 1].strip() or lines[first - 1].startswith("#")
+        ):
+            first -= 1
+        bounds.append(first)
+    chunks = []
+    prev = 0
+    for bound in bounds:
+        chunks.append(lines[prev:bound])
+        prev = bound
+    chunks.append(lines[prev:])
+    return [c for c in chunks if any(ln.strip() for ln in c)]
+
+
+def _split_list_items(lines: list[str]) -> list[tuple[list[str], list[str]]]:
+    """Block-list items as (attached comments, mapping body dedented to the margin).
+
+    A margin-0 comment run opens the NEXT item; one inside an item's body (followed by
+    indented lines) stays in the body, and a trailing run keeps its content inside the
+    last item's block. Inline items ("- Тип: X") normalize to the block spelling.
+    """
+    items: list[dict] = []
+    pending: list[str] = []
+    current: dict | None = None
+    for ln in lines:
+        if not ln.strip():
+            if current is not None and not pending:
+                current["body"].append("")
+            continue
+        if not ln.startswith(" "):  # margin 0: a dash item or a comment
+            if ln.startswith("#"):
+                pending.append(ln)
+                continue
+            if current is not None:
+                items.append(current)
+            current = {"comments": pending, "head": ln, "body": []}
+            pending = []
+            continue
+        if current is None:  # cannot happen in a composed sequence - defensive
+            raise FormModelError(
+                "Фрагмент не является yaml-блоком компонента (ожидается маппинг с ключом Тип)"
+            )
+        if pending:  # margin-0 comments inside the body were not item openers
+            current["body"].extend(pending)
+            pending = []
+        current["body"].append(ln)
+    if current is not None:
+        if pending:  # a trailing comment run keeps its content inside the last block
+            current["body"].extend(pending)
+        items.append(current)
+
+    chunks: list[tuple[list[str], list[str]]] = []
+    for item in items:
+        raw = item["body"]
+        while raw and not raw[-1].strip():
+            raw.pop()
+        non_comment = [
+            ln for ln in raw if ln.strip() and not ln.lstrip().startswith("#")
+        ]
+        indent = min((len(ln) - len(ln.lstrip(" ")) for ln in non_comment), default=0)
+        body = []
+        for ln in raw:
+            if not ln.strip():
+                body.append("")
+            else:
+                body.append(ln[min(indent, len(ln) - len(ln.lstrip(" "))):])
+        head_content = item["head"][1:].lstrip()  # the dash line minus its marker
+        if head_content:
+            body = [head_content] + body
+        chunks.append((item["comments"], body))
+    return chunks
+
+
+def _check_chunk_body(body: list[str], allow_untyped: bool) -> None:
+    """One pasted component: must be a yaml mapping describing a single component.
+
+    The component type is deliberately NOT checked against any catalog - project
+    components are as valid as platform ones. allow_untyped lifts the Тип requirement
+    (records of the Страницы slot carry Имя without Тип).
+    """
+    text = "\n".join(body) + "\n"
     try:
-        composed = yaml.compose(fragment, Loader=yaml.SafeLoader)
+        composed = yaml.compose(text, Loader=yaml.SafeLoader)
     except yaml.YAMLError as exc:
         raise FormModelError(f"Фрагмент не является корректным yaml: {exc}") from exc
-    if isinstance(composed, yaml.SequenceNode):
-        raise FormModelError(
-            "Фрагмент содержит список элементов – вставляйте компоненты по одному, "
-            "без маркера списка \"-\""
-        )
     if not isinstance(composed, yaml.MappingNode):
         raise FormModelError(
             "Фрагмент не является yaml-блоком компонента (ожидается маппинг с ключом Тип)"
@@ -443,64 +566,93 @@ def _fragment_component_lines(fragment: str) -> tuple[list[str], int]:
     type_count = keys.count("Тип")
     if type_count > 1:
         raise FormModelError(
-            f"Во фрагменте несколько компонентов (ключ Тип встречается {type_count} раза) – "
-            "вставляйте по одному"
+            f"Во фрагменте несколько компонентов в одном блоке (ключ Тип встречается "
+            f"{type_count} раза) – разделяйте компоненты маркером списка \"-\""
         )
     if type_count == 0:
-        raise FormModelError("Во фрагменте нет верхнеуровневого ключа Тип")
+        if len(keys) != len(set(keys)):
+            raise FormModelError(
+                "Во фрагменте несколько записей – вставляйте их блочным списком \"-\" элементов"
+            )
+        if not allow_untyped:
+            raise FormModelError("Во фрагменте нет верхнеуровневого ключа Тип")
 
-    lines = [ln.rstrip() for ln in fragment.replace("\r\n", "\n").split("\n")]
-    while lines and not lines[0].strip():
-        lines.pop(0)
-    while lines and not lines[-1].strip():
-        lines.pop()
-    common = min(len(ln) - len(ln.lstrip(" ")) for ln in lines if ln.strip())
-    lines = [ln[common:] if ln.strip() else "" for ln in lines]
-    # The leading comments become the node's attached comments: blank lines inside the
-    # run would detach them (the formmodel rule), so they are dropped from the run.
-    comments: list[str] = []
-    rest = list(lines)
-    while rest and (not rest[0].strip() or rest[0].lstrip().startswith("#")):
-        line = rest.pop(0)
-        if line.strip():
-            comments.append(line)
-    return comments + rest, len(comments)
+
+def _fragment_components(fragment: str, allow_untyped: bool) -> list[tuple[list[str], list[str]]]:
+    """The pasted fragment as component chunks: (attached comments, mapping lines) each.
+
+    Accepted shapes: ONE component mapping (the classic copy), a block "-" list of
+    components, or several component mappings written consecutively (every block opening
+    with its own margin-0 Тип key - the way copied blocks concatenate). Garbage, scalars
+    and flow collections raise the user-facing errors; allow_untyped (the Страницы slot)
+    admits records without Тип.
+    """
+    if not fragment or not fragment.strip():
+        raise FormModelError("Пустой yaml-фрагмент компонента")
+    try:
+        composed = yaml.compose(fragment, Loader=yaml.SafeLoader)
+    except yaml.YAMLError as exc:
+        raise FormModelError(f"Фрагмент не является корректным yaml: {exc}") from exc
+    lines = _normalized_fragment_lines(fragment)
+    if isinstance(composed, yaml.SequenceNode):
+        if composed.flow_style:
+            raise FormModelError(
+                "Фрагмент-список записан во flow-стиле – вставляйте блочный список \"-\" элементов"
+            )
+        chunks = _split_list_items(lines)
+    elif isinstance(composed, yaml.MappingNode):
+        chunks = [_lift_comment_run(c) for c in _split_mapping_chunks(lines)]
+    else:
+        raise FormModelError(
+            "Фрагмент не является yaml-блоком компонента (ожидается маппинг с ключом Тип)"
+        )
+    for _comments, body in chunks:
+        _check_chunk_body(body, allow_untyped)
+    return chunks
 
 
 def insert_fragment(text: str, parent_id: str, slot: str, fragment: str,
                     before: str | None = None, after: str | None = None) -> EditResult:
-    """Paste a copied component subtree (a ready yaml block) into the parent's slot.
+    """Paste copied component subtrees (ready yaml blocks) into the parent's slot.
 
-    The fragment is re-indented to the destination (the file's own step decides where
-    the body lands); its internal relative indentation survives as pasted. The slot
-    rules are the same as insert_component: a missing slot is created, a single-mapping
-    slot converts to the "-" list form.
+    The fragment may carry one component or several (a block "-" list or consecutive
+    mappings, each opening with its Тип key): several roots land as consecutive
+    siblings in the pasted order, each with its own attached comments; the reported
+    node is the FIRST of them. The blocks are re-indented to the destination (the
+    file's own step decides where the body lands); the internal relative indentation
+    survives as pasted. The slot rules are the same as insert_component - a missing
+    slot is created, a single-mapping slot converts to the "-" list form - and a
+    multi-component paste into a missing or empty slot writes the list form at once.
+    Records without Тип (pages) are allowed only when the slot is Страницы.
     """
     form = parse_form(text)
     parent = get_component(form, parent_id)
     if parent.body_col is None:
         raise FormModelError(f"У узла {parent_id} нет блока свойств – вставка невозможна")
     _check_slot(slot)
-    lines0, n_comments = _fragment_component_lines(fragment)
+    chunks = _fragment_components(fragment, allow_untyped=(slot == "Страницы"))
     nl, step = form.nl, form.step
 
     def render(prefix_col: int, body_col: int, dash: bool) -> str:
         out = []
-        for line in lines0[:n_comments]:
-            out.append(" " * prefix_col + line + nl)
-        if dash:
-            out.append(" " * prefix_col + "-" + nl)
-        for line in lines0[n_comments:]:
-            out.append((" " * body_col + line if line else "") + nl)
+        for comments, body in chunks:
+            for line in comments:
+                out.append(" " * prefix_col + line + nl)
+            if dash:
+                out.append(" " * prefix_col + "-" + nl)
+            for line in body:
+                out.append((" " * body_col + line if line else "") + nl)
         return "".join(out)
 
     def item_fn(dash_col: int) -> str:
         return render(dash_col, dash_col + step, dash=True)
 
     def map_fn(col: int) -> str:
-        return render(col, col, dash=False)
+        if len(chunks) == 1:
+            return render(col, col, dash=False)
+        return render(col, col + step, dash=True)
 
-    plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after, removal=None)
+    plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after)
     return _finish(text, plan.edits, plan.anchor)
 
 
@@ -528,10 +680,10 @@ def move_node(text: str, node_id: str, new_parent_id: str, slot: str,
         form, new_parent, slot,
         lambda dash: _as_item(form, node, dash),
         lambda col: _as_mapping(form, node, col),
-        before, after, removal=removal,
+        before, after, removals=[removal],
     )
     edits = list(plan.edits)
-    if not plan.removal_consumed:
+    if removal not in plan.consumed:
         edits.append(TextEdit(removal.start, removal.end, ""))
     return _finish(text, edits, plan.anchor)
 
@@ -543,6 +695,141 @@ def remove_node(text: str, node_id: str) -> EditResult:
     src_slot = get_node(form, node.parent_id)
     removal = node.span if len(src_slot.children) > 1 else src_slot.span
     return _finish(text, [TextEdit(removal.start, removal.end, "")], None)
+
+
+# --- batch operations over several nodes --------------------------------------------------
+
+
+def _resolve_batch(form: Form, node_ids: list[str], действие: str) -> list[Node]:
+    """The ids as component nodes: deduplicated, nested-in-another-listed dropped.
+
+    The order of the ids does not matter; repeated ids and ids nested inside another
+    listed node are skipped silently (removing/moving the ancestor covers them). The
+    root and unknown/non-component ids are user errors.
+    """
+    ids = [str(i) for i in node_ids if i is not None and str(i)]
+    if not ids:
+        raise FormModelError("Не заданы узлы операции (пустой список nodes)")
+    seen: dict[str, Node] = {}
+    for node_id in ids:
+        node = _not_root(get_component(form, node_id), действие)
+        seen.setdefault(node.id, node)
+    return [
+        node for node_id, node in seen.items()
+        if not any(other != node_id and node_id.startswith(other + "/") for other in seen)
+    ]
+
+
+def _batch_removals(form: Form, group: list[Node], dest_slot: Node | None) -> list[Span]:
+    """Removal spans of the nodes, grouped by their source slots.
+
+    A slot losing ALL its children is removed whole (the key line and its attached
+    comments go too - "Слот:" with an empty value does not compile) - except the
+    destination slot of a move, whose key survives a full reorder.
+    """
+    by_slot: dict[str, list[Node]] = {}
+    for node in group:
+        by_slot.setdefault(node.parent_id, []).append(node)
+    removals: list[Span] = []
+    for slot_id, members in by_slot.items():
+        src = get_node(form, slot_id)
+        if src is not dest_slot and len(members) == len(src.children):
+            removals.append(src.span)
+        else:
+            removals.extend(m.span for m in members)
+    return removals
+
+
+def remove_nodes(text: str, node_ids: list[str]) -> EditResult:
+    """Remove several nodes as ONE operation (each with its attached comments).
+
+    The ids come in any order; repeated ids and ids nested inside another removed node
+    are skipped silently. All removals merge into one non-overlapping edit list - a
+    single undo step - and a slot losing all its children is removed whole.
+    """
+    form = parse_form(text)
+    group = _resolve_batch(form, node_ids, "удалить")
+    removals = _batch_removals(form, group, None)
+    edits = [
+        TextEdit(r.start, r.end, "") for r in sorted(removals, key=lambda s: s.start)
+    ]
+    return _finish(text, edits, None)
+
+
+def move_nodes(text: str, node_ids: list[str], new_parent_id: str, slot: str,
+               before: str | None = None, after: str | None = None) -> EditResult:
+    """Move several nodes into one slot as ONE operation, keeping their DOCUMENT order.
+
+    The selection order does not matter: the nodes land as consecutive siblings ordered
+    as they stand in the source text. Nodes from different parents are welcome; repeated
+    ids and ids nested inside another moved node are skipped silently; a source slot
+    losing all its children is removed whole. The guards match move_node: the
+    destination must not sit inside any moved node, and before/after must not name a
+    moved node. The reported node is the FIRST of the moved run in the new text.
+    """
+    form = parse_form(text)
+    requested = {str(i) for i in node_ids if i is not None and str(i)}
+    group = _resolve_batch(form, node_ids, "переместить")
+    new_parent = get_component(form, new_parent_id)
+    if new_parent.body_col is None:
+        raise FormModelError(f"У узла {new_parent_id} нет блока свойств – вставка невозможна")
+    _check_slot(slot)
+    for node in group:
+        if new_parent_id == node.id or new_parent_id.startswith(node.id + "/"):
+            raise FormModelError("Нельзя переместить узел внутрь его собственного поддерева")
+    if before in requested or after in requested:
+        raise FormModelError("Нельзя позиционировать узел относительно самого себя")
+    dest_slot = next(
+        (c for c in new_parent.children if c.kind == "slot" and c.name == slot), None
+    )
+    group_ids = {n.id for n in group}
+    if (
+        dest_slot is not None and dest_slot.children
+        and all(c.id in group_ids for c in dest_slot.children)
+        and all(n.parent_id == dest_slot.id for n in group)
+    ):
+        raise FormModelError(
+            "Переносимые узлы – все дочерние узлы целевого слота, перемещать некуда"
+        )
+    ordered = sorted(group, key=lambda n: n.span.start)
+    removals = _batch_removals(form, ordered, dest_slot)
+
+    if (
+        dest_slot is not None and not dest_slot.list_style
+        and len(dest_slot.children) == 1 and dest_slot.children[0].id in group_ids
+    ):
+        # The destination's single nested-mapping child is itself among the moved
+        # nodes: nothing survives to convert, so the child block is replaced by the
+        # payload items outright (the child's own removal is folded into the edit).
+        if before is not None and after is not None:
+            raise FormModelError("Укажите только один из параметров before и after")
+        _resolve_sibling(form, dest_slot, before)
+        _resolve_sibling(form, dest_slot, after)
+        child = dest_slot.children[0]
+        if child.body_col is None:
+            raise FormModelError(
+                "Слот содержит скалярный элемент – преобразование не поддерживается"
+            )
+        region = child.span
+        payload = "".join(_as_item(form, n, child.body_col) for n in ordered)
+        edits = [TextEdit(region.start, region.end, payload)]
+        edits += [TextEdit(r.start, r.end, "") for r in removals if r != region]
+        cut = sum(r.end - r.start for r in removals if r != region and r.end <= region.start)
+        return _finish(text, edits, region.start - cut)
+
+    def item_fn(dash: int) -> str:
+        return "".join(_as_item(form, n, dash) for n in ordered)
+
+    def map_fn(col: int) -> str:
+        if len(ordered) == 1:
+            return _as_mapping(form, ordered[0], col)
+        return "".join(_as_item(form, n, col) for n in ordered)
+
+    plan = _plan_insert(form, new_parent, slot, item_fn, map_fn, before, after,
+                        removals=removals)
+    edits = list(plan.edits)
+    edits += [TextEdit(r.start, r.end, "") for r in removals if r not in plan.consumed]
+    return _finish(text, edits, plan.anchor)
 
 
 def wrap_node(text: str, node_id: str, container_type: str,
@@ -951,9 +1238,11 @@ _CAMEL_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
     """One entry point for LSP/MCP/CLI: an operation name plus its arguments.
 
-    Argument keys: parent, slot, type, name, before, after, node, new_parent,
+    Argument keys: parent, slot, type, name, before, after, node, nodes, new_parent,
     container, new_name, key, value, value_yaml, fragment, new_type (camelCase
-    spellings are accepted, for the operation name too).
+    spellings are accepted, for the operation name too). nodes - the id list of the
+    batch operations: an array of strings, or a string with ids separated by commas
+    (node ids never contain a comma), or an array of such strings.
     """
     op_norm = _CAMEL_RE.sub("_", op or "").lower().replace("-", "_")
     raw = args or {}
@@ -969,6 +1258,18 @@ def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
         v = a.get(param)
         return str(v) if v not in (None, "") else None
 
+    def need_nodes() -> list[str]:
+        v = a.get("nodes")
+        values = v if isinstance(v, (list, tuple)) else [v] if v not in (None, "") else []
+        ids = [
+            part.strip()
+            for value in values if value is not None
+            for part in str(value).split(",") if part.strip()
+        ]
+        if not ids:
+            raise FormModelError(f"Операция {op_norm}: не задан параметр nodes")
+        return ids
+
     if op_norm == "insert":
         return insert_component(text, need("parent"), need("slot"), type_=opt("type"),
                                 name=opt("name"), before=opt("before"), after=opt("after"))
@@ -978,8 +1279,13 @@ def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
     if op_norm == "move":
         return move_node(text, need("node"), need("new_parent"), need("slot"),
                          before=opt("before"), after=opt("after"))
+    if op_norm == "move_nodes":
+        return move_nodes(text, need_nodes(), need("new_parent"), need("slot"),
+                          before=opt("before"), after=opt("after"))
     if op_norm == "remove":
         return remove_node(text, need("node"))
+    if op_norm == "remove_nodes":
+        return remove_nodes(text, need_nodes())
     if op_norm == "wrap":
         return wrap_node(text, need("node"), need("container"), name=opt("name"))
     if op_norm == "unwrap":
