@@ -531,6 +531,22 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.formStructure.savePreset",
+        "title": "%cmd.formStructure.savePreset%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.insertPreset",
+        "title": "%cmd.formStructure.insertPreset%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formStructure.managePresets",
+        "title": "%cmd.formStructure.managePresets%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.formData.refresh",
         "title": "%cmd.formData.refresh%",
         "category": "XBSL",
@@ -661,6 +677,16 @@
           "command": "xbsl.formStructure.refresh",
           "when": "view == xbslFormStructure",
           "group": "navigation@3"
+        },
+        {
+          "command": "xbsl.formStructure.insertPreset",
+          "when": "view == xbslFormStructure",
+          "group": "navigation@4"
+        },
+        {
+          "command": "xbsl.formStructure.managePresets",
+          "when": "view == xbslFormStructure",
+          "group": "1_presets@1"
         },
         {
           "command": "xbsl.formPalette.refresh",
@@ -1038,6 +1064,16 @@
           "command": "xbsl.formStructure.pasteYaml",
           "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
           "group": "1_edit@4"
+        },
+        {
+          "command": "xbsl.formStructure.savePreset",
+          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
+          "group": "1_edit@5"
+        },
+        {
+          "command": "xbsl.formStructure.insertPreset",
+          "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
+          "group": "1_edit@6"
         },
         {
           "command": "xbsl.formData.addProperty",
@@ -1563,7 +1599,7 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "check": "tsc --noEmit",
-    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/propsModes.test.ts --bundle --outfile=dist/propsModes.test.js --format=cjs --platform=node && node dist/propsModes.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js",
+    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/propsModes.test.ts --bundle --outfile=dist/propsModes.test.js --format=cjs --platform=node && node dist/propsModes.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js && esbuild test/blockPresetsCore.test.ts --bundle --outfile=dist/blockPresetsCore.test.js --format=cjs --platform=node && node dist/blockPresetsCore.test.js",
     "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
     "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
     "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"

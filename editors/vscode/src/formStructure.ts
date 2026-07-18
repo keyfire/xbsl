@@ -8,6 +8,13 @@
 
 import * as vscode from "vscode";
 import { buildFieldFragment, DATA_MIME, decodeDataDrag } from "./formDataCore";
+import {
+  addPreset,
+  BLOCK_PRESETS_KEY,
+  BlockPreset,
+  removePreset,
+  sanitizePresets,
+} from "./blockPresetsCore";
 import { lspActive, lspRequest } from "./lspClient";
 import {
   decodePaletteDrag,
@@ -113,6 +120,9 @@ class FormStructureProvider
   private diagBadges = new Map<string, NodeDiagBadge>();
   private readonly memory = new Map<string, ExpansionMemory>();
   private insertListener?: (type: string) => void;
+
+  // hook 8: block presets live in globalState; the provider is the only writer.
+  constructor(private readonly presetStore?: vscode.Memento) {}
 
   attachView(view: vscode.TreeView<FormNode>): void {
     this.view = view;
@@ -643,20 +653,140 @@ class FormStructureProvider
     await this.performOp("wrap", { node: node.id, container: pick });
   }
 
-  async copyNode(node: FormNode): Promise<void> {
+  // The node's yaml subtree as text, re-read from the live buffer (the tree may lag behind
+  // typing). The block includes the node's children - its span runs to the end of the value
+  // block. The engine's insert_fragment normalizes the indentation on paste, so this raw slice
+  // is a ready fragment. Shared by copyNode and the block presets (hook 8).
+  private async nodeFragment(node: FormNode): Promise<string | undefined> {
     if (!this.target) {
-      return;
+      return undefined;
     }
-    // Re-read the span from the live buffer (the tree may lag behind typing).
     const res = await lspRequest<FormNodeAtResponse>("xbsl/formNodeAt", {
       uri: this.target.toString(),
       offset: node.span.start,
     });
     const span = res?.node?.id === node.id && res.node?.span ? res.node.span : node.span;
     const doc = await vscode.workspace.openTextDocument(this.target);
-    const text = doc.getText(new vscode.Range(doc.positionAt(span.start), doc.positionAt(span.end)));
+    return doc.getText(new vscode.Range(doc.positionAt(span.start), doc.positionAt(span.end)));
+  }
+
+  async copyNode(node: FormNode): Promise<void> {
+    const text = await this.nodeFragment(node);
+    if (text === undefined) {
+      return;
+    }
     await vscode.env.clipboard.writeText(text);
     vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL: the node yaml is copied to the clipboard."), 2000);
+  }
+
+  // --- block presets (hook 8) -------------------------------------------------------------
+
+  private loadPresets(): BlockPreset[] {
+    return sanitizePresets(this.presetStore?.get(BLOCK_PRESETS_KEY));
+  }
+
+  private async storePresets(list: BlockPreset[]): Promise<void> {
+    await this.presetStore?.update(BLOCK_PRESETS_KEY, list);
+  }
+
+  // Save a component subtree under a name: extract its fragment, ask for a name (defaulting to
+  // the node's Имя or type), and add it to the store. A re-save under an existing name replaces
+  // that preset.
+  async saveAsPreset(node: FormNode): Promise<void> {
+    if (!this.presetStore || node.kind !== "component" || node.id === ROOT_ID) {
+      return;
+    }
+    const fragment = await this.nodeFragment(node);
+    if (fragment === undefined || !fragment.trim()) {
+      return;
+    }
+    const suggested = (node.name || node.type || "").trim();
+    const name = await vscode.window.showInputBox({
+      title: vscode.l10n.t("Save block preset"),
+      prompt: vscode.l10n.t("A name for the block preset – reused across forms and sessions."),
+      value: suggested,
+      validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("Enter a name.")),
+    });
+    if (name === undefined || !name.trim()) {
+      return;
+    }
+    const existed = this.loadPresets().some((p) => p.name === name.trim());
+    const updated = addPreset(this.loadPresets(), {
+      name,
+      fragment,
+      type: node.type ?? undefined,
+    });
+    await this.storePresets(updated);
+    vscode.window.setStatusBarMessage(
+      existed
+        ? vscode.l10n.t('XBSL: block preset "{0}" updated.', name.trim())
+        : vscode.l10n.t('XBSL: block preset "{0}" saved.', name.trim()),
+      2500
+    );
+  }
+
+  // Insert a saved preset into the current structure selection (the palette-insertion target
+  // rules), the same path as pasteFromClipboard but with the fragment from the pick.
+  async insertPreset(node?: FormNode): Promise<void> {
+    if (!this.index || !this.target) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t("XBSL: open a form yaml (КомпонентИнтерфейса) – a block preset inserts into the structure selection.")
+      );
+      return;
+    }
+    const presets = this.loadPresets();
+    if (!presets.length) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t("XBSL: no block presets yet – save one from a component's context menu (Save as block preset).")
+      );
+      return;
+    }
+    const pick = await vscode.window.showQuickPick(
+      presets.map((p) => ({ label: p.name, description: p.type, preset: p })),
+      { title: vscode.l10n.t("Insert block preset"), placeHolder: vscode.l10n.t("Pick a block preset") }
+    );
+    if (!pick) {
+      return;
+    }
+    const selected = this.selectedNodes(node)[0];
+    const args = pasteFragmentArgs(selected, this.index, pick.preset.fragment, (t) => cachedContainerTypes()?.has(t) ?? false);
+    if (!args) {
+      return;
+    }
+    const inserted = await this.performOp("insert_fragment", args);
+    if (inserted) {
+      void this.notifyPropsPanel(inserted.span.start);
+    }
+  }
+
+  // Delete saved presets (a multi-pick with a confirmation-free removal - presets are cheap to
+  // recreate and this is the only way to prune them).
+  async managePresets(): Promise<void> {
+    if (!this.presetStore) {
+      return;
+    }
+    const presets = this.loadPresets();
+    if (!presets.length) {
+      void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: no block presets to manage."));
+      return;
+    }
+    const picks = await vscode.window.showQuickPick(
+      presets.map((p) => ({ label: p.name, description: p.type, name: p.name })),
+      {
+        title: vscode.l10n.t("Delete block presets"),
+        placeHolder: vscode.l10n.t("Pick presets to delete"),
+        canPickMany: true,
+      }
+    );
+    if (!picks || !picks.length) {
+      return;
+    }
+    let list = this.loadPresets();
+    for (const p of picks) {
+      list = removePreset(list, p.name);
+    }
+    await this.storePresets(list);
+    vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL: {0} block preset(s) deleted.", picks.length), 2500);
   }
 
   // Paste the clipboard yaml as a component (the counterpart of copyYaml; works across
@@ -832,7 +962,7 @@ class FormStructureProvider
 }
 
 export function registerFormStructure(context: vscode.ExtensionContext): FormStructureController {
-  const provider = new FormStructureProvider();
+  const provider = new FormStructureProvider(context.globalState);
   const view = vscode.window.createTreeView<FormNode>("xbslFormStructure", {
     treeDataProvider: provider,
     dragAndDropController: provider,
@@ -933,6 +1063,16 @@ export function registerFormStructure(context: vscode.ExtensionContext): FormStr
     vscode.commands.registerCommand("xbsl.formStructure.pasteYaml", (node?: FormNode) => {
       void provider.pasteFromClipboard(node);
     }),
+    vscode.commands.registerCommand("xbsl.formStructure.savePreset", (node?: FormNode) => {
+      const target = provider.selectedNodes(node)[0];
+      if (target && target.kind === "component" && target.id !== ROOT_ID) {
+        void provider.saveAsPreset(target);
+      }
+    }),
+    vscode.commands.registerCommand("xbsl.formStructure.insertPreset", (node?: FormNode) => {
+      void provider.insertPreset(node);
+    }),
+    vscode.commands.registerCommand("xbsl.formStructure.managePresets", () => void provider.managePresets()),
     vscode.commands.registerCommand("xbsl.formStructure.focusSubtree", (node?: FormNode) => {
       const target = provider.selectedNodes(node)[0];
       if (target && target.kind === "component") {
