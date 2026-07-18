@@ -1,262 +1,147 @@
-# Visual form designer – specification and roadmap
+# Visual form designer
 
-Status: waves 1-3 delivered - stages 0-3 (ui schema, form model and operations,
-structure view, palette, properties v2) plus hooks 1-12. The hook backlog is
-closed; live-feedback refinements are in the "Refinement backlog" section below.
-Russian counterpart: [DESIGNER.ru.md](https://github.com/keyfire/xbsl/blob/main/docs/DESIGNER.ru.md). Keep the two files in sync.
+**English** · [Русский](https://github.com/keyfire/xbsl/blob/main/docs/DESIGNER.ru.md)
 
-The toolkit grows a visual designer for 1C:Element interface components
-(`ВидЭлемента: КомпонентИнтерфейса` – forms, custom components): a structure view,
-a component palette and a typed properties panel inside VS Code, on top of the
-existing wireframe preview. The designer edits the `.yaml` source; the text editor
-remains the primary surface, the designer is a contextual lens over it.
+The extension includes a visual designer for 1C:Element interface components
+(`ВидЭлемента: КомпонентИнтерфейса` – forms and custom components). It is a set of panels
+over the `.yaml` source: a structure tree, a component palette, a data panel, a typed
+properties panel and a wireframe preview. The text editor stays the primary surface; the
+designer is a contextual lens over it.
 
-## Why this shape
+Two things to keep in mind:
 
-Research across IDE designers (Flutter Property Editor, Uno Hot Design, Android
-Studio Layout Editor, Delphi Object Inspector, Qt Designer, Webflow, Figma; see
-"Prior art") converges on one lesson: the durable, well-liked tools in code
-editors are NOT free-positioning canvases but the triad "tree + typed properties
-+ minimal text edits", with the canvas-style designers (XAML Designer,
-storyboards) being the most abandoned – slow, crash-prone, unmergeable diffs.
-An Element form is literally a yaml tree of containers, so the winning shape is
-also the natural one here.
+- **Every action is a minimal text edit.** The designer never rewrites or reformats the
+  whole file; comments, key order and formatting survive, and each operation is a single
+  undo step. Opening a form in the designer changes nothing until you act.
+- **The preview is a wireframe, not a render.** Rendering is server-side in the platform;
+  the local preview shows structure and layout, not pixels.
 
-## Non-goals
+## What you need
 
-- No free-positioning canvas and no pixel-accurate live rendering. Rendering is
-  server-side in the platform; the local preview stays an honest wireframe that
-  shows structure, not pixels.
-- The designer never rewrites or reformats a file wholesale, and never touches
-  a file without an explicit user action (opening a form in the designer must
-  produce zero diff).
-- No new write logic on the TypeScript side. Per the repository architecture
-  rule, all model reads and edits are computed by the engine; the extension is
-  a thin client that renders trees and applies `WorkspaceEdit`s.
+- The **panels and text edits work anywhere.** Selecting nodes, moving and wrapping
+  components, copy/paste and the wireframe all rely only on the yaml.
+- The **palette and the typed property editors need the language dataset** (the ui schema,
+  generated from your own 1C:Element distribution – see [Language data](GUIDE.md#language-data))
+  and the **LSP server** (`pip install "xbsl[lsp]"`). Without them the structure tree and edits
+  still work; the palette and typed editors degrade to a hint instead of failing.
 
-## Clean-room policy
+## Opening the designer
 
-The platform ships its own web-based visual editor. This designer is an
-independent reimplementation: the specification is written from the public
-platform documentation, from the toolkit's own extracted datasets and from
-black-box observation of designer behavior in general-purpose IDEs. Vendor
-source code, minified bundles or extracted vendor assets are never read,
-decompiled or reused. UI texts, icons and layouts are our own.
+Open a `.yaml` of an interface component (a form or a custom `КомпонентИнтерфейса`). Two
+activity-bar containers hold the panels, and both follow the active editor:
 
-## Architecture
+- **Designer (1C:Element)** – the **Structure**, **Palette** and **Data** panels.
+- **Properties (1C:Element)** – the **Properties** panel.
 
-```
-engine (Python)                        VS Code extension (TypeScript)
----------------                        ------------------------------
-ui schema (per-component:              structure view   - native TreeView
-  props, types, enums, events,         palette          - native TreeView
-  defaults, packages, docs)     -----> properties panel - WebviewView
-form model (yaml tree with             wireframe preview (existing)
-  node spans) + operations                  |
-  insert/move/remove/wrap/set  <----- one operation = one LSP request;
-  each returns precise text edits      editor applies WorkspaceEdit
-```
+For the wireframe, use the **form preview** button (the preview icon in the editor title bar,
+shown when a form yaml is active) or **Form preview** from the metadata tree's context menu.
 
-- **Engine owns the model.** A new form-model module parses a component's yaml
-  into a node tree with source spans (slots included: `Команды`, `Содержимое`,
-  `Подвал`, pages, columns) and computes operations as precise text edits –
-  the same philosophy as `scaffold.py` (no round-trip serialization; comments,
-  key order and formatting survive; diffs read as hand-made). Surfaces, like
-  the `meta_*` family: LSP requests for the designer (compute only, dirty
-  buffers via the injected reader; the editor applies edits, which keeps native
-  undo/redo), MCP tools and CLI subcommands for agents and scripts.
-- **Native TreeViews** for structure and palette: theme, keyboard, type-ahead
-  filtering, multi-select and drag-and-drop between the two views
-  (`TreeDragAndDropController`, shared MIME type) come for free.
-- **WebviewView** only where forms are needed: the properties panel (one shared
-  properties engine for form components and for metadata objects – it replaces
-  both current ad-hoc panels). A shared webview helper (escape, nonce, CSP,
-  JSON inlining with `<` escaped) replaces the per-panel copies.
-- **Two-way cursor sync** is the spine: cursor in yaml selects the node in the
-  structure view and fills the properties panel; selecting a node moves the
-  cursor in yaml. The pattern users praise most in Flutter Property Editor.
-- **DnD limitation accepted:** the VS Code tree API reports only the drop
-  target, not a between-nodes position. Semantics: drop on a container inserts
-  as its last child; drop on a leaf inserts after it. Precise ordering is
-  keyboard-first (Alt+Up/Down and friends), which research shows is the more
-  accurate tool for tree work anyway.
+## Structure panel
 
-## Stage 0 – foundations (engine)
+The **Structure** panel is the form as a tree of slots (`Содержимое`, `Команды`, pages,
+columns, ...) and components, with an icon per kind and linter badges on nodes.
 
-Two independent tracks.
+- **Cursor sync.** Put the cursor on a node in the yaml – it highlights in the tree and fills
+  the Properties panel. Select a node in the tree – the cursor moves to its yaml (**Go to
+  yaml** in the context menu, or a click).
+- **Arrange** (context menu + keys): **Move up / Move down** (`Alt+Up` / `Alt+Down`), **Wrap in
+  a container** (pick the container type), **Unwrap container**, **Duplicate**, **Rename (Имя)**
+  (`F2`), **Delete component** (`Delete`).
+- **Copy / paste as yaml.** **Copy yaml fragment** (`Ctrl+C`) and **Paste yaml from the
+  clipboard** (`Ctrl+V`) move subtrees – across forms and across projects.
+- **Multi-select.** Select several components and use **Edit selected together...** to set or
+  clear one property on all of them at once.
+- **Focus and filter.** **Focus on this subtree** narrows the tree to one branch (**Show the
+  whole form** restores it); the title-bar filter toggles **Show only named components** /
+  **Show all components**.
+- **Drag-and-drop** inside the tree: dropping on a container inserts as its last child,
+  dropping on a leaf inserts after it (invalid targets are rejected before the drop). For exact
+  ordering use `Alt+Up` / `Alt+Down`.
 
-**Track A – UI schema.** Extend the stdlib extractor to emit, per interface
-component: package (`Стд::Интерфейс::*`), since-version, and for every
-property: value type union (e.g. `Авто|Булево`, `Авто|Цвет|Url|Ссылка`),
-enum values where the type is an enumeration, whether it is an event (with the
-handler signature), a short doc snippet and the platform default where the docs
-state one. Delivered through the existing versioned dataset mechanism (data
-stays generated from the user's own distribution, never bundled). New LSP
-request `xbsl/uiSchema` (and an MCP mirror) serves the palette catalog and the
-per-component property schema. Graceful degradation without data: structure
-view and text edits still work; the palette and typed editors need the dataset.
+## Palette panel
 
-**Track B – form model and operations.** New engine module: parse a component
-yaml into a node tree `{kind, name, type, span, slot, children, properties}`;
-resolve a node by source offset; operations `insert_component`,
-`move_node`, `remove_node`, `wrap_node` / `unwrap_node`, `duplicate_node`,
-`rename_node`, `set_property` / `reset_property` – each returns text edits plus
-the new node id/span. Insertion respects slot rules (what the target property
-accepts – single component vs list). Exposed as LSP `xbsl/formTree`,
-`xbsl/formNodeAt`, `xbsl/formEdit` and as MCP/CLI (`meta_add_component`,
-`meta_move_component`, ...) in the same change – agents get the designer's
-operations for free. Full pytest coverage; surface-parity tests like
-`test_meta_surfaces.py`.
+The **Palette** lists components you can insert into the current structure selection, in
+sections: **Frequent**, **Favorites**, **Project** (your own components and inserts), then the
+platform packages from the ui schema.
 
-Acceptance (stage 0): round-trip guarantee (apply + revert = byte-identical);
-operations on a real project corpus never touch lines outside the reported
-edits; parity of the three surfaces.
+- **Insert** by double-clicking (or `Enter`) a palette entry while a container is selected in
+  the Structure panel; or **Insert into the form** from the context menu; or drag the entry
+  into the Structure tree.
+- **Add to favorites** / **Remove from favorites** (the star) pins the components you use most.
+- **Open documentation** opens the component's page in the Documentation panel; the tooltip
+  carries a short doc snippet.
 
-## Stage 1 – structure view
+## Properties panel
 
-Native TreeView "Structure" following the active editor:
+The **Properties** panel edits the selected component (and, from the metadata tree's
+**Properties**, metadata objects too – it is one shared panel).
 
-- Tree = slots and components with icons by kind, badges from linter
-  diagnostics on the node (hook 3), type-ahead filtering.
-- Two-way selection sync with the yaml editor and the properties panel;
-  Ctrl+click reveals the yaml without moving focus.
-- Operations: context menu + keyboard – Alt+Up/Down move, wrap in
-  Группа/Карточка (submenu of container types), unwrap, duplicate, Del, F2
-  rename, cut/copy/paste of subtrees via the clipboard as plain yaml (works
-  across forms and projects), multi-select for move/delete.
-- DnD inside the tree with invalid targets rejected before the drop.
-- "Focus on subtree" (temporary root) and a filter for named elements only.
+- **Set on top, all below.** The **Set** section lists the keys present in the yaml; below it,
+  collapsible groups hold every applicable property. Search filters by property name *and* by
+  current value. A filled dot marks a value set in the yaml, a hollow dot the default;
+  **Reset** deletes the key.
+- **Typed editors** from the ui schema: enumerations as a dropdown; `Авто|Булево` as a
+  tri-state; numbers; color (hex plus a swatch, with one-click presets from the form's own
+  colors and your recent picks); union types as a **Type + Value** pair (`Изображение`, `Фон`);
+  nested structures (`Шрифт`) as sub-groups; multiline strings.
+- **Bindings.** A per-property toggle switches a value between a literal and a binding (`=...`).
+  Binding completion offers enumeration values (`=Перечисление.Значение`), owner-object
+  attributes (`=Объект.Реквизит`), components and their members (`=Компоненты.Кнопка.Значение`)
+  and bindings already used in the form.
+- **Events.** An event property offers a dropdown of the module's compatible handlers;
+  "create handler" writes a stub with the right signature into the `.xbsl` and jumps to it.
+- **Slot indicator.** A property that is a child slot is marked with a bar and a badge.
+- **Serial editing.** The selected property row survives switching to another component of the
+  same type, so you can walk a set of similar components changing one field.
+- Values are validated before the write; an invalid value is reported under the field instead
+  of being written.
 
-Acceptance: every operation lands as one undo step; selection sync under
-200 ms on a 1000-node form; no file writes without an explicit action.
+## Data panel
 
-## Stage 2 – component palette
+The **Data** panel binds form inputs to data. It has two sections: the owner object's
+attributes, and the component's own `Свойства:`.
 
-Native TreeView "Palette", insertion into the current structure selection:
+- **Manage component properties**: **Add property**, **Rename property**, **Change property
+  type**, **Remove property**.
+- **Bind an input**: drag an attribute (or a property) into the Structure tree, or use **Insert
+  into the form** – the designer creates the right input component already bound (`Булево` –>
+  a checkbox, otherwise an input field with `Значение: =...`).
 
-- Sections: Frequent (usage counter, workspace state), Favorites, Project
-  (the project's own `КомпонентИнтерфейса` and inserts), then platform
-  packages from the ui schema.
-- Primary insertion = double click / Enter into the selected container
-  (research: faster and more precise than DnD); DnD into the structure view
-  as the secondary path.
-- Tooltip with the doc snippet; "Open documentation" opens the docs panel
-  (hook 4).
+## Wireframe preview
 
-Acceptance: insert of any catalog component produces valid yaml that the
-linter accepts; unknown-data state degrades to a hint, not an error.
+The preview is an honest wireframe of the form's structure. It highlights the selected
+component and follows the Structure selection; a `Картинка` with `Изображение: file.svg` shows
+the actual image (resource images are resolved against `**/Ресурсы/`); a narrow panel scrolls
+horizontally to the line content.
 
-## Stage 3 – properties panel v2
+## Structural search
 
-One properties engine (WebviewView) shared by form components and metadata
-objects; replaces both current panels.
+**Search forms by structure** (the search button on the Structure panel's title bar, or the
+command palette) finds components across the project's forms by type plus `key=value`
+predicates; results open in a quick pick that jumps to the node.
 
-- "Set" section on top (keys present in yaml), then collapsible groups of all
-  applicable properties; search filters by name AND current value.
-- Set/default indicator per row + Reset (= delete the key from yaml) – the
-  industry's most reinvented pattern (bold in WinForms, blue dot in Hot
-  Design, set/default chips in Flutter PE, orange/blue in Webflow).
-- Typed editors from the ui schema: enum -> dropdown only; `Авто|Булево` ->
-  tri-state; numbers; color (hex + swatch); union types -> "Type + Value"
-  pair editor (`Изображение`, `Фон`); nested structures (`Шрифт`) ->
-  collapsible sub-groups; multiline strings; binding values (`=...`) shown
-  as-is with an "Open in yaml" escape hatch until the binding editor hook.
-- Value validation before the write (engine-side), error under the field.
-- The selected property row survives switching to another component of the
-  same type (serial editing, the Delphi trick).
+## Block presets
 
-Acceptance: composite union properties fully editable (the current panel's
-main gap); every write is a minimal text edit; validation blocks a write the
-linter would flag as an error.
+**Save as block preset** stores a component subtree under a name; **Insert block preset...**
+drops it into any form (from the Structure title bar or a node's context menu), and **Manage
+block presets...** renames or removes them. Presets are per-user.
 
-## Hooks backlog (accepted, post-core)
+## Read-only forms
 
-| # | Hook | Size | Wave |
-|---|------|------|------|
-| 1 | Events in the properties panel: dropdown of existing compatible handlers; "create handler" generates a stub with the right signature into `.xbsl` and jumps to it | M | delivered (3) |
-| 2 | "Data" panel: object attributes and component `Свойства:`; dragging an attribute into the tree creates the right input component with the binding | M | delivered (3) |
-| 3 | Designer-side validation: linter badges on tree nodes, value checks before writes | S/M | folded into stages 1/3 |
-| 4 | Hover docs in the palette and properties, jump to the docs panel | S | folded into stages 2/3 |
-| 5 | Wireframe preview upgrades: selection highlight, follow structure selection (a click on a structure node moves the yaml cursor, the preview highlights the node and survives re-renders) | S/M | delivered |
-| 6 | Binding editor: literal/binding toggle per property, autocomplete from the form's bindings and the owner object's attributes (via LSP) | M/L | delivered |
-| 7 | Color editors with project palette presets (colors already used in the form plus recent picks, as one-click swatches) | S | delivered |
-| 8 | Block presets: save a component subtree as a named preset (globalState) and insert it into any form (structure context menu + title button/QuickPick) | M | delivered |
-| 9 | Multi-select mass property edit: one property (a key from the union of the selection's own, or a new one) set or cleared on all selected components at once - structure context menu on a multi-selection | S/M | delivered |
-| 10 | Structural search across project forms: component type + `key=value` predicates; the `xbsl.forms.search` command (a button on the structure view + the command palette), the `xbsl/searchForms` engine endpoint, results in a quick pick that jumps to the node | M | delivered |
-| 11 | Read-only designer view for library forms (`.xlib`): the panels detect a read-only source (a non-file git/diff scheme or a file flagged read-only) - the properties panel shows a banner with disabled editors plus a write backstop, structure edits are refused with a message. Viewing the `.xlib` archive itself (a virtual filesystem) is a separate prerequisite | S/M | delivered |
-| 12 | Designer operations for agents via MCP/CLI | S | folded into stage 0 |
+For a read-only source – a library form from an `.xlib`, a git/diff view, or a file flagged
+read-only – the panels show a banner and disable the editors, and structure edits are refused
+with a message, so browsing such a form never risks a stray write.
 
-## Refinement backlog (from live feedback)
+## Scripting (agents, CLI, MCP)
 
-- ~~**Horizontal scroll to the content in a narrow panel.**~~ DELIVERED: a reveal from the tree /
-  preview / search brings the yaml cursor into view via `revealContent` - VS Code scrolls
-  horizontally to the line's content (past the indentation), not to the cursor at the far edge.
-- ~~**Real resource images in the wireframe.**~~ DELIVERED: a `Картинка` with `Изображение: file.svg`
-  shows the actual image. The host resolves the name against `**/Ресурсы/<file>`, reads it and embeds
-  a data URI (`img-src data:` in the preview CSP, cached per session); bindings/URLs/unresolved names
-  keep the placeholder.
+The same operations are available outside the UI: the CLI (`xbsl form-tree`, `xbsl form-edit`),
+the MCP tools (`meta_component_tree`, `meta_add_component`, `meta_move_component`, ...) and the
+LSP requests (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). See the
+[Guide](GUIDE.md#metadata-scaffolding).
 
-- ~~**The yaml active line misses the highlighted preview block.**~~ FIXED: selecting a node
-  landed the yaml cursor on the list dash (`-`) BEFORE the node (`revealOffset` = `contentSpan.start`),
-  while the preview keys its block on the `Тип:` line; the cursor sat left of the node's data-off and
-  `selectionForCursor` picked the neighbouring block. Fix: `skipToNodeKey` moves the cursor past the
-  dash/indent to the node's first key (matching the preview's `map.range[0]`).
-- ~~**Full dotted completion of binding expressions.**~~ DELIVERED: enumeration values
-  (`=Перечисление.Значение`), owner-object attributes (`=Объект.Реквизит`), components and their
-  members (`=Компоненты.<name>` and `=Компоненты.Кнопка.Значение` - engine `xbsl/bindingComplete` +
-  `bindingcomplete.py`; the client prefetches names and members and merges them into the completion
-  with a display cap), and bindings already used in the form.
-- ~~**Project-creation wizard.**~~ DELIVERED: the `xbsl.project.new` command (native prompts, name
-  validation against the standard, engine `new-project`); see `projectWizard.ts`/`projectWizardCore.ts`.
-- ~~**Remember the metadata tree view's open state.**~~ DELIVERED: tree nodes now get a stable
-  `TreeItem.id` (the parent-id path plus the node key, in `setParents`) - VS Code then preserves the
-  expanded state across refreshes and window reloads (without an id it identified a node by its
-  label, recreated on every rebuild).
-- **Group properties by dependency in the properties panel.** BLOCKED on data: the ui schema
-  (`UiPropDto`) carries no property groups, so there is nothing to group by. It needs an ENGINE
-  change - the ui-schema extractor must pull property groups/categories from the platform docs (if
-  they are marked there); then the panel groups by them. Or clarify what "dependency" should mean.
-  Only the slot indicator (bar + badge) exists today.
+## Provenance
 
-## Delivery plan
-
-Parallel tracks; every stage ships as a normal minor release of the engine and
-the extension together.
-
-- Wave 1 (parallel): Track A (ui schema) + Track B (form model) – both engine,
-  disjoint modules.
-- Wave 2 (parallel, after A/B): structure view; palette; properties v2.
-  Hooks 3 and 4 land inside these stages.
-- Wave 3 (parallel): hook 1 (events) + hook 2 (data panel) – the two
-  strongest RAD habits.
-- Wave 4+: remaining hooks by demand.
-
-## Risks
-
-- **Dataset absent** (public install without generated data): palette and
-  typed editors degrade; structure view and edits must keep working.
-- **Tree DnD API** cannot express "between" positions – mitigated by
-  keyboard-first ordering; do not fight the API with a webview tree.
-- **Webview state costs**: the properties panel uses `getState`/`setState`,
-  not `retainContextWhenHidden`.
-- **Large forms**: tree building and node resolution must be incremental
-  (reuse the LSP parse of the open buffer, debounce selection sync).
-- **Two panels era**: until stage 3 replaces the metadata properties panel,
-  the two coexist; do not grow features in the old one.
-
-## Prior art (patterns adopted)
-
-- Flutter Property Editor – cursor-driven selection, set/default chips,
-  name+value search: https://docs.flutter.dev/tools/property-editor
-- Uno Platform Hot Design – Smart/All properties, toolbox categories,
-  double-click insertion: https://platform.uno/docs/articles/studio/Hot%20Design/hot-design-overview.html
-- Android Studio Layout Editor – Declared Attributes, component tree badges,
-  palette search: https://developer.android.com/studio/views/layout-editor
-- Delphi Object Inspector – events workflow, sticky property selection:
-  https://docwiki.embarcadero.com/RADStudio/Sydney/en/Setting_Properties_and_Events
-- Dart Code wrap/remove refactorings (keyboard tree surgery):
-  https://dartcode.org/docs/refactorings-and-code-fixes/
-- Webflow Navigator / style labels – DnD expectations, override indicators:
-  https://university.webflow.com/lesson/navigator
-- VS Code APIs: [Tree View](https://code.visualstudio.com/api/guides/tree-view) and
-  [Webview](https://code.visualstudio.com/api/extension-guides/webview)
+The platform ships its own web-based visual editor; this designer is an independent
+reimplementation written from the public platform documentation, the toolkit's own extracted
+datasets and black-box observation of designers in general-purpose IDEs. UI texts, icons and
+layouts are our own. See [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).
