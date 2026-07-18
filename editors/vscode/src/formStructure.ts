@@ -7,6 +7,7 @@
 // Pure logic (planning, projection, remapping) lives in formStructureCore.ts.
 
 import * as vscode from "vscode";
+import { buildFieldFragment, DATA_MIME, decodeDataDrag } from "./formDataCore";
 import { lspActive, lspRequest } from "./lspClient";
 import {
   decodePaletteDrag,
@@ -82,6 +83,9 @@ export interface FormStructureController {
   setInsertListener(listener: (type: string) => void): void;
   // Repaint tree visuals (e.g. after the ui-schema container set is learned).
   repaint(): void;
+  // Data-panel insertion (hook 2): a ready component fragment into the current structure
+  // selection; true when the edit applied.
+  insertFragment(fragment: string): Promise<boolean>;
 }
 
 class FormStructureProvider
@@ -90,7 +94,7 @@ class FormStructureProvider
   private readonly emitter = new vscode.EventEmitter<FormNode | undefined | void>();
   readonly onDidChangeTreeData = this.emitter.event;
 
-  readonly dropMimeTypes = [STRUCTURE_MIME, PALETTE_MIME];
+  readonly dropMimeTypes = [STRUCTURE_MIME, PALETTE_MIME, DATA_MIME];
   readonly dragMimeTypes = [STRUCTURE_MIME];
 
   private view?: vscode.TreeView<FormNode>;
@@ -720,6 +724,40 @@ class FormStructureProvider
     }
   }
 
+  // --- data-panel insertion (hook 2) --------------------------------------------------------
+
+  // A ready yaml fragment (an input component built by the data panel) into the current
+  // structure selection - the same target semantics as the palette insertion.
+  async insertFragment(fragment: string): Promise<boolean> {
+    if (!this.index || !this.target) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t("XBSL: open a form yaml (КомпонентИнтерфейса) – the field is inserted into the structure selection.")
+      );
+      return false;
+    }
+    const selected = this.view?.selection[0];
+    const plan = insertPlanForSelection(selected, this.index, (t) => cachedContainerTypes()?.has(t) ?? false);
+    if (!plan) {
+      return false;
+    }
+    const node = await this.insertFragmentByPlan(plan, fragment);
+    return !!node;
+  }
+
+  private async insertFragmentByPlan(plan: InsertPlan, fragment: string): Promise<{ id: string; span: FormSpan } | undefined> {
+    const node = await this.performOp("insert_fragment", {
+      parent: plan.parentId,
+      slot: plan.slot,
+      fragment,
+      before: plan.before,
+      after: plan.after,
+    });
+    if (node) {
+      void this.notifyPropsPanel(node.span.start);
+    }
+    return node;
+  }
+
   // --- drag and drop ----------------------------------------------------------------------
 
   handleDrag(source: readonly FormNode[], dataTransfer: vscode.DataTransfer): void {
@@ -753,6 +791,17 @@ class FormStructureProvider
       if (node) {
         this.insertListener?.(payload.componentType);
       }
+      return;
+    }
+    // A record dragged from the data panel (hook 2): the drop point takes an input
+    // component with the binding, built as one ready fragment.
+    const dataRaw = dataTransfer.get(DATA_MIME);
+    if (dataRaw) {
+      const payload = decodeDataDrag(await dataRaw.asString());
+      if (!payload) {
+        return;
+      }
+      await this.insertFragmentByPlan(plan, buildFieldFragment(payload));
       return;
     }
     const structureRaw = dataTransfer.get(STRUCTURE_MIME);
@@ -901,5 +950,6 @@ export function registerFormStructure(context: vscode.ExtensionContext): FormStr
     insertComponentType: (type: string) => provider.insertComponentType(type),
     setInsertListener: (listener) => provider.setInsertListener(listener),
     repaint: () => provider.repaint(),
+    insertFragment: (fragment: string) => provider.insertFragment(fragment),
   };
 }

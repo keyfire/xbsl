@@ -110,6 +110,11 @@
           "type": "webview",
           "name": "%view.properties%",
           "icon": "resources/form-props.svg"
+        },
+        {
+          "id": "xbslFormData",
+          "name": "%view.formData%",
+          "icon": "$(database)"
         }
       ]
     },
@@ -504,6 +509,44 @@
         "command": "xbsl.formStructure.pasteYaml",
         "title": "%cmd.formStructure.pasteYaml%",
         "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.refresh",
+        "title": "%cmd.formData.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.formData.activate",
+        "title": "%cmd.formData.activate%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.insert",
+        "title": "%cmd.formData.insert%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formData.addProperty",
+        "title": "%cmd.formData.addProperty%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formData.renameProperty",
+        "title": "%cmd.formData.renameProperty%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.retypeProperty",
+        "title": "%cmd.formData.retypeProperty%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.removeProperty",
+        "title": "%cmd.formData.removeProperty%",
+        "category": "XBSL"
       }
     ],
     "menus": {
@@ -522,6 +565,10 @@
         },
         {
           "command": "xbsl.properties.showForNode",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.formData.activate",
           "when": "false"
         }
       ],
@@ -589,6 +636,16 @@
           "command": "xbsl.formPalette.refresh",
           "when": "view == xbslFormPalette",
           "group": "navigation@1"
+        },
+        {
+          "command": "xbsl.formData.addProperty",
+          "when": "view == xbslFormData",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xbsl.formData.refresh",
+          "when": "view == xbslFormData",
+          "group": "navigation@2"
         }
       ],
       "view/item/context": [
@@ -951,6 +1008,41 @@
           "command": "xbsl.formStructure.pasteYaml",
           "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
           "group": "1_edit@4"
+        },
+        {
+          "command": "xbsl.formData.addProperty",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataSectionProps\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.formData.addProperty",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataSectionProps\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.formData.insert",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataRecord\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.formData.insert",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataRecord\\b/",
+          "group": "1_insert@1"
+        },
+        {
+          "command": "xbsl.formData.renameProperty",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
+          "group": "2_edit@1"
+        },
+        {
+          "command": "xbsl.formData.retypeProperty",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
+          "group": "2_edit@2"
+        },
+        {
+          "command": "xbsl.formData.removeProperty",
+          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
+          "group": "9_delete@1"
         }
       ]
     },
@@ -1441,7 +1533,7 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "check": "tsc --noEmit",
-    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js",
+    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js",
     "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
     "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
     "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"

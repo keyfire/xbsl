@@ -23,12 +23,14 @@ let catalogCache: UiCatalogResponse | undefined;
 const recordCache = new Map<string, UiComponentRecord | undefined>();
 let containersCache: Set<string> | undefined;
 let containersPromise: Promise<Set<string>> | undefined;
+const enumsCache = new Map<string, Record<string, string[]>>();
 
 export function resetUiSchemaCache(): void {
   catalogCache = undefined;
   recordCache.clear();
   containersCache = undefined;
   containersPromise = undefined;
+  enumsCache.clear();
 }
 
 export async function uiCatalog(): Promise<UiCatalogResponse> {
@@ -47,6 +49,24 @@ export async function uiComponent(name: string): Promise<UiComponentRecord | und
   const record = res?.available && res.component ? res.component : undefined;
   recordCache.set(name, record);
   return record;
+}
+
+// The enumerations referenced by a component's property unions: the per-component
+// xbsl/uiSchema response carries them as "enums" {name: [values]} (the LSP has no
+// catalog-wide enum listing). The data panel feeds the form's root component type here
+// to offer enumeration names as ready-made property types; {} without generated data.
+export async function componentEnums(name: string): Promise<Record<string, string[]>> {
+  const cached = enumsCache.get(name);
+  if (cached) {
+    return cached;
+  }
+  const res = await lspRequest<UiComponentResponse & { enums?: Record<string, string[]> }>(
+    "xbsl/uiSchema",
+    { component: name }
+  );
+  const enums = res?.available && res.enums ? res.enums : {};
+  enumsCache.set(name, enums);
+  return enums;
 }
 
 // Container types with a Содержимое slot. Newer datasets flag them right in the catalog

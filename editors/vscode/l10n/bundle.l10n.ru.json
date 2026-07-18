@@ -280,5 +280,22 @@
   "Create the handler": "Создать обработчик",
   "Handler method name (empty – the engine derives it from the node and the event)": "Имя метода-обработчика (пусто – движок соберёт имя из узла и события)",
   "XBSL: the workspace edit was not applied.": "XBSL: правка не применилась.",
-  "XBSL: open a form yaml (КомпонентИнтерфейса) – the clipboard yaml is pasted into the structure selection.": "XBSL: откройте yaml формы (КомпонентИнтерфейса) – yaml из буфера вставляется в выделение структуры."
+  "XBSL: open a form yaml (КомпонентИнтерфейса) – the clipboard yaml is pasted into the structure selection.": "XBSL: откройте yaml формы (КомпонентИнтерфейса) – yaml из буфера вставляется в выделение структуры.",
+  "Open a form yaml (КомпонентИнтерфейса) – the data panel follows the active editor.": "Откройте yaml формы (КомпонентИнтерфейса) – панель данных следует за активным редактором.",
+  "The data panel needs the LSP mode (install the engine with the [lsp] extra: pip install \"xbsl[lsp]\").": "Панели данных нужен режим LSP (установите движок с extra [lsp]: pip install \"xbsl[lsp]\").",
+  "Component properties": "Свойства компонента",
+  "Object attributes": "Реквизиты объекта",
+  "Component property": "Свойство компонента",
+  "Object attribute": "Реквизит объекта",
+  "Tabular part (shown for reference – drag the scalar attributes)": "Табличная часть (показана для сведения – перетаскивайте скалярные реквизиты)",
+  "Drag into the form structure, or double click (Enter twice) to insert into the structure selection.": "Перетащите в структуру формы; двойной щелчок / дважды Enter – вставить в выделение структуры.",
+  "XBSL: double click (or Enter twice) inserts the field into the form.": "XBSL: двойной щелчок (или дважды Enter) вставляет поле в форму.",
+  "The letter ё is not used in names (the 1C:Element naming standard).": "Буква ё в именах не используется (стандарт имён 1С:Элемент).",
+  "A property with this name already exists.": "Свойство с таким именем уже есть.",
+  "Name of the new property (an identifier, without the letter ё)": "Имя нового свойства (идентификатор, без буквы ё)",
+  "New name of the property": "Новое имя свойства",
+  "Property type": "Тип свойства",
+  "Enter the type manually...": "Ввести тип вручную...",
+  "Type (e.g. Строка, Массив<Строка> or Товары.Ссылка|?)": "Тип (например, Строка, Массив<Строка> или Товары.Ссылка|?)",
+  "XBSL: open a form yaml (КомпонентИнтерфейса) – the field is inserted into the structure selection.": "XBSL: откройте yaml формы (КомпонентИнтерфейса) – поле вставляется в выделение структуры."
 }

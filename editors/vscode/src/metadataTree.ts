@@ -638,11 +638,11 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
 
 // --- model building ---------------------------------------------------------------------
 
-// Categories (by kind) for a set of elements, including the "Common forms" section. Empty creatable
-// categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
-function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNode[] {
-  const forms = elements.filter((e) => e.kind === FORM_KIND);
-  const objects = elements.filter((e) => e.kind !== FORM_KIND);
+// Form-owner resolution shared by the tree grouping and the formOwnerByPath accessor (the
+// "Data" panel of the form designer): the form's own Тип: Форма*<Owner...> generic, then
+// the declared "Форма: <имя>" registration inside an object's Интерфейс section, then the
+// name-suffix convention (<Owner>ФормаОбъекта / ФормаСписка / ФормаОтчета).
+function formOwnerResolver(objects: Element[]): (form: Element) => string | undefined {
   const elementNames = new Set(objects.map((e) => e.name));
 
   const declaredOwner = new Map<string, string>();
@@ -654,7 +654,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
     }
   }
 
-  const ownerOf = (form: Element): string | undefined => {
+  return (form: Element): string | undefined => {
     if (form.ownerType && elementNames.has(form.ownerType)) {
       return form.ownerType;
     }
@@ -672,6 +672,15 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNod
     }
     return undefined;
   };
+}
+
+// Categories (by kind) for a set of elements, including the "Common forms" section. Empty creatable
+// categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
+function categoriesOf(elements: Element[], showEmptyCreatable: boolean): XbslNode[] {
+  const forms = elements.filter((e) => e.kind === FORM_KIND);
+  const objects = elements.filter((e) => e.kind !== FORM_KIND);
+
+  const ownerOf = formOwnerResolver(objects);
 
   const formsByOwner = new Map<string, Element[]>();
   const commonForms: Element[] = [];
@@ -877,6 +886,28 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     return this.model.elements
       .filter((el) => el.kind === FORM_KIND)
       .map((el) => ({ name: el.name, yamlPath: el.yamlPath }));
+  }
+
+  // The owner OBJECT of a form by the form's yaml path - the form designer's "Data" panel
+  // resolves the source of the object attributes through this. undefined for common forms
+  // (no owner), for non-form paths and for paths outside the parsed model.
+  async formOwnerByPath(
+    yamlPath: string
+  ): Promise<{ name: string; kind: string; yamlPath: string } | undefined> {
+    if (!this.model) {
+      this.model = await parseModel(this.projectRootFor);
+    }
+    const key = yamlPath.toLowerCase();
+    const form = this.model.elements.find(
+      (el) => el.kind === FORM_KIND && el.yamlPath.toLowerCase() === key
+    );
+    if (!form) {
+      return undefined;
+    }
+    const objects = this.model.elements.filter((el) => el.kind !== FORM_KIND);
+    const ownerName = formOwnerResolver(objects)(form);
+    const owner = ownerName ? objects.find((el) => el.name === ownerName) : undefined;
+    return owner ? { name: owner.name, kind: owner.kind, yamlPath: owner.yamlPath } : undefined;
   }
 
   // Type candidates for the properties panel (the Тип combo box): primitives, then object references
@@ -1343,6 +1374,7 @@ export function registerMetadataTree(
 ): {
   typeCandidates: () => Promise<string[]>;
   interfaceComponents: () => Promise<Array<{ name: string; yamlPath: string }>>;
+  formOwnerByPath: (yamlPath: string) => Promise<{ name: string; kind: string; yamlPath: string } | undefined>;
 } {
   const provider = new XbslMetadataProvider(projectRootFor);
   const view = vscode.window.createTreeView("xbslMetadata", {
@@ -1417,9 +1449,11 @@ export function registerMetadataTree(
   }
 
   // The properties panel takes the Тип combo box candidates from here; the component palette
-  // takes the project's interface components (the provider knows the project).
+  // takes the project's interface components; the form designer's data panel resolves a
+  // form's owner object (the provider knows the project).
   return {
     typeCandidates: () => provider.typeCandidates(),
     interfaceComponents: () => provider.interfaceComponents(),
+    formOwnerByPath: (yamlPath: string) => provider.formOwnerByPath(yamlPath),
   };
 }

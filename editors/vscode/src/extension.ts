@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
+import { registerFormData } from "./formData";
 import { registerFormPalette } from "./formPalette";
 import { registerFormPreview } from "./formPreview";
 import { registerFormStructure } from "./formStructure";
@@ -427,6 +428,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   registerFormPalette(context, {
     projectComponents: metadataTree.interfaceComponents,
     structure: formStructure,
+  });
+  // The "Data" panel of the form designer (docs/DESIGNER.md, hook 2): the component's own
+  // Свойства records plus the attributes of the form's owner object; records drag into the
+  // structure view as ready input components.
+  registerFormData(context, {
+    structure: formStructure,
+    formOwner: metadataTree.formOwnerByPath,
   });
   // Code templates: the management panel works in both modes (data and writes go through the
   // engine), while template suggestions on Ctrl+Space come from the LSP server.
