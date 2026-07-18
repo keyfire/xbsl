@@ -789,6 +789,337 @@ def test_result_parses_as_yaml(op, args):
     assert unchanged_outside(FORM, res)
 
 
+# --- the Свойства section: model and operations --------------------------------------------
+
+# A form with the top-level Свойства section: comments at both levels (a section-level
+# run attached to the first record, a record-level run attached to its own record) and
+# two bindings that use the Титул property.
+PROPS = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 6f0b6a44-0000-4000-8000-000000000103
+Имя: Карточка
+ОбластьВидимости: ВПодсистеме
+Наследует:
+    Тип: Группа
+    Компоновка: Вертикальная
+    Видимость: =не Скрыта
+    Содержимое:
+        -
+            Тип: Надпись
+            Имя: Заголовок
+            Значение: =Титул
+        -
+            Тип: Надпись
+            Имя: Повтор
+            Значение: =Титул
+Свойства:
+    # Свойства карточки
+    -
+        Имя: Титул
+        Тип: Строка
+    -
+        # Скрыть карточку целиком
+        Имя: Скрыта
+        Тип: Булево
+"""
+
+
+def prop_names(text):
+    return [p.name for p in parse_form(text).component_properties]
+
+
+def test_parse_component_properties():
+    form = parse_form(PROPS)
+    assert [(p.name, p.type_full) for p in form.component_properties] == [
+        ("Титул", "Строка"), ("Скрыта", "Булево"),
+    ]
+    first, second = form.component_properties
+    # the section-level comment run attaches to the first record
+    assert PROPS[first.span.start : first.span.end].startswith("    # Свойства карточки\n    -\n")
+    assert PROPS[first.content_span.start :].startswith("    -\n        Имя: Титул\n")
+    # a comment written inside the record (above Имя) is part of its block
+    assert "# Скрыть карточку целиком" in PROPS[second.span.start : second.span.end]
+    assert second.span == second.content_span  # nothing attached above the dash
+    # exact scalar spans of the values
+    assert PROPS[first.name_span.start : first.name_span.end] == "Титул"
+    assert PROPS[first.type_span.start : first.type_span.end] == "Строка"
+    section = form.properties_section
+    assert section.supported and section.dash_col == 4
+    assert PROPS[section.content_span.start :].startswith("Свойства:\n")
+    assert section.content_span.end == len(PROPS)
+    # a form without the section
+    assert parse_form(FORM).properties_section is None
+    assert parse_form(FORM).component_properties == []
+
+
+def test_component_properties_dicts_shape():
+    d = formmodel.component_properties_dicts(parse_form(PROPS))
+    assert d[0]["name"] == "Титул" and d[0]["type"] == "Строка"
+    assert set(d[0]) == {"name", "type", "span", "nameSpan", "typeSpan"}
+    assert d[0]["nameSpan"]["end"] - d[0]["nameSpan"]["start"] == len("Титул")
+
+
+def test_parse_properties_section_spellings():
+    bare = FORM + "Свойства:\n"
+    form = parse_form(bare)
+    assert form.properties_section is not None
+    assert form.properties_section.supported and form.properties_section.entries == []
+
+    flow = FORM + "Свойства: []\n"
+    assert parse_form(flow).properties_section.supported is False
+    with pytest.raises(FormModelError, match="не блочным списком"):
+        formedits.property_add(flow, "Титул", "Строка")
+
+
+def test_property_add_appends_to_section():
+    res = formedits.property_add(PROPS, "Итог", "Число")
+    assert unchanged_outside(PROPS, res)
+    assert res.node_id == "Свойства/Итог"
+    assert prop_names(res.new_text) == ["Титул", "Скрыта", "Итог"]
+    assert res.new_text[res.node_span.start : res.node_span.end] == (
+        "    -\n"
+        "        Имя: Итог\n"
+        "        Тип: Число\n"
+    )
+    back = formedits.property_remove(res.new_text, "Итог")
+    assert back.new_text == PROPS
+
+
+def test_property_add_creates_section_after_inherit():
+    res = formedits.property_add(CHAIN, "Титул", "Строка")
+    assert unchanged_outside(CHAIN, res)
+    form = parse_form(res.new_text)
+    assert [p.name for p in form.component_properties] == ["Титул"]
+    # the corpus placement: the section opens right after the Наследует block
+    assert res.new_text.endswith(
+        "            Значение: Здравствуйте\n"
+        "Свойства:\n"
+        "    -\n"
+        "        Имя: Титул\n"
+        "        Тип: Строка\n"
+    )
+    back = formedits.property_remove(res.new_text, "Титул")
+    assert back.new_text == CHAIN
+
+
+def test_property_add_into_empty_section_and_eof():
+    bare = FORM + "Свойства:"  # no trailing newline
+    res = formedits.property_add(bare, "Титул", "Строка")
+    assert prop_names(res.new_text) == ["Титул"]
+    assert res.new_text.endswith("Свойства:\n    -\n        Имя: Титул\n        Тип: Строка\n")
+
+    no_nl = CHAIN.rstrip("\n")
+    res = formedits.property_add(no_nl, "Титул", "Строка")
+    assert prop_names(res.new_text) == ["Титул"]
+    assert "Здравствуйте\nСвойства:\n" in res.new_text
+
+
+def test_property_add_validation():
+    with pytest.raises(FormModelError, match="уже есть"):
+        formedits.property_add(PROPS, "Титул", "Строка")
+    with pytest.raises(FormModelError, match="Недопустимое имя"):
+        formedits.property_add(PROPS, "Плохое имя", "Строка")
+    with pytest.raises(FormModelError, match="Недопустимый тип"):
+        formedits.property_add(PROPS, "Итог", "А: Б")
+    # union and nullable types are legal property types
+    res = formedits.property_add(PROPS, "Ссылка", "Накладная.Ссылка|?")
+    assert "Тип: Накладная.Ссылка|?" in res.new_text
+
+
+def test_property_retype():
+    res = formedits.property_retype(PROPS, "Скрыта", "Булево?")
+    assert unchanged_outside(PROPS, res)
+    assert res.node_id == "Свойства/Скрыта"
+    assert "Тип: Булево?" in res.new_text
+    back = formedits.property_retype(res.new_text, "Скрыта", "Булево")
+    assert back.new_text == PROPS
+
+    # a record without Тип gets the key right after Имя
+    no_type = PROPS.replace("        Имя: Скрыта\n        Тип: Булево\n",
+                            "        Имя: Скрыта\n")
+    res = formedits.property_retype(no_type, "Скрыта", "Булево")
+    assert res.new_text == PROPS
+
+    with pytest.raises(FormModelError, match="не найдено"):
+        formedits.property_retype(PROPS, "Нет", "Строка")
+    with pytest.raises(FormModelError, match="не найдено"):
+        formedits.property_retype(FORM, "Титул", "Строка")  # no section at all
+
+
+def test_property_remove_middle_and_last():
+    res = formedits.property_remove(PROPS, "Титул")
+    assert unchanged_outside(PROPS, res)
+    assert res.node_id is None
+    assert prop_names(res.new_text) == ["Скрыта"]
+    # the section comment went with the first record it was attached to
+    assert "# Свойства карточки" not in res.new_text
+
+    only = formedits.property_remove(res.new_text, "Скрыта")
+    assert "Свойства" not in only.new_text
+    assert parse_form(only.new_text).properties_section is None
+
+    with pytest.raises(FormModelError, match="не найдено"):
+        formedits.property_remove(PROPS, "Нет")
+
+
+def test_property_rename_reports_binding_usages():
+    res = formedits.property_rename(PROPS, "Титул", "Заглавие")
+    assert unchanged_outside(PROPS, res)
+    assert res.node_id == "Свойства/Заглавие"
+    # the record is renamed, the =Титул bindings are NOT rewritten - the note says so
+    assert "Имя: Заглавие" in res.new_text
+    assert res.new_text.count("=Титул") == 2
+    assert res.notes and "2" in res.notes[0] and "Титул" in res.notes[0]
+
+    back = formedits.property_rename(res.new_text, "Заглавие", "Титул")
+    assert back.new_text == PROPS
+    assert back.notes == []  # nothing references Заглавие
+
+    # =не Скрыта counts as one usage too
+    res = formedits.property_rename(PROPS, "Скрыта", "Спрятана")
+    assert res.notes and "1" in res.notes[0]
+
+    with pytest.raises(FormModelError, match="уже есть"):
+        formedits.property_rename(PROPS, "Титул", "Скрыта")
+    with pytest.raises(FormModelError, match="не найдено"):
+        formedits.property_rename(PROPS, "Нет", "Имя2")
+
+
+# --- insert_fragment ------------------------------------------------------------------------
+
+
+FRAGMENT = """\
+# Итоговая подпись
+Тип: Надпись
+Имя: Подпись
+Шрифт:
+    Тип: АбсолютныйШрифт
+    Размер: 28
+"""
+
+
+def test_insert_fragment_at_end_of_list():
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAGMENT)
+    assert unchanged_outside(FORM, res)
+    assert res.node_id == TPL + "/Содержимое[3]"
+    assert res.new_text[res.node_span.start : res.node_span.end] == (
+        "            # Итоговая подпись\n"
+        "            -\n"
+        "                Тип: Надпись\n"
+        "                Имя: Подпись\n"
+        "                Шрифт:\n"
+        "                    Тип: АбсолютныйШрифт\n"
+        "                    Размер: 28\n"
+    )
+    form = parse_form(res.new_text)
+    node = form.nodes[res.node_id]
+    assert node.type == "Надпись" and props(node)["Шрифт"].kind == "composite"
+    back = formedits.remove_node(res.new_text, res.node_id)
+    assert back.new_text == FORM
+
+
+def test_insert_fragment_reindents_and_positions():
+    deep = "\n".join("      " + line for line in FRAGMENT.splitlines()) + "\n"
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", deep, before=LABEL)
+    assert res.node_id == TPL + "/Содержимое[0]"
+    form = parse_form(res.new_text)
+    assert [c.type for c in form.nodes[LIST_GRP].children] == [
+        "Надпись", "Надпись", "ПолеВвода", "Страницы",
+    ]
+    assert "            # Итоговая подпись\n            -\n" in res.new_text
+
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: Гиперссылка", after=LABEL)
+    assert res.node_id == TPL + "/Содержимое[1]"
+
+
+def test_insert_fragment_into_missing_and_singleton_slot():
+    res = formedits.insert_fragment(CHAIN, CH_GRP, "Шапка", "Тип: Надпись\nИмя: Верх\n")
+    form = parse_form(res.new_text)
+    slot = form.nodes[CH_GRP + "/Шапка"]
+    assert slot.list_style is False and [c.name for c in slot.children] == ["Верх"]
+    # removing the only child takes the created slot with it - byte-identical rollback
+    back = formedits.remove_node(res.new_text, res.node_id)
+    assert back.new_text == CHAIN
+
+    res = formedits.insert_fragment(CHAIN, CH_GRP, "Содержимое", FRAGMENT)
+    assert unchanged_outside(CHAIN, res)
+    form = parse_form(res.new_text)
+    slot = form.nodes[CH_GRP + "/Содержимое"]
+    assert slot.list_style is True  # the singleton slot converted to the list form
+    assert [c.name for c in slot.children] == ["Текст", "Подпись"]
+
+
+def test_insert_fragment_normalizes_leading_blank_lines():
+    # a blank line between the comments and the body would detach the comments - dropped
+    frag = "# заметка\n\n\nТип: Надпись\n"
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", frag)
+    assert res.new_text[res.node_span.start : res.node_span.end] == (
+        "            # заметка\n"
+        "            -\n"
+        "                Тип: Надпись\n"
+    )
+
+
+def test_insert_fragment_preserves_crlf():
+    crlf = FORM.replace("\n", "\r\n")
+    res = formedits.insert_fragment(crlf, TPL, "Содержимое", FRAGMENT)
+    inserted = res.new_text[res.node_span.start : res.node_span.end]
+    assert "\r\n" in inserted and inserted.replace("\r\n", "").find("\n") == -1
+    back = formedits.remove_node(res.new_text, res.node_id)
+    assert back.new_text == crlf
+
+
+def test_insert_fragment_validation():
+    with pytest.raises(FormModelError, match="Пустой yaml-фрагмент"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "   \n")
+    with pytest.raises(FormModelError, match="не является корректным yaml"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: [обрыв")
+    with pytest.raises(FormModelError, match="список элементов"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "- Тип: А\n- Тип: Б\n")
+    with pytest.raises(FormModelError, match="ожидается маппинг"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "просто строка")
+    with pytest.raises(FormModelError, match="нет верхнеуровневого ключа Тип"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "Имя: БезТипа\n")
+    with pytest.raises(FormModelError, match="несколько компонентов"):
+        formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: А\nИмя: X\nТип: Б\n")
+    with pytest.raises(FormModelError, match="Слот не поддерживается"):
+        formedits.insert_fragment(FORM, TPL, "Реквизиты", FRAGMENT)
+    with pytest.raises(FormModelError, match="Узел не найден"):
+        formedits.insert_fragment(FORM, "Нет", "Содержимое", FRAGMENT)
+
+
+@pytest.mark.parametrize("op,args", [
+    ("insert_fragment", {"parent": TPL, "slot": "Содержимое", "fragment": FRAGMENT}),
+    ("property_add", {"name": "Итог", "type": "Число"}),
+    ("property_retype", {"name": "Скрыта", "new_type": "Булево?"}),
+    ("property_remove", {"name": "Титул"}),
+    ("property_rename", {"name": "Титул", "new_name": "Заглавие"}),
+])
+def test_new_op_results_parse_as_yaml(op, args):
+    res = formedits.apply_operation(PROPS, op, args)
+    assert pyyaml.safe_load(res.new_text)
+    assert unchanged_outside(PROPS, res)
+
+
+def test_apply_operation_new_ops_and_camel_op():
+    res = formedits.apply_operation(PROPS, "insertFragment", {
+        "parent": "Наследует", "slot": "Содержимое", "fragment": "Тип: Надпись",
+    })
+    assert res.node_id is not None
+    res = formedits.apply_operation(PROPS, "property-retype", {
+        "name": "Скрыта", "newType": "Булево?",
+    })
+    assert "Тип: Булево?" in res.new_text
+    res = formedits.apply_operation(PROPS, "property_rename", {
+        "name": "Титул", "new_name": "Заглавие",
+    })
+    assert res.notes  # the binding-usage warning rides on the dispatcher result too
+    with pytest.raises(FormModelError, match="не задан параметр"):
+        formedits.apply_operation(PROPS, "property_add", {"name": "Итог"})
+    with pytest.raises(FormModelError, match="не задан параметр"):
+        formedits.apply_operation(PROPS, "insert_fragment", {"parent": TPL, "slot": "Содержимое"})
+
+
 # --- smoke over the demo project ----------------------------------------------------------
 
 

@@ -21,7 +21,7 @@ import re
 from html import unescape
 from pathlib import Path
 
-from xbsl import dataset, docs, formedits, formmodel, report, scaffold, uischema
+from xbsl import dataset, docs, formedits, formhandlers, formmodel, report, scaffold, uischema
 from xbsl.cli import discover
 from xbsl.engine import RULES, load, load_text, run, run_sources
 
@@ -525,12 +525,18 @@ def meta_component_tree(yaml_path: str) -> dict:
     Шапка / Подвал; other nested values are properties. Use the node ids with
     meta_add_component / meta_move_component / meta_remove_component /
     meta_set_component_property; ids are positional, so re-read the tree after any edit.
+
+    componentProperties lists the records of the top-level Свойства section (the
+    component's own properties: name, type and their spans) - they are not tree nodes.
     """
     try:
         form = formedits.load_form(Path(yaml_path))
     except scaffold.ScaffoldError as exc:
         return {"error": str(exc)}
-    return {"root": formmodel.node_dict(form.root)}
+    return {
+        "root": formmodel.node_dict(form.root),
+        "componentProperties": formmodel.component_properties_dicts(form),
+    }
 
 
 @mcp.tool()
@@ -554,6 +560,30 @@ def meta_add_component(
     """
     return _form_write(yaml_path, "insert", {
         "parent": parent_id, "slot": slot, "type": type, "name": name,
+        "before": before, "after": after,
+    })
+
+
+@mcp.tool()
+def meta_insert_fragment(
+    yaml_path: str,
+    parent_id: str,
+    slot: str,
+    fragment: str,
+    before: str | None = None,
+    after: str | None = None,
+) -> dict:
+    """Paste a ready yaml block of ONE component (a copied subtree) into a slot.
+
+    fragment - the component block as copied from another form: `Тип: ...` plus its
+    nested keys, optionally with attached comments above; the component type is NOT
+    checked against any catalog (project components are valid). A list, several
+    components or a fragment without a top-level Тип are rejected with a clear error.
+    The block is re-indented to the destination; slot rules match meta_add_component
+    (missing slot created, a single-mapping slot converts to the list form).
+    """
+    return _form_write(yaml_path, "insert_fragment", {
+        "parent": parent_id, "slot": slot, "fragment": fragment,
         "before": before, "after": after,
     })
 
@@ -610,6 +640,44 @@ def meta_set_component_property(
     return _form_write(yaml_path, "set_property", {
         "node": node_id, "key": key, "value": value, "value_yaml": value_yaml,
     })
+
+
+@mcp.tool()
+def meta_add_handler(
+    yaml_path: str,
+    node_id: str,
+    key: str,
+    method: str | None = None,
+    signature: str | None = None,
+) -> dict:
+    """Bind an event property of a component node to a handler method of the paired module.
+
+    Writes BOTH files: the yaml gets `key: Метод` on the node, the module (same stem,
+    .xbsl; created when absent) gets a method stub appended - parameters ("Источник",
+    "Событие") and their types come from the event signature. method - an explicit
+    handler name: when such a method already exists in the module, only the yaml
+    changes (binding to an existing handler). Without method the name is
+    <Имя|Тип узла><Ключ> uniquified with a number, and a stub is always added.
+    signature - the "(Кнопка, СобытиеПриНажатии)->ничто" string (see ui_schema); when
+    omitted it is looked up in the local dataset by the node's type, and without the
+    dataset the stub is parameterless. Generic type parameters are grounded through the
+    node's own Тип (ПолеВвода<Строка> -> СобытиеПриИзменении<Строка>).
+
+    Returns files+notes+lint plus: method - the final name; created - the module file
+    was created; methodAdded - a stub was appended.
+    """
+    try:
+        outcome = formhandlers.op_add_handler(
+            Path(yaml_path), node_id, key, method=method, signature=signature,
+        )
+    except scaffold.ScaffoldError as exc:
+        return {"error": str(exc)}
+    out = _apply_and_lint(outcome.result)
+    out["method"] = outcome.plan.method
+    out["created"] = outcome.plan.created
+    out["methodAdded"] = outcome.plan.method_added
+    out["module"] = str(outcome.module_path)
+    return out
 
 
 def main() -> None:

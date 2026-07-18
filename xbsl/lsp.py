@@ -37,8 +37,8 @@ except ImportError:  # pragma: no cover - the extra is not installed
     LanguageServer = None
 
 from xbsl import (
-    __version__, baseline, dataset, docs, engine, formedits, formmodel, i18n,
-    indexer, scaffold, templates, uischema,
+    __version__, baseline, dataset, docs, engine, formedits, formhandlers, formmodel,
+    i18n, indexer, scaffold, templates, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -113,6 +113,8 @@ def _plain_params(value: object) -> object:
 _FORM_EDIT_ARG_KEYS = (
     "node", "key", "value", "valueYaml", "parent", "slot", "type", "name",
     "before", "after", "newParent", "container", "newName",
+    # wave-3 operations: insert_fragment and property_retype
+    "fragment", "newType",
 )
 
 FILE_DEBOUNCE_S = 0.3
@@ -905,6 +907,8 @@ def _make_server() -> "LanguageServer":
         return {
             "available": True,
             "root": formmodel.node_dict(form.root, property_spans=False),
+            # The component's own Свойства records (the "Data" panel), NOT tree nodes.
+            "componentProperties": formmodel.component_properties_dicts(form),
         }
 
     @server.feature("xbsl/formNodeAt")
@@ -930,10 +934,12 @@ def _make_server() -> "LanguageServer":
     @server.feature("xbsl/formEdit")
     def _form_edit(params: object) -> dict:
         # {uri, op, args} or {uri, op, <arguments flat in params>} ->
-        # {edits: [{start, end, newText}], node: {id, span} | null};
+        # {edits: [{start, end, newText}], node: {id, span} | null, notes?: [str]};
         # offsets are relative to the CURRENT buffer text the edits were computed from.
         # Over the real pygls channel a nested args object arrives as a namedtuple,
         # not a dict (see _plain_params) - both shapes and both spellings are accepted.
+        # The property_* operations return a pseudo node id "Свойства/<Имя>" that only
+        # carries the record span for the cursor jump.
         raw_args = _plain_params(_param(params, "args"))
         args: dict = raw_args if isinstance(raw_args, dict) else {}
         for key in _FORM_EDIT_ARG_KEYS:
@@ -950,7 +956,108 @@ def _make_server() -> "LanguageServer":
             return {"error": str(exc)}
         except OSError as exc:
             return {"error": str(exc)}
-        return {"edits": result.edits_dicts(), "node": result.node_dict()}
+        out = {"edits": result.edits_dicts(), "node": result.node_dict()}
+        if result.notes:
+            out["notes"] = list(result.notes)
+        return out
+
+    # --- event handlers (hook 1: the properties panel's event rows) ----------------------
+    #
+    # Compute only, flat request params (top-level scalars - nested params break on the
+    # pygls deserialization); the editor applies a multi-file WorkspaceEdit.
+
+    @server.feature("xbsl/moduleHandlers")
+    def _module_handlers(params: object) -> dict:
+        # {uri} - the component yaml or the module itself. Returns {available, module:
+        # uri|null, methods: [...], parseErrors}: available=False (module: null,
+        # methods: []) when the paired .xbsl file does not exist.
+        try:
+            path = _form_path(params)
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        module_path = (
+            path if path.suffix.lower() == ".xbsl" else formhandlers.module_path_for(path)
+        )
+        if not module_path.is_file():
+            return {"available": False, "module": None, "methods": []}
+        try:
+            methods, errors = formhandlers.module_methods(_form_reader(module_path))
+        except OSError as exc:
+            return {"error": str(exc)}
+        return {
+            "available": True,
+            "module": path_to_uri(module_path),
+            "methods": methods,
+            "parseErrors": errors,
+        }
+
+    @server.feature("xbsl/addHandler")
+    def _add_handler(params: object) -> dict:
+        """Flat params {uri, node, key, method?, signature?} -> the two-file plan.
+
+        Response: method - the final handler name; created - the module FILE does not
+        exist yet: moduleText carries its full content (the client creates the file)
+        and moduleEdits is []; methodAdded - a stub was appended (False - bound to an
+        existing method); yamlEdits - edits of the yaml buffer (empty when the key
+        already binds the method); moduleEdits - edits of the existing module buffer;
+        cursor - {uri, offset} of the handler method name (the jump target); notes -
+        optional warnings. Offsets are relative to the buffers the plan was computed
+        from; the client applies everything as one multi-file WorkspaceEdit.
+        """
+        try:
+            yaml_path = _form_path(params)
+            module_path = formhandlers.module_path_for(yaml_path)
+            yaml_text = _form_reader(yaml_path)
+            module_text = _form_reader(module_path) if module_path.is_file() else None
+            plan = formhandlers.add_handler(
+                yaml_text, module_text,
+                str(_param(params, "node", "") or ""),
+                str(_param(params, "key", "") or ""),
+                method_name=_opt_str(params, "method"),
+                event_signature=_opt_str(params, "signature"),
+            )
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        except OSError as exc:
+            return {"error": str(exc)}
+        module_uri = path_to_uri(module_path)
+        edits = lambda items: [
+            {"start": e.start, "end": e.end, "newText": e.new_text} for e in items
+        ]
+        out = {
+            "method": plan.method,
+            "created": plan.created,
+            "methodAdded": plan.method_added,
+            "yamlEdits": edits(plan.yaml_edits),
+            "moduleUri": module_uri,
+            "moduleEdits": edits(plan.module_edits),
+            "cursor": {"uri": module_uri, "offset": plan.cursor_offset},
+        }
+        if plan.created:
+            out["moduleText"] = plan.new_module_text
+        if plan.notes:
+            out["notes"] = list(plan.notes)
+        return out
+
+    # --- object info (the "Data" panel: attributes of the form's object) -----------------
+
+    @server.feature("xbsl/objectInfo")
+    def _object_info(params: object) -> dict:
+        # The mirror of MCP meta_object_info: flat {root?, name?, path?} -> the same
+        # JSON (fields, tabulars, forms, access, register...). root defaults to the
+        # server's source root; open module buffers are read through the buffer reader.
+        raw_path = _opt_str(params, "path")
+        try:
+            return scaffold.object_info(
+                _meta_root(params),
+                name=_opt_str(params, "name"),
+                yaml_path=Path(raw_path) if raw_path else None,
+                reader=_buffer_reader,
+            )
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        except OSError as exc:
+            return {"error": str(exc)}
 
     return server
 

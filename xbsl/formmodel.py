@@ -39,6 +39,11 @@ Model conventions (documented decisions):
     - Node ids are slash paths from the root: "Наследует", "Наследует/Содержимое" (a
       slot), "Наследует/Содержимое[0]" (a component). Ids are positional and stay valid
       only until the next edit; clients re-read the tree after every change.
+    - The top-level `Свойства:` section (the component's own properties: a "-" list of
+      {Имя, Тип} records) is NOT part of the node tree - it is modelled separately as
+      Form.properties_section and serialized as the "componentProperties" top field of
+      the tree surfaces. The corpus rule: the section follows the Наследует block (the
+      dominant spelling by a wide margin), which is where property_add creates it.
 """
 
 from __future__ import annotations
@@ -69,6 +74,7 @@ CHILD_SLOTS = (
 
 COMPONENT_ELEMENT_KIND = "КомпонентИнтерфейса"
 ROOT_KEY = "Наследует"
+PROPERTIES_KEY = "Свойства"
 
 _HANDLER_KEY_RE = re.compile(r"^(?:При|После|Перед)[А-ЯЁA-Z]")
 _INDENT_RE = re.compile(r"^[ \t]*")
@@ -236,6 +242,46 @@ class Node:
 
 
 @dataclass
+class ComponentProperty:
+    """One record of the top-level Свойства section ({Имя, Тип} with comments)."""
+
+    name: str | None
+    type_full: str | None
+    span: Span  # whole lines: the attached comments above the dash .. end of the record
+    content_span: Span  # without the attached comments
+    name_span: Span | None  # exact scalar span of the Имя value
+    type_span: Span | None  # exact scalar span of the Тип value
+    anchor_line: int  # the dash line of the record
+    body_col: int | None  # column of the record's keys (None for an opaque scalar item)
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "type": self.type_full,
+            "span": self.span.as_dict(),
+            "nameSpan": self.name_span.as_dict() if self.name_span else None,
+            "typeSpan": self.type_span.as_dict() if self.type_span else None,
+        }
+
+
+@dataclass
+class PropertiesSection:
+    """The top-level Свойства section of the component file.
+
+    supported=False marks a spelling the line-based operations do not edit (a flow
+    collection or a non-list value); the entries are empty then.
+    """
+
+    span: Span  # whole lines: comments above the key .. end of the section block
+    content_span: Span  # the key line .. end of the section block
+    key_line: int
+    key_col: int
+    dash_col: int | None  # None for an empty section ("Свойства:" with no items)
+    entries: list[ComponentProperty] = field(default_factory=list)
+    supported: bool = True
+
+
+@dataclass
 class Form:
     text: str
     root: Node
@@ -243,6 +289,11 @@ class Form:
     lines: _Lines
     nl: str
     step: int  # indentation step detected from the file itself
+    properties_section: PropertiesSection | None = None
+
+    @property
+    def component_properties(self) -> list[ComponentProperty]:
+        return self.properties_section.entries if self.properties_section else []
 
 
 # --- parsing ------------------------------------------------------------------------------
@@ -423,6 +474,50 @@ class _Builder:
         # an empty scalar value ("Слот:" with nothing nested) keeps zero children
         return slot
 
+    def build_properties(self, key_node: yaml.ScalarNode, value: object) -> PropertiesSection:
+        key_line = key_node.start_mark.line
+        key_col = key_node.start_mark.column
+        first = self.lines.attach_comments(key_line, key_col)
+        last = self.lines.block_last_line(key_line, key_col + 1)
+        section = PropertiesSection(
+            span=self._line_span(first, last),
+            content_span=self._line_span(key_line, last),
+            key_line=key_line, key_col=key_col, dash_col=None,
+        )
+        if isinstance(value, yaml.ScalarNode) and not value.value:
+            return section  # "Свойства:" with an empty value - a section with no records
+        if not isinstance(value, yaml.SequenceNode) or value.flow_style:
+            section.supported = False
+            return section
+        section.dash_col = value.start_mark.column
+        for item in value.value:
+            content_line = item.start_mark.line
+            dash_line = _find_dash_line(self.lines, content_line, section.dash_col)
+            item_last = self.lines.block_last_line(dash_line, section.dash_col + 1)
+            item_first = self.lines.attach_comments(dash_line, section.dash_col)
+            name = type_full = None
+            name_span = type_span = None
+            body_col = None
+            if isinstance(item, yaml.MappingNode):
+                body_col = item.start_mark.column
+                name = _scalar_of(item, "Имя")
+                type_full = _scalar_of(item, "Тип")
+                for k, v in _mapping_pairs(item):
+                    if not isinstance(v, yaml.ScalarNode) or v.end_mark.index <= v.start_mark.index:
+                        continue
+                    if k.value == "Имя":
+                        name_span = Span(v.start_mark.index, v.end_mark.index)
+                    elif k.value == "Тип":
+                        type_span = Span(v.start_mark.index, v.end_mark.index)
+            section.entries.append(ComponentProperty(
+                name=name, type_full=type_full,
+                span=self._line_span(item_first, item_last),
+                content_span=self._line_span(dash_line, item_last),
+                name_span=name_span, type_span=type_span,
+                anchor_line=dash_line, body_col=body_col,
+            ))
+        return section
+
 
 def parse_form(text: str) -> Form:
     """Parse an interface component yaml into the node tree.
@@ -460,9 +555,14 @@ def parse_form(text: str) -> Form:
         anchor_line=key_node.start_mark.line, min_indent=key_node.start_mark.column + 1,
         comment_indent=key_node.start_mark.column, dash_col=None,
     )
+    props_pair = next(
+        ((k, v) for k, v in _mapping_pairs(root_yaml) if k.value == PROPERTIES_KEY), None
+    )
+    section = builder.build_properties(*props_pair) if props_pair is not None else None
     return Form(
         text=text, root=root, nodes=builder.nodes, lines=builder.lines,
         nl=_dominant_nl(text), step=_detect_step(builder.lines),
+        properties_section=section,
     )
 
 
@@ -545,3 +645,8 @@ def node_dict(node: Node, *, property_spans: bool = True, deep: bool = True) -> 
             node_dict(c, property_spans=property_spans, deep=True) for c in node.children
         ]
     return d
+
+
+def component_properties_dicts(form: Form) -> list[dict]:
+    """The Свойства records for the tree surfaces ("componentProperties" - not tree nodes)."""
+    return [p.as_dict() for p in form.component_properties]

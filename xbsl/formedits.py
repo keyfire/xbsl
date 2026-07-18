@@ -24,13 +24,23 @@ Conventions (documented decisions):
       an empty value does not compile); the slot's own attached comments go with it.
     - The indentation step is detected from the file itself (formmodel._detect_step);
       list-item geometry is taken from the existing siblings of the target slot.
+    - insert_fragment pastes a READY yaml block of one component (what the structure
+      panel copied): the fragment is dedented to its margin and re-indented to the
+      destination; the internal relative indentation is preserved as pasted. Blank lines
+      inside the run of leading comments are dropped so the comments stay attached to
+      the inserted node (the formmodel attachment rule).
+    - The property_* operations edit the top-level Свойства section only. The section is
+      created right after the Наследует block - the corpus spelling (49 of 50 files put
+      Свойства immediately after Наследует). property_rename does NOT rewrite the
+      bindings that use the property (=Имя...): the result carries a note with the usage
+      count so the client can warn.
 """
 
 from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
@@ -38,10 +48,12 @@ import yaml
 from xbsl import engine
 from xbsl.formmodel import (
     CHILD_SLOTS,
+    PROPERTIES_KEY,
     ROOT_KEY,
     Form,
     FormModelError,
     Node,
+    PropertiesSection,
     Span,
     get_component,
     get_node,
@@ -52,14 +64,17 @@ from xbsl.scaffold import FileChange, ScaffoldResult, TextEdit
 
 _NAME_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$")
 _TYPE_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_.<>,: ?-]*$")
+#: Types of the Свойства records additionally allow unions ("Накладная.Ссылка|?").
+_PROPERTY_TYPE_RE = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_.<>,:| ?-]*$")
 _NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
 _BARE_SCALAR_RE = re.compile(r"^[=$A-Za-zА-Яа-яЁё0-9_][A-Za-zА-Яа-яЁё0-9_.,()<> =/-]*$")
 #: Plain spellings YAML would read as a non-string type - always quoted.
 _YAML_AMBIGUOUS = {"true", "false", "yes", "no", "on", "off", "null", "~"}
 
 OPERATIONS = (
-    "insert", "move", "remove", "wrap", "unwrap",
+    "insert", "insert_fragment", "move", "remove", "wrap", "unwrap",
     "duplicate", "rename", "set_property", "reset_property",
+    "property_add", "property_retype", "property_remove", "property_rename",
 )
 
 
@@ -69,6 +84,9 @@ class EditResult:
     new_text: str  # the text with the edits applied
     node_id: str | None  # the resulting node in the NEW text (None for remove)
     node_span: Span | None
+    # Warnings for the client (e.g. the binding-usage count on property_rename); the
+    # file-level wrapper copies them into ScaffoldResult.notes.
+    notes: list[str] = field(default_factory=list)
 
     def edits_dicts(self) -> list[dict]:
         return [{"start": e.start, "end": e.end, "newText": e.new_text} for e in self.edits]
@@ -398,6 +416,94 @@ def insert_component(text: str, parent_id: str, slot: str, type_: str | None = N
     return _finish(text, plan.edits, plan.anchor)
 
 
+def _fragment_component_lines(fragment: str) -> tuple[list[str], int]:
+    """The pasted component fragment as dedented lines: (lines, leading comment count).
+
+    The fragment must be ONE yaml mapping with a top-level Тип key (what the structure
+    panel copies), optionally with attached comments above. A list, several components
+    or a scalar raise a user-facing error; the component type is deliberately NOT
+    checked against any catalog - project components are as valid as platform ones.
+    """
+    if not fragment or not fragment.strip():
+        raise FormModelError("Пустой yaml-фрагмент компонента")
+    try:
+        composed = yaml.compose(fragment, Loader=yaml.SafeLoader)
+    except yaml.YAMLError as exc:
+        raise FormModelError(f"Фрагмент не является корректным yaml: {exc}") from exc
+    if isinstance(composed, yaml.SequenceNode):
+        raise FormModelError(
+            "Фрагмент содержит список элементов – вставляйте компоненты по одному, "
+            "без маркера списка \"-\""
+        )
+    if not isinstance(composed, yaml.MappingNode):
+        raise FormModelError(
+            "Фрагмент не является yaml-блоком компонента (ожидается маппинг с ключом Тип)"
+        )
+    keys = [k.value for k, _v in composed.value if isinstance(k, yaml.ScalarNode)]
+    type_count = keys.count("Тип")
+    if type_count > 1:
+        raise FormModelError(
+            f"Во фрагменте несколько компонентов (ключ Тип встречается {type_count} раза) – "
+            "вставляйте по одному"
+        )
+    if type_count == 0:
+        raise FormModelError("Во фрагменте нет верхнеуровневого ключа Тип")
+
+    lines = [ln.rstrip() for ln in fragment.replace("\r\n", "\n").split("\n")]
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    common = min(len(ln) - len(ln.lstrip(" ")) for ln in lines if ln.strip())
+    lines = [ln[common:] if ln.strip() else "" for ln in lines]
+    # The leading comments become the node's attached comments: blank lines inside the
+    # run would detach them (the formmodel rule), so they are dropped from the run.
+    comments: list[str] = []
+    rest = list(lines)
+    while rest and (not rest[0].strip() or rest[0].lstrip().startswith("#")):
+        line = rest.pop(0)
+        if line.strip():
+            comments.append(line)
+    return comments + rest, len(comments)
+
+
+def insert_fragment(text: str, parent_id: str, slot: str, fragment: str,
+                    before: str | None = None, after: str | None = None) -> EditResult:
+    """Paste a copied component subtree (a ready yaml block) into the parent's slot.
+
+    The fragment is re-indented to the destination (the file's own step decides where
+    the body lands); its internal relative indentation survives as pasted. The slot
+    rules are the same as insert_component: a missing slot is created, a single-mapping
+    slot converts to the "-" list form.
+    """
+    form = parse_form(text)
+    parent = get_component(form, parent_id)
+    if parent.body_col is None:
+        raise FormModelError(f"У узла {parent_id} нет блока свойств – вставка невозможна")
+    _check_slot(slot)
+    lines0, n_comments = _fragment_component_lines(fragment)
+    nl, step = form.nl, form.step
+
+    def render(prefix_col: int, body_col: int, dash: bool) -> str:
+        out = []
+        for line in lines0[:n_comments]:
+            out.append(" " * prefix_col + line + nl)
+        if dash:
+            out.append(" " * prefix_col + "-" + nl)
+        for line in lines0[n_comments:]:
+            out.append((" " * body_col + line if line else "") + nl)
+        return "".join(out)
+
+    def item_fn(dash_col: int) -> str:
+        return render(dash_col, dash_col + step, dash=True)
+
+    def map_fn(col: int) -> str:
+        return render(col, col, dash=False)
+
+    plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after, removal=None)
+    return _finish(text, plan.edits, plan.anchor)
+
+
 def move_node(text: str, node_id: str, new_parent_id: str, slot: str,
               before: str | None = None, after: str | None = None) -> EditResult:
     """Move a node (with its attached comments) into another - or the same - slot."""
@@ -673,6 +779,169 @@ def reset_property(text: str, node_id: str, key: str) -> EditResult:
     return _finish(text, [TextEdit(pair.span.start, pair.span.end, "")], node.span.start)
 
 
+# --- the Свойства section (the component's own properties) ---------------------------------
+#
+# The records feed the "Data" panel (docs/DESIGNER.md, hook 2). The operations edit ONLY
+# the top-level Свойства section; pseudo node ids "Свойства/<Имя>" in the results are
+# NOT tree node ids - they only carry the record span for the cursor jump.
+
+
+def _check_component_property_type(type_: str) -> str:
+    if (
+        not _PROPERTY_TYPE_RE.match(type_)
+        or ": " in type_
+        or type_.endswith(":")
+        or type_ != type_.strip()
+    ):
+        raise FormModelError(f"Недопустимый тип свойства: '{type_}'")
+    return type_
+
+
+def _properties_section(form: Form) -> PropertiesSection | None:
+    section = form.properties_section
+    if section is not None and not section.supported:
+        raise FormModelError(
+            "Секция Свойства записана не блочным списком – операция невозможна"
+        )
+    return section
+
+
+def _property_entry(form: Form, name: str):
+    section = _properties_section(form)
+    entry = next(
+        (e for e in (section.entries if section else []) if e.name == name), None
+    )
+    if entry is None:
+        raise FormModelError(f"Свойство {name} не найдено в секции Свойства")
+    return section, entry
+
+
+def _finish_property(text: str, edits: list[TextEdit], name: str | None,
+                     notes: list[str] | None = None) -> EditResult:
+    """Validate the edits by applying and re-parsing; locate the resulting record."""
+    new_text = apply_edits(text, edits)
+    try:
+        form = parse_form(new_text)
+    except FormModelError as exc:
+        raise FormModelError(f"Правка делает файл неразборным: {exc}") from exc
+    ordered = sorted(edits, key=lambda e: (e.start, e.end))
+    if name is None:
+        return EditResult(ordered, new_text, None, None, notes=notes or [])
+    entry = next((e for e in form.component_properties if e.name == name), None)
+    if entry is None:
+        raise FormModelError("внутренняя ошибка: свойство не найдено после правки")
+    return EditResult(
+        ordered, new_text, f"{PROPERTIES_KEY}/{name}", entry.span, notes=notes or [],
+    )
+
+
+def property_add(text: str, name: str, type_: str) -> EditResult:
+    """Append a {Имя, Тип} record to the Свойства section, creating the section if absent.
+
+    A new section lands right after the Наследует block - the spelling of the corpus
+    (Свойства immediately follows Наследует).
+    """
+    form = parse_form(text)
+    _check_name(name)
+    _check_component_property_type(type_)
+    section = _properties_section(form)
+    if section is not None and any(e.name == name for e in section.entries):
+        raise FormModelError(f"Свойство {name} уже есть в секции Свойства")
+    nl, step = form.nl, form.step
+
+    def record(dash_col: int) -> str:
+        body = " " * (dash_col + step)
+        return (
+            " " * dash_col + "-" + nl
+            + body + f"Имя: {name}" + nl
+            + body + f"Тип: {type_}" + nl
+        )
+
+    if section is None:
+        key_col = form.lines.indent(form.root.anchor_line)
+        pos = form.root.span.end
+        fragment = " " * key_col + PROPERTIES_KEY + ":" + nl + record(key_col + step)
+    elif section.dash_col is None:  # "Свойства:" with an empty value
+        pos = section.content_span.end
+        fragment = record(section.key_col + step)
+    else:
+        pos = section.content_span.end
+        fragment = record(section.dash_col)
+    if pos == len(text) and text and not text.endswith("\n"):
+        fragment = nl + fragment
+    return _finish_property(text, [TextEdit(pos, pos, fragment)], name)
+
+
+def property_retype(text: str, name: str, new_type: str) -> EditResult:
+    """Change the Тип of a Свойства record (a record without Тип gets the key added)."""
+    form = parse_form(text)
+    _check_component_property_type(new_type)
+    _section, entry = _property_entry(form, name)
+    if entry.type_span is not None:
+        edits = [TextEdit(entry.type_span.start, entry.type_span.end, new_type)]
+    else:
+        if entry.body_col is None or entry.name_span is None:
+            raise FormModelError(f"У свойства {name} нет блока ключей – правка невозможна")
+        line = form.lines.index_at(entry.name_span.start)
+        pos = form.lines.after(line)
+        edits = [TextEdit(pos, pos, " " * entry.body_col + f"Тип: {new_type}" + form.nl)]
+    return _finish_property(text, edits, name)
+
+
+def property_remove(text: str, name: str) -> EditResult:
+    """Remove a Свойства record; the last record takes the whole section with it."""
+    form = parse_form(text)
+    section, entry = _property_entry(form, name)
+    removal = entry.span if len(section.entries) > 1 else section.span
+    return _finish_property(text, [TextEdit(removal.start, removal.end, "")], None)
+
+
+def _binding_usage_count(text: str, name: str) -> int:
+    """Occurrences of the property name inside binding values (=... to the line end).
+
+    An approximation for the rename warning: a line's value part that starts with "="
+    (after "Ключ: " or a "- " list marker) is scanned for the name as a whole word.
+    Multi-line scalars are out of scope.
+    """
+    word = re.compile(rf"(?<![\wА-Яа-яЁё]){re.escape(name)}(?![\wА-Яа-яЁё])")
+    count = 0
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            stripped = stripped[2:].lstrip()
+        _key, sep, value = stripped.partition(": ")
+        if not sep:
+            value = stripped
+        value = value.strip().strip('"')
+        if value.startswith("="):
+            count += len(word.findall(value))
+    return count
+
+
+def property_rename(text: str, old: str, new: str) -> EditResult:
+    """Rename a Свойства record - the record ONLY.
+
+    The bindings that use the property (=Имя, =не Имя, =Метод(Имя) ...) and the paired
+    module code are NOT rewritten; the result's notes carry the number of binding
+    usages left behind so the client can warn the user.
+    """
+    form = parse_form(text)
+    _check_name(new)
+    section, entry = _property_entry(form, old)
+    if new != old and any(e.name == new for e in section.entries):
+        raise FormModelError(f"Свойство {new} уже есть в секции Свойства")
+    if entry.name_span is None:
+        raise FormModelError(f"У свойства {old} не задано Имя – переименование невозможно")
+    uses = _binding_usage_count(text, old)
+    notes = []
+    if uses:
+        notes.append(
+            f"Использования свойства в биндингах не переписаны: вхождений =...{old}... – {uses}"
+        )
+    edits = [TextEdit(entry.name_span.start, entry.name_span.end, new)]
+    return _finish_property(text, edits, new, notes=notes)
+
+
 # --- the shared dispatcher (parity of the three surfaces) ---------------------------------
 
 
@@ -683,9 +952,10 @@ def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
     """One entry point for LSP/MCP/CLI: an operation name plus its arguments.
 
     Argument keys: parent, slot, type, name, before, after, node, new_parent,
-    container, new_name, key, value, value_yaml (camelCase spellings are accepted).
+    container, new_name, key, value, value_yaml, fragment, new_type (camelCase
+    spellings are accepted, for the operation name too).
     """
-    op_norm = (op or "").replace("-", "_")
+    op_norm = _CAMEL_RE.sub("_", op or "").lower().replace("-", "_")
     raw = args or {}
     a = {_CAMEL_RE.sub("_", str(k)).lower(): v for k, v in raw.items()}
 
@@ -702,6 +972,9 @@ def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
     if op_norm == "insert":
         return insert_component(text, need("parent"), need("slot"), type_=opt("type"),
                                 name=opt("name"), before=opt("before"), after=opt("after"))
+    if op_norm == "insert_fragment":
+        return insert_fragment(text, need("parent"), need("slot"), need("fragment"),
+                               before=opt("before"), after=opt("after"))
     if op_norm == "move":
         return move_node(text, need("node"), need("new_parent"), need("slot"),
                          before=opt("before"), after=opt("after"))
@@ -722,6 +995,14 @@ def apply_operation(text: str, op: str, args: dict | None) -> EditResult:
                             value_yaml=opt("value_yaml"))
     if op_norm == "reset_property":
         return reset_property(text, need("node"), need("key"))
+    if op_norm == "property_add":
+        return property_add(text, need("name"), need("type"))
+    if op_norm == "property_retype":
+        return property_retype(text, need("name"), need("new_type"))
+    if op_norm == "property_remove":
+        return property_remove(text, need("name"))
+    if op_norm == "property_rename":
+        return property_rename(text, need("name"), need("new_name"))
     raise FormModelError(f"Неизвестная операция: {op} (доступны: {', '.join(OPERATIONS)})")
 
 
@@ -757,5 +1038,5 @@ def op_component_edit(yaml_path: Path, op: str, args: dict | None, *,
         cursor = (line, start - (res.new_text.rfind("\n", 0, start) + 1))
     result = ScaffoldResult(changes=[
         FileChange(path=yaml_path, content=res.new_text, created=False, cursor=cursor)
-    ])
+    ], notes=list(res.notes))
     return FormEditOutcome(result=result, node=res.node_dict(), edits=res.edits)

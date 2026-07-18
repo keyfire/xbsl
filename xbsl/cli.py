@@ -186,7 +186,7 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-form",
     "add-subsystem", "add-dependency", "rename-object", "set-access",
-    "object-info", "project-info", "form-tree", "form-edit",
+    "object-info", "project-info", "form-tree", "form-edit", "form-handlers",
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
 
@@ -408,22 +408,45 @@ def _scaffold_parser() -> argparse.ArgumentParser:
         help="операция конструктора форм: точечная правка yaml компонента интерфейса",
     )
     p.add_argument("yaml_path")
-    p.add_argument("op", choices=("insert", "move", "remove", "wrap", "unwrap",
-                                  "duplicate", "rename", "set-property", "reset-property"))
-    p.add_argument("--parent", help="id узла-контейнера (insert)")
+    p.add_argument("op", choices=("insert", "insert-fragment", "move", "remove", "wrap",
+                                  "unwrap", "duplicate", "rename",
+                                  "set-property", "reset-property",
+                                  "property-add", "property-retype", "property-remove",
+                                  "property-rename"))
+    p.add_argument("--parent", help="id узла-контейнера (insert/insert-fragment)")
     p.add_argument("--slot", help="слот детей: Содержимое, Страницы, Колонки, ... (insert/move)")
-    p.add_argument("--type", help="Тип нового компонента (insert)")
-    p.add_argument("--name", help="Имя нового компонента (insert) или обёртки (wrap)")
+    p.add_argument("--type", help="Тип нового компонента (insert) или свойства (property-add)")
+    p.add_argument("--name", help="Имя нового компонента (insert), обёртки (wrap) "
+                                  "или свойства секции Свойства (property-*)")
     p.add_argument("--node", help="id узла операции (move/remove/wrap/unwrap/duplicate/"
                                   "rename/set-property/reset-property)")
     p.add_argument("--new-parent", help="id нового контейнера (move)")
     p.add_argument("--container", help="Тип контейнера-обёртки (wrap)")
-    p.add_argument("--new-name", help="новое Имя узла (rename; без флага Имя удаляется)")
+    p.add_argument("--new-name", help="новое Имя узла (rename) или свойства (property-rename); "
+                                      "для rename без флага Имя удаляется")
     p.add_argument("--before", help="id соседа: вставить/переместить ПЕРЕД ним")
     p.add_argument("--after", help="id соседа: вставить/переместить ПОСЛЕ него")
-    p.add_argument("--key", help="имя свойства (set-property/reset-property)")
+    p.add_argument("--key", help="имя свойства узла (set-property/reset-property)")
     p.add_argument("--value", help="скалярное значение или биндинг (set-property)")
     p.add_argument("--value-yaml", help="составное значение готовым yaml-фрагментом (set-property)")
+    p.add_argument("--fragment", help="yaml-блок ОДНОГО компонента (insert-fragment)")
+    p.add_argument("--fragment-file", metavar="ФАЙЛ",
+                   help="файл с yaml-блоком компонента (insert-fragment, вместо --fragment)")
+    p.add_argument("--new-type", help="новый Тип свойства (property-retype)")
+
+    p = sub.add_parser(
+        "form-handlers",
+        help="обработчики парного модуля компонента: список методов или заготовка обработчика",
+    )
+    p.add_argument("yaml_path")
+    p.add_argument("--node", help="id узла (создание обработчика; без --node/--key – "
+                                  "список методов модуля)")
+    p.add_argument("--key", help="ключ события узла: ПриНажатии, ПослеСоздания, ...")
+    p.add_argument("--method", help="имя метода-обработчика (по умолчанию <Имя узла><Ключ>; "
+                                    "существующий метод – только привязка в yaml)")
+    p.add_argument("--signature", help='сигнатура события из ui-схемы, напр. '
+                                       '"(Кнопка, СобытиеПриНажатии)->ничто" '
+                                       '(без флага ищется в локальных данных)')
 
     for name, sp in sub.choices.items():
         if name.endswith("-info") or name == "form-tree":
@@ -534,12 +557,18 @@ def _scaffold_main(argv: list[str]) -> int:
         elif args.command == "form-edit":
             from xbsl import formedits
 
+            fragment = args.fragment
+            if args.fragment_file:
+                if fragment is not None:
+                    raise ValueError("Укажите только один из флагов --fragment и --fragment-file")
+                fragment = Path(args.fragment_file).read_text(encoding="utf-8-sig")
             outcome = formedits.op_component_edit(Path(args.yaml_path), args.op, {
                 "parent": args.parent, "slot": args.slot, "type": args.type,
                 "name": args.name, "node": args.node, "new_parent": args.new_parent,
                 "container": args.container, "new_name": args.new_name,
                 "before": args.before, "after": args.after,
                 "key": args.key, "value": args.value, "value_yaml": args.value_yaml,
+                "fragment": fragment, "new_type": args.new_type,
             })
             if args.dry_run:
                 payload = outcome.result.as_dict()
@@ -558,6 +587,51 @@ def _scaffold_main(argv: list[str]) -> int:
                 ],
                 "notes": outcome.result.notes,
                 "node": outcome.node,
+                "lint": _scaffold_lint(written),
+            }
+            print(json.dumps(out, ensure_ascii=False))
+            return 0
+        elif args.command == "form-handlers":
+            from xbsl import formhandlers
+
+            if not args.node and not args.key:
+                # The list mode: the methods of the paired module (the same shape as
+                # the LSP xbsl/moduleHandlers, with a path instead of a uri).
+                module_path = formhandlers.module_path_for(Path(args.yaml_path))
+                if module_path.is_file():
+                    from xbsl.engine import load
+
+                    methods, errors = formhandlers.module_methods(load(module_path).text)
+                    payload = {"available": True, "module": str(module_path),
+                               "methods": methods, "parseErrors": errors}
+                else:
+                    payload = {"available": False, "module": None, "methods": []}
+                print(json.dumps(payload, ensure_ascii=False))
+                return 0
+            if not (args.node and args.key):
+                raise ValueError("Для создания обработчика нужны оба флага --node и --key")
+            outcome = formhandlers.op_add_handler(
+                Path(args.yaml_path), args.node, args.key,
+                method=args.method, signature=args.signature,
+            )
+            extras = {
+                "method": outcome.plan.method,
+                "created": outcome.plan.created,
+                "methodAdded": outcome.plan.method_added,
+            }
+            if args.dry_run:
+                payload = outcome.result.as_dict()
+                payload.update(extras)
+                print(json.dumps(payload, ensure_ascii=False))
+                return 0
+            written = scaffold.apply_result(outcome.result)
+            out = {
+                "files": [
+                    {"path": str(c.path), "created": c.created}
+                    for c in outcome.result.changes
+                ],
+                "notes": outcome.result.notes,
+                **extras,
                 "lint": _scaffold_lint(written),
             }
             print(json.dumps(out, ensure_ascii=False))
