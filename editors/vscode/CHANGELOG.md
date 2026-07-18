@@ -6,6 +6,32 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.23.0
+
+- **Visual form designer.** A new **Designer (1C:Element)** container with three panels over a
+  form's `.yaml`: **Structure** (the component tree – cursor sync with the editor, `Alt+Up`/`Alt+Down`
+  to reorder, wrap/unwrap, duplicate, `F2` rename, copy/paste of yaml subtrees across forms,
+  multi-select edit, focus on a subtree, filter), **Palette** (insert a component by double-click
+  or drag, favorites, open its docs) and **Data** (drag an owner-object attribute or a component
+  property to create a bound input). A new **Properties (1C:Element)** panel edits the selected
+  component – and metadata objects – with typed editors: enum dropdowns, tri-state, color with
+  presets from the form's own palette, union "type + value", nested groups, a literal/binding
+  toggle with dotted completion (`=Компоненты.Кнопка.Значение`, `=Объект.Реквизит`, enum values),
+  and an events editor that can generate a handler stub in the `.xbsl`.
+- **Wireframe preview**: highlights the selected component and follows the structure selection,
+  shows real resource images (`Картинка` with `Изображение:`), and scrolls to the content in a
+  narrow panel.
+- **Structural search across forms** (`XBSL: search forms by structure`) – by component type and
+  `key=value` predicates.
+- **Block presets** – save a component subtree and drop it into any form.
+- **Read-only designer** for library forms (`.xlib`) and other read-only sources.
+- **New 1C:Element project wizard** (`XBSL: new 1C:Element project`).
+- **Metadata tree**: remembers its expanded state across refreshes and reloads, category
+  tooltips with a link into the docs, all categories shown (including empty ones), and semantic
+  coloring for enumerations and contracts.
+- The designer's palette and typed editors need engine `xbsl` 0.23.0 and the language dataset;
+  the structure tree and text edits work without them.
+
 ## 0.22.1
 
 - Your own code templates now actually reach Ctrl+Space: the extension passes `--templates`
