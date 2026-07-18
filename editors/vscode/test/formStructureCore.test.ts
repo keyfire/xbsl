@@ -14,6 +14,7 @@ import {
   insertPlanForSelection,
   isContainerNode,
   isDescendantOf,
+  massEditKeys,
   nodeDescription,
   nodeIconId,
   nodeLabel,
@@ -395,6 +396,23 @@ test("drag payloads round-trip and reject foreign data", () => {
   assert.deepStrictEqual(decodePaletteDrag(palette), { componentType: "Надпись" });
   assert.strictEqual(decodePaletteDrag("{}"), undefined);
   assert.strictEqual(decodePaletteDrag("мусор"), undefined);
+});
+
+test("massEditKeys: the union of scalar/binding keys, sorted, structure keys excluded (hook 9)", () => {
+  const a = comp("a", "Надпись", "A", [0, 10], [], [
+    { key: "Заголовок", kind: "scalar", valuePreview: "x" },
+    { key: "Видимость", kind: "binding", valuePreview: "=Объект.Виден" },
+    { key: "Шрифт", kind: "composite", valuePreview: "АбсолютныйШрифт" }, // composite excluded
+    { key: "ПриНажатии", kind: "handler", valuePreview: "Обработать" }, // handler excluded
+  ]);
+  const b = comp("b", "Кнопка", "B", [10, 20], [], [
+    { key: "Заголовок", kind: "scalar", valuePreview: "y" }, // shared - not duplicated
+    { key: "Доступность", kind: "scalar", valuePreview: "Истина" },
+  ]);
+  assert.deepStrictEqual(massEditKeys([a, b]), ["Видимость", "Доступность", "Заголовок"]);
+  // Slots contribute nothing.
+  assert.deepStrictEqual(massEditKeys([slot("s", "Содержимое", [0, 5], [])]), []);
+  assert.deepStrictEqual(massEditKeys([]), []);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -127,6 +127,7 @@
   "cmd.formStructure.savePreset": "Save as block preset",
   "cmd.formStructure.insertPreset": "Insert block preset...",
   "cmd.formStructure.managePresets": "Manage block presets...",
+  "cmd.formStructure.editSelected": "Edit selected together...",
   "view.formData": "Data",
   "cmd.formData.refresh": "XBSL: refresh the data panel",
   "cmd.formData.activate": "Activate the data record",

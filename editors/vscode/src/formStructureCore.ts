@@ -58,6 +58,24 @@ export interface FormNodeAtResponse {
   error?: string;
 }
 
+// hook 9: the property keys offered when mass-editing a multi-selection - the union of the keys
+// already present on the selected components, restricted to scalar and binding properties (a
+// single shared value fits those; composites and handlers do not). Sorted for a stable pick list.
+export function massEditKeys(nodes: FormNode[]): string[] {
+  const keys = new Set<string>();
+  for (const node of nodes) {
+    if (node.kind !== "component") {
+      continue;
+    }
+    for (const prop of node.properties ?? []) {
+      if (prop.kind === "scalar" || prop.kind === "binding") {
+        keys.add(prop.key);
+      }
+    }
+  }
+  return [...keys].sort((a, b) => a.localeCompare(b, "ru"));
+}
+
 export interface EngineTextEdit {
   start: number;
   end: number;

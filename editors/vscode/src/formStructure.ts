@@ -34,6 +34,7 @@ import {
   InsertPlan,
   isContainerNode,
   isDescendantOf,
+  massEditKeys,
   nodeDescription,
   nodeIconId,
   nodeLabel,
@@ -789,6 +790,94 @@ class FormStructureProvider
     vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL: {0} block preset(s) deleted.", picks.length), 2500);
   }
 
+  // --- multi-select mass property edit (hook 9) -------------------------------------------
+
+  // Set (or clear) one property on every selected component at once. The key is picked from the
+  // union of keys already present on the selection, or typed for a new one; an empty value clears
+  // the property where present. Each write is one engine set_property/reset_property applied in
+  // sequence (node ids stay valid - a property edit does not restructure the tree), so the buffer
+  // stays in sync between writes exactly as a single edit would.
+  async editSelected(node?: FormNode, multi?: FormNode[]): Promise<void> {
+    if (!this.target || !this.index) {
+      return;
+    }
+    const selected = this.selectedNodes(node, multi).filter(
+      (n) => n.kind === "component" && n.id !== ROOT_ID
+    );
+    if (selected.length < 2) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t("XBSL: select two or more components in the structure to edit them together.")
+      );
+      return;
+    }
+    const key = await this.pickMassEditKey(selected);
+    if (!key) {
+      return;
+    }
+    const value = await vscode.window.showInputBox({
+      title: vscode.l10n.t("Edit {0} on {1} components", key, selected.length),
+      prompt: vscode.l10n.t("The new value (a literal or a =binding) – empty clears the property where it is set."),
+    });
+    if (value === undefined) {
+      return; // cancelled (an empty string is a deliberate clear)
+    }
+    const clearing = value.trim() === "";
+    // Clearing only touches nodes that actually carry the key (reset on a missing property would
+    // just error); setting applies to all. Ids are captured now - stable across property writes.
+    const targets = clearing
+      ? selected.filter((n) => (n.properties ?? []).some((p) => p.key === key))
+      : selected;
+    let ok = 0;
+    for (const target of targets) {
+      const res = clearing
+        ? await this.performOp("reset_property", { node: target.id, key })
+        : await this.performOp("set_property", { node: target.id, key, value });
+      if (res) {
+        ok++;
+      }
+    }
+    vscode.window.setStatusBarMessage(
+      clearing
+        ? vscode.l10n.t("XBSL: {0} cleared on {1} component(s).", key, ok)
+        : vscode.l10n.t("XBSL: {0} set on {1} component(s).", key, ok),
+      2500
+    );
+  }
+
+  // The property to mass-edit: a pick from the union of the selection's existing scalar/binding
+  // keys, or a typed identifier for a key none of them has yet.
+  private async pickMassEditKey(selected: FormNode[]): Promise<string | undefined> {
+    const OTHER = " other";
+    const keys = massEditKeys(selected);
+    let chosen: string | undefined;
+    if (keys.length) {
+      const items: (vscode.QuickPickItem & { value?: string })[] = keys.map((k) => ({ label: k, value: k }));
+      items.push({ label: vscode.l10n.t("$(edit) Other property..."), value: OTHER });
+      const pick = await vscode.window.showQuickPick(items, {
+        title: vscode.l10n.t("Property to edit on the selection"),
+        placeHolder: vscode.l10n.t("Pick a property (or add another)"),
+      });
+      if (!pick) {
+        return undefined;
+      }
+      chosen = pick.value;
+    } else {
+      chosen = OTHER;
+    }
+    if (chosen !== OTHER) {
+      return chosen;
+    }
+    const typed = await vscode.window.showInputBox({
+      title: vscode.l10n.t("Property name"),
+      prompt: vscode.l10n.t("The name of the property to set on the selected components."),
+      validateInput: (v) =>
+        /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/.test(v.trim())
+          ? undefined
+          : vscode.l10n.t("A property name is an identifier (letters, digits, underscore)."),
+    });
+    return typed?.trim() || undefined;
+  }
+
   // Paste the clipboard yaml as a component (the counterpart of copyYaml; works across
   // forms and projects). The target follows the palette-insertion rules; the engine
   // validates the fragment (one mapping with a Тип key) and its message is shown as is.
@@ -1073,6 +1162,9 @@ export function registerFormStructure(context: vscode.ExtensionContext): FormStr
       void provider.insertPreset(node);
     }),
     vscode.commands.registerCommand("xbsl.formStructure.managePresets", () => void provider.managePresets()),
+    vscode.commands.registerCommand("xbsl.formStructure.editSelected", (node?: FormNode, multi?: FormNode[]) => {
+      void provider.editSelected(node, multi);
+    }),
     vscode.commands.registerCommand("xbsl.formStructure.focusSubtree", (node?: FormNode) => {
       const target = provider.selectedNodes(node)[0];
       if (target && target.kind === "component") {

@@ -127,6 +127,7 @@
   "cmd.formStructure.savePreset": "Сохранить как пресет блока",
   "cmd.formStructure.insertPreset": "Вставить пресет блока...",
   "cmd.formStructure.managePresets": "Управление пресетами блоков...",
+  "cmd.formStructure.editSelected": "Править выделенные вместе...",
   "view.formData": "Данные",
   "cmd.formData.refresh": "XBSL: обновить панель данных",
   "cmd.formData.activate": "Активировать запись данных",
