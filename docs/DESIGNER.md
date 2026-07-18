@@ -226,6 +226,5 @@ the extension together.
   https://dartcode.org/docs/refactorings-and-code-fixes/
 - Webflow Navigator / style labels – DnD expectations, override indicators:
   https://university.webflow.com/lesson/navigator
-- VS Code Tree View / Webview APIs:
-  https://code.visualstudio.com/api/guides/tree-view,
-  https://code.visualstudio.com/api/extension-guides/webview
+- VS Code APIs: [Tree View](https://code.visualstudio.com/api/guides/tree-view) and
+  [Webview](https://code.visualstudio.com/api/extension-guides/webview)
