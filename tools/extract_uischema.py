@@ -553,7 +553,10 @@ def main() -> int:
     schema = build_schema(docs.type_pages(version), version)
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uischema.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(schema, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # newline="\n": keep the generated file LF on every platform (git-friendly data).
+    out.write_text(
+        json.dumps(schema, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
     comps = schema["components"]
     props = [p for c in comps.values() for p in c["props"].values()]
