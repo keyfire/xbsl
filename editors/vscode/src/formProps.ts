@@ -244,11 +244,13 @@ ${cspMeta(nonce)}
   let model = null;
   let sticky = null;
   let recentColors = [];
-  // While a row is focused it must not jump between the "set" and "all" sections (setting Авto /
+  // While a row is focused it must not jump between the "set" and "all" sections (setting Авто /
   // resetting a value changes its section, and reflowing a focused field mid-edit is jarring). We
-  // pin the focused row to the section it is in; the move is deferred until focus leaves it.
+  // pin the focused row to the section AND position it is in; the move is deferred until focus
+  // leaves it. While pinned the row shows ONLY in its section (never a repeat in the other).
   let pinnedKey = null;
   let pinnedSection = null;
+  let pinnedIndex = 0;
   const pane = document.getElementById("pane");
   const titleBox = document.getElementById("title");
   const searchInput = document.getElementById("search");
@@ -584,8 +586,8 @@ ${cspMeta(nonce)}
   function isBinding(v) { return typeof v === "string" && v.trim().charAt(0) === "="; }
 
   // Rows rendered through the literal/binding cell (single-line text, number, binding) carry the
-  // yaml-jump button in their value line, next to the field - the caption must not add a second one.
-  function ownsInlineGoto(row) {
+  // reset button in their value line, next to the field - the caption must not add a second one.
+  function usesInlineCell(row) {
     const c = row.editor.control;
     return c === "binding" || c === "number" || (c === "text" && !row.editor.multiline);
   }
@@ -718,10 +720,9 @@ ${cspMeta(nonce)}
     return b;
   }
 
-  // The value-line action buttons for a literal/binding cell (hook 6): the yaml jump and the
-  // reset live next to the field, so the caption stays just the dot and the name.
+  // The value-line action of a literal/binding cell (hook 6): only the reset sits by the field.
+  // The yaml-jump {} stays in the caption for every row (its place is the same everywhere).
   function inlineActions(row, line) {
-    if (row.set && row.propSpan) { line.appendChild(gotoButton(row)); }
     if (row.set && row.editor.control !== "readonly") { line.appendChild(resetButton(row)); }
   }
 
@@ -763,16 +764,14 @@ ${cspMeta(nonce)}
     cap.appendChild(name);
     if (row.editor.control === "readonly") { cap.appendChild(el("span", "ro", "· " + L.readonly)); }
     cap.appendChild(el("span", "sp"));
-    // The yaml jump and reset live in the caption - EXCEPT for the literal/binding cell (hook 6),
-    // which carries them in its value line next to the field (see inlineActions).
-    const inlineButtons = ownsInlineGoto(row);
-    if (row.set && row.propSpan && row.editor.control !== "readonly" && !inlineButtons) {
+    // The yaml jump {} lives in the caption for every editable set row - one fixed place.
+    if (row.set && row.propSpan && row.editor.control !== "readonly") {
       cap.appendChild(gotoButton(row));
     }
     // The reset lives in the caption too - but not for read-only rows (nothing to reset), the
     // inline-cell rows (their reset sits by the field), or rows whose own control already clears
     // the value (tristate/enum/handler - the reset would just duplicate their auto/none choice).
-    if (row.set && row.editor.control !== "readonly" && !inlineButtons && !hasAutoAffordance(row)) {
+    if (row.set && row.editor.control !== "readonly" && !usesInlineCell(row) && !hasAutoAffordance(row)) {
       cap.appendChild(resetButton(row));
     }
     div.appendChild(cap);
@@ -781,12 +780,13 @@ ${cspMeta(nonce)}
     div.addEventListener("focusin", () => {
       post({ type: "sticky", key: row.key });
       markSticky(row.key);
-      // Pin this row to the section it is shown in, so an edit that changes its set-state does
-      // not fling it to the other section while the developer is still on it. Only in component
-      // mode (the metadata mode is a flat list with no sections - nothing to pin).
+      // Pin this row to the section AND position it is shown in, so an edit that changes its
+      // set-state does not fling it elsewhere while the developer is still on it. Component mode
+      // only (the metadata mode is a flat list with no sections - nothing to pin).
       const sec = div.closest("details.sec");
       pinnedKey = sec ? row.key : null;
       pinnedSection = sec ? sec.dataset.sec : null;
+      pinnedIndex = sec ? Array.prototype.indexOf.call(sec.querySelectorAll(".row"), div) : 0;
     });
     return div;
   }
@@ -867,10 +867,21 @@ ${cspMeta(nonce)}
     const titles = { set: L.secSet, events: L.secEvents, all: L.secAll };
     for (const section of model.sections) {
       let rows = section.rows;
-      // Keep a pinned row in its section even after an edit dropped it from the model's list here.
-      if (pinnedKey && pinnedSection === section.id && !rows.some((r) => r.key === pinnedKey)) {
-        const pinnedRow = rowInModel(pinnedKey);
-        if (pinnedRow) { rows = rows.concat([pinnedRow]); }
+      if (pinnedKey) {
+        if (pinnedSection === section.id) {
+          // Keep the pinned row here at its original position, even after an edit dropped it from
+          // the model's list for this section (a reset removes it from "set").
+          if (!rows.some((r) => r.key === pinnedKey)) {
+            const pinnedRow = rowInModel(pinnedKey);
+            if (pinnedRow) {
+              const at = Math.min(Math.max(pinnedIndex, 0), rows.length);
+              rows = rows.slice(0, at).concat([pinnedRow], rows.slice(at));
+            }
+          }
+        } else {
+          // ...and NOT in any other section, so the focused field never appears to jump or double.
+          rows = rows.filter((r) => r.key !== pinnedKey);
+        }
       }
       if (!rows.length) { continue; }
       const details = el("details", "sec");
