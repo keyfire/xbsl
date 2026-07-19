@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import textwrap
 from pathlib import Path
 
 from xbsl import __version__, baseline, dataset, engine, i18n, report
@@ -33,10 +34,47 @@ def discover(paths: list[str]) -> list[Path]:
     return uniq
 
 
+_SERVER_HELP = {
+    "lsp": "сервер LSP для редактора",
+    "mcp": "сервер MCP для агента",
+    "web": "веб-панель",
+}
+
+
+def _commands_help() -> str:
+    """Список команд для справки.
+
+    Команды верхнего уровня разбираются вручную в main(): режим по умолчанию принимает
+    произвольные пути, поэтому argparse не отличит "xbsl Форма.xbsl" от имени команды и сам такой
+    список не построит. Имена берутся из тех же кортежей, что и диспетчеризация, – разойтись со
+    списком они не могут.
+    """
+    entries = [("lint <пути>", "проверить исходники – то же, что без команды")]
+    entries += [(name, _SERVER_HELP[name]) for name in _SERVER_COMMANDS]
+    entries += [
+        ("templates", "шаблоны кода: list, export, import, save"),
+        ("self-update", "обновить xbsl распаковкой колеса с PyPI"),
+    ]
+    lines = ["команды:"]
+    lines += [f"  {name:<16}{description}" for name, description in entries]
+    lines += ["", "  скаффолдинг метаданных (создание и правка исходников):"]
+    # break_on_hyphens=False: without it the wrapper splits names like add-subsystem in half.
+    lines += textwrap.wrap(", ".join(_META_COMMANDS), width=74, break_on_hyphens=False,
+                           initial_indent="    ", subsequent_indent="    ")
+    lines += ["", "Опции команды: xbsl <команда> --help. Опции выше относятся к режиму проверки."]
+    return "\n".join(lines)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xbsl",
-        description="Линтер исходников 1С:Элемент (пары .yaml/.xbsl).",
+        usage="%(prog)s [пути] [опции]        (без команды: проверка исходников)\n"
+              "       %(prog)s <команда> [опции]",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        description="Линтер исходников 1С:Элемент (пары .yaml/.xbsl).\n\n"
+                    "Без команды проверяет указанные пути – это режим по умолчанию.\n"
+                    "Команды ниже адресуют остальные части инструментария.",
+        epilog=_commands_help(),
     )
     parser.add_argument("paths", nargs="*", default=["."], help="файлы или каталоги для проверки")
     parser.add_argument(
