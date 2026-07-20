@@ -1,6 +1,10 @@
-# Руководство пользователя xbsl
-
-[English](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md) · **Русский**
+---
+title: "Руководство пользователя xbsl"
+description: "Полное руководство по инструментарию — установка, флаги CLI, настройка CI, механизм baseline и скаффолдинг метаданных."
+sidebar:
+  label: Руководство
+  order: 2
+---
 
 Полное руководство по инструментарию. [README](https://github.com/keyfire/xbsl/blob/main/README.ru.md) –
 короткая обзорная экскурсия; всё, на что он ссылается "подробнее", живёт здесь. Полный перечень

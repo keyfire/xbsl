@@ -1,6 +1,6 @@
-# Публикация сайта документации (mkdocs.yml) на GitHub Pages. Источник Pages в настройках
-# репозитория должен быть "GitHub Actions" (Settings -> Pages -> Source). Сборка проверяется
-# тем же mkdocs build --strict, что и локально (requirements-docs.txt).
+# Публикация сайта документации (blume.config.ts) на GitHub Pages. Источник Pages в
+# настройках репозитория должен быть "GitHub Actions" (Settings -> Pages -> Source).
+# Сборка проверяется тем же `npx blume build`, что и локально; вывод — в dist/.
 name: Docs
 
 on:
@@ -8,8 +8,9 @@ on:
     branches: [main]
     paths:
       - "docs/**"
-      - "mkdocs.yml"
-      - "requirements-docs.txt"
+      - "blume.config.ts"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/docs.yml"
   workflow_dispatch:
 
@@ -28,17 +29,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          # Полная история нужна для дат "последнее изменение" (lastModified в blume.config.ts).
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
       - name: Install
-        run: pip install -r requirements-docs.txt
-      - name: Build (strict)
-        run: mkdocs build --strict
+        run: npm ci
+      - name: Build
+        run: npx blume build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: site
+          path: dist
 
   deploy:
     needs: build

@@ -1,6 +1,10 @@
-# Visual form designer
-
-**English** · [Русский](https://github.com/keyfire/xbsl/blob/main/docs/DESIGNER.ru.md)
+---
+title: "Visual form designer"
+description: "The in-editor visual designer for 1C:Element interface components — structure, palette, properties, and binding panels over the .yaml source."
+sidebar:
+  label: Visual designer
+  order: 4
+---
 
 The extension includes a visual designer for 1C:Element interface components
 (`ВидЭлемента: КомпонентИнтерфейса` – forms and custom components). It is a set of panels
@@ -21,7 +25,7 @@ Two things to keep in mind:
 - The **panels and text edits work anywhere.** Selecting nodes, moving and wrapping
   components, copy/paste and the wireframe all rely only on the yaml.
 - The **palette and the typed property editors need the language dataset** (the ui schema,
-  generated from your own 1C:Element distribution – see [Language data](GUIDE.md#language-data))
+  generated from your own 1C:Element distribution – see [Language data](/GUIDE#language-data))
   and the **LSP server** (`pip install "xbsl[lsp]"`). Without them the structure tree and edits
   still work; the palette and typed editors degrade to a hint instead of failing.
 
@@ -147,7 +151,7 @@ with a message, so browsing such a form never risks a stray write.
 The same operations are available outside the UI: the CLI (`xbsl form-tree`, `xbsl form-edit`),
 the MCP tools (`meta_component_tree`, `meta_add_component`, `meta_move_component`, ...) and the
 LSP requests (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). See the
-[Guide](GUIDE.md#metadata-scaffolding).
+[Guide](/GUIDE#metadata-scaffolding).
 
 ## Provenance
 

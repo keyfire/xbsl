@@ -1,6 +1,10 @@
-# XBSL (1C:Element)
-
-**English** · [Русский](https://github.com/keyfire/xbsl/blob/main/docs/index.ru.md)
+---
+title: "XBSL (1C:Element)"
+description: "A toolkit for 1C:Element: a linter with autofixes, an LSP server, documentation search, and metadata scaffolding — plus a VS Code extension on the same engine."
+sidebar:
+  label: Home
+  order: 1
+---
 
 XBSL is a toolkit for **1C:Element** projects written as `Name.yaml` (element description) and
 `Name.xbsl` (code module) pairs. It gives fast local feedback ahead of the slow server-side
@@ -38,7 +42,7 @@ ships as a Python engine and a VS Code extension built on top of it.
 
 Language data (keywords, the stdlib type catalog, the configuration metamodel) is generated
 from your own 1C:Element distribution and is not bundled with the project – see
-[Language data](GUIDE.md#language-data) in the guide.
+[Language data](/GUIDE#language-data) in the guide.
 
 Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
 respective owners – see [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).

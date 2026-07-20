@@ -1,6 +1,10 @@
-# xbsl user guide
-
-**English** · [Русский](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md)
+---
+title: "xbsl user guide"
+description: "The complete guide to the toolkit — installation, CLI flags, CI setup, the baseline mechanism, and metadata scaffolding."
+sidebar:
+  label: Guide
+  order: 2
+---
 
 The complete guide to the toolkit. The [README](https://github.com/keyfire/xbsl/blob/main/README.md)
 is the short tour; everything it links to in depth lives here. The full rule list is a separate
