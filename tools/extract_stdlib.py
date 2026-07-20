@@ -160,6 +160,31 @@ def page_members(raw: str) -> tuple[set[str], set[str]]:
     return props, methods
 
 
+def page_bases(raw: str) -> list[str]:
+    """Base types of a page, from its "Иерархия типа" section.
+
+    The section lists the WHOLE ancestor chain (`Исключение, Объект` for an exception),
+    so nothing has to be resolved afterwards. Names are taken unqualified: the page prints
+    them as links, and a qualified `Стд::Интерфейс::Компонент` only shows up in the plain
+    text of the section. "Дочерние типы" are a separate subsection and are not bases -
+    the reason the search stops at the first heading after the bases list.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return []
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Иерархия типа"):
+            continue
+        head, _, _rest = section.partition("Дочерние типы")
+        bases: list[str] = []
+        for m in _LINK_RE.finditer(head):
+            name = _plain_text(m.group(1))
+            if _PROP_NAME_RE.match(name) and name not in bases:
+                bases.append(name)
+        return bases
+    return []
+
+
 # The signature in the code block after a method's H3 heading: `Имя(Параметры): ТипВозврата`.
 _SIG_CODE_RE = re.compile(r"<pre class=\"highlight\"><code>(.*?)</code></pre>", re.S)
 # The return type root: the head before a generic bracket/alternative/nullable; allows
@@ -270,7 +295,7 @@ def extract(
     dist: Path,
 ) -> tuple[
     set[str], dict[str, set[str]], dict[str, set[str]], dict[str, dict[str, set[str]]],
-    set[str], dict[str, set[str]], dict[str, dict[str, set[str]]],
+    set[str], dict[str, set[str]], dict[str, dict[str, set[str]]], dict[str, list[str]],
 ]:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members."""
     car = _distro.find_car(dist)
@@ -282,6 +307,7 @@ def extract(
     managers: dict[str, set[str]] = {}
     facets: dict[str, dict[str, set[str]]] = {}
     returns: dict[str, dict[str, str]] = {}
+    bases: dict[str, list[str]] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -298,6 +324,12 @@ def extract(
             # Type members (dot access) under BOTH name forms - to complete globals and types
             # (e.g. КонтекстДоступа./AccessContext., Массив./Array.). "::" (namespaced) names are skipped.
             props, methods = page_members(raw)
+            # Иерархия: страница печатает ВСЮ цепочку предков, разворачивать нечего.
+            page_base_list = page_bases(raw)
+            if page_base_list:
+                for key in (title if _PROP_NAME_RE.match(title) else "", eng or ""):
+                    if key:
+                        bases.setdefault(key, page_base_list)
             # Global context: the properties and methods of the Стд page itself and of its
             # PACKAGE pages (Стд::Интерфейс, Стд::Данные... - a top-level directory without
             # the _ru suffix) are available in code by bare name (ПерейтиПоСсылке, Сообщить,
@@ -357,7 +389,7 @@ def extract(
             if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
-    return names, members, components, types, globals_, managers, facets, returns
+    return names, members, components, types, globals_, managers, facets, returns, bases
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -380,7 +412,7 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    names, members, components, types, globals_, managers, facets, returns = extract(dist)
+    names, members, components, types, globals_, managers, facets, returns, bases = extract(dist)
     data = {
         "meta": {
             "element_version": version,
@@ -405,6 +437,9 @@ def main(argv=None) -> int:
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
         # Result type roots of members (page signatures: method returns and property types).
         "member_types": {k: dict(sorted(v.items())) for k, v in sorted(returns.items())},
+        # Type hierarchy: the WHOLE ancestor chain a page prints under "Иерархия типа", so a
+        # check needs no resolution of its own - `"Исключение" in bases[type]` decides.
+        "bases": {k: v for k, v in sorted(bases.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"

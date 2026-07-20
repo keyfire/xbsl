@@ -171,13 +171,31 @@ SEVERITY_OVERRIDES: dict[str, Severity] = {}
 _LEVEL_OFF = "off"
 
 
+#: Whether plugin overrides have been applied to a COMPLETE registry (see _ensure_overrides).
+_overrides_applied = False
+
+
+def _ensure_overrides() -> None:
+    """Apply the overrides if the import-time attempt happened on a partial registry.
+
+    Importing a single rule module (`from xbsl.rules.<name> import ...`) starts the rules
+    package, whose first module imports the engine - so the engine's own import-time call
+    sees only the rules registered so far and cannot tell a typo from a not-yet-imported
+    rule. In that case the call is deferred to here, where the registry is complete.
+    """
+    if not _overrides_applied:
+        apply_severity_overrides()
+
+
 def apply_severity_overrides() -> None:
     """Apply plugin severity overrides to the registry (idempotent, called on import).
 
     An unknown rule id or level raises PluginError: a silently ignored override is a typo
     nobody notices, and the linter must not pretend the project's levels are in force.
     """
+    global _overrides_applied
     overrides = _plugins.severity_overrides()
+    _overrides_applied = True
     if not overrides:
         return
     by_id = {info.id: i for i, info in enumerate(RULES)}
@@ -233,6 +251,7 @@ def active_rules(
     ignore: set[str] | None = None,
     enable: set[str] | None = None,
 ) -> list[RuleInfo]:
+    _ensure_overrides()
     return [r for r in RULES if _is_selected(r, select, ignore, enable)]
 
 
@@ -415,5 +434,11 @@ from xbsl import plugins as _plugins  # noqa: E402
 
 # Rules of external packages come after the built-in ones, to keep the registry order stable.
 _plugins.load_rules()
-# Severity overrides come last: they may target both built-in and plugin rules.
-apply_severity_overrides()
+# Severity overrides come last: they may target both built-in and plugin rules. When the rules
+# package is still being imported (someone imported a single rule module, so this module got a
+# partially initialized package above), the registry is incomplete and an override could not be
+# told from a typo - then it is applied later, on the first active_rules().
+try:
+    apply_severity_overrides()
+except _plugins.PluginError:
+    _overrides_applied = False

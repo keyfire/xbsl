@@ -298,9 +298,24 @@ MESSAGES_STATIC = {
 }
 i18n.register(MESSAGES_STATIC)
 
-# The roots of the type hierarchy: every type inherits them, so their own member set is the
-# bare object protocol. Judging anything against it would report every real member as unknown.
-_HIERARCHY_ROOTS = frozenset({"Объект", "Одиночка", "Object", "Singleton"})
+_roots_cache: frozenset[str] | None = None
+
+
+def _hierarchy_roots() -> frozenset[str]:
+    """Types whose whole member set is the bare object protocol - nothing to judge by.
+
+    `Объект` and `Одиночка` sit at the top of the hierarchy and carry only ВСтроку /
+    ПолучитьТип / Представление, so any access through them would look unknown. Computed
+    from the catalog rather than listed by hand: a type that gains a member stops being a
+    blind spot on its own, and a new empty base type becomes one without a code change.
+    """
+    global _roots_cache
+    if _roots_cache is None:
+        _roots_cache = frozenset(
+            name for name, members in _stdlib_members().items()
+            if not (members - _COMMON_MEMBERS)
+        )
+    return _roots_cache
 
 # `Имя: X` anywhere in a yaml - an object name, a form attribute, a component, a column. Any of
 # them becomes a bare name in the paired module and would shadow a same-named stdlib type.
@@ -409,7 +424,7 @@ def _static_mapper(source: SourceFile) -> dict | None:
     module, errors = parse(source)
     if errors:
         return None
-    shadow = _module_shadow(module) | _IMPLICIT | _HIERARCHY_ROOTS
+    shadow = _module_shadow(module) | _IMPLICIT | _hierarchy_roots()
     methods: list[P.Method] = []
     for m in module.members:
         if isinstance(m, P.Method):

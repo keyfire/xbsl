@@ -173,3 +173,28 @@ def test_cli_where_shows_root(tmp_path, capsys):
     assert str(root) in out
     assert "--data-dir" in out
     assert "1.0.0" in out  # the default version from index.json
+
+
+def test_importing_a_single_rule_module_does_not_break_overrides():
+    """Прямой импорт модуля правил не должен ронять загрузку.
+
+    Такой импорт начинает пакет правил, первый модуль которого тянет движок, - и
+    импортный вызов переопределений видит НЕПОЛНЫЙ реестр, где ещё не отличить
+    опечатку от неимпортированного правила. Тогда применение откладывается до
+    первого active_rules(); раньше это падало с PluginError у любого, кто
+    импортировал отдельное правило (тесты, скрипты, редакторские интеграции).
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "from xbsl.rules.catch_exceptions import _stdlib_sets\n"
+        "from xbsl import engine\n"
+        "import xbsl.rules\n"
+        "print(len(engine.active_rules()) > 0)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8"
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip().endswith("True")
