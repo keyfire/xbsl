@@ -58,7 +58,9 @@ _H3_RE = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S)
 _LINK_RE = re.compile(r"<a[^>]*>(.*?)</a>", re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _JUNK_RE = re.compile(r"[\x00-\x1f​﻿]")  # control characters and Docusaurus anchors
-_PROP_NAME_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*$")
+# Underscores are part of member names: the constant-style properties (Символы.НОВАЯ_СТРОКА,
+# ВОЗВРАТ_КАРЕТКИ, НЕРАЗРЫВНЫЙ_ПРОБЕЛ) are documented and must not be dropped.
+_PROP_NAME_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9_]*$")
 # An entity type facet: "Пользователи.Объект", "ДвоичныйОбъект.Ссылка" - the record and
 # reference members live on these pages, not on the type's own (manager) page.
 _FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*$")
