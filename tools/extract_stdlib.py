@@ -23,9 +23,14 @@ indisputable part is kept.
 
 From all Std pages type_members is built: type name -> its members for dot completion,
 properties and methods SEPARATELY (different icons in the completion list, methods get parens).
-Only a type's OWN members are stored (meta.members == "own"); the "Иерархия типа" section gives
-the whole ancestor chain in `bases`, and the loader (dataset._expand_inherited) rebuilds the full
-set by adding every ancestor's own - so the object protocol is not repeated on all 2000 types.
+Two kinds of redundancy are removed at extraction and restored on load, so the file stays small
+without the consumers changing:
+- only a type's OWN members are stored (meta.members == "own"); the "Иерархия типа" section gives
+  the whole ancestor chain in `bases`, and the loader rebuilds the full set by adding every
+  ancestor's own - the object protocol is not repeated on all 2000 types;
+- members, bases and facets are stored under ONE name form (meta.bilingual_keys == "expand"); the
+  loader adds the English key of each from terms.json, so a type is not stored twice (Запрос/Query).
+Both are done by dataset._add_english_keys + dataset._expand_inherited.
 
 The result is xbsl/data/element/<version>/stdlib.json:
 { "names": [...], "object_members": {"Справочник": [...], ...},
@@ -327,12 +332,14 @@ def extract(
             # Type members (dot access) under BOTH name forms - to complete globals and types
             # (e.g. КонтекстДоступа./AccessContext., Массив./Array.). "::" (namespaced) names are skipped.
             props, methods = page_members(raw)
+            # One key per type - the Russian title (or the Latin one for a type that has no
+            # Russian name). The English spelling is not stored: the loader adds it by terms.json,
+            # which pairs the two forms. So members, bases and facets are kept once, not twice.
+            key = (title if _PROP_NAME_RE.match(title) else "") or eng or ""
             # Иерархия: страница печатает ВСЮ цепочку предков, разворачивать нечего.
             page_base_list = page_bases(raw)
-            if page_base_list:
-                for key in (title if _PROP_NAME_RE.match(title) else "", eng or ""):
-                    if key:
-                        bases.setdefault(key, page_base_list)
+            if page_base_list and key:
+                bases.setdefault(key, page_base_list)
             # Global context: the properties and methods of the Стд page itself and of its
             # PACKAGE pages (Стд::Интерфейс, Стд::Данные... - a top-level directory without
             # the _ru suffix) are available in code by bare name (ПерейтиПоСсылке, Сообщить,
@@ -344,25 +351,21 @@ def extract(
                 globals_ |= package_members(raw)
             if props or methods:
                 rets = page_member_types(raw)
-                for key in (title if _PROP_NAME_RE.match(title) else "", eng or ""):
-                    if not key:
-                        continue
+                if key:
                     slot = types.setdefault(key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
                     if rets:
                         returns.setdefault(key, {}).update(rets)
                 # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record
-                # and reference members go into a separate dictionary, under both name forms.
-                eng_facet = _english_facet_from_path(n)
-                for key in (title if _FACET_TITLE_RE.match(title) else "", eng_facet or ""):
-                    if not key:
-                        continue
-                    slot = facets.setdefault(key, {"properties": set(), "methods": set()})
+                # and reference members go into a separate dictionary, under the Russian form.
+                facet_key = (title if _FACET_TITLE_RE.match(title) else "") or _english_facet_from_path(n)
+                if facet_key:
+                    slot = facets.setdefault(facet_key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
                     if rets:
-                        returns.setdefault(key, {}).update(rets)
+                        returns.setdefault(facet_key, {}).update(rets)
             got = component_props(n, raw)
             if got is not None:
                 comp, props = got
@@ -463,6 +466,9 @@ def main(argv=None) -> int:
             # The loader expands type_members/member_types only when this marker is present -
             # older full datasets (without it) are read as is.
             "members": "own",
+            # Members/bases/facets are stored under one name form; the loader adds the English
+            # keys from terms.json. Older datasets without this marker carry both forms already.
+            "bilingual_keys": "expand",
             "note": "двуязычные имена символов stdlib (русское из title + английское из пути)"
                     " + порождаемые члены по видам объектов (шаблонные страницы)"
                     " + встроенные свойства компонентов интерфейса (страницы наследников"

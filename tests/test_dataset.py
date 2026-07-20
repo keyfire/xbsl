@@ -74,3 +74,40 @@ def test_expand_inherited_leaves_full_datasets_untouched():
         "type_members": {"Наследник": {"properties": ["Своё"]}},
     }
     assert dataset._expand_inherited(full_form)["type_members"] == {"Наследник": {"properties": ["Своё"]}}
+
+
+# --- bilingual key expansion (dataset._add_english_keys) -----------------------------------
+
+def _ru_only_dataset():
+    """A catalog stored under Russian keys only, marked for English expansion."""
+    return {
+        "meta": {"members": "own", "bilingual_keys": "expand"},
+        "bases": {"Запрос": ["Объект"], "Объект": []},
+        "type_members": {"Запрос": {"methods": ["Выполнить"]}, "Объект": {"methods": ["ВСтроку"]}},
+        "member_types": {"Запрос": {"Выполнить": "РезультатЗапроса"}},
+    }
+
+
+PAIRS = {"Запрос": "Query", "Объект": "Object", "Выполнить": "Execute"}
+
+
+def test_add_english_keys_copies_the_russian_entry():
+    data = dataset._add_english_keys(_ru_only_dataset(), PAIRS)
+    assert data["type_members"]["Query"] == data["type_members"]["Запрос"]
+    assert data["bases"]["Query"] == ["Объект"]  # bases stay Russian - they are values, not keys
+    assert data["member_types"]["Query"] == {"Выполнить": "РезультатЗапроса"}
+
+
+def test_english_type_inherits_like_the_russian_one():
+    # the English keys are added BEFORE the inheritance expansion, so Query inherits too
+    full = dataset._expand_inherited(dataset._add_english_keys(_ru_only_dataset(), PAIRS))
+    assert set(full["type_members"]["Query"]["methods"]) == {"Выполнить", "ВСтроку"}
+    assert full["type_members"]["Query"] == full["type_members"]["Запрос"]
+
+
+def test_bilingual_expansion_skipped_without_marker_or_terms():
+    no_marker = _ru_only_dataset()
+    no_marker["meta"].pop("bilingual_keys")
+    assert "Query" not in dataset._add_english_keys(no_marker, PAIRS)["type_members"]
+    # marker present but terms.json absent (empty pairs) - Russian still works, no crash
+    assert "Query" not in dataset._add_english_keys(_ru_only_dataset(), {})["type_members"]

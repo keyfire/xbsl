@@ -133,6 +133,26 @@ def resolve_version(override: str | None = None) -> str:
 
 
 # The root is part of the cache key: otherwise switching roots would return data read from the old one.
+def _add_english_keys(data: dict, pairs: dict) -> dict:
+    """Add the English key of every type/facet, copying the Russian entry.
+
+    The catalog stores members, bases and facets once - under the Russian name (or the Latin
+    one for a type that has no Russian). `pairs` is terms.json's Russian->English map (types +
+    facets); the English key gets the same value, so a type is not written twice. Runs before
+    the inheritance expansion, so the English types then inherit exactly like the Russian ones.
+    """
+    if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
+        return data
+    for section in ("type_members", "member_types", "bases"):
+        entries = data.get(section)
+        if not entries:
+            continue
+        for ru, en in pairs.items():
+            if ru in entries and en not in entries:
+                entries[en] = entries[ru]
+    return data
+
+
 def _expand_inherited(data: dict) -> dict:
     """Re-expand the own-members form of stdlib.json into full member sets.
 
@@ -173,13 +193,27 @@ def _expand_inherited(data: dict) -> dict:
     return data
 
 
+def _stdlib_pairs(root: str, version: str) -> dict:
+    """terms.json's Russian->English pairs (types + facets), or empty if the file is absent."""
+    try:
+        terms = _load_cached(root, version, "terms.json")
+    except DatasetError:
+        return {}
+    return {**(terms.get("types") or {}), **(terms.get("facets") or {})}
+
+
 @lru_cache(maxsize=None)
 def _load_cached(root: str, version: str, name: str) -> dict:
     path = Path(root) / version / name
     if not path.exists():
         raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
     data = json.loads(path.read_text(encoding="utf-8"))
-    return _expand_inherited(data) if name == "stdlib.json" else data
+    if name == "stdlib.json":
+        # English keys first (so the English types then inherit like the Russian ones),
+        # then the inheritance expansion.
+        data = _add_english_keys(data, _stdlib_pairs(root, version))
+        data = _expand_inherited(data)
+    return data
 
 
 def load_json(name: str, version: str | None = None) -> dict:
