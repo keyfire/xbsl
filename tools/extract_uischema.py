@@ -537,7 +537,7 @@ def build_schema(pages: list[dict], element_version: str) -> dict:
     }
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(
         description="Извлечь ui-схему компонентов интерфейса из датасета документации"
     )
@@ -547,7 +547,7 @@ def main() -> int:
     )
     ap.add_argument("--out", help="переопределить путь uischema.json")
     _distro.add_data_dir_arg(ap)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     _distro.set_data_root(args.data_dir)
     root = _distro.data_root()
     dataset.set_data_root(root)  # read the docs from the same root the output goes to

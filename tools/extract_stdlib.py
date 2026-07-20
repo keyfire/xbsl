@@ -365,14 +365,14 @@ def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
     return {kind: sorted(members[kind]) for kind in ("properties", "methods") if members.get(kind)}
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Извлечь каталог типов stdlib Элемента из доков")
     ap.add_argument("--dist", required=True, help="каталог дистрибутива 1С:Элемент")
     ap.add_argument("--element-version", help="версия Элемента (если не определяется из дистрибутива)")
     ap.add_argument("--no-default", action="store_true", help="не делать эту версию версией по умолчанию")
     ap.add_argument("--out", help="переопределить путь stdlib.json")
     _distro.add_data_dir_arg(ap)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     _distro.set_data_root(args.data_dir)
 
     dist = Path(args.dist)

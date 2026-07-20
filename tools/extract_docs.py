@@ -446,14 +446,14 @@ def _assert_fts5(con: sqlite3.Connection) -> None:
         raise SystemExit(f"В этой сборке SQLite нет FTS5: {e}")
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Извлечь документацию Элемента из дистрибутива в docs.sqlite")
     ap.add_argument("--dist", required=True, help="каталог дистрибутива 1С:Элемент (с .car сервера-с-IDE)")
     ap.add_argument("--element-version", help="версия Элемента (если не из дистрибутива)")
     ap.add_argument("--no-default", action="store_true", help="не делать эту версию версией по умолчанию")
     ap.add_argument("--out", help="переопределить путь docs.sqlite")
     _distro.add_data_dir_arg(ap)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     _distro.set_data_root(args.data_dir)
 
     dist = Path(args.dist)

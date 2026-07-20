@@ -122,12 +122,12 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     return {"types": types, "facets": facets, "properties": properties, "enums": enums}, conflicts
 
 
-def main() -> None:
+def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dist", required=True, help="каталог дистрибутива 1С:Элемент")
     ap.add_argument("--element-version", help="версия данных (по умолчанию определяется по дистрибутиву)")
     _distro.add_data_dir_arg(ap)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     dist = Path(args.dist)
     version = _distro.detect_version(dist, args.element_version)

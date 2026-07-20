@@ -150,7 +150,7 @@ def parse_grammar(path: Path) -> tuple[dict[str, dict], list[str]]:
     return keywords, symbols
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="Извлечь языковые данные XBSL из грамматики Элемента")
     ap.add_argument("--dist", help="каталог дистрибутива 1С:Элемент")
     ap.add_argument("--grammar-dir", help="каталог с InternalBsl.g и InternalBsl.tokens")
@@ -158,7 +158,7 @@ def main() -> int:
     ap.add_argument("--no-default", action="store_true", help="не делать эту версию версией по умолчанию")
     ap.add_argument("--out", help="переопределить путь language.json")
     _distro.add_data_dir_arg(ap)
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
     _distro.set_data_root(args.data_dir)
 
     dist = Path(args.dist) if args.dist else None
