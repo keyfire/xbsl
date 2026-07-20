@@ -189,3 +189,22 @@ def test_check_mode_help_follows_lang_flag(capsys):
     with pytest.raises(SystemExit):
         cli.main(["--lang", "ru", "--help"])
     assert "Линтер исходников" in capsys.readouterr().out
+
+
+def test_scaffold_help_follows_env_language(monkeypatch, capsys):
+    """Scaffolding and templates take no --lang; their help language comes from XBSL_LANG (or the
+    locale) via current_lang(). Set the env to en and check a subcommand's help is English. No
+    Element data needed - --help exits before any scaffold work. _restore_lang puts ru back."""
+    from xbsl import cli
+
+    monkeypatch.setenv("XBSL_LANG", "en")
+    i18n.set_lang(None)  # unpin, so current_lang() reads the env
+
+    with pytest.raises(SystemExit) as info:
+        cli.main(["add-field", "--help"])
+    assert info.value.code == 0
+    assert "tabular section name" in capsys.readouterr().out
+
+    with pytest.raises(SystemExit):
+        cli.main(["templates", "--help"])
+    assert "code templates" in capsys.readouterr().out

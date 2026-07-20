@@ -250,6 +250,323 @@ _CORE_MESSAGES = {
         "ru": "Опции команды: xbsl <команда> --help. Опции выше относятся к режиму проверки.",
         "en": "Command options: xbsl <command> --help. The options above apply to the check mode.",
     },
+    # -- help: self-update, templates and scaffolding sub-parsers (cli.py) --
+    # These take no --lang; the language comes from XBSL_LANG / locale via current_lang().
+    # XBSL identifiers stay Russian (they are the actual spellings); literal braces are doubled.
+    "cli.help.selfupdate-version": {
+        "ru": "целевая версия (по умолчанию – последняя с PyPI)",
+        "en": "target version (default: the latest from PyPI)",
+    },
+    "cli.help.tpl.description": {
+        "ru": "шаблоны кода: встроенный набор и файл пользователя (формат выгрузки EDT)",
+        "en": "code templates: the builtin set and the user's file (EDT export format)",
+    },
+    "cli.help.tpl.list": {
+        "ru": "перечислить шаблоны (встроенные и пользовательские)",
+        "en": "list templates (builtin and user)",
+    },
+    "cli.help.tpl.export": {
+        "ru": "выгрузить шаблоны в файл формата EDT",
+        "en": "export templates to an EDT-format file",
+    },
+    "cli.help.tpl.export-output": {
+        "ru": "куда писать выгрузку",
+        "en": "where to write the export",
+    },
+    "cli.help.tpl.export-custom-only": {
+        "ru": "только шаблоны пользователя, без встроенных",
+        "en": "user templates only, without the builtin ones",
+    },
+    "cli.help.tpl.import": {
+        "ru": "влить выгрузку в файл шаблонов пользователя",
+        "en": "merge an export into the user's templates file",
+    },
+    "cli.help.tpl.import-source": {
+        "ru": "выгрузка (наша или из 1С:EDT)",
+        "en": "an export (ours or from 1C:EDT)",
+    },
+    "cli.help.tpl.save": {
+        "ru": "заменить файл шаблонов пользователя (конверт JSON из stdin)",
+        "en": "replace the user's templates file (a JSON envelope from stdin)",
+    },
+    "cli.help.tpl.file": {
+        "ru": "файл шаблонов пользователя (по умолчанию {path}); "
+              "дополняет встроенный набор, одноимённые шаблоны замещает",
+        "en": "the user's templates file (default {path}); "
+              "it extends the builtin set and overrides same-named templates",
+    },
+    "cli.help.scaf.description": {
+        "ru": "Скаффолдинг метаданных 1С:Элемент (вывод – JSON)",
+        "en": "1C:Element metadata scaffolding (output – JSON)",
+    },
+    "cli.help.scaf.new-project": {
+        "ru": "создать проект: Проект.yaml + Проект.xbsl + подсистема",
+        "en": "create a project: Проект.yaml + Проект.xbsl + a subsystem",
+    },
+    "cli.help.scaf.new-object": {
+        "ru": "создать объект конфигурации (yaml + модуль по виду)",
+        "en": "create a configuration object (yaml + a module by kind)",
+    },
+    "cli.help.scaf.new-object-routes": {
+        "ru": 'маршруты HttpСервис: "GET /, POST /, GET /{{id}}"',
+        "en": 'HttpСервис routes: "GET /, POST /, GET /{{id}}"',
+    },
+    "cli.help.scaf.new-object-report": {
+        "ru": "описание отчёта (JSON: source, rows, columns, measures)",
+        "en": "report description (JSON: source, rows, columns, measures)",
+    },
+    "cli.help.scaf.add-field": {
+        "ru": "добавить реквизит/измерение/ресурс/значение/ТЧ",
+        "en": "add an attribute/dimension/resource/value/tabular section",
+    },
+    "cli.help.scaf.add-field-tabular": {
+        "ru": "имя табличной части (реквизит добавляется в неё)",
+        "en": "tabular section name (the attribute is added into it)",
+    },
+    "cli.help.scaf.add-route": {
+        "ru": "добавить маршруты в существующий HttpСервис",
+        "en": "add routes to an existing HttpСервис",
+    },
+    "cli.help.scaf.add-method": {
+        "ru": "добавить метод в модуль .xbsl, не разрывая аннотации",
+        "en": "add a method to an .xbsl module without breaking annotations",
+    },
+    "cli.help.scaf.add-method-params": {
+        "ru": "список параметров как в сигнатуре",
+        "en": "parameter list as in the signature",
+    },
+    "cli.help.scaf.add-method-returns": {
+        "ru": "тип возвращаемого значения",
+        "en": "return value type",
+    },
+    "cli.help.scaf.add-method-annotations": {
+        "ru": "аннотации через пробел, например 'НаСервере ВПроекте'",
+        "en": "annotations separated by spaces, e.g. 'НаСервере ВПроекте'",
+    },
+    "cli.help.scaf.add-method-after": {
+        "ru": "вставить после этого метода",
+        "en": "insert after this method",
+    },
+    "cli.help.scaf.add-method-before": {
+        "ru": "вставить перед этим методом",
+        "en": "insert before this method",
+    },
+    "cli.help.scaf.add-method-body": {
+        "ru": "одна строка тела вместо заготовки // TODO",
+        "en": "a one-line body instead of the // TODO stub",
+    },
+    "cli.help.scaf.add-form": {
+        "ru": "создать формы объекта и зарегистрировать в Интерфейс",
+        "en": "create the object's forms and register them in Интерфейс",
+    },
+    "cli.help.scaf.yaml-vs-name": {
+        "ru": "yaml объекта (вместо --name)",
+        "en": "the object's yaml (instead of --name)",
+    },
+    "cli.help.scaf.add-form-forms": {
+        "ru": "подмножество object,list,list-cards,report через запятую "
+              "(list-cards – список карточками, вместо list)",
+        "en": "a subset object,list,list-cards,report comma-separated "
+              "(list-cards – a card list, instead of list)",
+    },
+    "cli.help.scaf.add-form-card-min-width": {
+        "ru": "ширина колонки сетки карточек (по умолчанию 400, с фото – 250)",
+        "en": "card grid column width (default 400, 250 with a photo)",
+    },
+    "cli.help.scaf.add-form-card-placeholder": {
+        "ru": 'выражение картинки-заглушки, напр. "Ресурс{{Аккаунт.svg}}.Ссылка"',
+        "en": 'placeholder image expression, e.g. "Ресурс{{Аккаунт.svg}}.Ссылка"',
+    },
+    "cli.help.scaf.add-subsystem": {
+        "ru": "создать подсистему (папка + Подсистема.yaml)",
+        "en": "create a subsystem (a folder + Подсистема.yaml)",
+    },
+    "cli.help.scaf.add-subsystem-uses": {
+        "ru": "имена подсистем через запятую",
+        "en": "subsystem names, comma-separated",
+    },
+    "cli.help.scaf.add-dependency": {
+        "ru": "подключить библиотеку к проекту (раздел Библиотеки Проект.yaml)",
+        "en": "attach a library to the project (the Библиотеки section of Проект.yaml)",
+    },
+    "cli.help.scaf.add-dependency-vendor": {
+        "ru": "поставщик библиотеки",
+        "en": "library vendor",
+    },
+    "cli.help.scaf.add-dependency-name": {
+        "ru": "имя библиотеки",
+        "en": "library name",
+    },
+    "cli.help.scaf.add-dependency-version": {
+        "ru": "версия релиза библиотеки, например 2.0",
+        "en": "library release version, e.g. 2.0",
+    },
+    "cli.help.scaf.add-dependency-path": {
+        "ru": "Проект.yaml (при нескольких проектах под корнем)",
+        "en": "Проект.yaml (when there are several projects under the root)",
+    },
+    "cli.help.scaf.rename-object": {
+        "ru": "переименовать объект (файлы, формы) и обновить ссылки по всему проекту",
+        "en": "rename an object (files, forms) and update references across the whole project",
+    },
+    "cli.help.scaf.rename-new-presentation": {
+        "ru": "новое Представление/Заголовок (по умолчанию – новое имя)",
+        "en": "new Представление/Заголовок (default: the new name)",
+    },
+    "cli.help.scaf.rename-old-presentation": {
+        "ru": "старое представление (для замены в Заголовок/Представление)",
+        "en": "the old presentation (to replace in Заголовок/Представление)",
+    },
+    "cli.help.scaf.rename-path": {
+        "ru": "yaml объекта (при нескольких объектах с одним именем)",
+        "en": "the object's yaml (when several objects share one name)",
+    },
+    "cli.help.scaf.set-access": {
+        "ru": "задать КонтрольДоступа.Разрешения объекта",
+        "en": "set the object's КонтрольДоступа.Разрешения",
+    },
+    "cli.help.scaf.set-access-default": {
+        "ru": "способ для права ПоУмолчанию",
+        "en": "the method for the ПоУмолчанию right",
+    },
+    "cli.help.scaf.set-access-permission": {
+        "ru": "способ отдельного права (повторяемый), напр. Чтение=РазрешеноВсем",
+        "en": "the method for a single right (repeatable), e.g. Чтение=РазрешеноВсем",
+    },
+    "cli.help.scaf.set-access-calc-by": {
+        "ru": "поля РасчетРазрешенийПо через запятую "
+              "(обязательны для РазрешенияВычисляютсяДляКаждогоОбъекта)",
+        "en": "РасчетРазрешенийПо fields, comma-separated "
+              "(required for РазрешенияВычисляютсяДляКаждогоОбъекта)",
+    },
+    "cli.help.scaf.meta.right-method": {
+        "ru": "ПРАВО=СПОСОБ",
+        "en": "RIGHT=METHOD",
+    },
+    "cli.help.scaf.object-info": {
+        "ru": "сводка объекта: реквизиты, ТЧ, формы, namespace",
+        "en": "object summary: attributes, tabular sections, forms, namespace",
+    },
+    "cli.help.scaf.project-info": {
+        "ru": "обзор исходников: проекты, подсистемы, объекты",
+        "en": "sources overview: projects, subsystems, objects",
+    },
+    "cli.help.scaf.form-tree": {
+        "ru": "дерево компонента интерфейса (узлы, слоты, свойства со спанами)",
+        "en": "interface component tree (nodes, slots, properties with spans)",
+    },
+    "cli.help.scaf.form-tree-at": {
+        "ru": "вместо дерева вернуть узел по смещению в файле (синхронизация курсора)",
+        "en": "instead of the tree, return the node at a file offset (cursor sync)",
+    },
+    "cli.help.scaf.meta.offset": {
+        "ru": "СМЕЩЕНИЕ",
+        "en": "OFFSET",
+    },
+    "cli.help.scaf.form-edit": {
+        "ru": "операция конструктора форм: точечная правка yaml компонента интерфейса",
+        "en": "form-designer operation: a pinpoint edit of an interface component's yaml",
+    },
+    "cli.help.scaf.fe-parent": {
+        "ru": "id узла-контейнера (insert/insert-fragment)",
+        "en": "container node id (insert/insert-fragment)",
+    },
+    "cli.help.scaf.fe-slot": {
+        "ru": "слот детей: Содержимое, Страницы, Колонки, ... (insert/move)",
+        "en": "children slot: Содержимое, Страницы, Колонки, ... (insert/move)",
+    },
+    "cli.help.scaf.fe-type": {
+        "ru": "Тип нового компонента (insert) или свойства (property-add)",
+        "en": "Тип of the new component (insert) or property (property-add)",
+    },
+    "cli.help.scaf.fe-name": {
+        "ru": "Имя нового компонента (insert), обёртки (wrap) или свойства секции Свойства (property-*)",
+        "en": "Имя of the new component (insert), the wrapper (wrap) or a Свойства-section property (property-*)",
+    },
+    "cli.help.scaf.fe-node": {
+        "ru": "id узла операции (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
+        "en": "operation node id (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property)",
+    },
+    "cli.help.scaf.fe-nodes": {
+        "ru": "id узлов пачковой операции (move-nodes/remove-nodes): через "
+              "запятую или повтором флага; порядок не важен",
+        "en": "node ids of a batch operation (move-nodes/remove-nodes): comma-separated "
+              "or by repeating the flag; order does not matter",
+    },
+    "cli.help.scaf.fe-new-parent": {
+        "ru": "id нового контейнера (move/move-nodes)",
+        "en": "new container id (move/move-nodes)",
+    },
+    "cli.help.scaf.fe-container": {
+        "ru": "Тип контейнера-обёртки (wrap)",
+        "en": "Тип of the wrapper container (wrap)",
+    },
+    "cli.help.scaf.fe-new-name": {
+        "ru": "новое Имя узла (rename) или свойства (property-rename); "
+              "для rename без флага Имя удаляется",
+        "en": "the node's new Имя (rename) or property's (property-rename); "
+              "for rename without the flag, Имя is removed",
+    },
+    "cli.help.scaf.fe-before": {
+        "ru": "id соседа: вставить/переместить ПЕРЕД ним",
+        "en": "sibling id: insert/move BEFORE it",
+    },
+    "cli.help.scaf.fe-after": {
+        "ru": "id соседа: вставить/переместить ПОСЛЕ него",
+        "en": "sibling id: insert/move AFTER it",
+    },
+    "cli.help.scaf.fe-key": {
+        "ru": "имя свойства узла (set-property/reset-property)",
+        "en": "node property name (set-property/reset-property)",
+    },
+    "cli.help.scaf.fe-value": {
+        "ru": "скалярное значение или биндинг (set-property)",
+        "en": "scalar value or binding (set-property)",
+    },
+    "cli.help.scaf.fe-value-yaml": {
+        "ru": "составное значение готовым yaml-фрагментом (set-property)",
+        "en": "a composite value as a ready yaml fragment (set-property)",
+    },
+    "cli.help.scaf.fe-fragment": {
+        "ru": 'yaml-блок компонента или нескольких – список "-" или блоки подряд (insert-fragment)',
+        "en": 'a yaml block of one component or several – a "-" list or blocks in a row (insert-fragment)',
+    },
+    "cli.help.scaf.fe-fragment-file": {
+        "ru": "файл с yaml-блоком компонента (insert-fragment, вместо --fragment)",
+        "en": "a file with a component's yaml block (insert-fragment, instead of --fragment)",
+    },
+    "cli.help.scaf.fe-new-type": {
+        "ru": "новый Тип свойства (property-retype)",
+        "en": "the property's new Тип (property-retype)",
+    },
+    "cli.help.scaf.form-handlers": {
+        "ru": "обработчики парного модуля компонента: список методов или заготовка обработчика",
+        "en": "handlers of the component's paired module: a method list or a handler stub",
+    },
+    "cli.help.scaf.fh-node": {
+        "ru": "id узла (создание обработчика; без --node/--key – список методов модуля)",
+        "en": "node id (handler creation; without --node/--key – the module's method list)",
+    },
+    "cli.help.scaf.fh-key": {
+        "ru": "ключ события узла: ПриНажатии, ПослеСоздания, ...",
+        "en": "node event key: ПриНажатии, ПослеСоздания, ...",
+    },
+    "cli.help.scaf.fh-method": {
+        "ru": "имя метода-обработчика (по умолчанию <Имя узла><Ключ>; "
+              "существующий метод – только привязка в yaml)",
+        "en": "handler method name (default <Имя узла><Ключ>; "
+              "an existing method – only the binding in yaml)",
+    },
+    "cli.help.scaf.fh-signature": {
+        "ru": 'сигнатура события из ui-схемы, напр. '
+              '"(Кнопка, СобытиеПриНажатии)->ничто" (без флага ищется в локальных данных)',
+        "en": 'event signature from the ui schema, e.g. '
+              '"(Кнопка, СобытиеПриНажатии)->ничто" (without the flag it is looked up in the local data)',
+    },
+    "cli.help.scaf.dry-run": {
+        "ru": "показать изменения (с текстами файлов), ничего не записывая",
+        "en": "show the changes (with file texts) without writing anything",
+    },
 }
 
 

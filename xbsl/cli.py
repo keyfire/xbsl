@@ -214,30 +214,29 @@ _SERVER_COMMANDS = ("lsp", "mcp", "web")
 def _templates_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="xbsl templates",
-        description="шаблоны кода: встроенный набор и файл пользователя (формат выгрузки EDT)",
+        description=i18n.t("cli.help.tpl.description"),
     )
     sub = parser.add_subparsers(dest="action", required=True)
 
-    p = sub.add_parser("list", help="перечислить шаблоны (встроенные и пользовательские)")
+    p = sub.add_parser("list", help=i18n.t("cli.help.tpl.list"))
     p.add_argument("--format", choices=("text", "json"), default="text")
 
-    p = sub.add_parser("export", help="выгрузить шаблоны в файл формата EDT")
-    p.add_argument("--output", required=True, help="куда писать выгрузку")
+    p = sub.add_parser("export", help=i18n.t("cli.help.tpl.export"))
+    p.add_argument("--output", required=True, help=i18n.t("cli.help.tpl.export-output"))
     p.add_argument("--custom-only", action="store_true",
-                   help="только шаблоны пользователя, без встроенных")
+                   help=i18n.t("cli.help.tpl.export-custom-only"))
 
-    p = sub.add_parser("import", help="влить выгрузку в файл шаблонов пользователя")
-    p.add_argument("source", help="выгрузка (наша или из 1С:EDT)")
+    p = sub.add_parser("import", help=i18n.t("cli.help.tpl.import"))
+    p.add_argument("source", help=i18n.t("cli.help.tpl.import-source"))
 
-    sub.add_parser("save", help="заменить файл шаблонов пользователя (конверт JSON из stdin)")
+    sub.add_parser("save", help=i18n.t("cli.help.tpl.save"))
 
     # Every subcommand takes --file: on the parent, argparse would demand it BEFORE the
     # subcommand ("templates --file X import Y") - that reads backwards and is easy to forget.
     for sp in sub.choices.values():
         sp.add_argument(
             "--file", default=DEFAULT_TEMPLATES_FILE,
-            help=f"файл шаблонов пользователя (по умолчанию {DEFAULT_TEMPLATES_FILE}); "
-                 "дополняет встроенный набор, одноимённые шаблоны замещает",
+            help=i18n.t("cli.help.tpl.file", path=DEFAULT_TEMPLATES_FILE),
         )
     return parser
 
@@ -324,11 +323,11 @@ def _templates_main(argv: list[str]) -> int:
 
 def _scaffold_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="xbsl", description="Скаффолдинг метаданных 1С:Элемент (вывод – JSON)"
+        prog="xbsl", description=i18n.t("cli.help.scaf.description")
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("new-project", help="создать проект: Проект.yaml + Проект.xbsl + подсистема")
+    p = sub.add_parser("new-project", help=i18n.t("cli.help.scaf.new-project"))
     p.add_argument("root")
     p.add_argument("vendor")
     p.add_argument("name")
@@ -338,106 +337,93 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--subsystem", default="Основное")
     p.add_argument("--library", action="store_true")
 
-    p = sub.add_parser("new-object", help="создать объект конфигурации (yaml + модуль по виду)")
+    p = sub.add_parser("new-object", help=i18n.t("cli.help.scaf.new-object"))
     p.add_argument("directory")
     p.add_argument("kind")
     p.add_argument("name")
     p.add_argument("--scope")
     p.add_argument("--environment")
     p.add_argument("--access")
-    p.add_argument("--routes", help='маршруты HttpСервис: "GET /, POST /, GET /{id}"')
-    p.add_argument("--report", help="описание отчёта (JSON: source, rows, columns, measures)")
+    p.add_argument("--routes", help=i18n.t("cli.help.scaf.new-object-routes"))
+    p.add_argument("--report", help=i18n.t("cli.help.scaf.new-object-report"))
 
-    p = sub.add_parser("add-field", help="добавить реквизит/измерение/ресурс/значение/ТЧ")
+    p = sub.add_parser("add-field", help=i18n.t("cli.help.scaf.add-field"))
     p.add_argument("yaml_path")
+    # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose.
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
                                                  "параметр", "поле", "табличная-часть")))
     p.add_argument("name")
     p.add_argument("--type", default="Строка")
-    p.add_argument("--tabular", help="имя табличной части (реквизит добавляется в неё)")
+    p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
 
-    p = sub.add_parser("add-route", help="добавить маршруты в существующий HttpСервис")
+    p = sub.add_parser("add-route", help=i18n.t("cli.help.scaf.add-route"))
     p.add_argument("yaml_path")
     p.add_argument("routes")
 
-    p = sub.add_parser("add-method", help="добавить метод в модуль .xbsl, не разрывая аннотации")
+    p = sub.add_parser("add-method", help=i18n.t("cli.help.scaf.add-method"))
     p.add_argument("module_path")
     p.add_argument("name")
-    p.add_argument("--params", default="", help="список параметров как в сигнатуре")
-    p.add_argument("--returns", help="тип возвращаемого значения")
-    p.add_argument("--annotations", help="аннотации через пробел, например 'НаСервере ВПроекте'")
-    p.add_argument("--after", help="вставить после этого метода")
-    p.add_argument("--before", help="вставить перед этим методом")
-    p.add_argument("--body", help="одна строка тела вместо заготовки // TODO")
+    p.add_argument("--params", default="", help=i18n.t("cli.help.scaf.add-method-params"))
+    p.add_argument("--returns", help=i18n.t("cli.help.scaf.add-method-returns"))
+    p.add_argument("--annotations", help=i18n.t("cli.help.scaf.add-method-annotations"))
+    p.add_argument("--after", help=i18n.t("cli.help.scaf.add-method-after"))
+    p.add_argument("--before", help=i18n.t("cli.help.scaf.add-method-before"))
+    p.add_argument("--body", help=i18n.t("cli.help.scaf.add-method-body"))
 
-    p = sub.add_parser("add-form", help="создать формы объекта и зарегистрировать в Интерфейс")
+    p = sub.add_parser("add-form", help=i18n.t("cli.help.scaf.add-form"))
     p.add_argument("root")
     p.add_argument("--name")
-    p.add_argument("--path", help="yaml объекта (вместо --name)")
-    p.add_argument("--forms", help="подмножество object,list,list-cards,report через запятую "
-                                   "(list-cards – список карточками, вместо list)")
-    p.add_argument("--card-min-width", type=int,
-                   help="ширина колонки сетки карточек (по умолчанию 400, с фото – 250)")
-    p.add_argument("--card-placeholder",
-                   help='выражение картинки-заглушки, напр. "Ресурс{Аккаунт.svg}.Ссылка"')
+    p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
+    p.add_argument("--forms", help=i18n.t("cli.help.scaf.add-form-forms"))
+    p.add_argument("--card-min-width", type=int, help=i18n.t("cli.help.scaf.add-form-card-min-width"))
+    p.add_argument("--card-placeholder", help=i18n.t("cli.help.scaf.add-form-card-placeholder"))
     p.add_argument("--overwrite", action="store_true")
 
-    p = sub.add_parser("add-subsystem", help="создать подсистему (папка + Подсистема.yaml)")
+    p = sub.add_parser("add-subsystem", help=i18n.t("cli.help.scaf.add-subsystem"))
     p.add_argument("parent_dir")
     p.add_argument("name")
     p.add_argument("--representation")
     p.add_argument("--no-auto-interface", action="store_true")
-    p.add_argument("--uses", help="имена подсистем через запятую")
+    p.add_argument("--uses", help=i18n.t("cli.help.scaf.add-subsystem-uses"))
 
-    p = sub.add_parser(
-        "add-dependency", help="подключить библиотеку к проекту (раздел Библиотеки Проект.yaml)"
-    )
+    p = sub.add_parser("add-dependency", help=i18n.t("cli.help.scaf.add-dependency"))
     p.add_argument("root")
-    p.add_argument("vendor", help="поставщик библиотеки")
-    p.add_argument("name", help="имя библиотеки")
-    p.add_argument("version", help="версия релиза библиотеки, например 2.0")
-    p.add_argument("--path", help="Проект.yaml (при нескольких проектах под корнем)")
+    p.add_argument("vendor", help=i18n.t("cli.help.scaf.add-dependency-vendor"))
+    p.add_argument("name", help=i18n.t("cli.help.scaf.add-dependency-name"))
+    p.add_argument("version", help=i18n.t("cli.help.scaf.add-dependency-version"))
+    p.add_argument("--path", help=i18n.t("cli.help.scaf.add-dependency-path"))
 
-    p = sub.add_parser(
-        "rename-object",
-        help="переименовать объект (файлы, формы) и обновить ссылки по всему проекту",
-    )
+    p = sub.add_parser("rename-object", help=i18n.t("cli.help.scaf.rename-object"))
     p.add_argument("root")
     p.add_argument("old_name")
     p.add_argument("new_name")
-    p.add_argument("--new-presentation", help="новое Представление/Заголовок (по умолчанию – новое имя)")
-    p.add_argument("--old-presentation", help="старое представление (для замены в Заголовок/Представление)")
-    p.add_argument("--path", help="yaml объекта (при нескольких объектах с одним именем)")
+    p.add_argument("--new-presentation", help=i18n.t("cli.help.scaf.rename-new-presentation"))
+    p.add_argument("--old-presentation", help=i18n.t("cli.help.scaf.rename-old-presentation"))
+    p.add_argument("--path", help=i18n.t("cli.help.scaf.rename-path"))
 
-    p = sub.add_parser("set-access", help="задать КонтрольДоступа.Разрешения объекта")
+    p = sub.add_parser("set-access", help=i18n.t("cli.help.scaf.set-access"))
     p.add_argument("root")
     p.add_argument("--name")
-    p.add_argument("--path", help="yaml объекта (вместо --name)")
-    p.add_argument("--default", help="способ для права ПоУмолчанию")
-    p.add_argument("--permission", action="append", metavar="ПРАВО=СПОСОБ",
-                   help="способ отдельного права (повторяемый), напр. Чтение=РазрешеноВсем")
-    p.add_argument("--calc-by", help="поля РасчетРазрешенийПо через запятую "
-                                     "(обязательны для РазрешенияВычисляютсяДляКаждогоОбъекта)")
+    p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
+    p.add_argument("--default", help=i18n.t("cli.help.scaf.set-access-default"))
+    p.add_argument("--permission", action="append", metavar=i18n.t("cli.help.scaf.meta.right-method"),
+                   help=i18n.t("cli.help.scaf.set-access-permission"))
+    p.add_argument("--calc-by", help=i18n.t("cli.help.scaf.set-access-calc-by"))
 
-    p = sub.add_parser("object-info", help="сводка объекта: реквизиты, ТЧ, формы, namespace")
+    p = sub.add_parser("object-info", help=i18n.t("cli.help.scaf.object-info"))
     p.add_argument("root")
     p.add_argument("--name")
     p.add_argument("--path")
 
-    p = sub.add_parser("project-info", help="обзор исходников: проекты, подсистемы, объекты")
+    p = sub.add_parser("project-info", help=i18n.t("cli.help.scaf.project-info"))
     p.add_argument("root")
 
-    p = sub.add_parser(
-        "form-tree", help="дерево компонента интерфейса (узлы, слоты, свойства со спанами)"
-    )
+    p = sub.add_parser("form-tree", help=i18n.t("cli.help.scaf.form-tree"))
     p.add_argument("yaml_path")
-    p.add_argument("--at", type=int, metavar="СМЕЩЕНИЕ",
-                   help="вместо дерева вернуть узел по смещению в файле (синхронизация курсора)")
+    p.add_argument("--at", type=int, metavar=i18n.t("cli.help.scaf.meta.offset"),
+                   help=i18n.t("cli.help.scaf.form-tree-at"))
 
-    p = sub.add_parser(
-        "form-edit",
-        help="операция конструктора форм: точечная правка yaml компонента интерфейса",
-    )
+    p = sub.add_parser("form-edit", help=i18n.t("cli.help.scaf.form-edit"))
     p.add_argument("yaml_path")
     p.add_argument("op", choices=("insert", "insert-fragment", "move", "move-nodes",
                                   "remove", "remove-nodes", "wrap",
@@ -445,50 +431,37 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                                   "set-property", "reset-property",
                                   "property-add", "property-retype", "property-remove",
                                   "property-rename"))
-    p.add_argument("--parent", help="id узла-контейнера (insert/insert-fragment)")
-    p.add_argument("--slot", help="слот детей: Содержимое, Страницы, Колонки, ... (insert/move)")
-    p.add_argument("--type", help="Тип нового компонента (insert) или свойства (property-add)")
-    p.add_argument("--name", help="Имя нового компонента (insert), обёртки (wrap) "
-                                  "или свойства секции Свойства (property-*)")
-    p.add_argument("--node", help="id узла операции (move/remove/wrap/unwrap/duplicate/"
-                                  "rename/set-property/reset-property)")
+    p.add_argument("--parent", help=i18n.t("cli.help.scaf.fe-parent"))
+    p.add_argument("--slot", help=i18n.t("cli.help.scaf.fe-slot"))
+    p.add_argument("--type", help=i18n.t("cli.help.scaf.fe-type"))
+    p.add_argument("--name", help=i18n.t("cli.help.scaf.fe-name"))
+    p.add_argument("--node", help=i18n.t("cli.help.scaf.fe-node"))
     p.add_argument("--nodes", action="append", metavar="ID[,ID...]",
-                   help="id узлов пачковой операции (move-nodes/remove-nodes): через "
-                        "запятую или повтором флага; порядок не важен")
-    p.add_argument("--new-parent", help="id нового контейнера (move/move-nodes)")
-    p.add_argument("--container", help="Тип контейнера-обёртки (wrap)")
-    p.add_argument("--new-name", help="новое Имя узла (rename) или свойства (property-rename); "
-                                      "для rename без флага Имя удаляется")
-    p.add_argument("--before", help="id соседа: вставить/переместить ПЕРЕД ним")
-    p.add_argument("--after", help="id соседа: вставить/переместить ПОСЛЕ него")
-    p.add_argument("--key", help="имя свойства узла (set-property/reset-property)")
-    p.add_argument("--value", help="скалярное значение или биндинг (set-property)")
-    p.add_argument("--value-yaml", help="составное значение готовым yaml-фрагментом (set-property)")
-    p.add_argument("--fragment", help="yaml-блок компонента или нескольких – список \"-\" "
-                                      "или блоки подряд (insert-fragment)")
-    p.add_argument("--fragment-file", metavar="ФАЙЛ",
-                   help="файл с yaml-блоком компонента (insert-fragment, вместо --fragment)")
-    p.add_argument("--new-type", help="новый Тип свойства (property-retype)")
+                   help=i18n.t("cli.help.scaf.fe-nodes"))
+    p.add_argument("--new-parent", help=i18n.t("cli.help.scaf.fe-new-parent"))
+    p.add_argument("--container", help=i18n.t("cli.help.scaf.fe-container"))
+    p.add_argument("--new-name", help=i18n.t("cli.help.scaf.fe-new-name"))
+    p.add_argument("--before", help=i18n.t("cli.help.scaf.fe-before"))
+    p.add_argument("--after", help=i18n.t("cli.help.scaf.fe-after"))
+    p.add_argument("--key", help=i18n.t("cli.help.scaf.fe-key"))
+    p.add_argument("--value", help=i18n.t("cli.help.scaf.fe-value"))
+    p.add_argument("--value-yaml", help=i18n.t("cli.help.scaf.fe-value-yaml"))
+    p.add_argument("--fragment", help=i18n.t("cli.help.scaf.fe-fragment"))
+    p.add_argument("--fragment-file", metavar=i18n.t("cli.help.meta.file"),
+                   help=i18n.t("cli.help.scaf.fe-fragment-file"))
+    p.add_argument("--new-type", help=i18n.t("cli.help.scaf.fe-new-type"))
 
-    p = sub.add_parser(
-        "form-handlers",
-        help="обработчики парного модуля компонента: список методов или заготовка обработчика",
-    )
+    p = sub.add_parser("form-handlers", help=i18n.t("cli.help.scaf.form-handlers"))
     p.add_argument("yaml_path")
-    p.add_argument("--node", help="id узла (создание обработчика; без --node/--key – "
-                                  "список методов модуля)")
-    p.add_argument("--key", help="ключ события узла: ПриНажатии, ПослеСоздания, ...")
-    p.add_argument("--method", help="имя метода-обработчика (по умолчанию <Имя узла><Ключ>; "
-                                    "существующий метод – только привязка в yaml)")
-    p.add_argument("--signature", help='сигнатура события из ui-схемы, напр. '
-                                       '"(Кнопка, СобытиеПриНажатии)->ничто" '
-                                       '(без флага ищется в локальных данных)')
+    p.add_argument("--node", help=i18n.t("cli.help.scaf.fh-node"))
+    p.add_argument("--key", help=i18n.t("cli.help.scaf.fh-key"))
+    p.add_argument("--method", help=i18n.t("cli.help.scaf.fh-method"))
+    p.add_argument("--signature", help=i18n.t("cli.help.scaf.fh-signature"))
 
     for name, sp in sub.choices.items():
         if name.endswith("-info") or name == "form-tree":
             continue
-        sp.add_argument("--dry-run", action="store_true",
-                        help="показать изменения (с текстами файлов), ничего не записывая")
+        sp.add_argument("--dry-run", action="store_true", help=i18n.t("cli.help.scaf.dry-run"))
     return parser
 
 
@@ -729,8 +702,8 @@ def main(argv: list[str] | None = None) -> int:
         from xbsl import selfupdate
 
         sp = argparse.ArgumentParser(prog="xbsl self-update",
-                                     description="обновить xbsl распаковкой колеса с PyPI")
-        sp.add_argument("--version", help="целевая версия (по умолчанию – последняя с PyPI)")
+                                     description=i18n.t("cli.help.commands.self-update"))
+        sp.add_argument("--version", help=i18n.t("cli.help.selfupdate-version"))
         sp_args = sp.parse_args(argv[1:])
         try:
             old, new = selfupdate.self_update(version=sp_args.version,
