@@ -189,3 +189,97 @@ def test_qualified_and_binding_values_skipped():
         + "        Тип: =ВычислитьТип()\n"
     )
     assert _lint(_project(form)) == []
+
+
+# --- yaml/foreign-not-public: the other half of the same boundary -----------------------
+
+VIS_RULE = "yaml/foreign-not-public"
+
+# A navigation command in subsystem А opening a form that lives in subsystem Б.
+PANEL = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Имя: Панель\n"
+    "Содержимое:\n"
+    "    -\n"
+    "        Тип: НавигационнаяКоманда\n"
+    "        Имя: Команда\n"
+    "        ТипФормы: ЦелеваяФорма\n"
+)
+
+
+def _lint_vis(files):
+    sources = [engine.load_text(name, content) for name, content in files.items()]
+    return engine.run_sources(sources, select={VIS_RULE})
+
+
+def _nav_project(target: str, **extra):
+    files = {
+        "А/Подсистема.yaml": SUB_A,
+        "Б/Подсистема.yaml": SUB_B,
+        "Б/ЦелеваяФорма.yaml": target,
+        "А/Панель.yaml": PANEL,
+    }
+    files.update(extra)
+    return files
+
+
+def test_visibility_rule_registered_project_scope():
+    info = next(r for r in engine.active_rules() if r.id == VIS_RULE)
+    assert info.tier == "D" and info.scope == "project" and info.enabled_by_default
+
+
+def test_navigation_to_private_foreign_form_flagged():
+    # The default (no ОбластьВидимости) is ВПодсистеме - unreachable from А.
+    diags = _lint_vis(_nav_project("ВидЭлемента: КомпонентИнтерфейса\nИмя: ЦелеваяФорма\n"))
+    assert len(diags) == 1
+    d = diags[0]
+    assert d.rule_id == VIS_RULE
+    assert "ЦелеваяФорма" in d.message and "'Б'" in d.message and "ВПодсистеме" in d.message
+    assert d.line == 7  # the line "        ТипФормы: ЦелеваяФорма"
+
+
+def test_navigation_to_public_foreign_form_ok():
+    target = "ВидЭлемента: КомпонентИнтерфейса\nИмя: ЦелеваяФорма\nОбластьВидимости: ВПроекте\n"
+    assert _lint_vis(_nav_project(target)) == []
+
+
+def test_navigation_inside_own_subsystem_ok():
+    files = {
+        "А/Подсистема.yaml": SUB_A,
+        "А/ЦелеваяФорма.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: ЦелеваяФорма\n",
+        "А/Панель.yaml": PANEL,
+    }
+    assert _lint_vis(files) == []
+
+
+def test_private_target_in_type_position_flagged():
+    # Not only navigation: a type reference to a private foreign object is the same error.
+    private = "ВидЭлемента: Справочник\nИмя: Товары\nОбластьВидимости: ВПодсистеме\n"
+    files = _project(FORM_HEAD + FORM_BODY)
+    files["Б/Товары.yaml"] = private
+    diags = _lint_vis(files)
+    assert len(diags) == 1 and "Товары" in diags[0].message
+
+
+def test_public_target_is_left_to_the_sibling_rule():
+    # Public but not imported: yaml/missing-import's case, not this rule's - no overlap.
+    assert _lint_vis(_project(FORM_HEAD + FORM_BODY)) == []
+
+
+def test_unknown_target_is_silent():
+    # A platform form (ФормаЖурналаСобытий) no project element declares - unknown, not wrong.
+    panel = PANEL.replace("ЦелеваяФорма", "ФормаЖурналаСобытий")
+    files = {
+        "А/Подсистема.yaml": SUB_A,
+        "Б/Подсистема.yaml": SUB_B,
+        "А/Панель.yaml": panel,
+    }
+    assert _lint_vis(files) == []
+
+
+def test_visibility_no_subsystem_layout_skipped():
+    files = {
+        "ЦелеваяФорма.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: ЦелеваяФорма\n",
+        "Панель.yaml": PANEL,
+    }
+    assert _lint_vis(files) == []

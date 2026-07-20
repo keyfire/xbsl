@@ -1,4 +1,10 @@
-"""Tier D: cross-subsystem project types in yaml against the element's Импорт section.
+"""Tier D: cross-subsystem references in yaml - two complementary rules.
+
+yaml/missing-import wants a public foreign element to be imported; yaml/foreign-not-public
+wants the foreign element to be public at all (see its own docstring). Together they cover
+what the platform requires for a reference across a subsystem boundary; both are built on
+the same placement model of the project, described below.
+
 
 The yaml/missing-import rule: a yaml element (a form, an object...) that uses, in a type
 position (the string values of `Тип` keys, generic arguments included), a type generated
@@ -194,4 +200,139 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "yaml/missing-import", Severity.WARNING,
                 i18n.t("yaml/missing-import.missing", name=chain_name, sub="/".join(candidates)),
+            )
+
+
+# --- The other half: the foreign element is not public at all ---------------------------
+
+MESSAGES_VISIBILITY = {
+    "yaml/foreign-not-public.title": {
+        "ru": "Ссылка на непубличный элемент чужой подсистемы",
+        "en": "Reference to a non-public element of another subsystem",
+    },
+    "yaml/foreign-not-public.found": {
+        "ru": "Элемент '{name}' лежит в подсистеме '{sub}' и не публичен "
+              "(ОбластьВидимости: {vis}) – из другой подсистемы он недоступен. "
+              "Задайте у него ОбластьВидимости: ВПроекте.",
+        "en": "Element '{name}' lives in subsystem '{sub}' and is not public "
+              "(ОбластьВидимости: {vis}) - it is unreachable from another subsystem. "
+              "Set ОбластьВидимости: ВПроекте on it.",
+    },
+}
+i18n.register(MESSAGES_VISIBILITY)
+
+# Navigation targets name a form the same way a type position names a type, so both keys
+# feed the same check: `ТипФормы: ПрограммыФормаСписка` is a reference across subsystems.
+_REFERENCE_KEYS = ("Тип", "ТипФормы")
+_DEFAULT_SCOPE = "ВПодсистеме"  # the platform default when the property is absent
+
+
+def _visibility_mapper(source: SourceFile) -> dict | None:
+    """The map phase: the same placement slice as above, but the candidates also come from
+    the navigation key `ТипФормы` - a form opened from another subsystem must be public."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "xbsl":
+        try:
+            local = semantics._file_local_types(source)
+        except DatasetError:
+            return None
+        if not local:
+            return None
+        return {"k": "x", "local_types": sorted(local)}
+    if source.kind != "yaml":
+        return None
+    if source.path.name == _SUBSYSTEM_FILE:
+        data, err = _parsed(source)
+        name = data.get("Имя") if err is None and isinstance(data, dict) else None
+        return {
+            "k": "sub",
+            "dir": str(source.path.parent),
+            "name": name if isinstance(name, str) else source.path.parent.name,
+        }
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict) or not data.get("ВидЭлемента"):
+        return None
+    stdlib = semantics._stdlib_names()
+    cands: list[tuple[str, str, int, int]] = []
+    for key in _REFERENCE_KEYS:
+        for value in dict.fromkeys(_type_values(data, key)):  # unique, in document order
+            chains = _parse_type_string(value)
+            if not chains:
+                continue
+            position: tuple[int, int] | None = None
+            for chain in chains:
+                root = chain[0]
+                if root in stdlib:
+                    continue
+                if position is None:
+                    position = (_value_positions(source, value, key) or [(1, 1)])[0]
+                cands.append((root, ".".join(chain), position[0], position[1]))
+    nm = data.get("Имя")
+    return {
+        "k": "el",
+        "path": str(source.path),
+        "name": nm if isinstance(nm, str) else None,
+        "vis": data.get("ОбластьВидимости"),
+        "cands": cands,
+    }
+
+
+@rule(
+    "yaml/foreign-not-public", "yaml/foreign-not-public.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_visibility_mapper,
+)
+def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A yaml reference to an element of ANOTHER subsystem that is not public.
+
+    The documentation is explicit ("Модульная разработка"): an element is visible only
+    inside its own subsystem (ВПодсистеме, the default) and unreachable from the others
+    unless its ОбластьВидимости is ВПроекте or Глобально. No import can help - which is
+    exactly the case yaml/missing-import leaves alone, so the two rules never overlap:
+    that one fires when a public foreign element is not imported, this one when the
+    foreign element is not public in the first place.
+
+    The narrowings of the sibling rule apply here too (they are what keeps this at zero
+    false positives): names of the file's own subsystem resolve locally, stdlib names and
+    module-declared local types are skipped, qualified `Подсистема::Тип` names rely on the
+    subsystem's `Использование`, and a name no project element declares (a platform form
+    like ФормаЖурналаСобытий) is unknown, not wrong. One diagnostic per target per file.
+    """
+    roots: dict[Path, str] = {}
+    for fact in facts.values():
+        if fact["k"] == "sub":
+            roots[Path(fact["dir"])] = fact["name"]
+    if not roots:
+        return
+    local_types: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "x":
+            local_types.update(fact["local_types"])
+    placement: dict[str, dict[str, object]] = {}
+    elements: list[tuple[str, dict, str]] = []
+    for rel, fact in facts.items():
+        if fact["k"] != "el":
+            continue
+        sub = _subsystem_of(Path(fact["path"]), roots)
+        if sub is None:
+            continue
+        elements.append((rel, fact, sub))
+        if fact["name"]:
+            placement.setdefault(fact["name"], {})[sub] = fact["vis"]
+    for rel, fact, my_sub in elements:
+        reported: set[str] = set()
+        for root, chain_name, line, col in fact["cands"]:
+            if root in local_types or root in reported:
+                continue
+            subs = placement.get(root)
+            if not subs or my_sub in subs:
+                continue
+            if any(vis in _PUBLIC_SCOPES for vis in subs.values()):
+                continue  # a public one exists - missing import at most, the sibling's case
+            owner = sorted(subs)[0]
+            vis = subs[owner] or _DEFAULT_SCOPE
+            reported.add(root)
+            yield Diagnostic(
+                rel, line, col, "yaml/foreign-not-public", Severity.WARNING,
+                i18n.t("yaml/foreign-not-public.found", name=chain_name, sub=owner, vis=vis),
             )

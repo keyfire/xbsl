@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 87 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 89 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -137,6 +137,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/unknown-type` | warning | on | project | Unknown type | – |
 | `code/catch-non-exception` | error | on | file | The type in `поймать` is not an exception (a stdlib non-exception or a local `структура`) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/exceptions/) |
 | `code/unknown-member` | error | on | file | A member access on a variable of a known plain stdlib type that the type does not have (first hop, typos get a hint) | – |
+| `code/unknown-static-member` | error | on | project | A member reached through a type name (`ДатаВремя.Минимальная()`) that the type does not have; the type of such a call carries on to the next hop. A bare name is read as a type only when the project gives it no other meaning | – |
+| `yaml/foreign-not-public` | warning | on | project | A yaml reference (a type position or a `ТипФормы` navigation target) to an element of another subsystem whose `ОбластьВидимости` is not `ВПроекте`/`Глобально` - unreachable from outside its subsystem, and no import helps | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/call-arity-cross` | error | on | project | Argument count of a `Модуль.Метод(...)` call outside the target module's signature range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/undefined-name` | error | on | project | Undefined name in an expression (typos like `Адресар` for `Адреса`) - the compiler rejects such code | – |
 | `code/unknown-object-type` | warning | on | project | Unknown project-object type | – |

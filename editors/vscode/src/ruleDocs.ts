@@ -108,6 +108,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "видимость-языковых-конструкций",
   },
   { match: (r) => r === "yaml/missing-import", page: MODULAR, anchor: "импорт-пространств-имен" },
+  {
+    match: (r) => r === "yaml/foreign-not-public",
+    page: MODULAR,
+    anchor: "область-видимости-элемента-проекта",
+  },
 
   // --- queries, forms, yaml ---
   {

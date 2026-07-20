@@ -140,22 +140,23 @@ def _parse_type_string(value: str) -> list[list[str]] | None:
     return chains
 
 
-def _type_values(node) -> Iterable[str]:
-    """All string values of `Тип` keys in the parsed yaml tree."""
+def _type_values(node, key: str = "Тип") -> Iterable[str]:
+    """All string values of `key` keys in the parsed yaml tree (`ТипФормы` for navigation)."""
     if isinstance(node, dict):
         for k, v in node.items():
-            if k == "Тип" and isinstance(v, str):
+            if k == key and isinstance(v, str):
                 yield v
-            yield from _type_values(v)
+            yield from _type_values(v, key)
     elif isinstance(node, list):
         for item in node:
-            yield from _type_values(item)
+            yield from _type_values(item, key)
 
 
-def _value_positions(source: SourceFile, value: str) -> list[tuple[int, int]]:
-    """(line, col) of every `Тип: <значение>` occurrence in the source text."""
+def _value_positions(source: SourceFile, value: str, key: str = "Тип") -> list[tuple[int, int]]:
+    """(line, col) of every `<key>: <значение>` occurrence in the source text."""
     pat = re.compile(  # \r?: the file may be CRLF, `$` in multiline mode anchors before \n
-        r"(?m)^[ \t]*(?:- +)?Тип:[ \t]*(['\"]?)(" + re.escape(value) + r")\1[ \t]*(?:#.*)?\r?$"
+        r"(?m)^[ \t]*(?:- +)?" + re.escape(key)
+        + r":[ \t]*(['\"]?)(" + re.escape(value) + r")\1[ \t]*(?:#.*)?\r?$"
     )
     lm = linemap(source)
     return [lm.linecol(m.start(2)) for m in pat.finditer(source.text)]
