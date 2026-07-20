@@ -13,6 +13,7 @@
 python tools/extract_grammar.py   --dist "<каталог дистрибутива>"
 python tools/extract_stdlib.py    --dist "<каталог дистрибутива>"
 python tools/extract_metamodel.py --dist "<каталог дистрибутива>"
+python tools/extract_terms.py     --dist "<каталог дистрибутива>"
 
 pip install -e ".[dev]"     # линтер + pytest + PyYAML
 pytest                      # тесты (без данных зависящие от них пропускаются)
@@ -58,6 +59,7 @@ python -m xbsl <путь>   # прогон на исходниках
 python tools/extract_grammar.py   --dist "<каталог дистрибутива>"
 python tools/extract_stdlib.py    --dist "<каталог дистрибутива>"
 python tools/extract_metamodel.py --dist "<каталог дистрибутива>"
+python tools/extract_terms.py     --dist "<каталог дистрибутива>"
 ```
 
 Вендорные файлы дистрибутива не коммитятся (кэш в `.refs/`) – только производные JSON.

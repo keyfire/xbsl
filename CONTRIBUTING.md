@@ -13,6 +13,7 @@ from your own 1C:Element distribution (otherwise the linter and some tests will 
 python tools/extract_grammar.py   --dist "<path to the distribution>"
 python tools/extract_stdlib.py    --dist "<path to the distribution>"
 python tools/extract_metamodel.py --dist "<path to the distribution>"
+python tools/extract_terms.py     --dist "<path to the distribution>"
 
 pip install -e ".[dev]"     # linter + pytest + PyYAML
 pytest                      # tests (data-dependent ones are skipped without data)
@@ -59,6 +60,7 @@ distribution and run the extractors – the version is detected automatically:
 python tools/extract_grammar.py   --dist "<path to the distribution>"
 python tools/extract_stdlib.py    --dist "<path to the distribution>"
 python tools/extract_metamodel.py --dist "<path to the distribution>"
+python tools/extract_terms.py     --dist "<path to the distribution>"
 ```
 
 Vendor files from the distribution are not committed (cached under `.refs/`) – only the derived

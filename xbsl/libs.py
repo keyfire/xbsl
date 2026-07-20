@@ -28,6 +28,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
+from xbsl import terms
+
 try:
     import yaml
 
@@ -40,15 +42,15 @@ _LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader) if _HAVE_YAML else None
 # The keys are bilingual, as everywhere in Element yaml: shipped sources carry English
 # spellings too. A project descriptor is recognized by its dependency block, not by the file
 # name, so a renamed or English-named descriptor is picked up just the same.
+#: Spellings come from the platform's own term pairs (terms.py), not from guesses - a
+#: hand-written "VisibilityArea" used to sit here and matched nothing.
 _LIB_BLOCK_RE = re.compile(r"^(?:Библиотеки|Libraries)\s*:", re.M)
 _PROJECT_KEY_RE = re.compile(r"^(?:Поставщик|Vendor)\s*:", re.M)
-_VENDOR_KEYS = ("Поставщик", "Vendor")
-_NAME_KEYS = ("Имя", "Name")
-_VERSION_KEYS = ("Версия", "Version")
-_KIND_KEYS = ("ВидЭлемента", "ElementKind")
-#: The English spelling comes from the metamodel annotation @PropertyInfo(ru="ОбластьВидимости",
-#: en="VisibilityScope"); the earlier "VisibilityArea" here matched nothing.
-_SCOPE_KEYS = ("ОбластьВидимости", "VisibilityScope")
+_VENDOR_KEYS = terms.key_forms("Поставщик", extra=("Vendor",))
+_NAME_KEYS = terms.key_forms("Имя")
+_VERSION_KEYS = terms.key_forms("Версия")
+_KIND_KEYS = terms.key_forms("ВидЭлемента")
+_SCOPE_KEYS = terms.key_forms("ОбластьВидимости")
 
 # The scope written when an element is visible outside its library; anything else (the
 # default is ВПодсистеме) stays internal to the library.
