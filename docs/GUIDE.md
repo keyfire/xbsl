@@ -8,7 +8,7 @@ sidebar:
 
 The complete guide to the toolkit. The [README](https://github.com/keyfire/xbsl/blob/main/README.md)
 is the short tour; everything it links to in depth lives here. The full rule list is a separate
-document – [RULES.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.md).
+document – [RULES.md](/RULES).
 
 - [Language data](#language-data)
 - [Installation details](#installation-details)
@@ -150,7 +150,7 @@ lint:
 ## Rules in depth
 
 **The full list of all 87 rules** (severity, default state, scope, links to platform
-documentation sections) is in [RULES.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.md);
+documentation sections) is in [RULES.md](/RULES);
 at runtime – `xbsl --list-rules`. The tier overview is in the README; below is what the deeper
 tiers actually verify.
 
@@ -187,7 +187,7 @@ subset (temporary tables, unions, subqueries) is skipped whole rather than guess
 Detailed group descriptions - `query/` (a composite type in `IN` with a subquery),
 `project/` (project properties), `naming/` (the naming standard, the `[morph]` extra) and
 `style/` (code-writing conventions and their on/off policy) - live in
-[RULES.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.md).
+[RULES.md](/RULES).
 
 ## Baseline: adopt a rule on a legacy codebase
 
