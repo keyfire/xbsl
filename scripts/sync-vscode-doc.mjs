@@ -21,18 +21,24 @@ const pages = [
     dest: "docs/vscode.md",
     title: "XBSL for VS Code",
     description:
-      "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation — all on the xbsl engine.",
+      "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation – all on the xbsl engine.",
     sidebarLabel: "VS Code extension",
     order: 5,
+    note: (src) =>
+      `<!-- Generated from ${src}; do not edit by hand.\n` +
+      `     Edit ${src} and run: npm run sync:docs -->\n`,
   },
   {
     src: "editors/vscode/README.ru.md",
     dest: "docs/vscode.ru.md",
     title: "XBSL для VS Code",
     description:
-      "Расширение VS Code для 1С:Элемент: подсветка синтаксиса, линтинг на лету с Quick Fix, визуальный конструктор форм, обозреватель метаданных и навигация по проекту — всё на движке xbsl.",
+      "Расширение VS Code для 1С:Элемент: подсветка синтаксиса, линтинг на лету с Quick Fix, визуальный конструктор форм, обозреватель метаданных и навигация по проекту – всё на движке xbsl.",
     sidebarLabel: "Расширение VS Code",
     order: 5,
+    note: (src) =>
+      `<!-- Сгенерировано из ${src} – не редактируйте вручную.\n` +
+      `     Правьте ${src} и выполните: npm run sync:docs -->\n`,
   },
 ];
 
@@ -71,9 +77,7 @@ for (const page of pages) {
     `  order: ${page.order}\n` +
     "---\n";
 
-  const note =
-    `<!-- Сгенерировано из ${page.src} — не редактируйте вручную.\n` +
-    `     Правьте ${page.src} и выполните: npm run sync:docs -->\n`;
+  const note = page.note(page.src);
 
   writeFileSync(join(root, page.dest), `${frontmatter}\n${note}\n${body}\n`, "utf8");
   console.log(`synced ${page.src} -> ${page.dest}`);

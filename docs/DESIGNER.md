@@ -1,13 +1,13 @@
 ---
 title: "Visual form designer"
-description: "The in-editor visual designer for 1C:Element interface components — structure, palette, properties, and binding panels over the .yaml source."
+description: "The in-editor visual designer for 1C:Element interface components - structure, palette, properties, and binding panels over the .yaml source."
 sidebar:
   label: Visual designer
   order: 4
 ---
 
 The extension includes a visual designer for 1C:Element interface components
-(`ВидЭлемента: КомпонентИнтерфейса` – forms and custom components). It is a set of panels
+(`ElementKind: InterfaceComponent` - forms and custom components). It is a set of panels
 over the `.yaml` source: a structure tree, a component palette, a data panel, a typed
 properties panel and a wireframe preview. The text editor stays the primary surface; the
 designer is a contextual lens over it.
@@ -31,7 +31,7 @@ Two things to keep in mind:
 
 ## Opening the designer
 
-Open a `.yaml` of an interface component (a form or a custom `КомпонентИнтерфейса`). Three
+Open a `.yaml` of an interface component (a form or a custom `InterfaceComponent`). Three
 activity-bar containers hold the panels, and all follow the active editor:
 
 - **Designer (1C:Element)** – the **Structure**, **Palette** and **Data** panels.
@@ -43,14 +43,14 @@ shown when a form yaml is active) or **Form preview** from the metadata tree's c
 
 ## Structure panel
 
-The **Structure** panel is the form as a tree of slots (`Содержимое`, `Команды`, pages,
+The **Structure** panel is the form as a tree of slots (`Content`, `Commands`, pages,
 columns, ...) and components, with an icon per kind and linter badges on nodes.
 
 - **Cursor sync.** Put the cursor on a node in the yaml – it highlights in the tree and fills
   the Properties panel. Select a node in the tree – the cursor moves to its yaml (**Go to
   yaml** in the context menu, or a click).
 - **Arrange** (context menu + keys): **Move up / Move down** (`Alt+Up` / `Alt+Down`), **Wrap in
-  a container** (pick the container type), **Unwrap container**, **Duplicate**, **Rename (Имя)**
+  a container** (pick the container type), **Unwrap container**, **Duplicate**, **Rename**
   (`F2`), **Delete component** (`Delete`).
 - **Copy / paste as yaml.** **Copy yaml fragment** (`Ctrl+C`) and **Paste yaml from the
   clipboard** (`Ctrl+V`) move subtrees – across forms and across projects.
@@ -85,13 +85,13 @@ The **Properties** panel edits the selected component (and, from the metadata tr
   collapsible groups hold every applicable property. Search filters by property name *and* by
   current value. A filled dot marks a value set in the yaml, a hollow dot the default;
   **Reset** deletes the key.
-- **Typed editors** from the ui schema: enumerations as a dropdown; `Авто|Булево` as a
+- **Typed editors** from the ui schema: enumerations as a dropdown; an `Auto|Boolean` union as a
   tri-state; numbers; color (hex plus a swatch, with one-click presets from the form's own
-  colors and your recent picks); union types as a **Type + Value** pair (`Изображение`, `Фон`);
-  nested structures (`Шрифт`) as sub-groups; multiline strings.
+  colors and your recent picks); union types as a **Type + Value** pair (`Image`, `Background`);
+  nested structures (`Font`) as sub-groups; multiline strings.
 - **Bindings.** A per-property toggle switches a value between a literal and a binding (`=...`).
-  Binding completion offers enumeration values (`=Перечисление.Значение`), owner-object
-  attributes (`=Объект.Реквизит`), components and their members (`=Компоненты.Кнопка.Значение`)
+  Binding completion offers enumeration values (`=Enum.Value`), owner-object attributes
+  (`=Object.Attribute`), components and their members (`=Components.Button.Value`)
   and bindings already used in the form.
 - **Events.** An event property offers a dropdown of the module's compatible handlers;
   "create handler" writes a stub with the right signature into the `.xbsl` and jumps to it.
@@ -104,13 +104,13 @@ The **Properties** panel edits the selected component (and, from the metadata tr
 ## Data panel
 
 The **Data** panel binds form inputs to data. It has two sections: the owner object's
-attributes, and the component's own `Свойства:`.
+attributes, and the component's own `Properties`.
 
 - **Manage component properties**: **Add property**, **Rename property**, **Change property
   type**, **Remove property**.
 - **Bind an input**: drag an attribute (or a property) into the Structure tree, or use **Insert
-  into the form** – the designer creates the right input component already bound (`Булево` –>
-  a checkbox, otherwise an input field with `Значение: =...`).
+  into the form** – the designer creates the right input component already bound (`Boolean` –>
+  a checkbox, otherwise an input field with `Value: =...`).
 
 ## Documentation panel
 
@@ -124,8 +124,8 @@ is this component or property".
 ## Wireframe preview
 
 The preview is an honest wireframe of the form's structure. It highlights the selected
-component and follows the Structure selection; a `Картинка` with `Изображение: file.svg` shows
-the actual image (resource images are resolved against `**/Ресурсы/`); a narrow panel scrolls
+component and follows the Structure selection; a `Picture` with `Image: file.svg` shows
+the actual image (resource images are resolved against the project's `Resources` folders); a narrow panel scrolls
 horizontally to the line content.
 
 ## Structural search

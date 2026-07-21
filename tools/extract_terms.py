@@ -13,12 +13,25 @@ Every pair here comes from the distribution, never from a translation:
   English one in its path segment (`.../Query_ru/index.html`), the same pairing extract_stdlib
   relies on;
 - yaml properties - the EMF metamodel annotates them `@PropertyInfo(ru="Имя", en="Name")`;
-- enumeration values - the metamodel declares them `InProject as "ВПроекте"`.
+- enumeration values - the metamodel declares them `InProject as "ВПроекте"`;
+- members of every stdlib type - the compiler's meta objects. The two documentation-and-xcore
+  sources above are thin: a great many names carry no `en` in the metamodel at all
+  (`@PropertyInfo(ru="Реквизиты")`), which used to read as "the platform has no English name
+  for this" - and that was wrong. The compiler builds each meta object with calls shaped like
+  `builder.name("Get", "Получить")`, so the class constant pool holds the English name
+  immediately before the Russian one, for every type and every member. Scanning those classes
+  yields thousands of pairs the other sources never see (Реквизиты/Attributes,
+  ТабличныеЧасти/TabularParts, СоздатьОбъект/CreateObject).
 
 Keywords are NOT duplicated here: language.json already stores every form of each keyword.
 
 The result is xbsl/data/element/<version>/terms.json:
-    { "types": {ru: en}, "facets": {ru: en}, "properties": {ru: en}, "enums": {ru: en} }
+    { "types": {ru: en}, "facets": {ru: en}, "properties": {ru: en}, "enums": {ru: en},
+      "members": {en type: {ru: en}}, "common": {ru: en} }
+
+`members` keeps the owner, because a word may be translated differently depending on where it
+sits (`Ссылка` is `Reference` on a data-object facet and `Link` on a navigation property);
+`common` holds only the names whose English spelling is unambiguous across the distribution.
 """
 
 from __future__ import annotations
@@ -27,8 +40,10 @@ import argparse
 import io
 import json
 import re
+import struct
 import sys
 import zipfile
+from collections import Counter, defaultdict
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -69,6 +84,90 @@ def _add(target: dict[str, str], ru: str, en: str, conflicts: set[str]) -> None:
         target[ru] = en
     elif known != en:
         conflicts.add(ru)
+
+
+#: Meta-object classes: the file name without this suffix is the English name of the type.
+_META_SUFFIX = re.compile(r"(CtMetaObject|MetaObject|BslImpl)$")
+#: Jars of the platform itself - the only ones that can hold meta objects.
+_PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
+_EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
+_RU_NAME_RE = re.compile(r"^[А-ЯЁ][А-Яа-яЁё0-9_]*$")
+#: How many times the leading spelling must beat the runner-up to be taken as unambiguous.
+_DOMINANCE = 3
+
+
+def _constant_pool(data: bytes) -> list[str]:
+    """The UTF8 entries of a class constant pool, in index order.
+
+    Only the strings are needed, so the other entry kinds are skipped by their fixed sizes
+    (long and double take two pool slots - the quirk the `num += 1` accounts for).
+    """
+    count = struct.unpack_from(">H", data, 8)[0]
+    out: dict[int, str] = {}
+    i, num = 10, 1
+    while num < count and i < len(data):
+        tag = data[i]
+        if tag == 1:
+            length = struct.unpack_from(">H", data, i + 1)[0]
+            out[num] = data[i + 3:i + 3 + length].decode("utf-8", "replace")
+            i += 3 + length
+        elif tag in (7, 8, 16, 19, 20):
+            i += 3
+        elif tag == 15:
+            i += 4
+        elif tag in (3, 4, 9, 10, 11, 12, 17, 18):
+            i += 5
+        elif tag in (5, 6):
+            i += 9
+            num += 1
+        else:
+            i += 1
+        num += 1
+    return [out[key] for key in sorted(out)]
+
+
+def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
+    """({owner type: {ru: en}}, {ru: en}) from the compiler meta objects of the distribution.
+
+    A class without a single Cyrillic byte cannot hold a pair and is skipped before parsing -
+    that check alone drops the overwhelming majority of the classes.
+    """
+    members: dict[str, dict[str, str]] = defaultdict(dict)
+    variants: dict[str, Counter] = defaultdict(Counter)
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if not inner.endswith(".class"):
+                continue
+            try:
+                data = jar.read(inner)
+            except (zipfile.BadZipFile, KeyError):
+                continue
+            if b"\xd0" not in data and b"\xd1" not in data:
+                continue
+            strings = _constant_pool(data)
+            pairs = [
+                (en, ru) for en, ru in zip(strings, strings[1:])
+                if _EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru)
+            ]
+            if not pairs:
+                continue
+            owner = _META_SUFFIX.sub("", inner.rsplit("/", 1)[-1][:-len(".class")])
+            for en, ru in pairs:
+                members[owner][ru] = en
+                variants[ru][en] += 1
+    common: dict[str, str] = {}
+    for ru, counter in variants.items():
+        ranked = counter.most_common(2)
+        best, best_n = ranked[0]
+        if len(ranked) == 1 or best_n >= ranked[1][1] * _DOMINANCE:
+            common[ru] = best
+    return {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())}, common
 
 
 def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
@@ -115,11 +214,17 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
                 except zipfile.BadZipFile:
                     continue
 
+    with zipfile.ZipFile(car) as z:
+        members, common = _scan_meta_objects(z)
+
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]
         for name in names:
             target.pop(name, None)
-    return {"types": types, "facets": facets, "properties": properties, "enums": enums}, conflicts
+    return {
+        "types": types, "facets": facets, "properties": properties, "enums": enums,
+        "members": members, "common": common,
+    }, conflicts
 
 
 def main(argv=None) -> None:
@@ -134,18 +239,26 @@ def main(argv=None) -> None:
     _distro.set_data_root(args.data_dir)
     sections, conflicts = extract(dist)
 
-    payload = {
-        "meta": {
-            "element_version": version,
-            "source": "docs/help/ru (title + путь страницы), *.xcore (@PropertyInfo, значения перечислений)",
-            "note": "пары русского и английского написания; имена с несколькими ролями "
-                    "(разное английское написание в разных местах) исключены",
-        },
-        **{name: dict(sorted(values.items())) for name, values in sections.items()},
+    meta = {
+        "element_version": version,
+        "source": "docs/help/ru (title + путь страницы), *.xcore (@PropertyInfo, значения "
+                  "перечислений), метаобъекты компилятора в jar дистрибутива",
+        "note": "пары русского и английского написания; имена с несколькими ролями "
+                "(разное английское написание в разных местах) исключены",
     }
-    out = _distro.version_dir(version) / "terms.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(payload, ensure_ascii=False, indent=1), encoding="utf-8")
+    # Компактный файл читает рантайм на каждом прогоне - в нём только то, чем пользуются
+    # правила. Полный словарь (тысячи членов) лежит рядом и грузится по требованию:
+    # 1 МБ json в каждом параллельном воркере стоил бы четверти времени прогона.
+    small = {"meta": meta, **{name: dict(sorted(sections[name].items()))
+                              for name in ("types", "facets", "properties", "enums")}}
+    full = {"meta": meta, "members": sections["members"], "common": sections["common"]}
+
+    version_dir = _distro.version_dir(version)
+    version_dir.mkdir(parents=True, exist_ok=True)
+    out = version_dir / "terms.json"
+    out.write_text(json.dumps(small, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_full = version_dir / "terms_full.json"
+    out_full.write_text(json.dumps(full, ensure_ascii=False, indent=1), encoding="utf-8")
     _distro.update_index(version)
 
     print(f"Записано: {out} (версия {version})")
@@ -153,6 +266,8 @@ def main(argv=None) -> None:
         dropped = sorted(conflicts[name])
         extra = f", исключено по конфликту: {dropped}" if dropped else ""
         print(f"  {name}: {len(sections[name])}{extra}")
+    print(f"Записано: {out_full}")
+    print(f"  members: {len(sections['members'])} типов, common: {len(sections['common'])} имён")
 
 
 if __name__ == "__main__":

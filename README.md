@@ -26,7 +26,7 @@ objects, attributes and forms.
 
 ## How it works
 
-One engine, four surfaces. The core reads the `Имя.yaml` + `Имя.xbsl` pairs, and the scaffolding
+One engine, four surfaces. The core reads the `<element>.yaml` + `<element>.xbsl` pairs, and the scaffolding
 writes them back; the CLI, the LSP server, the MCP server and the web UI are thin adapters over
 the same core, so every surface sees the same rules, data and templates:
 
@@ -66,7 +66,7 @@ mechanics – in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/GUID
 **Rules.** 97 rules in four tiers: **A** – structure and yaml schema, **B** – text and
 typography conventions, **C** – code structure (blocks, brackets, unused locals, the `style/`
 code conventions), **D** – semantics against the platform data and the project itself: every
-type position in code and yaml, enumeration values, `Запрос{...}` tables, cross-file
+type position in code and yaml, enumeration values, `Query{...}` block tables, cross-file
 consistency, the types of attached `.xlib` libraries. The full list with severities and
 documentation links – [docs/RULES.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.md);
 at runtime – `xbsl --list-rules`; what tier D verifies in depth –
@@ -85,11 +85,15 @@ yaml: 33 element kinds, forms generated with real content, context-aware `rename
 access-control editing. The same operations through the CLI, MCP and LSP:
 
 ```sh
-xbsl new-object vendor/App/Основное Справочник Товары
-xbsl add-field vendor/App/Основное/Товары.yaml реквизит Цвет --type Строка
-xbsl add-form . --name Товары            # object + list forms, registered
-xbsl rename-object . Товары Номенклатура # rename files + update references
+xbsl new-object <subsystem-dir> <kind> <name>   # kinds: Catalog, Document, Enum, ...
+xbsl add-field <object>.yaml <section> <name> --type <type>   # sections: Attributes, ...
+xbsl add-form . --name <object>                # object + list forms, registered
+xbsl rename-object . <old> <new>               # rename files + update references
 ```
+
+The platform is bilingual: every metadata name has both an English and a Russian spelling for
+the same thing, and a project is written in one of them. The tool takes the spellings your
+project uses - `xbsl new-object --help` lists the kinds it can create.
 
 All subcommands with their options –
 [the guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#metadata-scaffolding).
@@ -101,7 +105,8 @@ project-wide diagnostics, go-to-definition and completion, a form preview, a met
 a deploy button. Under the hood is `xbsl-lsp` – a Language Server any LSP-capable editor can
 spawn ([details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#lsp-server)).
 
-**Code templates.** Type `есл`, press Ctrl+Space – get the whole construct with edit points.
+**Code templates.** Type the first letters of a construct, press Ctrl+Space – get the whole
+construct with edit points.
 51 builtin templates (each one parsed by the linter's own parser, so it cannot insert broken
 code), your own in `.xbsl-templates.json`, a management panel in VS Code; the mechanism and
 file format mirror 1C:EDT.

@@ -63,9 +63,9 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/id-required` | warning | on | file | The object has no Id | – |
 | `yaml/name-matches-file` | warning | on | file | Name does not match the file name | – |
 | `yaml/id-unique` | error | on | project | Duplicate Id in the project | – |
-| `yaml/standard-field-length` | error | on | file | A standard field longer than the platform limit (`Наименование` > 400, `Код` > 50) - apply rejects the field and it drops out of the object | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| `yaml/ref-needs-nullable` | error | on | file | A reference type in a `Тип` position without `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`) - a reference has no default value, the compilation fails with `Default value initialization is not supported` | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| `yaml/no-expression-in-literal` | error | on | file | An `=...` expression inside a literal-typed node (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) - the platform accepts only a literal there, compute the whole object instead | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `yaml/standard-field-length` | error | on | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| `yaml/ref-needs-nullable` | error | on | file | A reference type in a type position without `?` (`Goods.Reference`, `Edit<Goods.Reference>`) - a reference has no default value, the compilation fails with `Default value initialization is not supported` | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `yaml/no-expression-in-literal` | error | on | file | An `=...` expression inside a literal-typed node (`Font: {Type: AbsoluteFont, Size: =...}`) - the platform accepts only a literal there, compute the whole object instead | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `project/identifier` | warning | on | file | Project name or vendor is not an identifier | [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/presentation` | warning | on | file | Project presentation is empty | [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/version` | warning | on | file | Project version is not A.B.C | [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
@@ -98,7 +98,7 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 | Rule | Severity | Default | Scope | What it checks | Docs |
 |---|---|---|---|---|---|
 | `code/parse-error` | error | on | file | Syntax error (a full parse against the platform grammar) | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
-| `code/statement-no-effect` | warning | on | file | Expression statement with no effect: the value is dropped (often a keyword typo like `возрат 5`) | – |
+| `code/statement-no-effect` | warning | on | file | Expression statement with no effect: the value is dropped (often a keyword typo, `retun 5` for `return 5`) | – |
 | `code/return-mismatch` | error | on | file | Return does not match the method signature (a value in a void method, a bare `return` in a typed one) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/call-arity` | error | on | file | Argument count of a local call outside the method's [required, total] range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/brackets` | error | on | file | Unbalanced brackets () [] {} | – |
@@ -117,18 +117,18 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 | `style/wrap-comma` | warning | on | file | Comma at the start of a wrapped line | [docs](https://1cmycloud.com/docs/help/topics/split-expressions/) |
 | `style/camel-case` | info | off | file | Name is not in UpperCamelCase | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 | `style/const-case` | warning | on | file | Constant is not in ALL_CAPS | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| `style/exception-prefix` | warning | on | file | Exception name without the "Исключение" prefix | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/exception-prefix` | warning | on | file | Exception name without the exception prefix | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 | `style/abbreviation-case` | info | off | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 | `style/enum-name-vid` | warning | on | file | Enumeration name starts with "Type" | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 | `style/collection-literal` | info | off | file | Manual collection fill instead of a literal | [docs](https://1cmycloud.com/docs/help/topics/collection-literals-usage/) |
-| `style/redundant-tostring` | info | off | file | '.ВСтроку()' in a concatenation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
+| `style/redundant-tostring` | info | off | file | An explicit `ToString()` call in a concatenation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
 | `style/interpolation` | info | off | file | Concatenation instead of interpolation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
 | `style/type-colon-space` | warning | on | file | Spaces around the type colon | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `style/union-spaces` | warning | on | file | Spaces around '\|' in a union type | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `style/nullable-shorthand` | warning | on | file | Undefined in a type without the '?' shorthand | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `style/redundant-type` | warning | on | file | Redundant type annotation on initialization | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `style/optional-params-last` | warning | on | file | Optional parameter before a required one | [docs](https://1cmycloud.com/docs/help/topics/method-declarations/) |
-| `code/resource-bare-name` | error | on | file | `Ресурс{Ресурсы/Имя.svg}` - a resource is addressed by its bare file name, a path with a folder is not resolved | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `code/resource-bare-name` | error | on | file | `Resource{<folder>/<file>.svg}` - a resource is addressed by its bare file name, a path with a folder is not resolved | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 
 ### Tier D - semantics over stdlib, forms and the metamodel
 
@@ -137,29 +137,29 @@ the execution model (client/server), form handlers, properties and queries.
 
 | Rule | Severity | Default | Scope | What it checks | Docs |
 |---|---|---|---|---|---|
-| `yaml/choice-needs-static-list` | warning | on | file | ValueChoice without a static СписокВыбора | [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
+| `yaml/choice-needs-static-list` | warning | on | file | ValueChoice without a static `ChoiceList` | [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
 | `code/unknown-type` | warning | on | project | Unknown type | – |
 | `code/catch-non-exception` | error | on | file | The type in `catch` is not an exception (a stdlib non-exception or a local `structure`) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/exceptions/) |
 | `code/unknown-member` | error | on | file | A member access on a variable of a known plain stdlib type that the type does not have (first hop, typos get a hint) | – |
 | `code/unknown-static-member` | error | on | project | A member reached through a type name (`DateTime.Minimal()`) that the type does not have; the type of such a call carries on to the next hop. A bare name is read as a type only when the project gives it no other meaning | – |
-| `yaml/foreign-not-public` | error | on | project | A yaml reference (a type position or a `ТипФормы` navigation target) to an element of another subsystem whose `VisibilityScope` is not `InProject`/`Global` - unreachable from outside its subsystem, and no import helps | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `code/call-arity-cross` | error | on | project | Argument count of a `Модуль.Метод(...)` call outside the target module's signature range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| `code/undefined-name` | error | on | project | Undefined name in an expression (typos like `Адресар` for `Адреса`) and in a short string interpolation (`"?$format=json"` substitutes the name `format`, `\$` is needed) - the compiler rejects such code | – |
+| `yaml/foreign-not-public` | error | on | project | A yaml reference (a type position or a `FormType` navigation target) to an element of another subsystem whose `VisibilityScope` is not `InProject`/`Global` - unreachable from outside its subsystem, and no import helps | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/call-arity-cross` | error | on | project | Argument count of a `<Module>.<Method>(...)` call outside the target module's signature range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| `code/undefined-name` | error | on | project | Undefined name in an expression (a typo in a name) and in a short string interpolation (`"?$format=json"` substitutes the name `format`, `\$` is needed) - the compiler rejects such code | – |
 | `code/unknown-object-type` | warning | on | project | Unknown project-object type | – |
 | `yaml/unknown-type` | warning | on | project | Unknown type in yaml | – |
 | `yaml/dynlist-missing-field` | warning | on | project | Missing dynamic-list field | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `code/unknown-enum-value` | warning | on | project | Unknown enumeration value | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/enum-needs-nullable` | warning | on | project | Enumeration without nullable | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
-| `yaml/unknown-enum-value` | error | on | file | A component property value outside the enumeration of the ui schema (`ВыравниваниеСодержимогоПоВертикали: Конец` - the vertical axis has no `Конец`) | – |
-| `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Объект` (`Значение: Титул`) - the platform expects a quoted literal or an `=` binding | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
-| `code/unknown-resource` | error | on | project | The name in `Ресурс{...}` is neither in the project's `Ресурсы` folders nor in the platform's image library | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `yaml/unknown-enum-value` | error | on | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top|Center|Bottom|Baseline`, no `End`) | – |
+| `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal or an `=` binding | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `code/unknown-resource` | error | on | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | warning | on | project | Form handler not found in the module | [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | warning | on | project | Server method is unavailable to a client handler | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-annotation-in-server-module` | warning | on | project | Client annotation in a server common module | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-module-in-http-service` | warning | on | project | Client common module in an HTTP service | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| `code/query-needs-server` | error | on | project | A `Query{...}` block in a method of a client-side module (a form, or a common module whose `Окружение` involves the client) that carries no `@НаСервере` - the type does not exist on the client and the compiler rejects the build | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/query-needs-server` | error | on | project | A `Query{...}` block in a method of a client-side module (a form, or a common module whose `Environment` involves the client) that carries no `@OnServer` - the type does not exist on the client and the compiler rejects the build | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/local-method-cross-component` | warning | on | project | Cross-component call of a local method | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `naming/yo` | warning | on | file | Letter "ё" in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/yo` | warning | on | file | The letter yo in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
 | `naming/underscore` | warning | on | file | Underscore in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
 | `naming/abbreviation` | warning | on | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
 | `naming/latin-term` | warning | on | file | English term spelled in Cyrillic | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
@@ -179,7 +179,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/builtin-property-name` | warning | on | file | Built-in property name clash | – |
 | `yaml/size-needs-no-stretch` | info | off | file | A size without disabling the stretch | [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `code/unused-method` | warning | off | project | Method is never referenced | – |
-| `yaml/missing-import` | warning | on | project | A yaml reference (a type position or a `ТипФормы` navigation target) to a public element of another subsystem that the `Import` section does not list | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/missing-import` | warning | on | project | A yaml reference (a type position or a `FormType` navigation target) to a public element of another subsystem that the `Import` section does not list | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 
 ## Group details
 
@@ -199,13 +199,14 @@ A type counts as composite when the yaml spells two or more alternatives (`Strin
 composite either. Only a field whose type is known for sure is questioned: `Alias.Field` or
 `Table.Field`, where the alias is unambiguous within the block and the field is found in the
 table's yaml; a list of values (`IN (1, 2, &Codes)`) is not what the standard is about. Both
-spellings of the query language are understood (`В`/`IN`, `НЕ`/`NOT`, `ВЫБРАТЬ`/`SELECT`).
+spellings of the query language are understood - the English `IN`, `NOT`, `SELECT` and their
+Russian equivalents.
 
 ### Project properties (the `project/` rules)
 
 Three rules from the standard "Filling in the project properties": `Vendor` and `Name` are
-identifiers built from the presentations (every word capitalized: `КабинетСотрудника`,
-`НовыеЭлементарныеТехнологии`); `Presentation` and `ПредставлениеПоставщика` are filled in – the
+identifiers built from the presentations, every word capitalized; `Presentation` and
+`VendorPresentation` are filled in - the
 official name of the project and of the company that developed it; `Version` is three numbers
 `A.B.C` (semantic versioning), not `1.0`.
 
@@ -213,21 +214,23 @@ official name of the project and of the company that developed it; `Version` is 
 
 Twelve rules from the platform standard "Names of project elements" – it is mandatory in new code,
 so all of them are warnings. They read the descriptions (`.yaml`): the name of the element itself
-and the names of its attributes, dimensions, resources, tabular sections and enumeration values.
+and the names in its `Attributes`, `Dimensions`, `Resources`, `TabularParts` and enumeration
+values.
 
 The number of a name is checked against the kind: catalogs, documents, registers and tabular
 sections are named in the plural, enumerations and structures in the singular (`naming/number`).
-This is morphology, not a guess by the ending: `Номенклатура` is singular and the standard allows
-it, while `Программы` and `Акции` without the case read as a genitive singular. Needs the `[morph]`
+This is morphology, not a guess by the ending: a singular noun that the standard allows is told
+apart from a plural that reads as a genitive singular without the case. Needs the `[morph]`
 extra (`pip install "xbsl[morph]"`); without it the rule stays silent.
 
-The rest: the letter `ё` and underscores in names, an abbreviation written as one word (`Ндс`, not
-`НДС`), an English term as the original (`Xml`, not `Хмл`), `Вид` rather than `Type` for
-enumerations, the kind inside its own name (`ОтчетЗависшиеЗадачи`), filler words (`Управление`,
-`Менеджер`), an environment suffix on a common module (`ОбменДаннымиКлиентИСервер` – the
-environment is a property, not a name), a boolean attribute named by a negation (`НетОшибок`
-instead of `Успешно`), an empty `Presentation`, and the prefixes required for certain kinds
-(`КлючДоступа`, `ПравоНа`, `Навигация`).
+The rest: the letter yo and underscores in names, an abbreviation written in mixed case instead
+of all caps, an English term transliterated rather than kept as the original (`Xml`, not its
+Cyrillic spelling), an enumeration named with the word for type where the standard asks for the
+word for kind, the element kind repeated inside its own name, filler words such as the ones for
+management or manager, an environment suffix on a common module name (the environment is a
+property, not a name), a boolean attribute named by a negation instead of the positive form, an
+empty `Presentation`, and the prefixes required for certain kinds - access key, right and
+navigation.
 
 ### Code style conventions (the `style/` rules)
 
@@ -251,7 +254,7 @@ switches on off-by-default rules on top of the defaults.
 
 `Query{ ... }` blocks (the query DSL) and string literals (HTML/CSS/SVG in web views) are
 excluded from these checks. Not covered, and left to the author and review: indentation being a
-multiple of four, collection idioms, `Строки.Соединить()` for bulk concatenation, the `?.` / `??`
+multiple of four, collection idioms, `Rows.Join()` for bulk concatenation, the `?.` / `??`
 idioms, and `case` instead of an `else if` chain.
 
 ## Enabling and disabling

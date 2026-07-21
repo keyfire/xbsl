@@ -2,19 +2,21 @@
 
 [Русский](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md) · **English**
 
-> Metadata names (yaml keys such as `Реквизиты` or `Многострочная`) exist in Russian only – the platform
-> documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
-> types use their English forms. See the [note on names](README.md#navigation-and-completion).
+> The platform is bilingual: every metadata name has an English spelling of its own
+> (`Attributes`, `TabularParts`, `VisibilityScope`), and this English changelog uses those.
+> The Russian spellings - the ones that appear in the sources of a Russian-language project -
+> are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
+> See also the [note on names](README.md#navigation-and-completion).
 
 ## 0.25.0
 
 - **Three new engine rules in the "Problems" panel.** `yaml/ref-needs-nullable` – a reference type
-  in a `Тип` position without `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`): a reference has no
+  in a type position without `?` (`Goods.Reference`, `Edit<Goods.Reference>`): a reference has no
   default value, so applying the build fails; the id is clickable and opens the platform section on
   type description and initialization. `yaml/unknown-enum-value` – a component property value
   outside the enumeration of the ui schema, which also covers the alignment trap (the horizontal
-  axis has `Конец`, the vertical one does not). `yaml/standard-field-length` – `Наименование` over
-  400 characters or `Код` over 50, the limits the platform rejects.
+  axis has `End`, the vertical one does not). `yaml/standard-field-length` – `Name` over
+  400 characters or `Code` over 50, the limits the platform rejects.
 - **A short interpolation inside a string literal is now resolved.** `code/undefined-name` reads
   names inside string literals as well, so `"...?$format=json"` – a substitution of the
   non-existent name `format` – is reported before the build instead of failing the compilation.
@@ -41,10 +43,10 @@
   property to create a bound input). A new **Properties (1C:Element)** panel edits the selected
   component – and metadata objects – with typed editors: enum dropdowns, tri-state, color with
   presets from the form's own palette, union "type + value", nested groups, a literal/binding
-  toggle with dotted completion (`=Компоненты.Кнопка.Значение`, `=Объект.Реквизит`, enum values),
+  toggle with dotted completion (`=Components.Button.Value`, `=Object.Attribute`, enum values),
   and an events editor that can generate a handler stub in the `.xbsl`.
 - **Wireframe preview**: highlights the selected component and follows the structure selection,
-  shows real resource images (`Картинка` with `Изображение:`), and scrolls to the content in a
+  shows real resource images (`Picture` with `Image:`), and scrolls to the content in a
   narrow panel.
 - **Structural search across forms** (`XBSL: search forms by structure`) – by component type and
   `key=value` predicates.
@@ -71,7 +73,7 @@
 
 - Code templates - the mechanism of 1C:EDT, with its export file. Type an abbreviation,
   press Ctrl+Space and get the whole construct with edit points; templates are offered
-  ahead of the other completions. `${ИмяОбъектаМетаданного(Справочник)}` expands into the
+  ahead of the other completions. `${MetadataObjectName(Catalog)}` expands into the
   catalogs of your own project, from the index. 51 builtin templates, each one parsed by the
   engine's parser, so none of them inserts code that does not compile.
 - The "XBSL: code templates" panel, laid out like the EDT dialog: the list with the call
@@ -108,9 +110,9 @@
 - Documentation links on every rule backed by a platform requirement (54 of 78): the
   diagnostic code in the Problems panel opens the exact documentation section right inside
   VS Code (the Documentation panel + scroll to the anchor). Previously only some rules had links.
-- Works with the xbsl 0.18.0 engine: scaffolding creates registers and Документ valid
-  (mandatory starter fields), adds SoapСервис, Обработка operations, ЛокализованныеСтроки,
-  Индексы, report query parameters and КомандаСКомпонентом; library attachment –
+- Works with the xbsl 0.18.0 engine: scaffolding creates registers and `Document` valid
+  (mandatory starter fields), adds `SoapService`, `DataProcessor` operations, `LocalizedStrings`,
+  `Indexes`, report query parameters and a command with a component; library attachment –
   `add-dependency`; the full rule reference – docs/RULES.md in the engine repository.
 
 ## 0.19.1
@@ -131,8 +133,8 @@
   (LSP `xbsl/meta*` requests, or the CLI subcommands in the CLI mode) and apply the returned
   changes through a single undoable edit. Templates no longer live in the extension.
 - "Add object form" now offers the object form or the object + list pair, and the engine
-  generates them populated from the object's attributes (standard Наименование / Номер /
-  Дата included, hierarchy supported) and registers them in the owner's `Интерфейс` itself.
+  generates them populated from the object's attributes (standard `Name` / `Number` /
+  `Date` included, hierarchy supported) and registers them in the owner's `Interface` itself.
 - The same scaffolding is exposed to AI agents through the engine's `meta_*` MCP tools –
   creation and lint of the result in one call.
 ## 0.18.2
@@ -164,8 +166,8 @@
 
 - "Find All References" (Shift+F12, and "Go to References"/"Find All References" in the context menu)
   for methods, objects and interface components – built over the project index, it lists every usage:
-  calls inside the module, `Module.Method` / `Компоненты.Module.Method` calls, `Обработчик:` handlers in
-  yaml, object chain roots, and `Компоненты.Name`. Needs the linter engine 0.13.0 or newer (the index now
+  calls inside the module, `Module.Method` / `Components.Module.Method` calls, `Handler:` keys in
+  yaml, object chain roots, and `Components.Name`. Needs the linter engine 0.13.0 or newer (the index now
   carries usage sites); with an older engine references stay silent.
 
 ## 0.16.1
@@ -183,7 +185,7 @@
 
 - Opening a document from a rule or a link now scrolls to the relevant section (anchor) instead of
   the top of the page: `naming/module-suffix` lands on the general naming rules, `project/version` on
-  the "Версия" section, and so on. Section headings in the documentation keep their anchors.
+  the `Version` section, and so on. Section headings in the documentation keep their anchors.
 
 ## 0.15.1
 
@@ -216,14 +218,14 @@
 ## 0.13.0
 
 - New **project** rule group in the settings: the project properties per the standard "Filling in the
-  project properties" – `Поставщик` and `Имя` as identifiers starting with a capital letter, a
-  filled-in `Представление` and `ПредставлениеПоставщика`, and a three-number version `A.B.C`.
+  project properties" – `Vendor` and `Name` as identifiers starting with a capital letter, a
+  filled-in `Presentation` and `VendorPresentation`, and a three-number version `A.B.C`.
 - New rule in the **query** group (needs `xbsllint` >= 0.11.0): `IN` with a subquery over a field of
-  a composite type (`Строка|Число`) – per the platform standard such a condition is written with
+  a composite type (`String|Number`) – per the platform standard such a condition is written with
   `EXISTS`, because `IN` with a subquery is implemented inefficiently on most DBMSs.
 - New **naming** rule group in the settings (needs `xbsllint` >= 0.11.0): names of project elements
   per the platform standard "Names of project elements" – the number by kind (catalogs in the plural,
-  enumerations in the singular), the letter `ё` and underscores, abbreviations as one word, the kind
+  enumerations in the singular), the letter yo and underscores, abbreviations as one word, the kind
   inside its own name, an environment suffix on a common module, an empty presentation. All twelve
   rules are warnings; the whole group can be lowered or switched off from a dropdown, like the others.
 
@@ -267,14 +269,14 @@
 - The form preview's primary button now uses the platform's native yellow (`#fd0`, dark text)
   instead of blue.
 - The **type** of an attribute / dimension / resource / field is edited through a combo in the
-  properties panel: primitives, reference types (`<Object>.Ссылка?`) and the project enumerations are
+  properties panel: primitives, reference types (`<Object>.Reference?`) and the project enumerations are
   offered as suggestions, and any other type can still be typed in.
-- The multiline flag (`Многострочная`) shows in the properties panel only for the string type
-  (`Строка`) and is dropped when the type is changed to another one.
+- The `Multiline` flag shows in the properties panel only for the `String` type and is dropped
+  when the type is changed to another one.
 - A **Standard attributes** group for catalogs/documents lists the predefined attributes – name and
-  code for a catalog, number and date for a document (`Наименование`/`Код`, `Номер`/`Дата`) – even when
+  code for a catalog, number and date for a document (`Name`/`Code`, `Number`/`Date`) – even when
   they are not in the yaml; editing a property in the panel materializes the entry into the attributes
-  section (`Реквизиты`), without an id, as a standard attribute.
+  `Attributes` section, without an id, as a standard attribute.
 - A **status bar** item shows the extension build time, the xbsllint version and the completion mode
   (CLI index / LSP) – handy for telling which build is actually running.
 - In a `Query{...}` block, completion after `<Table>.` offers the table's **fields** (standard fields,
@@ -287,7 +289,7 @@
   AS P` → `P.` gives the fields of Product); the loop variable of a query result (`for Row in Result` →
   `Row.`) gives the columns of the selection; a variable of a known type (`var List = new Array<String>()`
   → `List.`) and stdlib types and globals (`AccessContext.`) give their members. The parsing runs over
-  tokens, so keywords are understood in both languages (`var`/`пер`, `new`/`новый`). Properties and
+  tokens, so keywords are understood in both spellings, English and Russian. Properties and
   methods are listed apart: a method carries its own icon and is inserted with parentheses. A name in
   scope beats a type of the same name (with `List` declared, `List.` is about its type, not about the
   `List` component). Requires `xbsllint` >= 0.10.0.
@@ -336,7 +338,7 @@
 
 - The form preview gained a **properties panel**, like the platform web editor: a click on an
   element selects it and opens a separate *Properties* tab (drag it wherever suits) – enums as
-  dropdowns, the stretch flags (`Растягивать*`) as Auto / `Истина` / `Ложь` toggles, everything
+  dropdowns, the stretch flags (`Stretch*`) as `Auto` / `True` / `False` toggles, everything
   else as text; the
   curated standard set of the component plus every property present in the yaml. Edits are
   applied to the yaml document as precise text edits (undo works); an empty value / *(auto)*
@@ -422,7 +424,7 @@
 
 - Go to definition and completion powered by the project index (`xbsllint index`, with the
   `--index` spelling probed as a fallback): objects, tabular sections, local types, enum values,
-  methods, form components, the yaml handler and type keys (`Обработчик:` / `Тип:`). Silent when
+  methods, form components, the yaml `Handler:` / `Type:` keys. Silent when
   the installed linter has no index command.
 - New setting `xbsl.navigation.enabled` (default `true`).
 

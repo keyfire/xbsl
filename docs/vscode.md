@@ -1,13 +1,13 @@
 ---
 title: "XBSL for VS Code"
-description: "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation — all on the xbsl engine."
+description: "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation – all on the xbsl engine."
 sidebar:
   label: "VS Code extension"
   order: 5
 ---
 
-<!-- Сгенерировано из editors/vscode/README.md — не редактируйте вручную.
-     Правьте editors/vscode/README.md и выполните: npm run sync:docs -->
+<!-- Generated from editors/vscode/README.md; do not edit by hand.
+     Edit editors/vscode/README.md and run: npm run sync:docs -->
 
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
 [xbsl](https://github.com/keyfire/xbsl) linter.
@@ -26,7 +26,7 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   carry the rule id (e.g. `code/brackets`) and severity.
 - **Workspace diagnostics** – saving any `.xbsl`/`.yaml` file runs the linter over the whole
   workspace folder in the background, so project-scope rules (`code/unknown-type`,
-  `yaml/unknown-type`, id (`Ид`) uniqueness) show up right in the editor, across all files.
+  `yaml/unknown-type`, `Id` uniqueness) show up right in the editor, across all files.
   Controlled by `xbsl.workspaceLint` (on by default).
 - **Whole-project check** – the command *XBSL: check the whole project* runs the same
   workspace-wide check on demand.
@@ -45,8 +45,8 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   element and opens its **properties panel** for editing (dropdowns and toggles write back
   into the yaml); Ctrl+click reveals the yaml node. See [Form preview](#form-preview).
 - **Metadata explorer** – a dedicated Activity Bar view: a tree of the project objects grouped by
-  kind, with subtrees (attributes, dimensions, forms, enum values ...), an editable properties
-  panel, creation of objects/fields/subsystems and filtering by subsystem. See
+  `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum `Values` ...), an editable
+  properties panel, creation of objects/fields/subsystems and filtering by subsystem. See
   [Metadata explorer](#metadata-explorer).
 - **Documentation** – a dedicated Activity Bar view: the 1C:Element reference the way the docs site
   shows it – a "Contents" tree (the developer and administrator guides, the type and query-language
@@ -80,51 +80,50 @@ output channel, no popups.
 **Go to definition** (F12 / Ctrl+Click), in `.xbsl` and `.yaml`:
 
 - a project object name (bare, or the root of a dotted chain) → its `.yaml`;
-- `<Object>.<LocalType>` → the type declaration; `<Object>.<TabularSection>` → the section in the
+- `<Object>.<LocalType>` → the type declaration; `<Object>.<TabularPart>` → the section in the
   object's yaml; `<Enum>.<Value>` → the value line;
 - `<Module>.<Method>` (including manager modules named after the object), and a bare method name
   inside its own module → the method;
-- `Компоненты.<Name>` → the component node in the current form's yaml; `Компоненты.<Name>.<Method>`
+- `Components.<Name>` → the component node in the current form's yaml; `Components.<Name>.<Method>`
   → the method of that module;
-- in yaml, the value of `Обработчик: <Name>` → the handler in the paired `.xbsl`.
+- in yaml, the value of `Handler: <Name>` → the handler in the paired `.xbsl`.
 
 **Find all references** (Shift+F12, or *Go to References* / *Find All References* in the context menu),
 for methods, objects and interface components – every usage, from the same index:
 
-- a method → its calls inside the module, `<Module>.<Method>` and `Компоненты.<Module>.<Method>` calls,
-  and `Обработчик: <Name>` handlers in yaml;
+- a method → its calls inside the module, `<Module>.<Method>` and `Components.<Module>.<Method>`
+  calls, and the `Handler: <Name>` keys that name it in yaml;
 - an object → every place it is the root of a dotted chain;
-- a component → its `Компоненты.<Name>` uses in the form's module.
+- a component → its `Components.<Name>` uses in the form's module.
 
 Deeper chains that would need type inference are out of scope, as they are for go-to-definition.
 
-> **A note on names.** Code keywords, literals and the names of stdlib types are bilingual, and this
-> README spells them in English (`var`, `new`, `Query{}`, `Array<String>`, `True`). Metadata names are
-> not – the platform documents them in Russian only – so yaml keys and type members appear here exactly
-> as they are written in the yaml. The ones this README uses:
+> **A note on names.** 1C:Element is bilingual all the way down: keywords, literals, stdlib types and
+> the metadata vocabulary each carry a Russian and an English spelling, and this README uses the
+> English one (`var`, `new`, `Query{}`, `Array<String>`, `True`). Sources may be written either way,
+> and the extension reads both. The metadata names used below:
 >
-> | In the yaml | Means |
+> | Name | What it is |
 > | --- | --- |
-> | `Реквизиты` · `Измерения` · `Ресурсы` · `ТабличныеЧасти` | attributes · dimensions · resources · tabular sections |
-> | `Ид` · `Имя` · `Тип` · `Обработчик` | id · name · type · handler |
-> | `Ссылка` · `Объект` | the reference / the object of a type family |
-> | `Компоненты` | the components of a form |
-> | `Многострочная` · `Компоновка` · `Растягивать*` · `Страницы` | multiline · layout · stretch flags · tabs |
-> | `Истина` · `Ложь` | true · false |
+> | `Attributes` · `Dimensions` · `Resources` · `TabularParts` | the field sections of an object |
+> | `Id` · `Name` · `Type` · `Handler` | the yaml keys an element carries |
+> | `Reference` · `Object` | the reference and the object of a type family |
+> | `Components` | the components collection of a form |
+> | `Multiline` · `Layout` · `HorizontalStretch` · `VerticalStretch` · `Pages` | the properties of a component |
 
 **Completion** (triggered by `.` and `:`):
 
-- after `<Object>.` – the type family (`Ссылка`, `Объект`, ...), tabular sections, local types and
+- after `<Object>.` – the type family (`Reference`, `Object`, ...), `TabularParts`, local types and
   manager-module methods; for an enum – its values;
-- after `Компоненты.` – components of the current form; after `Компоненты.<Name>.` – methods of
-  that module;
-- in yaml after `Тип:` – project object names (the object kind is shown as the detail).
+- after `Components.` – the components of the current form; after `Components.<Name>.` – the methods
+  of that module;
+- in yaml, after `Type:` – project object names (the object kind is shown as the detail).
 
 **Type-aware completion** – in [LSP mode](#lsp-mode-default) only. The parsing runs over tokens, so
-keywords are understood in both languages (`var`/`пер`, `new`/`новый`):
+keywords are understood in both of the spellings the language has, the English one and the Russian:
 
-- inside `Query{ ... }`, after a table – its fields: the standard fields of the kind, the
-  attributes and the tabular sections. Aliases resolve too: `FROM Product AS P` → `P.` gives the
+- inside `Query{ ... }`, after a table – its fields: the standard fields of the kind, its
+  `Attributes` and `TabularParts`. Aliases resolve too: `FROM Product AS P` → `P.` gives the
   same fields;
 - after the loop variable of a query result (`for Row in Result` → `Row.`) – the columns of the
   selection (the `SELECT ... AS` aliases; a plain field is named by its last segment);
@@ -173,7 +172,7 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.linter.ignore` | – | Exclude these rules. |
 | `xbsl.rules` | `{}` | Per-rule levels and disabling: `{"style": "off", "code/brackets": "error"}`. See [Rules](#rules-levels-and-disabling). |
 | `xbsl.linter.debounce` | `300` | Delay (ms) before linting while typing. |
-| `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (id (`Ид`) uniqueness etc.) cross-fire between directories. |
+| `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (`Id` uniqueness etc.) cross-fire between directories. |
 | `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
@@ -212,9 +211,9 @@ or wherever `xbsl.baseline` points. The reason stays next to the frozen finding,
 `xbsl --write-baseline` keeps it on a rewrite:
 
 ```json
-"app/Полезное.yaml": {
+"app/Useful.yaml": {
  "naming/number": {
-  "The name 'Полезное' is singular – ...": { "count": 1, "reason": "a historical name" }
+  "The name 'Useful' is singular – ...": { "count": 1, "reason": "a historical name" }
  }
 }
 ```
@@ -255,11 +254,10 @@ global theme and other languages stay untouched; the extension manages only its 
 ![Form preview: wireframe, themes and live updates](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-preview.gif)
 
 The command **XBSL: form preview** (`xbsl.previewForm`, also a preview button in the editor
-title of form yamls – files whose element kind is an interface component, `КомпонентИнтерфейса`)
-renders a wireframe of a 1C:Element
-form from its yaml: nested vertical/horizontal groups, labels, input fields with captions and
-`=bindings`, buttons (the primary one filled), checkboxes, tables with their real columns,
-switchable tabs (`Страницы`), cards, image and HTML-container placeholders, and the form's
+title of form yamls – files whose `ElementKind` is `InterfaceComponent`) renders a wireframe of a
+1C:Element form from its yaml: nested vertical/horizontal groups, labels, input fields with captions
+and `=bindings`, buttons (the primary one filled), checkboxes, tables with their real columns,
+switchable tabs (`Pages`), cards, image and HTML-container placeholders, and the form's
 command bar. Unknown and custom component types render as labeled boxes with their content
 inside, so nothing disappears.
 
@@ -271,9 +269,9 @@ the default), dark, or the editor theme – the choice is remembered.
 
 **Properties panel.** A click on an element selects it and opens a separate **Properties**
 panel (its own tab – drag it below or aside, wherever suits), like the platform web editor:
-enums as dropdowns (the layout `Компоновка`, alignments, spacings, widths, button kinds), the
-stretch flags (`Растягивать*`) as Auto / `Истина` / `Ложь` toggles, everything else as text – the
-component's standard set plus
+enums as dropdowns (`Layout`, alignments, spacings, widths, button kinds), `HorizontalStretch` and
+`VerticalStretch` as Auto / `True` / `False` toggles, everything else as text – the component's
+standard set plus
 every property present in the yaml (object values are shown read-only). Edits land in the
 yaml document as precise text edits, so the regular undo works; an empty value / *(auto)*
 removes the property. Selecting an element and every edit also position the yaml editor on
@@ -284,7 +282,7 @@ into the editor – handy for navigating large forms.
 colors already used in the form and your recent picks – one click reuses a shade. Any
 single-line value carries a literal/binding toggle: press `=` to bind the property to data,
 and in binding mode an autocomplete offers the bindings already used in the form and the
-attributes of the form's owner object (`=Объект.Наименование`); the `abc` button switches
+attributes of the form's owner object (`=Object.Name`); the `abc` button switches
 back to a literal.
 
 It is a layout skeleton, not the platform's rendering: composition, nesting and captions are
@@ -309,8 +307,8 @@ platform designer, but inside VS Code.
 
 > **Experimental.** The metadata explorer is an experimental feature – expect bugs and rough edges.
 
-**The tree.** The root is the project (the project file), with the vendor and name in grey; its
-context menu opens the application module. Below are a **Subsystems** branch and categories by kind:
+**The tree.** The root is the project descriptor, with `Vendor\Name` in grey; its context menu opens
+the application module. Below are a **Subsystems** branch and categories by `ElementKind`:
 Catalogs, Documents, Information/Accumulation registers, Enumerations, Common modules, HTTP services,
 Structures, Client events and so on – each with its own icon. The `.yaml` + `.xbsl` pair of an object
 is one row; an object/list form is nested under its owner, forms with no owner go to a **Common
@@ -321,28 +319,28 @@ a register into **Dimensions**, **Resources**, **Attributes**; an enumeration in
 structure into **Fields**; client-work parameters into **Parameters**; an HTTP service into **URL
 templates** with their methods.
 
-**Clicks.** An object or a field opens the **properties panel** on the right (a field's **type** is a
-combo of primitives, reference types (`<Object>.Ссылка?`) and the project enumerations, and still
+**Clicks.** An object or a field opens the **properties panel** on the right (a field's `Type` is a
+combo of primitives, reference types (`<Object>.Reference?`) and the project enumerations, and still
 accepts a typed-in value); a common module opens its `.xbsl`; a form opens the preview. The context
 menu adds *Properties*, open description / module.
 
 **Properties panel** (on the right, like the form preview). Scalar properties are edited in place:
-dropdowns for the visibility and environment, a true/false toggle, text for the rest. The id and the
-element kind are read-only; collections are edited in the tree. Edits are surgical (undo works); save
-the file (Ctrl+S) to refresh the tree.
+dropdowns for `VisibilityScope` and `Environment`, a `True` / `False` toggle, text for the rest.
+`Id` and `ElementKind` are read-only; collections (`Attributes` and the like) are edited in the tree.
+Edits are surgical (undo works); save the file (Ctrl+S) to refresh the tree.
 
-Composite (nested) properties – a content alignment, say (`ВыравниваниеСодержимогоПоГоризонтали
-{ ... }`) – are shown but not editable: edit those in the yaml.
+Composite (nested) properties – `ContentHorizontalAlign { ... }`, say – are shown but not
+editable: edit those in the yaml.
 
 **Creating objects.** A category root has an **Add &lt;class&gt;** action (Add catalog, Add document,
 Add enumeration, Add information/accumulation register, Add common module, Add HTTP service, Add
 structure, Add client event, Add command-interface fragment, Add client-work parameters, Add common
-form): it asks a name and a subsystem (folder), writes a minimal valid yaml (a fresh id; a paired
+form): it asks a name and a subsystem (folder), writes a minimal valid yaml (a fresh `Id`; a paired
 `.xbsl` for module kinds) and opens it. Classes are shown even when the project has none of them yet.
 In the subtree groups a **"+"** adds an attribute / dimension / resource / value / parameter / field /
 tabular section; a catalog/document has **Add object form**: the engine generates a form populated
-from the object's attributes (optionally a list form with columns too) and registers it in the
-owner's `Интерфейс`.
+from the object's `Attributes` (optionally a list form with columns too) and registers it in the
+owner's `Interface`.
 
 The templates and yaml edits are computed by the engine (`xbsl` 0.16+): the same operations are
 available to agents through its `meta_*` MCP tools and to any editor through the `xbsl/meta*` LSP
@@ -405,7 +403,7 @@ The **1C:Element** container in the Activity Bar hosts, below the metadata explo
 **Documentation** view – the platform reference the way the docs site shows it.
 
 **The tree.** A curated "Contents" that mirrors the site: the developer and administrator guides,
-the type reference (`Стд::Коллекции` → `Массив` → ...) and the query language. It is built from the
+the type reference (`Std::Collections` → `Array` → ...) and the query language. It is built from the
 distribution's own sidebar, so the structure matches the site. Clicking a node opens the page.
 
 **Search.** The search button in the view title (command *XBSL: search the documentation*) runs a
@@ -418,7 +416,7 @@ and opening a page reveals it in the Contents tree.
 **Documentation for the symbol.** Right-click a type or variable in an `.xbsl` file – *XBSL:
 documentation for the symbol* – to open its page. For a type its reference page opens directly; for a
 method or an ambiguous name a pick-list of candidates is shown, ranked by the receiver before the dot
-(so `Задание.Настроить` prefers the scheduled-job pages, not a guide topic).
+(so `Job.Setup` prefers the scheduled-job pages, not a guide topic).
 
 The data comes from the linter's LSP server, so it needs [LSP mode](#lsp-mode-default) and the
 documentation database built from your distribution (`xbsl` ≥ 0.12.0, see

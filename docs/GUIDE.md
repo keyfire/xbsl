@@ -1,6 +1,6 @@
 ---
 title: "xbsl user guide"
-description: "The complete guide to the toolkit — installation, CLI flags, CI setup, the baseline mechanism, and metadata scaffolding."
+description: "The complete guide to the toolkit – installation, CLI flags, CI setup, the baseline mechanism, and metadata scaffolding."
 sidebar:
   label: Guide
   order: 2
@@ -86,7 +86,7 @@ For editor integration, `--stdin --filename NAME` checks a single buffer read fr
 rules only); the JSON payload (`{diagnostics, summary}`) is the same one the MCP server returns.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting – the
-objects (with tabular sections, module-declared local types and the member families for dot
+objects (with their `TabularParts`, module-declared local types and the member families for dot
 completion), the method declarations with their annotations and the named form components, with
 POSIX paths relative to the root and 1-based lines – for go-to-definition and completion in
 editors.
@@ -154,39 +154,40 @@ documentation sections) is in [RULES.md](/RULES);
 at runtime – `xbsl --list-rules`. The tier overview is in the README; below is what the deeper
 tiers actually verify.
 
-The type rules of tier D cover every type position in code (`новый`, `как` casts, annotations,
-signatures) and every `Тип:` value in yaml (unions `А|Б|?`, generics, nullable): the root must
+The type rules of tier D cover every type position in code (`new`, `as` casts, annotations,
+signatures) and every `Type:` key in yaml (unions `A|B|?`, generics, nullable): the root must
 be a known type – stdlib, a project object, a module-declared local type or a global type of a
 declared library (see below) – and a dotted chain
 rooted at a project object must stay within the family that object generates: the derived types
-extracted from the distribution docs (`Ссылка`, `Объект`, `СоздатьОбъект`, the automatic
-forms...), its tabular sections and module structures. Namespace-qualified references
-(`Справочник.X.Ссылка`) also check that the object exists under that kind, and the values of
+extracted from the distribution docs (`Reference`, `Object`, `CreateObject`, the automatic
+forms...), its `TabularParts` and module structures. Namespace-qualified references
+(`Catalog.X.Reference`) also check that the object exists under that kind, and the values of
 project enumerations are verified both in code and in yaml bindings.
 
-The types of the declared libraries come from their archives. `Проект.yaml` declares the
-coordinates only (`Поставщик`, `Имя`, `Версия`), so the names are read from the
-`{Поставщик}-{Имя}-{Версия}.xlib` archive, looked up in the project descriptor's directory and
-above it (up to four levels) - where the archive sits when the sources are shipped. An element
-becomes known when it is `ОбластьВидимости: Глобально`; the rest is the library's own business.
+The types of the declared libraries come from their archives. The project descriptor declares the
+coordinates only – `Vendor`, `Name` and `Version` – so the names are read from the
+`{Vendor}-{Name}-{Version}.xlib` archive, looked up in the project descriptor's directory and
+above it (up to four levels) – where the archive sits when the sources are shipped. An element
+becomes known when its `VisibilityScope` is `Global`; the rest is the library's own business.
 With no archive next to the sources the library types stay unknown, exactly as they were before
 libraries were understood at all.
 
-The cross-file rules of tier D catch what the compiler reports late or not at all: a yaml
-handler missing from the paired module, a foreign-subsystem type used without an `Импорт:`
-entry, a dynamic list typed by the automatic list form that misses an attribute of its object,
-a cross-component `Компоненты.X.Метод()` call to a method without a visibility annotation,
-environment mismatches (`@НаСервере` called from a client handler without `@ДоступноСКлиента`,
-a client-only module used from an HTTP service), reserved names (`Тип`/`type` as a field or
-parameter, a component property named like a built-in one), methods that nothing references,
+The cross-file rules of tier D catch what the compiler reports late or not at all: a `Handler:`
+in yaml with no method in the paired module, a foreign-subsystem type used without an `Import:`
+entry, a `DynamicList` typed by the automatic list form that misses an attribute of its object,
+a cross-component call `Components.X.Method()` that carries no visibility annotation,
+environment mismatches (`@OnServer` called from a client handler without `@AvailableFromClient`,
+a client module used from an `HttpService`), reserved names
+(a field or parameter named `Type` in either language spelling, a component property named like
+a built-in one), methods that nothing references,
 and top-level yaml properties against the configuration metamodel. The `query/` group
-parses `Запрос{ ... }` blocks and verifies the tables of `ИЗ`/`СОЕДИНЕНИЕ` against the
-project objects and their tabular sections; a block with constructs outside the supported
+parses `Query{ ... }` blocks and verifies the `FROM` / `JOIN` tables against the
+project objects and their `TabularParts`; a block with constructs outside the supported
 subset (temporary tables, unions, subqueries) is skipped whole rather than guessed.
 
-Detailed group descriptions - `query/` (a composite type in `IN` with a subquery),
+Detailed group descriptions – `query/` (a composite type in `IN` with a subquery),
 `project/` (project properties), `naming/` (the naming standard, the `[morph]` extra) and
-`style/` (code-writing conventions and their on/off policy) - live in
+`style/` (code-writing conventions and their on/off policy) – live in
 [RULES.md](/RULES).
 
 ## Baseline: adopt a rule on a legacy codebase
@@ -220,69 +221,79 @@ duplicate checks and section/kind compatibility. The same operations are exposed
 CLI (subcommands, JSON output), MCP (the `meta_*` tools for agents) and LSP (the `xbsl/meta*`
 custom requests that power the VS Code metadata tree).
 
-33 kinds of project element are creatable – from Справочник and Документ to ВиртуальнаяТаблица
-(paired with its mandatory `.xbql` query), ЗапланированноеЗадание, contracts, rights and
+33 kinds of project element are creatable – from `Catalog` and `Document` to `VirtualTable`
+(paired with its mandatory `.xbql` query), `ScheduledJob`, contracts, rights and
 commands. Each kind carries what the docs make mandatory: the platform's own default scope
-(`ВПодсистеме` – widen it deliberately with `--scope`), a module stub for the handler the kind
-cannot live without, and a note for whatever the generator must not invent for you. Kinds whose
-content is drawn in the designer (ПанельОтчетов, ПроцессИнтеграции) are deliberately absent.
+(`InSubsystem` – widen it deliberately with `--scope`), a module stub for the handler the
+kind cannot live without, and a note for whatever the generator must not invent for you. Kinds
+whose content is drawn in the designer (`ReportPanel`, `IntegrationProcess`) are
+deliberately absent.
 
 ![The VS Code tree, AI agents and the terminal call the same scaffolding core; it writes created and point-edited yaml/xbsl files, the linter checks what was written, and the response carries files, notes and the lint report; the LSP surface returns full texts for the editor to apply](https://raw.githubusercontent.com/keyfire/xbsl/main/images/scaffolding.png)
 
 ```sh
-xbsl new-project . vendor App                        # Проект.yaml + Проект.xbsl + a subsystem
-xbsl new-object vendor/App/Основное Справочник Товары
-xbsl add-field vendor/App/Основное/Товары.yaml реквизит Цвет --type Строка
-xbsl add-form . --name Товары                        # object + list forms, registered
-xbsl add-form . --name Товары --forms list-cards     # list form as a card grid
-xbsl new-object ... HttpСервис Каталог --routes "GET /, POST /, GET /{id}"
-xbsl add-route  .../Каталог.yaml "DELETE /{id}"      # url template + handler stub
-xbsl add-method .../Товары.Объект.xbsl Пересчитать --annotations НаСервере --after Записать
-xbsl add-subsystem vendor/App Задачи
-xbsl add-dependency . acme CurrencyConverter 2.0      # library into the project's Библиотеки
-xbsl rename-object . Товары Номенклатура             # rename files + update references
-xbsl set-access . --name Товары --default РазрешеноАутентифицированным
-xbsl object-info . --name Товары                     # fields, tabulars, forms, namespace
-xbsl project-info .                                  # projects, subsystems, objects by kind
+xbsl new-project . vendor App                          # descriptor + module + a subsystem
+xbsl new-object <subsystem-dir> <kind> <name>          # kind: Catalog, Document, Enum, ... (--help spells them)
+xbsl add-field <object>.yaml <section> <field> --type <type>
+xbsl add-form . --name <object>                        # object + list forms, registered
+xbsl add-form . --name <object> --forms list-cards     # list form as a card grid
+xbsl new-object <subsystem-dir> <http-service-kind> <name> --routes "GET /, POST /, GET /{id}"
+xbsl add-route  <service>.yaml "DELETE /{id}"          # url template + handler stub
+xbsl add-method <module>.xbsl <method> --annotations <annotation> --after <existing-method>
+xbsl add-subsystem vendor/App <name>
+xbsl add-dependency . acme CurrencyConverter 2.0       # attach a library to the project
+xbsl rename-object . <old-name> <new-name>             # rename files + update references
+xbsl set-access . --name <object> --default <access-method>
+xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
+xbsl project-info .                                    # projects, subsystems, objects by kind
 ```
 
+The kind, the section, the annotations, the access methods and every identifier reach the CLI in
+the spelling the platform uses for the project's development language; the prose of this page
+names them by their English equivalents (`Catalog`, `Attributes`, `OnServer`,
+`PermitAuthenticated`), which is why the examples above use placeholders.
+`xbsl new-object --help` lists the kinds a project can hold, spelled the way the command wants
+them.
+
 Forms are generated with real content: input fields per attribute (including the standard
-Наименование / Номер / Дата and hierarchy support), dynamic-list columns, tabular-section
-tables, a report form with parameters; the form is registered in the owner's `Интерфейс`
-section. `--dry-run` prints the changes (with full file texts) without writing – this is how
+`Name` / `Number` / `Date` fields and hierarchy support), `DynamicList` columns, `TabularParts`
+tables, a report form with parameters; the form is registered in the `Interface` section of its
+owner. `--dry-run` prints the changes (with full file texts) without writing – this is how
 the VS Code extension applies them through its own undo-friendly edits.
 
-`--forms list-cards` builds the list form as a card grid instead of a table: a
-`ПроизвольныйСписок` whose `КонтейнерСтрок` is a matrix group, plus the row component
-`СтрокаСписка<Имя>`. The card takes a title, a photo (a `ДвоичныйОбъект.Ссылка` attribute
-switches it to `ПроизвольнаяКарточка` with the image above the caption) and up to three more
+`--forms list-cards` builds the list form as a card grid instead of a table: a `CustomList`
+whose `RowsContainer` is a `MatrixGroup`, plus a generated `ListRow<Name>` row component named
+after the object. The card takes a `Title`, a photo (an attribute of type `BinaryObject.Reference`
+switches the card to `CustomCard`, with the image above the caption) and up to three more
 fields, dates formatted; notes report what landed on the card and what did not.
 `--card-min-width` sets the grid column width (default 400, 250 with a photo) and
 `--card-placeholder` the image shown when the photo is empty.
 
-`add-dependency` attaches a library – the `Библиотеки` section of `Проект.yaml` (`Имя`,
-`Поставщик`, `Версия`). The version is the library's **release** version: a release is issued
+`add-dependency` attaches a library – it writes the `Libraries` section of the project descriptor
+(`Name`, `Vendor`, `Version`). The version is the library's **release** version: a release is issued
 in the control panel, and a build version with a suffix (`1.0-42`) is rejected. Different
 versions of one library within a project are not allowed, so attaching an already attached
 library updates the version of the existing entry. What is attached now – `project-info`
 (`projects[].libraries`). The vendor, name, version and the qualified type names of a library
 come from parsing its archive: `elemctl inspect <file.xlib>`.
 
-`set-access` edits `КонтрольДоступа.Разрешения` in place, aware of what each kind allows:
-`--default` sets the ПоУмолчанию right, `--permission Чтение=РазрешеноВсем` an individual one
-(custom rights of a `ПравоНаЭлемент` included), `--calc-by` fills `РасчетРазрешенийПо` –
-mandatory for `РазрешенияВычисляютсяДляКаждогоОбъекта`. Wrong methods, rights a kind does not
-have, and per-object rights on a `НаборКонстант` are rejected; the computed-permission
-handlers stay yours to write (notes say which). `object-info` reports the current permissions
-and the kind's rights, `project-info` the ПоУмолчанию of every object – no section there means
-the platform applies `РазрешеноАдминистраторам`.
+`set-access` edits `AccessControl.Permissions` of an object in place, aware of what each kind
+allows: `--default` sets the `Default` right, `--permission Read=PermitEveryone` an individual
+one (custom rights of a `PrivilegeOnElement` included), `--calc-by` fills `ComputePermissionsBy` –
+mandatory for `PermissionsComputedForEachObject`.
+Wrong methods, rights a kind does not have, and per-object rights on a `ConstantsSet` are
+rejected; the computed-permission handlers stay yours to write (notes say which). `object-info`
+reports the current permissions and the kind's rights, `project-info` the `Default` of every
+object – no section there means the platform falls back to `PermitAdmins`.
 
-`rename-object` renames the object's files (including its forms and the `СтрокаСписка<Имя>`
-row component) and rewrites references context-aware across the whole project: yaml
-type/table/form keys, `=` bindings and .xbsl code. Attributes, components or dynamic-list
+`rename-object` renames the object's files (including its forms and the generated `ListRow<Name>`
+component of a card list) and rewrites references context-aware across the whole project: the
+reference-bearing yaml keys (`Type` / `Table` / `DataSource` / `Form` / `FormType`), `=` bindings
+and .xbsl code. Attributes, components or dynamic-list
 fields that merely share the old name are left alone, and so are string literals (UI text);
-`--new-presentation`/`--old-presentation` update the Заголовок/Представление values of the
-object and its forms. The object's `Ид` is untouched, so the platform keeps the stored data.
+`--new-presentation`/`--old-presentation` update the `Title` / `Presentation` of the
+object and its forms. The object's `Id` is untouched, so the platform keeps the stored
+data.
 
 ## Extending: your own rules, data and severities
 
@@ -323,36 +334,38 @@ rules, bundled data and default severities only).
 `xbsl-lsp` (the `[lsp]` extra: `pip install "xbsl[lsp]"`) runs the linter as a
 long-living Language Server over stdio: live per-file diagnostics as you type, project-wide
 diagnostics on save, go to definition, completion and hover over a resident project index,
-and quick-fix code actions - without paying the interpreter start-up cost per call. Flags:
+and quick-fix code actions – without paying the interpreter start-up cost per call. Flags:
 `--project-root` (the sources root relative to the workspace folder), `--select`/`--ignore`/
 `--enable`, `--data-dir`, `--baseline`, `--templates`. Any LSP-capable editor (VS Code, Neovim,
 JetBrains) can spawn it.
 
 ## Code templates
 
-A template is a short trigger plus a construct: type `есл`, press Ctrl+Space, pick `если` and get
-the whole statement with edit points to tab through. The mechanism mirrors the one in 1C:EDT
-(`Параметры - Шаблоны`), the file format included.
+A template is a short trigger plus a construct: type the first letters of `if`, press Ctrl+Space,
+pick the template and get the whole statement with edit points to tab through. The mechanism
+mirrors the one in 1C:EDT (the code-templates preference page), the file format included.
 
-Templates are offered **ahead of the other completions** - the construct you are typing out ranks
+Templates are offered **ahead of the other completions** – the construct you are typing out ranks
 above a name that merely starts the same. They need no Element data, only the LSP server
 (`xbsl.lsp.enabled`, on by default): the CLI-index mode of the extension does not offer them.
 
 The builtin set is 51 templates (`xbsl/templates_builtin.py`): the control statements, the
 declarations (methods with their annotations, structures, enumerations, exception types), queries
-and the applied idioms - walking a catalog, register movements, an HTTP service handler,
+and the applied idioms – walking a `Catalog`, register movements, an `HttpService` handler,
 per-object access permissions, object events, form handlers. Every pattern is parsed by the same
 parser the linter runs (`tests/test_templates.py`), so a template cannot insert code that does
 not compile.
 
-A pattern holds edit points and choices:
+A pattern holds edit points and choices. The variables use the `${...}` syntax of 1C:EDT
+templates; unlike the metadata vocabulary the platform gives them no English spelling, so the
+table describes them instead of spelling them out:
 
 | Variable | Expands to |
 |---|---|
-| `${Редактировать("подсказка")}` | an edit point; the prompt is the pre-selected text |
-| `${Выбрать("а", "б")}` | a dropdown of fixed variants |
-| `${ИмяОбъектаМетаданного(Справочник)}` | a dropdown of **this project's** catalogs, from the index |
-| `${ПолноеИмяОбъектаМетаданного("Перечисление")}` | the same, inserted as `Вид.Имя` |
+| edit point | an edit point; its argument is the pre-selected prompt text |
+| choice | a dropdown of the fixed variants listed in its arguments |
+| metadata name | a dropdown of **this project's** objects of the given kind (`Catalog`, `Enum`, ...), from the index |
+| qualified metadata name | the same, inserted as `<Kind>.<Name>` |
 
 Your own templates live in `.xbsl-templates.json` at the workspace root (`--file` / the
 `xbsl.templates.file` setting): the file extends the builtin set, and a template with the same
@@ -365,7 +378,7 @@ xbsl templates export --output my.json     # a dump (to carry your templates to 
 xbsl templates import dump.json            # merge a dump into your file
 ```
 
-In VS Code the same thing is a panel - **XBSL: code templates** - laid out like the EDT dialog:
+In VS Code the same thing is a panel – **XBSL: code templates** – laid out like the EDT dialog:
 the list with the call context, the description and the pattern, and buttons to add, edit, delete,
 import, export and restore the defaults. Saving re-reads the set in the running server, so the
 next Ctrl+Space already offers the edited template.
