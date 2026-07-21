@@ -6,6 +6,15 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.24.0
+
+- **Documentation links for the engine's new rules.** The `code/query-needs-server` and
+  `yaml/foreign-not-public` ids in the "Problems" panel became clickable and open the relevant
+  platform documentation section inside the editor.
+- **The group description counters now follow the engine.** The `code` group claimed "4 rules at
+  error, 12 at warning" against the actual 15 and 13, and `yaml` claimed 3 errors against 4. All
+  the rules of a group are counted by their own level; both locales fixed.
+
 ## 0.23.0
 
 - **Visual form designer.** A new **Designer (1C:Element)** container with three panels over a
