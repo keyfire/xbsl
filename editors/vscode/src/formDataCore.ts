@@ -65,45 +65,18 @@ export interface DataFormEditResponse {
   error?: string;
 }
 
-// --- drag-and-drop payload -------------------------------------------------------------------
+// --- the record payload ------------------------------------------------------------------------
 
-// The Data panel's own tree MIME (VS Code derives "application/vnd.code.tree.<viewid
-// lowercase>" from the view id xbslFormData); the structure view accepts it next to the
-// palette MIME.
-// A plain custom mime (not the reserved application/vnd.code.tree.<viewid>): the reserved one
-// does not reliably carry a custom payload across to a different tree. See PALETTE_MIME.
-export const DATA_MIME = "application/vnd.xbsl.data-record";
-
-// A dragged record: an object attribute binds as =Объект.Имя, a component property as
-// =Имя. multiline marks the fields the engine renders with a multiline input
-// (Описание/Комментарий).
+// A record on its way into the form: an object attribute binds as =Объект.Имя, a component
+// property as =Имя. multiline marks the fields the engine renders with a multiline input
+// (Описание/Комментарий). No JSON codec any more - a drag from the data pane onto a structure
+// row happens inside the form panel, so the row id travels in the panel's own script and the
+// payload is built here from the model.
 export interface DataDragPayload {
   kind: "attribute" | "componentProperty";
   name: string;
   type: string;
   multiline?: boolean;
-}
-
-export function encodeDataDrag(payload: DataDragPayload): string {
-  return JSON.stringify(payload);
-}
-
-export function decodeDataDrag(raw: string): DataDragPayload | undefined {
-  try {
-    const data = JSON.parse(raw) as DataDragPayload;
-    if (
-      (data?.kind === "attribute" || data?.kind === "componentProperty") &&
-      typeof data?.name === "string" &&
-      data.name.length > 0 &&
-      typeof data?.type === "string" &&
-      (data.multiline === undefined || typeof data.multiline === "boolean")
-    ) {
-      return data;
-    }
-  } catch {
-    // not our payload
-  }
-  return undefined;
 }
 
 // --- the input-component fragment ------------------------------------------------------------

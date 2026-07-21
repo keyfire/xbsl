@@ -5,7 +5,7 @@ import { LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
 import { registerFormData } from "./formData";
 import { registerFormPalette } from "./formPalette";
-import { registerFormPreview } from "./formPreview";
+import { registerFormDesigner } from "./formDesigner";
 import { registerFormStructure } from "./formStructure";
 import { baselineForLint, registerExcludeAction } from "./excludeAction";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
@@ -414,7 +414,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     resetAndRelint();
   });
   registerDeploy(context, projectRootFor);
-  registerFormPreview(context);
   // Getting-started wizard: scaffold a new 1C:Element project through the engine (native prompts,
   // no webview). Available in both modes, so it is registered before the LSP early return.
   registerProjectWizard(context);
@@ -434,10 +433,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
   registerDocs(context);
   registerHoverDocs(context);
-  // Visual form designer panels: the structure tree of the active form yaml and the component
-  // palette. Both are thin clients of the engine (xbsl/formTree, xbsl/formEdit, xbsl/uiSchema);
-  // the providers load data lazily, only when their views are visible.
+  // The visual form designer. The structure and data MODELS are thin clients of the engine
+  // (xbsl/formTree, xbsl/formEdit, xbsl/objectInfo); the form panel paints both of them next to
+  // the wireframe frame and drives their lifecycle, and the palette (in the metadata container)
+  // inserts into the panel's structure selection.
   const formStructure = registerFormStructure(context);
+  const formData = registerFormData(context, {
+    structure: formStructure,
+    formOwner: metadataTree.formOwnerByPath,
+  });
+  registerFormDesigner(context, { structure: formStructure, data: formData });
   registerFormPalette(context, {
     projectComponents: metadataTree.interfaceComponents,
     structure: formStructure,
@@ -445,13 +450,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Structural search across the project's forms (hook 10): find components by type and property
   // predicates, jump to the match. A thin client of the engine's xbsl/searchForms.
   registerFormSearch(context, { interfaceComponents: metadataTree.interfaceComponents });
-  // The "Data" panel of the form designer (docs/DESIGNER.md, hook 2): the component's own
-  // Свойства records plus the attributes of the form's owner object; records drag into the
-  // structure view as ready input components.
-  registerFormData(context, {
-    structure: formStructure,
-    formOwner: metadataTree.formOwnerByPath,
-  });
   // Code templates: the management panel works in both modes (data and writes go through the
   // engine), while template suggestions on Ctrl+Space come from the LSP server.
   registerTemplates(context);

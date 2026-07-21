@@ -1,16 +1,16 @@
 ---
 title: "Visual form designer"
-description: "The in-editor visual designer for 1C:Element interface components - structure, palette, properties, and binding panels over the .yaml source."
+description: "The in-editor visual designer for 1C:Element interface components - a form panel with structure, data and the form frame, plus the palette and properties panels over the .yaml source."
 sidebar:
   label: Visual designer
   order: 4
 ---
 
 The extension includes a visual designer for 1C:Element interface components
-(`ElementKind: InterfaceComponent` - forms and custom components). It is a set of panels
-over the `.yaml` source: a structure tree, a component palette, a data panel, a typed
-properties panel and a wireframe preview. The text editor stays the primary surface; the
-designer is a contextual lens over it.
+(`ElementKind: InterfaceComponent` - forms and custom components). The main workplace is the
+**form panel**: the structure tree on the left, the form's data on the right, the form frame
+under them. Next to it live the component palette in the sidebar and the typed properties panel.
+The text editor stays the primary surface; the designer is a contextual lens over it.
 
 Two things to keep in mind:
 
@@ -31,47 +31,82 @@ Two things to keep in mind:
 
 ## Opening the designer
 
-Open a `.yaml` of an interface component (a form or a custom `InterfaceComponent`). Three
-activity-bar containers hold the panels, and all follow the active editor:
+Open a `.yaml` of an interface component (a form or a custom `InterfaceComponent`) and press the
+**form designer** button in the editor title bar (shown when a form yaml is active), or **Open in
+the form designer** from the metadata tree's context menu. The form panel opens; while it is
+open, the **Palette** shows up next to the metadata tree.
 
-- **Designer (1C:Element)** – the **Structure**, **Palette** and **Data** panels.
+The remaining panels live in activity-bar containers and follow the active editor:
+
+- **1C:Element** – the metadata tree and the **Palette** (the latter only while the form panel is open).
 - **Properties (1C:Element)** – the **Properties** panel.
 - **Documentation (1C:Element)** – the **Documentation** panel.
 
-For the wireframe, use the **form preview** button (the preview icon in the editor title bar,
-shown when a form yaml is active) or **Form preview** from the metadata tree's context menu.
+## The form panel
 
-## Structure panel
+The panel is three areas with draggable splitters (their position is remembered):
 
-The **Structure** panel is the form as a tree of slots (`Content`, `Commands`, pages,
-columns, ...) and components, with an icon per kind and linter badges on nodes.
+| Left | Right |
+| --- | --- |
+| **Structure** – the tree of slots and components | **Data** – component properties and object attributes |
+| **The form frame** – a full-width wireframe under both ||
 
-- **Cursor sync.** Put the cursor on a node in the yaml – it highlights in the tree and fills
-  the Properties panel. Select a node in the tree – the cursor moves to its yaml (**Go to
-  yaml** in the context menu, or a click).
+A form depends on its own properties, so its structure and its data are edited where the form is
+shown; the Properties panel stays separate and follows the selection.
+
+### Structure
+
+The form as a tree of slots (`Content`, `Commands`, pages, columns, ...) and components, with an
+icon per kind and linter badges on nodes.
+
+- **Cursor sync.** Put the cursor on a node in the yaml – it highlights in the tree and in the
+  frame and fills the Properties panel. Select a node in the tree – the cursor moves to its yaml;
+  a double click moves the focus there too.
 - **Arrange** (context menu + keys): **Move up / Move down** (`Alt+Up` / `Alt+Down`), **Wrap in
   a container** (pick the container type), **Unwrap container**, **Duplicate**, **Rename**
   (`F2`), **Delete component** (`Delete`).
 - **Copy / paste as yaml.** **Copy yaml fragment** (`Ctrl+C`) and **Paste yaml from the
   clipboard** (`Ctrl+V`) move subtrees – across forms and across projects.
-- **Multi-select.** Select several components and use **Edit selected together...** to set or
-  clear one property on all of them at once.
-- **Focus and filter.** **Focus on this subtree** narrows the tree to one branch (**Show the
-  whole form** restores it); the title-bar filter toggles **Show only named components** /
-  **Show all components**.
-- **Drag-and-drop** inside the tree: dropping on a container inserts as its last child,
-  dropping on a leaf inserts after it (invalid targets are rejected before the drop). For exact
-  ordering use `Alt+Up` / `Alt+Down`.
+- **Multi-select** (`Ctrl`/`Shift` click): use **Edit selected together...** to set or clear one
+  property on all of them at once.
+- **Focus and filter.** **Focus on this subtree** narrows the tree to one branch (the button in
+  the area header restores the whole form); the filter button toggles showing only named
+  components.
+- **Drag-and-drop** inside the area: dropping on a container inserts as its last child, dropping
+  on a leaf inserts after it (invalid targets are rejected before the drop). For exact ordering
+  use `Alt+Up` / `Alt+Down`.
+
+### Data
+
+The **Data** area binds input components to data. It has two sections: the component's own
+`Properties:` and the attributes of the owner object.
+
+- **Component properties**: **Add property** (the button in the area header), **Rename property**
+  (`F2`), **Change property type**, **Remove property** (`Delete`).
+- **Bind an input component**: drag an attribute (or a property) onto a node in the Structure
+  area, or double click it – the designer creates the right input component with the binding
+  already in place (`Boolean` -> a checkbox, otherwise an input with `Value: =...`).
+
+### The form frame
+
+The frame is an honest wireframe of the form structure, not a render. It highlights the selected
+component and follows both the structure selection and the yaml cursor; a click on a block selects
+the component, `Ctrl+click` jumps to its yaml. An `Image` component with `Image: file.svg` shows
+the picture itself (resource images are resolved under `**/Resources/`). The area header carries
+the frame theme (light, dark, editor) and the zoom.
 
 ## Palette panel
 
-The **Palette** lists components you can insert into the current structure selection, in
-sections: **Frequent**, **Favorites**, **Project** (your own components and inserts), then the
-platform packages from the ui schema.
+The **Palette** sits next to the metadata tree and shows up while the form panel is open. It
+lists components you can insert into the current structure selection, in sections: **Frequent**,
+**Favorites**, **Project** (your own components and inserts), then the platform packages from the
+ui schema.
 
-- **Insert** by double-clicking (or `Enter`) a palette entry while a container is selected in
-  the Structure panel; or **Insert into the form** from the context menu; or drag the entry
-  into the Structure tree.
+- **Insert** by double-clicking (or pressing `Enter` twice) a palette entry while a container is
+  selected in the Structure area; or **Insert into the form** from the context menu.
+- **A palette entry cannot be dragged into the form panel** – the platform does not carry a drag
+  from its own tree into a webview. That is why insertion is click-driven; dragging works inside
+  the panel itself.
 - **Add to favorites** / **Remove from favorites** (the star) pins the components you use most.
 - **Open documentation** opens the component's page in the Documentation panel; the tooltip
   carries a short doc snippet.
@@ -109,17 +144,6 @@ The **Properties** panel edits the selected component (and, from the metadata tr
 - Values are validated before the write; an invalid value is reported under the field instead
   of being written.
 
-## Data panel
-
-The **Data** panel binds form inputs to data. It has two sections: the owner object's
-attributes, and the component's own `Properties`.
-
-- **Manage component properties**: **Add property**, **Rename property**, **Change property
-  type**, **Remove property**.
-- **Bind an input**: drag an attribute (or a property) into the Structure tree, or use **Insert
-  into the form** – the designer creates the right input component already bound (`Boolean` –>
-  a checkbox, otherwise an input field with `Value: =...`).
-
 ## Documentation panel
 
 The **Documentation (1C:Element)** container is a searchable tree of the platform's own
@@ -129,24 +153,17 @@ right-click menu on a type or a variable) and the **Open documentation** action 
 and the properties panel open the matching page here – this is where the designer answers "what
 is this component or property".
 
-## Wireframe preview
-
-The preview is an honest wireframe of the form's structure. It highlights the selected
-component and follows the Structure selection; a `Picture` with `Image: file.svg` shows
-the actual image (resource images are resolved against the project's `Resources` folders); a narrow panel scrolls
-horizontally to the line content.
-
 ## Structural search
 
-**Search forms by structure** (the search button on the Structure panel's title bar, or the
+**Search forms by structure** (the search button on the Palette panel's title bar, or the
 command palette) finds components across the project's forms by type plus `key=value`
 predicates; results open in a quick pick that jumps to the node.
 
 ## Block presets
 
 **Save as block preset** stores a component subtree under a name; **Insert block preset...**
-drops it into any form (from the Structure title bar or a node's context menu), and **Manage
-block presets...** renames or removes them. Presets are per-user.
+drops it into any form (from the Palette title bar or a structure node's context menu), and
+**Manage block presets...** renames or removes them. Presets are per-user.
 
 ## Read-only forms
 

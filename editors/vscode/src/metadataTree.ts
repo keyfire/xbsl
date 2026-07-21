@@ -1202,8 +1202,8 @@ async function previewForm(node?: XbslNode): Promise<void> {
   if (!node?.yamlPath) {
     return;
   }
-  // The form preview on the LEFT (column One), the yaml on the RIGHT (column Two, focused) - handy
-  // for dragging components toward the form.
+  // The form panel on the LEFT (column One), the yaml on the RIGHT (column Two, focused): the
+  // panel keeps its own tab group, so revealing a node in the yaml does not hide the designer.
   const uri = vscode.Uri.file(node.yamlPath);
   await vscode.commands.executeCommand("xbsl.previewForm", uri);
   const doc = await vscode.workspace.openTextDocument(uri);

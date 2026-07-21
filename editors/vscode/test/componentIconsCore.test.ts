@@ -110,11 +110,13 @@ test("the container flag refines only the generic fallback", () => {
 
 // --- every produced id is a real codicon ------------------------------------------------------
 
-// The authoritative list ships with @vscode/codicons (not a dependency of this extension);
-// when the package is around (e.g. a future dependency or a hoisted install) the test reads
-// it, otherwise it falls back to a subset transcribed from the official reference
-// (code.visualstudio.com/api/references/icons-in-labels). An id outside the list would
-// silently render as an EMPTY icon in a TreeItem - exactly the bug this test pins down.
+// The authoritative list is the codicon stylesheet VENDORED with the extension
+// (resources/codicons/codicon.css): its .codicon-<name> classes are exactly the glyphs the
+// form panel can paint inside its webview, and the same names are what a native TreeItem
+// accepts. The fallback below - a subset transcribed from the official reference
+// (code.visualstudio.com/api/references/icons-in-labels) - keeps the test meaningful in a
+// checkout without the stylesheet. An id outside the list would silently render as an EMPTY
+// icon - exactly the bug this test pins down.
 const FALLBACK_KNOWN_CODICONS = [
   "browser", "calendar", "check", "circle-filled", "code", "dashboard",
   "device-camera-video", "editor-layout", "file", "file-media", "files", "filter",
@@ -126,15 +128,21 @@ const FALLBACK_KNOWN_CODICONS = [
 
 function knownCodicons(): { names: Set<string>; source: string } {
   const candidates = [
-    path.join(__dirname, "..", "node_modules", "@vscode", "codicons", "src", "template", "mapping.json"),
-    path.join(process.cwd(), "node_modules", "@vscode", "codicons", "src", "template", "mapping.json"),
+    path.join(__dirname, "..", "resources", "codicons", "codicon.css"),
+    path.join(process.cwd(), "resources", "codicons", "codicon.css"),
   ];
   for (const candidate of candidates) {
     try {
-      const mapping = JSON.parse(fs.readFileSync(candidate, "utf8")) as Record<string, unknown>;
-      return { names: new Set(Object.keys(mapping)), source: "mapping.json" };
+      const css = fs.readFileSync(candidate, "utf8");
+      const names = new Set<string>();
+      for (const match of css.matchAll(/^\.codicon-([a-z0-9-]+):before/gm)) {
+        names.add(match[1]);
+      }
+      if (names.size) {
+        return { names, source: "codicon.css" };
+      }
     } catch {
-      // not installed here - try the next location or the fallback
+      // no stylesheet here - try the next location or the fallback
     }
   }
   return { names: new Set(FALLBACK_KNOWN_CODICONS), source: "fallback list" };

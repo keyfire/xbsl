@@ -4,9 +4,6 @@
 import * as assert from "assert";
 import {
   buildFieldFragment,
-  DATA_MIME,
-  decodeDataDrag,
-  encodeDataDrag,
   isMultilineText,
   PROPERTY_PRIMITIVE_TYPES,
   propertyNameError,
@@ -124,26 +121,9 @@ test("property names: identifier only, no ё, no duplicates", () => {
 
 // --- drag payload ------------------------------------------------------------------------------
 
-test("the drag payload round-trips through encode/decode", () => {
-  const payload = { kind: "attribute" as const, name: "Описание", type: "Строка", multiline: true };
-  assert.deepStrictEqual(decodeDataDrag(encodeDataDrag(payload)), payload);
-  const property = { kind: "componentProperty" as const, name: "Итог", type: "Число" };
-  assert.deepStrictEqual(decodeDataDrag(encodeDataDrag(property)), property);
-});
-
-test("foreign or malformed payloads decode to undefined", () => {
-  assert.strictEqual(decodeDataDrag("not json"), undefined);
-  assert.strictEqual(decodeDataDrag("{}"), undefined);
-  assert.strictEqual(decodeDataDrag('{"kind":"other","name":"X","type":""}'), undefined);
-  assert.strictEqual(decodeDataDrag('{"kind":"attribute","name":"","type":""}'), undefined);
-  assert.strictEqual(decodeDataDrag('{"kind":"attribute","name":"X"}'), undefined);
-  assert.strictEqual(decodeDataDrag('{"kind":"attribute","name":"X","type":"","multiline":"yes"}'), undefined);
-});
-
 // --- constants ---------------------------------------------------------------------------------
 
-test("the drag MIME is a plain custom type and the primitives are the picker's fixed set", () => {
-  assert.strictEqual(DATA_MIME, "application/vnd.xbsl.data-record");
+test("the primitives are the picker's fixed set", () => {
   assert.deepStrictEqual([...PROPERTY_PRIMITIVE_TYPES], ["Строка", "Число", "Булево", "Дата"]);
 });
 

@@ -8,6 +8,26 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.28.0
+
+- **The form designer is one panel now.** A form depends on its own properties, so its structure
+  and its data moved to where the form is shown: the structure tree on the left, the data on the
+  right, the form frame under them, with draggable splitters between (their position is
+  remembered). The separate "Structure" and "Data" sidebar views are gone, and so is the
+  "Designer" container.
+- **The palette moved next to the metadata tree** and shows up only while the form panel is open.
+  Insertion is a double click on a palette component into the structure selection. Dragging from
+  the palette into the panel is gone: the platform does not carry a native tree's drag into a
+  webview - which is exactly why insertion became click-driven.
+- **Inside the panel dragging works:** a structure node onto another node, and a record from the
+  data pane onto a structure node (an attribute becomes an input component with its binding). The
+  target rules are unchanged: a container takes the payload inside, a leaf places it after itself.
+- **Keyboard and context menu live in the panel:** the arrows walk the tree, `Alt+Up`/`Alt+Down`
+  move a component, `F2` renames, `Delete` removes, `Ctrl+C`/`Ctrl+V` carry a yaml fragment. The
+  selection still follows the yaml cursor, the form frame and the "Properties" panel.
+- The editor title button opens the form designer rather than a preview; the frame itself is the
+  same wireframe with its own theme and zoom.
+
 ## 0.27.1
 
 - **Panels survive an editor restart.** The form preview, the documentation page and the

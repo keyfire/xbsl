@@ -625,57 +625,7 @@ export function remapIds(ids: Iterable<string>, oldIndex: FormIndex | undefined,
   return out;
 }
 
-// --- drag-and-drop payloads ---------------------------------------------------------------
-
-// MIME types of the two trees. The structure view's own type doubles as the drop protocol id
-// (VS Code derives "application/vnd.code.tree.<viewid lowercase>" from the view id); the
-// palette contributes its payload under its own type, which the structure view also accepts.
-// The structure's own intra-tree move uses the reserved tree mime (VS Code handles it
-// natively). The cross-tree sources (palette, data panel) use PLAIN custom mimes: the reserved
-// application/vnd.code.tree.<viewid> carries VS Code's own internal item representation and does
-// not reliably deliver a custom payload to a DIFFERENT tree - a plain mime does.
-export const STRUCTURE_MIME = "application/vnd.code.tree.xbslformstructure";
-export const PALETTE_MIME = "application/vnd.xbsl.palette-component";
-
-// Structure drag payload: the source document and the dragged component ids (JSON).
-export interface StructureDragPayload {
-  uri: string;
-  ids: string[];
-}
-
-// Palette drag payload: the component type to insert (JSON).
-export interface PaletteDragPayload {
-  componentType: string;
-}
-
-export function encodeStructureDrag(payload: StructureDragPayload): string {
-  return JSON.stringify(payload);
-}
-
-export function decodeStructureDrag(raw: string): StructureDragPayload | undefined {
-  try {
-    const data = JSON.parse(raw) as StructureDragPayload;
-    if (typeof data?.uri === "string" && Array.isArray(data?.ids) && data.ids.every((i) => typeof i === "string")) {
-      return data;
-    }
-  } catch {
-    // not our payload
-  }
-  return undefined;
-}
-
-export function encodePaletteDrag(payload: PaletteDragPayload): string {
-  return JSON.stringify(payload);
-}
-
-export function decodePaletteDrag(raw: string): PaletteDragPayload | undefined {
-  try {
-    const data = JSON.parse(raw) as PaletteDragPayload;
-    if (typeof data?.componentType === "string" && data.componentType) {
-      return data;
-    }
-  } catch {
-    // not our payload
-  }
-  return undefined;
-}
+// Drag and drop needs no payload codec any more: both ends of a drag live inside the form
+// panel's webview (a structure node onto a node, a data record onto a node), so the dragged
+// row id travels in the panel's own script and arrives here as a plain message. The former
+// MIME types and their JSON codecs served the native trees, which the panel replaced.

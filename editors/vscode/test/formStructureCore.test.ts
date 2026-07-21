@@ -3,12 +3,8 @@
 
 import * as assert from "assert";
 import {
-  decodePaletteDrag,
-  decodeStructureDrag,
   dropPlan,
   editsOverlap,
-  encodePaletteDrag,
-  encodeStructureDrag,
   FormNode,
   indexTree,
   insertPlanForSelection,
@@ -398,20 +394,6 @@ test("expansion survives positional id shifts via unique names", () => {
   assert.ok(remapped.has(innerSlot2.id)); // slot re-attached to the remapped parent
   assert.ok(remapped.has(field2.id)); // followed Поиск
   assert.strictEqual(remapped.size, 4); // the unnamed Кнопка is not traceable
-});
-
-// --- drag payloads ------------------------------------------------------------------------
-
-test("drag payloads round-trip and reject foreign data", () => {
-  const structure = encodeStructureDrag({ uri: "file:///a.yaml", ids: [GROUP.id] });
-  assert.deepStrictEqual(decodeStructureDrag(structure), { uri: "file:///a.yaml", ids: [GROUP.id] });
-  assert.strictEqual(decodeStructureDrag("мусор"), undefined);
-  assert.strictEqual(decodeStructureDrag('{"uri": 5, "ids": []}'), undefined);
-
-  const palette = encodePaletteDrag({ componentType: "Надпись" });
-  assert.deepStrictEqual(decodePaletteDrag(palette), { componentType: "Надпись" });
-  assert.strictEqual(decodePaletteDrag("{}"), undefined);
-  assert.strictEqual(decodePaletteDrag("мусор"), undefined);
 });
 
 test("massEditKeys: the union of scalar/binding keys, sorted, structure keys excluded (hook 9)", () => {

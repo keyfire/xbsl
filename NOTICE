@@ -17,6 +17,12 @@ tools/extract_grammar.py and tools/extract_stdlib.py, and stays on the user's ma
 responsible for holding the rights to the distribution and for the admissibility of extracting data
 from it.
 
+The VS Code extension bundles the codicon icon font of Microsoft
+(editors/vscode/resources/codicons, from the @vscode/codicons package): the form designer paints
+its trees inside a webview, where the editor's own icon font is not available. The icons are
+licensed under CC BY 4.0 and the accompanying code under the MIT License - both license texts are
+next to the font.
+
 The project's source code is distributed under the MIT License (see the LICENSE file).
 
 --- Русский ---
@@ -32,5 +38,10 @@ The project's source code is distributed under the MIT License (see the LICENSE 
 скриптами tools/extract_grammar.py и tools/extract_stdlib.py и остаются на локальной машине.
 Ответственность за наличие прав на дистрибутив и за допустимость извлечения из него данных несёт
 пользователь.
+
+В расширение VS Code включён шрифт иконок codicon фирмы Microsoft
+(editors/vscode/resources/codicons, из пакета @vscode/codicons): конструктор форм рисует свои
+деревья внутри webview, где собственный шрифт иконок редактора недоступен. Иконки распространяются
+по лицензии CC BY 4.0, сопровождающий код – по MIT; тексты обеих лицензий лежат рядом со шрифтом.
 
 Исходный код проекта распространяется по лицензии MIT (см. файл LICENSE).

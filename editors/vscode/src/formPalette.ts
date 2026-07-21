@@ -2,10 +2,13 @@
 // insertable interface components from the engine's xbsl/uiSchema catalog plus the project's own
 // КомпонентИнтерфейса elements. Sections: Frequent (insertion counters in globalState),
 // Favorites (starred, globalState), Project, then platform packages by the last package
-// segment. Insertion goes through the structure view (a double activation - double click or
-// Enter twice - or the inline "+" button, or DnD into the structure tree); without generated
-// ui-schema data the palette degrades to a hint node plus the project section. Pure section
-// building lives in formPaletteCore.ts.
+// segment. The view sits next to the metadata tree and shows up only while the form panel is
+// open (the xbsl.formDesigner.open context key) - the panel is where the insertion lands.
+// Insertion is a double activation (double click or Enter twice) or the inline "+" button, and
+// goes into the structure selection of the form panel; DRAGGING a palette item into the panel
+// is impossible - the platform does not carry a native tree's drag into a webview, which is
+// exactly why insertion is click-driven. Without generated ui-schema data the palette degrades
+// to a hint node plus the project section. Pure section building lives in formPaletteCore.ts.
 
 import * as vscode from "vscode";
 import { iconFor } from "./componentIcons";
@@ -18,7 +21,6 @@ import {
   PaletteSectionModel,
   bumpUsage,
 } from "./formPaletteCore";
-import { encodePaletteDrag, PALETTE_MIME } from "./formStructureCore";
 import { FormStructureController } from "./formStructure";
 import { cachedContainerTypes, resetUiSchemaCache, uiCatalog, warmContainers } from "./uiSchemaClient";
 import { resetMetaSchemaCache } from "./metaSchemaClient";
@@ -42,14 +44,9 @@ type PaletteElement =
   | { kind: "component"; sectionId: string; item: PaletteItemModel }
   | { kind: "hint" };
 
-class FormPaletteProvider
-  implements vscode.TreeDataProvider<PaletteElement>, vscode.TreeDragAndDropController<PaletteElement>
-{
+class FormPaletteProvider implements vscode.TreeDataProvider<PaletteElement> {
   private readonly emitter = new vscode.EventEmitter<PaletteElement | undefined | void>();
   readonly onDidChangeTreeData = this.emitter.event;
-
-  readonly dragMimeTypes = [PALETTE_MIME];
-  readonly dropMimeTypes: string[] = [];
 
   private sections?: PaletteSectionModel[];
   private loading?: Promise<void>;
@@ -223,7 +220,9 @@ class FormPaletteProvider
     if (model.doc) {
       tip.appendMarkdown(`\n\n${model.doc}`);
     }
-    tip.appendMarkdown(`\n\n${vscode.l10n.t("Double click / Enter twice inserts into the structure selection.")}`);
+    tip.appendMarkdown(
+      `\n\n${vscode.l10n.t("Double click / Enter twice inserts into the structure selection of the form panel.")}`
+    );
     item.tooltip = tip;
     item.contextValue = `palettecomponent ${this.isFavorite(model.name) ? "palettefav" : "palettenonfav"}`;
     item.command = { command: "xbsl.formPalette.activate", title: "", arguments: [element] };
@@ -278,32 +277,13 @@ class FormPaletteProvider
     await openPage(this.context, best.id);
   }
 
-  // --- drag and drop (the palette is a drag source only) ----------------------------------
-
-  handleDrag(source: readonly PaletteElement[], dataTransfer: vscode.DataTransfer): void {
-    const component = source.find((el): el is Extract<PaletteElement, { kind: "component" }> => el.kind === "component");
-    if (!component) {
-      return; // sections and the hint are not draggable
-    }
-    dataTransfer.set(
-      PALETTE_MIME,
-      new vscode.DataTransferItem(encodePaletteDrag({ componentType: component.item.name }))
-    );
-  }
-
-  handleDrop(): void {
-    // Nothing can be dropped into the palette.
-  }
 }
 
 export function registerFormPalette(context: vscode.ExtensionContext, deps: FormPaletteDeps): void {
   const provider = new FormPaletteProvider(context, deps);
   const view = vscode.window.createTreeView<PaletteElement>("xbslFormPalette", {
     treeDataProvider: provider,
-    dragAndDropController: provider,
   });
-  // DnD inserts land in the structure view; count them into Frequent from here.
-  deps.structure.setInsertListener((type) => void provider.noteInserted(type));
 
   context.subscriptions.push(
     view,

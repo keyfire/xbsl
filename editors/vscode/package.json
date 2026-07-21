@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.27.1",
+  "version": "0.28.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -75,11 +75,6 @@
           "icon": "resources/docs-book.svg"
         },
         {
-          "id": "xbslDesigner",
-          "title": "%view.designerContainer%",
-          "icon": "resources/form-designer.svg"
-        },
-        {
           "id": "xbslProps",
           "title": "%view.propsContainer%",
           "icon": "resources/form-props.svg"
@@ -92,6 +87,12 @@
           "id": "xbslMetadata",
           "name": "%view.metadataContainer%",
           "icon": "$(list-tree)"
+        },
+        {
+          "id": "xbslFormPalette",
+          "name": "%view.formPalette%",
+          "icon": "resources/form-palette.svg",
+          "when": "xbsl.formDesigner.open"
         }
       ],
       "xbslDocsContainer": [
@@ -99,23 +100,6 @@
           "id": "xbslDocs",
           "name": "%view.docsContainer%",
           "icon": "$(book)"
-        }
-      ],
-      "xbslDesigner": [
-        {
-          "id": "xbslFormStructure",
-          "name": "%view.formStructure%",
-          "icon": "resources/form-structure.svg"
-        },
-        {
-          "id": "xbslFormPalette",
-          "name": "%view.formPalette%",
-          "icon": "resources/form-palette.svg"
-        },
-        {
-          "id": "xbslFormData",
-          "name": "%view.formData%",
-          "icon": "$(database)"
         }
       ],
       "xbslProps": [
@@ -421,11 +405,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "xbsl.formStructure.select",
-        "title": "%cmd.formStructure.select%",
-        "category": "XBSL"
-      },
-      {
         "command": "xbsl.formStructure.openInEditor",
         "title": "%cmd.formStructure.openInEditor%",
         "category": "XBSL",
@@ -571,11 +550,6 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "xbsl.formData.activate",
-        "title": "%cmd.formData.activate%",
-        "category": "XBSL"
-      },
-      {
         "command": "xbsl.formData.insert",
         "title": "%cmd.formData.insert%",
         "category": "XBSL",
@@ -610,19 +584,11 @@
           "when": "false"
         },
         {
-          "command": "xbsl.formStructure.select",
-          "when": "false"
-        },
-        {
           "command": "xbsl.formPalette.activate",
           "when": "false"
         },
         {
           "command": "xbsl.properties.showForNode",
-          "when": "false"
-        },
-        {
-          "command": "xbsl.formData.activate",
           "when": "false"
         }
       ],
@@ -682,39 +648,9 @@
           "group": "navigation@2"
         },
         {
-          "command": "xbsl.formStructure.resetFocus",
-          "when": "view == xbslFormStructure && xbsl.formStructure.focusedSubtree",
-          "group": "navigation@1"
-        },
-        {
-          "command": "xbsl.formStructure.filterNamed",
-          "when": "view == xbslFormStructure && !xbsl.formStructure.namedOnly",
-          "group": "navigation@2"
-        },
-        {
-          "command": "xbsl.formStructure.filterAll",
-          "when": "view == xbslFormStructure && xbsl.formStructure.namedOnly",
-          "group": "navigation@2"
-        },
-        {
-          "command": "xbsl.formStructure.refresh",
-          "when": "view == xbslFormStructure",
-          "group": "navigation@3"
-        },
-        {
           "command": "xbsl.forms.search",
-          "when": "view == xbslFormStructure",
-          "group": "navigation@4"
-        },
-        {
-          "command": "xbsl.formStructure.insertPreset",
-          "when": "view == xbslFormStructure",
-          "group": "navigation@5"
-        },
-        {
-          "command": "xbsl.formStructure.managePresets",
-          "when": "view == xbslFormStructure",
-          "group": "1_presets@1"
+          "when": "view == xbslFormPalette",
+          "group": "navigation@0"
         },
         {
           "command": "xbsl.formPalette.refresh",
@@ -722,14 +658,14 @@
           "group": "navigation@1"
         },
         {
-          "command": "xbsl.formData.addProperty",
-          "when": "view == xbslFormData",
-          "group": "navigation@1"
+          "command": "xbsl.formStructure.insertPreset",
+          "when": "view == xbslFormPalette",
+          "group": "1_presets@0"
         },
         {
-          "command": "xbsl.formData.refresh",
-          "when": "view == xbslFormData",
-          "group": "navigation@2"
+          "command": "xbsl.formStructure.managePresets",
+          "when": "view == xbslFormPalette",
+          "group": "1_presets@1"
         }
       ],
       "view/item/context": [
@@ -1014,56 +950,6 @@
           "group": "2_filter@2"
         },
         {
-          "command": "xbsl.formStructure.openInEditor",
-          "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
-          "group": "0_open@1"
-        },
-        {
-          "command": "xbsl.formStructure.rename",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "1_edit@1"
-        },
-        {
-          "command": "xbsl.formStructure.duplicate",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "1_edit@2"
-        },
-        {
-          "command": "xbsl.formStructure.copyYaml",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "1_edit@3"
-        },
-        {
-          "command": "xbsl.formStructure.moveUp",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "2_arrange@1"
-        },
-        {
-          "command": "xbsl.formStructure.moveDown",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "2_arrange@2"
-        },
-        {
-          "command": "xbsl.formStructure.wrap",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "3_wrap@1"
-        },
-        {
-          "command": "xbsl.formStructure.unwrap",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformContainer\\b/",
-          "group": "3_wrap@2"
-        },
-        {
-          "command": "xbsl.formStructure.focusSubtree",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "4_view@1"
-        },
-        {
-          "command": "xbsl.formStructure.delete",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "9_delete@1"
-        },
-        {
           "command": "xbsl.formPalette.insert",
           "when": "view == xbslFormPalette && viewItem =~ /\\bpalettecomponent\\b/",
           "group": "inline"
@@ -1087,99 +973,9 @@
           "command": "xbsl.formPalette.openDocs",
           "when": "view == xbslFormPalette && viewItem =~ /\\bpalettecomponent\\b/",
           "group": "3_docs@1"
-        },
-        {
-          "command": "xbsl.formStructure.pasteYaml",
-          "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
-          "group": "1_edit@4"
-        },
-        {
-          "command": "xbsl.formStructure.editSelected",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/ && listMultiSelection",
-          "group": "1_edit@0"
-        },
-        {
-          "command": "xbsl.formStructure.savePreset",
-          "when": "view == xbslFormStructure && viewItem =~ /\\bformNode\\b/",
-          "group": "1_edit@5"
-        },
-        {
-          "command": "xbsl.formStructure.insertPreset",
-          "when": "view == xbslFormStructure && viewItem =~ /\\b(formNode|formSlot|formRoot)\\b/",
-          "group": "1_edit@6"
-        },
-        {
-          "command": "xbsl.formData.addProperty",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataSectionProps\\b/",
-          "group": "inline"
-        },
-        {
-          "command": "xbsl.formData.addProperty",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataSectionProps\\b/",
-          "group": "1_add@1"
-        },
-        {
-          "command": "xbsl.formData.insert",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataRecord\\b/",
-          "group": "inline"
-        },
-        {
-          "command": "xbsl.formData.insert",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataRecord\\b/",
-          "group": "1_insert@1"
-        },
-        {
-          "command": "xbsl.formData.renameProperty",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
-          "group": "2_edit@1"
-        },
-        {
-          "command": "xbsl.formData.retypeProperty",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
-          "group": "2_edit@2"
-        },
-        {
-          "command": "xbsl.formData.removeProperty",
-          "when": "view == xbslFormData && viewItem =~ /\\bdataProperty\\b/",
-          "group": "9_delete@1"
         }
       ]
     },
-    "keybindings": [
-      {
-        "command": "xbsl.formStructure.moveUp",
-        "key": "alt+up",
-        "when": "focusedView == 'xbslFormStructure'"
-      },
-      {
-        "command": "xbsl.formStructure.moveDown",
-        "key": "alt+down",
-        "when": "focusedView == 'xbslFormStructure'"
-      },
-      {
-        "command": "xbsl.formStructure.delete",
-        "key": "delete",
-        "mac": "cmd+backspace",
-        "when": "focusedView == 'xbslFormStructure'"
-      },
-      {
-        "command": "xbsl.formStructure.rename",
-        "key": "f2",
-        "when": "focusedView == 'xbslFormStructure'"
-      },
-      {
-        "command": "xbsl.formStructure.copyYaml",
-        "key": "ctrl+c",
-        "mac": "cmd+c",
-        "when": "focusedView == 'xbslFormStructure'"
-      },
-      {
-        "command": "xbsl.formStructure.pasteYaml",
-        "key": "ctrl+v",
-        "mac": "cmd+v",
-        "when": "focusedView == 'xbslFormStructure'"
-      }
-    ],
     "configuration": [
       {
         "title": "XBSL",
@@ -1632,7 +1428,7 @@
     "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "check": "tsc --noEmit",
-    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/propsModes.test.ts --bundle --outfile=dist/propsModes.test.js --format=cjs --platform=node && node dist/propsModes.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js && esbuild test/blockPresetsCore.test.ts --bundle --outfile=dist/blockPresetsCore.test.js --format=cjs --platform=node && node dist/blockPresetsCore.test.js && esbuild test/projectWizardCore.test.ts --bundle --outfile=dist/projectWizardCore.test.js --format=cjs --platform=node && node dist/projectWizardCore.test.js",
+    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/propsModes.test.ts --bundle --outfile=dist/propsModes.test.js --format=cjs --platform=node && node dist/propsModes.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js && esbuild test/blockPresetsCore.test.ts --bundle --outfile=dist/blockPresetsCore.test.js --format=cjs --platform=node && node dist/blockPresetsCore.test.js && esbuild test/projectWizardCore.test.ts --bundle --outfile=dist/projectWizardCore.test.js --format=cjs --platform=node && node dist/projectWizardCore.test.js && esbuild test/formDesignerCore.test.ts --bundle --outfile=dist/formDesignerCore.test.js --format=cjs --platform=node && node dist/formDesignerCore.test.js",
     "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
     "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
     "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"

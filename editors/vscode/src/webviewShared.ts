@@ -24,13 +24,30 @@ export function makeNonce(): string {
   return s;
 }
 
+// Extra sources a panel needs on top of the strict default: the webview's own cspSource for
+// bundled assets (the codicon stylesheet and its font), data: images. Everything omitted stays
+// forbidden.
+export interface CspSources {
+  style?: string;
+  font?: string;
+  img?: string;
+}
+
 // The strict CSP shared by the extension's webviews: no default sources, inline styles
 // (the panels style themselves through --vscode-* variables), scripts only with the nonce.
-export function cspMeta(nonce: string): string {
-  return (
-    '<meta http-equiv="Content-Security-Policy" ' +
-    `content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">`
-  );
+export function cspMeta(nonce: string, extra?: CspSources): string {
+  const parts = [
+    "default-src 'none'",
+    `style-src 'unsafe-inline'${extra?.style ? " " + extra.style : ""}`,
+    `script-src 'nonce-${nonce}'`,
+  ];
+  if (extra?.font) {
+    parts.push(`font-src ${extra.font}`);
+  }
+  if (extra?.img) {
+    parts.push(`img-src ${extra.img}`);
+  }
+  return `<meta http-equiv="Content-Security-Policy" content="${parts.join("; ")};">`;
 }
 
 // JSON safe for inlining into a <script> block: "<" cannot open a tag, line/paragraph
