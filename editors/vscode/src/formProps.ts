@@ -534,7 +534,7 @@ ${cspMeta(nonce)}
   // An event row: a dropdown of the paired module's methods. "(no handler)" resets the
   // property, "(create a handler...)" starts the two-file stub flow in the extension;
   // choosing an existing method is a plain set_property.
-  const CREATE_HANDLER = " create"; // no method name can collide with this value
+  const CREATE_HANDLER = "\u0000create"; // no method name can collide with this value
   function handlerEditor(row) {
     const line = el("div", "valline");
     const sel = document.createElement("select");
