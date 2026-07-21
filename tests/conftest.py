@@ -6,8 +6,12 @@ need the data are skipped rather than failed: either a whole module (_DATA_DEPEN
 test marked `@pytest.mark.needs_data` - the latter keeps the data-free tests of a mixed module
 running in a public checkout.
 
-The output language is pinned to Russian: assertions elsewhere match Russian message text, and
-without pinning the result would depend on the developer's system locale.
+The output language is pinned to Russian BEFORE EVERY TEST: assertions elsewhere match Russian
+message text, and without pinning the result would depend on the developer's system locale. Once
+at import is not enough - a test that runs cli.main without --lang unpins the language
+(set_lang(None) restores the env/locale lookup), and every later test comparing Russian text then
+fails on an English locale. The autouse fixture puts the pin back for each test; a test that needs
+another language still sets it inside its own body.
 """
 
 import pytest
@@ -15,6 +19,16 @@ import pytest
 from xbsl import dataset, i18n
 
 i18n.set_lang("ru")
+
+
+@pytest.fixture(autouse=True)
+def _pinned_language(monkeypatch):
+    # Pinned BOTH ways on purpose. set_lang covers the explicit selection; XBSL_LANG covers what
+    # happens when a test runs cli.main without --lang: that call does set_lang(None), which drops
+    # back to the env/locale lookup, and only the env keeps the fallback Russian. The i18n tests
+    # that exercise env/locale override or delete this variable themselves.
+    monkeypatch.setenv("XBSL_LANG", "ru")
+    i18n.set_lang("ru")
 
 _DATA_DEPENDENT = {
     "test_lexer",
