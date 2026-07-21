@@ -26,6 +26,7 @@ import base64
 import os
 import re
 import threading
+from functools import lru_cache
 from pathlib import Path
 from typing import Optional
 
@@ -165,6 +166,43 @@ _COMPLETION_KINDS = {
 #: sorts by sortText, and without one it would rank a template against names alphabetically.
 _SORT_TEMPLATE = "0"
 _SORT_REST = "1"
+#: Within the ordinary names, the ones written in the project's own language come first.
+_SORT_OWN_LANGUAGE = "0"
+_SORT_OTHER_LANGUAGE = "1"
+
+_CYRILLIC = re.compile(r"[А-Яа-яЁё]")
+#: `ЯзыкРазработки` of Проект.yaml; the platform standard asks for Russian, so that is the
+#: default when the file says nothing.
+_DEV_LANGUAGE_RE = re.compile(r"(?m)^ЯзыкРазработки:\s*(\S+)")
+
+
+@lru_cache(maxsize=8)
+def _project_language(root: Optional[str]) -> str:
+    """"ru" or "en" - the language the project's sources are written in.
+
+    The platform is bilingual and every stdlib member has both spellings, so completion would
+    otherwise offer a Russian project the English half of the catalog interleaved with its own
+    names. Read from the nearest Проект.yaml under the workspace root.
+    """
+    if not root:
+        return "ru"
+    for candidate in sorted(Path(root).rglob("Проект.yaml"))[:1]:
+        match = _DEV_LANGUAGE_RE.search(candidate.read_text(encoding="utf-8", errors="replace"))
+        if match:
+            return "ru" if _CYRILLIC.search(match.group(1)) else "en"
+    return "ru"
+
+
+def _label_language(label: str) -> str:
+    return "ru" if _CYRILLIC.search(label) else "en"
+
+
+def _sort_text(entry: dict, project_language: str) -> str:
+    """sortText: templates first, then the names of the project's own language."""
+    if entry["kind"] == "snippet":
+        return _SORT_TEMPLATE + entry["label"]
+    own = _label_language(entry["label"]) == project_language
+    return _SORT_REST + (_SORT_OWN_LANGUAGE if own else _SORT_OTHER_LANGUAGE) + entry["label"]
 
 
 class _State:
@@ -607,6 +645,7 @@ def _make_server() -> "LanguageServer":
         )
         if entries is None:
             return None
+        project_language = _project_language(str(STATE.root) if STATE.root else None)
         items = [
             lsp.CompletionItem(
                 label=e["label"],
@@ -614,7 +653,7 @@ def _make_server() -> "LanguageServer":
                 detail=e.get("detail"),
                 insert_text=e.get("snippet"),
                 insert_text_format=lsp.InsertTextFormat.Snippet if e.get("snippet") else None,
-                sort_text=(_SORT_TEMPLATE if e["kind"] == "snippet" else _SORT_REST) + e["label"],
+                sort_text=_sort_text(e, project_language),
             )
             for e in entries
         ]

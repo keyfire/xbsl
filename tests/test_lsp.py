@@ -73,3 +73,44 @@ def test_resolve_templates_path(tmp_path):
     assert lsp._resolve_templates_path("own.json", tmp_path) == tmp_path / "own.json"
     absolute = str(tmp_path / "t.json")
     assert lsp._resolve_templates_path(absolute, tmp_path) == Path(absolute)
+
+
+# --- completion follows the project's own language ------------------------------------------
+
+
+def _project(tmp_path, development_language):
+    (tmp_path / "Проект.yaml").write_text(
+        "ВидПроекта: Приложение\nИмя: Проба\nПоставщик: acme\n"
+        f"ЯзыкРазработки: {development_language}\n",
+        encoding="utf-8",
+    )
+    lsp._project_language.cache_clear()
+    return str(tmp_path)
+
+
+def test_project_language_is_read_from_the_project_file(tmp_path):
+    assert lsp._project_language(_project(tmp_path, "Русский")) == "ru"
+
+
+def test_project_language_english(tmp_path):
+    assert lsp._project_language(_project(tmp_path, "English")) == "en"
+
+
+def test_project_language_defaults_to_russian(tmp_path):
+    # the platform standard asks for Russian, so an unreadable project is treated as such
+    lsp._project_language.cache_clear()
+    assert lsp._project_language(str(tmp_path)) == "ru"
+    assert lsp._project_language(None) == "ru"
+
+
+def test_own_language_names_are_offered_first():
+    russian = {"kind": "member", "label": "Ссылка"}
+    english = {"kind": "member", "label": "Reference"}
+    assert lsp._sort_text(russian, "ru") < lsp._sort_text(english, "ru")
+    assert lsp._sort_text(english, "en") < lsp._sort_text(russian, "en")
+
+
+def test_templates_stay_ahead_of_every_name():
+    template = {"kind": "snippet", "label": "если"}
+    name = {"kind": "member", "label": "Ссылка"}
+    assert lsp._sort_text(template, "ru") < lsp._sort_text(name, "ru")
