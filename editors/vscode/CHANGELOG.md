@@ -8,6 +8,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.26.1
+
+- **Completion follows the language your project is written in.** The platform keeps both
+  spellings of every stdlib member, and after the term dictionary grew the English half started
+  showing up interleaved with the Russian one. The server now reads `ЯзыкРазработки` from the
+  project file and offers the names of that language first; nothing is hidden, only reordered.
+- The rule table in the documentation gained a leading column that numbers the rules 1-97, the
+  same numbers in both locales.
+
 ## 0.26.0
 
 - **Four new engine rules in the "Problems" panel.** `code/resource-bare-name` and
