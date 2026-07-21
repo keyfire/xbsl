@@ -6,6 +6,22 @@
 > documents them that way – so they are written here as they appear in the yaml; code keywords and stdlib
 > types use their English forms. See the [note on names](README.md#navigation-and-completion).
 
+## 0.25.0
+
+- **Three new engine rules in the "Problems" panel.** `yaml/ref-needs-nullable` – a reference type
+  in a `Тип` position without `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`): a reference has no
+  default value, so applying the build fails; the id is clickable and opens the platform section on
+  type description and initialization. `yaml/unknown-enum-value` – a component property value
+  outside the enumeration of the ui schema, which also covers the alignment trap (the horizontal
+  axis has `Конец`, the vertical one does not). `yaml/standard-field-length` – `Наименование` over
+  400 characters or `Код` over 50, the limits the platform rejects.
+- **A short interpolation inside a string literal is now resolved.** `code/undefined-name` reads
+  names inside string literals as well, so `"...?$format=json"` – a substitution of the
+  non-existent name `format` – is reported before the build instead of failing the compilation.
+- **The group description counters follow the engine automatically.** A guard in the engine's test
+  suite compares every counter, table row and documentation link against the rule registry, so the
+  numbers shown in the settings can no longer drift away from what the engine actually ships.
+
 ## 0.24.0
 
 - **Documentation links for the engine's new rules.** The `code/query-needs-server` and
