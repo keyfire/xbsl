@@ -225,6 +225,11 @@ rule id (`whitespace/trailing`) or a whole group (`style`) to a level or `off`. 
 beats its group, and any `xbsl.rules` key beats the group dropdowns. Works in both the CLI
 and the LSP mode.
 
+A rule group added by an engine plugin has no dropdown of its own – the dropdowns list the
+engine's built-in groups. Configure such a group through `xbsl.rules` by its name
+(`{"conventions": "off"}`), or through the "Configure rule..." action on any of its
+findings – both treat a plugin group exactly like a built-in one.
+
 ## Excluding a finding (the baseline)
 
 Disabling a rule silences it everywhere; sometimes a single finding must stay unfixed – the
