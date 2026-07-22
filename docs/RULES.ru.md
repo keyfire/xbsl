@@ -150,7 +150,7 @@ sidebar:
 | 66 | `code/unknown-enum-value` | warning | вкл | проект | Неизвестное значение перечисления | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | 67 | `yaml/enum-needs-nullable` | warning | вкл | проект | Перечисление без nullable | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | 68 | `yaml/unknown-enum-value` | error | вкл | файл | Значение свойства компонента вне списка перечисления ui-схемы (`ВыравниваниеСодержимогоПоВертикали: Конец` – по вертикали значения `Конец` нет) | – |
-| 69 | `yaml/bare-object-value` | error | вкл | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках либо выражение с `=` | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
+| 69 | `yaml/bare-object-value` | error | вкл | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках, выражение с `=` либо `$`-ссылку локализованной строки | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
 | 70 | `code/unknown-resource` | error | вкл | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы | [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
 | 71 | `form/unknown-handler` | warning | вкл | проект | Обработчик формы не найден в модуле | [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | 72 | `code/server-call-from-handler` | warning | вкл | проект | Серверный метод недоступен клиентскому обработчику | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |

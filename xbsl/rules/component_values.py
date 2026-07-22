@@ -58,8 +58,10 @@ Inside the two listed types the corpus has 687 nodes and not a single binding �
 a convention the code already follows.
 
 The yaml/bare-object-value rule. A property whose type union includes `Объект` (`Значение` of a
-label, `ДополнительныеДанные`, ...) takes either a quoted literal or an `=` binding; a bare word
-is rejected outright. The probe settled what the backlog had guessed wrong: the platform does
+label, `ДополнительныеДанные`, ...) takes a quoted literal, an `=` binding or a `$` reference
+to a localized string (`$ЛокализованныеСтроки.Заголовок`, qualified
+`$НС::ЛокализованныеСтроки.Ключ` – the documented identifier syntax, and the platform's own
+editor writes such values when a text is localized); a bare word is rejected outright. The probe settled what the backlog had guessed wrong: the platform does
 NOT read the bare word as an expression to be resolved – `Значение: Титул` fails even when
 `Титул` is a declared property of that very form, with exactly the message an unknown name gets:
 
@@ -322,8 +324,8 @@ def bare_object_value(source: SourceFile) -> Iterable[Diagnostic]:
             if value_node.style:  # quoted or a block scalar - a literal, not a bare word
                 continue
             value = value_node.value.strip()
-            if not value or value.startswith("="):
-                continue
+            if not value or value[0] in "=$":
+                continue  # '=' opens a binding, '$' a localized-string reference
             if _yaml_scalar_is_word(value_node) is False:
                 continue  # a number/boolean/null - yaml reads it as a typed literal
             yield Diagnostic(

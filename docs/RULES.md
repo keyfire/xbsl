@@ -151,7 +151,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 66 | `code/unknown-enum-value` | warning | on | project | Unknown enumeration value | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | 67 | `yaml/enum-needs-nullable` | warning | on | project | Enumeration without nullable | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | 68 | `yaml/unknown-enum-value` | error | on | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top`, `Center`, `Bottom`, `Baseline` and no `End`) | – |
-| 69 | `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal or an `=` binding | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
+| 69 | `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal, an `=` binding or a `$` localized-string reference | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
 | 70 | `code/unknown-resource` | error | on | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 | 71 | `form/unknown-handler` | warning | on | project | Form handler not found in the module | [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | 72 | `code/server-call-from-handler` | warning | on | project | Server method is unavailable to a client handler | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |

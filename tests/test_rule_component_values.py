@@ -320,6 +320,17 @@ def test_binding_not_flagged_bare(tmp_path, ui_root):
     assert not _run_bare(tmp_path, "        Значение: =Титул\n")
 
 
+def test_localized_string_ref_not_flagged(tmp_path, ui_root):
+    # '$' opens the documented localized-string identifier; the platform's editor writes these
+    assert not _run_bare(tmp_path, "        Значение: $ЛокализованныеСтроки.Заголовок\n")
+
+
+def test_qualified_localized_string_ref_not_flagged(tmp_path, ui_root):
+    assert not _run_bare(
+        tmp_path, "        Значение: $Акме::ЛокализованныеСтроки.Заголовок\n"
+    )
+
+
 def test_number_not_flagged(tmp_path, ui_root):
     # yaml reads it as a number, not a word
     assert not _run_bare(tmp_path, "        Значение: 42\n")
