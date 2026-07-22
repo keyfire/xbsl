@@ -121,12 +121,21 @@ def test_page_sections_match_between_languages():
     assert page_sections("CLI.md") == page_sections("CLI.ru.md")
 
 
+# The server commands dispatch to entry points with optional dependencies (extras mcp/lsp);
+# without those installed --help cannot answer, which is a fact of the minimal install, not
+# a hang. The public CI installs [dev] only - skip what cannot run there.
+_SERVER_DEPS = {("mcp",): "mcp", ("lsp",): "pygls"}
+
+
 @pytest.mark.parametrize(
     "command",
     [(), ("mcp",), ("lsp",), ("web",), ("templates",), ("self-update",), ("new-object",)],
 )
 def test_help_answers_within_timeout(command):
     # `xbsl mcp --help` used to start the MCP server and wait on stdin instead of answering
+    dep = _SERVER_DEPS.get(tuple(command))
+    if dep and importlib.util.find_spec(dep) is None:
+        pytest.skip(f"optional dependency {dep} is not installed")
     out = subprocess.run(
         [sys.executable, "-m", "xbsllint", *command, "--help"],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
@@ -145,9 +154,12 @@ def generator():
     return mod
 
 
+@pytest.mark.needs_data
 def test_committed_pages_are_current(generator):
     # the generator is the source of truth; a mismatch means the committed page went
-    # stale after a flag was edited
+    # stale after a flag was edited. The canonical pages are generated WITH the Element
+    # data (parts of the scaffolding help come from it), so a data-less clone must skip
+    # rather than compare against a poorer rendering.
     for fname, text in generator.generate().items():
         committed = (DOCS / fname).read_text(encoding="utf-8")
         assert committed == text, f"{fname} is stale: rerun python scripts/gen-cli-docs.py"
