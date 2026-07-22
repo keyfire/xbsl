@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
@@ -152,14 +153,31 @@ def _type_values(node, key: str = "Тип") -> Iterable[str]:
             yield from _type_values(item, key)
 
 
-def _value_positions(source: SourceFile, value: str, key: str = "Тип") -> list[tuple[int, int]]:
-    """(line, col) of every `<key>: <значение>` occurrence in the source text."""
-    pat = re.compile(  # \r?: the file may be CRLF, `$` in multiline mode anchors before \n
+@lru_cache(maxsize=None)
+def _positions_pattern(key: str) -> re.Pattern:
+    # \r?: the file may be CRLF, `$` in multiline mode anchors before \n
+    return re.compile(
         r"(?m)^[ \t]*(?:- +)?" + re.escape(key)
-        + r":[ \t]*(['\"]?)(" + re.escape(value) + r")\1[ \t]*(?:#.*)?\r?$"
+        + r":[ \t]*(['\"]?)(.*?)\1[ \t]*(?:#.*)?\r?$"
     )
-    lm = linemap(source)
-    return [lm.linecol(m.start(2)) for m in pat.finditer(source.text)]
+
+
+def _value_positions(source: SourceFile, value: str, key: str = "Тип") -> list[tuple[int, int]]:
+    """(line, col) of every `<key>: <значение>` occurrence in the source text.
+
+    One scan per (source, key) collects the positions of EVERY value at once, cached
+    on the source: the type mappers ask for several values per file, and a fresh
+    regex scan per value used to lead the whole-run profile. Values are asked as the
+    yaml parser returns them (quotes stripped), which is what group 2 captures.
+    """
+    cache_key = f"value_positions:{key}"
+    if cache_key not in source.cache:
+        lm = linemap(source)
+        table: dict[str, list[tuple[int, int]]] = {}
+        for m in _positions_pattern(key).finditer(source.text):
+            table.setdefault(m.group(2), []).append(lm.linecol(m.start(2)))
+        source.cache[cache_key] = table
+    return list(source.cache[cache_key].get(value, ()))
 
 
 def _yaml_type_mapper(source: SourceFile) -> dict | None:

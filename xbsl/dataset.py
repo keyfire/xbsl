@@ -75,6 +75,8 @@ def register_reset(hook) -> None:
 
 def _clear_caches() -> None:
     _load_cached.cache_clear()
+    _discovered_root.cache_clear()
+    _index_cached.cache_clear()
     for hook in _RESET_HOOKS:
         hook()
 
@@ -87,12 +89,22 @@ def set_data_root(path: str | os.PathLike[str] | None) -> None:
 
 
 def data_root() -> Path:
-    """The effective data root, by priority order (see the module description)."""
+    """The effective data root, by priority order (see the module description).
+
+    Every dataset access resolves the root, so the plugin walk below is cached; the
+    override and the env checks stay outside the cache - they are cheap and a test
+    (or the CLI) changes them mid-process.
+    """
     if _root_override is not None:
         return _root_override
     env = _env(_ENV_DATA_DIR, _ENV_DATA_DIR_LEGACY)
     if env:
         return Path(env)
+    return _discovered_root()
+
+
+@lru_cache(maxsize=None)
+def _discovered_root() -> Path:
     for root in plugins.data_roots():
         if (root / "index.json").exists():
             return root
@@ -112,7 +124,15 @@ def data_root_source() -> str:
 
 
 def _read_index() -> dict:
-    idx = data_root() / "index.json"
+    return _index_cached(str(data_root()))
+
+
+# The root is the cache key: version resolution reads the index on every dataset access,
+# and re-reading the file each time costs a run dearly (a whole-project pass resolves
+# the version hundreds of times). set_data_root/set_version clear the cache.
+@lru_cache(maxsize=None)
+def _index_cached(root: str) -> dict:
+    idx = Path(root) / "index.json"
     if not idx.exists():
         raise DatasetError(i18n.t("dataset.no-index", idx=idx, env=_ENV_DATA_DIR))
     return json.loads(idx.read_text(encoding="utf-8"))

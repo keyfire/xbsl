@@ -346,13 +346,21 @@ def _worker_lint(payload: tuple) -> tuple[list[Diagnostic], dict[str, dict[str, 
 
 def resolve_jobs(jobs: int, file_count: int) -> int:
     """The worker count: 0 - auto (by run size and cores), 1 - sequential."""
+    import math
     import os
 
     cpus = os.cpu_count() or 1
     if jobs == 0:
         if file_count < _PARALLEL_MIN_FILES or cpus < 4:
             return 1
-        return max(2, cpus - 1)
+        # Every worker pays a fixed cost F (the spawn, the imports, its own dataset
+        # parse) against its share of the work W: the wall clock F*w + W/w bottoms
+        # out near w = sqrt(W/F), and W grows with the file count - so cpus-1 workers
+        # overshoot badly on mid-size runs. Measured on a 20-core machine: 253 files
+        # ran best at ~4 workers (cpus-1 was 2x slower than sequential), ~1000 files
+        # flat across 4..8, ~4000 files flat across 13..19; sqrt(files/25) tracks
+        # those optima and is capped by the cores.
+        return max(2, min(cpus - 1, round(math.sqrt(file_count / 25))))
     return max(1, min(jobs, cpus))
 
 

@@ -214,13 +214,13 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         # an import of an external namespace (a library): its contents are not
         # visible to the rule, any bare name may come from there - skip the file
         return None
-    findings = _module_candidates(module, static)
+    findings, hint_pool = _module_candidates(module, static)
     if not findings:
         return None
     lm = linemap(source)
     cands = [
-        (*lm.linecol(offset), name, hint, sign)
-        for offset, name, hint, sign in findings
+        (*lm.linecol(offset), name, sign)
+        for offset, name, sign in findings
     ]
     return {
         "k": "x",
@@ -228,20 +228,22 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         "pair": pair_file,
         "obj": source.rel.endswith(".Объект.xbsl"),
         "cands": cands,
+        "pool": hint_pool,
     }
 
 
 def _module_candidates(
     module: P.Module, known_global: set[str],
-) -> list[tuple[int, str, str | None, str]]:
-    """Names unknown to the module and to `known_global`, with a local-scope hint.
+) -> tuple[list[tuple[int, str, str]], list[str]]:
+    """Names unknown to the module and to `known_global`, plus the module's hint pool.
 
-    The last element is the interpolation sign ("%"/"$") for a name found inside a string
-    literal, and "" for an ordinary one - the reduce picks the message by it.
+    The last element of a candidate is the interpolation sign ("%"/"$") for a name found
+    inside a string literal, and "" for an ordinary one - the reduce picks the message by it.
 
     The walk collects everything unknown to the LOCAL scopes; the big static set filters
-    afterwards, and the hints are computed only for the survivors against the pool of the
-    module's own names (difflib per raw finding would dominate the whole run).
+    afterwards. Hints are NOT computed here: most survivors are project names the reduce
+    resolves and drops, and difflib per raw candidate dominates the whole run on a real
+    project - the reduce runs difflib against the returned pool for the true findings only.
     """
     module_names: set[str] = set()
     for m in module.members:
@@ -273,14 +275,16 @@ def _module_candidates(
                 elif isinstance(sub, P.ObjectField) and sub.init is not None:
                     _walk_expr(sub.init, set(inner), findings)
     if not findings:
-        return []
+        return [], []
     _collect_declared(module, hint_pool)
-    out: list[tuple[int, str, str | None, str]] = []
-    for offset, name, sign in findings:
-        if name in known_global:
-            continue
-        out.append((offset, name, _closest(name, hint_pool), sign))
-    return out
+    out: list[tuple[int, str, str]] = [
+        (offset, name, sign)
+        for offset, name, sign in findings
+        if name not in known_global
+    ]
+    if not out:
+        return [], []
+    return out, sorted(hint_pool)
 
 
 def _collect_declared(module: P.Module, pool: set[str]) -> None:
@@ -381,7 +385,7 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 extras = set(pair["sections"])
                 extras |= set(object_members.get(kind, ()))
                 extras |= set(manager_members.get(kind, ()))
-        for line, col, name, hint, sign in fact["cands"]:
+        for line, col, name, sign in fact["cands"]:
             if name in project_names or name in extras:
                 continue
             if sign:
@@ -389,6 +393,9 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 # spelling hint would send the reader the wrong way.
                 message = i18n.t("code/undefined-name.found-interp", name=name, sign=sign)
             else:
+                # difflib runs only for a true finding: the module's own pool first
+                # (a local typo), then the project-wide names.
+                hint = _closest(name, fact.get("pool") or ())
                 if hint is None:
                     hint = _closest(name, project_names | extras)
                 message = (
@@ -583,6 +590,6 @@ def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
     # Literal, This, GlobalAccess, MethodRef are atoms (method references - stage 3)
 
 
-def _closest(name: str, scope: set[str]) -> str | None:
+def _closest(name: str, scope: Iterable[str]) -> str | None:
     hits = difflib.get_close_matches(name, scope, n=1, cutoff=0.75)
     return hits[0] if hits else None

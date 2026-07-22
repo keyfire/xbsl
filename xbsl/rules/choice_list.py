@@ -30,8 +30,8 @@ from collections.abc import Iterable
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import linemap
 from xbsl.rules.yaml_schema import _HAVE_YAML, _is_object, _parsed
+from xbsl.rules.yaml_types import _value_positions
 
 MESSAGES = {
     "yaml/choice-needs-static-list.title": {
@@ -119,15 +119,6 @@ def _choice_nodes(node, out: list[tuple[str, bool]]) -> None:
     elif isinstance(node, list):
         for item in node:
             _choice_nodes(item, out)
-
-
-def _value_positions(source: SourceFile, value: str) -> list[tuple[int, int]]:
-    """(line, col) of every `Тип: <значение>` occurrence in the source text."""
-    pat = re.compile(  # \r?: the file may be CRLF, `$` in multiline mode anchors before \n
-        r"(?m)^[ \t]*(?:- +)?Тип:[ \t]*(['\"]?)(" + re.escape(value) + r")\1[ \t]*(?:#.*)?\r?$"
-    )
-    lm = linemap(source)
-    return [lm.linecol(m.start(2)) for m in pat.finditer(source.text)]
 
 
 @rule(

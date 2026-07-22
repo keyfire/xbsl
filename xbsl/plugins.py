@@ -34,8 +34,10 @@ nobody notices.
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 from importlib.metadata import EntryPoint, entry_points
 from pathlib import Path
+from typing import Callable
 
 RULES_GROUP = "xbsl.rules"
 DATA_GROUP = "xbsl.data"
@@ -64,14 +66,27 @@ def disabled() -> bool:
 def _points(group: str) -> list[EntryPoint]:
     if disabled():
         return []
-    found = list(entry_points(group=group))
+    return list(_scan(group, entry_points))
+
+
+@lru_cache(maxsize=None)
+def _scan(group: str, scan: Callable) -> tuple[EntryPoint, ...]:
+    """One entry-point walk per group and process.
+
+    A walk reads every installed distribution's metadata, and the callers (the dataset
+    root resolution, the severity overrides) come back many times per run - uncached
+    it was the single largest share of a whole-project pass. The scanning callable is
+    part of the cache key on purpose: a test that monkeypatches `entry_points` gets a
+    fresh walk through its stub, with no cache reset to remember.
+    """
+    found = list(scan(group=group))
     legacy = _LEGACY_GROUPS.get(group)
     if legacy:
         # A package published for the transition period may declare both groups –
         # count each (name, target) once, the new group wins.
         seen = {(ep.name, ep.value) for ep in found}
-        found.extend(ep for ep in entry_points(group=legacy) if (ep.name, ep.value) not in seen)
-    return sorted(found, key=lambda ep: ep.name)
+        found.extend(ep for ep in scan(group=legacy) if (ep.name, ep.value) not in seen)
+    return tuple(sorted(found, key=lambda ep: ep.name))
 
 
 def _load(ep: EntryPoint):

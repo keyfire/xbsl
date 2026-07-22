@@ -165,13 +165,16 @@ def _is_object(data) -> bool:
 def _composed(source: SourceFile):
     """The composed node graph of the file (line/column marks kept), or None.
 
-    `yaml.compose` needs the pure-python loader - the marks are what the callers are
-    after. Cached per source: several rules walk the same graph.
+    libyaml composes the same graph as the pure-python loader - tags, values and
+    line/column marks are identical (verified node by node); the differences are
+    `Mark.buffer` (the snippet text, which nothing here reads) and the style of a
+    plain scalar (None vs "", both falsy - the consumers only test for block and
+    quote styles). Cached per source: several rules walk the same graph.
     """
     key = "yaml_composed"
     if key not in source.cache:
         try:
-            source.cache[key] = yaml.compose(source.text, Loader=yaml.SafeLoader)
+            source.cache[key] = yaml.compose(source.text, Loader=_LOADER)
         except yaml.YAMLError:
             source.cache[key] = None
     return source.cache[key]
