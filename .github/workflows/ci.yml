@@ -24,3 +24,10 @@ jobs:
       # матрице версий Python.
       - name: Tests
         run: pytest -q
+      # Джоба wheels гоняет mypy по компилируемым модулям и их транзитивным импортам
+      # (mypyc), но только ПО ТЕГУ - ошибка типов там валит уже опубликованный релиз
+      # (так сорвалась публикация 0.29.0). Тот же прогон на каждый пуш ловит её до тега.
+      - name: mypy (mypyc-compiled modules)
+        run: |
+          pip install mypy
+          mypy xbsl/lexer.py xbsl/parser.py --ignore-missing-imports
