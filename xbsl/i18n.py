@@ -903,8 +903,11 @@ class ArgumentParser(_argparse.ArgumentParser):
     this class is enough.
     """
 
-    def __init__(self, *args, add_help: bool = True, **kwargs) -> None:
-        super().__init__(*args, add_help=False, **kwargs)
+    def __init__(self, *, add_help: bool = True, **kwargs) -> None:
+        # Keyword-only, and add_help is forced through kwargs: an explicit keyword next to
+        # *args trips mypy's multiple-values check and fails the mypyc wheel build.
+        kwargs["add_help"] = False
+        super().__init__(**kwargs)
         self._positionals.title = t("cli.help.group.positional")
         self._optionals.title = t("cli.help.group.options")
         if add_help:
