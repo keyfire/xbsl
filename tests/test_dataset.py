@@ -5,11 +5,13 @@ import pytest
 from xbsl import dataset
 
 
+@pytest.mark.needs_data
 def test_default_is_available():
     assert dataset.available_versions()
     assert dataset.default_version() in dataset.available_versions()
 
 
+@pytest.mark.needs_data
 def test_load_language_and_stdlib():
     lang = dataset.load_json("language.json")
     assert lang["keywords"]["METHOD"]["forms"]
@@ -17,6 +19,7 @@ def test_load_language_and_stdlib():
     assert "Массив" in std["names"]
 
 
+@pytest.mark.needs_data
 def test_data_stamped_with_element_version():
     lang = dataset.load_json("language.json")
     assert lang["meta"]["element_version"] == dataset.default_version()
@@ -111,3 +114,54 @@ def test_bilingual_expansion_skipped_without_marker_or_terms():
     assert "Query" not in dataset._add_english_keys(no_marker, PAIRS)["type_members"]
     # marker present but terms.json absent (empty pairs) - Russian still works, no crash
     assert "Query" not in dataset._add_english_keys(_ru_only_dataset(), {})["type_members"]
+
+
+# --- in-place regeneration is picked up without a restart (no distribution data needed) -----
+
+def _write_root(tmp_path, marker: str):
+    (tmp_path / "index.json").write_text(
+        '{"available": ["1.0"], "default": "1.0"}', encoding="utf-8"
+    )
+    version_dir = tmp_path / "1.0"
+    version_dir.mkdir(exist_ok=True)
+    (version_dir / "language.json").write_text(
+        '{"meta": {"element_version": "1.0"}, "marker": "%s"}' % marker, encoding="utf-8"
+    )
+    return version_dir / "language.json"
+
+
+def test_regenerated_file_is_picked_up_without_a_restart(tmp_path):
+    # The LSP and MCP servers live long: data regenerated IN PLACE used to keep answering
+    # from the process cache until a restart, discovered only by diverging answers.
+    import os
+
+    data_file = _write_root(tmp_path, "before")
+    resets = []
+    dataset.register_reset(lambda: resets.append(1))
+    dataset.set_data_root(tmp_path)
+    try:
+        assert dataset.load_json("language.json")["marker"] == "before"
+        baseline_resets = len(resets)
+        data_file.write_text(
+            '{"meta": {"element_version": "1.0"}, "marker": "after"}', encoding="utf-8"
+        )
+        # the stamp is st_mtime_ns: force a distinct one, a fast write can land in the
+        # same filesystem timestamp tick
+        stamp = data_file.stat()
+        os.utime(data_file, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 1_000_000))
+        assert dataset.load_json("language.json")["marker"] == "after"
+        # the derived caches (register_reset) were dropped along with the data
+        assert len(resets) > baseline_resets
+    finally:
+        dataset._RESET_HOOKS.pop()
+        dataset.set_data_root(None)
+
+
+def test_unchanged_files_stay_cached(tmp_path):
+    data_file = _write_root(tmp_path, "stable")
+    dataset.set_data_root(tmp_path)
+    try:
+        first = dataset.load_json("language.json")
+        assert dataset.load_json("language.json") is first
+    finally:
+        dataset.set_data_root(None)
