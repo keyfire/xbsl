@@ -10,6 +10,7 @@ import pytest
 from xbsl import dataset, engine
 from xbsl import templates as tpl
 from xbsl.lsp_nav import (
+    CHAIN_TAIL_RE,
     IndexLookup,
     _query_field_entries,
     chain_at,
@@ -554,6 +555,36 @@ def test_chain_type_at_dot_after_call():
         file_stem="Модуль", stdlib_members=members, expr_type=t,
     )
     assert any(e["label"] == "ПервыйИлиНеопределено" for e in entries)
+
+
+@pytest.mark.needs_data
+def test_chain_type_at_dot_after_property():
+    # a dot after a PROPERTY link: `Список.НастройкиСервисовУчетныхЗаписей.` - the chain
+    # walks property types the same way it walks returns, and the completion trigger
+    # (CHAIN_TAIL_RE) must fire without a bracket before the dot. This is the owner's
+    # reported dead completion: the first links worked, the property link answered nothing.
+    code = (
+        "метод А()\n"
+        "    знч Список = СпискиПользователей.ПолучитьСписокПоУмолчанию()\n"
+        "    знч Х = Список.НастройкиСервисовУчетныхЗаписей.\n"
+        ";\n"
+    )
+    src = engine.load_text("Модуль.xbsl", code)
+    catalog = dataset.load_json("stdlib.json")
+    members = {**catalog["type_members"], **catalog["facet_members"]}
+    returns = catalog["member_types"]
+    line_prefix = "    знч Х = Список.НастройкиСервисовУчетныхЗаписей."
+    assert CHAIN_TAIL_RE.search(line_prefix)
+    assert not CHAIN_TAIL_RE.search("    знч Х = Список.")  # one link stays on the old paths
+    offset = code.index("НастройкиСервисовУчетныхЗаписей.\n") + len("НастройкиСервисовУчетныхЗаписей.")
+    lv = local_var_types(src, offset, returns=returns, static_roots=members.keys())
+    t = chain_type_at(src, offset, var_types=lv, returns=returns, static_roots=members.keys())
+    assert t == "ЧитаемоеМножество"
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix=line_prefix,
+        file_stem="Модуль", stdlib_members=members, expr_type=t,
+    )
+    assert any(e["label"] == "Фильтровать" for e in entries)
 
 
 @pytest.mark.needs_data

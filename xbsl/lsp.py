@@ -44,6 +44,7 @@ from xbsl import (
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
 from xbsl.lsp_nav import (
+    CHAIN_TAIL_RE,
     IndexLookup,
     chain_at,
     resolve_completions,
@@ -623,10 +624,12 @@ def _make_server() -> "LanguageServer":
                 src, offset, returns=returns, static_roots=stdlib_members.keys(),
             )
             query_rows = query_row_columns(src, offset)
-            # `ЗапросКБД.Выполнить().` - the dot follows a call, the chain type gives
-            # the members (the identifier-before-dot path below cannot see it).
+            # `ЗапросКБД.Выполнить().` or `Список.НастройкиСервисов.` - the dot continues
+            # a chain, the inferred chain type gives the members (the identifier-before-dot
+            # path resolves one link only). Not inside Запрос{...}: there a dotted name is
+            # a table reference and belongs to the query paths.
             expr_type = None
-            if re.search(r"[)\]}]\s*\.\s*[\wА-Яа-яЁё]*$", prefix):
+            if not in_query and CHAIN_TAIL_RE.search(prefix):
                 expr_type = chain_type_at(
                     src, offset, var_types=local_vars,
                     returns=returns, static_roots=stdlib_members.keys(),

@@ -24,6 +24,11 @@ from xbsl.templates import (
 IDENT = r"[A-Za-zА-Яа-яЁё_][A-Za-z0-9А-Яа-яЁё_]*"
 # A character that cannot appear immediately before a recognized identifier chain.
 NOT_BEFORE = r"[^.0-9A-Za-zА-Яа-яЁё_]"
+# A dot that CONTINUES a chain: after a call or index (`ЗапросКБД.Выполнить().`) or after a
+# property link (`Список.НастройкиСервисов.`) - the identifier-before-dot paths resolve one
+# link only, so these cursors need the inferred chain type. A single `Имя.` does not match:
+# the one-link paths (variables, components, project objects, query tables) own it.
+CHAIN_TAIL_RE = re.compile(rf"(?:[)\]}}]|\.\s*{IDENT})\s*\.\s*(?:{IDENT})?$")
 
 _CHAIN_RE = re.compile(rf"{IDENT}(?:\.{IDENT})*")
 # A trailing comment after the value is allowed - it is not part of the name.
@@ -508,9 +513,10 @@ def resolve_completions(
     templates: Optional[Sequence["Template"]] = None,
 ) -> Optional[list[dict]]:
     """Completion items [{label, kind, detail}] for the context, or None if it is unknown."""
-    # A dot after a call: `ЗапросКБД.Выполнить().` - the caller inferred the chain type
-    # (expr_type), the identifier-before-dot paths below cannot see through the brackets.
-    if expr_type and re.search(rf"[)\]}}]\s*\.\s*(?:{IDENT})?$", line_prefix):
+    # A dot that continues a chain - after a call (`ЗапросКБД.Выполнить().`) or a property
+    # link (`Список.НастройкиСервисов.`): the caller inferred the chain type (expr_type),
+    # the identifier-before-dot paths below cannot see past the first link.
+    if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:
             return _stdlib_entries(members)
