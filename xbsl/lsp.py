@@ -90,6 +90,14 @@ def _opt_str(params: object, name: str) -> Optional[str]:
     return str(value) if value is not None else None
 
 
+def _opt_str_list(params: object, name: str) -> list[str]:
+    """A flat array parameter - the shape custom requests use for anything list-like."""
+    value = _param(params, name)
+    if not isinstance(value, (list, tuple)):
+        return []
+    return [str(item) for item in value]
+
+
 def open_doc_source(open_docs: dict, path: Path) -> Optional[str]:
     """The source text of the open editor document for `path`, or None when it is not open.
 
@@ -939,9 +947,23 @@ def _make_server() -> "LanguageServer":
         kind = _opt_str(params, "kind")
         if not kind:
             return {"available": True, "kinds": list(metamodel.kinds())}
-        props = metamodel.localized(metamodel.properties(kind), lang)
+        # A nested node asks with its path: `sections` are the collection keys from the root down
+        # (Реквизиты, ТабличныеЧасти/Реквизиты), `names` are the `Имя` of the item on each level -
+        # the metamodel dispatches by it, so `Код` gets its own class, not the ordinary attribute
+        # one. Flat arrays on purpose: nested objects do not survive the pygls deserialization.
+        sections = _opt_str_list(params, "sections")
+        names = _opt_str_list(params, "names")
+        cls = metamodel.class_for_kind(kind)
+        if sections:
+            path = tuple(zip(sections, list(names) + [None] * (len(sections) - len(names))))
+            cls = metamodel.item_class(kind, path)
+            if not cls:
+                return {"available": True, "kind": kind, "props": {}}
+            props = metamodel.localized(metamodel.properties_of_class(cls), lang)
+        else:
+            props = metamodel.localized(metamodel.properties(kind), lang)
         if not props:
-            return {"available": True, "kind": kind, "props": {}}
+            return {"available": True, "kind": kind, "class": cls, "props": {}}
         enums = {}
         for record in props.values():
             name = record.get("enum")
@@ -953,7 +975,7 @@ def _make_server() -> "LanguageServer":
         return {
             "available": True,
             "kind": kind,
-            "class": metamodel.class_for_kind(kind),
+            "class": cls,
             "props": props,
             "enums": enums,
         }

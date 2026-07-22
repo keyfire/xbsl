@@ -184,9 +184,14 @@ The **Properties** panel edits the selected component (and, from the metadata tr
   section also shows what the file does not set yet: `Presentation`, `Hierarchical`,
   `InputByString`, `AccessControl`. The editors are typed - a tri-state for a flag, a value list
   for an enumeration, a combobox for a data type; collections and nested blocks (`Attributes`,
-  `TabularParts`) are listed for reference and edited in the metadata tree. For a field of an
-  object, for a kind outside the metamodel and without generated data the panel stays the flat
-  list of set properties it has always been.
+  `TabularParts`) are listed for reference and edited in the metadata tree.
+- **Collection items too.** An attribute, a dimension, a resource, a structure field, an attribute
+  of a tabular part, a value of an enumeration, a parameter - each gets its own **All properties**
+  section: the metamodel names the item class itself, and where a collection holds items of
+  different classes it picks one by the name (the built-in `Code`, `Name` and `Owner` of a catalog
+  are classes of their own with their own properties - `Code` has `Length`, `Uniqueness`,
+  `AutoNumbering`). Without generated data, and for a nested block that is not a collection item,
+  the panel stays the flat list of set properties it has always been.
 - **Slot indicator.** A property that is a child slot is marked with a bar and a badge.
 - **Serial editing.** The selected property row survives switching to another component of the
   same type, so you can walk a set of similar components changing one field.

@@ -184,7 +184,11 @@ def ui_schema(component: str | None = None) -> dict:
 
 
 @mcp.tool()
-def metadata_schema(kind: str | None = None) -> dict:
+def metadata_schema(
+    kind: str | None = None,
+    sections: list[str] | None = None,
+    names: list[str] | None = None,
+) -> dict:
     """The properties a configuration element of a kind (ВидЭлемента) may declare.
 
     Without arguments - the kinds the metamodel covers. With `kind` - its properties, each
@@ -194,6 +198,12 @@ def metadata_schema(kind: str | None = None) -> dict:
     `block` and `list` are the nested structures (КонтрольДоступа, Реквизиты), written as
     yaml blocks rather than a scalar. Use it before writing an element yaml by hand:
     it answers "what else may a Справочник declare" without guessing.
+
+    An item of a collection is asked for by its path: `sections` are the collection keys from
+    the root down (["Реквизиты"], ["ТабличныеЧасти", "Реквизиты"]) and `names` are the `Имя`
+    of the item on each level. The name matters where the platform dispatches by it - the
+    built-in `Код`, `Наименование` and `Владелец` of a Справочник have classes of their own,
+    so their properties differ from an ordinary attribute's.
     {"available": false} when the metamodel dataset is not generated
     (tools/extract_metamodel.py).
     """
@@ -201,7 +211,15 @@ def metadata_schema(kind: str | None = None) -> dict:
         return {"available": False}
     if not kind:
         return {"available": True, "kinds": list(metamodel.kinds())}
-    props = metamodel.properties(kind)
+    cls = metamodel.class_for_kind(kind)
+    if sections:
+        path = tuple(zip(sections, list(names or []) + [None] * (len(sections) - len(names or []))))
+        cls = metamodel.item_class(kind, path)
+        if not cls:
+            return {"available": True, "kind": kind, "props": {}}
+        props = metamodel.properties_of_class(cls)
+    else:
+        props = metamodel.properties(kind)
     enums = {
         name: list(metamodel.enum_values(name))
         for name in {p.get("enum") for p in props.values() if p.get("enum")}
@@ -209,7 +227,7 @@ def metadata_schema(kind: str | None = None) -> dict:
     return {
         "available": True,
         "kind": kind,
-        "class": metamodel.class_for_kind(kind),
+        "class": cls,
         "props": props,
         "enums": enums,
     }

@@ -12,6 +12,7 @@ import {
   isRootNode,
   metaKindOf,
   metaNodeOffsetAt,
+  metaSchemaPathAt,
   metaPropertyEdits,
   pairedYamlPath,
 } from "../src/propsModes";
@@ -147,6 +148,49 @@ test("metaNodeOffsetAt: offset 0 before leading comments falls back to the root 
   const internals = parseInternals(commented)!;
   assert.ok(internals.rootOffset > 0);
   assert.strictEqual(metaNodeOffsetAt(commented, 0), internals.rootOffset);
+});
+
+// --- metaSchemaPathAt ---------------------------------------------------------------------
+
+test("metaSchemaPathAt: the object itself asks for the kind's own schema", () => {
+  const internals = parseInternals(CATALOG)!;
+  assert.deepStrictEqual(metaSchemaPathAt(CATALOG, internals.rootOffset), {
+    sections: [],
+    names: [],
+  });
+});
+
+test("metaSchemaPathAt: an attribute carries its section and its name", () => {
+  const internals = parseInternals(CATALOG)!;
+  assert.deepStrictEqual(metaSchemaPathAt(CATALOG, internals.attributes[1].offset!), {
+    sections: ["Реквизиты"],
+    names: ["Цена"],
+  });
+});
+
+test("metaSchemaPathAt: a nested tabular attribute carries both levels", () => {
+  const internals = parseInternals(CATALOG)!;
+  const offset = internals.tabulars[0].children![0].offset!;
+  assert.deepStrictEqual(metaSchemaPathAt(CATALOG, offset), {
+    sections: ["ТабличныеЧасти", "Реквизиты"],
+    names: ["Строки", "Количество"],
+  });
+});
+
+test("metaSchemaPathAt: an item without Имя still names its section", () => {
+  const text = "ВидЭлемента: Перечисление\nИмя: Оценка\nЭлементы:\n    -\n        Ид: bbb\n";
+  const offset = text.indexOf("Ид: bbb");
+  assert.deepStrictEqual(metaSchemaPathAt(text, offset), {
+    sections: ["Элементы"],
+    names: [""],
+  });
+});
+
+test("metaSchemaPathAt: a node that is not a collection item has no path", () => {
+  // The map under `Наследует` is a block, not an item of a collection - the metamodel does
+  // not address it this way, so the panel keeps showing the set rows alone.
+  const offset = metaNodeOffsetAt(FORM, FORM.indexOf("Тип: Форма"))!;
+  assert.strictEqual(metaSchemaPathAt(FORM, offset), undefined);
 });
 
 // --- describeMetaSelection ----------------------------------------------------------------

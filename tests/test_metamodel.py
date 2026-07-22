@@ -23,10 +23,34 @@ _MM = {
                                   "priority": 9550},
                 "Представление": {"kind": "string", "type": "AttributeName", "priority": 9900},
                 "Реквизиты": {"kind": "list", "item": "IAcmeAttribute",
-                              "impl": "AcmeRegularAttribute"},
+                              "impl": "AcmeRegularAttribute", "dispatch": "Имя"},
+                "ТабличныеЧасти": {"kind": "list", "item": "AcmeTabularDescriptor"},
             },
             "ext": ["AcmeElementBase"],
             "inline": ["AcmeStringLimits"],
+        },
+        # A dispatched collection: an ordinary attribute is the default implementation, the
+        # built-in `Код` has a class of its own (the platform marks it with a presentation).
+        "IAcmeAttribute": {"props": {"Имя": {"kind": "string"}}, "ext": []},
+        "AcmeRegularAttributeDescriptor": {
+            "props": {"Тип": {"kind": "type"}, "ЗначениеПоУмолчанию": {"kind": "string"}},
+            "ext": ["IAcmeAttribute"],
+            "implName": "AcmeRegularAttribute",
+        },
+        "AcmeCodeAttribute": {
+            "props": {"Длина": {"kind": "number"}, "Автонумерация": {"kind": "boolean"}},
+            "ext": ["IAcmeAttribute"],
+            "presents": "Код",
+        },
+        # The same presentation in an unrelated family: a candidate must be assignable to the
+        # collection's item type, otherwise `Код` of a catalog would pick this one.
+        "AcmeReportCode": {"props": {"Чужое": {"kind": "string"}}, "ext": [], "presents": "Код"},
+        "AcmeTabularDescriptor": {
+            "props": {
+                "Имя": {"kind": "string"},
+                "Реквизиты": {"kind": "list", "item": "AcmeRegularAttributeDescriptor"},
+            },
+            "ext": [],
         },
         "AcmeElementBase": {
             "props": {
@@ -126,6 +150,38 @@ def test_enum_values_and_class_lookup(mm_root):
     assert metamodel.class_property_names("AcmeCatalogDescriptor") >= {"Иерархический", "Поставщик"}
 
 
+def test_item_class_of_a_collection_uses_the_default_implementation(mm_root):
+    cls = metamodel.item_class("Справочник", (("Реквизиты", "Срок"),))
+    assert cls == "AcmeRegularAttributeDescriptor"  # resolved through implName, not by guessing
+    props = metamodel.properties_of_class(cls)
+    assert set(props) >= {"Тип", "ЗначениеПоУмолчанию", "Имя"}  # own plus inherited
+    assert "ВидЭлемента" not in props  # the envelope belongs to elements, not to their items
+
+
+def test_item_class_dispatches_by_the_item_name(mm_root):
+    assert metamodel.item_class("Справочник", (("Реквизиты", "Код"),)) == "AcmeCodeAttribute"
+    props = metamodel.properties_of_class("AcmeCodeAttribute")
+    assert set(props) >= {"Длина", "Автонумерация"}
+    assert "ЗначениеПоУмолчанию" not in props  # a built-in attribute is NOT an ordinary one
+
+
+def test_item_class_ignores_a_namesake_from_another_family(mm_root):
+    # AcmeReportCode also presents itself as `Код` but is not an IAcmeAttribute.
+    assert metamodel.item_class("Справочник", (("Реквизиты", "Код"),)) != "AcmeReportCode"
+
+
+def test_item_class_walks_a_nested_path(mm_root):
+    cls = metamodel.item_class("Справочник", (("ТабличныеЧасти", "Шаги"), ("Реквизиты", "Готово")))
+    assert cls == "AcmeRegularAttributeDescriptor"
+    assert metamodel.item_class("Справочник", (("ТабличныеЧасти", "Шаги"),)) == "AcmeTabularDescriptor"
+
+
+def test_item_class_of_an_unknown_path_is_none(mm_root):
+    assert metamodel.item_class("Справочник", (("НетТакого", "X"),)) is None
+    assert metamodel.item_class("Справочник", (("Иерархический", "X"),)) is None  # not a collection
+    assert metamodel.item_class("НетТакогоВида", (("Реквизиты", "X"),)) is None
+
+
 def test_legacy_data_reads_as_untyped_properties(legacy_root):
     props = metamodel.properties("Справочник")
     assert props["Иерархический"] == {}  # names only - the panel falls back to text editors
@@ -185,6 +241,16 @@ def test_mcp_metadata_schema(mcp_module, mm_root):
     assert one["enums"]["VisibilityScopeEnum"] == ["ВПодсистеме", "ВПроекте", "Глобально"]
 
 
+def test_mcp_metadata_schema_of_a_collection_item(mcp_module, mm_root):
+    item = mcp_module.metadata_schema("Справочник", ["Реквизиты"], ["Срок"])
+    assert item["class"] == "AcmeRegularAttributeDescriptor"
+    assert "Тип" in item["props"] and "Иерархический" not in item["props"]
+    code = mcp_module.metadata_schema("Справочник", ["Реквизиты"], ["Код"])
+    assert code["class"] == "AcmeCodeAttribute" and "Длина" in code["props"]
+    nowhere = mcp_module.metadata_schema("Справочник", ["НетТакого"], ["X"])
+    assert nowhere["props"] == {}
+
+
 def test_mcp_metadata_schema_degrades_without_data(mcp_module, no_data):
     assert mcp_module.metadata_schema() == {"available": False}
 
@@ -216,6 +282,26 @@ def test_lsp_metadata_schema_kinds_and_properties(mm_root):
     assert one["enums"]["VisibilityScopeEnum"] == ["ВПодсистеме", "ВПроекте", "Глобально"]
     unknown = features["xbsl/metadataSchema"]({"kind": "НетТакого"})
     assert unknown["props"] == {}
+
+
+def test_lsp_metadata_schema_of_a_collection_item(mm_root):
+    features = _server_features()
+    ask = features["xbsl/metadataSchema"]
+    item = ask({"kind": "Справочник", "sections": ["Реквизиты"], "names": ["Срок"]})
+    assert item["class"] == "AcmeRegularAttributeDescriptor"
+    assert "ЗначениеПоУмолчанию" in item["props"]
+    code = ask({"kind": "Справочник", "sections": ["Реквизиты"], "names": ["Код"]})
+    assert code["class"] == "AcmeCodeAttribute" and "Автонумерация" in code["props"]
+    # A name is optional: without it the collection falls back to its default implementation.
+    unnamed = ask({"kind": "Справочник", "sections": ["Реквизиты"]})
+    assert unnamed["class"] == "AcmeRegularAttributeDescriptor"
+    nested = ask({
+        "kind": "Справочник",
+        "sections": ["ТабличныеЧасти", "Реквизиты"],
+        "names": ["Шаги", "Готово"],
+    })
+    assert nested["class"] == "AcmeRegularAttributeDescriptor"
+    assert ask({"kind": "Справочник", "sections": ["НетТакого"], "names": ["X"]})["props"] == {}
 
 
 def test_lsp_metadata_schema_degrades_without_data(no_data):

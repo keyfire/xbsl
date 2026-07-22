@@ -354,6 +354,13 @@ dropdowns for `VisibilityScope` and `Environment`, a `True` / `False` toggle, te
 `Id` and `ElementKind` are read-only; collections (`Attributes` and the like) are edited in the tree.
 Edits are surgical (undo works); save the file (Ctrl+S) to refresh the tree.
 
+The **All properties** section shows what the file does not set yet - not only for the object
+itself but for an item of any of its collections: an attribute, a dimension, a resource, a
+structure field, an attribute of a tabular part, a value of an enumeration, a parameter. The
+metamodel names the item class itself, and where a collection holds items of different classes it
+picks one by the name: the built-in `Code`, `Name` and `Owner` of a catalog are classes of their
+own, so their property sets differ too.
+
 Composite (nested) properties – `ContentHorizontalAlign { ... }`, say – are shown but not
 editable: edit those in the yaml.
 

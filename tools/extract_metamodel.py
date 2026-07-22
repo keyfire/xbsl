@@ -301,11 +301,18 @@ def _member_property(annots: dict[str, str], decl: str, wrappers: set[str], enum
     possible = _arg(annots.get("PossibleTypes", ""), "value")
     if possible:
         rec["types"] = possible
-    impl = _arg(annots.get("DescriptorDispatchedBy", ""), "defaultImpl")
-    if impl:
-        # The concrete class of a collection item when the declared type is an interface
-        # (Реквизиты hold ICatalogAttributeDescriptor, an ordinary one is CatalogRegularAttribute).
-        rec["impl"] = impl
+    dispatched = annots.get("DescriptorDispatchedBy")
+    if dispatched is not None:
+        # A collection whose items are of different classes: the platform picks one by the value
+        # of a key of the item itself (`Имя` for attributes, `Вид` for scheduled jobs), and falls
+        # back to defaultImpl. The key is stored as `dispatch`, the fallback as `impl` - the name
+        # of an implementation, resolved to a class through @DefaultImpl (see `implName`).
+        by = _arg(dispatched, "ru")
+        if by:
+            rec["dispatch"] = by
+        impl = _arg(dispatched, "defaultImpl")
+        if impl:
+            rec["impl"] = impl
     primary_key, primary = spellings[0]
     aliases = [name for _, name in spellings[1:]]
     if aliases:
@@ -313,6 +320,54 @@ def _member_property(annots: dict[str, str], decl: str, wrappers: set[str], enum
     if primary_key != "PropertyInfo":
         rec["deprecated"] = True  # only an old spelling is declared
     return primary, rec
+
+
+def _leading_annotations(text: str, start: int) -> dict[str, str]:
+    """Annotations written right before position `start` (a class header), name -> arguments.
+
+    Walked BACKWARDS so the class regex stays as it is: an annotation block is a run of
+    `@Name(args)` (or a bare `@Name`) separated by whitespace, and the first thing that is
+    neither ends it.
+    """
+    out: dict[str, str] = {}
+    i = start
+    while i > 0:
+        j = i
+        while j > 0 and text[j - 1].isspace():
+            j -= 1
+        if j == 0:
+            break
+        if text[j - 1] == ")":
+            depth = 0
+            k = j - 1
+            while k >= 0:
+                if text[k] == ")":
+                    depth += 1
+                elif text[k] == "(":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                k -= 1
+            if k < 0:
+                break
+            args = text[k + 1:j - 1]
+            n = k
+            while n > 0 and (text[n - 1].isalnum() or text[n - 1] == "_"):
+                n -= 1
+            if n == k or n == 0 or text[n - 1] != "@":
+                break
+            out.setdefault(text[n:k], args)
+            i = n - 1
+            continue
+        n = j
+        while n > 0 and (text[n - 1].isalnum() or text[n - 1] == "_"):
+            n -= 1
+        if n < j and n > 0 and text[n - 1] == "@":
+            out.setdefault(text[n:j], "")
+            i = n - 1
+            continue
+        break
+    return out
 
 
 def _parse_xcore(text: str, classes: dict, enums: dict, wrappers: set[str]) -> None:
@@ -342,6 +397,17 @@ def _parse_xcore(text: str, classes: dict, enums: dict, wrappers: set[str]) -> N
         for e in ext:
             if e not in node["ext"]:
                 node["ext"].append(e)
+        # Who this class is for, as the metamodel itself declares it: @DefaultImpl names the
+        # implementation a collection falls back to, @DescriptorPresentation carries the value a
+        # dispatched collection matches against (the name of a built-in attribute - Код,
+        # Наименование, Владелец). Both let the item class be RESOLVED instead of guessed.
+        leading = _leading_annotations(text, m.start())
+        impl_name = _arg(leading.get("DefaultImpl", ""), "name")
+        if impl_name:
+            node["implName"] = impl_name
+        presents = _arg(leading.get("DescriptorPresentation", ""), "ru")
+        if presents:
+            node["presents"] = presents
 
 
 def _fill_members(classes: dict, enums: dict, wrappers: set[str]) -> None:
@@ -412,7 +478,15 @@ def main(argv=None) -> int:
             "note": "свойства элементов конфигурации по видам: правило yaml/unknown-property и панель свойств",
         },
         "classes": {
-            k: {"props": v["props"], "ext": v["ext"], **({"inline": v["inline"]} if v["inline"] else {})}
+            k: {
+                "props": v["props"],
+                "ext": v["ext"],
+                **({"inline": v["inline"]} if v["inline"] else {}),
+                # How a dispatched collection finds this class: by the implementation name it is
+                # the default for, or by the value its items carry (Код, Наименование, Владелец).
+                **({"implName": v["implName"]} if v.get("implName") else {}),
+                **({"presents": v["presents"]} if v.get("presents") else {}),
+            }
             for k, v in sorted(classes.items())
         },
         "enums": dict(sorted(enums.items())),

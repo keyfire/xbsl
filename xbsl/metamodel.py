@@ -37,7 +37,7 @@ def _data() -> dict | None:
 
 def _reset() -> None:
     """Drop the derived tables when the data root or version changes (dataset hook)."""
-    for cached in (_data, _class_properties, properties, allowed_keys):
+    for cached in (_data, _class_properties, properties, properties_of_class, _bases, allowed_keys):
         cached.cache_clear()
 
 
@@ -142,6 +142,92 @@ def properties(kind: str) -> dict[str, dict]:
         props.setdefault(key, {"kind": "string"})
     order = sorted(props.items(), key=lambda kv: (-int(kv[1].get("priority") or 0), kv[0]))
     return dict(order)
+
+
+@lru_cache(maxsize=None)
+def properties_of_class(name: str) -> dict[str, dict]:
+    """Typed properties of a class, ordered as the platform's own designer orders them.
+
+    The counterpart of `properties` for something that is not an element of its own: an item of a
+    collection (an attribute, a dimension, a value of an enumeration). The envelope keys are NOT
+    added here - a collection item carries no `ВидЭлемента` and no `ОбластьВидимости`.
+    """
+    props = dict(_class_properties(name))
+    order = sorted(props.items(), key=lambda kv: (-int(kv[1].get("priority") or 0), kv[0]))
+    return dict(order)
+
+
+@lru_cache(maxsize=None)
+def _bases(name: str) -> frozenset[str]:
+    """The class itself plus everything it extends, transitively."""
+    data = _data()
+    if not data:
+        return frozenset()
+    classes = data["classes"]
+    out: set[str] = set()
+    stack = [name]
+    while stack:
+        current = stack.pop()
+        if current in out:
+            continue
+        out.add(current)
+        node = classes.get(current)
+        if node:
+            stack.extend(node.get("ext") or ())
+    return frozenset(out)
+
+
+def _class_by_impl(impl: str) -> str | None:
+    """The class the metamodel declares as this implementation (`@DefaultImpl(name=...)`)."""
+    data = _data()
+    if not data:
+        return None
+    for name, node in data["classes"].items():
+        if node.get("implName") == impl:
+            return name
+    return None
+
+
+def _dispatched_class(item: str, value: str) -> str | None:
+    """The class a dispatched collection picks for an item whose key holds `value`.
+
+    The platform marks such classes with `@DescriptorPresentation` (the built-in attributes
+    `Код`, `Наименование`, `Владелец` each have their own class); the same value occurs in
+    unrelated families, so the candidate must also be assignable to the collection's item type.
+    """
+    data = _data()
+    if not data:
+        return None
+    for name, node in data["classes"].items():
+        if node.get("presents") == value and item in _bases(name):
+            return name
+    return None
+
+
+def item_class(kind: str, path: tuple[tuple[str, str | None], ...]) -> str | None:
+    """The class of a nested element: a collection item, possibly nested several levels deep.
+
+    `path` is the way from the element's root down to the node, one `(section, name)` pair per
+    level - the yaml key of the collection and the `Имя` of the item inside it (the name matters
+    only where the metamodel dispatches by it). Returns None when the path leads nowhere.
+    """
+    current = class_for_kind(kind)
+    if not current:
+        return None
+    for section, name in path:
+        record = _class_properties(current).get(section)
+        if not record or record.get("kind") != "list":
+            return None
+        item = record.get("item")
+        if not item:
+            return None
+        chosen = None
+        if record.get("dispatch") and name:
+            chosen = _dispatched_class(item, name)
+        if not chosen and record.get("impl"):
+            chosen = _class_by_impl(record["impl"])
+        current = chosen or item
+    return current
 
 
 @lru_cache(maxsize=None)

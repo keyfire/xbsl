@@ -69,9 +69,7 @@ export function metaKindOf(text: string): string | undefined {
   return META_KIND_VALUE_RE.exec(text)?.[1];
 }
 
-// Whether the offset points at the document's root map (the object itself). Only there do the
-// kind's own properties apply - a nested map is a field or a section item, whose schema is
-// resolved by discriminators (a separate stage), so the panel offers nothing extra for it.
+// Whether the offset points at the document's root map (the object itself).
 export function isRootNode(text: string, offset: number): boolean {
   let root: unknown;
   try {
@@ -80,6 +78,77 @@ export function isRootNode(text: string, offset: number): boolean {
     return false;
   }
   return isMap(root) ? (root as YAMLMap).range?.[0] === offset : false;
+}
+
+// The way from the element's root down to the node at `offset`, as the metamodel needs it: the
+// key of every collection passed through and the `Имя` of the item picked inside it. The root
+// itself answers with an empty path (the kind's own schema); a node that is not an item of a
+// collection - a nested block like КонтрольДоступа - answers undefined, since the metamodel
+// addresses only collection items this way.
+export interface MetaSchemaPath {
+  sections: string[];
+  names: string[];
+}
+
+export function metaSchemaPathAt(text: string, offset: number): MetaSchemaPath | undefined {
+  let root: unknown;
+  try {
+    root = parseDocument(text, { uniqueKeys: false }).contents ?? undefined;
+  } catch {
+    return undefined;
+  }
+  if (!isMap(root)) {
+    return undefined;
+  }
+  const path: MetaSchemaPath = { sections: [], names: [] };
+  let map = root as YAMLMap;
+  for (;;) {
+    if (map.range?.[0] === offset) {
+      return path;
+    }
+    const step = collectionStepAt(map, offset);
+    if (!step) {
+      return undefined;
+    }
+    path.sections.push(step.section);
+    path.names.push(step.name);
+    map = step.item;
+  }
+}
+
+// The collection item of `map` that contains `offset`: which key it sits under and its `Имя`.
+function collectionStepAt(
+  map: YAMLMap,
+  offset: number
+): { section: string; name: string; item: YAMLMap } | undefined {
+  for (const pair of map.items) {
+    const key = (pair.key as { value?: unknown } | null)?.value;
+    if (typeof key !== "string" || !isSeq(pair.value)) {
+      continue;
+    }
+    for (const entry of (pair.value as { items: unknown[] }).items) {
+      if (!isMap(entry)) {
+        continue;
+      }
+      const item = entry as YAMLMap;
+      const range = item.range;
+      if (!range || offset < range[0] || offset > (range[2] ?? range[1])) {
+        continue;
+      }
+      return { section: key, name: stringValue(item, "Имя") ?? "", item };
+    }
+  }
+  return undefined;
+}
+
+function stringValue(map: YAMLMap, key: string): string | undefined {
+  for (const pair of map.items) {
+    if ((pair.key as { value?: unknown } | null)?.value === key) {
+      const value = (pair.value as { value?: unknown } | null)?.value;
+      return typeof value === "string" ? value : undefined;
+    }
+  }
+  return undefined;
 }
 
 // -- metadata node resolution ------------------------------------------------------------------
