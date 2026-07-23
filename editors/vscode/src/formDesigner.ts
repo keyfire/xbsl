@@ -921,15 +921,31 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .sechead { font-weight: 600; font-size: 1.1em; margin-top: 4px; }
   .fld { display: inline-flex; flex-direction: column; gap: 3px; min-width: 160px; }
   .fld-cap { font-size: .85em; opacity: .75; }
-  .inp { border: 1px solid var(--fp-input-border); background: var(--fp-input-bg); border-radius: 4px; padding: 5px 9px; display: flex; justify-content: space-between; gap: 8px; }
+  .inp { border: 1px solid var(--fp-input-border); background: var(--fp-input-bg); border-radius: 4px; padding: 5px 9px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
   .dd { opacity: .6; }
   .chk { display: inline-block; }
-  .btn { border: 1px solid var(--fp-border); background: transparent; color: var(--fp-fg); border-radius: 4px; padding: 5px 14px; font-size: inherit; cursor: pointer; }
+  .btn { border: 1px solid var(--fp-border); background: transparent; color: var(--fp-fg); border-radius: 4px; padding: 5px 14px; font-size: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
   /* Primary button - the native Element yellow (--themeColorPrimaryBtnBg #fd0, text #1c1c1f). */
   .btn.primary { background: var(--fp-btn-bg); color: var(--fp-btn-fg); border-color: var(--fp-btn-bg); }
   .btn.link { border-color: transparent; color: var(--fp-link); padding-left: 4px; padding-right: 4px; }
+  .btn.ico { padding: 5px 7px; }
+  .btn .bico { width: 16px; height: 16px; object-fit: contain; display: block; }
+  .btn .bico-ph { font-size: 14px; line-height: 1; }
+  /* Action danger (ОпасностьДействия): red for Высокая, amber for Средняя. */
+  .btn.dng-hi { color: #d34040; border-color: #d34040; }
+  .btn.dng-mid { color: #c77700; border-color: #c77700; }
+  .btn.primary.dng-hi { background: #d34040; border-color: #d34040; color: #fff; }
+  .btn.primary.dng-mid { background: #e08a00; border-color: #e08a00; color: #fff; }
+  .btn.link.dng-hi, .btn.link.dng-mid { border-color: transparent; }
   .img { width: 110px; height: 74px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 4px; font-size: 24px; background: var(--fp-soft); overflow: hidden; }
   .img .rimg { max-width: 100%; max-height: 100%; object-fit: contain; }
+  /* An image repainted by an explicit Цвет: the SVG is the mask, the color is the fill. */
+  .img .rmask { display: block; width: 100%; height: 100%; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
+  /* Field commands (Команды) - compact icons at the input's edge. */
+  .fcmds { display: inline-flex; gap: 5px; align-items: center; }
+  .fcmd { display: inline-flex; cursor: pointer; opacity: .8; }
+  .fcmd .cico { width: 14px; height: 14px; object-fit: contain; display: block; }
+  .fcmd .cph { font-size: 12px; line-height: 1; }
   .htmlbox { border: 1px dashed rgba(128,128,128,.6); border-radius: 4px; min-height: 48px; min-width: 140px; position: relative; padding: 11px 9px 9px;
     background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--fp-soft) 6px, var(--fp-soft) 12px); }
   table.tbl { border-collapse: collapse; }

@@ -182,6 +182,128 @@ check("Картинка renders an <img> when the resource is resolved", withImg
 const withoutImg = renderFormPreview(IMG_FORM);
 check("Картинка keeps the placeholder when the resource is not resolved", withoutImg.ok && !withoutImg.html.includes("<img") && withoutImg.html.includes("🖼"));
 
+// --- buttons: icon display kind, danger tint, explicit sizes -------------------------------
+
+const BTN_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        -",
+  "            Тип: Кнопка",
+  "            Имя: КнопкаКопии",
+  "            Вид: Дополнительная",
+  "            ВидОтображенияЗаголовка: Иконка",
+  "            Изображение: copy.svg",
+  "            РастягиватьПоГоризонтали: Ложь",
+  "            МинимальнаяШирина: 32",
+  "        -",
+  "            Тип: Кнопка",
+  "            Имя: КнопкаДобавить",
+  "            Заголовок: Добавить",
+  "            Изображение: plus.svg",
+  "        -",
+  "            Тип: Кнопка",
+  "            Заголовок: Удалить",
+  "            ОпасностьДействия: Высокая",
+  "        -",
+  "            Тип: Кнопка",
+  "            Заголовок: Сбросить",
+  "            ОпасностьДействия: Средняя",
+  "            ВидОтображенияЗаголовка: Текст",
+  "            Изображение: reset.svg",
+  "",
+].join("\n");
+const BTN_RES = {
+  "copy.svg": "data:image/svg+xml;base64,Q09QWQ==",
+  "plus.svg": "data:image/svg+xml;base64,UExVUw==",
+  "reset.svg": "data:image/svg+xml;base64,UkVTRVQ=",
+};
+const btns = renderFormPreview(BTN_FORM, BTN_RES);
+check("кнопки: форма разбирается", btns.ok);
+if (btns.ok) {
+  const html = btns.html;
+  check("икон-кнопка: класс ico и картинка", html.includes('class="btn link ico"') && html.includes('class="bico" src="data:image/svg+xml;base64,Q09QWQ=="'));
+  check("икон-кнопка: имя не попало в содержимое", !html.includes(">КнопкаКопии<"));
+  check("икон-кнопка: минимальная ширина", html.includes("min-width:32px"));
+  check("икон-кнопка: запрет растягивания прижимает", html.includes("align-self:flex-start"));
+  check("кнопка с текстом и иконкой: обе части", html.includes('src="data:image/svg+xml;base64,UExVUw=="') && html.includes(">Добавить</button>"));
+  check("опасность Высокая: класс dng-hi", html.includes('class="btn dng-hi"'));
+  check("опасность Средняя: класс dng-mid", html.includes("dng-mid"));
+  check("ВидОтображенияЗаголовка Текст: иконка не рисуется", !html.includes("UkVTRVQ="));
+}
+const btnNoRes = renderFormPreview(BTN_FORM);
+check(
+  "икон-кнопка без ресурса: глиф вместо полного имени",
+  btnNoRes.ok && btnNoRes.html.includes('class="bico-ph"') && !btnNoRes.html.includes(">КнопкаКопии<")
+);
+
+// --- images: explicit sizes and the explicit color -----------------------------------------
+
+const SIZED_IMG_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        -",
+  "            Тип: Картинка",
+  "            Изображение: logo.svg",
+  "            Ширина: 30",
+  "            Высота: 30",
+  "            Цвет:",
+  "                Тип: АбсолютныйЦвет",
+  "                Значение: RGB(1F9D55)",
+  "        -",
+  "            Тип: Картинка",
+  "            Изображение: logo.svg",
+  "            Ширина: 40",
+  "",
+].join("\n");
+const sizedImgs = renderFormPreview(SIZED_IMG_FORM, { "logo.svg": "data:image/svg+xml;base64,TE9HTw==" });
+check("картинки: форма разбирается", sizedImgs.ok);
+if (sizedImgs.ok) {
+  const html = sizedImgs.html;
+  check("картинка: явные размеры в стиле", html.includes("width:30px;height:30px"));
+  check("картинка: явный цвет красит маску", html.includes('class="rmask"') && html.includes("background-color:#1F9D55") && html.includes("mask-image:url("));
+  check("картинка: одна размерность освобождает вторую", html.includes("width:40px;height:auto"));
+  check("картинка без цвета: обычный img", html.includes('class="rimg"'));
+}
+
+// --- field commands (Команды) ---------------------------------------------------------------
+
+const CMD_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        Тип: ПолеВвода<Строка>",
+  "        Заголовок: Код",
+  "        Команды:",
+  "            Тип: ФрагментКомандногоИнтерфейса",
+  "            Элементы:",
+  "                -",
+  "                    Тип: ОбычнаяКоманда",
+  "                    Обработчик: КопироватьОбработчик",
+  "                    Изображение: copy.svg",
+  "                    Представление: Скопировать код",
+  "",
+].join("\n");
+const cmds = renderFormPreview(CMD_FORM, { "copy.svg": "data:image/svg+xml;base64,Q09QWQ==" });
+check("команды поля: форма разбирается", cmds.ok);
+if (cmds.ok) {
+  const html = cmds.html;
+  const cmdOff = CMD_FORM.indexOf("Тип: ОбычнаяКоманда");
+  check("команды поля: иконка у поля", html.includes('class="fcmd"') && html.includes('class="cico" src="data:image/svg+xml;base64,Q09QWQ=="'));
+  check("команды поля: подсказка из Представление", html.includes('title="Скопировать код"'));
+  check("команды поля: узел команды кликабелен", html.includes(`data-off="${cmdOff}"`));
+}
+const SINGLE_CMD_FORM = CMD_FORM.replace(
+  /Команды:[\s\S]*$/,
+  ["Команды:", "            Тип: ОбычнаяКоманда", "            Представление: Очистить", ""].join("\n")
+);
+const singleCmd = renderFormPreview(SINGLE_CMD_FORM);
+check(
+  "команды поля: одиночная команда без иконки - глиф",
+  singleCmd.ok && singleCmd.html.includes('class="fcmd"') && singleCmd.html.includes('class="cph"') && singleCmd.html.includes('title="Очистить"')
+);
+
 // --- session restore ---------------------------------------------------------------------
 
 check(

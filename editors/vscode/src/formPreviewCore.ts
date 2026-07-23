@@ -1,8 +1,8 @@
 // Wireframe preview of a 1C:Element form: the yaml description (КомпонентИнтерфейса) is turned
 // into an HTML mockup - groups, fields, buttons, tables, tabs. This is a wireframe, not the
-// platform's rendering: layout and captions are conveyed, exact sizes and styles are not. The
-// module is pure (no vscode) so the rendering can be checked by plain node tests; the webview
-// wiring is in formPreview.ts.
+// platform's rendering: layout, captions, explicit sizes and colors are conveyed, the exact
+// platform look is not. The module is pure (no vscode) so the rendering can be checked by
+// plain node tests; the webview wiring is in formDesigner.ts.
 //
 // The tree is taken from Наследует.Содержимое; child nodes live only in known properties
 // (Содержимое, Страницы, Колонки) - other nested objects (АбсолютныйЦвет, the Источник of a
@@ -98,7 +98,38 @@ function growStyle(node: unknown, horizontalParent: boolean): string {
   }
   if (horizontalParent ? growV : growH) {
     parts.push("align-self:stretch");
+  } else if (prop(node, horizontalParent ? "РастягиватьПоВертикали" : "РастягиватьПоГоризонтали") === "Ложь") {
+    // An explicit Ложь opts out of the container's cross-axis stretch (.form-body stretches
+    // its children by default), so the component hugs its content like on the platform.
+    parts.push("align-self:flex-start");
   }
+  return parts.join(";");
+}
+
+function joinStyle(...parts: Array<string | undefined>): string {
+  return parts.filter(Boolean).join(";");
+}
+
+// An integer property value, or undefined when absent or not a plain number.
+function numOf(node: unknown, key: string): string | undefined {
+  const v = prop(node, key);
+  return v && /^\d+$/.test(v) ? v : undefined;
+}
+
+// Explicit sizes; the numbers are pixels on the platform. Stretch styles from growStyle
+// coexist with them the same way the platform resolves the combination - via flexbox.
+function sizeStyle(node: unknown): string {
+  const parts: string[] = [];
+  const push = (key: string, css: string) => {
+    const v = numOf(node, key);
+    if (v) {
+      parts.push(`${css}:${v}px`);
+    }
+  };
+  push("Ширина", "width");
+  push("Высота", "height");
+  push("МинимальнаяШирина", "min-width");
+  push("МинимальнаяВысота", "min-height");
   return parts.join(";");
 }
 
@@ -197,6 +228,30 @@ function renderUnknown(node: unknown, type: string): string {
   return `<div ${tagAttrs(node, "unknown col")}><span class="tag">${esc(type)}${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}</span>${inner}</div>`;
 }
 
+// Field commands (Команды: a single command or a command-interface fragment/group) show as
+// compact icons at the input's edge - the platform places them next to the field.
+function fieldCommands(node: unknown): string {
+  const block = get(node, "Команды");
+  if (!isMap(block)) {
+    return "";
+  }
+  const elements = get(block, "Элементы");
+  const commands = isSeq(elements) ? elements.items : [block];
+  const chips: string[] = [];
+  for (const cmd of commands) {
+    if (!isMap(cmd)) {
+      continue;
+    }
+    const image = prop(cmd, "Изображение");
+    const src = image ? _resources[image] : undefined;
+    const icon = src ? `<img class="cico" src="${esc(src)}" alt="">` : `<span class="cph">⚙</span>`;
+    const tip = prop(cmd, "Представление") ?? prop(cmd, "Тип") ?? "";
+    const off = offsetOf(cmd);
+    chips.push(`<span class="fcmd"${off !== undefined ? ` data-off="${off}"` : ""}${tip ? ` title="${esc(tip)}"` : ""}>${icon}</span>`);
+  }
+  return chips.length > 0 ? `<span class="fcmds">${chips.join("")}</span>` : "";
+}
+
 function renderComponent(node: unknown, horizontalParent: boolean): string {
   if (isSeq(node)) {
     return renderChildren(node, horizontalParent);
@@ -205,51 +260,90 @@ function renderComponent(node: unknown, horizontalParent: boolean): string {
     return "";
   }
   const type = baseType(node) ?? "";
-  const grow = growStyle(node, horizontalParent);
+  const layout = joinStyle(growStyle(node, horizontalParent), sizeStyle(node));
   switch (type) {
     case "ПроизвольныйШаблонФормы":
       return renderChildren(get(node, "Содержимое"), false);
     case "Группа":
-      return renderGroup(node, "grp", grow);
+      return renderGroup(node, "grp", layout);
     case "СтандартнаяКарточка": {
       const banner = prop(node, "ВидОтображения") === "Баннер";
-      return renderGroup(node, banner ? "card banner" : "card", grow);
+      return renderGroup(node, banner ? "card banner" : "card", layout);
     }
     case "Надпись": {
       const text = prop(node, "Значение") ?? prop(node, "Заголовок");
-      return `<span ${tagAttrs(node, "lbl", [textStyle(node), grow].filter(Boolean).join(";"))}>${valueHtml(text, "Надпись")}</span>`;
+      return `<span ${tagAttrs(node, "lbl", joinStyle(textStyle(node), layout))}>${valueHtml(text, "Надпись")}</span>`;
     }
     case "ЗаголовокСекции":
-      return `<div ${tagAttrs(node, "sechead", grow)}>${valueHtml(prop(node, "Заголовок"), "Секция")}</div>`;
+      return `<div ${tagAttrs(node, "sechead", layout)}>${valueHtml(prop(node, "Заголовок"), "Секция")}</div>`;
     case "ПолеВвода":
     case "ПолеВыбора":
     case "ВыборЗначения": {
       const cap = prop(node, "Заголовок");
       const suffix = type === "ПолеВвода" ? "" : `<span class="dd">▾</span>`;
       return (
-        `<div ${tagAttrs(node, "fld", grow)}>` +
+        `<div ${tagAttrs(node, "fld", layout)}>` +
         (cap ? `<div class="fld-cap">${esc(cap)}</div>` : "") +
-        `<div class="inp">${valueHtml(prop(node, "Значение"), "…")}${suffix}</div></div>`
+        `<div class="inp">${valueHtml(prop(node, "Значение"), "…")}${suffix}${fieldCommands(node)}</div></div>`
       );
     }
     case "Флажок":
-      return `<label ${tagAttrs(node, "chk", grow)}>☐ ${valueHtml(prop(node, "Заголовок"), "Флажок")}</label>`;
+      return `<label ${tagAttrs(node, "chk", layout)}>☐ ${valueHtml(prop(node, "Заголовок"), "Флажок")}</label>`;
     case "Кнопка":
     case "КнопкаФормы":
     case "ОбычнаяКоманда":
     case "НавигационнаяКоманда": {
       const kind = prop(node, "Вид");
-      const cls = kind === "Основная" ? "btn primary" : kind === "Дополнительная" ? "btn link" : "btn";
+      let cls = kind === "Основная" ? "btn primary" : kind === "Дополнительная" ? "btn link" : "btn";
+      // The platform tints dangerous actions; the wireframe follows with red and amber.
+      const danger = prop(node, "ОпасностьДействия");
+      if (danger === "Высокая") {
+        cls += " dng-hi";
+      } else if (danger === "Средняя") {
+        cls += " dng-mid";
+      }
       const title = prop(node, "Заголовок") ?? prop(node, "Представление") ?? prop(node, "Имя");
-      return `<button ${tagAttrs(node, cls, grow)}>${valueHtml(title, "Кнопка")}</button>`;
+      // ВидОтображенияЗаголовка picks icon, text or both; Авто shows the icon when given.
+      // An icon that did not resolve keeps a compact glyph, not the full caption.
+      const image = prop(node, "Изображение");
+      const src = image ? _resources[image] : undefined;
+      const icon = image ? (src ? `<img class="bico" src="${esc(src)}" alt="">` : `<span class="bico-ph">🖼</span>`) : undefined;
+      const head = prop(node, "ВидОтображенияЗаголовка");
+      let inner: string;
+      if (head === "Иконка" && icon) {
+        cls += " ico";
+        inner = icon;
+      } else if (head === "Текст" || !icon) {
+        inner = valueHtml(title, "Кнопка");
+      } else {
+        inner = icon + valueHtml(title, "Кнопка");
+      }
+      return `<button ${tagAttrs(node, cls, layout)}>${inner}</button>`;
     }
     case "Картинка": {
       // A resource image (Изображение: info.svg) shows for real when the host resolved it; a
-      // binding, a URL or an unresolved name keeps the placeholder glyph.
+      // binding, a URL or an unresolved name keeps the placeholder glyph. An explicit Цвет
+      // repaints the image the way the platform's monochrome adaptation does: the image
+      // becomes a mask filled with that color.
       const image = prop(node, "Изображение");
       const src = image ? _resources[image] : undefined;
-      const inner = src ? `<img class="rimg" src="${esc(src)}" alt="">` : "🖼";
-      return `<div ${tagAttrs(node, "img", grow)}>${inner}</div>`;
+      const rgb = prop(get(node, "Цвет"), "Значение");
+      const hex = rgb && /^RGB\(([0-9A-Fa-f]{6})\)$/.exec(rgb.trim());
+      let inner: string;
+      if (src && hex) {
+        const mask = `-webkit-mask-image:url("${src}");mask-image:url("${src}")`;
+        inner = `<span class="rmask" style="${esc(`background-color:#${hex[1]};${mask}`)}"></span>`;
+      } else if (src) {
+        inner = `<img class="rimg" src="${esc(src)}" alt="">`;
+      } else {
+        inner = "🖼";
+      }
+      // Explicit sizes defeat the fixed placeholder tile; when only one dimension is given
+      // the other follows the image's aspect ratio instead of the tile's.
+      const w = numOf(node, "Ширина");
+      const h = numOf(node, "Высота");
+      const free = w && !h ? "height:auto" : h && !w ? "width:auto" : "";
+      return `<div ${tagAttrs(node, "img", joinStyle(layout, free))}>${inner}</div>`;
     }
     case "Таблица":
     case "ПроизвольныйСписок":
@@ -258,7 +352,7 @@ function renderComponent(node: unknown, horizontalParent: boolean): string {
       return renderTabs(node, horizontalParent);
     case "КонтейнерHtml":
     case "РедакторHtml":
-      return `<div ${tagAttrs(node, "htmlbox", grow)}><span class="tag">HTML${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}</span></div>`;
+      return `<div ${tagAttrs(node, "htmlbox", layout)}><span class="tag">HTML${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}</span></div>`;
     default:
       return renderUnknown(node, type || "?");
   }
