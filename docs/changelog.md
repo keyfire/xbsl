@@ -19,12 +19,17 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-07-23 – 0.31.0
 
 ### Changed
 - The generated stdlib type catalog records fuller member types and curates extra type surfaces
   from the platform's topic pages, so the linter's member checks and completion match what the
   platform actually exposes.
+
+### Fixed
+- `code/resource-bare-name` no longer treats an `inbase/…` reference as a folder path: a resource
+  uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
+  (the compiler verifies its existence at apply).
 
 ## 2026-07-22 – 0.28.0, 0.29.0, 0.30.0, 0.30.1
 
