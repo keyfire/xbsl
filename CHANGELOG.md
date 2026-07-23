@@ -12,17 +12,20 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-23 – 0.31.0
+## 2026-07-23 – 0.31.0, 0.31.1
 
 ### Changed
 - The generated stdlib type catalog records fuller member types and curates extra type surfaces
   from the platform's topic pages, so the linter's member checks and completion match what the
-  platform actually exposes.
+  platform actually exposes (0.31.0).
 
 ### Fixed
 - `code/resource-bare-name` no longer treats an `inbase/…` reference as a folder path: a resource
   uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
-  (the compiler verifies its existence at apply).
+  (the compiler verifies its existence at apply) (0.31.0).
+- A resource key is a path relative to the subsystem's `Ресурсы` folder: `code/resource-bare-name`
+  now flags only a key that spells the `Ресурсы` folder out, and subdirectory references
+  (`Подкаталог/Файл.svg`) are legal instead of being reported (0.31.1).
 
 ## 2026-07-22 – 0.28.0, 0.29.0, 0.30.0, 0.30.1
 
