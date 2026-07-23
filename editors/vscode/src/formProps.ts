@@ -1286,10 +1286,16 @@ async function refreshMetadata(uri: vscode.Uri, sel: MetaSelector): Promise<void
   }
   // The schema of the node under the cursor: the kind's own for the object, the collection
   // item's for an attribute, a dimension or a value of an enumeration (the engine resolves the
-  // class by the path and by the item's name). A node that is not addressable this way - a
-  // nested block, a synthetic standard attribute - keeps showing the set rows alone.
-  const kind = sel.std ? undefined : metaKindOf(text);
-  const path = kind ? metaSchemaPathAt(text, desc.offset) : undefined;
+  // class by the path and by the item's name). A standard attribute - materialized or not -
+  // is addressed by its would-be path (Реквизиты + name): the metamodel dispatches by the
+  // name whether the record exists in yaml or not. A node that is not addressable this way -
+  // a nested block - keeps showing the set rows alone.
+  const kind = metaKindOf(text);
+  const path = sel.std
+    ? { sections: ["Реквизиты"], names: [sel.std.name] }
+    : kind
+      ? metaSchemaPathAt(text, desc.offset)
+      : undefined;
   const schema = kind && path && lspActive() ? await metaSchema(kind, path) : undefined;
   if (seq !== my || !view) {
     return;

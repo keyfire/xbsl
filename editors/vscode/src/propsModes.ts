@@ -319,7 +319,8 @@ const KIND_KEYS = new Set(["ВидЭлемента", "ElementKind"]);
 // instead of being interleaved with the editable rows and repeated per section. Without a
 // schema (a nested node, an unknown kind, no generated data) the panel degrades to the set
 // rows, split the same way. A synthetic standard attribute (offset -1, no record in yaml)
-// renders every row as "not set" - editing materializes the record (metaPropertyEdits below).
+// shows the schema's property set with everything unset - its handwritten spec rows are only
+// the no-schema fallback; editing materializes the record (metaPropertyEdits below).
 export function buildMetaPanelModel(
   desc: MetaNodeDescription,
   typeCandidates?: string[],
@@ -328,7 +329,7 @@ export function buildMetaPanelModel(
   const synthetic = desc.offset < 0;
   const nameRow = desc.rows.find((r) => r.key === "Имя");
   const name = nameRow && nameRow.value !== desc.title ? nameRow.value : "";
-  const visible = desc.rows.filter((r) => !KIND_KEYS.has(r.key));
+  const visible = synthetic && schema ? [] : desc.rows.filter((r) => !KIND_KEYS.has(r.key));
   const byKey = new Map(visible.map((r) => [r.key, r]));
   const toRow = (r: MetaPropRow): PanelRow => {
     const prop = schema?.props[r.key];
@@ -349,7 +350,7 @@ export function buildMetaPanelModel(
   const rows: PanelRow[] = visible.filter((r) => !r.readonly).map(toRow);
   const readonlyRows: PanelRow[] = visible.filter((r) => r.readonly).map(toRow);
   const sections: PanelSection[] = [{ id: "set", rows }];
-  if (schema && !synthetic) {
+  if (schema) {
     const all: PanelRow[] = [];
     for (const [key, prop] of Object.entries(schema.props)) {
       if (prop.deprecated || KIND_KEYS.has(key)) {

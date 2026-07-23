@@ -332,6 +332,37 @@ test("buildMetaPanelModel: the schema adds the applicable properties below the s
   assert.strictEqual(new Set(seen).size, seen.length);
 });
 
+// What the engine answers for the Код standard attribute (a class of its own in the metamodel).
+const CODE_ATTR_SCHEMA = {
+  kind: "Справочник",
+  props: {
+    Тип: { kind: "enum", enum: "CodeType", default: "Строка" },
+    Длина: { kind: "number", default: "9" },
+    Уникальность: { kind: "boolean", default: "true" },
+    Автонумерация: { kind: "boolean", default: "true" },
+  },
+  enums: { CodeType: ["Строка", "Число"] },
+};
+
+test("buildMetaPanelModel: a synthetic standard attribute with a schema shows the real set", () => {
+  const model = buildMetaPanelModel(
+    describeMetaSelection(CATALOG, { std: { kind: "Справочник", name: "Код" } })!,
+    undefined,
+    CODE_ATTR_SCHEMA
+  );
+  assert.strictEqual(model.schemaAvailable, true);
+  assert.deepStrictEqual(model.sections.map((s) => s.id), ["set", "all"]);
+  // The handwritten spec rows give way to the schema: nothing is set, and the properties the
+  // spec never knew (Автонумерация) become discoverable - that closes the "no all-properties
+  // section on Код/Наименование" gap.
+  assert.strictEqual(model.sections[0].rows.length, 0);
+  const all = Object.fromEntries(model.sections[1].rows.map((r) => [r.key, r]));
+  assert.ok(model.sections[1].rows.every((r) => !r.set));
+  assert.strictEqual(all["Автонумерация"].editor.control, "tristate");
+  assert.strictEqual(all["Длина"].defaultValue, "9");
+  assert.deepStrictEqual((all["Тип"].editor as { options: string[] }).options, ["Строка", "Число"]);
+});
+
 test("buildMetaPanelModel: a collection present in yaml is set, its size is the value", () => {
   const internals = parseInternals(CATALOG)!;
   const model = buildMetaPanelModel(
