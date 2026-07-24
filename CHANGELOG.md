@@ -12,6 +12,33 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-24 – 0.32.0
+
+### Added
+- The `code/invalid-string-escape` rule (tier C, error): an escape sequence a string literal
+  cannot carry (`\'`, the regex-style `\d`) is caught before the server-side compilation.
+  Valid are `\н \в \т \\ \" \% \$`, `\ю` with a decimal character code and the Latin
+  spellings; interpolation spans are skipped, and pattern literals (`'...'`) live by the
+  regex syntax and are not judged.
+- MCP `ui_schema`: the `brief` parameter answers one line per property (the type union,
+  enum values inline, nullable/slot markers, event signatures) instead of the full
+  component schema, and `property` returns the full record of a single property with the
+  enumerations it references.
+- The metadata schema resolves a closed data-type constraint of a property into the list
+  of allowed values: for the standard `Code` attribute the panel offers exactly `String`
+  and `Number`, not every type of the project.
+
+### Fixed
+- A variable named `Запрос` (the Query keyword) was read as the query-literal keyword
+  everywhere: the declaration dropped out of the token utilities, a `Запрос.Выполнить()`
+  chain fell into the literal path, and the hover documented the database query type.
+  Like the parser, the tokenizer now reads it as a plain name when no `{` follows.
+- A single-file check (the way the editor lints a saved module) lost the paired yaml's
+  shadow, so a form attribute named `Email` was judged as the same-named stdlib type.
+  The pair's names are read from the disk neighbor when the module has finding candidates.
+- The hover documents neither a declared variable with an uninferred type nor a name the
+  paired yaml declares as a same-named stdlib type.
+
 ## 2026-07-23 – 0.31.0, 0.31.1
 
 ### Changed

@@ -8,6 +8,29 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.31.0
+
+- **The form wireframe follows sizes, icons and action danger.** Explicit
+  Width/Height/MinWidth reach the rendering (a 30x30 icon is no longer a 110x74 tile; a
+  single given dimension frees the other for the image's aspect ratio), a button with
+  TitleDisplayKind: Icon draws as a compact icon, an Image next to a text title draws
+  beside the text, ActionSeverity tints the button (red for high, amber for medium), field
+  commands (the Команды block) show as icons at the input's edge with the tooltip and the
+  jump to yaml, an explicit image Color repaints the SVG through a mask, and an explicit
+  "do not stretch" pins the component to the container start.
+- **The True/False captions follow the UI locale.** In the English locale the tristate
+  buttons read True/False; the yaml always keeps the platform spelling, and when the
+  caption differs from it, the written value shows as the button's tooltip.
+- **A deploy without an app id asks for one.** Instead of the elemctl "app id is not set"
+  error in the terminal, an input box opens before the confirmation: the hint names
+  `elemctl apps list` and the application card in the platform console, and the answer is
+  saved to the folder's xbsl.deploy.appId setting.
+- **A synthetic standard attribute shows the schema of its class.** Until Code or Name is
+  written into the yaml, the panel used to show a handwritten row set without "All
+  properties" - now the schema is requested by the would-be path, so Code shows every
+  property of its class (auto-numbering included). A closed type constraint is a dropdown
+  (String or Number), not every type of the project.
+
 ## 0.30.0
 
 - **Read-only properties moved into a section of their own.** They used to be interleaved with
