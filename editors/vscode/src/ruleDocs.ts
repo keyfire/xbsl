@@ -140,7 +140,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "параметры-запроса",
   },
   {
-    match: (r) => r === "query/deletion-mark-immediate",
+    match: (r) => r === "query/deletion-mark-immediate"
+      || r === "yaml/delete-current-needs-immediate",
     page: "topics/catalog-properties",
   },
   { match: (r) => r === "code/unknown-row-field", page: "topics/dynamic-list" },

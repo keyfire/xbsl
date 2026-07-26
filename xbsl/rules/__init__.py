@@ -56,6 +56,7 @@ from . import (  # noqa: F401
     size_stretch,
     unknown_members,
     unused_methods,
+    yaml_deletion,
     yaml_imports,
     yaml_render,
     yaml_properties,

@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 117 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 118 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -200,6 +200,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 115 | `yaml/hint-too-long` | warning | on | file | A `Tooltip` longer than the render limit – the tail is not shown at all | – |
 | 116 | `code/client-available-needs-context` | error | on | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 117 | `code/server-module-in-client-context` | error | on | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 118 | `yaml/delete-current-needs-immediate` | error | on | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute whose owner has a `DeletionMode` that only marks (`DeletionMark` is also the default) – the apply answers `Action DeleteCurrent cannot apply to object with a DeletionMark` | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 
 ## Group details
 

@@ -145,7 +145,7 @@ lint:
 
 ## Rules in depth
 
-**The full list of all 117 rules** (severity, default state, scope, links to platform
+**The full list of all 118 rules** (severity, default state, scope, links to platform
 documentation sections) is in [RULES.md](/RULES);
 at runtime – `xbsl --list-rules`. The tier overview is in the README; below is what the deeper
 tiers actually verify.
