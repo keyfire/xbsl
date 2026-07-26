@@ -9,6 +9,18 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.37.0
+
+- **The group descriptions in the settings name the rules of engine 0.39.0.** A new rule over
+  deletion by reference changed the level counters of the `yaml` group - 15 error, 11 warning,
+  1 info now.
+- **The code of `yaml/delete-current-needs-immediate` in the Problems panel** opens the
+  "Catalog properties" documentation section - the same one `query/deletion-mark-immediate`
+  points at.
+- **The settings strings speak English in the English locale.** The group descriptions and the
+  rename command still carried Russian spellings of platform names (`Ид`, `Обработчик`, `Имя`);
+  they are `Id`, `Handler` and `Name` now. The Russian locale is unchanged.
+
 ## 0.36.0
 
 - **The group descriptions in the settings name the rules of engine 0.38.0.** Two new rules over

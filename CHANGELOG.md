@@ -12,9 +12,15 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0
+## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0
 
 ### Changed
+- **A guard over the English documents.** Russian spellings of platform names in the English
+  documents (`Группа` for `Group`, `Ид` for `Id`) drifted in with every wave of rules and were
+  caught by eye alone. A test refuses them now, knowing the three legitimate cases: a file name the
+  platform keeps Russian for projects of either language, a single letter that is the subject
+  itself, and a link to the Russian twin. The divergences it found in the rule table and in the
+  extension settings strings are fixed.
 - **0.37.3: the last docstrings and the demo README state the facts too.** What the compiler
   accepts and what a rule guards against stay; the rest is gone. No rule changed its behaviour.
 - **0.37.2: the texts state the facts, not how they were obtained.** The changelog, the rule
@@ -25,6 +31,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   declares; only the example in the module docstring dropped the number.
 
 ### Added
+- **0.39.0: `yaml/delete-current-needs-immediate`** (118 rules now). A reference attribute with
+  `OnReferencedObjectDeletion: DeleteCurrent` whose owner has a `DeletionMode` that only marks the
+  record brings the whole apply down: `Action DeleteCurrent cannot apply to object with a
+  DeletionMark`. An object that never declares the mode is in the same trap - `DeletionMark` is the
+  default, and the rule takes it from the metamodel rather than from its own text. Both facts live
+  in one file, so the check is a file rule and highlights while you type; keys and values are read
+  in either spelling.
+
 - **0.38.0: two rules over the execution environment** (117 rules now). Both close an apply
   failure that leaves no line in a local build: `elemctl build` packs an archive, while the
   environment is checked only by the server-side compilation.
