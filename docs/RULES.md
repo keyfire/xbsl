@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 118 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 120 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -201,6 +201,8 @@ the execution model (client/server), form handlers, properties and queries.
 | 116 | `code/client-available-needs-context` | error | on | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 117 | `code/server-module-in-client-context` | error | on | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 118 | `yaml/delete-current-needs-immediate` | error | on | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute whose owner has a `DeletionMode` that only marks (`DeletionMark` is also the default) – the apply answers `Action DeleteCurrent cannot apply to object with a DeletionMark` | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| 119 | `code/per-object-permissions-need-common` | warning | on | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| 120 | `code/permission-field-not-declared` | warning | on | project | Inside `ComputeAccessPermissionsForObjects` a field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity` instead of the record | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 
 ## Group details
 

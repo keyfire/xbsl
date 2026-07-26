@@ -7,7 +7,7 @@ sidebar:
 ---
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 118.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 120.
 
 ## Граница: линтер дополняет компилятор, но не заменяет его
 
@@ -200,6 +200,8 @@ sidebar:
 | 116 | `code/client-available-needs-context` | error | вкл | проект | `@ДоступноСКлиента` у метода модуля компонента интерфейса, который не статический и без `@Контекстный` – тип компонента не синглтонный, применение отвергает модификатор | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 117 | `code/server-module-in-client-context` | error | вкл | проект | Обращение `Модуль.Член(...)` к общему модулю с `Окружение: Сервер` из метода, исполняемого на клиенте (компонент интерфейса, команда, клиентский общий модуль) – на клиенте типа нет | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 118 | `yaml/delete-current-needs-immediate` | error | вкл | файл | `ПриУдаленииОбъектаПоСсылке: УдалятьТекущий` у реквизита владельца, чей `РежимУдаления` только помечает (`ПометкаУдаления` – это ещё и умолчание) – применение отвечает `Action УдалятьТекущий cannot apply to object with a DeletionMark` | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| 119 | `code/per-object-permissions-need-common` | warning | вкл | проект | Объект вычисляет разрешения для каждого объекта, но в его модуле нет обработчика `ВычислитьРазрешенияДоступа` – общий расчёт обязателен и при per-object, пусть и возвращает пустой массив | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| 120 | `code/permission-field-not-declared` | warning | вкл | проект | В `ВычислитьРазрешенияДоступаДляОбъектов` читается поле, которого нет среди `РасчетРазрешенийПо`, либо объявленное поле берётся через `Сущность` вместо `Запись` | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 
 ## Подробнее о группах
 

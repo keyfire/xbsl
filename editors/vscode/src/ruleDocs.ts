@@ -144,6 +144,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "yaml/delete-current-needs-immediate",
     page: "topics/catalog-properties",
   },
+  {
+    match: (r) => r === "code/per-object-permissions-need-common"
+      || r === "code/permission-field-not-declared",
+    page: "topics/project-element-permissions",
+  },
   { match: (r) => r === "code/unknown-row-field", page: "topics/dynamic-list" },
   { match: (r) => r === "code/row-field-null", page: "topics/dynamic-list" },
   { match: (r) => r === "form/unknown-handler", page: "topics/form-component", anchor: "события" },
