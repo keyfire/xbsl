@@ -959,6 +959,18 @@ def _make_server() -> "LanguageServer":
         aliases.update(formmodel.key_aliases())  # the structure keys win: they are exact
         return {"aliases": aliases, "types": uischema.component_aliases()}
 
+    @server.feature("xbsl/metaKeys")
+    def _meta_keys(params: object = None) -> dict:
+        # The formKeys counterpart for configuration elements: pairs of the ELEMENT keys
+        # (`Attributes` -> `Реквизиты`). The metadata tree of the editor parses the yaml itself,
+        # so without them an English object shows empty branches - the sections are looked up by
+        # their Russian names while the file spells English ones. Pairs come from the `en` of the
+        # metamodel classes, never from a guess; no data - an empty map, and the tree behaves as
+        # before (Russian keys only).
+        if not metamodel.available():
+            return {"available": False, "aliases": {}}
+        return {"available": True, "aliases": metamodel.key_aliases()}
+
     @server.feature("xbsl/metadataSchema")
     def _metadata_schema(params: object = None) -> dict:
         # The uiSchema counterpart for configuration elements: without parameters - the kinds

@@ -81,6 +81,26 @@ export function formKeyAliases(): Promise<FormKeyPairs> {
   return keyAliasesPromise;
 }
 
+let metaKeysPromise: Promise<Record<string, string>> | undefined;
+
+/** Pairs of the element keys (`Attributes` -> `Реквизиты`), asked once per session.
+ *
+ * The metadata tree parses the yaml itself, so it needs the pairs the metamodel classes carry:
+ * without them an English object shows empty branches. An engine that does not know the request
+ * (or has no data) answers nothing - the tree then behaves as before, Russian keys only.
+ */
+export function metaKeyAliases(): Promise<Record<string, string>> {
+  if (!metaKeysPromise) {
+    metaKeysPromise = lspRequest<{ available?: boolean; aliases?: Record<string, string> }>(
+      "xbsl/metaKeys",
+      {}
+    )
+      .then((res) => res?.aliases ?? {})
+      .catch(() => ({}));
+  }
+  return metaKeysPromise;
+}
+
 export async function componentEnums(name: string): Promise<Record<string, string[]>> {
   const cached = enumsCache.get(name);
   if (cached) {

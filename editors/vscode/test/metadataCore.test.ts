@@ -8,6 +8,7 @@ import {
   describeStandardAttr,
   insertItemEdit,
   parseInternals,
+  setMetaKeyAliases,
   stringAttributeNames,
 } from "../src/metadataCore";
 
@@ -141,6 +142,61 @@ test("parseInternals: шаблоны URL с методами", () => {
   assert.strictEqual(it.urlTemplates[0].name, "Пинг");
   assert.strictEqual(it.urlTemplates[0].type, "/ping");
   assert.deepStrictEqual(it.urlTemplates[0].children!.map((m) => `${m.name}->${m.type}`), ["GET->Пинг"]);
+});
+
+// An English project is legal code: the platform spells every section two ways, and the pairs
+// come from the engine (`xbsl/metaKeys`), not from a table written here. Before they arrive the
+// reader knows Russian keys only - that is the "empty branches" state this pair of tests pins.
+const CATALOG_EN = `Ид: 019f0000-0000-0000-0000-000000000001
+Name: Goods
+ElementKind: Catalog
+Attributes:
+    -
+        Name: Title
+        Type: String
+    -
+        Name: Price
+        Type: Number
+TabularParts:
+    -
+        Name: Lines
+        Attributes:
+            -
+                Name: Quantity
+                Type: Number
+`;
+
+test("parseInternals: английский объект без пар - ветки пусты", () => {
+  setMetaKeyAliases({});
+  const it = parseInternals(CATALOG_EN)!;
+  assert.strictEqual(it.attributes.length, 0);
+  assert.strictEqual(it.tabulars.length, 0);
+});
+
+test("parseInternals: с парами движка английские секции читаются", () => {
+  // Exactly the shape `xbsl/metaKeys` answers: {English spelling: the Russian key}.
+  setMetaKeyAliases({ Attributes: "Реквизиты", TabularParts: "ТабличныеЧасти" });
+  try {
+    const it = parseInternals(CATALOG_EN)!;
+    assert.deepStrictEqual(it.attributes.map((a) => a.name), ["Title", "Price"]);
+    assert.strictEqual(it.attributes[1].type, "Number");
+    // The nested collection uses the same lookup - a tabular section spells its own Attributes.
+    assert.deepStrictEqual(it.tabulars.map((t) => t.name), ["Lines"]);
+    assert.deepStrictEqual(it.tabulars[0].children!.map((c) => c.name), ["Quantity"]);
+  } finally {
+    setMetaKeyAliases({}); // the map is module state - do not leak it into the tests below
+  }
+});
+
+test("parseInternals: пары не ломают русский объект", () => {
+  setMetaKeyAliases({ Attributes: "Реквизиты", TabularParts: "ТабличныеЧасти" });
+  try {
+    const it = parseInternals(CATALOG)!;
+    assert.deepStrictEqual(it.attributes.map((a) => a.name), ["Наименование", "Цена"]);
+    assert.deepStrictEqual(it.tabulars[0].children!.map((c) => c.name), ["Количество"]);
+  } finally {
+    setMetaKeyAliases({});
+  }
 });
 
 test("parseInternals: параметры работы клиента", () => {

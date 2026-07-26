@@ -144,6 +144,28 @@ def common_keys() -> tuple[str, ...]:
     return tuple(data["common"]) if data else ()
 
 
+@lru_cache(maxsize=None)
+def key_aliases() -> dict[str, str]:
+    """{English spelling: the Russian key} of element properties - for surfaces outside python.
+
+    The metadata tree of the editor parses the yaml itself (a tree view cannot call into the
+    engine per node), so it needs the same pairs the classes carry: without them an English
+    object shows empty branches - the sections are looked up by `Реквизиты` while the file
+    spells `Attributes`. Every pair comes from the `en` of a class property, never from a guess.
+
+    The whole metamodel is walked, not one kind: a section item is a class of its own
+    (`TabularSectionDescriptor` spells its own `Реквизиты`), and the tree descends into those.
+    """
+    data = _data()
+    out: dict[str, str] = {}
+    for node in (data["classes"] if data else {}).values():
+        for key, record in _props_of(node).items():
+            english = record.get("en") if isinstance(record, dict) else None
+            if english and english != key:
+                out.setdefault(english, key)
+    return out
+
+
 def enum_values(name: str) -> tuple[str, ...]:
     """Values of a metamodel enumeration, or () when unknown."""
     data = _data()

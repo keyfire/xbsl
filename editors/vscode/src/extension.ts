@@ -13,6 +13,8 @@ import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClie
 import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerProjectWizard } from "./projectWizard";
+import { metaKeyAliases } from "./uiSchemaClient";
+import { setMetaKeyAliases } from "./metadataCore";
 import { registerFormProps } from "./formProps";
 import { registerFormSearch } from "./formSearch";
 import { registerDocs } from "./docsTree";
@@ -418,6 +420,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // no webview). Available in both modes, so it is registered before the LSP early return.
   registerProjectWizard(context);
   const metadataTree = registerMetadataTree(context, projectRootFor);
+  // The element keys the platform spells two ways (`Attributes` / `Реквизиты`): asked once and
+  // handed to the yaml reader, otherwise an English project shows empty branches in the tree.
+  // Failure is not fatal - without the pairs the reader keeps working on Russian keys.
+  void metaKeyAliases().then((aliases) => {
+    if (!Object.keys(aliases).length) {
+      return;
+    }
+    setMetaKeyAliases(aliases);
+    // The tree is usually built before the answer arrives - redraw it with the pairs in hand.
+    void vscode.commands.executeCommand("xbsl.metadata.refresh");
+  });
   // The unified "Properties" panel (docs/DESIGNER.md, stage 3): follows the active editor -
   // form yamls fill it with the component under the cursor (through the LSP server; the CLI
   // mode shows a hint), other element yamls and modules with the metadata object (local

@@ -338,3 +338,56 @@ def test_lsp_metadata_schema_of_a_collection_item(mm_root):
 
 def test_lsp_metadata_schema_degrades_without_data(no_data):
     assert _server_features()["xbsl/metadataSchema"](None) == {"available": False}
+
+
+# --- the element key pairs (xbsl/metaKeys) -------------------------------------------------
+
+
+_MM_BILINGUAL = {
+    "meta": {"element_version": _VER, "props": "typed"},
+    "classes": {
+        "AcmeCatalogDescriptor": {
+            "props": {
+                "Реквизиты": {"kind": "list", "item": "AcmeTabularDescriptor", "en": "Attributes"},
+                "ТабличныеЧасти": {"kind": "list", "item": "AcmeTabularDescriptor",
+                                   "en": "TabularParts"},
+                # a property the platform spells the same way in both languages
+                "Ид": {"kind": "string", "en": "Ид"},
+                # a property the platform does not translate at all
+                "Иерархический": {"kind": "boolean"},
+            },
+        },
+        # A section item is a class of its own, and the tree descends into it: its own
+        # `Реквизиты` must land in the map as well.
+        "AcmeTabularDescriptor": {"props": {"Реквизиты": {"kind": "list", "en": "Attributes"}}},
+    },
+    "vid2class": {"Справочник": "AcmeCatalogDescriptor"},
+    "common": [],
+}
+
+
+@pytest.fixture
+def bilingual_root(tmp_path):
+    yield _root(tmp_path, _MM_BILINGUAL)
+    dataset.set_data_root(None)
+
+
+def test_key_aliases_pairs_come_from_the_classes(bilingual_root):
+    pairs = metamodel.key_aliases()
+    assert pairs["Attributes"] == "Реквизиты"
+    assert pairs["TabularParts"] == "ТабличныеЧасти"
+    # A name spelled the same in both languages is not a pair, and an untranslated property
+    # contributes nothing - the map must not invent an English spelling.
+    assert "Ид" not in pairs
+    assert "Иерархический" not in pairs and "Hierarchical" not in pairs
+
+
+def test_lsp_meta_keys_registered_and_degrades_without_data(bilingual_root, tmp_path):
+    features = _server_features()
+    assert "xbsl/metaKeys" in features
+    answer = features["xbsl/metaKeys"](None)
+    assert answer["available"] is True
+    assert answer["aliases"]["Attributes"] == "Реквизиты"
+    dataset.set_data_root(tmp_path / "empty")
+    metamodel._reset()
+    assert _server_features()["xbsl/metaKeys"](None) == {"available": False, "aliases": {}}

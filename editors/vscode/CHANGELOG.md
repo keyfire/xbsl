@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+- **The metadata tree fills its branches in an English project.** The reader knew the section keys
+  by their Russian names only (`Реквизиты`, `ТабличныеЧасти`, `ШаблоныUrl` ...), so an English
+  object showed a bare node: on the demo catalog it reported 0 attributes and 0 tabular parts
+  where the file declares 5 and 1. The pairs now come from the engine (`xbsl/metaKeys`), asked
+  once per session, and nested collections use the same lookup - a tabular section spells its own
+  `Attributes`. An engine that does not know the request answers nothing, and the tree behaves as
+  before, Russian keys only.
+
 ## 0.38.0
 
 - **The group descriptions in the settings name the rules of engine 0.40.0.** Four new rules

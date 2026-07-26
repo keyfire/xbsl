@@ -63,6 +63,35 @@ const EN_KEY: Record<string, string> = {
   "Окружение": "Environment",
 };
 
+// Section keys (`Реквизиты`, `ТабличныеЧасти`, `ШаблоныUrl` ...) are NOT in the table above:
+// listing them by hand would mean guessing the English spellings, and the platform declares them
+// itself - every metamodel class carries the pair. The engine hands the whole map over once per
+// session (`xbsl/metaKeys`), the editor stores it here, and lookups below consult it. Until it
+// arrives - or when the engine has no data - the map stays empty and the reader behaves exactly
+// as before: Russian keys only.
+let EN_BY_RU: Record<string, string> = {};
+
+/** Store the {Russian key: English spelling} pairs the engine reports (`xbsl/metaKeys`). */
+export function setMetaKeyAliases(aliases: Record<string, string>): void {
+  const pairs: Record<string, string> = {};
+  for (const [english, russian] of Object.entries(aliases ?? {})) {
+    if (russian && english) {
+      pairs[russian] = english;
+    }
+  }
+  EN_BY_RU = pairs;
+}
+
+/** A collection node by its Russian key, falling back to the English spelling of the platform. */
+function section(map: unknown, key: string): unknown {
+  const direct = get(map, key);
+  if (direct !== undefined) {
+    return direct;
+  }
+  const english = EN_BY_RU[key] ?? EN_KEY[key];
+  return english ? get(map, english) : undefined;
+}
+
 function prop(map: unknown, key: string): string | undefined {
   for (const spelling of [key, EN_KEY[key]]) {
     if (!spelling) {
@@ -103,7 +132,9 @@ function fieldsOf(seq: unknown, opts: FieldOpts = {}): MetaField[] {
       name: prop(item, nameKey) ?? "?",
       type: prop(item, typeKey),
       offset: offsetOf(item),
-      children: opts.childKey ? fieldsOf(get(item, opts.childKey), opts.childOpts ?? {}) : undefined,
+      // Nested collections go through the same lookup: a tabular section spells its own
+      // `Реквизиты`/`Attributes`, and the url template its `Методы`/`Methods`.
+      children: opts.childKey ? fieldsOf(section(item, opts.childKey), opts.childOpts ?? {}) : undefined,
     });
   }
   return out;
@@ -121,18 +152,18 @@ export function parseInternals(text: string): MetaInternals | undefined {
   }
   return {
     rootOffset: offsetOf(root) ?? 0,
-    attributes: fieldsOf(get(root, "Реквизиты")),
-    dimensions: fieldsOf(get(root, "Измерения")),
-    resources: fieldsOf(get(root, "Ресурсы")),
-    tabulars: fieldsOf(get(root, "ТабличныеЧасти"), { childKey: "Реквизиты" }),
-    enumValues: fieldsOf(get(root, "Элементы")),
-    clientParams: fieldsOf(get(root, "Параметры")),
-    urlTemplates: fieldsOf(get(root, "ШаблоныUrl"), {
+    attributes: fieldsOf(section(root, "Реквизиты")),
+    dimensions: fieldsOf(section(root, "Измерения")),
+    resources: fieldsOf(section(root, "Ресурсы")),
+    tabulars: fieldsOf(section(root, "ТабличныеЧасти"), { childKey: "Реквизиты" }),
+    enumValues: fieldsOf(section(root, "Элементы")),
+    clientParams: fieldsOf(section(root, "Параметры")),
+    urlTemplates: fieldsOf(section(root, "ШаблоныUrl"), {
       typeKey: "Шаблон",
       childKey: "Методы",
       childOpts: { nameKey: "Метод", typeKey: "Обработчик" },
     }),
-    structFields: fieldsOf(get(root, "Поля")),
+    structFields: fieldsOf(section(root, "Поля")),
   };
 }
 

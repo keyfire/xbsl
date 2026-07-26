@@ -12,6 +12,17 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`xbsl/metaKeys` – the element key pairs for surfaces outside python** (`Attributes` ->
+  `Реквизиты`), the metadata counterpart of `xbsl/formKeys`. The metadata tree of the editor
+  parses the yaml itself, so an English object used to show empty branches: the sections were
+  looked up by their Russian names while the file spells English ones. Pairs are collected from
+  the `en` of the metamodel classes - the whole model, not one kind, because a section item is a
+  class of its own and the tree descends into it. Without the data the request answers
+  `{"available": false}` and the reader keeps working on Russian keys.
+
 ## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0, 0.40.0
 
 ### Changed
