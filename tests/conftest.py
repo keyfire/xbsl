@@ -52,6 +52,7 @@ _DATA_DEPENDENT = {
     "test_rule_item_id",  # the rule needs the metamodel
     "test_rule_deletion",  # the rule needs the metamodel (property default) and terms
     "test_rule_access_control",  # the rules read the platform names from terms
+    "test_rule_localization",  # the rule reads the section names from the metamodel
     "test_rule_property_since",  # the rule needs the ui schema
     "test_parser",  # the parser sits on the lexer, which sits on language.json
     "test_statement_no_effect",  # the rule parses code with the parser

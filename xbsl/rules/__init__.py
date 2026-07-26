@@ -58,6 +58,7 @@ from . import (  # noqa: F401
     unused_methods,
     access_control,
     yaml_deletion,
+    localization,
     yaml_imports,
     yaml_render,
     yaml_properties,

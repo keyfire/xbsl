@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 120 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 122 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -203,6 +203,8 @@ the execution model (client/server), form handlers, properties and queries.
 | 118 | `yaml/delete-current-needs-immediate` | error | on | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute whose owner has a `DeletionMode` that only marks (`DeletionMark` is also the default) – the apply answers `Action DeleteCurrent cannot apply to object with a DeletionMark` | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | 119 | `code/per-object-permissions-need-common` | warning | on | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
 | 120 | `code/permission-field-not-declared` | warning | on | project | Inside `ComputeAccessPermissionsForObjects` a field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity` instead of the record | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| 121 | `yaml/placeholder-key-in-strings` | error | on | file | A key carrying the placeholder `$0` in the `Strings` section of a `LocalizedStrings` dictionary: the section compiles to a method WITHOUT parameters, so a call with an argument fails the apply with an "unknown method" answer | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
+| 122 | `code/compare-with-localized` | warning | on | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
 
 ## Group details
 
