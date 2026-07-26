@@ -134,8 +134,8 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 | 57 | `query/named-parameter` | error | on | file | A named parameter `&Name` inside a query literal - the literal takes its values by interpolation (`%Name`) | [docs](https://1cmycloud.com/docs/help/topics/query-literal/) |
 | 58 | `code/this-in-static-method` | error | on | file | The keyword `this` inside the body of a static method - a static method is common to the whole type and has no object context, the compiler rejects the project | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
 | 59 | `code/instance-call-from-static` | error | on | file | A bare call of an instance method of the same owner from a static method - the docs forbid it outright; call the method on a value or make it static | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
-| 60 | `code/close-in-before-close` | warning | on | file | `Закрыть()` inside `ПередЗакрытием` – the platform ignores the call and nothing closes the form afterwards | – |
-| 61 | `query/no-isnull` | error | on | file | `ЕСТЬNULL(` inside a query literal – the query language has no such function | – |
+| 60 | `code/close-in-before-close` | warning | on | file | `Close()` inside `BeforeClose` – the platform ignores the call and nothing closes the form afterwards | – |
+| 61 | `query/no-isnull` | error | on | file | `ISNULL(` inside a query literal – the query language has no such function | – |
 
 ### Tier D - semantics over stdlib, forms and the metamodel
 
@@ -193,7 +193,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 108 | `yaml/property-since-compat` | error | on | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property | [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
 | 109 | `query/deletion-mark-immediate` | error | on | project | A deletion-mark condition in a query on an object whose `DeletionMode` is `Immediately` - such an object has no mark and the query fails on apply | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | 110 | `yaml/item-id-required` | error | on | file | A metadata collection item (an attribute, a tabular section, an enumeration item, an access-key parameter) without the `Id` its class declares - apply answers `ID required` | – |
-| 111 | `code/unknown-row-field` | error | on | project | A field addressed on a dynamic list row (`СтрокаДинамическогоСписка<Форма.Тип>`) that the list's `Поля` do not declare | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| 111 | `code/unknown-row-field` | error | on | project | A field addressed on a dynamic list row (`DynamicListRow<Form.Type>`) that the list's `Fields` do not declare | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | 112 | `code/row-field-null` | error | on | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | 113 | `yaml/unknown-attribute-property` | error | on | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object | – |
 | 114 | `yaml/empty-group-sized` | warning | on | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap | – |
