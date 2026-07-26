@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 115 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 117 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -196,8 +196,10 @@ the execution model (client/server), form handlers, properties and queries.
 | 111 | `code/unknown-row-field` | error | on | project | A field addressed on a dynamic list row (`СтрокаДинамическогоСписка<Форма.Тип>`) that the list's `Поля` do not declare | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | 112 | `code/row-field-null` | error | on | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | 113 | `yaml/unknown-attribute-property` | error | on | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object | – |
-| 114 | `yaml/empty-group-sized` | warning | on | file | An empty `Группа` with `Высота`/`Ширина` – the renderer drops the node and there is no gap | – |
-| 115 | `yaml/hint-too-long` | warning | on | file | A `Подсказка` longer than the render limit – the tail is not shown at all | – |
+| 114 | `yaml/empty-group-sized` | warning | on | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap | – |
+| 115 | `yaml/hint-too-long` | warning | on | file | A `Tooltip` longer than the render limit – the tail is not shown at all | – |
+| 116 | `code/client-available-needs-context` | error | on | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 117 | `code/server-module-in-client-context` | error | on | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 
 ## Group details
 

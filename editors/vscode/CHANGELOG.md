@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.36.0
+
+- **The group descriptions in the settings name the rules of engine 0.38.0.** Two new rules over
+  the execution environment changed the level counters of the `code` group - 24 error / 14 warning
+  now.
+- **The rule code in the Problems panel opens its documentation section.** For
+  `code/client-available-needs-context` and `code/server-module-in-client-context` that is
+  "Module execution" - the same section the other environment checks point at.
+
 ## 0.35.1
 
 - The changelog states the facts, not how they were obtained: what a rule checks and what the

@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3
+## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0
 
 ### Changed
 - **0.37.3: the last docstrings and the demo README state the facts too.** What the compiler
@@ -25,15 +25,39 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   declares; only the example in the module docstring dropped the number.
 
 ### Added
+- **0.38.0: two rules over the execution environment** (117 rules now). Both close an apply
+  failure that leaves no line in a local build: `elemctl build` packs an archive, while the
+  environment is checked only by the server-side compilation.
+  - `code/client-available-needs-context` (error): `@AvailableFromClient` on a method of an
+    interface component module that is declared neither `static` nor `@Contextual`. The component
+    type is not a singleton, so the apply answers `Modifier "AvailableFromClient" can only be used
+    in static methods, singleton-type methods, or methods with modifier "Contextual"`. Both
+    documented forms pass in silence: the static method that hands execution from the client to the
+    server, and the contextual one that keeps the instance context. The check is confined to
+    interface components on purpose - `@Contextual` is available in their modules alone, while
+    common modules, catalogs and information registers are singleton types, where the plain form is
+    correct.
+  - `code/server-module-in-client-context` (error): a `Module.Member(...)` access to a common
+    module with `Environment: Server` from a method that runs on the client. The mirror of
+    `code/client-module-in-http-service`, except that the failure here is not a runtime one but a
+    compile-time one - `<Client> Type "X" is unavailable in the current environment`, and the
+    application is never created; hence the error level. Only the bodies of methods without
+    `@OnServer` are read: a method carrying that annotation runs on the server, where the type does
+    exist. The modules judged are the ones that live in the Client environment - interface
+    components, commands, storable structures and common modules with `Environment: Client`.
+
+  Both rules read the platform names in either spelling (`terms.json`), so an English project is
+  caught just like a Russian one.
+
 - **Five rules over what the platform ACCEPTS but does not do** (115 rules now). The compiler is
   happy in every one of these cases and the defect surfaces later - on the screen, on the deploy or
   in the database.
-  - `yaml/empty-group-sized` (warning): an empty `Группа` with a fixed `Высота`/`Ширина` is thrown
+  - `yaml/empty-group-sized` (warning): an empty `Group` with a fixed `Height`/`Width` is thrown
     out of the DOM entirely, so the spacer leaves no gap. The cure is a non-empty transparent insert
     of the same height.
-  - `yaml/hint-too-long` (warning): the renderer cuts a `Подсказка` off at about 290 characters
+  - `yaml/hint-too-long` (warning): the renderer cuts a `Tooltip` off at about 290 characters
     without a scroll or a "more" affordance - the tail is simply lost.
-  - `code/close-in-before-close` (warning): a `Закрыть()` call in the own flow of `ПередЗакрытием`
+  - `code/close-in-before-close` (warning): a `Close()` call in the own flow of `BeforeClose`
     is ignored by the platform while the closing stays unfinished, and after that nothing closes the
     form. The recommended cure - the call handed to a one-shot timer inside a lambda - the rule
     passes over in silence.

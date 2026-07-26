@@ -246,6 +246,208 @@ def test_module_without_environment_not_checked(tmp_path):
     assert not _has(d, "code/client-annotation-in-server-module")
 
 
+# --- code/client-available-needs-context -----------------------------------------------
+
+_RULE_CTX = "code/client-available-needs-context"
+
+
+def _component(tmp_path, module, yaml="ВидЭлемента: КомпонентИнтерфейса\nИмя: Панель\n"):
+    (tmp_path / "Панель.yaml").write_text(yaml, encoding="utf-8")
+    (tmp_path / "Панель.xbsl").write_text(module, encoding="utf-8")
+    return engine.run(discover([str(tmp_path)]), select={_RULE_CTX})
+
+
+def test_client_available_without_context_flagged(tmp_path):
+    d = _component(
+        tmp_path,
+        "@НаСервере @ДоступноСКлиента\nметод Прочитать()\n    возврат\n;\n",
+    )
+    assert any(x.rule_id == _RULE_CTX and "Прочитать" in x.message for x in d)
+
+
+def test_client_available_static_ok(tmp_path):
+    d = _component(
+        tmp_path,
+        "@НаСервере @ДоступноСКлиента\nстатический метод Прочитать()\n    возврат\n;\n",
+    )
+    assert not _has(d, _RULE_CTX)
+
+
+def test_client_available_contextual_ok(tmp_path):
+    d = _component(
+        tmp_path,
+        "@НаСервере @Контекстный @ДоступноСКлиента\nметод Прочитать()\n    возврат\n;\n",
+    )
+    assert not _has(d, _RULE_CTX)
+
+
+def test_client_available_in_common_module_not_checked(tmp_path):
+    """A common module is a singleton type – the plain form is correct there."""
+    (tmp_path / "Модуль.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nОкружение: КлиентИСервер\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Модуль.xbsl").write_text(
+        "@НаСервере @ДоступноСКлиента\nметод Прочитать()\n    возврат\n;\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={_RULE_CTX})
+    assert not _has(d, _RULE_CTX)
+
+
+def test_client_available_english_spelling_flagged(tmp_path):
+    d = _component(
+        tmp_path,
+        "@OnServer @AvailableFromClient\nmethod Read()\n    возврат\n;\n",
+        yaml="ElementKind: InterfaceComponent\nИмя: Панель\n",
+    )
+    assert any(x.rule_id == _RULE_CTX and "Read" in x.message for x in d)
+
+
+def test_client_available_english_contextual_ok(tmp_path):
+    d = _component(
+        tmp_path,
+        "@OnServer @Contextual @AvailableFromClient\nmethod Read()\n    возврат\n;\n",
+        yaml="ElementKind: InterfaceComponent\nИмя: Панель\n",
+    )
+    assert not _has(d, _RULE_CTX)
+
+
+def test_client_available_in_structure_member_not_checked(tmp_path):
+    """Only module-level methods are judged – a structure member belongs to its own type."""
+    d = _component(
+        tmp_path,
+        "структура Данные\n"
+        "    пер Имя: Строка?\n"
+        "    @НаСервере @ДоступноСКлиента\n"
+        "    метод Прочитать()\n"
+        "        возврат\n"
+        "    ;\n"
+        ";\n",
+    )
+    assert not _has(d, _RULE_CTX)
+
+
+def test_client_available_broken_module_not_checked(tmp_path):
+    """A file the parser cannot read is code/parse-error territory."""
+    d = _component(
+        tmp_path,
+        "@НаСервере @ДоступноСКлиента\nметод Прочитать(\n",
+    )
+    assert not _has(d, _RULE_CTX)
+
+
+# --- code/server-module-in-client-context ----------------------------------------------
+
+_RULE_SRV = "code/server-module-in-client-context"
+
+_CALLER = (
+    "@Обработчик\nметод ПриНажатии()\n"
+    "    СерверныйМодуль.Прочитать()\n"
+    ";\n"
+)
+
+
+def _environment_pair(tmp_path, caller_yaml, caller_module=_CALLER,
+                    server_yaml="ВидЭлемента: ОбщийМодуль\nИмя: СерверныйМодуль\n"
+                                "Окружение: Сервер\n"):
+    (tmp_path / "СерверныйМодуль.yaml").write_text(server_yaml, encoding="utf-8")
+    (tmp_path / "СерверныйМодуль.xbsl").write_text(
+        "@НаСервере @ВПроекте\nметод Прочитать(): Строка\n    возврат \"\"\n;\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Панель.yaml").write_text(caller_yaml, encoding="utf-8")
+    (tmp_path / "Панель.xbsl").write_text(caller_module, encoding="utf-8")
+    return engine.run(discover([str(tmp_path)]), select={_RULE_SRV})
+
+
+_COMPONENT_YAML = "ВидЭлемента: КомпонентИнтерфейса\nИмя: Панель\n"
+
+
+def test_server_module_from_client_handler_flagged(tmp_path):
+    d = _environment_pair(tmp_path, _COMPONENT_YAML)
+    assert any(x.rule_id == _RULE_SRV and "СерверныйМодуль.Прочитать" in x.message for x in d)
+
+
+def test_server_module_from_server_method_ok(tmp_path):
+    """A method annotated `@НаСервере` executes where the type does exist."""
+    d = _environment_pair(
+        tmp_path, _COMPONENT_YAML,
+        "@НаСервере @Контекстный\nметод Загрузить()\n"
+        "    СерверныйМодуль.Прочитать()\n;\n",
+    )
+    assert not _has(d, _RULE_SRV)
+
+
+def test_server_module_from_plain_method_flagged(tmp_path):
+    """The twin of the test above: the same method without `@НаСервере` is judged, so the
+    silence there comes from the annotation and not from the method being unnamed as a
+    handler."""
+    d = _environment_pair(
+        tmp_path, _COMPONENT_YAML,
+        "@Контекстный\nметод Загрузить()\n"
+        "    СерверныйМодуль.Прочитать()\n;\n",
+    )
+    assert any(x.rule_id == _RULE_SRV and "Загрузить" in x.message for x in d)
+
+
+def test_mixed_environment_module_ok(tmp_path):
+    d = _environment_pair(
+        tmp_path, _COMPONENT_YAML,
+        server_yaml="ВидЭлемента: ОбщийМодуль\nИмя: СерверныйМодуль\n"
+                    "Окружение: КлиентИСервер\n",
+    )
+    assert not _has(d, _RULE_SRV)
+
+
+def test_server_kind_caller_not_checked(tmp_path):
+    """A catalog module lives on the server – the access is legal there."""
+    d = _environment_pair(tmp_path, "ВидЭлемента: Справочник\nИмя: Панель\n")
+    assert not _has(d, _RULE_SRV)
+
+
+def test_client_common_module_caller_flagged(tmp_path):
+    d = _environment_pair(
+        tmp_path,
+        "ВидЭлемента: ОбщийМодуль\nИмя: Панель\nОкружение: Клиент\n",
+        "метод Показать()\n    СерверныйМодуль.Прочитать()\n;\n",
+    )
+    assert any(x.rule_id == _RULE_SRV for x in d)
+
+
+def test_server_module_english_spelling_flagged(tmp_path):
+    d = _environment_pair(
+        tmp_path,
+        "ElementKind: InterfaceComponent\nName: Панель\n",
+        server_yaml="ElementKind: CommonModule\nName: СерверныйМодуль\n"
+                    "Environment: Server\n",
+    )
+    assert any(x.rule_id == _RULE_SRV for x in d)
+
+
+def test_server_module_name_shadowed_ok(tmp_path):
+    """A local bound to the name is not the module."""
+    d = _environment_pair(
+        tmp_path, _COMPONENT_YAML,
+        "@Обработчик\nметод ПриНажатии()\n"
+        "    знч СерверныйМодуль = ЭтоНеМодуль()\n"
+        "    СерверныйМодуль.Прочитать()\n"
+        ";\n",
+    )
+    assert not _has(d, _RULE_SRV)
+
+
+def test_server_module_as_member_ok(tmp_path):
+    """`х.СерверныйМодуль.Прочитать()` is a member of another object, not the module."""
+    d = _environment_pair(
+        tmp_path, _COMPONENT_YAML,
+        "@Обработчик\nметод ПриНажатии()\n"
+        "    Контейнер.СерверныйМодуль.Прочитать()\n"
+        ";\n",
+    )
+    assert not _has(d, _RULE_SRV)
+
+
 # --- code/client-module-in-http-service ------------------------------------------------
 
 def _сервис(tmp_path, env, client_module, service_module):

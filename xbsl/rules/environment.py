@@ -4,7 +4,7 @@ The platform assigns every module an environment – Клиент, Сервер 
 "Исполнение модуля") – and the annotations @НаСервере/@НаКлиенте/@ДоступноСКлиента refine
 it per method or type. An environment mismatch is among the most painful failures: the
 server-side apply silently rolls the whole project back without pointing at the line.
-Three checks, all narrow by design (a skipped case is a false negative, never a false
+Five checks, all narrow by design (a skipped case is a false negative, never a false
 positive); each is project-wide because it needs the paired yaml of the module.
 
 - code/server-call-from-handler: in an interface component module (a form – environment
@@ -20,6 +20,27 @@ positive); each is project-wide because it needs the paired yaml of the module.
   @НаКлиенте in its module contradicts the declared environment – the module has to be
   КлиентИСервер.
 
+- code/client-available-needs-context: @AvailableFromClient on a method of an interface
+  component module that is neither `static` nor @Contextual. The environment of such a
+  module is Client and its type is not a singleton, so the apply answers `Modifier
+  "AvailableFromClient" can only be used in static methods, singleton-type methods, or
+  methods with modifier "Contextual"`. Both documented forms are silent: the static server
+  call (docs topics/move-execution-from-client-to-server) and the contextual method, which
+  is the one that keeps the instance context (docs topics/module-execution). The check is
+  confined to interface components on purpose - @Contextual is available in their modules
+  alone, and the kinds whose module belongs to a singleton type (a common module, a catalog,
+  an information register) accept the plain form.
+
+- code/server-module-in-client-context: the mirror of the check below, and unlike it a
+  compile-time failure rather than a runtime one, which is why it is an error. A common
+  module with `Environment: Server` may carry only the @OnServer annotation, so nothing in
+  it is ever client-available; a module that lives in the Client environment (an interface
+  component, a command, a client common module) reaching it as `Module.Member(...)` from a
+  method that runs on the client makes the apply refuse the project with
+  `<Клиент> Type "X" is unavailable in the current environment` (the environment tag comes
+  from the platform verbatim). Only the bodies of methods without @OnServer are read, and
+  only the call form is judged.
+
 - code/client-module-in-http-service: a common module with `Окружение: Клиент` does not
   exist on the server, so the module of an HttpСервис (environment Сервер) calling
   `ИмяМодуля.Метод(...)` fails at runtime ("Type unavailable"). Members declared
@@ -33,11 +54,14 @@ a @НаСервере @ДоступноСКлиента method is found by the s
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, terms
+from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import tokens
+from xbsl.lexer import linemap, tokens
+from xbsl.parser import parse
 from xbsl.rules._syntax import code_tokens
 from xbsl.rules.enum_values import _shadowed_names
 from xbsl.rules.handlers import _HANDLER_RE, _IDENT_RE
@@ -63,6 +87,33 @@ MESSAGES = {
               "допустима только @НаСервере, модулю нужно Окружение: КлиентИСервер.",
         "en": "Annotation @{ann} in common module '{module}' with {n[Окружение]}: {n[Сервер]} – "
               "only @{n[НаСервере]} is allowed, the module needs {n[Окружение]}: {n[КлиентИСервер]}.",
+    },
+    "code/client-available-needs-context.title": {
+        "ru": "Клиентский метод компонента без контекста",
+        "en": "Client-available component method without a context",
+    },
+    "code/client-available-needs-context.method": {
+        "ru": "Метод '{name}' модуля компонента интерфейса объявлен @ДоступноСКлиента, но "
+              "не статический и без @Контекстный – применение отвергает такой модификатор. "
+              "Добавьте @Контекстный, если методу нужен контекст экземпляра, иначе объявите "
+              "его статическим.",
+        "en": "Method '{name}' of an interface component module is declared "
+              "@{n[ДоступноСКлиента]} but is neither {n[статический]} nor @{n[Контекстный]} – "
+              "the apply rejects that modifier. Add @{n[Контекстный]} when the method needs "
+              "the instance context, otherwise declare it {n[статический]}.",
+    },
+    "code/server-module-in-client-context.title": {
+        "ru": "Серверный общий модуль в клиентском окружении",
+        "en": "Server common module in a client environment",
+    },
+    "code/server-module-in-client-context.call": {
+        "ru": "Обращение '{name}' из метода '{method}', исполняемого на клиенте: у общего "
+              "модуля '{root}' Окружение: Сервер – на клиенте типа нет. Пометьте метод "
+              "@НаСервере либо поднимите модуль до Окружение: КлиентИСервер.",
+        "en": "Access '{name}' from method '{method}', which runs on the client: common "
+              "module '{root}' has {n[Окружение]}: {n[Сервер]} – the type does not exist on "
+              "the client. Annotate the method @{n[НаСервере]}, or raise the module to "
+              "{n[Окружение]}: {n[КлиентИСервер]}.",
     },
     "code/client-module-in-http-service.title": {
         "ru": "Клиентский общий модуль в HTTP-сервисе",
@@ -304,6 +355,189 @@ def client_annotation_in_server_module(facts: dict[str, dict]) -> Iterable[Diagn
                 Severity.WARNING,
                 i18n.t("code/client-annotation-in-server-module.annotation",
                        ann=ann, module=name),
+            )
+
+
+@lru_cache(maxsize=1)
+def _context_ann_forms() -> tuple[frozenset[str], frozenset[str]]:
+    """Both spellings of the two annotations this check reads (from terms.json)."""
+    return (frozenset(terms.key_forms("ДоступноСКлиента")),
+            frozenset(terms.key_forms("Контекстный")))
+
+
+dataset.register_reset(_context_ann_forms.cache_clear)
+
+
+def _client_context_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a yaml marks its pair as an interface component, a module contributes
+    the methods it declares @AvailableFromClient without a context - the reduce joins the
+    pair.
+
+    Only module-level methods are judged: the members of a structure or an enumeration
+    declared in the module belong to their own type, and a structure extends its own type
+    from the module of that structure anyway (docs topics/structure-type)."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None or object_kind(data) != "КомпонентИнтерфейса":
+            return None
+        return {"k": "y", "stem": _pair_stem(source.rel)}
+    if source.kind != "xbsl":
+        return None
+    available, contextual = _context_ann_forms()
+    if not any(name in source.text for name in available):
+        return None
+    module, errors = parse(source)
+    if errors:
+        return None  # a broken file is code/parse-error territory
+    hits: list[tuple[str, int, int]] = []
+    lm = linemap(source)
+    for member in module.members:
+        if not isinstance(member, P.Method) or member.is_static:
+            continue
+        anns = {a.name for a in member.annotations}
+        if not (anns & available) or (anns & contextual):
+            continue
+        line, col = lm.linecol(member.start)
+        hits.append((member.name, line, col))
+    if not hits:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "hits": hits}
+
+
+@rule(
+    "code/client-available-needs-context",
+    "code/client-available-needs-context.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_client_context_mapper,
+)
+def client_available_needs_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    components = {fact["stem"] for fact in facts.values() if fact["k"] == "y"}
+    if not components:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "x" or fact["stem"] not in components:
+            continue
+        for name, line, col in fact["hits"]:
+            yield Diagnostic(
+                rel, line, col, "code/client-available-needs-context",
+                Severity.ERROR,
+                i18n.t("code/client-available-needs-context.method", name=name),
+            )
+
+
+# Kinds whose module exists in the Client environment by default (docs topics/module-execution).
+# A common module is judged by its own `Environment` instead, and a structure element is left
+# out: the docs give it the environment of the project element, which its yaml does not settle.
+_CLIENT_ENV_KINDS = ("КомпонентИнтерфейса", "НавигационнаяКоманда", "ОбычнаяКоманда",
+                     "ПереключаемаяКоманда", "ХранимаяСтруктура")
+
+
+@lru_cache(maxsize=1)
+def _environment_forms() -> tuple[frozenset[str], frozenset[str]]:
+    """Both spellings of the two `Environment` values this check reads (from terms.json)."""
+    def forms(value: str) -> frozenset[str]:
+        return frozenset({value, terms.english(value, "enums") or value})
+    return forms("Сервер"), forms("Клиент")
+
+
+@lru_cache(maxsize=1)
+def _on_server_forms() -> frozenset[str]:
+    """Both spellings of the @OnServer annotation (from terms.json)."""
+    return frozenset(terms.key_forms("НаСервере"))
+
+
+dataset.register_reset(_environment_forms.cache_clear)
+dataset.register_reset(_on_server_forms.cache_clear)
+
+
+def _server_module_mapper(source: SourceFile) -> dict | None:
+    """The map phase. A yaml names its pair either a server common module or a module that
+    lives in the Client environment; a module contributes the bare `Module.Member(...)`
+    accesses of the methods that run on the client. The reduce joins the pairs.
+
+    A method annotated @OnServer executes on the server, where the type does exist, so its
+    body is not read at all - which is also why a method carrying both @OnServer and
+    @OnClient is skipped rather than guessed."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        kind = object_kind(data)
+        server_env, client_env = _environment_forms()
+        if kind == "ОбщийМодуль":
+            env = value_of(data, "Окружение", kind)
+            if env in server_env:
+                name = value_of(data, "Имя", kind)
+                if not isinstance(name, str):
+                    return None
+                return {"k": "y", "stem": _pair_stem(source.rel),
+                        "role": "server", "name": name}
+            if env in client_env:
+                return {"k": "y", "stem": _pair_stem(source.rel), "role": "client"}
+            return None
+        if kind in _CLIENT_ENV_KINDS:
+            return {"k": "y", "stem": _pair_stem(source.rel), "role": "client"}
+        return None
+    if source.kind != "xbsl":
+        return None
+    toks = code_tokens(source)
+    _decls, methods = _module_decls(toks)
+    on_server = _on_server_forms()
+    client_side = [m for m in methods if not (m[1] & on_server)]
+    if not client_side:
+        return None
+    bodies = _method_bodies(toks, client_side, _decl_anchors(toks))
+    shadowed = _shadowed_names(toks)
+    n = len(toks)
+    accesses: list[tuple[str, str, str, int, int]] = []
+    for method, (start, end) in bodies.items():
+        for i in range(start, min(end, n)):
+            t = toks[i]
+            if t.kind != "IDENT" or t.value in shadowed:
+                continue
+            if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == ".":
+                continue  # a member of another object, not the module
+            if not (i + 3 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
+                    and toks[i + 2].kind == "IDENT"
+                    and toks[i + 3].kind == "OP" and toks[i + 3].value == "("):
+                continue  # only `Модуль.Член(...)` accesses are checked
+            accesses.append((t.value, toks[i + 2].value, method, t.line, t.col))
+    if not accesses:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "accesses": accesses}
+
+
+@rule(
+    "code/server-module-in-client-context",
+    "code/server-module-in-client-context.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_server_module_mapper,
+)
+def server_module_in_client_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    server_names: set[str] = set()
+    client_stems: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] != "y":
+            continue
+        if fact["role"] == "server":
+            server_names.add(fact["name"])
+        else:
+            client_stems.add(fact["stem"])
+    if not server_names or not client_stems:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "x" or fact["stem"] not in client_stems:
+            continue
+        for root, member, method, line, col in fact["accesses"]:
+            if root not in server_names:
+                continue
+            yield Diagnostic(
+                rel, line, col, "code/server-module-in-client-context",
+                Severity.ERROR,
+                i18n.t("code/server-module-in-client-context.call",
+                       name=f"{root}.{member}", method=method, root=root),
             )
 
 
