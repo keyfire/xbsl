@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.39.0
 
 - **The metadata tree fills its branches in an English project.** The reader knew the section keys
   by their Russian names only (`Реквизиты`, `ТабличныеЧасти`, `ШаблоныUrl` ...), so an English

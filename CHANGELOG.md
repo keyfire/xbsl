@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-07-27 – 0.41.0
 
 ### Added
 - **`xbsl/metaKeys` – the element key pairs for surfaces outside python** (`Attributes` ->
