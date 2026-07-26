@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0
+## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0, 0.40.0
 
 ### Changed
 - **A guard over the English documents.** Russian spellings of platform names in the English
@@ -31,6 +31,23 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   declares; only the example in the module docstring dropped the number.
 
 ### Added
+- **0.40.0: four rules - per-object permissions and localization** (122 rules now).
+  - `code/per-object-permissions-need-common` (warning): an object asks for its permissions to be
+    decided per record while its module declares no common `ComputeAccessPermissions` handler. It
+    is required even then, if only to return an empty array; without it the object has no general
+    permissions at all and the per-object calculation is never reached.
+  - `code/permission-field-not-declared` (warning): inside `ComputeAccessPermissionsForObjects` a
+    field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity`
+    instead of the record. The declared list is what tells the second shape apart: `Entity.Privilege`
+    is a legitimate namespace and appears in the very same handler.
+  - `yaml/placeholder-key-in-strings` (error): a key carrying the `$0` placeholder in the `Strings`
+    section of a dictionary. The section compiles to a method WITHOUT parameters, so a call with an
+    argument fails the apply - and the answer names the key but never the section, pointing away
+    from the cause.
+  - `code/compare-with-localized` (warning): a localized value compared against a literal or a
+    second localized value - in another language the branch simply never runs. Branch on the value
+    behind the presentation instead. A comparison against a variable is deliberately not judged.
+
 - **0.39.0: `yaml/delete-current-needs-immediate`** (118 rules now). A reference attribute with
   `OnReferencedObjectDeletion: DeleteCurrent` whose owner has a `DeletionMode` that only marks the
   record brings the whole apply down: `Action DeleteCurrent cannot apply to object with a

@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.38.0
+
+- **The group descriptions in the settings name the rules of engine 0.40.0.** Four new rules
+  changed the level counters: the `code` group is 25 error / 17 warning, the `yaml` group
+  16 error, 11 warning, 1 info.
+- **The codes of the new rules open their documentation from the Problems panel.** The per-object
+  permission rules point at "Права элементов проекта и вычисление разрешений", the localization
+  ones at the localization section.
+
 ## 0.37.0
 
 - **The group descriptions in the settings name the rules of engine 0.39.0.** A new rule over
