@@ -1,0 +1,96 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="470" viewBox="0 0 820 470">
+  <style>
+    text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+    .mono { font-family: Consolas, 'Cascadia Mono', Menlo, monospace; }
+    .zone-label { font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; fill: #7f8aa3; }
+    .box-title { font-size: 15px; font-weight: 600; fill: #eef1f8; }
+    .box-sub { font-size: 12px; fill: #7f8aa3; }
+    .box-body { font-size: 12.5px; fill: #aab3c7; }
+    .code { font-size: 11.5px; fill: #c9d4ea; }
+    .code-dim { font-size: 11.5px; fill: #8b95ab; }
+    .edge-label { font-size: 12.5px; font-weight: 600; fill: #c6cddd; }
+    .edge-sub { font-size: 11.5px; font-style: italic; fill: #8b95ab; }
+    .box { fill: #232a38; stroke: #3b445c; }
+    .edge { stroke: #6d7891; stroke-width: 1.5; fill: none; }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" fill="#6d7891"/>
+    </marker>
+  </defs>
+
+  <!-- card -->
+  <rect x="0.5" y="0.5" width="819" height="469" rx="12" fill="#14171e" stroke="#262c38"/>
+
+  <!-- zones -->
+  <rect x="14" y="30" width="238" height="416" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <rect x="268" y="30" width="264" height="416" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <rect x="548" y="30" width="258" height="416" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <text x="30" y="54" class="zone-label">ПОТРЕБИТЕЛИ</text>
+  <text x="284" y="54" class="zone-label">ЯДРО СКАФФОЛДИНГА</text>
+  <text x="564" y="54" class="zone-label">РЕЗУЛЬТАТ</text>
+
+  <!-- edges: consumers / core -->
+  <path d="M236,116 H260 V196 H284" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <line x1="236" y1="236" x2="284" y2="236" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <path d="M236,356 H260 V276 H284" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+
+  <!-- edges: core / result -->
+  <path d="M516,196 H540 V155 H564" class="edge" marker-end="url(#ah)"/>
+  <text x="540" y="188" text-anchor="middle" class="edge-sub">пишет</text>
+  <line x1="677" y1="210" x2="677" y2="280" class="edge" marker-end="url(#ah)"/>
+
+  <!-- edge: response back to the callers -->
+  <path d="M616,376 V412 H133 V404" class="edge" marker-end="url(#ah)"/>
+  <text x="380" y="430" text-anchor="middle" class="mono code">{files, notes, lint}</text>
+
+  <!-- VS Code tree -->
+  <rect x="30" y="68" width="206" height="96" rx="8" class="box"/>
+  <rect x="30" y="76" width="3" height="80" rx="1.5" fill="#3794ff"/>
+  <text x="44" y="92" class="box-title">Дерево VS Code</text>
+  <text x="44" y="116" class="mono code">xbsl/meta*  (LSP)</text>
+  <text x="44" y="140" class="box-body">правки применяет редактор</text>
+
+  <!-- AI agent -->
+  <rect x="30" y="188" width="206" height="96" rx="8" class="box"/>
+  <rect x="30" y="196" width="3" height="80" rx="1.5" fill="#a78bfa"/>
+  <text x="44" y="212" class="box-title">ИИ-агент</text>
+  <text x="44" y="236" class="mono code">meta_*  (MCP)</text>
+  <text x="44" y="260" class="box-body">запись + линт одним вызовом</text>
+
+  <!-- Terminal / CI -->
+  <rect x="30" y="308" width="206" height="96" rx="8" class="box"/>
+  <rect x="30" y="316" width="3" height="80" rx="1.5" fill="#39c5cf"/>
+  <text x="44" y="332" class="box-title">Терминал / CI</text>
+  <text x="44" y="356" class="mono code">xbsl add-field · --dry-run</text>
+  <text x="44" y="380" class="box-body">вывод – JSON</text>
+
+  <!-- Core -->
+  <rect x="284" y="158" width="232" height="170" rx="8" class="box"/>
+  <rect x="284" y="166" width="3" height="154" rx="1.5" fill="#f778ba"/>
+  <text x="298" y="182" class="box-title">xbsl.scaffold</text>
+  <text x="298" y="206" class="box-body">шаблоны: объекты, реквизиты,</text>
+  <text x="298" y="224" class="box-body">маршруты, формы, подсистемы</text>
+  <text x="298" y="248" class="mono code">uuid · точечные правки yaml</text>
+  <text x="298" y="272" class="box-body">проверки дублей и видов</text>
+  <text x="298" y="296" class="mono code-dim">единый источник шаблонов</text>
+
+  <!-- footnote about the LSP path -->
+  <text x="400" y="366" text-anchor="middle" class="box-sub">LSP-поверхность возвращает полные тексты –</text>
+  <text x="400" y="384" text-anchor="middle" class="box-sub">их применяет редактор (undo работает)</text>
+
+  <!-- Project sources -->
+  <rect x="564" y="100" width="226" height="110" rx="8" class="box"/>
+  <rect x="564" y="108" width="3" height="94" rx="1.5" fill="#56d364"/>
+  <text x="578" y="124" class="box-title">Исходники проекта</text>
+  <text x="578" y="148" class="mono code">Имя.yaml · Имя.xbsl</text>
+  <text x="578" y="172" class="box-body">созданы / правки точечные,</text>
+  <text x="578" y="190" class="box-body">отступы сохраняются</text>
+
+  <!-- Linter -->
+  <rect x="564" y="280" width="226" height="96" rx="8" class="box"/>
+  <rect x="564" y="288" width="3" height="80" rx="1.5" fill="#f0883e"/>
+  <text x="578" y="304" class="box-title">Линтер</text>
+  <text x="578" y="328" class="box-body">пофайловая проверка</text>
+  <text x="578" y="346" class="box-body">записанных файлов</text>
+</svg>

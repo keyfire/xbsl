@@ -1,0 +1,42 @@
+ElementKind: Catalog
+Id: 42073842-db14-41d6-a17a-7b03a5d57933
+Name: Tasks
+Presentation: Name
+VisibilityScope: InProject
+Interface:
+    Object:
+        Form: TaskCard
+Attributes:
+    -
+        Name: Name
+        Length: 250
+    -
+        Id: 54c9050e-3377-4a67-8c34-c80d1074edfc
+        Name: DueDate
+        Type: Date
+    -
+        Id: 771ad094-7290-4156-a847-726ac8f60789
+        Name: Details
+        Type: String
+        Multiline: True
+    -
+        Id: cb4f3e7f-10a1-4bd9-af5c-9951cc33b918
+        Name: Importance
+        Type: Number
+    -
+        Id: f5b5ded8-eb69-4244-b31a-e5d1dd8d3933
+        Name: Done
+        Type: Boolean
+TabularParts:
+    -
+        Id: b54d2067-069e-43d4-abae-ad0f6de8c9c8
+        Name: Steps
+        Attributes:
+            -
+                Id: eb95cb2a-644c-4cf5-bd43-fc79abd32b25
+                Name: Step
+                Type: String
+            -
+                Id: 1b2163db-ee5e-419c-a089-6eb6cd120fe8
+                Name: Complete
+                Type: Boolean

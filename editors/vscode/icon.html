@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<style>
+  /* Extension icon 512x512, rendered from HTML (real font, shadows, glow) in the same
+     "glassy neon" style as the KeyFire game icons. Hero tile = code structure / highlighting,
+     corner tiles = tokens the extension highlights and checks (@ decorator, // comment,
+     ; statement, ✓ lint pass). */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 512px; height: 512px; overflow: hidden; }
+  .bg {
+    width: 512px; height: 512px;
+    background: radial-gradient(circle at 50% 38%, #23234a 0%, #12122400 60%), linear-gradient(160deg, #14142a 0%, #0b0b16 100%);
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    font-family: "Consolas", "Cascadia Code", "Segoe UI", monospace;
+  }
+  .tile { position: absolute; border-radius: 26px; display: flex; font-weight: 800; padding: 22px; }
+  .accent { width: 150px; height: 150px; font-size: 62px; color: #fff; opacity: 0.97; }
+  /* Each corner glyph hugs its OUTER corner so it stays visible past the hero tile. */
+  .at   { top: 30px;  left: 30px;  align-items: flex-start; justify-content: flex-start; background: linear-gradient(145deg, #ff5c8a, #d81e5b); box-shadow: 0 0 34px #f7258577; transform: rotate(-8deg); }
+  .sl   { top: 34px;  right: 30px; align-items: flex-start; justify-content: flex-end;   background: linear-gradient(145deg, #4e8ef2, #2f4fd0); box-shadow: 0 0 32px #4e6ef288; transform: rotate(9deg); font-size: 54px; letter-spacing: -4px; }
+  .semi { bottom: 30px; left: 34px; align-items: flex-end;   justify-content: flex-start; background: linear-gradient(145deg, #ff8a3d, #e4531f); box-shadow: 0 0 34px #ff6b3d77; transform: rotate(7deg); }
+  .chk  { bottom: 34px; right: 30px; align-items: flex-end;   justify-content: flex-end;   background: linear-gradient(145deg, #46d17f, #17a35b); box-shadow: 0 0 34px #3ce08a88; transform: rotate(-6deg); font-size: 70px; }
+  .hero {
+    width: 256px; height: 256px; border-radius: 44px;
+    align-items: center; justify-content: center; padding: 0;
+    background: linear-gradient(150deg, #5ef2c8 0%, #17c39a 55%, #0a9e86 100%);
+    box-shadow: 0 0 58px #2ee6b088, 0 10px 30px #00000066, inset 0 0 0 4px #d9fff2aa;
+    font-size: 140px; font-weight: 800; letter-spacing: -6px; color: #05352b; z-index: 5;
+    font-family: "Consolas", "Cascadia Code", monospace;
+  }
+</style>
+</head>
+<body>
+  <div class="bg">
+    <div class="tile accent at">@</div>
+    <div class="tile accent sl">//</div>
+    <div class="tile accent semi">;</div>
+    <div class="tile accent chk">&#10003;</div>
+    <div class="tile hero">{&nbsp;}</div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,14 @@
+@Handler
+method SaveAndClose()
+    ВыполнитьЗаписатьИЗакрыть()
+;
+
+@Handler
+method MarkDone()
+    var previousTitle = Object.Name   
+    // Mark the task done — writing is all that is left…
+    var stepCount: Number2 = Object.Steps.Size()
+    Object.Importance = stepCount
+    Object.Done = True
+    ВыполнитьЗаписать()
+;

@@ -1,0 +1,1446 @@
+{
+  "name": "xbsl",
+  "displayName": "XBSL (1C:Element)",
+  "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
+  "version": "0.35.1",
+  "publisher": "keyfire",
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.106.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "keywords": [
+    "1c",
+    "1c-element",
+    "xbsl",
+    "linter",
+    "elemctl",
+    "deploy"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/keyfire/xbsl.git",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://github.com/keyfire/xbsl/tree/main/editors/vscode",
+  "bugs": {
+    "url": "https://github.com/keyfire/xbsl/issues"
+  },
+  "galleryBanner": {
+    "color": "#0b0b16",
+    "theme": "dark"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:xbsl",
+    "workspaceContains:**/*.xbsl",
+    "onView:xbslMetadata",
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "xbsl",
+        "aliases": [
+          "XBSL",
+          "xbsl"
+        ],
+        "extensions": [
+          ".xbsl"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "xbsl",
+        "scopeName": "source.xbsl",
+        "path": "./syntaxes/xbsl.tmLanguage.json"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "xbslElement",
+          "title": "%view.metadataContainer%",
+          "icon": "resources/element-tree.svg"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "xbslProps",
+          "title": "%view.propsContainer%",
+          "icon": "resources/form-props.svg"
+        }
+      ]
+    },
+    "views": {
+      "xbslElement": [
+        {
+          "id": "xbslMetadata",
+          "name": "%view.metadataTree%",
+          "icon": "$(list-tree)",
+          "initialSize": 3
+        },
+        {
+          "id": "xbslPalette",
+          "name": "%view.formPalette%",
+          "icon": "resources/form-palette.svg",
+          "when": "xbsl.formDesigner.open",
+          "initialSize": 2
+        }
+      ],
+      "xbslProps": [
+        {
+          "id": "xbslProperties",
+          "type": "webview",
+          "name": "%view.properties%",
+          "icon": "resources/form-props.svg"
+        },
+        {
+          "id": "xbslDocs",
+          "name": "%view.docs%",
+          "icon": "$(book)"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "xbsl.lintProject",
+        "title": "%cmd.lintProject%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.project.new",
+        "title": "%cmd.project.new%",
+        "category": "XBSL",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "xbsl.forms.search",
+        "title": "%cmd.forms.search%",
+        "category": "XBSL",
+        "icon": "$(search)"
+      },
+      {
+        "command": "xbsl.metadata.refresh",
+        "title": "%cmd.metadata.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.metadata.openYaml",
+        "title": "%cmd.metadata.openYaml%",
+        "category": "XBSL",
+        "icon": "$(symbol-property)"
+      },
+      {
+        "command": "xbsl.metadata.openModule",
+        "title": "%cmd.metadata.openModule%",
+        "category": "XBSL",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "xbsl.metadata.openObjectModule",
+        "title": "%cmd.metadata.openObjectModule%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.previewForm",
+        "title": "%cmd.metadata.previewForm%",
+        "category": "XBSL",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "xbsl.metadata.openAppModule",
+        "title": "%cmd.metadata.openAppModule%",
+        "category": "XBSL",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "xbsl.metadata.props",
+        "title": "%cmd.metadata.props%",
+        "category": "XBSL",
+        "icon": "$(symbol-property)"
+      },
+      {
+        "command": "xbsl.metadata.addAttribute",
+        "title": "%cmd.metadata.addAttribute%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addDimension",
+        "title": "%cmd.metadata.addDimension%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addResource",
+        "title": "%cmd.metadata.addResource%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addEnumValue",
+        "title": "%cmd.metadata.addEnumValue%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addClientParam",
+        "title": "%cmd.metadata.addClientParam%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addStructField",
+        "title": "%cmd.metadata.addStructField%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addTabular",
+        "title": "%cmd.metadata.addTabular%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addTabularAttr",
+        "title": "%cmd.metadata.addTabularAttr%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObjectForm",
+        "title": "%cmd.metadata.addObjectForm%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.deleteObject",
+        "title": "%cmd.metadata.deleteObject%",
+        "category": "XBSL",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.catalog",
+        "title": "%cmd.metadata.add.catalog%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.document",
+        "title": "%cmd.metadata.add.document%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.enumeration",
+        "title": "%cmd.metadata.add.enumeration%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.inforegister",
+        "title": "%cmd.metadata.add.inforegister%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.accumregister",
+        "title": "%cmd.metadata.add.accumregister%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.commonmodule",
+        "title": "%cmd.metadata.add.commonmodule%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.httpservice",
+        "title": "%cmd.metadata.add.httpservice%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.clientparams",
+        "title": "%cmd.metadata.add.clientparams%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.structure",
+        "title": "%cmd.metadata.add.structure%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.clientevent",
+        "title": "%cmd.metadata.add.clientevent%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.cmdfragment",
+        "title": "%cmd.metadata.add.cmdfragment%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.commonform",
+        "title": "%cmd.metadata.add.commonform%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addSubsystem",
+        "title": "%cmd.metadata.addSubsystem%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.filterBySubsystem",
+        "title": "%cmd.metadata.filterBySubsystem%",
+        "category": "XBSL",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xbsl.metadata.clearFilter",
+        "title": "%cmd.metadata.clearFilter%",
+        "category": "XBSL",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "xbsl.metadata.groupMode",
+        "title": "%cmd.metadata.groupMode%",
+        "category": "XBSL",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "xbsl.metadata.hideEmptyCategories",
+        "title": "%cmd.metadata.hideEmptyCategories%",
+        "category": "XBSL",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xbsl.metadata.showEmptyCategories",
+        "title": "%cmd.metadata.showEmptyCategories%",
+        "category": "XBSL",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "xbsl.restartLinter",
+        "title": "%cmd.restartLinter%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.choosePalette",
+        "title": "%cmd.choosePalette%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.deploy",
+        "title": "%cmd.deploy%",
+        "category": "XBSL",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "xbsl.previewForm",
+        "title": "%cmd.previewForm%",
+        "category": "XBSL",
+        "icon": "$(open-preview)"
+      },
+      {
+        "command": "xbsl.templates.manage",
+        "title": "%cmd.templates.manage%",
+        "category": "XBSL",
+        "icon": "$(symbol-snippet)"
+      },
+      {
+        "command": "xbsl.templates.import",
+        "title": "%cmd.templates.import%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.templates.export",
+        "title": "%cmd.templates.export%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.docs.search",
+        "title": "%cmd.docs.search%",
+        "category": "XBSL",
+        "icon": "$(search)"
+      },
+      {
+        "command": "xbsl.docs.showForSymbol",
+        "title": "%cmd.docs.showForSymbol%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.docs.refresh",
+        "title": "%cmd.docs.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.docs.open",
+        "title": "%cmd.docs.open%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.refresh",
+        "title": "%cmd.formStructure.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.formStructure.openInEditor",
+        "title": "%cmd.formStructure.openInEditor%",
+        "category": "XBSL",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "xbsl.formStructure.moveUp",
+        "title": "%cmd.formStructure.moveUp%",
+        "category": "XBSL",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "xbsl.formStructure.moveDown",
+        "title": "%cmd.formStructure.moveDown%",
+        "category": "XBSL",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "xbsl.formStructure.delete",
+        "title": "%cmd.formStructure.delete%",
+        "category": "XBSL",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "xbsl.formStructure.rename",
+        "title": "%cmd.formStructure.rename%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.duplicate",
+        "title": "%cmd.formStructure.duplicate%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.wrap",
+        "title": "%cmd.formStructure.wrap%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.unwrap",
+        "title": "%cmd.formStructure.unwrap%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.copyYaml",
+        "title": "%cmd.formStructure.copyYaml%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.focusSubtree",
+        "title": "%cmd.formStructure.focusSubtree%",
+        "category": "XBSL",
+        "icon": "$(target)"
+      },
+      {
+        "command": "xbsl.formStructure.resetFocus",
+        "title": "%cmd.formStructure.resetFocus%",
+        "category": "XBSL",
+        "icon": "$(close)"
+      },
+      {
+        "command": "xbsl.formStructure.filterNamed",
+        "title": "%cmd.formStructure.filterNamed%",
+        "category": "XBSL",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xbsl.formStructure.filterAll",
+        "title": "%cmd.formStructure.filterAll%",
+        "category": "XBSL",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "xbsl.formPalette.refresh",
+        "title": "%cmd.formPalette.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.formPalette.activate",
+        "title": "%cmd.formPalette.activate%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formPalette.insert",
+        "title": "%cmd.formPalette.insert%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formPalette.addFavorite",
+        "title": "%cmd.formPalette.addFavorite%",
+        "category": "XBSL",
+        "icon": "$(star-empty)"
+      },
+      {
+        "command": "xbsl.formPalette.removeFavorite",
+        "title": "%cmd.formPalette.removeFavorite%",
+        "category": "XBSL",
+        "icon": "$(star-full)"
+      },
+      {
+        "command": "xbsl.formPalette.openDocs",
+        "title": "%cmd.formPalette.openDocs%",
+        "category": "XBSL",
+        "icon": "$(book)"
+      },
+      {
+        "command": "xbsl.properties.showForNode",
+        "title": "%cmd.properties.showForNode%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.pasteYaml",
+        "title": "%cmd.formStructure.pasteYaml%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.savePreset",
+        "title": "%cmd.formStructure.savePreset%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.insertPreset",
+        "title": "%cmd.formStructure.insertPreset%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formStructure.managePresets",
+        "title": "%cmd.formStructure.managePresets%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formStructure.editSelected",
+        "title": "%cmd.formStructure.editSelected%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.refresh",
+        "title": "%cmd.formData.refresh%",
+        "category": "XBSL",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "xbsl.formData.insert",
+        "title": "%cmd.formData.insert%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formData.addProperty",
+        "title": "%cmd.formData.addProperty%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.formData.renameProperty",
+        "title": "%cmd.formData.renameProperty%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.retypeProperty",
+        "title": "%cmd.formData.retypeProperty%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.formData.removeProperty",
+        "title": "%cmd.formData.removeProperty%",
+        "category": "XBSL"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "xbsl.docs.open",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.formPalette.activate",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.properties.showForNode",
+          "when": "false"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "xbsl.docs.showForSymbol",
+          "when": "resourceLangId == xbsl",
+          "group": "navigation@9"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "xbsl.deploy",
+          "when": "resourceLangId == xbsl",
+          "group": "navigation"
+        },
+        {
+          "command": "xbsl.previewForm",
+          "when": "xbsl.formYaml && resourceLangId == yaml",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "xbsl.project.new",
+          "when": "view == xbslMetadata",
+          "group": "navigation@0"
+        },
+        {
+          "command": "xbsl.metadata.groupMode",
+          "when": "view == xbslMetadata",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xbsl.metadata.refresh",
+          "when": "view == xbslMetadata",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xbsl.metadata.hideEmptyCategories",
+          "when": "view == xbslMetadata && !xbsl.metadata.emptyHidden",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xbsl.metadata.showEmptyCategories",
+          "when": "view == xbslMetadata && xbsl.metadata.emptyHidden",
+          "group": "navigation@3"
+        },
+        {
+          "command": "xbsl.docs.search",
+          "when": "view == xbslDocs",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xbsl.docs.refresh",
+          "when": "view == xbslDocs",
+          "group": "navigation@2"
+        },
+        {
+          "command": "xbsl.forms.search",
+          "when": "view == xbslPalette",
+          "group": "navigation@0"
+        },
+        {
+          "command": "xbsl.formPalette.refresh",
+          "when": "view == xbslPalette",
+          "group": "navigation@1"
+        },
+        {
+          "command": "xbsl.formStructure.insertPreset",
+          "when": "view == xbslPalette",
+          "group": "1_presets@0"
+        },
+        {
+          "command": "xbsl.formStructure.managePresets",
+          "when": "view == xbslPalette",
+          "group": "1_presets@1"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "xbsl.metadata.props",
+          "when": "view == xbslMetadata && viewItem =~ /\\bprops\\b/",
+          "group": "0_props@1"
+        },
+        {
+          "command": "xbsl.metadata.openYaml",
+          "when": "view == xbslMetadata && viewItem =~ /\\byaml\\b/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "xbsl.metadata.openModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bxbsl\\b/",
+          "group": "1_open@2"
+        },
+        {
+          "command": "xbsl.metadata.openObjectModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bobjmod\\b/",
+          "group": "1_open@3"
+        },
+        {
+          "command": "xbsl.metadata.previewForm",
+          "when": "view == xbslMetadata && viewItem =~ /\\bform\\b/",
+          "group": "2_form@1"
+        },
+        {
+          "command": "xbsl.metadata.openAppModule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bappmod\\b/",
+          "group": "1_open@1"
+        },
+        {
+          "command": "xbsl.metadata.addAttribute",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddattr\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addAttribute",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddattr\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addDimension",
+          "when": "view == xbslMetadata && viewItem =~ /\\badddim\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addDimension",
+          "when": "view == xbslMetadata && viewItem =~ /\\badddim\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addResource",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddres\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addResource",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddres\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addEnumValue",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddval\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addEnumValue",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddval\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addClientParam",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddparam\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addClientParam",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddparam\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addStructField",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddstructfield\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addStructField",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddstructfield\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addTabular",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddtabular\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addTabular",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddtabular\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addTabularAttr",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddtcattr\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addTabularAttr",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddtcattr\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObjectForm",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddform\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObjectForm",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddform\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.deleteObject",
+          "when": "view == xbslMetadata && viewItem =~ /\\bdeletable\\b/",
+          "group": "9_delete@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.catalog",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-catalog\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.catalog",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-catalog\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.document",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-document\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.document",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-document\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.enumeration",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-enumeration\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.enumeration",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-enumeration\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.inforegister",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-inforegister\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.inforegister",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-inforegister\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.accumregister",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-accumregister\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.accumregister",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-accumregister\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.commonmodule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-commonmodule\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.commonmodule",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-commonmodule\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.httpservice",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-httpservice\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.httpservice",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-httpservice\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.clientparams",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-clientparams\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.clientparams",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-clientparams\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.structure",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-structure\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.structure",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-structure\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.clientevent",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-clientevent\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.clientevent",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-clientevent\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.cmdfragment",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-cmdfragment\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.cmdfragment",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-cmdfragment\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.commonform",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-commonform\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.commonform",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-commonform\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addSubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\bsubsystems\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addSubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\bsubsystems\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addSubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddsub\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addSubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddsub\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addSubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\bproject\\b/",
+          "group": "3_addsub@1"
+        },
+        {
+          "command": "xbsl.metadata.filterBySubsystem",
+          "when": "view == xbslMetadata && viewItem =~ /\\bproject\\b/",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "xbsl.metadata.clearFilter",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfiltered\\b/",
+          "group": "2_filter@2"
+        },
+        {
+          "command": "xbsl.formPalette.insert",
+          "when": "view == xbslPalette && viewItem =~ /\\bpalettecomponent\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.formPalette.insert",
+          "when": "view == xbslPalette && viewItem =~ /\\bpalettecomponent\\b/",
+          "group": "1_insert@1"
+        },
+        {
+          "command": "xbsl.formPalette.addFavorite",
+          "when": "view == xbslPalette && viewItem =~ /\\bpalettenonfav\\b/",
+          "group": "2_favorites@1"
+        },
+        {
+          "command": "xbsl.formPalette.removeFavorite",
+          "when": "view == xbslPalette && viewItem =~ /\\bpalettefav\\b/",
+          "group": "2_favorites@1"
+        },
+        {
+          "command": "xbsl.formPalette.openDocs",
+          "when": "view == xbslPalette && viewItem =~ /\\bpalettecomponent\\b/",
+          "group": "3_docs@1"
+        }
+      ]
+    },
+    "configuration": [
+      {
+        "title": "XBSL",
+        "properties": {
+          "xbsl.linter.run": {
+            "type": "string",
+            "enum": [
+              "onType",
+              "onSave",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.linter.run.enum.0%",
+              "%config.linter.run.enum.1%",
+              "%config.linter.run.enum.2%"
+            ],
+            "default": "onType",
+            "scope": "resource",
+            "description": "%config.linter.run%"
+          },
+          "xbsl.linter.command": {
+            "type": "string",
+            "default": "xbsl",
+            "scope": "resource",
+            "description": "%config.linter.command%"
+          },
+          "xbsl.linter.pythonPath": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.linter.pythonPath%"
+          },
+          "xbsl.linter.dataDir": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.linter.dataDir%"
+          },
+          "xbsl.linter.lang": {
+            "type": "string",
+            "enum": [
+              "",
+              "ru",
+              "en"
+            ],
+            "enumDescriptions": [
+              "%config.linter.lang.enum.0%",
+              "%config.linter.lang.enum.1%",
+              "%config.linter.lang.enum.2%"
+            ],
+            "default": "",
+            "scope": "resource",
+            "description": "%config.linter.lang%"
+          },
+          "xbsl.linter.select": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.linter.select%"
+          },
+          "xbsl.linter.ignore": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.linter.ignore%"
+          },
+          "xbsl.rules": {
+            "type": "object",
+            "default": {},
+            "scope": "resource",
+            "additionalProperties": {
+              "type": "string",
+              "enum": [
+                "off",
+                "error",
+                "warning",
+                "info",
+                "hint"
+              ]
+            },
+            "markdownDescription": "%config.rules%"
+          },
+          "xbsl.projectRoot": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.projectRoot%"
+          },
+          "xbsl.baseline": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.baseline%"
+          },
+          "xbsl.templates.file": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.templates.file%"
+          },
+          "xbsl.lsp.enabled": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "%config.lsp.enabled%"
+          },
+          "xbsl.lsp.command": {
+            "type": "string",
+            "default": "",
+            "scope": "machine-overridable",
+            "description": "%config.lsp.command%"
+          },
+          "xbsl.linter.debounce": {
+            "type": "number",
+            "default": 300,
+            "minimum": 0,
+            "scope": "resource",
+            "description": "%config.linter.debounce%"
+          },
+          "xbsl.workspaceLint": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "%config.workspaceLint%"
+          },
+          "xbsl.workspaceLintTimeout": {
+            "type": "number",
+            "default": 60000,
+            "minimum": 0,
+            "scope": "resource",
+            "description": "%config.workspaceLintTimeout%"
+          },
+          "xbsl.navigation.enabled": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "%config.navigation.enabled%"
+          },
+          "xbsl.deploy.elemctlPath": {
+            "type": "string",
+            "default": "elemctl",
+            "scope": "machine-overridable",
+            "description": "%config.deploy.elemctlPath%"
+          },
+          "xbsl.deploy.envFile": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.deploy.envFile%"
+          },
+          "xbsl.deploy.appId": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.deploy.appId%"
+          },
+          "xbsl.deploy.extraArgs": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "description": "%config.deploy.extraArgs%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.groups%",
+        "properties": {
+          "xbsl.groups.code": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 1,
+            "description": "%config.groups.code%"
+          },
+          "xbsl.groups.yaml": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 2,
+            "description": "%config.groups.yaml%"
+          },
+          "xbsl.groups.style": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 3,
+            "description": "%config.groups.style%"
+          },
+          "xbsl.groups.typography": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 4,
+            "description": "%config.groups.typography%"
+          },
+          "xbsl.groups.whitespace": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 5,
+            "description": "%config.groups.whitespace%"
+          },
+          "xbsl.groups.encoding": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 6,
+            "description": "%config.groups.encoding%"
+          },
+          "xbsl.groups.structure": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 7,
+            "description": "%config.groups.structure%"
+          },
+          "xbsl.groups.form": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 8,
+            "description": "%config.groups.form%"
+          },
+          "xbsl.groups.query": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 9,
+            "description": "%config.groups.query%"
+          },
+          "xbsl.groups.naming": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 10,
+            "description": "%config.groups.naming%"
+          },
+          "xbsl.groups.project": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 11,
+            "description": "%config.groups.project%"
+          },
+          "xbsl.groups.security": {
+            "type": "string",
+            "enum": [
+              "default",
+              "error",
+              "warning",
+              "info",
+              "hint",
+              "off"
+            ],
+            "enumDescriptions": [
+              "%config.groups.enum.default%",
+              "%config.groups.enum.error%",
+              "%config.groups.enum.warning%",
+              "%config.groups.enum.info%",
+              "%config.groups.enum.hint%",
+              "%config.groups.enum.off%"
+            ],
+            "default": "default",
+            "scope": "resource",
+            "order": 12,
+            "description": "%config.groups.security%"
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "check": "tsc --noEmit",
+    "test": "esbuild test/navCore.test.ts --bundle --outfile=dist/navCore.test.js --format=cjs --platform=node && node dist/navCore.test.js && esbuild test/codeActionsCore.test.ts --bundle --outfile=dist/codeActionsCore.test.js --format=cjs --platform=node && node dist/codeActionsCore.test.js && esbuild test/formPreviewCore.test.ts --bundle --outfile=dist/formPreviewCore.test.js --format=cjs --platform=node && node dist/formPreviewCore.test.js && esbuild test/workspaceCore.test.ts --bundle --outfile=dist/workspaceCore.test.js --format=cjs --platform=node && node dist/workspaceCore.test.js && esbuild test/metadataCore.test.ts --bundle --outfile=dist/metadataCore.test.js --format=cjs --platform=node && node dist/metadataCore.test.js && esbuild test/baselineCore.test.ts --bundle --outfile=dist/baselineCore.test.js --format=cjs --platform=node && node dist/baselineCore.test.js && esbuild test/templatesCore.test.ts --bundle --outfile=dist/templatesCore.test.js --format=cjs --platform=node && node dist/templatesCore.test.js && esbuild test/formStructureCore.test.ts --bundle --outfile=dist/formStructureCore.test.js --format=cjs --platform=node && node dist/formStructureCore.test.js && esbuild test/formPaletteCore.test.ts --bundle --outfile=dist/formPaletteCore.test.js --format=cjs --platform=node && node dist/formPaletteCore.test.js && esbuild test/formPropsCore.test.ts --bundle --outfile=dist/formPropsCore.test.js --format=cjs --platform=node && node dist/formPropsCore.test.js && esbuild test/propsModes.test.ts --bundle --outfile=dist/propsModes.test.js --format=cjs --platform=node && node dist/propsModes.test.js && esbuild test/componentIconsCore.test.ts --bundle --outfile=dist/componentIconsCore.test.js --format=cjs --platform=node && node dist/componentIconsCore.test.js && esbuild test/formDataCore.test.ts --bundle --outfile=dist/formDataCore.test.js --format=cjs --platform=node && node dist/formDataCore.test.js && esbuild test/blockPresetsCore.test.ts --bundle --outfile=dist/blockPresetsCore.test.js --format=cjs --platform=node && node dist/blockPresetsCore.test.js && esbuild test/projectWizardCore.test.ts --bundle --outfile=dist/projectWizardCore.test.js --format=cjs --platform=node && node dist/projectWizardCore.test.js && esbuild test/formDesignerCore.test.ts --bundle --outfile=dist/formDesignerCore.test.js --format=cjs --platform=node && node dist/formDesignerCore.test.js",
+    "package": "vsce package --no-dependencies -o xbsl-vscode.vsix",
+    "publish:vsce": "vsce publish --no-dependencies --skip-duplicate",
+    "publish:ovsx": "ovsx publish xbsl-vscode.vsix --skip-duplicate"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/vscode": "^1.106.0",
+    "@vscode/vsce": "^3",
+    "esbuild": "^0.23",
+    "ovsx": "^0.9",
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1",
+    "yaml": "^2.9.0"
+  },
+  "l10n": "./l10n"
+}

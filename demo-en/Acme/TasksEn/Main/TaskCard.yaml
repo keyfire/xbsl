@@ -1,0 +1,118 @@
+ElementKind: InterfaceComponent
+Id: 17bc1179-7bf1-42ea-8ff5-5cfbfb5c4ed6
+Name: TaskCard
+VisibilityScope: InProject
+Inherits:
+    Type: ObjectForm<Tasks.Object>
+    Title: Task
+    MainCommand:
+        Type: UsualCommand
+        Handler: SaveAndClose
+        Presentation: Save and close
+    Content:
+        Type: CustomFormTemplate
+        WidthInColumns: Double
+        Content:
+            Type: Group
+            Layout: Vertical
+            VerticalItemsSpacing: Single
+            HorizontalStretch: True
+            Content:
+                -
+                    Type: StandardCard
+                    Name: Hint
+                    DisplayKind: Banner
+                    HorizontalStretch: True
+                    Content:
+                        Type: Label
+                        Value: "Describe the task and break it into steps."
+                        Color:
+                            Type: AbsoluteColor
+                            Value: RGB(595964)
+                -
+                    Type: Pages
+                    Name: Sections
+                    HorizontalStretch: True
+                    Pages:
+                        -
+                            Name: MainPage
+                            Title: Main
+                            Content:
+                                Type: Group
+                                Layout: Vertical
+                                HorizontalStretch: True
+                                Content:
+                                    -
+                                        Type: Edit<String>
+                                        Name: Title
+                                        Title: Title
+                                        Value: =Object.Name
+                                        HorizontalStretch: True
+                                    -
+                                        Type: Group
+                                        Name: DueAndImportance
+                                        Layout: Horizontal
+                                        Content:
+                                            -
+                                                Type: Edit<Date>
+                                                Name: DueDate
+                                                Title: Due date
+                                                Value: =Object.DueDate
+                                            -
+                                                Type: Edit<Number>
+                                                Name: Importance
+                                                Title: Importance
+                                                Value: =Object.Importance
+                                    -
+                                        Type: Edit<String>
+                                        Name: Details
+                                        Title: Details
+                                        Value: =Object.Details
+                                        HorizontalStretch: True
+                                    -
+                                        Type: Checkbox
+                                        Name: Done
+                                        Title: Done
+                                        Value: =Object.Done
+                                    -
+                                        Type: Group
+                                        Name: ActionButtons
+                                        Layout: Horizontal
+                                        HorizontalAlignInGroup: End
+                                        HorizontalStretch: True
+                                        Content:
+                                            -
+                                                Type: Button
+                                                Name: DoneButton
+                                                Kind: Main
+                                                Title: "Mark as done"
+                                                OnClick: MarkDone
+                        -
+                            Name: StepsPage
+                            Title: Steps
+                            Content:
+                                Type: Group
+                                Layout: Vertical
+                                HorizontalStretch: True
+                                Content:
+                                    -
+                                        Type: Table<ArrayDataSource<Tasks.Steps>>
+                                        Name: Steps
+                                        DisplayKind: Table
+                                        HorizontalStretch: True
+                                        Height: 200
+                                        Source:
+                                            Data: =Object.Steps
+                                        Columns:
+                                            -
+                                                Type: StandardTableColumn<Tasks.Steps>
+                                                Title: Step
+                                                ValueField: Step
+                                            -
+                                                Type: StandardTableColumn<Tasks.Steps>
+                                                Title: Complete
+                                                ValueField: Complete
+                                        Commands:
+                                            Type: CommandInterfaceFragment
+                                            Items:
+                                                - =Components.Steps.AddRow

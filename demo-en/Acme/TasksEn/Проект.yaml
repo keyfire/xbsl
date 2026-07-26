@@ -1,0 +1,10 @@
+Id: 5b1e77c4-8a20-4f3d-9d21-6a0f4e2c1d90
+CompatibilityMode: 9.0
+Vendor: Acme
+Name: TasksEn
+Version: 1.0.0
+Presentation: "Tasks (demo, English spellings)"
+VendorPresentation: "Acme"
+LocalizationLanguages: [Russian]
+DefaultLanguage: Russian
+DevelopmentLanguage: Russian

@@ -1,0 +1,406 @@
+"""Guard: the rule metadata restated outside the registry must not drift away from it.
+
+Four places repeat what `engine.RULES` already knows, and every one of them was kept in sync
+by hand until a release caught them lying: the group descriptions in the extension claimed
+"4 rules at error, 12 at warning" for `code` while the registry held 15 and 13, and `yaml`
+claimed 3 errors against 4.
+
+  * `docs/RULES.md` / `RULES.ru.md` - the rule count in the intro and a table row per rule
+    (severity, default, scope) inside the tier sections; the count is repeated in both READMEs;
+  * `editors/vscode/package.nls.json` / `.ru.json` - the per-level counts in the group
+    descriptions shown in the VS Code settings UI;
+  * `editors/vscode/package.json` - a `xbsl.groups.<group>` setting per rule group, plus the
+    published version, which both CHANGELOGs must describe;
+  * `editors/vscode/src/ruleDocs.ts` - which rules link to a documentation page.
+
+The registry is read in a SUBPROCESS with XBSL_NO_PLUGINS=1 on purpose. An installed plugin
+adds its own rules and rewrites the severity of built-in ones at import time, so an in-process
+`len(RULES)` would depend on what is installed next to the engine: green in a public CI,
+red on a machine with the internal plugin (or the other way round). Published metadata
+describes the built-in set, and only a plugin-free process shows it.
+
+The counts cover ALL rules of a group by their own severity, disabled-by-default ones
+included - that is what the published sentences state.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import subprocess
+import sys
+from collections import Counter, defaultdict
+from functools import lru_cache
+from pathlib import Path
+
+import pytest
+
+ROOT = Path(__file__).resolve().parent.parent
+DOCS = ROOT / "docs"
+VSCODE = ROOT / "editors" / "vscode"
+
+# A snapshot of the registry: no titles (they are translated) and no functions - only the
+# metadata the four sources restate.
+_SNAPSHOT = """
+import json
+import xbsl.rules  # noqa: F401  - importing the package registers the built-in rules
+from xbsl.engine import RULES
+print(json.dumps([
+    {"id": r.id, "tier": r.tier, "scope": r.scope,
+     "severity": r.severity.value, "default": r.enabled_by_default}
+    for r in RULES
+], ensure_ascii=False))
+"""
+
+_LEVELS = "error|warning|info|hint"
+
+
+@lru_cache(maxsize=1)
+def _registry() -> tuple[dict, ...]:
+    env = dict(os.environ, XBSL_NO_PLUGINS="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
+    run = subprocess.run(
+        [sys.executable, "-c", _SNAPSHOT], cwd=ROOT, env=env,
+        capture_output=True, text=True, encoding="utf-8",
+    )
+    assert run.returncode == 0, f"снимок реестра не собрался:\n{run.stderr}"
+    return tuple(json.loads(run.stdout))
+
+
+@lru_cache(maxsize=1)
+def _by_id() -> dict[str, dict]:
+    return {r["id"]: r for r in _registry()}
+
+
+@lru_cache(maxsize=1)
+def _levels_by_group() -> dict[str, Counter]:
+    groups: dict[str, Counter] = defaultdict(Counter)
+    for r in _registry():
+        groups[r["id"].split("/")[0]][r["severity"]] += 1
+    return dict(groups)
+
+
+# --- docs/RULES.* ------------------------------------------------------------------------
+
+# Rule ids may carry digits (encoding/utf8) - a stricter pattern silently drops such a row
+# and the guard goes blind exactly where it should look.
+_ROW = re.compile(
+    r"^\|\s*(\d+)\s*\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*(\w+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*"
+    r"\|(.*)\|\s*$"
+)
+_ANY_ROW = re.compile(r"^\|\s*\d*\s*\|?\s*`")
+_TIER_HEADING = re.compile(r"^###\s+(?:Тир|Tier)\s+([A-D])")
+_DOC_LINK = re.compile(r"\[(?:доки|docs)\]\((\S+?)\)")
+
+# Every sentence in the repository stating how many rules there are, keyed by file. Each
+# pattern is anchored on its own wording: a bare \d+ would match an unrelated number and
+# keep the guard green while the sentence lies.
+# Every place that states the number of rules in prose. The documentation site pages belong
+# here as much as the READMEs: their counters had drifted to 97 and 87 unnoticed exactly
+# because the guard did not look at them.
+_COUNTS = {
+    "docs/RULES.ru.md": re.compile(r"Сейчас правил:\s*(\d+)"),
+    "docs/RULES.md": re.compile(r"Currently there are\s+(\d+)\s+rules"),
+    "README.ru.md": re.compile(r"\*\*Правила\.\*\*\s*(\d+)\s+правил"),
+    "README.md": re.compile(r"\*\*Rules\.\*\*\s*(\d+)\s+rules"),
+    "docs/index.ru.md": re.compile(r"(\d+)\s+правил в четырёх тирах"),
+    "docs/index.md": re.compile(r"(\d+)\s+rules in four tiers"),
+    "docs/GUIDE.ru.md": re.compile(r"Полный перечень всех\s+(\d+)\s+правил"),
+    "docs/GUIDE.md": re.compile(r"The full list of all\s+(\d+)\s+rules"),
+}
+
+# Locale-specific spellings of the "Default" and "Scope" columns.
+_TABLES = {
+    "RULES.ru.md": {"on": "вкл", "off": "выкл", "file": "файл", "project": "проект"},
+    "RULES.md": {"on": "on", "off": "off", "file": "file", "project": "project"},
+}
+
+
+def _parse_table(name: str) -> dict[str, dict]:
+    """Rule rows of a documentation table, keyed by rule id (tier taken from the heading)."""
+    rows: dict[str, dict] = {}
+    tier = None
+    for number, line in enumerate((DOCS / name).read_text(encoding="utf-8").splitlines(), 1):
+        heading = _TIER_HEADING.match(line)
+        if heading:
+            tier = heading.group(1)
+            continue
+        match = _ROW.match(line)
+        if not match:
+            assert not _ANY_ROW.match(line), (
+                f"{name}:{number} – строка таблицы правил не разобрана сторожем: {line!r}. "
+                "Либо формат строки изменился, либо в столбцах опечатка; сторож не должен "
+                "молча пропускать строки."
+            )
+            continue
+        position, rule_id, severity, default, scope, tail = match.groups()
+        link = _DOC_LINK.search(tail)
+        rows[rule_id] = {
+            "tier": tier, "severity": severity, "default": default, "scope": scope,
+            "link": link.group(1) if link else None, "line": number,
+            "position": int(position),
+        }
+    return rows
+
+
+@pytest.mark.parametrize("name", sorted(_COUNTS))
+def test_stated_rule_count(name: str):
+    text = (ROOT / name).read_text(encoding="utf-8")
+    match = _COUNTS[name].search(text)
+    assert match, f"{name}: не найдено предложение со счётчиком правил"
+    stated = int(match.group(1))
+    assert stated == len(_registry()), (
+        f"{name}: заявлено правил {stated}, в реестре {len(_registry())} – поправьте счётчик"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(_TABLES))
+def test_docs_table_lists_every_rule(name: str):
+    rows = _parse_table(name)
+    missing = sorted(set(_by_id()) - set(rows))
+    unknown = sorted(set(rows) - set(_by_id()))
+    assert not missing, f"{name}: нет строки таблицы для правил {missing}"
+    assert not unknown, (
+        f"{name}: строки для несуществующих правил {unknown} – правило удалено или переименовано"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(_TABLES))
+def test_docs_table_matches_registry(name: str):
+    words = _TABLES[name]
+    problems = []
+    for rule_id, row in sorted(_parse_table(name).items()):
+        info = _by_id().get(rule_id)
+        if info is None:
+            continue  # reported by test_docs_table_lists_every_rule
+        expected = {
+            "severity": info["severity"],
+            "default": words["on"] if info["default"] else words["off"],
+            "scope": words[info["scope"]],
+            "tier": info["tier"],
+        }
+        for column, want in expected.items():
+            if row[column] != want:
+                problems.append(
+                    f"{name}:{row['line']} {rule_id}: {column} – в таблице {row[column]!r}, "
+                    f"в реестре {want!r}"
+                )
+    assert not problems, "таблица правил разошлась с реестром:\n" + "\n".join(problems)
+
+
+# --- editors/vscode/package.nls.* --------------------------------------------------------
+
+_GROUP_KEY = "config.groups."
+# The sentence stating the group defaults; the tail is parsed for "<count> ... <level>" pairs,
+# which covers both spellings ("15 правил error, 13 – warning" / "15 rules at error, 13 at
+# warning") without pinning the wording.
+_DEFAULTS = re.compile(r"(?:По умолчанию|Defaults?):\s*([^.]*)\.")
+_COUNTED = re.compile(rf"(\d+)[^\d]*?({_LEVELS})")
+_SINGLE = re.compile(rf"^({_LEVELS})$")
+
+_NLS = ["package.nls.ru.json", "package.nls.json"]
+
+
+def _parse_nls(name: str) -> dict[str, str]:
+    """Group id -> the "defaults" sentence tail of its description."""
+    data = json.loads((VSCODE / name).read_text(encoding="utf-8"))
+    tails = {}
+    for key, value in data.items():
+        if not key.startswith(_GROUP_KEY) or ".enum." in key:
+            continue
+        group = key[len(_GROUP_KEY):]
+        stated = _DEFAULTS.search(value)
+        assert stated, (
+            f"{name}: в описании группы {group!r} нет предложения об умолчаниях "
+            "(\"По умолчанию: ...\" / \"Defaults: ...\") – сторож не может его сверить"
+        )
+        tails[group] = stated.group(1).strip()
+    return tails
+
+
+@pytest.mark.parametrize("name", _NLS)
+def test_extension_describes_every_group(name: str):
+    described = set(_parse_nls(name))
+    actual = set(_levels_by_group())
+    assert described == actual, (
+        f"{name}: описаны группы {sorted(described)}, в реестре {sorted(actual)}"
+    )
+
+
+@pytest.mark.parametrize("name", _NLS)
+def test_extension_group_counters_match_registry(name: str):
+    problems = []
+    for group, tail in sorted(_parse_nls(name).items()):
+        actual = _levels_by_group().get(group)
+        if actual is None:
+            continue  # reported by test_extension_describes_every_group
+        counted = _COUNTED.findall(tail)
+        if counted:
+            stated = {level: int(number) for number, level in counted}
+            if stated != dict(actual):
+                problems.append(f"{group}: заявлено {stated}, в реестре {dict(actual)}")
+            continue
+        single = _SINGLE.match(tail)
+        assert single, f"{name}: умолчания группы {group!r} не разобраны: {tail!r}"
+        if set(actual) != {single.group(1)}:
+            problems.append(
+                f"{group}: заявлен единственный уровень {single.group(1)!r}, "
+                f"в реестре {dict(actual)}"
+            )
+    assert not problems, f"{name}: счётчики групп разошлись с реестром:\n" + "\n".join(problems)
+
+
+def _manifest() -> dict:
+    return json.loads((VSCODE / "package.json").read_text(encoding="utf-8"))
+
+
+def test_extension_settings_cover_every_group():
+    """Every rule group needs its own xbsl.groups.<group> setting, or it cannot be configured."""
+    package = _manifest()
+    sections = package["contributes"]["configuration"]  # split into UI sections
+    if isinstance(sections, dict):
+        sections = [sections]
+    prefix = "xbsl.groups."
+    declared = {
+        key[len(prefix):]
+        for section in sections
+        for key in section.get("properties", {})
+        if key.startswith(prefix)
+    }
+    assert declared == set(_levels_by_group()), (
+        f"настройки расширения: группы {sorted(declared)}, в реестре "
+        f"{sorted(_levels_by_group())} – добавьте или удалите xbsl.groups.<группа>"
+    )
+
+
+@pytest.mark.parametrize("name", ["CHANGELOG.ru.md", "CHANGELOG.md"])
+def test_extension_version_is_described_in_changelog(name: str):
+    """The published version needs its own section; 0.24.0 shipped without one and nobody saw it."""
+    version = _manifest()["version"]
+    text = (VSCODE / name).read_text(encoding="utf-8")
+    assert re.search(rf"^##\s+{re.escape(version)}\s*$", text, re.M), (
+        f"{name}: нет раздела '## {version}' – версия расширения поднята, "
+        "а история изменений о ней молчит"
+    )
+
+
+# --- editors/vscode/src/ruleDocs.ts ------------------------------------------------------
+
+# The predicates are a closed set of two shapes; anything else must break the guard loudly
+# rather than be counted as "no coverage".
+_MATCH_BODY = re.compile(r"match:\s*\(r\)\s*=>(.*?),\s*\n?\s*page:", re.S)
+_EXACT = re.compile(r'r\s*===\s*"([^"]+)"')
+_PREFIX = re.compile(r'r\.startsWith\("([^"]+)"\)')
+_DOCS_ORIGIN = "https://1cmycloud.com/docs/help/"
+
+
+@lru_cache(maxsize=1)
+def _rule_docs() -> tuple[frozenset[str], frozenset[str]]:
+    """(exact rule ids, group prefixes) linked to a documentation page."""
+    text = (VSCODE / "src" / "ruleDocs.ts").read_text(encoding="utf-8")
+    bodies = _MATCH_BODY.findall(text)
+    assert bodies, "ruleDocs.ts: не найдено ни одного предиката match – формат файла изменился"
+    exact, prefixes, leftovers = set(), set(), []
+    for body in bodies:
+        exact.update(_EXACT.findall(body))
+        prefixes.update(_PREFIX.findall(body))
+        rest = _PREFIX.sub("", _EXACT.sub("", body)).replace("||", "").strip()
+        if rest:
+            leftovers.append(rest)
+    assert not leftovers, (
+        "ruleDocs.ts: предикаты неизвестной формы " + repr(leftovers) + " – сторож умеет "
+        'только r === "id" и r.startsWith("группа/"); научите его или верните прежнюю форму'
+    )
+    return frozenset(exact), frozenset(prefixes)
+
+
+def _has_doc_link(rule_id: str) -> bool:
+    exact, prefixes = _rule_docs()
+    return rule_id in exact or any(rule_id.startswith(p) for p in prefixes)
+
+
+def test_rule_docs_entries_are_known_rules():
+    exact, prefixes = _rule_docs()
+    unknown = sorted(rule_id for rule_id in exact if rule_id not in _by_id())
+    assert not unknown, (
+        f"ruleDocs.ts: ссылки для несуществующих правил {unknown} – правило переименовано "
+        "или удалено, ссылка потеряна молча"
+    )
+    groups = set(_levels_by_group())
+    stray = sorted(p for p in prefixes if p.rstrip("/") not in groups)
+    assert not stray, f"ruleDocs.ts: префиксы несуществующих групп {stray}"
+
+
+@pytest.mark.parametrize("name", sorted(_TABLES))
+def test_docs_table_links_agree_with_extension(name: str):
+    """The Docs column of the table and ruleDocs.ts are the same statement in two places.
+
+    A rule with no documentation page is legitimate (typography, whitespace, existence checks
+    over the catalog); what must not happen is the two sources disagreeing on which rules
+    those are. The failure message lists the current no-link set, so adding a rule forces a
+    decision instead of a silent omission.
+    """
+    rows = _parse_table(name)
+    problems = []
+    for rule_id, row in sorted(rows.items()):
+        if rule_id not in _by_id():
+            continue
+        in_table = row["link"] is not None
+        in_extension = _has_doc_link(rule_id)
+        if in_table != in_extension:
+            problems.append(
+                f"{name}:{row['line']} {rule_id}: в таблице "
+                f"{'ссылка' if in_table else 'прочерк'}, в ruleDocs.ts "
+                f"{'запись есть' if in_extension else 'записи нет'}"
+            )
+        if in_table and not row["link"].startswith(_DOCS_ORIGIN):
+            problems.append(f"{name}:{row['line']} {rule_id}: ссылка не на {_DOCS_ORIGIN}")
+    without = sorted(r["id"] for r in _registry() if not _has_doc_link(r["id"]))
+    assert not problems, (
+        "столбец Документация разошёлся с ruleDocs.ts:\n" + "\n".join(problems)
+        + f"\n\nсейчас без ссылки на доки {len(without)} правил: {', '.join(without)}"
+    )
+
+
+@pytest.mark.parametrize("name", sorted(_TABLES))
+def test_table_numbering_is_continuous(name):
+    """The leading column numbers the rules 1..N straight through the tier tables.
+
+    A hand-written number is the kind of thing that quietly rots: a rule inserted in the
+    middle shifts everything below it. The guard fails with the first position that broke.
+    """
+    rows = _parse_table(name)
+    positions = sorted(row["position"] for row in rows.values())
+    expected = list(range(1, len(rows) + 1))
+    assert positions == expected, (
+        f"{name}: нумерация правил разошлась – ожидались номера 1..{len(rows)}, "
+        f"первое расхождение на {next(iter(set(positions) ^ set(expected)), '?')}"
+    )
+
+
+def test_table_numbering_matches_across_locales():
+    """A rule keeps the same number in both locales - so a number can be quoted as an id."""
+    ru = {rule: row["position"] for rule, row in _parse_table("RULES.ru.md").items()}
+    en = {rule: row["position"] for rule, row in _parse_table("RULES.md").items()}
+    diverged = {rule: (en[rule], ru[rule]) for rule in en if ru.get(rule) != en[rule]}
+    assert not diverged, f"номера правил разошлись между локалями: {diverged}"
+
+
+@pytest.mark.needs_data
+def test_extension_kind_table_matches_the_platform_dictionary():
+    """The English spelling of every element kind in the metadata tree comes from the platform.
+
+    The tree recognizes an English-spelled project by this table (`ElementKind: Catalog`), so a
+    wrong or stale spelling there means an empty section rather than a visible error.
+    """
+    from xbsl import terms
+
+    text = (ROOT / "editors" / "vscode" / "src" / "metadataTree.ts").read_text(encoding="utf-8")
+    rows = re.findall(r'\["([А-ЯЁ][^"]*)", "[^"]+", "[^"]+", "([A-Za-z]+)"\]', text)
+    assert rows, "таблица видов не разобралась - изменился её формат?"
+    wrong = {
+        kind: (english, terms.english(kind, "types") or terms.common_english(kind))
+        for kind, english in rows
+        if (terms.english(kind, "types") or terms.common_english(kind)) != english
+    }
+    assert not wrong, f"английские написания видов разошлись со словарём платформы: {wrong}"

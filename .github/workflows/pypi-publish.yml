@@ -1,0 +1,88 @@
+# Публикация пакета на PyPI по тегу вида v0.8.1 через Trusted Publishing (OIDC):
+# PyPI помечает ссылки проекта проверенными и прикладывает аттестации происхождения.
+# Требует одноразовой настройки на стороне PyPI: Manage project -> Publishing ->
+# Add GitHub publisher (owner, repo, workflow pypi-publish.yml, environment pypi).
+# Теги расширения vscode-v* этот workflow не трогает.
+name: pypi-publish
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -e ".[dev]"
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  # Нативные колёса (mypyc-скомпилированные лексер и парсер) под три платформы.
+  # Пользователю компилятор не нужен: pip выбирает готовое колесо своей платформы,
+  # для остальных остаётся универсальное py3-none-any из job build (чистый Python).
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pypa/cibuildwheel@v4.1
+        env:
+          XBSL_MYPYC: "1"
+          # Linux собирается в docker-контейнере - env туда пробрасывает CIBW_ENVIRONMENT.
+          CIBW_ENVIRONMENT: 'XBSL_MYPYC="1"'
+          CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
+          CIBW_SKIP: "*-musllinux_*"
+          CIBW_ARCHS_WINDOWS: "AMD64"
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          # PEP 517-изоляция прячет установленный mypy от сборки - собираем без неё.
+          CIBW_BUILD_FRONTEND: "build; args: --no-isolation"
+          CIBW_BEFORE_BUILD: "pip install mypy setuptools wheel"
+          # Дым-тест без данных Элемента: модули импортируются и они нативные
+          # (полный разбор требует language.json - его в тестовом окружении нет).
+          CIBW_TEST_COMMAND: >-
+            python -c "import xbsl.lexer, xbsl.parser;
+            assert not xbsl.lexer.__file__.endswith('.py'), xbsl.lexer.__file__;
+            assert not xbsl.parser.__file__.endswith('.py'), xbsl.parser.__file__"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  publish:
+    needs: [build, wheels]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist/
+      - uses: pypa/gh-action-pypi-publish@release/v1

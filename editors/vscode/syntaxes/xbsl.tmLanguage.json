@@ -1,0 +1,101 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "XBSL",
+  "scopeName": "source.xbsl",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#decorators" },
+    { "include": "#keywords-control" },
+    { "include": "#storage" },
+    { "include": "#modifiers" },
+    { "include": "#operator-words" },
+    { "include": "#constants" },
+    { "include": "#language-variables" },
+    { "include": "#generic-type" },
+    { "include": "#operators" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.documentation.xbsl",
+          "begin": "/\\*\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.block.xbsl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.double-slash.xbsl",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.xbsl",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xbsl",
+          "match": "\\\\."
+        },
+        {
+          "name": "meta.interpolation.braced.xbsl",
+          "match": "(?<!\\\\)[%$]\\{[^}]*\\}",
+          "captures": {
+            "0": { "name": "variable.other.interpolation.xbsl" }
+          }
+        },
+        {
+          "name": "variable.other.interpolation.xbsl",
+          "match": "(?<!\\\\)[%$][A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*"
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.xbsl",
+      "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
+    },
+    "decorators": {
+      "name": "storage.type.annotation.xbsl",
+      "match": "@[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*"
+    },
+    "keywords-control": {
+      "name": "keyword.control.xbsl",
+      "match": "(?i)\\b(если|if|иначе|else|выбор|case|когда|when|умолчание|default|для|for|по|to|из|in|вниз|down|шаг|step|пока|while|попытка|try|поймать|catch|вконце|finally|выбросить|throw|возврат|return|прервать|break|продолжить|continue|импорт|import|исп|use|область|scope)\\b"
+    },
+    "storage": {
+      "name": "storage.type.xbsl",
+      "match": "(?i)\\b(метод|method|пер|var|знч|val|обз|req|структура|structure|перечисление|enum|исключение|exception|конст|const|конструктор|constructor|запрос|query|тип|type)\\b"
+    },
+    "modifiers": {
+      "name": "storage.modifier.xbsl",
+      "match": "(?i)\\b(статический|static|абстрактный|abstract|глобальный|global|никогда|never|неизвестно|unknown)\\b"
+    },
+    "operator-words": {
+      "name": "keyword.operator.word.xbsl",
+      "match": "(?i)\\b(и|and|или|or|не|not|это|is|как|as|новый|new)\\b"
+    },
+    "constants": {
+      "name": "constant.language.xbsl",
+      "match": "(?i)\\b(истина|true|ложь|false|неопределено|ничто|undefined)\\b"
+    },
+    "language-variables": {
+      "name": "variable.language.xbsl",
+      "match": "(?i)\\b(этот|this)\\b"
+    },
+    "generic-type": {
+      "name": "support.class.xbsl",
+      "match": "\\b[A-ZА-ЯЁ][A-Za-zА-Яа-яЁё0-9_]*(?=<)"
+    },
+    "operators": {
+      "name": "keyword.operator.xbsl",
+      "match": "!=|\\*\\*|\\*=|\\+=|-=|->|/=|::|<=|==|>=|\\?\\.|\\?\\?|[-+*/%<>=!&|?]"
+    }
+  }
+}

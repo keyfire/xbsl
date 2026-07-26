@@ -1,0 +1,67 @@
+# Публикация сайта документации (blume.config.ts) на GitHub Pages. Источник Pages в
+# настройках репозитория должен быть "GitHub Actions" (Settings -> Pages -> Source).
+# Сборка проверяется тем же `npx blume build`, что и локально; вывод — в dist/.
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "blume.config.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/docs.yml"
+      # Зеркальные страницы сайта: расширение — из README, changelog — из CHANGELOG
+      # (см. scripts/sync-docs.mjs).
+      - "editors/vscode/README.md"
+      - "editors/vscode/README.ru.md"
+      - "CHANGELOG.md"
+      - "CHANGELOG.ru.md"
+      - "scripts/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Одновременно публикуется одна версия; новый push не отменяет уже идущий деплой.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история нужна для дат "последнее изменение" (lastModified в blume.config.ts).
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - name: Install
+        run: npm ci
+      # Синхронизируем зеркальные страницы (README расширения -> docs/vscode*) перед
+      # сборкой, чтобы задеплоенный сайт всегда совпадал с актуальным README.
+      - name: Sync mirrored docs
+        run: npm run sync:docs
+      - name: Build
+        run: npx blume build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
