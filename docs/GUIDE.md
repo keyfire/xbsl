@@ -251,6 +251,17 @@ names them by their English equivalents (`Catalog`, `Attributes`, `OnServer`,
 `xbsl new-object --help` lists the kinds a project can hold, spelled the way the command wants
 them.
 
+The sources themselves may be written in either language, and the scaffolding reads both: an
+object whose file spells its kind and its sections in English - `ElementKind: Catalog`,
+`Attributes:` - is found, described and edited exactly like one spelled the other way (see
+`demo-en/`). What the tool writes follows the file it writes into: a new attribute of an English
+object gets `Name:` and `Type:`, a missing section is created as `Attributes:`, a subsystem and a
+library entry are spelled like the project around them. The pairs come from the platform data -
+the metamodel's own English name of every property - so a name that the platform spells
+differently depending on the class (the enumeration values section is `Items` there and
+`Elements` elsewhere) keeps the original spelling in both reading and writing instead of being
+guessed at. Values (types, access methods) are yours and are written as given.
+
 Forms are generated with real content: input fields per attribute (including the standard
 `Name` / `Number` / `Date` fields and hierarchy support), `DynamicList` columns, `TabularParts`
 tables, a report form with parameters; the form is registered in the `Interface` section of its

@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, terms
+from xbsl import dataset, engine, fixer, metamodel, terms
 
 PROJECT_FILE = "Проект.yaml"
 SUBSYSTEM_FILE = "Подсистема.yaml"
@@ -39,13 +39,122 @@ _IDENTIFIER = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$"
 _KIND_RE = re.compile(r"^ВидЭлемента:\s*(\S+)", re.M)
 # The same key in the English spelling the platform declares for it.
 _KIND_EN_RE = re.compile(r"^ElementKind:\s*(\S+)", re.M)
-_NAME_RE = re.compile(r"^Имя:\s*(\S+)", re.M)
-_VENDOR_RE = re.compile(r"^Поставщик:\s*(\S+)", re.M)
 _LINE_INDENT = re.compile(r"^[ \t]*")
 
 
 class ScaffoldError(RuntimeError):
     """Scaffolding operation error; the text is shown to the user as is."""
+
+
+# --- bilingual yaml keys ----------------------------------------------------------------
+#
+# Sources may be written in either language: `ElementKind: Catalog` is the very same object as
+# `ВидЭлемента: Справочник`, and the section `Attributes` is `Реквизиты` (demo-en/ is such a
+# project, and it compiles). So everything below READS both spellings and WRITES the one the
+# file around it uses, while the tables of this module stay keyed by the Russian names.
+
+
+@lru_cache(maxsize=None)
+def key_forms(name: str) -> tuple[str, ...]:
+    """Both spellings of a yaml key, Russian first; just the Russian one when unpaired.
+
+    The English spelling comes from the metamodel, where the platform declares it, and from
+    nowhere else: `Реквизиты` is `Attributes` there, the compact term dictionary has no English
+    for it at all, and a hand-made table would be a guess. An ambiguous name (the metamodel
+    classes disagree) yields the Russian spelling alone - a false negative beats inventing a key.
+    Without the data every key degrades to Russian, exactly as the tool worked before.
+    """
+    english = metamodel.english_name(name)
+    return (name, english) if english and english != name else (name,)
+
+
+@lru_cache(maxsize=None)
+def field_forms(name: str) -> tuple[str, ...]:
+    """Both spellings of a standard attribute name (`Наименование` is `Name`, `Дата` is `Date`).
+
+    A standard attribute is not a yaml key but a member of the object, and members are named
+    in the compiler dictionary rather than in the metamodel classes - hence the second source.
+    """
+    english = metamodel.english_name(name) or terms.common_english(name)
+    return (name, english) if english and english != name else (name,)
+
+
+@lru_cache(maxsize=None)
+def _key_re(name: str) -> re.Pattern:
+    """`^Ключ: значение` in either spelling of the key."""
+    return re.compile(rf"^(?:{'|'.join(re.escape(f) for f in key_forms(name))}):\s*(\S+)", re.M)
+
+
+dataset.register_reset(key_forms.cache_clear)
+dataset.register_reset(field_forms.cache_clear)
+dataset.register_reset(_key_re.cache_clear)
+
+# Keys of section items that the scaffolding reads (see section_items). Listed one by one, and
+# only where the platform itself names the pair: a wholesale reverse map would have to guess -
+# `Name` is both `Имя` and `Наименование` depending on the class.
+_ITEM_KEYS = ("Ид", "Имя", "Тип", "Шаблон", "ПолеРодителя", "Поставщик", "Версия")
+
+
+@lru_cache(maxsize=1)
+def _russian_item_keys() -> dict[str, str]:
+    """{English spelling of an item key: the Russian one} - to read items under one set of keys."""
+    return {forms[-1]: forms[0] for name in _ITEM_KEYS if len(forms := key_forms(name)) > 1}
+
+
+dataset.register_reset(_russian_item_keys.cache_clear)
+
+
+def element_kind(text: str) -> str | None:
+    """The element kind of an object yaml as the metamodel names it, or None - not an object.
+
+    Both the key and the value are bilingual, and the answer is always the Russian spelling:
+    every table of this module (KIND_SECTIONS, ACCESS_KIND_RIGHTS, KIND_SPECS) is keyed by it.
+    """
+    m = _key_re("ВидЭлемента").search(text)
+    return metamodel.canonical_kind(m.group(1)) if m else None
+
+
+def element_name(text: str, default: str = "") -> str:
+    """The value of the `Имя`/`Name` key of an element yaml, or the default."""
+    m = _key_re("Имя").search(text)
+    return m.group(1) if m else default
+
+
+def yaml_language(text: str, directory: Path | None = None) -> str:
+    """The language a yaml file spells its KEYS in: "ru" or "en".
+
+    Decided by the file itself - it declares its element kind in one spelling or the other -
+    and for a file that declares no kind (a project descriptor, a subsystem) by the project
+    around it. Never by a setting: what the tool writes must look like the files next to it.
+    """
+    if _KIND_EN_RE.search(text):
+        return "en"
+    if _KIND_RE.search(text):
+        return "ru"
+    return project_language(directory) if directory is not None else "ru"
+
+
+def spelled_key(name: str, lang: str) -> str:
+    """A yaml key in the given language (the Russian one when the platform declares no pair)."""
+    return key_forms(name)[-1] if lang == "en" else name
+
+
+_LINE_KEY_RE = re.compile(rf"^([ \t]*(?:-[ \t]*)?)([{_WORD}]+):(.*)$")
+
+
+def spelled_lines(lines: list[str], lang: str) -> list[str]:
+    """Template lines with their KEYS in the given language; values are left as they are.
+
+    A value is the author's data (a name, a type, a version) and the platform accepts a Russian
+    one inside an English project - the keys are what has to match the file.
+    """
+    if lang != "en":
+        return list(lines)
+    out = []
+    for line in lines:
+        m = _LINE_KEY_RE.match(line)
+        out.append(f"{m.group(1)}{spelled_key(m.group(2), lang)}:{m.group(3)}" if m else line)
+    return out
 
 
 def _check_identifier(name: str, что: str) -> str:
@@ -96,9 +205,16 @@ def _section_bounds(text: str, section: str, top_level: bool = False) -> tuple[i
     same name (`Реквизиты` inside a tabular part) would be taken for the object section.
     Calls on a block slice (tabular part attributes, Разрешения inside КонтрольДоступа)
     search at any indent.
+
+    The section is looked up under both spellings of its name: `Attributes:` is the same
+    section as `Реквизиты:` and callers name it the Russian way.
     """
     indent_pattern = "()" if top_level else "([ \t]*)"
-    header = re.search(rf"^{indent_pattern}{re.escape(section)}:[ \t]*\r?$", text, re.M)
+    header = None
+    for spelling in key_forms(section):
+        header = re.search(rf"^{indent_pattern}{re.escape(spelling)}:[ \t]*\r?$", text, re.M)
+        if header is not None:
+            break
     if header is None:
         return None
     header_indent = len(header.group(1))
@@ -120,7 +236,7 @@ def _section_bounds(text: str, section: str, top_level: bool = False) -> tuple[i
 
 
 def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "\n",
-                     top_level: bool = False) -> TextEdit:
+                     top_level: bool = False, lang: str = "ru") -> TextEdit:
     """Pinpoint insertion of a new item (a set of field lines) at the end of a section.
 
     If the section is missing, it is appended at the end of the file. top_level=True -
@@ -128,6 +244,9 @@ def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "
     tabular part section). A port of insertItemEdit from the VS Code extension
     (metadataCore.ts) with one difference: the newline is passed as a parameter so the
     edit does not mix styles in CRLF files.
+
+    The section is named the Russian way by the caller and found under either spelling;
+    lang is the spelling to CREATE it in when it is not there yet.
     """
 
     def body(item: str, fld: str) -> str:
@@ -136,7 +255,7 @@ def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "
     bounds = _section_bounds(text, section, top_level)
     if bounds is None:
         tail = "" if (not text or text.endswith("\n")) else nl
-        new = f"{tail}{section}:{nl}{body('    ', '        ')}{nl}"
+        new = f"{tail}{spelled_key(section, lang)}:{nl}{body('    ', '        ')}{nl}"
         return TextEdit(len(text), len(text), new)
 
     header_indent, header_line_end, body_end = bounds
@@ -146,13 +265,14 @@ def insert_item_edit(text: str, section: str, item_lines: list[str], nl: str = "
 
 
 def insert_nested_item_edit(
-    text: str, block_offset: int, section: str, item_lines: list[str], nl: str = "\n"
+    text: str, block_offset: int, section: str, item_lines: list[str], nl: str = "\n",
+    lang: str = "ru",
 ) -> TextEdit:
     """Insert an item into a nested section of an item block (e.g. tabular part Реквизиты).
 
     block_offset is the offset of the block's first key (see find_section_item_offset).
     The block ends before the first non-blank line indented less than the block's fields.
-    A port of insertTabularAttrEdit.
+    A port of insertTabularAttrEdit. lang - see insert_item_edit.
     """
     line_start = text.rfind("\n", 0, block_offset) + 1
     field_indent = block_offset - line_start
@@ -167,10 +287,10 @@ def insert_nested_item_edit(
             break
         pos = le
     block = text[block_offset:block_end]
-    has_section = re.search(rf"^[ \t]{{{field_indent}}}{re.escape(section)}:[ \t]*\r?$", block, re.M)
-    if has_section:
-        sub = insert_item_edit(block, section, item_lines, nl)
-        return TextEdit(block_offset + sub.start, block_offset + sub.end, sub.new_text)
+    for spelling in key_forms(section):
+        if re.search(rf"^[ \t]{{{field_indent}}}{re.escape(spelling)}:[ \t]*\r?$", block, re.M):
+            sub = insert_item_edit(block, spelling, item_lines, nl)
+            return TextEdit(block_offset + sub.start, block_offset + sub.end, sub.new_text)
     # No nested section - append it at the end of the block content.
     head = " " * field_indent
     item = " " * (field_indent + 4)
@@ -186,7 +306,7 @@ def insert_nested_item_edit(
             break
         p = e + 1
     body = nl.join(f"{fld}{line}" for line in item_lines)
-    new = f"{nl}{head}{section}:{nl}{item}-{nl}{body}"
+    new = f"{nl}{head}{spelled_key(section, lang)}:{nl}{item}-{nl}{body}"
     return TextEdit(block_offset + content_end, block_offset + content_end, new)
 
 
@@ -197,7 +317,12 @@ def section_items(text: str, section: str, top_level: bool = False) -> list[dict
     sections (tabular part Реквизиты, template Методы) do not make it into the dict,
     their fields are indented deeper than the item fields. top_level=True - only the
     object-level section, unindented (see _section_bounds).
+
+    The keys the scaffolding reads come back under their Russian spelling whatever the file
+    writes (`Name: Steps` reads as `Имя`), so callers have one set of keys to know; the rest
+    of the keys are returned as written.
     """
+    russian = _russian_item_keys()
     bounds = _section_bounds(text, section, top_level)
     if bounds is None:
         return []
@@ -223,7 +348,8 @@ def section_items(text: str, section: str, top_level: bool = False) -> list[dict
             rest = stripped[1:].strip()
             if rest and ":" in rest:  # inline form "- Имя: X"
                 k, _, v = rest.partition(":")
-                current[k.strip()] = v.strip()
+                key = k.strip()
+                current[russian.get(key, key)] = v.strip()
             continue
         if current is None:
             continue
@@ -233,7 +359,8 @@ def section_items(text: str, section: str, top_level: bool = False) -> list[dict
             k, _, v = stripped.partition(":")
             v = v.strip()
             if v:
-                current[k.strip()] = v
+                key = k.strip()
+                current[russian.get(key, key)] = v
     if current is not None:
         items.append(current)
     return items
@@ -244,8 +371,9 @@ def find_section_item_offset(text: str, section: str, name: str,
     """Offset of the first key of the section item with Имя == name (for nested inserts).
 
     Searched in the object-level section (unindented): callers address ТабличныеЧасти
-    and ШаблоныUrl.
+    and ШаблоныUrl. The name key is read in either spelling (`Имя:` or `Name:`).
     """
+    name_keys = tuple(f"{form}:" for form in key_forms("Имя"))
     bounds = _section_bounds(text, section, top_level)
     if bounds is None:
         return None
@@ -267,8 +395,9 @@ def find_section_item_offset(text: str, section: str, name: str,
             current_named = False
         elif stripped and current_start is None and indent > item_indent:
             current_start = header_line_end + pos + indent
-        if stripped.startswith("Имя:") and current_start is not None and not current_named:
-            value = stripped[len("Имя:"):].strip()
+        key = next((k for k in name_keys if stripped.startswith(k)), None)
+        if key is not None and current_start is not None and not current_named:
+            value = stripped[len(key):].strip()
             if value == name:
                 return current_start
             current_named = True
@@ -278,7 +407,11 @@ def find_section_item_offset(text: str, section: str, name: str,
 
 def top_level_key_span(text: str, key: str) -> tuple[int, int] | None:
     """(start of the key line, end of body) of a top-level key with nested content."""
-    m = re.search(rf"^{re.escape(key)}:[ \t]*\r?$", text, re.M)
+    m = None
+    for spelling in key_forms(key):
+        m = re.search(rf"^{re.escape(spelling)}:[ \t]*\r?$", text, re.M)
+        if m is not None:
+            break
     if m is None:
         return None
     bounds = _section_bounds(text, key)
@@ -325,7 +458,13 @@ def project_language(directory: Path) -> str:
 
 
 def _spelled(name: str, lang: str, section: str = "") -> str:
-    """A metadata name in the project's language, falling back to the Russian one."""
+    """A metadata VALUE in the project's language, falling back to the Russian one.
+
+    Values (a kind, an enumeration value) live in the term dictionary; the KEYS around them
+    are spelled by spelled_key, which asks the metamodel - the two dictionaries name different
+    things and disagree where they overlap (`Поставщик` is the property `Vendor`, but the
+    compiler's word for the same root is `Provider`).
+    """
     if lang != "en":
         return name
     english = None
@@ -337,10 +476,10 @@ def _spelled(name: str, lang: str, section: str = "") -> str:
 def new_object_yaml(
     kind: str, uid: str, name: str, scope: str, extra_lines: list[str], lang: str = "ru",
 ) -> str:
-    keys = [_spelled(k, lang, "properties") for k in _HEADER_KEYS]
+    keys = [spelled_key(k, lang) for k in _HEADER_KEYS]
     values = [_spelled(kind, lang, "types"), uid, name, _spelled(scope, lang, "enums")]
     lines = [f"{k}: {v}" for k, v in zip(keys, values)]
-    return "\n".join(lines + list(extra_lines)) + "\n"
+    return "\n".join(lines + spelled_lines(list(extra_lines), lang)) + "\n"
 
 
 def _expand_extra(lines: tuple[str, ...], name: str) -> list[str]:
@@ -710,8 +849,8 @@ def find_projects(root: Path) -> list[dict]:
             continue
         text = _read(project_yaml)
         project_dir = project_yaml.parent
-        vendor = (_VENDOR_RE.search(text) or [None, project_dir.parent.name])[1]
-        name = (_NAME_RE.search(text) or [None, project_dir.name])[1]
+        vendor = _vendor_of(text, project_dir.parent.name)
+        name = element_name(text, project_dir.name)
         subsystems = sorted(
             p.parent.name for p in project_dir.rglob(SUBSYSTEM_FILE)
             if not any(part.startswith(".") for part in p.relative_to(project_dir).parts)
@@ -723,16 +862,21 @@ def find_projects(root: Path) -> list[dict]:
     return out
 
 
+def _vendor_of(text: str, default: str) -> str:
+    """The `Поставщик`/`Vendor` of a project descriptor, or the default."""
+    m = _key_re("Поставщик").search(text)
+    return m.group(1) if m else default
+
+
 def _iter_objects(root: Path):
     for yaml_path in engine.find_sources(root, "*.yaml"):
         if yaml_path.name in (PROJECT_FILE, SUBSYSTEM_FILE):
             continue
         text = _read(yaml_path)
-        kind_m = _KIND_RE.search(text)
-        if kind_m is None:
+        kind = element_kind(text)
+        if kind is None:
             continue
-        name = (_NAME_RE.search(text) or [None, yaml_path.stem])[1]
-        yield yaml_path, kind_m.group(1), name, text
+        yield yaml_path, kind, element_name(text, yaml_path.stem), text
 
 
 def _namespace_of(yaml_path: Path, root: Path) -> tuple[str | None, str]:
@@ -749,8 +893,8 @@ def _namespace_of(yaml_path: Path, root: Path) -> tuple[str | None, str]:
     project_yaml = project_dir / PROJECT_FILE
     if project_yaml.is_file():
         text = _read(project_yaml)
-        vendor = (_VENDOR_RE.search(text) or [None, project_dir.parent.name])[1]
-        project = (_NAME_RE.search(text) or [None, project_dir.name])[1]
+        vendor = _vendor_of(text, project_dir.parent.name)
+        project = element_name(text, project_dir.name)
     parts = [p for p in (vendor, project, subsystem) if p]
     return subsystem, "::".join(parts)
 
@@ -803,9 +947,7 @@ _REGISTER_FIELD_SECTIONS = ("Измерения", "Ресурсы", "Рекви�
 # Обороты - changes only. A balance register record has a ВидЗаписи (Приход/Расход) - a
 # turnover one does not ("Свойства элемента проекта РегистрНакопления" documentation and
 # the design example).
-_REGISTER_KIND_RE = re.compile(r"^ВидРегистра:\s*(\S+)", re.M)
 BALANCE_REGISTER = "Остатки"
-_PERIODICITY_RE = re.compile(r"^Периодичность:\s*(\S+)", re.M)
 
 # Permission computation handlers: level 1 - for the project element as a whole, level 2 -
 # for individual objects (RLS). Written in the object module <Имя>.xbsl.
@@ -828,13 +970,12 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         if not yaml_path.is_file():
             raise ScaffoldError(f"Файл не найден: {yaml_path}")
         text = _read(yaml_path)
-        kind_m = _KIND_RE.search(text)
-        if kind_m is None:
+        kind = element_kind(text)
+        if kind is None:
             raise ScaffoldError(f"В {yaml_path} нет ВидЭлемента – это не объект конфигурации")
         subsystem, namespace = _namespace_of(yaml_path, root)
         hit = ObjectHit(
-            kind_m.group(1), (_NAME_RE.search(text) or [None, yaml_path.stem])[1],
-            yaml_path, subsystem, namespace, text,
+            kind, element_name(text, yaml_path.stem), yaml_path, subsystem, namespace, text,
         )
     else:
         hit = find_object(root, name or "")
@@ -852,7 +993,11 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
     ]
     declared = {f["name"] for f in fields}
     standard_source = register.get("standard_fields") or _STANDARD_FIELDS.get(hit.kind, [])
-    standard = [f for f in standard_source if f["name"] not in declared]
+    # A standard attribute the object declares itself is not added a second time - in either
+    # spelling: an English catalog declares `Name`, and that IS `Наименование`.
+    standard = [
+        f for f in standard_source if not declared.intersection(field_forms(f["name"]))
+    ]
     fields = standard + fields
 
     tabulars = [
@@ -866,7 +1011,11 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         {"name": h.get("Имя", ""), "field": h.get("ПолеРодителя", "")}
         for h in section_items(text, "ДополнительныеИерархии", top_level=True)
     ]
-    is_hierarchical = bool(re.search(r"^Иерархический:\s*Истина", text, re.M))
+    # The value is bilingual as well: `Иерархический: Истина` is `Hierarchical: True`.
+    hierarchical = _key_re("Иерархический").search(text)
+    is_hierarchical = bool(
+        hierarchical and _enum_value(hierarchical.group(1)) == "Истина"
+    )
 
     stem = hit.path.stem
     if hit.kind == "Отчет":
@@ -912,6 +1061,18 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
     }
 
 
+def _enum_value(value: str) -> str:
+    """An enumeration value as the platform names it in Russian (`Turnovers` -> `Обороты`).
+
+    A property of a bilingual project carries a bilingual value; the tool compares against the
+    Russian names, so an English one is translated back by the term pairs - and an unknown word
+    is returned as it stands rather than guessed at.
+    """
+    if not value.isascii():
+        return value
+    return terms.russian(value, "enums") or terms.common_russian(value) or value
+
+
 def _register_info(kind: str, text: str) -> dict:
     """{register_kind, needs_record_type, standard_fields} of a register; empty for other kinds.
 
@@ -921,7 +1082,8 @@ def _register_info(kind: str, text: str) -> dict:
     if not kind.startswith("Регистр"):
         return {}
     if kind == "РегистрНакопления":
-        register_kind = (_REGISTER_KIND_RE.search(text) or [None, BALANCE_REGISTER])[1]
+        found = _key_re("ВидРегистра").search(text)
+        register_kind = _enum_value(found.group(1)) if found else BALANCE_REGISTER
         balance = register_kind == BALANCE_REGISTER
         standard = [{"name": "Период", "type": "ДатаВремя"}, {"name": "Регистратор", "type": ""}]
         if balance:
@@ -931,7 +1093,8 @@ def _register_info(kind: str, text: str) -> dict:
             "needs_record_type": balance,
             "standard_fields": standard,
         }
-    periodicity = (_PERIODICITY_RE.search(text) or [None, "Непериодический"])[1]
+    found = _key_re("Периодичность").search(text)
+    periodicity = _enum_value(found.group(1)) if found else "Непериодический"
     return {
         "register_kind": None,  # an information register has no kind - it has periodicity
         "periodicity": periodicity,
@@ -1304,8 +1467,10 @@ def op_add_field(
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
     text, nl = _load_for_edit(yaml_path, reader)
-    kind_m = _KIND_RE.search(text)
-    kind = kind_m.group(1) if kind_m else "?"
+    kind = element_kind(text) or "?"
+    # The item is written in the spelling of the file it goes into: a Russian island inside
+    # an English object compiles, but the next reader has to know both to find anything.
+    lang = yaml_language(text, yaml_path.parent)
 
     if tabular:
         if field_kind != "реквизит":
@@ -1313,8 +1478,10 @@ def op_add_field(
         offset = find_section_item_offset(text, "ТабличныеЧасти", tabular)
         if offset is None:
             raise ScaffoldError(f"Табличная часть '{tabular}' не найдена в {yaml_path.name}")
-        lines = [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"]
-        edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl)
+        lines = spelled_lines(
+            [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"], lang
+        )
+        edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl, lang)
         new_text = apply_edit(text, edit)
         cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
         return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
@@ -1344,11 +1511,11 @@ def op_add_field(
     if name in existing:
         raise ScaffoldError(f"'{name}' уже есть в секции {spec['section']} файла {yaml_path.name}")
     template = _KIND_SECTION_LINES.get((kind, field_kind), spec["lines"])
-    lines = [
+    lines = spelled_lines([
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=type_)
         for line in template
-    ]
-    edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True)
+    ], lang)
+    edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
     result = ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
@@ -1389,7 +1556,8 @@ def _add_mapping_entry(
         new_text = text[:body_end] + f"{nl}    {key}: {entry_value}" + text[body_end:]
     else:
         tail = "" if (not text or text.endswith("\n")) else nl
-        new_text = text + f"{tail}{section}:{nl}    {key}: {entry_value}{nl}"
+        header = spelled_key(section, yaml_language(text, yaml_path.parent))
+        new_text = text + f"{tail}{header}:{nl}    {key}: {entry_value}{nl}"
     cursor = _cursor_at(new_text, new_text.index(f"{key}: {entry_value}"))
     return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
 
@@ -1428,6 +1596,7 @@ def op_add_subsystem(
     yaml_path = parent_dir / name / SUBSYSTEM_FILE
     if yaml_path.exists():
         raise ScaffoldError(f"Файл уже существует: {yaml_path}")
+    lang = project_language(parent_dir)
     lines: list[str] = []
     if uses:
         lines.append("Использование:")
@@ -1435,10 +1604,11 @@ def op_add_subsystem(
     # The Интерфейс block is always written: the platform default is Истина, so disabling
     # the auto-interface exists only as an explicit ВключатьВАвтоИнтерфейс: Ложь entry.
     lines.append("Интерфейс:")
-    lines.append(f"    ВключатьВАвтоИнтерфейс: {'Истина' if auto_interface else 'Ложь'}")
+    flag = "Истина" if auto_interface else "Ложь"
+    lines.append(f"    ВключатьВАвтоИнтерфейс: {_spelled(flag, lang, 'enums')}")
     if representation:
         lines.append(f"    Представление: {representation}")
-    content = "\n".join(lines) + "\n"
+    content = "\n".join(spelled_lines(lines, lang)) + "\n"
     return ScaffoldResult([FileChange(yaml_path, content, created=True)])
 
 
@@ -1561,6 +1731,8 @@ def op_add_dependency(
         )
     path = Path(project_yaml) if project_yaml else _find_project_yaml(Path(root))
     text, nl = _load_for_edit(path, reader)
+    # The descriptor declares no element kind, so its language is that of the project it heads.
+    lang = yaml_language(text, path.parent)
     result = ScaffoldResult()
 
     for item in project_libraries(text):
@@ -1589,8 +1761,10 @@ def op_add_dependency(
         result.notes.append(f"{vendor}::{name}: версия {current} -> {version}")
         return result
 
-    lines = [f"Имя: {name}", f"Поставщик: {vendor}", f"Версия: {version}"]
-    edit = insert_item_edit(text, LIBRARIES_SECTION, lines, nl, top_level=True)
+    lines = spelled_lines(
+        [f"Имя: {name}", f"Поставщик: {vendor}", f"Версия: {version}"], lang
+    )
+    edit = insert_item_edit(text, LIBRARIES_SECTION, lines, nl, top_level=True, lang=lang)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
     result.changes.append(FileChange(path, new_text, created=False, cursor=cursor))
@@ -2000,8 +2174,7 @@ def op_add_route(yaml_path: Path, routes: str, *, reader=None) -> ScaffoldResult
     """
     yaml_path = Path(yaml_path)
     text, nl = _load_for_edit(yaml_path, reader)
-    kind_m = _KIND_RE.search(text)
-    if kind_m is None or kind_m.group(1) != "HttpСервис":
+    if element_kind(text) != "HttpСервис":
         raise ScaffoldError(f"{yaml_path.name} – не HttpСервис")
     module_path = yaml_path.with_suffix(".xbsl")
     module_text = (reader or _read)(module_path) if module_path.is_file() else ""
@@ -2981,7 +3154,11 @@ def _mapping_in(body: str, key: str) -> dict[str, str]:
 
 def _calc_by_values(body: str) -> list[str]:
     """РасчетРазрешенийПо values: both the inline list [A, B] and the "- A" item list."""
-    m = re.search(rf"^[ \t]*{_CALC_BY_KEY}:[ \t]*(.*)$", body, re.M)
+    m = None
+    for spelling in key_forms(_CALC_BY_KEY):
+        m = re.search(rf"^[ \t]*{re.escape(spelling)}:[ \t]*(.*)$", body, re.M)
+        if m is not None:
+            break
     if m is None:
         return []
     inline = m.group(1).strip()
@@ -3023,7 +3200,8 @@ def _access_anchor(text: str) -> int:
     offsets = [
         m.start()
         for key in _ACCESS_ANCHORS
-        for m in [re.search(rf"^{re.escape(key)}:[ \t]*\r?$", text, re.M)]
+        for spelling in key_forms(key)
+        for m in [re.search(rf"^{re.escape(spelling)}:[ \t]*\r?$", text, re.M)]
         if m
     ]
     return min(offsets) if offsets else len(text)
@@ -3033,15 +3211,18 @@ def _set_mapping_value(text: str, section_offset_end: int, body_end: int, indent
                        key: str, value: str, nl: str) -> tuple[str, int]:
     """Replace a mapping key's value or append the key at the end of the section.
 
+    An existing key is recognized in either spelling and keeps the one it is written in;
+    a key being added is written as the caller spelled it.
     Returns (new text, shift of the section end) - the caller recomputes the bounds.
     """
     body = text[section_offset_end:body_end]
-    m = re.search(rf"^([ \t]*){re.escape(key)}:[ \t]*(.*)$", body, re.M)
-    if m:
-        start = section_offset_end + m.start()
-        end = section_offset_end + m.end()
-        new_line = f"{m.group(1)}{key}: {value}"
-        return text[:start] + new_line + text[end:], len(new_line) - (end - start)
+    for spelling in key_forms(key):
+        m = re.search(rf"^([ \t]*){re.escape(spelling)}:[ \t]*(.*)$", body, re.M)
+        if m:
+            start = section_offset_end + m.start()
+            end = section_offset_end + m.end()
+            new_line = f"{m.group(1)}{spelling}: {value}"
+            return text[:start] + new_line + text[end:], len(new_line) - (end - start)
     addition = f"{nl}{indent}{key}: {value}"
     return text[:body_end] + addition + text[body_end:], len(addition)
 
@@ -3119,10 +3300,16 @@ def op_set_access(
         return result
 
     if current is None:
-        lines = [f"{_ACCESS_SECTION}:", f"    {_PERMISSIONS_KEY}:"]
+        # The section keys are spelled like the file; the rights and the methods are the
+        # platform's own names, which the caller passes and this operation validates.
+        lang = yaml_language(text, owner_path.parent)
+        lines = [
+            f"{spelled_key(_ACCESS_SECTION, lang)}:",
+            f"    {spelled_key(_PERMISSIONS_KEY, lang)}:",
+        ]
         lines += [f"        {right}: {method}" for right, method in wanted.items()]
         if calc_by:
-            lines.append(f"    {_CALC_BY_KEY}: [{', '.join(calc_by)}]")
+            lines.append(f"    {spelled_key(_CALC_BY_KEY, lang)}: [{', '.join(calc_by)}]")
         at = _access_anchor(text)
         block = nl.join(lines) + nl
         new_text = text[:at] + block + text[at:]
@@ -3161,7 +3348,8 @@ def _write_permission(text: str, right: str, method: str, nl: str) -> str:
     body = text[header_line_end:body_end]
     perms = _section_bounds(body, _PERMISSIONS_KEY)
     if perms is None:  # the section exists but Разрешения does not - append the block
-        addition = f"{nl}    {_PERMISSIONS_KEY}:{nl}        {right}: {method}"
+        key = spelled_key(_PERMISSIONS_KEY, yaml_language(text))
+        addition = f"{nl}    {key}:{nl}        {right}: {method}"
         return text[:body_end] + addition + text[body_end:]
     perm_indent, perm_header_end, perm_body_end = perms
     new_text, _ = _set_mapping_value(
@@ -3174,7 +3362,8 @@ def _write_permission(text: str, right: str, method: str, nl: str) -> str:
 def _write_calc_by(text: str, calc_by: list[str], nl: str) -> str:
     header_line_end, body_end = _access_body_bounds(text)
     value = f"[{', '.join(calc_by)}]"
-    new_text, _ = _set_mapping_value(text, header_line_end, body_end, "    ", _CALC_BY_KEY, value, nl)
+    key = spelled_key(_CALC_BY_KEY, yaml_language(text))
+    new_text, _ = _set_mapping_value(text, header_line_end, body_end, "    ", key, value, nl)
     return new_text
 
 
@@ -3187,8 +3376,21 @@ def _write_calc_by(text: str, calc_by: list[str], nl: str) -> str:
 # comments are (mentions of the object in code documentation).
 
 # Yaml keys whose values carry the object name as a reference to the object or a form.
+# Read in either spelling: an English project writes the same keys as Type, Table, Form.
 _YAML_REF_KEYS = ("Тип", "Таблица", "ИсточникДанных", "Форма", "ТипФормы")
 _PRESENTATION_KEYS = ("Заголовок", "Представление")
+
+
+@lru_cache(maxsize=1)
+def _rename_key_sets() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(reference keys, presentation keys, name keys) in both spellings."""
+    def both(names: tuple[str, ...]) -> frozenset[str]:
+        return frozenset(form for name in names for form in key_forms(name))
+
+    return both(_YAML_REF_KEYS), both(_PRESENTATION_KEYS), both(("Имя",))
+
+
+dataset.register_reset(_rename_key_sets.cache_clear)
 _YAML_KEY_LINE = re.compile(rf"^([ \t]*(?:-[ \t]+)?)([{_WORD}]+):([ \t]*)(.*)$")
 _IMPORT_LINE = re.compile(r"^[ \t]*импорт[ \t]+\S")
 
@@ -3299,6 +3501,7 @@ def _rename_in_yaml(
     `Имя:` and the Заголовок/Представление values matching the old name/presentation are
     edited.
     """
+    ref_keys, presentation_keys, name_keys = _rename_key_sets()
     total = 0
     out: list[str] = []
     for line in text.split("\n"):
@@ -3307,17 +3510,17 @@ def _rename_in_yaml(
         m = _YAML_KEY_LINE.match(line)
         if m:
             prefix, key, sep, value = m.groups()
-            if key in _YAML_REF_KEYS:
+            if key in ref_keys:
                 value, n = renamer.identifier(value)
                 total += n
                 line = f"{prefix}{key}:{sep}{value}"
                 out.append(line)
                 continue
-            if own and key == "Имя" and prefix == "" and value.strip() == renamer.old:
+            if own and key in name_keys and prefix == "" and value.strip() == renamer.old:
                 out.append(f"{prefix}{key}:{sep}{value.replace(renamer.old, renamer.new)}")
                 total += 1
                 continue
-            if own and presentations and key in _PRESENTATION_KEYS:
+            if own and presentations and key in presentation_keys:
                 value, swapped = _swap_presentation(value, *presentations)
                 if swapped:
                     total += 1
@@ -3369,14 +3572,14 @@ def op_rename_object(
         if not yaml_path.is_file():
             raise ScaffoldError(f"Файл не найден: {yaml_path}")
         text = (reader or _read)(yaml_path)
-        kind_m = _KIND_RE.search(text)
-        if kind_m is None:
+        kind = element_kind(text)
+        if kind is None:
             raise ScaffoldError(f"В {yaml_path} нет ВидЭлемента – это не объект конфигурации")
-        file_name = (_NAME_RE.search(text) or [None, yaml_path.stem])[1]
+        file_name = element_name(text, yaml_path.stem)
         if file_name != old_name:
             raise ScaffoldError(f"В {yaml_path.name} объект называется '{file_name}', а не '{old_name}'")
         subsystem, namespace = _namespace_of(yaml_path, root)
-        hit = ObjectHit(kind_m.group(1), file_name, yaml_path, subsystem, namespace, text)
+        hit = ObjectHit(kind, file_name, yaml_path, subsystem, namespace, text)
     else:
         hit = find_object(root, old_name)
 

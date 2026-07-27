@@ -1688,3 +1688,323 @@ def test_english_kinds_come_from_the_real_dictionary():
     assert pairs.get("catalog") == "Справочник"
     assert pairs.get("interfacecomponent") == "КомпонентИнтерфейса"
     assert len(pairs) >= 30
+
+
+# --- an English project: the scaffolding must read it as it reads the Russian one -------------
+#
+# 1C:Element is bilingual: `ElementKind: Catalog` is the very same object as
+# `ВидЭлемента: Справочник`, and `Attributes` is the section `Реквизиты`. Such a project
+# compiles - `demo-en/` in this repository is exactly one. Every pair below comes from the
+# platform's own data (the metamodel's `en` of a property), never from a translation.
+
+ENGLISH_CATALOG = """\
+ElementKind: Catalog
+Id: 6f0b6a44-0000-4000-8000-0000000000a1
+Name: Tasks
+Presentation: Name
+VisibilityScope: InProject
+Interface:
+    Object:
+        Form: TaskCard
+Attributes:
+    -
+        Id: 6f0b6a44-0000-4000-8000-0000000000a2
+        Name: DueDate
+        Type: Date
+TabularParts:
+    -
+        Id: 6f0b6a44-0000-4000-8000-0000000000a3
+        Name: Steps
+        Attributes:
+            -
+                Id: 6f0b6a44-0000-4000-8000-0000000000a4
+                Name: Step
+                Type: String
+"""
+
+ENGLISH_FORM = """\
+ElementKind: InterfaceComponent
+Id: 6f0b6a44-0000-4000-8000-0000000000a5
+Name: TaskCard
+VisibilityScope: InProject
+Inherits:
+    Type: ObjectForm<Tasks.Object>
+    Title: Tasks
+"""
+
+
+def _make_english_project(tmp_path) -> Path:
+    """A mini project written in English spellings; returns its subsystem directory."""
+    project = tmp_path / "Acme" / "TasksEn"
+    (project / "Main").mkdir(parents=True)
+    (project / "Проект.yaml").write_text(
+        "Id: 6f0b6a44-0000-4000-8000-0000000000a0\n"
+        "Vendor: Acme\nName: TasksEn\nVersion: 1.0.0\n",
+        encoding="utf-8",
+    )
+    (project / "Main" / "Подсистема.yaml").write_text(
+        "Interface:\n    IncludeInAutoInterface: True\n", encoding="utf-8"
+    )
+    (project / "Main" / "Tasks.yaml").write_text(ENGLISH_CATALOG, encoding="utf-8")
+    (project / "Main" / "TaskCard.yaml").write_text(ENGLISH_FORM, encoding="utf-8")
+    return project / "Main"
+
+
+def test_key_forms_without_the_metamodel_stay_russian(monkeypatch):
+    """No pairs in the data - the Russian spelling alone, as before.
+
+    The negative control of the whole bilingual layer: the English spellings must come from the
+    platform data and from nowhere else, so cutting the data off has to cut them off too.
+    """
+    monkeypatch.setattr(scaffold.metamodel, "english_name", lambda name: None)
+    scaffold.key_forms.cache_clear()
+    scaffold._key_re.cache_clear()
+    try:
+        assert scaffold.key_forms("Реквизиты") == ("Реквизиты",)
+        assert scaffold.element_kind(ENGLISH_CATALOG) is None
+    finally:
+        scaffold.key_forms.cache_clear()
+        scaffold._key_re.cache_clear()
+
+
+@pytest.mark.needs_data
+def test_key_forms_come_from_the_metamodel():
+    assert scaffold.key_forms("ВидЭлемента") == ("ВидЭлемента", "ElementKind")
+    # The section names are the point: the compact term dictionary has no English for
+    # `Реквизиты` at all, the metamodel declares `Attributes`.
+    assert scaffold.key_forms("Реквизиты") == ("Реквизиты", "Attributes")
+    assert scaffold.key_forms("ТабличныеЧасти") == ("ТабличныеЧасти", "TabularParts")
+
+
+@pytest.mark.needs_data
+def test_section_items_reads_english_sections():
+    """The items are found by the English section name and come back under the Russian keys."""
+    items = section_items(ENGLISH_CATALOG, "Реквизиты", top_level=True)
+    assert [i["Имя"] for i in items] == ["DueDate"]
+    assert items[0]["Тип"] == "Date"
+    assert items[0]["Ид"] == "6f0b6a44-0000-4000-8000-0000000000a2"
+    assert [i["Имя"] for i in section_items(ENGLISH_CATALOG, "ТабличныеЧасти", top_level=True)] \
+        == ["Steps"]
+
+
+@pytest.mark.needs_data
+def test_find_section_item_offset_reads_english_names():
+    offset = find_section_item_offset(ENGLISH_CATALOG, "ТабличныеЧасти", "Steps")
+    assert offset is not None and ENGLISH_CATALOG[offset:].startswith("Id:")
+
+
+@pytest.mark.needs_data
+def test_element_kind_answers_in_the_metamodel_spelling():
+    assert scaffold.element_kind(ENGLISH_CATALOG) == "Справочник"
+    assert scaffold.element_kind(CATALOG) == "Справочник"
+    assert scaffold.element_kind("Interface:\n    IncludeInAutoInterface: True\n") is None
+
+
+@pytest.mark.needs_data
+def test_find_object_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    hit = scaffold.find_object(tmp_path, "Tasks")
+    assert hit.path == subsystem / "Tasks.yaml"
+    # The kind comes back as the metamodel names it: every table of the module is keyed by it.
+    assert hit.kind == "Справочник"
+    assert hit.namespace == "Acme::TasksEn::Main"
+
+
+@pytest.mark.needs_data
+def test_project_info_lists_english_objects(tmp_path):
+    _make_english_project(tmp_path)
+    info = scaffold.project_info(tmp_path)
+    assert [(o["kind"], o["name"]) for o in info["objects"]] == [
+        ("КомпонентИнтерфейса", "TaskCard"),
+        ("Справочник", "Tasks"),
+    ]
+
+
+@pytest.mark.needs_data
+def test_object_info_of_an_english_object(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    info = scaffold.object_info(tmp_path, name="Tasks")
+    assert info["kind"] == "Справочник"
+    # The standard Наименование is added because this catalog does not declare it.
+    assert [f["name"] for f in info["fields"]] == ["Наименование", "DueDate"]
+    assert info["tabulars"] == [{"name": "Steps", "fields": [{"name": "Step", "type": "String"}]}]
+    # The same object addressed by file - the other entry point into the same reading.
+    by_path = scaffold.object_info(tmp_path, yaml_path=subsystem / "Tasks.yaml")
+    assert by_path["fields"] == info["fields"]
+
+
+@pytest.mark.needs_data
+def test_a_standard_attribute_declared_in_english_is_not_doubled(tmp_path):
+    """`Name` IS `Наименование` - a catalog that declares it must not get a phantom twin.
+
+    demo-en/ declares exactly that attribute, and the phantom used to reach the generated
+    form as a column over a field that does not exist.
+    """
+    subsystem = _make_english_project(tmp_path)
+    yaml_path = subsystem / "Tasks.yaml"
+    yaml_path.write_text(
+        yaml_path.read_text(encoding="utf-8").replace(
+            "        Name: DueDate\n        Type: Date\n",
+            "        Name: Name\n        Length: 250\n",
+        ),
+        encoding="utf-8",
+    )
+    info = scaffold.object_info(tmp_path, name="Tasks")
+    assert [f["name"] for f in info["fields"]] == ["Name"]
+
+
+@pytest.mark.needs_data
+def test_object_info_of_an_english_register(tmp_path):
+    """The register keys are bilingual too: ВидРегистра is RegisterKind, its value Обороты."""
+    subsystem = _make_english_project(tmp_path)
+    (subsystem / "Sales.yaml").write_text(
+        "ElementKind: AccumulationRegister\n"
+        "Id: 6f0b6a44-0000-4000-8000-0000000000b1\n"
+        "Name: Sales\n"
+        "RegisterKind: Turnovers\n"
+        "Dimensions:\n    -\n        Name: Product\n        Type: String\n"
+        "Resources:\n    -\n        Name: Amount\n        Type: Number\n",
+        encoding="utf-8",
+    )
+    info = scaffold.object_info(tmp_path, name="Sales")
+    assert info["kind"] == "РегистрНакопления"
+    assert [f["name"] for f in info["fields"]] == ["Период", "Регистратор", "Product", "Amount"]
+    # A turnover register has no ВидЗаписи - reading the value in either spelling decides it.
+    assert info["register"]["needs_record_type"] is False
+
+
+@pytest.mark.needs_data
+def test_add_field_into_an_english_object(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    yaml_path = subsystem / "Tasks.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Details", type_="String"))
+    text = yaml_path.read_text(encoding="utf-8")
+
+    # Into the section that is already there - no second, Russian-named one next to it.
+    assert "Реквизиты:" not in text and text.count("Attributes:") == 2
+    parsed = _valid_yaml(text)
+    assert [a["Name"] for a in parsed["Attributes"]] == ["DueDate", "Details"]
+    # The keys of the new item are spelled like the file around them.
+    assert "Имя:" not in text and "Тип:" not in text and "Ид:" not in text
+    assert parsed["Attributes"][1]["Type"] == "String"
+
+    # A duplicate is refused - the check reads the English section as well.
+    with pytest.raises(ScaffoldError, match="уже есть"):
+        scaffold.op_add_field(yaml_path, "реквизит", "Details", type_="String")
+
+
+@pytest.mark.needs_data
+def test_add_field_into_an_english_tabular_part(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    yaml_path = subsystem / "Tasks.yaml"
+    apply_result(
+        scaffold.op_add_field(yaml_path, "реквизит", "Done", type_="Boolean", tabular="Steps")
+    )
+    parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    tabular = parsed["TabularParts"][0]
+    assert [a["Name"] for a in tabular["Attributes"]] == ["Step", "Done"]
+    # The object-level section is untouched.
+    assert [a["Name"] for a in parsed["Attributes"]] == ["DueDate"]
+
+
+@pytest.mark.needs_data
+def test_add_field_creates_a_missing_section_in_english(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    (subsystem / "Notes.yaml").write_text(
+        "ElementKind: Catalog\nId: 6f0b6a44-0000-4000-8000-0000000000b2\nName: Notes\n",
+        encoding="utf-8",
+    )
+    apply_result(scaffold.op_add_field(subsystem / "Notes.yaml", "реквизит", "Text"))
+    text = (subsystem / "Notes.yaml").read_text(encoding="utf-8")
+    assert "Attributes:" in text and "Реквизиты:" not in text
+    assert [i["Имя"] for i in section_items(text, "Реквизиты", top_level=True)] == ["Text"]
+    assert _valid_yaml(text)
+
+
+@pytest.mark.needs_data
+def test_an_ambiguous_key_keeps_the_russian_spelling(tmp_path):
+    """A name the metamodel classes spell differently stays Russian - in reading and in writing.
+
+    `Элементы` is `Items` for an enumeration and `Elements` elsewhere, so there is no single
+    English spelling to write; a Russian key inside an English file compiles, an invented
+    `Elements:` in an enumeration would not be what the platform declares. Reading and writing
+    degrade together, which is what keeps the file readable by the very next call.
+    """
+    assert scaffold.key_forms("Элементы") == ("Элементы",)
+    subsystem = _make_english_project(tmp_path)
+    (subsystem / "Kinds.yaml").write_text(
+        # `Enum` is the platform's own English name of the kind - not `Enumeration`.
+        "ElementKind: Enum\nId: 6f0b6a44-0000-4000-8000-0000000000b3\nName: Kinds\n",
+        encoding="utf-8",
+    )
+    apply_result(scaffold.op_add_field(subsystem / "Kinds.yaml", "значение", "Simple"))
+    text = (subsystem / "Kinds.yaml").read_text(encoding="utf-8")
+    assert "Элементы:" in text
+    assert [i["Имя"] for i in section_items(text, "Элементы", top_level=True)] == ["Simple"]
+    assert _valid_yaml(text)
+
+
+@pytest.mark.needs_data
+def test_set_access_on_an_english_object(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    result = scaffold.op_set_access(tmp_path, name="Tasks", default="РазрешеноВсем")
+    apply_result(result)
+    text = (subsystem / "Tasks.yaml").read_text(encoding="utf-8")
+    assert "AccessControl:" in text and "КонтрольДоступа:" not in text
+    assert "Permissions:" in text and "Разрешения:" not in text
+    # The section lands before the first data section, not at the end of the file.
+    assert text.index("AccessControl:") < text.index("Attributes:")
+    assert scaffold.access_info(text)["default"] == "РазрешеноВсем"
+    assert _valid_yaml(text)
+
+
+@pytest.mark.needs_data
+def test_rename_object_in_an_english_project(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    result = scaffold.op_rename_object(tmp_path, "Tasks", "Assignments")
+    assert {r.old_path.name: r.new_path.name for r in result.renames} == {
+        "Tasks.yaml": "Assignments.yaml"
+    }
+    apply_result(result)
+
+    owner = (subsystem / "Assignments.yaml").read_text(encoding="utf-8")
+    assert "Name: Assignments" in owner and "Name: Tasks" not in owner
+    # The attribute named Name (the presentation field) is not an object reference.
+    assert "Presentation: Name" in owner
+    form = (subsystem / "TaskCard.yaml").read_text(encoding="utf-8")
+    assert "Type: ObjectForm<Assignments.Object>" in form
+    assert _valid_yaml(owner) and _valid_yaml(form)
+
+
+@pytest.mark.needs_data
+def test_add_dependency_updates_an_english_descriptor(tmp_path):
+    """The Libraries section is read as Библиотеки - otherwise a second entry is appended."""
+    project = _make_english_project(tmp_path).parent
+    descriptor = project / "Проект.yaml"
+    descriptor.write_text(
+        descriptor.read_text(encoding="utf-8")
+        + "Libraries:\n    -\n        Name: Converter\n        Vendor: acme\n"
+          "        Version: 1.0.0\n",
+        encoding="utf-8",
+    )
+    apply_result(scaffold.op_add_dependency(tmp_path, "acme", "Converter", "2.0.0"))
+    parsed = _valid_yaml(descriptor.read_text(encoding="utf-8"))
+    assert parsed["Libraries"] == [{"Name": "Converter", "Vendor": "acme", "Version": "2.0.0"}]
+
+    # A new library is appended to the same section, spelled like it.
+    apply_result(scaffold.op_add_dependency(tmp_path, "acme", "Charts", "1.0.0"))
+    text = descriptor.read_text(encoding="utf-8")
+    assert "Библиотеки:" not in text and "Имя:" not in text
+    assert [i["Имя"] for i in scaffold.project_libraries(text)] == ["Converter", "Charts"]
+
+
+@pytest.mark.needs_data
+def test_add_subsystem_follows_the_project_spelling(tmp_path):
+    _make_english_project(tmp_path)
+    project = tmp_path / "Acme" / "TasksEn"
+    apply_result(scaffold.op_add_subsystem(project, "Reports", uses=["Main"]))
+    text = (project / "Reports" / "Подсистема.yaml").read_text(encoding="utf-8")
+    assert "Interface:" in text and "Интерфейс:" not in text
+    assert "IncludeInAutoInterface: True" in text
+    assert "Using:" in text and "Использование:" not in text
+    assert _valid_yaml(text)

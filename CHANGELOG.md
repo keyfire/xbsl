@@ -12,6 +12,24 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-27 – 0.43.0
+
+### Fixed
+- **Scaffolding reads a project written with English metadata keys.** Only writing was bilingual:
+  every yaml READER in the scaffolding matched Russian spellings, so `rename-object`, `object-info`,
+  `add-field`, `set-access`, `add-form` and `add-route` answered "no such object" on an
+  English-spelled project - and three operations were worse than that, answering successfully with
+  the wrong result: `project-info` reported an empty object list, `add-dependency` appended a second
+  library entry instead of updating the version in place, and `add-subsystem` wrote a Russian
+  descriptor into an English project. `object-info` also invented a standard `Наименование`
+  alongside the declared `Name`, which would have reached a generated form as a column. Readers now
+  accept both spellings and write in the language of the file. The pairs come from the platform's
+  own metamodel (`english_name`), never from a hand-written table: `terms` is the source for VALUES
+  (kinds, enumerations) and the metamodel for KEYS, and they genuinely differ. A name the platform
+  spells ambiguously across classes (`Элементы` is `Items` on an enumeration and `Elements`
+  elsewhere) stays Russian on purpose - guessing costs more than staying silent. Without the
+  platform data everything degrades to the previous Russian-only behaviour.
+
 ## 2026-07-27 – 0.42.1
 
 ### Fixed
