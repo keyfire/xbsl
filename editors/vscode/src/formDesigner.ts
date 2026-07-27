@@ -39,6 +39,8 @@ import { formKeyAliases } from "./uiSchemaClient";
 import { DataHost, DataSnapshot, FormDataModel } from "./formData";
 import { dataMenu, DEFAULT_LAYOUT, sanitizeLayout, structureMenu } from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
+import { hintName } from "./metadataCore";
+import { projectWritesEnglishNames } from "./metadataTree";
 import { editorColumnFor, revealContent } from "./reveal";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
 
@@ -112,8 +114,9 @@ function labels(): Record<string, string> {
 }
 
 // The context-menu labels, by the short command id of formDesignerCore's menus. Kept here
-// (not in the core) so the core stays free of vscode and its l10n.
-function menuLabel(pane: "structure" | "data", command: string): string {
+// (not in the core) so the core stays free of vscode and its l10n. `nameKey` is the spelling of
+// `Имя` the project at hand uses - the rename item names the key that will change in the yaml.
+function menuLabel(pane: "structure" | "data", command: string, nameKey: string): string {
   if (pane === "data") {
     switch (command) {
       case "insert":
@@ -146,7 +149,7 @@ function menuLabel(pane: "structure" | "data", command: string): string {
     case "duplicate":
       return vscode.l10n.t("Duplicate");
     case "rename":
-      return vscode.l10n.t("Rename (Имя)");
+      return vscode.l10n.t("Rename ({0})", nameKey);
     case "delete":
       return vscode.l10n.t("Delete component");
     case "copyYaml":
@@ -402,7 +405,15 @@ class Designer implements StructureHost, DataHost {
       if (result.reason === "parse") {
         body = `<p class="note">${esc(vscode.l10n.t("The yaml does not parse: {0}", result.detail ?? ""))}</p>`;
       } else {
-        body = `<p class="note">${esc(vscode.l10n.t("No form content here (Наследует → Содержимое) – open a form yaml."))}</p>`;
+        // The note names the two keys the form is missing, so it spells them the project's way.
+        const english = await projectWritesEnglishNames();
+        body = `<p class="note">${esc(
+          vscode.l10n.t(
+            "No form content here ({0} → {1}) – open a form yaml.",
+            hintName("Наследует", english),
+            hintName("Содержимое", english)
+          )
+        )}</p>`;
       }
     }
     this.lastFrame = { body, title };
@@ -552,13 +563,14 @@ class Designer implements StructureHost, DataHost {
         if (!items.length) {
           return;
         }
+        const nameKey = hintName("Имя", await projectWritesEnglishNames());
         this.post({
           type: "menu",
           pane,
           id,
           x: m.x,
           y: m.y,
-          items: items.map((i) => ({ ...i, label: menuLabel(pane, i.command) })),
+          items: items.map((i) => ({ ...i, label: menuLabel(pane, i.command, nameKey) })),
         });
         return;
       }

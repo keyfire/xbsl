@@ -26,9 +26,18 @@ import {
 } from "./formDataCore";
 import { DataRow, flattenData, DataModel, propertyRowId } from "./formDesignerCore";
 import { FormStructureModel } from "./formStructure";
+import { projectWritesEnglishNames } from "./metadataTree";
 import { lspActive, lspRequest } from "./lspClient";
 import { editorColumnFor, revealContent } from "./reveal";
 import { componentEnums } from "./uiSchemaClient";
+
+// The examples of the "enter the type manually" prompt. They name platform types, so they follow
+// the language of the PROJECT: `Строка` is `String` and the facet `Ссылка` is `Reference` - the
+// platform's own spellings (the compiler dictionary and the facet pairs, `Справочник.Ссылка` ->
+// `Catalog.Reference`), never a translation. The sample object is the one the English demo
+// project of the repository carries.
+const TYPE_EXAMPLES_RU = ["Строка", "Массив<Строка>", "Товары.Ссылка|?"];
+const TYPE_EXAMPLES_EN = ["String", "Array<String>", "Tasks.Reference|?"];
 
 export interface FormOwnerRef {
   name: string;
@@ -401,8 +410,9 @@ export class FormDataModel {
     if (!pick.manual) {
       return pick.label;
     }
+    const examples = (await projectWritesEnglishNames()) ? TYPE_EXAMPLES_EN : TYPE_EXAMPLES_RU;
     const manual = await vscode.window.showInputBox({
-      prompt: vscode.l10n.t("Type (e.g. Строка, Массив<Строка> or Товары.Ссылка|?)"),
+      prompt: vscode.l10n.t("Type (e.g. {0}, {1} or {2})", ...examples),
       value: current ?? "",
       validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("A valid identifier is required (letters, digits, _).")),
     });

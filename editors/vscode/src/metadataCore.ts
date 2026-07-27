@@ -71,6 +71,30 @@ const EN_KEY: Record<string, string> = {
 // as before: Russian keys only.
 let EN_BY_RU: Record<string, string> = {};
 
+// The names a HINT puts in front of the user - the rename prompt, the wrap prompt, the "no form
+// content" note. A hint that names a key names the key the user is about to look for in the
+// sources, so its spelling follows the language of the PROJECT and not the language of the
+// editor: an English window over a Russian project must still say `Имя`, and a Russian window
+// over an English project must say `Name`. Hence the hints are parametric and this table is
+// their argument. The English spellings are the platform's own - the compiler dictionary
+// (terms_full.json, the `common` pairs), never a translation.
+const HINT_NAME_EN: Record<string, string> = {
+  "Имя": "Name",
+  "Содержимое": "Content",
+  "Наследует": "Inherits",
+  "Импорт": "Import",
+};
+
+/** The spelling of a platform name for a project that writes its names in English, or in Russian.
+ *
+ * A name the table does not carry comes back as it was given: the platform has far more names
+ * than the hints use, and inventing an English spelling would be worse than showing the Russian
+ * one - the user would look for a key that is not in the file.
+ */
+export function hintName(name: string, english: boolean): string {
+  return english ? HINT_NAME_EN[name] ?? name : name;
+}
+
 /** Store the {Russian key: English spelling} pairs the engine reports (`xbsl/metaKeys`). */
 export function setMetaKeyAliases(aliases: Record<string, string>): void {
   const pairs: Record<string, string> = {};

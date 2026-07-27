@@ -20,6 +20,8 @@ import {
   sanitizePresets,
 } from "./blockPresetsCore";
 import { expandAncestors, flattenStructure, StructureRow } from "./formDesignerCore";
+import { hintName } from "./metadataCore";
+import { projectWritesEnglishNames } from "./metadataTree";
 import { lspActive, lspRequest } from "./lspClient";
 import { isReadonlyDoc } from "./readonly";
 import { editorColumnFor, revealContent } from "./reveal";
@@ -585,8 +587,10 @@ export class FormStructureModel {
     if (node.kind !== "component" || node.id === ROOT_ID) {
       return;
     }
+    // The hint names the key the user will find in the yaml, so its spelling is the project's.
+    const nameKey = hintName("Имя", await projectWritesEnglishNames());
     const value = await vscode.window.showInputBox({
-      prompt: vscode.l10n.t("Component name (empty removes Имя)"),
+      prompt: vscode.l10n.t("Component name (empty removes {0})", nameKey),
       value: node.name ?? "",
       validateInput: (v) =>
         !v.trim() || IDENTIFIER.test(v.trim())
@@ -608,8 +612,9 @@ export class FormStructureModel {
       return;
     }
     const candidates = await contentContainerTypes();
+    const contentKey = hintName("Содержимое", await projectWritesEnglishNames());
     const pick = await vscode.window.showQuickPick(candidates, {
-      placeHolder: vscode.l10n.t("Container type to wrap into (a Содержимое slot)"),
+      placeHolder: vscode.l10n.t("Container type to wrap into (a {0} slot)", contentKey),
     });
     if (!pick) {
       return;

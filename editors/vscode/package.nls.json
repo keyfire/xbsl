@@ -105,7 +105,7 @@
   "cmd.formStructure.moveUp": "Move up",
   "cmd.formStructure.moveDown": "Move down",
   "cmd.formStructure.delete": "Delete component",
-  "cmd.formStructure.rename": "Rename (Name)",
+  "cmd.formStructure.rename": "Rename component",
   "cmd.formStructure.duplicate": "Duplicate",
   "cmd.formStructure.wrap": "Wrap in a container",
   "cmd.formStructure.unwrap": "Unwrap container",

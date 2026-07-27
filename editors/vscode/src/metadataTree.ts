@@ -914,6 +914,22 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
 
 // --- provider ---------------------------------------------------------------------------
 
+// The one provider of the session (registerMetadataTree fills it in). Panels that carry no tree
+// of their own - the form structure, the data panel, the designer, the project wizard - ask the
+// language of the project through it.
+let sessionProvider: XbslMetadataProvider | undefined;
+
+/** Does the project of this workspace write its metadata names in English?
+ *
+ * The answer decides the spelling of every name a hint shows: the name goes to the user (and
+ * from a default value, into the sources), so it follows the project rather than the editor.
+ * Without a provider - the extension has not activated the tree yet - the answer is Russian,
+ * the language `xbsl new-project` writes.
+ */
+export async function projectWritesEnglishNames(): Promise<boolean> {
+  return (await sessionProvider?.ensureWritesEnglishNames()) ?? false;
+}
+
 class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   private readonly emitter = new vscode.EventEmitter<XbslNode | undefined | void>();
   readonly onDidChangeTreeData = this.emitter.event;
@@ -937,6 +953,16 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   // editor speaks.
   writesEnglishNames(): boolean {
     return (this.model?.elements ?? []).some((e) => e.englishKind);
+  }
+
+  // The async twin of the predicate above, for callers outside the tree. The model is built
+  // lazily by getChildren, so a panel that asks before the view was ever opened would be told
+  // "Russian" about an English project.
+  async ensureWritesEnglishNames(): Promise<boolean> {
+    if (!this.model) {
+      this.model = await parseModel(this.projectRootFor);
+    }
+    return this.writesEnglishNames();
   }
 
   refresh(): void {
@@ -1603,6 +1629,7 @@ export function registerMetadataTree(
   projectEnums: () => Promise<Record<string, string[]>>;
 } {
   const provider = new XbslMetadataProvider(projectRootFor);
+  sessionProvider = provider; // the panels ask the project language through it
   const view = vscode.window.createTreeView("xbslMetadata", {
     treeDataProvider: provider,
     showCollapseAll: true,

@@ -105,7 +105,7 @@
   "cmd.formStructure.moveUp": "Переместить выше",
   "cmd.formStructure.moveDown": "Переместить ниже",
   "cmd.formStructure.delete": "Удалить компонент",
-  "cmd.formStructure.rename": "Переименовать (Имя)",
+  "cmd.formStructure.rename": "Переименовать компонент",
   "cmd.formStructure.duplicate": "Дублировать",
   "cmd.formStructure.wrap": "Обернуть в контейнер",
   "cmd.formStructure.unwrap": "Развернуть контейнер",

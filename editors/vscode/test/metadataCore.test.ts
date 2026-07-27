@@ -6,6 +6,7 @@ import { parseDocument } from "yaml";
 import {
   describeMetaNode,
   describeStandardAttr,
+  hintName,
   insertItemEdit,
   parseInternals,
   setMetaKeyAliases,
@@ -368,6 +369,19 @@ test("stringAttributeNames: no-Тип and Строка attributes offered, other
 
 test("stringAttributeNames: no attributes - an empty list", () => {
   assert.deepStrictEqual(stringAttributeNames("ВидЭлемента: Справочник\nИмя: Пусто\n"), []);
+});
+
+test("hintName: the spelling follows the project, not the editor", () => {
+  // A hint names the key the user will look for in the sources: over a Russian project the
+  // key is Russian whatever language the window speaks, and over an English one it is English.
+  assert.strictEqual(hintName("Имя", false), "Имя");
+  assert.strictEqual(hintName("Имя", true), "Name");
+  assert.strictEqual(hintName("Содержимое", true), "Content");
+  assert.strictEqual(hintName("Наследует", true), "Inherits");
+  assert.strictEqual(hintName("Импорт", true), "Import");
+  // A name the table does not carry comes back unchanged - an invented English spelling would
+  // send the user looking for a key that is not in the file.
+  assert.strictEqual(hintName("Реквизиты", true), "Реквизиты");
 });
 
 console.log(`\nитого: ${passed} ok, ${failed} fail`);

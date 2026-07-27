@@ -7,10 +7,19 @@
 import * as path from "path";
 import * as vscode from "vscode";
 import { applyScaffold, callMeta } from "./engineMeta";
+import { hintName } from "./metadataCore";
+import { projectWritesEnglishNames } from "./metadataTree";
 import { buildNewProjectCall, checkProjectIdentifier, IdentifierReason } from "./projectWizardCore";
 
 // The generated project file (the engine's PROJECT_FILE) - what the wizard opens afterwards.
 const PROJECT_FILE = "Проект.yaml";
+// The key the vendor lands in. The project does not exist yet, so there is no project language
+// to read - but there is no choice to make either: the engine's new_project writes `Поставщик`
+// and `ЯзыкРазработки: Русский` into every project it scaffolds, whatever language the editor
+// speaks. So the hint says `Поставщик` in an English window too, and it is right to: that is the
+// key the user will find in the file the wizard just created. It is an ARGUMENT rather than part
+// of the English string because it is a name and not prose.
+const VENDOR_KEY = "Поставщик";
 // Remembered vendor: it repeats across a developer's projects, so it prefills the next prompt.
 const LAST_VENDOR_KEY = "xbsl.project.lastVendor";
 
@@ -53,6 +62,10 @@ async function askIdentifier(prompt: string, value: string): Promise<string | un
 // Application vs library project (the engine's library flag). Returns undefined when cancelled;
 // false and true are both meaningful answers, so callers must test for undefined explicitly.
 async function pickLibrary(): Promise<boolean | undefined> {
+  // The importing project is a DIFFERENT project and its language is unknown here; the projects
+  // already in the workspace are the only evidence there is, and with none the answer is Russian
+  // - the language every scaffolded project is written in.
+  const importKey = hintName("Импорт", await projectWritesEnglishNames());
   const items: Array<vscode.QuickPickItem & { library: boolean }> = [
     {
       label: vscode.l10n.t("Application"),
@@ -61,7 +74,7 @@ async function pickLibrary(): Promise<boolean | undefined> {
     },
     {
       label: vscode.l10n.t("Library"),
-      description: vscode.l10n.t("Attached to other projects via Импорт"),
+      description: vscode.l10n.t("Attached to other projects via {0}", importKey),
       library: true,
     },
   ];
@@ -141,7 +154,7 @@ async function runWizard(context: vscode.ExtensionContext): Promise<void> {
     return;
   }
   const lastVendor = context.globalState.get<string>(LAST_VENDOR_KEY) ?? "";
-  const vendor = await askIdentifier(vscode.l10n.t("Vendor (Поставщик, identifier)"), lastVendor);
+  const vendor = await askIdentifier(vscode.l10n.t("Vendor ({0}, identifier)", VENDOR_KEY), lastVendor);
   if (!vendor) {
     return;
   }
