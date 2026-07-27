@@ -35,6 +35,24 @@ class SourceFile:
     def rel(self) -> str:
         return str(self.path)
 
+    def __getstate__(self) -> dict:
+        """Pickling drops the cache: it holds process-local derived representations.
+
+        A source crosses a process boundary only through the worker pool, and there the
+        cache is worse than useless. It is rebuilt on demand from `text` anyway, it
+        multiplies the payload several times over (tokens, AST and yaml of every file),
+        and – the reason this is not merely an optimization – not everything in it can be
+        reconstructed on the other side. In the native build (mypyc, `XBSL_MYPYC=1`)
+        `lexer._LineMap` is a C extension class: it pickles, but unpickling calls
+        `cls.__new__(cls)` with no arguments and its generated constructor refuses
+        ("missing required argument 'text'"). That exception is raised in the parent's
+        result reader, so the pool dies as `BrokenProcessPool` with the real cause buried
+        in the child's traceback – and only in the released wheel, never in a pure-Python
+        run. Keeping derived data out of the pickle closes the whole class of failure
+        instead of the one entry that happened to trip it.
+        """
+        return {**self.__dict__, "cache": {}}
+
 
 def _detect_newline(data: bytes) -> str:
     crlf = data.count(b"\r\n")

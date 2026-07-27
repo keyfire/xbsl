@@ -12,6 +12,21 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-27 – 0.42.1
+
+### Fixed
+- **A parallel run of the released wheel no longer dies as `BrokenProcessPool`.** With `--jobs`
+  left at its default the engine goes parallel on its own once a run has at least 120 files and the
+  machine has at least 4 cores, so `xbsl lint` over a real project failed outright – no flag
+  needed. The pool broke while the PARENT unpickled a worker's result: a fact carried a whole
+  `SourceFile`, and with it the file's cache holding a `lexer._LineMap`. In the native build that
+  class is a C extension: it pickles, but unpickling calls `cls.__new__(cls)` with no arguments and
+  its generated constructor refuses. The exception surfaced only as a broken pool, and only in the
+  wheel – a pure-Python run was never affected, which is why neither CI nor development saw it.
+  Sources now leave their cache out of the pickle (derived, process-local data, rebuilt on demand),
+  which closes the whole class rather than the one entry that tripped it, and shrinks a worker's
+  result from 1.96 MB to 0.58 MB. Guarded by new tests that do not depend on the build.
+
 ## 2026-07-27 – 0.42.0
 
 ### Fixed
