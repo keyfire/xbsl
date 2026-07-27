@@ -9,6 +9,18 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.41.0
+
+- **The extension says when a newer one is published.** It is installed from a vsix, and the
+  editor asks the Marketplace for updates while the CI publishes to Open VSX - so nothing in
+  the editor ever noticed a version left behind, and the only signal was the version in the
+  status bar. Open VSX is now asked once a day; when a newer extension is out, an arrow lights
+  up in the status bar and the tooltip names the version. The check is quiet on purpose (no
+  popup on startup), can be switched off (`xbsl.checkForUpdates`), and the command
+  "XBSL: Check for a newer extension" asks right away regardless of the setting. Anything
+  unexpected - no network, a changed answer, an unreadable version - ends in silence: a false
+  alarm here is worse than a missed update.
+
 ## 0.40.0
 
 - **Dialog hints name a metadata key the way the PROJECT spells it.** The spelling followed the

@@ -9,6 +9,7 @@ import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { LinterConfig } from "./report";
+import { compareVersions } from "./updateCheckCore";
 
 const SHOW_INFO = "xbsl.showVersionInfo";
 const AGE_REFRESH_MS = 60_000;
@@ -68,7 +69,7 @@ function linterVersion(cfg: LinterConfig): Promise<string | undefined> {
 export function registerStatusBar(
   context: vscode.ExtensionContext,
   getLinter: (resource?: vscode.Uri) => LinterConfig
-): { setLspMode: (on: boolean) => void } {
+): { setLspMode: (on: boolean) => void; setLatestVersion: (latest?: string) => void } {
   const extVersion = String(context.extension.packageJSON.version ?? "?");
   const build = buildId(context);
   const hash = build ? build.hash : "?";
@@ -79,9 +80,12 @@ export function registerStatusBar(
   // (no [lsp] extra), and then completion works the old way, via the CLI index. It is set
   // by extension.ts after startup.
   let lspOn = false;
+  // The version published to Open VSX, when it is newer than the installed one. The
+  // extension is side-loaded from a vsix, so nothing else in the editor would ever say it.
+  let update: string | undefined;
 
-  const line = (): string =>
-    vscode.l10n.t(
+  const line = (): string => {
+    const base = vscode.l10n.t(
       "Extension XBSL {0} (build {3}, built {4}) · engine xbsl {1} · completion: {2}",
       extVersion,
       linter,
@@ -89,11 +93,17 @@ export function registerStatusBar(
       hash,
       build ? builtAgo(build.builtAt) : "?"
     );
+    return update
+      ? `${base}
+` + vscode.l10n.t("A newer extension is published: {0}", update)
+      : base;
+  };
 
   const render = (): void => {
     // "engine", not "lint": since 0.16 this is the whole toolkit (lint, LSP, scaffolding),
     // and the tooltip next to it says "engine xbsl" - the captions must match.
-    item.text = `$(versions) XBSL ${extVersion} · ${hash} · engine ${linter}`;
+    const mark = update ? "$(arrow-up) " : "";
+    item.text = `${mark}$(versions) XBSL ${extVersion} · ${hash} · engine ${linter}`;
     item.tooltip = line();
     item.show();
   };
@@ -121,6 +131,10 @@ export function registerStatusBar(
   return {
     setLspMode: (on: boolean): void => {
       lspOn = on;
+      render();
+    },
+    setLatestVersion: (latest?: string): void => {
+      update = latest && compareVersions(latest, extVersion) > 0 ? latest : undefined;
       render();
     },
   };

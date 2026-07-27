@@ -139,6 +139,21 @@ def spelled_key(name: str, lang: str) -> str:
     return key_forms(name)[-1] if lang == "en" else name
 
 
+def spelled_property(name: str, lang: str) -> str:
+    """A key of a form template: a metadata key, otherwise a component property.
+
+    Two sources on purpose. A metadata key is declared by the metamodel classes, and there a
+    guess is dangerous. A form is built of COMPONENTS, and their properties are members - named
+    in the compiler dictionary, the same source the standard attributes come from. That the
+    dictionary is right here is not a hope: the English demo project (which compiles) spells
+    exactly these keys - `Content`, `MainCommand`, `WidthInColumns`.
+    """
+    if lang != "en":
+        return name
+    spelled = key_forms(name)[-1]
+    return spelled if spelled != name else (terms.common_english(name) or name)
+
+
 _LINE_KEY_RE = re.compile(rf"^([ \t]*(?:-[ \t]*)?)([{_WORD}]+):(.*)$")
 
 
@@ -155,6 +170,144 @@ def spelled_lines(lines: list[str], lang: str) -> list[str]:
         m = _LINE_KEY_RE.match(line)
         out.append(f"{m.group(1)}{spelled_key(m.group(2), lang)}:{m.group(3)}" if m else line)
     return out
+
+
+# --- what the tool WRITES, in the language of the project ---------------------------------
+#
+# Reading both spellings was only half the job. A form generated into an English project used
+# to arrive with Russian keys, Russian type names and a file called `TasksФормаСписка.yaml` -
+# a Russian island in an English project, exactly what the reading side was fixed to avoid.
+#
+# Three kinds of words meet in a generated file, and each has its own source:
+#   - KEYS and platform TYPE names belong to the platform - taken from its own data
+#     (the metamodel and the term dictionaries), never from a hand-written table;
+#   - the AUTHOR's names (the object, its attributes, its tabular parts) are not touched at
+#     all: `Goods` stays `Goods` even when a platform type happens to be spelled the same;
+#   - the words the TOOL invents (route handler names, the row-data structure of a list form)
+#     have no platform pair, so they are listed below in both languages. That is the tool's
+#     own vocabulary, and choosing it is legitimate - the same way `new-project` names things.
+
+_TOKEN_RE = re.compile(rf"[{_WORD}]+")
+
+
+def spelled_type(value: str, lang: str, keep: frozenset[str] = frozenset()) -> str:
+    """Platform names inside a VALUE in the given language; `keep` is never translated.
+
+    Token by token, because a value is a type expression rather than a word:
+    `ФормаОбъекта<Goods.Объект>` has a platform type, an author's object and a platform facet
+    in one line. A token the platform knows no English for stays as it is, and the author's
+    names arrive in `keep` - so an object named like a platform type keeps its own name.
+    """
+    if lang != "en" or not value:
+        return value
+
+    def replace(match: re.Match) -> str:
+        token = match.group(0)
+        if token in keep:
+            return token
+        return terms.common_english(token) or terms.english(token, "types") or token
+
+    return _TOKEN_RE.sub(replace, value)
+
+
+def spelled_template(lines: list[str], lang: str, keep: frozenset[str] = frozenset()) -> list[str]:
+    """Template lines fully in the given language: keys, and platform names in the values."""
+    if lang != "en":
+        return list(lines)
+    out = []
+    for line in lines:
+        m = _LINE_KEY_RE.match(line)
+        if not m:
+            out.append(spelled_type(line, lang, keep) if line.lstrip().startswith("- ") else line)
+            continue
+        key = m.group(2) if m.group(2) in keep else spelled_property(m.group(2), lang)
+        out.append(f"{m.group(1)}{key}:{spelled_type(m.group(3), lang, keep)}")
+    return out
+
+
+#: Form kinds the scaffolding produces - the suffix of the element name and of the file name.
+FORM_SUFFIXES = ("ФормаОбъекта", "ФормаСписка", "ФормаОтчета")
+
+
+def localize_form_text(text: str, info: dict, lang: str) -> str:
+    """A generated form yaml in the language of the project it goes into.
+
+    The generators build the Russian template (one shape, one place to read) and this pass
+    puts it into the project's language: keys and platform names by the platform's own data,
+    the composite `<Object><FormKind>` name by the same rule as the file name, and the two
+    words the tool invents by its own vocabulary. Author names are protected.
+    """
+    if lang != "en":
+        return text
+    keep = author_names(info)
+    out = "\n".join(spelled_template(text.split("\n"), lang, keep))
+    obj = info.get("name", "")
+    for suffix in FORM_SUFFIXES:
+        english = form_suffix(suffix, lang)
+        if english != suffix:
+            out = out.replace(f"{obj}{suffix}", f"{obj}{english}")
+    for russian, english in TOOL_WORDS_EN.items():
+        out = out.replace(russian, english)
+    return out
+
+
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def untranslated_words(text: str, keep: frozenset[str] = frozenset()) -> list[str]:
+    """Russian words left in a text meant to be English - what the data could not name.
+
+    Not every Russian word in a generated English file is a defect of the tool: the value
+    lists of the INTERFACE enumerations (`ШиринаВКолонках: Одинарная`) exist in English in the
+    platform, but the extracted data spells them in Russian only - the type is `WidthInColumns`
+    while its values stay `Одинарная`. Guessing an English value would be inventing platform
+    vocabulary, so the value is left as it is and the caller is told which ones - a note beats
+    both a silent Russian island and a made-up word.
+    """
+    found = []
+    for token in _TOKEN_RE.findall(text):
+        if token in keep or token in found or not _CYRILLIC_RE.search(token):
+            continue
+        found.append(token)
+    return found
+
+
+def form_suffix(suffix: str, lang: str) -> str:
+    """`ФормаСписка` / `ListForm` - the suffix of a form's name and of its file name.
+
+    The convention `<Object><FormKind>` is the platform's own (the kinds are its type names),
+    so the English project gets the English spelling of the very same convention.
+    """
+    if lang != "en":
+        return suffix
+    return terms.common_english(suffix) or terms.english(suffix, "types") or suffix
+
+
+#: The tool's own words - the names it invents, which the platform never spells. Listed in
+#: both languages because there is nowhere to look them up: a Russian name inside an English
+#: project would be the tool's own Russian island, and inventing an English one on the fly
+#: would give a different name on every code path.
+TOOL_WORDS_EN = {
+    "ДанныеСтрокиСписка": "ListRowData",
+    "СтрокаСписка": "ListRow",
+}
+
+
+def tool_word(name: str, lang: str) -> str:
+    """A word the tool invented, in the given language."""
+    return TOOL_WORDS_EN.get(name, name) if lang == "en" else name
+
+
+def author_names(info: dict) -> frozenset[str]:
+    """Names that belong to the project and must survive translation untouched."""
+    names = {info.get("name", ""), info.get("namespace", "")}
+    for field in info.get("fields") or ():
+        names.add(field.get("name", ""))
+    for tabular in info.get("tabulars") or ():
+        names.add(tabular.get("name", ""))
+        for field in tabular.get("fields") or ():
+            names.add(field.get("name", ""))
+    return frozenset(name for name in names if name)
 
 
 def _check_identifier(name: str, что: str) -> str:
@@ -1792,6 +1945,25 @@ _METHOD_RU = {
     "GET": "Получить", "POST": "Создать", "PUT": "Обновить",
     "PATCH": "ОбновитьЧастично", "DELETE": "Удалить",
 }
+#: The same vocabulary in English - for a project whose sources are written in English. These
+#: names are the TOOL's, not the platform's: there is nothing to look them up in, and a
+#: Russian handler in an English module would be an island of the kind the bilingual reading
+#: was fixed to avoid.
+_HANDLER_NAMES_EN: dict[tuple[str, bool], str] = {
+    ("GET", False): "GetList",
+    ("POST", False): "Create",
+    ("GET", True): "GetById",
+    ("PUT", True): "Update",
+    ("PATCH", True): "UpdatePartially",
+    ("DELETE", True): "Delete",
+}
+_METHOD_EN = {
+    "GET": "Get", "POST": "Create", "PUT": "Update",
+    "PATCH": "UpdatePartially", "DELETE": "Delete",
+}
+#: Template names the tool invents when the path gives it nothing to name them by.
+_TEMPLATE_WORDS_EN = {"Список": "List", "ЭлементПоИд": "ItemById", "Шаблон": "Template"}
+_PARENT_SUFFIX = ("ПоРодителю", "ByParent")
 
 
 def parse_routes(routes_str: str) -> list[tuple[str, list[str]]]:
@@ -1835,21 +2007,32 @@ def _to_pascal(s: str) -> str:
     return "".join(p[:1].upper() + p[1:] for p in parts)
 
 
-def template_name(path: str) -> str:
+def template_name(path: str, lang: str = "ru") -> str:
+    """The name of a URL template, derived from the path itself.
+
+    The words the tool adds when the path names nothing (`Список`, `ЭлементПоИд`) are its own
+    vocabulary, so they exist in both languages; the literal segments of the path are the
+    author's and are used as they are.
+    """
     if path == "/":
-        return "Список"
+        return tool_route_word("Список", lang)
     segments = [s for s in path.lstrip("/").split("/") if s]
     literal = [_to_pascal(s) for s in segments if not (s.startswith("{") and s.endswith("}"))]
     literal = [s for s in literal if s]
     params = [s for s in segments if s.startswith("{") and s.endswith("}")]
     if not literal:
-        return "ЭлементПоИд"
+        return tool_route_word("ЭлементПоИд", lang)
     if params:
-        return literal[-1] + "ПоРодителю"
+        return literal[-1] + (_PARENT_SUFFIX[1] if lang == "en" else _PARENT_SUFFIX[0])
     return literal[-1]
 
 
-def assign_template_name(path: str, used: set[str]) -> str:
+def tool_route_word(name: str, lang: str) -> str:
+    """A route word the tool invents, in the given language."""
+    return _TEMPLATE_WORDS_EN.get(name, name) if lang == "en" else name
+
+
+def assign_template_name(path: str, used: set[str], lang: str = "ru") -> str:
     """A URL template name unique within the service.
 
     The template name is a key: the platform stores access permissions by it, it is
@@ -1857,7 +2040,7 @@ def assign_template_name(path: str, used: set[str]) -> str:
     Different paths easily produce one name (`/users` and `/orders/users`), so duplicates
     are disambiguated with a suffix.
     """
-    base = template_name(path) or "Шаблон"
+    base = template_name(path, lang) or tool_route_word("Шаблон", lang)
     name, n = base, 2
     while name in used:
         name = f"{base}{n}"
@@ -1866,12 +2049,14 @@ def assign_template_name(path: str, used: set[str]) -> str:
     return name
 
 
-def assign_handler(method: str, path: str, used: set[str]) -> str:
-    """Route handler name: a dictionary one (ПолучитьСписок etc.), if taken -
+def assign_handler(method: str, path: str, used: set[str], lang: str = "ru") -> str:
+    """Route handler name: a dictionary one (ПолучитьСписок / GetList etc.), if taken -
     <Метод><ИмяШаблона>, then a numeric suffix. The name is marked as taken."""
-    name = _HANDLER_NAMES.get((method, _has_path_param(path)))
+    names = _HANDLER_NAMES_EN if lang == "en" else _HANDLER_NAMES
+    methods = _METHOD_EN if lang == "en" else _METHOD_RU
+    name = names.get((method, _has_path_param(path)))
     if name is None or name in used:
-        name = f"{_METHOD_RU.get(method, method.capitalize())}{template_name(path)}"
+        name = f"{methods.get(method, method.capitalize())}{template_name(path, lang)}"
     base, n = name, 2
     while name in used:
         name = f"{base}{n}"
@@ -1880,7 +2065,8 @@ def assign_handler(method: str, path: str, used: set[str]) -> str:
     return name
 
 
-def _template_lines(path: str, method_handlers: list[tuple[str, str]], name: str) -> list[str]:
+def _template_lines(path: str, method_handlers: list[tuple[str, str]], name: str,
+                    lang: str = "ru") -> list[str]:
     lines = [f"Имя: {name}", f"Шаблон: {path}", "Методы:"]
     for method, handler in method_handlers:
         lines += [
@@ -1888,11 +2074,16 @@ def _template_lines(path: str, method_handlers: list[tuple[str, str]], name: str
             f"        Метод: {method}",
             f"        Обработчик: {handler}",
         ]
-    return lines
+    return spelled_lines(lines, lang)
 
 
-def _handler_stub(method: str, path: str, handler: str) -> str:
+def _handler_stub(method: str, path: str, handler: str, lang: str = "ru") -> str:
     """Route handler stub: a canonical CRUD skeleton by method and path parameters.
+
+    Two texts, not one text translated: the keywords, the stdlib names AND the comments all
+    change with the language, and a token-by-token translation of prose is how a comment turns
+    into nonsense. The platform spells both halves itself (`method`/`метод`,
+    `HttpServiceRequest`/`HttpСервисЗапрос`), so neither text invents platform vocabulary.
 
     The live code is a valid response placeholder with no unused variables; the expanded
     example (limit parsing, lookup by Ид, serialization) goes as a comment to be
@@ -1902,6 +2093,8 @@ def _handler_stub(method: str, path: str, handler: str) -> str:
     set a 500 (see the HttpСервисОтвет documentation).
     """
     key = (method, _has_path_param(path))
+    if lang == "en":
+        return _handler_stub_en(method, path, handler, key)
     if key == ("GET", False):
         body = """\
     попытка
@@ -1954,6 +2147,68 @@ def _handler_stub(method: str, path: str, handler: str) -> str:
     return f"метод {handler}(Запрос: HttpСервисЗапрос)\n{body}\n;"
 
 
+def _handler_stub_en(method: str, path: str, handler: str, key: tuple[str, bool]) -> str:
+    """The same skeleton for a project written in English."""
+    if key == ("GET", False):
+        body = """\
+    try
+        // TODO: read the data and send it as the body. Reading a `limit` parameter:
+        // val DefaultLimit = 100
+        // val LimitParameter = Query.Parameters.GetFirst("limit")
+        // val Limit = LimitParameter != Undefined
+        //     ? Min(new Number(LimitParameter), DefaultLimit) : DefaultLimit
+        // val Data = <Catalog>.GetList(Limit)
+        Query.Response.Headers.Set("Content-Type", "application/json")
+        Query.Response.SetBody("[]")
+    catch Error: Exception
+        HandleError(Query.Response, Error)
+    ;"""
+    elif key == ("POST", False):
+        body = """\
+    try
+        // TODO: deserialize the body and create the object
+        // val Data = JsonSerialization.ReadObject(Query.Body, Type<...>)
+        // val Reference = <Catalog>.Create(Data)
+        Query.Response.SetStatusCode(201)
+    catch Error: Exception
+        HandleError(Query.Response, Error)
+    ;"""
+    elif key == ("GET", True):
+        m = re.search(r"\{([^}]+)\}", path)
+        param = m.group(1) if m else "id"
+        body = f"""\
+    try
+        val Id = Query.Parameters.GetFirst("{param}")
+        // TODO: find the object by Id and send it as the body
+        // val Object = <Catalog>.FindById(Id)
+        // if Object != Undefined
+        //     Query.Response.SetBody(JsonSerialization.WriteObject(Object))
+        //     return
+        // ;
+        Query.Response.SetStatusCode(404)
+        Query.Response.SetBody("Not found: " + Id)
+    catch Error: Exception
+        HandleError(Query.Response, Error)
+    ;"""
+    else:
+        body = f"""\
+    try
+        // TODO: implement {method}
+        Query.Response.SetStatusCode(501)
+    catch Error: Exception
+        HandleError(Query.Response, Error)
+    ;"""
+    return f"method {handler}(Query: HttpServiceRequest)\n{body}\n;"
+
+
+_ERROR_HELPER_EN = """\
+method HandleError(Response: HttpServiceResponse, Error: Exception)
+    Response.SetStatusCode(500)
+    Response.Headers.Set("Content-Type", "text/plain; charset=utf-8")
+    Response.SetBody(Error.Description)
+;"""
+
+
 _ERROR_HELPER = """\
 метод ОбработатьОшибку(Ответ: HttpСервисОтвет, Ошибка: Исключение)
     Ответ.УстановитьКодСтатуса(500)
@@ -1977,39 +2232,49 @@ def _new_http_service(
     yaml_path: Path, name: str, access: str | None, routes: str, result: ScaffoldResult,
     scope: str | None = None,
 ) -> ScaffoldResult:
+    # A new service has no file to be judged by, so the language is the project's.
+    lang = project_language(yaml_path.parent)
     templates = parse_routes(routes)
     used: set[str] = set()
     used_templates: set[str] = set()
     assigned = [
-        (path, assign_template_name(path, used_templates),
-         [(m, assign_handler(m, path, used)) for m in methods])
+        (path, assign_template_name(path, used_templates, lang),
+         [(m, assign_handler(m, path, used, lang)) for m in methods])
         for path, methods in templates
     ]
     root_url = _root_url(name)
-    lines = [
+    lines = spelled_lines([
         "ВидЭлемента: HttpСервис",
         f"Ид: {new_uuid()}",
         f"Имя: {name}",
         f"ОбластьВидимости: {scope or KIND_SPECS['HttpСервис'].scope}",
         f"КорневойUrl: /{root_url}",
-    ]
+    ], lang)
+    if lang == "en":
+        # The kind and the scope are the platform's own words - it spells them in English too.
+        lines = [spelled_type(line, lang) if line.startswith(("ElementKind:", "VisibilityScope:"))
+                 else line for line in lines]
     if any("а" <= c.lower() <= "я" for c in root_url):
         result.notes.append(
             f"КорневойUrl /{root_url} содержит кириллицу – это публичный префикс URL, "
             "обычно его задают латиницей (например, Имя КаталогHttpСервис, КорневойUrl /catalog)"
         )
     if access:
-        lines += ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {access}"]
-    lines.append("ШаблоныUrl:")
+        lines += spelled_lines(
+            ["КонтрольДоступа:", "    Разрешения:", f"        Вызов: {access}"], lang
+        )
+    lines.append(spelled_key("ШаблоныUrl", lang) + ":")
     for path, template, method_handlers in assigned:
         lines.append("    -")
-        lines += [f"        {line}" for line in _template_lines(path, method_handlers, template)]
+        lines += [
+            f"        {line}" for line in _template_lines(path, method_handlers, template, lang)
+        ]
     blocks = [
-        _handler_stub(m, path, handler)
+        _handler_stub(m, path, handler, lang)
         for path, _template, method_handlers in assigned
         for m, handler in method_handlers
     ]
-    blocks.append(_ERROR_HELPER)
+    blocks.append(_ERROR_HELPER_EN if lang == "en" else _ERROR_HELPER)
     result.changes.append(FileChange(yaml_path, "\n".join(lines) + "\n", created=True))
     result.changes.append(
         FileChange(yaml_path.with_suffix(".xbsl"), "\n\n".join(blocks) + "\n", created=True)
@@ -2179,13 +2444,17 @@ def op_add_route(yaml_path: Path, routes: str, *, reader=None) -> ScaffoldResult
     module_path = yaml_path.with_suffix(".xbsl")
     module_text = (reader or _read)(module_path) if module_path.is_file() else ""
     module_nl = _dominant_nl(module_text)
+    # The routes are written in the language of the service they are added to.
+    lang = yaml_language(text, yaml_path.parent)
 
-    # Taken handler names: declared in the module and mentioned in yaml.
-    declared = set(re.findall(r"^метод\s+([A-Za-zА-Яа-яЁё0-9_]+)", module_text, re.M))
-    used = set(declared) | set(re.findall(r"Обработчик:\s*(\S+)", text))
+    # Taken handler names: declared in the module and mentioned in yaml. The keyword is
+    # bilingual, so a handler of an English module counts as taken just the same.
+    declared = set(re.findall(r"^(?:метод|method)\s+([A-Za-zА-Яа-яЁё0-9_]+)", module_text, re.M))
+    used = set(declared) | set(re.findall(r"(?:Обработчик|Handler):\s*(\S+)", text))
     # Taken template names: the name is the template key (the platform stores permissions
     # by it, Запрос.ИмяШаблона returns it, and the block to extend below is found by it).
     used_templates = {i.get("Имя", "") for i in section_items(text, "ШаблоныUrl", top_level=True)}
+    error_helper_name = "HandleError" if lang == "en" else "ОбработатьОшибку"
 
     result = ScaffoldResult()
     added: list[tuple[str, str, str]] = []  # (method, template, handler)
@@ -2197,22 +2466,24 @@ def op_add_route(yaml_path: Path, routes: str, *, reader=None) -> ScaffoldResult
             offset = find_section_item_offset(text, "ШаблоныUrl", template.get("Имя", ""))
             if offset is None:
                 raise ScaffoldError(f"Не удалось найти блок шаблона '{path}' в {yaml_path.name}")
-            known = set(re.findall(r"Метод:\s*(\S+)", _block_at(text, offset)))
+            known = set(re.findall(r"(?:Метод|Method):\s*(\S+)", _block_at(text, offset)))
             for method in methods:
                 if method in known:
                     result.notes.append(f"Маршрут {method} {path} уже есть – пропущен")
                     continue
-                handler = assign_handler(method, path, used)
+                handler = assign_handler(method, path, used, lang)
                 edit = insert_nested_item_edit(
-                    text, offset, "Методы", [f"Метод: {method}", f"Обработчик: {handler}"], nl
+                    text, offset, "Методы",
+                    spelled_lines([f"Метод: {method}", f"Обработчик: {handler}"], lang), nl
                 )
                 text = apply_edit(text, edit)
                 added.append((method, path, handler))
         else:
-            method_handlers = [(m, assign_handler(m, path, used)) for m in methods]
-            template_name_ = assign_template_name(path, used_templates)
+            method_handlers = [(m, assign_handler(m, path, used, lang)) for m in methods]
+            template_name_ = assign_template_name(path, used_templates, lang)
             edit = insert_item_edit(
-                text, "ШаблоныUrl", _template_lines(path, method_handlers, template_name_), nl,
+                text, "ШаблоныUrl",
+                _template_lines(path, method_handlers, template_name_, lang), nl,
                 top_level=True,
             )
             text = apply_edit(text, edit)
@@ -2222,10 +2493,10 @@ def op_add_route(yaml_path: Path, routes: str, *, reader=None) -> ScaffoldResult
         result.notes.append("Новых маршрутов нет")
     result.changes.append(FileChange(yaml_path, text, created=False))
 
-    stubs = [_handler_stub(m, path, handler) for m, path, handler in added]
+    stubs = [_handler_stub(m, path, handler, lang) for m, path, handler in added]
     if stubs:
-        if "ОбработатьОшибку" not in declared:
-            stubs.append(_ERROR_HELPER)
+        if error_helper_name not in declared:
+            stubs.append(_ERROR_HELPER_EN if lang == "en" else _ERROR_HELPER)
         if module_text.strip():
             new_module = module_text.rstrip("\r\n") + "\n\n" + "\n\n".join(stubs) + "\n"
         else:
@@ -2989,6 +3260,7 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     form is not overwritten without overwrite - a note goes into notes instead.
     """
     info = object_info(Path(root), name=name, yaml_path=yaml_path)
+    text_of_owner = (reader or _read)(Path(info["path"]))
     kind = info["kind"]
     obj = info["name"]
     owner_path = Path(info["path"])
@@ -3035,21 +3307,34 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         "list-cards": ("ФормаСписка", lambda i, uid: cards_list_form_yaml(i, uid, min_width=card_min_width)),
         "report": ("ФормаОтчета", report_form_yaml),
     }
+    # The form is written in the language of the object it belongs to: a Russian form in an
+    # English project would be exactly the island the bilingual reading was fixed to avoid.
+    lang = yaml_language(text_of_owner, owner_path.parent)
     made: list[str] = []
     for form in forms:
         suffix, generator = generators[form]
-        form_path = owner_path.parent / f"{obj}{suffix}.yaml"
+        form_path = owner_path.parent / f"{obj}{form_suffix(suffix, lang)}.yaml"
         if form_path.exists() and not overwrite:
             result.notes.append(f"{form_path.name} уже существует – пропущена (overwrite=true перезапишет)")
             continue
+        content = localize_form_text(generator(info, new_uuid()), info, lang)
         result.changes.append(
-            FileChange(form_path, generator(info, new_uuid()), created=not form_path.exists())
+            FileChange(form_path, content, created=not form_path.exists())
         )
+        if lang == "en":
+            left = untranslated_words(content, author_names(info))
+            if left:
+                # The data spells the INTERFACE enum values in Russian only; inventing an
+                # English one would be inventing platform vocabulary.
+                result.notes.append(
+                    f"{form_path.name}: значения перечислений интерфейса остались русскими "
+                    "(английских написаний нет в данных платформы) – " + ", ".join(left)
+                )
         made.append(form)
         if form == "list-cards":
             _add_card_row(info, owner_path, overwrite, card_placeholder, result)
     if made:
-        text, nl = _load_for_edit(owner_path, reader)
+        text, nl = text_of_owner, _dominant_nl(text_of_owner)
         # The card list form is registered like a regular one: the same <Объект>ФормаСписка file.
         registered = ["list" if f == "list-cards" else f for f in made]
         new_text = _register_forms(text, nl, kind, obj, registered, result)

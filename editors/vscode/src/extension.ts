@@ -20,6 +20,7 @@ import { registerFormSearch } from "./formSearch";
 import { registerDocs } from "./docsTree";
 import { registerHoverDocs } from "./hoverDocs";
 import { registerStatusBar } from "./statusBar";
+import { registerUpdateCheck } from "./updateCheck";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
@@ -474,6 +475,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Extension/linter versions and the completion mode in the status bar (before the LSP branch -
   // visible in both modes).
   const statusBar = registerStatusBar(context, (resource) => readSettings(resource).linter);
+  // "Is this the latest extension?" - the editor never answers it here: the extension is
+  // installed from a vsix and VS Code asks the Marketplace, while the CI publishes to Open VSX.
+  // The check is quiet (the status bar lights up), rare (once a day) and switchable.
+  registerUpdateCheck(context, (latest) => statusBar.setLatestVersion(latest));
 
   // LSP mode (the default): everything is done by the long-lived xbsl-lsp server - it also
   // provides hover and type-based completion. On a failed start we continue in the plain (CLI)

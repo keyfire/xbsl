@@ -2008,3 +2008,95 @@ def test_add_subsystem_follows_the_project_spelling(tmp_path):
     assert "IncludeInAutoInterface: True" in text
     assert "Using:" in text and "Использование:" not in text
     assert _valid_yaml(text)
+
+
+# --- an English project: what the scaffolding WRITES is English too --------------------------
+#
+# Reading was only half the job. A form generated into an English project used to arrive with
+# Russian keys, Russian type names and a file called `TasksФормаСписка.yaml` - the very island
+# the bilingual reading was fixed to avoid. Every English spelling below comes from the
+# platform's own data (metamodel classes, the compiler dictionary); the two words the tool
+# invents for itself (a row-data structure, route handler names) are its own vocabulary.
+
+
+def test_generated_form_is_english_in_an_english_project(tmp_path):
+    directory = _make_english_project(tmp_path)
+    result = scaffold.op_add_form(directory, name="Tasks", forms=("list",))
+
+    form = next(c for c in result.changes if str(c.path).endswith(".yaml") and "Form" in str(c.path))
+    assert Path(form.path).name == "TasksListForm.yaml", "имя файла – по конвенции проекта"
+    text = form.content
+    assert "ElementKind: InterfaceComponent" in text and "ВидЭлемента" not in text
+    assert "Name: TasksListForm" in text
+    assert "Type: ListForm" in text and "ФормаСписка" not in text
+    # A component property key comes from the compiler dictionary - demo-en spells it so.
+    assert "Content:" in text and "Содержимое" not in text
+    # The tool's own word for the row data structure.
+    assert "ListRowData" in text and "ДанныеСтрокиСписка" not in text
+
+
+def test_generated_form_stays_russian_in_a_russian_project(tmp_path):
+    """Отрицательный контроль: русский проект получает ровно то же, что и раньше."""
+    directory = tmp_path / "Acme" / "Tasks" / "Основное"
+    directory.mkdir(parents=True)
+    (directory.parent / "Проект.yaml").write_text(
+        "Ид: 6f0b6a44-0000-4000-8000-0000000000b0\nПоставщик: Acme\nИмя: Tasks\nВерсия: 1.0.0\n",
+        encoding="utf-8",
+    )
+    (directory / "Задачи.yaml").write_text(
+        "ВидЭлемента: Справочник\nИд: 6f0b6a44-0000-4000-8000-0000000000b1\nИмя: Задачи\n"
+        "ОбластьВидимости: ВПроекте\nРеквизиты:\n    -\n        Ид: 6f0b6a44-0000-4000-8000-0000000000b2\n"
+        "        Имя: Срок\n        Тип: Дата\n",
+        encoding="utf-8",
+    )
+    result = scaffold.op_add_form(directory, name="Задачи", forms=("list",))
+    form = next(c for c in result.changes if "ФормаСписка" in str(c.path))
+    assert Path(form.path).name == "ЗадачиФормаСписка.yaml"
+    assert "ВидЭлемента: КомпонентИнтерфейса" in form.content
+    assert "ListForm" not in form.content
+
+
+def test_untranslated_enum_values_are_named_in_the_notes(tmp_path):
+    """Значения интерфейсных перечислений данные пишут только по-русски – об этом говорят."""
+    directory = _make_english_project(tmp_path)
+    result = scaffold.op_add_form(directory, name="Tasks", forms=("object",))
+    notes = " ".join(result.notes)
+    assert "Одинарная" in notes and "нет в данных платформы" in notes
+
+
+def test_new_http_service_is_english_in_an_english_project(tmp_path):
+    directory = _make_english_project(tmp_path)
+    result = scaffold.op_new_object(
+        directory, "HttpСервис", "TasksApiHttpService", routes="GET /, GET /{id}"
+    )
+    yaml_text = next(c.content for c in result.changes if str(c.path).endswith(".yaml"))
+    module_text = next(c.content for c in result.changes if str(c.path).endswith(".xbsl"))
+
+    assert "ElementKind: HttpService" in yaml_text and "ВидЭлемента" not in yaml_text
+    assert "UrlTemplates:" in yaml_text and "Handler: GetList" in yaml_text
+    assert "Name: List" in yaml_text and "Имя: Список" not in yaml_text
+    # The code stub: platform keywords and stdlib names in English, and so are the comments.
+    assert module_text.startswith("method GetList(Query: HttpServiceRequest)")
+    assert "catch Error: Exception" in module_text and "поймать" not in module_text
+    assert "method HandleError(Response: HttpServiceResponse" in module_text
+    assert "TODO: read the data" in module_text
+    assert not any("а" <= ch <= "я" for ch in module_text), "в английском модуле кириллица"
+
+
+def test_routes_added_to_an_english_service_follow_it(tmp_path):
+    directory = _make_english_project(tmp_path)
+    created = scaffold.op_new_object(
+        directory, "HttpСервис", "TasksApiHttpService", routes="GET /"
+    )
+    for change in created.changes:
+        Path(change.path).write_text(change.content, encoding="utf-8")
+
+    result = scaffold.op_add_route(directory / "TasksApiHttpService.yaml", "POST /, DELETE /{id}")
+
+    yaml_text = next(c.content for c in result.changes if str(c.path).endswith(".yaml"))
+    module_text = next(c.content for c in result.changes if str(c.path).endswith(".xbsl"))
+    assert "Handler: Create" in yaml_text and "Обработчик" not in yaml_text
+    assert "Handler: Delete" in yaml_text
+    assert "method Create(Query: HttpServiceRequest)" in module_text
+    # The error helper is already there from the first generation - not added twice.
+    assert module_text.count("method HandleError(") == 1

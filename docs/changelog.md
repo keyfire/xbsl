@@ -22,6 +22,23 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-27 – 0.46.0
 
 ### Fixed
+- **What the scaffolding WRITES now follows the language of the project.** Reading English
+  sources was only half the job: a form generated into an English project arrived with Russian
+  keys, Russian type names and a file name carrying the Russian form suffix, and a new service
+  came with Russian route names and Russian code stubs - the very island the bilingual reading
+  was fixed to avoid. Keys and platform type names come from the platform's own data (the
+  metamodel classes for metadata keys, the compiler dictionary for component properties - the
+  English demo project spells exactly those); the author's names are never touched, so an
+  object named like a platform type keeps its name. The words the tool invents for itself (a
+  row-data structure, route handler and template names) are its own vocabulary in both
+  languages, and the code stubs of an English service are a second text rather than a
+  translated one - keywords, stdlib names and comments together.
+- **What the data cannot name is said out loud.** The value lists of the INTERFACE
+  enumerations exist in English in the platform but are extracted in Russian only, so a
+  generated English form keeps `WidthInColumns: Одинарная` - and the report names those values
+  instead of inventing an English word for them.
+
+### Fixed
 - **The project-scope localization rule no longer ships whole source files between
   processes.** `code/compare-with-localized` needs the project's dictionary names before it
   can judge a module, and used to defer everything: the map phase put the source file into
