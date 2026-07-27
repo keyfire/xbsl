@@ -212,7 +212,7 @@ usage: xbsl templates save [-h] [--file FILE]
 update xbsl by unpacking the wheel from PyPI
 
 ```bash
-usage: xbsl self-update [-h] [--version VERSION]
+usage: xbsl self-update [-h] [--version VERSION] [--stop-holders]
 ```
 
 **Options**
@@ -221,6 +221,7 @@ usage: xbsl self-update [-h] [--version VERSION]
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--version VERSION` | target version (default: the latest from PyPI) |
+| `--stop-holders` | stop the processes holding the installation (the editor's LSP server, MCP sessions) and update; without the flag the command only names them |
 
 ## Metadata scaffolding
 

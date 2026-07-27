@@ -212,7 +212,7 @@ usage: xbsl templates save [-h] [--file FILE]
 обновить xbsl распаковкой колеса с PyPI
 
 ```bash
-usage: xbsl self-update [-h] [--version VERSION]
+usage: xbsl self-update [-h] [--version VERSION] [--stop-holders]
 ```
 
 **Параметры**
@@ -221,6 +221,7 @@ usage: xbsl self-update [-h] [--version VERSION]
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
 | `--version VERSION` | целевая версия (по умолчанию – последняя с PyPI) |
+| `--stop-holders` | снять процессы, держащие установку (LSP-сервер редактора, MCP-сессии), и обновиться; без флага команда только назовёт их |
 
 ## Скаффолдинг метаданных
 

@@ -19,6 +19,27 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-27 – 0.46.0
+
+### Changed
+- **`self-update` no longer trades a working installation for an empty directory.** The
+  command now renames the installed package aside FIRST – a rename fails while a file inside
+  is open, and at that moment nothing has been removed – then names the holding processes by
+  name and pid (`--stop-holders` ends them). The previous installation is kept until the new
+  one is PROVEN to import in a separate process; a broken archive, a failed extraction or a
+  package that does not import puts the old one back. This is the failure the command exists
+  for: `pip install --upgrade` removes the old version, fails to unpack the new one over a
+  held compiled module and says nothing about the empty space it leaves.
+- **A native installation is updated from a native wheel.** `self-update` always took the
+  portable `py3-none-any` wheel, so a compiled install silently became pure Python – several
+  times slower parsing, with nothing said. The wheel is now chosen by the interpreter and
+  platform tags; when there is no native wheel for the platform, the portable one is used and
+  the command says so. Holders are recognized by their own executable name or by an
+  interpreter running our modules – an editor or an agent that merely mentions `xbsl` in its
+  arguments is never offered for stopping.
+- **Everything the command prints goes through the message catalog** – `--lang en` answers in
+  English, as the rest of the toolkit does.
+
 ## 2026-07-27 – 0.45.0
 
 ### Added

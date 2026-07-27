@@ -379,6 +379,110 @@ _CORE_MESSAGES = {
         "ru": "целевая версия (по умолчанию – последняя с PyPI)",
         "en": "target version (default: the latest from PyPI)",
     },
+    "cli.help.selfupdate-stop": {
+        "ru": "снять процессы, держащие установку (LSP-сервер редактора, MCP-сессии), "
+              "и обновиться; без флага команда только назовёт их",
+        "en": "stop the processes holding the installation (the editor's LSP server, MCP "
+              "sessions) and update; without the flag the command only names them",
+    },
+    # -- self-update (selfupdate.py): everything the command says to the user --
+    "selfupdate.editable": {
+        "ru": "пакет импортируется из {site} – это editable-установка из репозитория; "
+              "обновляйте её через git (pip install -e не требуется повторно)",
+        "en": "the package is imported from {site} – an editable install from a repository; "
+              "update it with git (no need to repeat pip install -e)",
+    },
+    "selfupdate.no-version": {
+        "ru": "версия не найдена на PyPI",
+        "en": "no such version on PyPI",
+    },
+    "selfupdate.pypi-status": {
+        "ru": "PyPI ответил {status}",
+        "en": "PyPI answered {status}",
+    },
+    "selfupdate.pypi-unreachable": {
+        "ru": "не удалось обратиться к PyPI: {error}",
+        "en": "could not reach PyPI: {error}",
+    },
+    "selfupdate.no-wheel": {
+        "ru": "на PyPI нет подходящего колеса xbsl",
+        "en": "PyPI has no suitable xbsl wheel",
+    },
+    "selfupdate.up-to-date": {
+        "ru": "уже актуально: xbsl {version}",
+        "en": "already current: xbsl {version}",
+    },
+    "selfupdate.kind.native": {"ru": "нативное", "en": "native"},
+    "selfupdate.kind.portable": {"ru": "переносимое", "en": "portable"},
+    "selfupdate.native-missing": {
+        "ru": "внимание: установка нативная, но колеса под эту платформу нет – ставится "
+              "переносимое, разбор исходников станет заметно медленнее",
+        "en": "note: the installation is native, but there is no wheel for this platform – "
+              "the portable one is used and parsing gets noticeably slower",
+    },
+    "selfupdate.downloading": {
+        "ru": "скачиваю xbsl {version} с PyPI ({kind} колесо)...",
+        "en": "downloading xbsl {version} from PyPI ({kind} wheel)...",
+    },
+    "selfupdate.download-failed": {
+        "ru": "не удалось скачать колесо: {error}",
+        "en": "could not download the wheel: {error}",
+    },
+    "selfupdate.extracting": {
+        "ru": "распаковываю в {site}...",
+        "en": "extracting into {site}...",
+    },
+    "selfupdate.busy": {
+        "ru": "установку сейчас не заменить – файлы заняты ({error}). {holders}. "
+              "Закройте их и повторите, либо запустите с --stop-holders. "
+              "Прежняя установка НЕ ТРОНУТА и работает",
+        "en": "the installation cannot be replaced right now – files are held ({error}). "
+              "{holders}. Close them and repeat, or run with --stop-holders. The previous "
+              "installation is UNTOUCHED and working",
+    },
+    "selfupdate.holders": {
+        "ru": "держат установку: {list}",
+        "en": "holding the installation: {list}",
+    },
+    "selfupdate.holders-unknown": {
+        "ru": "определить держателей не удалось; обычно это LSP-сервер открытого редактора "
+              "и MCP-сессии агента",
+        "en": "could not tell which processes hold it; usually the open editor's LSP server "
+              "and the agent's MCP sessions",
+    },
+    "selfupdate.holder-stopped": {
+        "ru": "снят держатель {name} (pid {pid})",
+        "en": "stopped the holder {name} (pid {pid})",
+    },
+    "selfupdate.process": {"ru": "процесс", "en": "process"},
+    "selfupdate.extract-failed": {
+        "ru": "распаковка не удалась ({error}); прежняя установка возвращена на место",
+        "en": "extraction failed ({error}); the previous installation is back in place",
+    },
+    "selfupdate.unverified": {
+        "ru": "новая установка не проверилась ({reason}); возвращена прежняя версия {version}",
+        "en": "the new installation did not verify ({reason}); the previous version {version} is back",
+    },
+    "selfupdate.reason.version": {
+        "ru": "импорт отдал {version}",
+        "en": "the import answered {version}",
+    },
+    "selfupdate.reason.no-import": {
+        "ru": "пакет не импортируется",
+        "en": "the package does not import",
+    },
+    "selfupdate.done": {
+        "ru": "готово: xbsl {old} -> {new} ({kind} колесо), импорт проверен отдельным "
+              "процессом. Перезапустите долгоживущие процессы (LSP-сервер редактора, "
+              "MCP-сессии) – они продолжают работать на старом коде.",
+        "en": "done: xbsl {old} -> {new} ({kind} wheel), the import verified in a separate "
+              "process. Restart the long-lived processes (the editor's LSP server, MCP "
+              "sessions) – they keep running the old code.",
+    },
+    "selfupdate.pipx-updated": {
+        "ru": "обновлён pipx_metadata.json",
+        "en": "pipx_metadata.json updated",
+    },
     "cli.help.tpl.list-format": {
         "ru": "формат вывода: text (по умолчанию) или json",
         "en": "output format: text (default) or json",

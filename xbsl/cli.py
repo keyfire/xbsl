@@ -273,6 +273,8 @@ def _selfupdate_parser() -> argparse.ArgumentParser:
     parser = i18n.ArgumentParser(prog="xbsl self-update",
                                  description=i18n.t("cli.help.commands.self-update"))
     parser.add_argument("--version", help=i18n.t("cli.help.selfupdate-version"))
+    parser.add_argument("--stop-holders", action="store_true",
+                        help=i18n.t("cli.help.selfupdate-stop"))
     return parser
 
 def _templates_parser() -> argparse.ArgumentParser:
@@ -773,6 +775,7 @@ def main(argv: list[str] | None = None) -> int:
         sp_args = _selfupdate_parser().parse_args(argv[1:])
         try:
             old, new = selfupdate.self_update(version=sp_args.version,
+                                              stop_busy=sp_args.stop_holders,
                                               log=lambda msg: print(msg, file=sys.stderr))
         except selfupdate.SelfUpdateError as exc:
             print(json.dumps({"error": str(exc)}, ensure_ascii=False))

@@ -4,6 +4,11 @@ The command must replace both the xbsl package and the xbsllint alias package fr
 wheel, without touching the dist-info of the transitional xbsllint metapackage, and refuse
 to run in an editable install (there git does the updating, and extraction would wreck the
 repository).
+
+The rest of the module is about the failure this command exists for: a held installation.
+Whatever goes wrong - a locked file, a broken archive, a package that does not import -
+the previous installation must still be there afterwards. That is checked by looking at
+the disk, not at the return value.
 """
 
 from __future__ import annotations
@@ -57,7 +62,8 @@ def fake_site(tmp_path, monkeypatch):
 
 
 def test_self_update_extracts_wheel(fake_site, monkeypatch):
-    monkeypatch.setattr(selfupdate, "_wheel_url", lambda v: ("http://pypi/xbsl.whl", "9.9.9"))
+    monkeypatch.setattr(selfupdate, "_wheel_url",
+                        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
     )
@@ -74,7 +80,8 @@ def test_self_update_extracts_wheel(fake_site, monkeypatch):
 
 
 def test_self_update_noop_when_current(fake_site, monkeypatch):
-    monkeypatch.setattr(selfupdate, "_wheel_url", lambda v: ("http://pypi/x.whl", xbsl.__version__))
+    monkeypatch.setattr(selfupdate, "_wheel_url",
+                        lambda v, native=False: ("http://pypi/x.whl", xbsl.__version__, selfupdate.PORTABLE))
 
     def boom(*a, **k):
         raise AssertionError("скачивание не должно происходить")
@@ -92,7 +99,8 @@ def test_self_update_refuses_editable(monkeypatch, tmp_path):
 
 
 def test_cli_dispatch(fake_site, monkeypatch, capsys):
-    monkeypatch.setattr(selfupdate, "_wheel_url", lambda v: ("http://pypi/xbsl.whl", "9.9.9"))
+    monkeypatch.setattr(selfupdate, "_wheel_url",
+                        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE))
     monkeypatch.setattr(
         selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
     )
@@ -107,3 +115,176 @@ def test_cli_reports_error_as_json(monkeypatch, tmp_path, capsys):
     code = cli.main(["self-update"])
     assert code == 2
     assert "editable" in json.loads(capsys.readouterr().out)["error"]
+
+
+# -- занятая установка: что бы ни случилось, прежняя версия остаётся на месте ---------------
+
+
+def _stub_download(monkeypatch, payload=None):
+    monkeypatch.setattr(
+        selfupdate, "_wheel_url",
+        lambda v, native=False: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.PORTABLE),
+    )
+    monkeypatch.setattr(
+        selfupdate.urllib.request, "urlopen",
+        lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9") if payload is None else payload),
+    )
+
+
+def test_busy_installation_is_refused_before_anything_is_removed(fake_site, monkeypatch):
+    """Переименование – ворота процедуры: файл занят, а удалять ещё нечего."""
+    _stub_download(monkeypatch)
+    original = selfupdate.Path.rename
+
+    def refuse(self, target):
+        if self.name == "xbsl":
+            raise OSError(13, "Файл занят другим процессом")
+        return original(self, target)
+
+    monkeypatch.setattr(selfupdate.Path, "rename", refuse)
+    monkeypatch.setattr(selfupdate, "holders", lambda: [{"pid": 4242, "name": "xbsl-lsp.exe"}])
+
+    with pytest.raises(selfupdate.SelfUpdateError) as error:
+        selfupdate.self_update(log=lambda *a: None)
+
+    message = str(error.value)
+    assert "xbsl-lsp.exe" in message and "4242" in message
+    assert "--stop-holders" in message and "НЕ ТРОНУТА" in message
+    # Главное: старая установка на месте и работоспособна.
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
+    assert (fake_site / "xbsl-0.0.1.dist-info").exists()
+
+
+def test_unknown_holders_still_produce_an_honest_message(fake_site, monkeypatch):
+    """Имён может не быть – тогда так и сказано, а не молчание."""
+    _stub_download(monkeypatch)
+    monkeypatch.setattr(selfupdate.Path, "rename",
+                        lambda self, target: (_ for _ in ()).throw(OSError("занято")))
+    monkeypatch.setattr(selfupdate, "holders", list)
+    with pytest.raises(selfupdate.SelfUpdateError, match="определить держателей не удалось"):
+        selfupdate.self_update(log=lambda *a: None)
+
+
+def test_broken_archive_rolls_back(fake_site, monkeypatch):
+    _stub_download(monkeypatch, payload=b"not a zip archive")
+    with pytest.raises(selfupdate.SelfUpdateError, match="возвращена на место"):
+        selfupdate.self_update(log=lambda *a: None)
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
+    assert not list(fake_site.glob("*" + selfupdate._BACKUP_SUFFIX))
+
+
+def test_install_that_does_not_import_rolls_back(fake_site, monkeypatch):
+    """Проверка идёт ОТДЕЛЬНЫМ процессом: текущий держит старый код в памяти."""
+    _stub_download(monkeypatch)
+    monkeypatch.setattr(selfupdate, "verify_install", lambda site, expected: "")
+    with pytest.raises(selfupdate.SelfUpdateError, match="не импортируется"):
+        selfupdate.self_update(log=lambda *a: None)
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
+
+
+def test_successful_update_leaves_no_backup(fake_site, monkeypatch):
+    _stub_download(monkeypatch)
+    selfupdate.self_update(log=lambda *a: None)
+    assert not list(fake_site.glob("*" + selfupdate._BACKUP_SUFFIX))
+
+
+# -- нативная установка обновляется нативным колесом ----------------------------------------
+
+
+WHEELS = [
+    {"filename": "xbsl-0.45.0-py3-none-any.whl", "url": "http://pypi/pure.whl"},
+    {"filename": "xbsl-0.45.0-cp314-cp314-win_amd64.whl", "url": "http://pypi/win.whl"},
+    {"filename": "xbsl-0.45.0-cp313-cp313-win_amd64.whl", "url": "http://pypi/win313.whl"},
+    {"filename": "xbsl-0.45.0-cp314-cp314-manylinux_2_17_x86_64.whl", "url": "http://pypi/linux.whl"},
+]
+
+
+def test_native_install_takes_the_wheel_of_this_platform(monkeypatch):
+    """Переносимое колесо поверх нативной установки молча съело бы скорость разбора."""
+    monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
+    assert selfupdate._pick_wheel(WHEELS, native=True) == ("http://pypi/win.whl", selfupdate.NATIVE)
+    monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("linux", "x86_64")))
+    assert selfupdate._pick_wheel(WHEELS, native=True)[0] == "http://pypi/linux.whl"
+
+
+def test_pure_install_takes_the_portable_wheel(monkeypatch):
+    monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
+    assert selfupdate._pick_wheel(WHEELS, native=False) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
+
+
+def test_platform_without_a_native_wheel_falls_back(monkeypatch):
+    """Отрицательный контроль: чужая платформа – переносимое колесо, и об этом говорят."""
+    monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp312", ("macosx", "arm64")))
+    assert selfupdate._pick_wheel(WHEELS, native=True) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
+
+
+def test_native_install_is_recognized_by_compiled_modules(tmp_path):
+    site = tmp_path / "site-packages"
+    (site / "xbsl").mkdir(parents=True)
+    assert selfupdate.is_native(site) is False
+    (site / "xbsl" / "lexer.cp314-win_amd64.pyd").write_bytes(b"")
+    assert selfupdate.is_native(site) is True
+
+
+# -- держатели ------------------------------------------------------------------------------
+
+
+def test_holders_are_our_own_processes_only(monkeypatch):
+    """Ошибиться здесь – значит предложить снять ЧУЖОЙ процесс.
+
+    Поймано живым прогоном: клиент агента упоминает xbsl в аргументах (путь к проекту,
+    файл базлайна) и попадал в список держателей.
+    """
+    monkeypatch.setattr(
+        selfupdate, "_process_listing",
+        lambda: [
+            (11, "xbsl-lsp.exe", "xbsl-lsp --project-root app"),
+            (12, "python.exe", "python.exe -m xbsl.mcp_server"),
+            (13, "python.exe", "python.exe -m http.server"),
+            (14, "claude.exe", "claude.exe --baseline /repo/.xbsllint-baseline"),
+            (15, "Code.exe", "Code.exe --folder-uri file:///d:/repo/xbsl"),
+        ],
+    )
+    monkeypatch.setitem(__import__("sys").modules, "psutil", None)
+    found = {item["pid"] for item in selfupdate.holders()}
+    assert found == {11, 12}
+
+
+def test_interpreter_tag_is_the_wheel_spelling():
+    """cache_tag пишет тот же интерпретатор как cpython-314 – колёс с таким именем нет."""
+    interpreter, keywords = selfupdate.platform_tags()
+    assert interpreter.startswith(("cp", "pp")) and interpreter[2:].isdigit()
+    assert "-" not in interpreter and keywords
+
+
+def test_stop_holders_reports_what_it_ended(monkeypatch):
+    calls = []
+    monkeypatch.setattr(selfupdate.subprocess, "run",
+                        lambda *a, **k: calls.append(a[0]) or None)
+    monkeypatch.setattr(selfupdate.os, "kill", lambda pid, sig: calls.append(("kill", pid)))
+    said = []
+    alive = selfupdate.stop_holders([{"pid": 11, "name": "xbsl-lsp.exe"}], said.append)
+    assert alive == [] and calls and "11" in said[0]
+
+
+def test_every_message_is_translated(monkeypatch, fake_site, capsys):
+    """Пакет публичный: --lang en обязан отвечать по-английски, а не по-русски.
+
+    Проверяется не наличие ключей, а ФАКТ вывода: отказ занятой установки и строка
+    завершения – самые длинные тексты команды, и оба собираются из нескольких ключей.
+    """
+    from xbsl import i18n
+
+    i18n.set_lang("en")
+    try:
+        message = selfupdate._holders_message([{"pid": 7, "name": "xbsl-lsp.exe"}])
+        assert "holding the installation" in message and "держ" not in message
+        assert "could not tell" in selfupdate._holders_message([])
+        _stub_download(monkeypatch)
+        said = []
+        selfupdate.self_update(log=said.append)
+        text = " ".join(said)
+        assert "extracting into" in text and "done: xbsl" in text
+        assert not any("а" <= ch <= "я" for ch in text), "в английском выводе кириллица"
+    finally:
+        i18n.set_lang("ru")
