@@ -9,6 +9,19 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.40.0
+
+- **Dialog hints name a metadata key the way the PROJECT spells it.** The spelling followed the
+  language of the editor, so an English window over a Russian project suggested a key the file does
+  not contain - `Rename (Name)` where the yaml says `Имя`. The hints are parametric now and the
+  English spellings come from the compiler's own dictionary. The predicate lived on the metadata
+  tree only; an asynchronous twin was added, because the model is built lazily and a panel asking
+  before the tree is first opened would have been told the wrong language. The new-project wizard is
+  the exception in reverse: scaffolding writes a Russian development language into every new
+  project, so the vendor key there is a constant rather than a choice. One contributed command that
+  named a key in a static string - the manifest is substituted before the extension activates, so it
+  cannot be parametric - was reworded to name the object instead.
+
 ## 0.39.0
 
 - **The metadata tree fills its branches in an English project.** The reader knew the section keys
