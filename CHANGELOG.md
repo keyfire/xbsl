@@ -17,8 +17,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ### Changed
 - **What the platform documents as a code-writing convention is now a standard: seven `style/`
   rules run by default and report at `warning`** – line length, comparing a boolean with
-  `Истина`/`Ложь`, UpperCamelCase, collection literals, string interpolation, a redundant
-  `.ВСтроку()` and the case of abbreviations. They used to be `info` and off, treated as
+  `True`/`False`, UpperCamelCase, collection literals, string interpolation, a redundant
+  `.ToString()` and the case of abbreviations. They used to be `info` and off, treated as
   accumulated debt; a convention that is documented and never enforced is not a convention.
   Existing debt belongs in a baseline, and new violations are visible from the first run.
   Off by default remain only the two checks whose finding may legitimately be a false positive:
@@ -30,10 +30,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   translated like everything else; a guard requires it from every disabled rule.
 
 ### Added
-- `style/redundant-type` now sees the typed empty literal: `пер Артикулы: Массив<Число> =
-  <Число>[]` states the type twice, and the platform's "Идиомы" document the short form
-  (`знч Артикулы = <Число>[]`). Only the array spelling is recognised – the empty set and map
-  forms are not in the documentation, and guessing at them would risk a false positive.
+- `style/redundant-type` now sees the typed empty literal: `var Articles: Array<Number> =
+  <Number>[]` states the type twice, and the platform's "Idioms" article documents the short
+  form (`val Articles = <Number>[]`). Only the array spelling is recognised – the empty set and
+  map forms are not in the documentation, and guessing at them would risk a false positive.
 
 ## 2026-07-27 – 0.43.0
 
@@ -266,11 +266,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Added
 - Rule **`code/local-method-cross-module`** (tier D, error, project-scoped; 101 rules now):
-  `Module.Method(...)` must target a method that carries a visibility annotation. @Локально is
+  `Module.Method(...)` must target a method that carries a visibility annotation. @Local is
   the DEFAULT visibility of a language construct, so a method with no annotation is reachable
   from its own module alone and the compiler rejects the call on build. The sibling
   `code/local-method-cross-component` covers the same invariant reached through a component
-  INSTANCE (`Компоненты.X.Method(...)`, a runtime failure); this one goes through the module
+  INSTANCE (`Components.X.Method(...)`, a runtime failure); this one goes through the module
   name and resolves it by the file stem, the resolution of `code/call-arity-cross`.
 
 ### Changed
@@ -284,7 +284,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - The metadata scaffolding writes a **slot by its cardinality**: a first child of a slot the ui
   schema declares `Array<Component>` (`Group.Content` and friends) lands as a "-" list item, not
   as a single nested mapping. A singleton there compiles into "Значение типа ... не может быть
-  присвоено в Массив<Компонент>" and takes the whole `Компоненты.<Name>` resolution down with it -
+  присвоено в Массив<Компонент>" and takes the whole `Components.<Name>` resolution down with it -
   the trap `meta_move_components` fell into when a table moved into a fresh group. Slots declared
   with a single type keep the mapping spelling; an owner the schema cannot name (a page item
   carries no `Type`) keeps it too.
@@ -368,8 +368,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   hierarchy sections list base types as links with unqualified texts, so the qualified-name
   marker matched nothing and the built-in property sets survived for one component out of
   dozens; the link target is now accepted as the marker as well.
-- A variable named `Запрос` (the Query keyword) was read as the query-literal keyword
-  everywhere: the declaration dropped out of the token utilities, a `Запрос.Выполнить()`
+- A variable named `Query` (the keyword spelling) was read as the query-literal keyword
+  everywhere: the declaration dropped out of the token utilities, a `Query.Execute()`
   chain fell into the literal path, and the hover documented the database query type.
   Like the parser, the tokenizer now reads it as a plain name when no `{` follows.
 - A single-file check (the way the editor lints a saved module) lost the paired yaml's
@@ -389,9 +389,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - `code/resource-bare-name` no longer treats an `inbase/…` reference as a folder path: a resource
   uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
   (the compiler verifies its existence at apply) (0.31.0).
-- A resource key is a path relative to the subsystem's `Ресурсы` folder: `code/resource-bare-name`
-  now flags only a key that spells the `Ресурсы` folder out, and subdirectory references
-  (`Подкаталог/Файл.svg`) are legal instead of being reported (0.31.1).
+- A resource key is a path relative to the subsystem's `Resources` folder: `code/resource-bare-name`
+  now flags only a key that spells the `Resources` folder out, and subdirectory references
+  (`Subfolder/File.svg`) are legal instead of being reported (0.31.1).
 
 ## 2026-07-22 – 0.28.0, 0.29.0, 0.30.0, 0.30.1
 

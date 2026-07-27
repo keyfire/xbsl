@@ -191,3 +191,68 @@ def test_hint_guard_allows_the_legitimate_cases():
     assert _hint_offenders('vscode.l10n.t("Open application module (Проект.xbsl)")') == []
     # Cyrillic outside a hint is code - a platform key, a kind table, a default value.
     assert _hint_offenders('const KIND = "Справочник";') == []
+
+
+# --- the changelog: a name that has an English spelling must use it -------------------
+
+_QUOTED_MESSAGE = re.compile(r'"[^"]*"', re.S)
+
+
+def _changelog_entries(text: str):
+    """Записи чейнджлога: маркированный пункт вместе со строками-продолжениями.
+
+    Судить надо запись, а не строку: английский двойник имени часто переносится на
+    соседнюю строку, и построчная проверка объявила бы это нарушением.
+    """
+    current: list[str] = []
+    start = 1
+    for number, line in enumerate(text.splitlines(), 1):
+        if line.startswith("- ") or line.startswith("#") or not line.strip():
+            if current:
+                yield start, "\n".join(current)
+            current, start = ([line], number) if line.startswith("- ") else ([], number)
+        elif current:
+            current.append(line)
+    if current:
+        yield start, "\n".join(current)
+
+
+def _wrong_spellings(text: str) -> list[tuple[int, str, str]]:
+    from xbsl import terms
+
+    found = []
+    for number, entry in _changelog_entries(text):
+        # Цитата сообщения платформы законна: платформа так и напечатала.
+        body = _QUOTED_MESSAGE.sub(" ", entry)
+        for word in sorted(set(_CYRILLIC.findall(body))):
+            english = terms.common_english(word)
+            if english and english not in entry:
+                found.append((number, word, english))
+    return found
+
+
+@pytest.mark.needs_data
+def test_english_changelog_uses_english_spellings():
+    """У имени платформы есть английское написание – в английском чейнджлоге стоит оно.
+
+    Чейнджлоги когда-то были выведены из-под этой проверки: их записи объясняют, как
+    платформа зовёт вещь на каждом языке, и оба написания обязаны стоять рядом. Исключение
+    оказалось шире нужного – 27.07 в английскую запись уехали `Истина`, `Ложь`, `.ВСтроку()`
+    и целый пример на русском. Теперь исключение сужено до того, ради чего заводилось:
+    русское написание законно, если в ТОЙ ЖЕ записи стоит его английский двойник (тогда
+    запись и объясняет пару) либо если оно внутри цитаты сообщения платформы.
+    """
+    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    wrong = _wrong_spellings(text)
+    assert not wrong, "в английском чейнджлоге русские написания: " + "; ".join(
+        f"строка {n}: {word} – должно быть {english}" for n, word, english in wrong[:8]
+    )
+
+
+@pytest.mark.needs_data
+def test_changelog_guard_catches_a_planted_defect():
+    """Молчание сторожа неотличимо от неработающего шаблона, пока он не поймал дефект."""
+    planted = "- A boolean is compared with `Истина` rather than the short form.\n"
+    assert _wrong_spellings(planted), "сторож не поймал заведомо русское написание"
+    paired = "- The English `True` is what the platform spells `Истина` in Russian sources.\n"
+    assert not _wrong_spellings(paired), "запись с парой написаний – законна, её трогать нельзя"
