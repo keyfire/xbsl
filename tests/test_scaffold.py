@@ -2019,6 +2019,7 @@ def test_add_subsystem_follows_the_project_spelling(tmp_path):
 # invents for itself (a row-data structure, route handler names) are its own vocabulary.
 
 
+@pytest.mark.needs_data
 def test_generated_form_is_english_in_an_english_project(tmp_path):
     directory = _make_english_project(tmp_path)
     result = scaffold.op_add_form(directory, name="Tasks", forms=("list",))
@@ -2056,6 +2057,7 @@ def test_generated_form_stays_russian_in_a_russian_project(tmp_path):
     assert "ListForm" not in form.content
 
 
+@pytest.mark.needs_data
 def test_untranslated_enum_values_are_named_in_the_notes(tmp_path):
     """Значения интерфейсных перечислений данные пишут только по-русски – об этом говорят."""
     directory = _make_english_project(tmp_path)
@@ -2064,6 +2066,7 @@ def test_untranslated_enum_values_are_named_in_the_notes(tmp_path):
     assert "Одинарная" in notes and "нет в данных платформы" in notes
 
 
+@pytest.mark.needs_data
 def test_new_http_service_is_english_in_an_english_project(tmp_path):
     directory = _make_english_project(tmp_path)
     result = scaffold.op_new_object(
@@ -2083,6 +2086,7 @@ def test_new_http_service_is_english_in_an_english_project(tmp_path):
     assert not any("а" <= ch <= "я" for ch in module_text), "в английском модуле кириллица"
 
 
+@pytest.mark.needs_data
 def test_routes_added_to_an_english_service_follow_it(tmp_path):
     directory = _make_english_project(tmp_path)
     created = scaffold.op_new_object(
