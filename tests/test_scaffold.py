@@ -4,6 +4,7 @@ Every generated yaml is additionally fed through PyYAML: a template the parser c
 parse must not pass the tests regardless of the targeted checks.
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -12,6 +13,7 @@ import yaml as pyyaml
 
 from xbsl import scaffold
 from xbsl.scaffold import (
+    FileRename,
     ScaffoldError,
     TextEdit,
     apply_edit,
@@ -769,6 +771,181 @@ def test_rename_object_dry_dict_shape(tmp_path):
     assert any("замен" in note for note in plan["notes"])
     # Nothing is written - the operation only computes the changes.
     assert (tmp_path / "vendor" / "Приложение" / "Основное" / "Склады.yaml").is_file()
+
+
+# --- rename that only changes letter case --------------------------------------------------
+#
+# The class the tests below are about: `Склады` -> `склады`. On a case-insensitive
+# filesystem (Windows, macOS by default) the old and the new file are one and the same, so
+# the plain existence check reads the target as an occupied name and the whole rename is
+# refused; the assertions therefore ask the OS for the REAL name (os.listdir) instead of
+# Path.exists, which answers True for either spelling there.
+
+
+def _case_insensitive_fs(directory: Path) -> bool:
+    probe = directory / "XbslCaseProbe.tmp"
+    probe.write_text("x", encoding="utf-8")
+    try:
+        return (directory / "xbslcaseprobe.tmp").exists()
+    finally:
+        probe.unlink()
+
+
+def _names(directory: Path) -> set[str]:
+    """The names as the filesystem itself stores them."""
+    return set(os.listdir(directory))
+
+
+def test_file_rename_case_only_flag():
+    assert FileRename(Path("a/Товары.yaml"), Path("a/товары.yaml")).case_only
+    assert FileRename(Path("a/Товары.yaml"), Path("a/ТовАры.yaml")).case_only
+    assert not FileRename(Path("a/Товары.yaml"), Path("a/Склады.yaml")).case_only
+    assert not FileRename(Path("a/Товары.yaml"), Path("b/Товары.yaml")).case_only
+    assert not FileRename(Path("a/Товары.yaml"), Path("a/Товары.yaml")).case_only
+
+
+def test_rename_clashes_only_with_a_foreign_file(tmp_path):
+    goods = tmp_path / "Товары.yaml"
+    goods.write_text("a", encoding="utf-8")
+    (tmp_path / "Склады.yaml").write_text("b", encoding="utf-8")
+
+    assert scaffold._rename_clashes(FileRename(goods, tmp_path / "Склады.yaml"))
+    assert not scaffold._rename_clashes(FileRename(goods, tmp_path / "Прочее.yaml"))
+    # The same file under the other casing is not a clash on either filesystem: where the
+    # target exists it IS this file, where it does not exist there is nothing to clash with.
+    assert not scaffold._rename_clashes(FileRename(goods, tmp_path / "товары.yaml"))
+
+
+def test_rename_object_case_only(tmp_path):
+    subsystem = _make_rename_project(tmp_path)
+    # The plain module of the object - the third shape of a satellite file, next to
+    # <Имя>.yaml and <Имя>.<Часть>.xbsl.
+    (subsystem / "Склады.xbsl").write_text("метод Пусто()\n;\n", encoding="utf-8")
+    result = scaffold.op_rename_object(tmp_path, "Склады", "склады")
+
+    renamed = {r.old_path.name: r.new_path.name for r in result.renames}
+    assert renamed == {
+        "Склады.yaml": "склады.yaml",
+        "Склады.xbsl": "склады.xbsl",
+        "Склады.Объект.xbsl": "склады.Объект.xbsl",
+        "СкладыФормаОбъекта.yaml": "складыФормаОбъекта.yaml",
+        "СкладыФормаСписка.yaml": "складыФормаСписка.yaml",
+        "СтрокаСпискаСклады.yaml": "СтрокаСпискасклады.yaml",
+    }
+    assert all(r.case_only for r in result.renames)
+    # The note about the two steps and about version control belongs to the filesystem that
+    # actually merges the two names; on a case-sensitive one the rename is ordinary and the
+    # note would only be noise.
+    note = [n for n in result.notes if "только регистром" in n]
+    if _case_insensitive_fs(subsystem):
+        assert note and "git" in note[0]
+    else:
+        assert not note
+
+    apply_result(result)
+    names = _names(subsystem)
+    assert "склады.yaml" in names and "Склады.yaml" not in names
+    assert "склады.xbsl" in names and "Склады.xbsl" not in names
+    assert "склады.Объект.xbsl" in names and "Склады.Объект.xbsl" not in names
+    assert "складыФормаОбъекта.yaml" in names
+    assert "СтрокаСпискасклады.yaml" in names
+    assert "СкладыАрхив.yaml" in names  # the namesake object is untouched
+    # The intermediate name of the two-step rename is not left behind.
+    assert not [n for n in names if "xbsl-rename-tmp" in n]
+
+    owner = (subsystem / "склады.yaml").read_text(encoding="utf-8")
+    assert "Имя: склады" in owner
+    assert "Форма: складыФормаОбъекта" in owner
+    assert _valid_yaml(owner)
+
+    orders = (subsystem / "Заказы.yaml").read_text(encoding="utf-8")
+    assert "Тип: склады.Ссылка?" in orders
+    module = (subsystem / "Заказы.xbsl").read_text(encoding="utf-8")
+    assert "пер С: склады.Ссылка?" in module
+
+
+def test_rename_object_case_only_inside_the_name(tmp_path):
+    """The case changes in the middle of the name - the same class, and the owner's link."""
+    subsystem = _make_rename_project(tmp_path)
+    result = scaffold.op_rename_object(tmp_path, "СкладыФормаОбъекта", "СкладыФормаобъекта")
+    apply_result(result)
+
+    names = _names(subsystem)
+    assert "СкладыФормаобъекта.yaml" in names
+    assert "СкладыФормаОбъекта.yaml" not in names
+    owner = (subsystem / "Склады.yaml").read_text(encoding="utf-8")
+    assert "Форма: СкладыФормаобъекта" in owner
+    assert _valid_yaml(owner)
+
+
+def test_rename_object_case_only_keeps_a_foreign_file(tmp_path):
+    """A name taken by ANOTHER file is still refused - the case-only branch must not eat it."""
+    subsystem = _make_rename_project(tmp_path)
+    if _case_insensitive_fs(subsystem):
+        # Заказы.yaml is a different object: on a case-insensitive filesystem the target
+        # name resolves to it, so the rename would destroy it.
+        with pytest.raises(ScaffoldError, match="уже существует"):
+            scaffold.op_rename_object(tmp_path, "Склады", "заказы")
+    else:
+        # Here the two names coexist; the rename is legitimate and Заказы.yaml stays put.
+        apply_result(scaffold.op_rename_object(tmp_path, "Склады", "заказы"))
+        assert {"заказы.yaml", "Заказы.yaml"} <= _names(subsystem)
+
+
+def _force_two_step(monkeypatch) -> None:
+    """Take the two-step branch regardless of the filesystem under the test run.
+
+    Without this the branch is only reachable on a case-insensitive filesystem, and CI runs
+    on a case-sensitive one - the rollback would go untested exactly where it is checked.
+    """
+    monkeypatch.setattr(scaffold, "_one_file_under_both_names", lambda rename: True)
+
+
+def test_rename_file_two_steps_through_a_temporary_name(tmp_path, monkeypatch):
+    path = tmp_path / "Товары.yaml"
+    path.write_text("x", encoding="utf-8")
+    _force_two_step(monkeypatch)
+    steps = []
+    real_rename = Path.rename
+    monkeypatch.setattr(
+        Path, "rename", lambda self, target: (steps.append(target.name), real_rename(self, target))[1]
+    )
+
+    scaffold._rename_file(FileRename(path, tmp_path / "товары.yaml"))
+    assert steps == ["Товары.yaml.xbsl-rename-tmp", "товары.yaml"]
+    assert _names(tmp_path) == {"товары.yaml"}
+
+
+def test_rename_file_two_step_rolls_back(tmp_path, monkeypatch):
+    """A failure of the second step leaves neither a temporary file nor a lost original."""
+    path = tmp_path / "Товары.yaml"
+    path.write_text("x", encoding="utf-8")
+    _force_two_step(monkeypatch)
+    real_rename = Path.rename
+    calls = []
+
+    def failing(self, target):
+        calls.append(target)
+        if len(calls) == 2:
+            raise OSError("boom")
+        return real_rename(self, target)
+
+    monkeypatch.setattr(Path, "rename", failing)
+    with pytest.raises(OSError, match="boom"):
+        scaffold._rename_file(FileRename(path, tmp_path / "товары.yaml"))
+    monkeypatch.undo()
+
+    assert _names(tmp_path) == {"Товары.yaml"}
+    assert path.read_text(encoding="utf-8") == "x"
+
+
+def test_free_temp_path_skips_taken_names(tmp_path):
+    path = tmp_path / "Товары.yaml"
+    path.write_text("x", encoding="utf-8")
+    first = scaffold._free_temp_path(path)
+    assert first.name == "Товары.yaml.xbsl-rename-tmp"
+    first.write_text("busy", encoding="utf-8")
+    assert scaffold._free_temp_path(path).name == "Товары.yaml.xbsl-rename-tmp1"
 
 
 # --- card list form -----------------------------------------------------------------------

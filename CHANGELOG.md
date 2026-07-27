@@ -23,6 +23,22 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   class of its own and the tree descends into it. Without the data the request answers
   `{"available": false}` and the reader keeps working on Russian keys.
 
+### Fixed
+- **An object rename that only changes letter case is no longer refused.** `xbsl rename-object` /
+  `meta_rename_object` answered "Файл уже существует" to a rename of `Goods` into `goods`: a
+  case-insensitive filesystem (Windows, macOS) addresses the old and the new name as one file, and
+  the occupied-name check read it as a foreign one. Such a rename is now recognised (the names
+  match case-insensitively AND it is the same file) and applied in two steps through a temporary
+  name; a failure of the second step undoes the first, and no temporary name is left on disk. A
+  name held by ANOTHER file is still refused. On a case-sensitive filesystem nothing changed -
+  there the name is free, the rename runs in a single step and no intermediate name appears in the
+  report.
+- **A case-only rename warns about the version control system.** The tool renames the files
+  itself, but git on a case-insensitive filesystem folds ASCII letters only: a Latin rename goes
+  unnoticed (`git mv` is needed), while a Cyrillic one is recorded as a delete plus an add - and
+  then every other clone on such a filesystem stops at "untracked working tree files would be
+  overwritten by merge". A new note in the tool's answer says so.
+
 ## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0, 0.40.0
 
 ### Changed

@@ -291,6 +291,17 @@ fields that merely share the old name are left alone, and so are string literals
 object and its forms. The object's `Id` is untouched, so the platform keeps the stored
 data.
 
+A rename that only changes letter case (`Goods` into `goods`) is applied in two steps through a
+temporary name: a case-insensitive filesystem (Windows, macOS) addresses the old and the new name
+as one file, and a single-step rename between them is not guaranteed. A failure of the second step
+undoes the first and leaves no temporary name on disk; on a case-sensitive filesystem the name is
+free and the rename runs in a single step. The tool renames the files itself, but check the
+version control system: git on a case-insensitive filesystem folds ASCII letters only, so a Latin
+rename goes unnoticed - record it explicitly (`git mv <old> <new>`) - while a Cyrillic one is
+recorded as a delete plus an add, and then every other clone on such a filesystem stops at
+"untracked working tree files would be overwritten by merge", where the file under the old name
+has to be deleted before pulling.
+
 ## Extending: your own rules, data and severities
 
 Three entry point groups let a separate package extend the linter without forking it. This exists

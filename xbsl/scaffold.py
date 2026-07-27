@@ -1031,6 +1031,82 @@ class FileRename:
     old_path: Path
     new_path: Path
 
+    @property
+    def case_only(self) -> bool:
+        """The two names differ only by letter case: `Товары.yaml` -> `товары.yaml`.
+
+        This is the one rename whose target legitimately "already exists": a
+        case-insensitive filesystem (Windows, macOS by default) addresses one and the same
+        file under both spellings, so the existence check must not read it as a clash with
+        a foreign file. The test is textual on purpose - it states the class of the rename
+        and answers the same on every filesystem.
+        """
+        old, new = str(self.old_path), str(self.new_path)
+        return old != new and old.casefold() == new.casefold()
+
+
+# Suffix of the intermediate name of a two-step rename (see _rename_file). Deliberately
+# not .yaml/.xbsl: should a process be killed between the steps, what is left behind is
+# not picked up as a source by engine.find_sources.
+_RENAME_TEMP_SUFFIX = ".xbsl-rename-tmp"
+
+
+def _one_file_under_both_names(rename: FileRename) -> bool:
+    """A case-only rename on a case-insensitive filesystem: both names are one file.
+
+    On a case-sensitive filesystem the new name is simply free, so this is False and the
+    rename is an ordinary one. A path that cannot be stat'ed also answers False - nothing
+    then proves the two names are one file, and the safe reading is a foreign file.
+    """
+    if not rename.case_only or not rename.new_path.exists():
+        return False
+    try:
+        return rename.old_path.samefile(rename.new_path)
+    except OSError:
+        return False
+
+
+def _rename_clashes(rename: FileRename) -> bool:
+    """The target name is taken by ANOTHER file - the rename would destroy it."""
+    return rename.new_path.exists() and not _one_file_under_both_names(rename)
+
+
+def _free_temp_path(path: Path) -> Path:
+    """A name next to `path` that is free under any casing - for the intermediate step."""
+    candidate = path.with_name(path.name + _RENAME_TEMP_SUFFIX)
+    n = 0
+    while candidate.exists():
+        n += 1
+        candidate = path.with_name(f"{path.name}{_RENAME_TEMP_SUFFIX}{n}")
+    return candidate
+
+
+def _rename_file(rename: FileRename) -> None:
+    """Rename one file; a case-only rename goes through a temporary name.
+
+    On a case-insensitive filesystem the old and the new name are the same file, and a
+    single-step rename between them is not guaranteed: it is a no-op or an error depending
+    on the filesystem (network shares and mounted volumes differ from a local NTFS).
+    Two steps through a free name work everywhere and leave nothing behind - a failure of
+    the second step undoes the first. The branch is on the observable fact "the target
+    exists and it is the same file", not on the operating system: on a case-sensitive
+    filesystem the target simply does not exist, the plain single rename runs and no
+    temporary name ever appears.
+
+    Called after _rename_clashes has cleared the rename - a target held by a foreign file
+    is an error, not a case to handle here.
+    """
+    if _one_file_under_both_names(rename):
+        temp = _free_temp_path(rename.old_path)
+        rename.old_path.rename(temp)
+        try:
+            temp.rename(rename.new_path)
+        except OSError:
+            temp.rename(rename.old_path)
+            raise
+    else:
+        rename.old_path.rename(rename.new_path)
+
 
 @dataclass
 class ScaffoldResult:
@@ -1063,12 +1139,13 @@ def apply_result(result: ScaffoldResult) -> list[str]:
     File renames run before writing the edits: edits of renamed files reference the new
     paths. Editing an existing file preserves its BOM (the encoding is detected by
     engine.load); newlines are chosen by the operation itself when generating the text.
+    A rename that only changes letter case is applied in two steps (see _rename_file).
     """
     for rename in result.renames:
-        if rename.new_path.exists():
+        if _rename_clashes(rename):
             raise ScaffoldError(f"Файл уже существует: {rename.new_path}")
         rename.new_path.parent.mkdir(parents=True, exist_ok=True)
-        rename.old_path.rename(rename.new_path)
+        _rename_file(rename)
     written = []
     for change in result.changes:
         change.path.parent.mkdir(parents=True, exist_ok=True)
@@ -3328,10 +3405,10 @@ def op_rename_object(
         new_base = renamer.file_base(base)
         if new_base == base:
             continue
-        new_path = path.with_name(new_base + path.name[len(base):])
-        if new_path.exists():
-            raise ScaffoldError(f"Файл уже существует: {new_path}")
-        result.renames.append(FileRename(path, new_path))
+        rename = FileRename(path, path.with_name(new_base + path.name[len(base):]))
+        if _rename_clashes(rename):
+            raise ScaffoldError(f"Файл уже существует: {rename.new_path}")
+        result.renames.append(rename)
     renamed = {r.old_path.resolve(): r.new_path for r in result.renames}
     own_yaml = {
         r.old_path.resolve() for r in result.renames if r.old_path.suffix == ".yaml"
@@ -3375,5 +3452,23 @@ def op_rename_object(
     if hit.kind == "HttpСервис" and re.search(r"^КорневойUrl:", hit.text, re.M):
         result.notes.append(
             "КорневойUrl не изменён (публичный контракт сервиса) – при необходимости поправьте вручную"
+        )
+    if any(_one_file_under_both_names(r) for r in result.renames):
+        # The files are renamed here, but what the version control system makes of it is
+        # beyond the tool's reach, and it differs by alphabet: git on a case-insensitive
+        # filesystem (core.ignorecase=true) folds ASCII letters only, so a Latin name stays
+        # in the index under the old spelling while a Cyrillic one is recorded as a delete
+        # plus an add - and then every other clone on such a filesystem stops at
+        # "untracked working tree files would be overwritten by merge".
+        result.notes.append(
+            "Имена отличаются только регистром: на регистронезависимой файловой системе "
+            "(Windows, macOS) файлы переименованы в два шага через временное имя. "
+            "Проверьте, что система контроля версий увидела новые имена: git сличает "
+            "имена без учёта регистра только для латиницы, поэтому латинское "
+            "переименование он не заметит – зафиксируйте его явно (git mv <старое> "
+            "<новое>), а кириллическое покажет как удаление и добавление, и тогда в "
+            "остальных клонах на такой же файловой системе git pull остановится с "
+            "\"untracked working tree files would be overwritten by merge\" – там перед "
+            "обновлением надо удалить файл со старым именем"
         )
     return result
