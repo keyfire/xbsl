@@ -128,6 +128,11 @@ class RuleInfo:
     severity: Severity
     func: Callable
     enabled_by_default: bool = True
+    # WHY the rule is off by default - a catalog key or a literal. A bare "off" in the
+    # listing tells the reader nothing, and the reason then lives in three different
+    # places (the rule docstring, the RULES table, someone's backlog), none of which is
+    # where the reader is looking. Required for every disabled rule - tests/test_rules_off.py.
+    off_reason: str = ""
     # Map-reduce for a project rule: mapper(source) -> a small picklable per-file fact
     # (None = the file contributes nothing). The rule func then takes {rel: fact} instead
     # of the source list. In a parallel run the mapper executes inside the FILE workers
@@ -148,7 +153,15 @@ class RuleInfo:
             "scope": self.scope,
             "severity": self.severity.value,
             "enabled_by_default": self.enabled_by_default,
+            "off_reason": self.off_reason_text,
         }
+
+    @property
+    def off_reason_text(self) -> str:
+        """Why the rule is off, translated; empty for a rule that is on."""
+        if self.enabled_by_default or not self.off_reason:
+            return ""
+        return i18n.t(self.off_reason)
 
 
 RULES: list[RuleInfo] = []
@@ -162,6 +175,7 @@ def rule(
     scope: str = "file",
     severity: Severity = Severity.WARNING,
     enabled_by_default: bool = True,
+    off_reason: str = "",
     mapper: Callable | None = None,
 ) -> Callable[[Callable], Callable]:
     """Register a rule with its metadata.
@@ -174,7 +188,7 @@ def rule(
 
     def deco(fn: Callable) -> Callable:
         RULES.append(RuleInfo(
-            rule_id, title, tier, scope, severity, fn, enabled_by_default, mapper,
+            rule_id, title, tier, scope, severity, fn, enabled_by_default, off_reason, mapper,
         ))
         return fn
 

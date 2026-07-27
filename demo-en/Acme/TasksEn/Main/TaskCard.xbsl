@@ -5,10 +5,10 @@ method SaveAndClose()
 
 @Handler
 method MarkDone()
-    var previousTitle = Object.Name   
+    var PreviousTitle = Object.Name   
     // Mark the task done — writing is all that is left…
-    var stepCount: Number2 = Object.Steps.Size()
-    Object.Importance = stepCount
+    var StepCount: Number2 = Object.Steps.Size()
+    Object.Importance = StepCount
     Object.Done = True
     ВыполнитьЗаписать()
 ;

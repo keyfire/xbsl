@@ -56,6 +56,26 @@ _CORE_MESSAGES = {
         "ru": "(правила ещё не зарегистрированы)",
         "en": "(no rules registered yet)",
     },
+    "code/unused-method.off": {
+        "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
+        "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",
+    },
+    "yaml/size-needs-no-stretch.off": {
+        "ru": "у части компонентов размер без явного запрета растягивания работает законно (у родителя нет свободного места по этой оси, статически это не решается) – предупреждение дало бы ложные. Зовите точечно, когда видите симптом: пустое место или раздутые соседи",
+        "en": "for some components a size without an explicit stretch ban is perfectly valid (the parent has no leftover space along that axis, which is not statically decidable) - a warning would be false. Enable it point-blank when you see the symptom: blank space or inflated neighbours",
+    },
+    "typography/em-dash.off": {
+        "ru": "типографика – соглашение ПРОЕКТА, а не платформы: у одной команды длинное тире запрещено, у другой принято. Движок правило несёт, но включает его профиль проекта (точка расширения xbsl.severity), а не умолчание",
+        "en": "typography is a PROJECT convention rather than a platform one: one team bans the em dash, another uses it. The engine ships the rule but a project profile turns it on (the xbsl.severity entry point), not the default",
+    },
+    "typography/guillemets-comment.off": {
+        "ru": "типографика – соглашение ПРОЕКТА, а не платформы; включается профилем проекта (точка расширения xbsl.severity)",
+        "en": "typography is a PROJECT convention rather than a platform one; a project profile turns it on (the xbsl.severity entry point)",
+    },
+    "cli.rule-off": {
+        "ru": "выключено, потому что",
+        "en": "off because",
+    },
     "cli.data-error": {
         "ru": "Ошибка данных Элемента: {error}",
         "en": "Element data error: {error}",

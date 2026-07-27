@@ -188,6 +188,34 @@ def nullable_shorthand(source: SourceFile) -> Iterable[Diagnostic]:
             )
 
 
+def _typed_empty_array(source: SourceFile, toks, start: int) -> str | None:
+    """`<Т>[]` – an empty array literal that names its own element type.
+
+    The platform documents the form in "Идиомы" (`знч Артикулы = <Число>[]`), and it makes the
+    annotation redundant exactly like a constructor does: `пер А: Массив<Число> = <Число>[]`
+    states the type twice. Only the ARRAY form is recognised - the empty set and map spellings
+    are not in the documentation, and guessing at them would risk a false positive on code the
+    rule has no evidence about.
+    """
+    depth = 0
+    for i in range(start, len(toks)):
+        tok = toks[i]
+        if tok.kind != "OP":
+            continue
+        if tok.value == "<":
+            depth += 1
+        elif tok.value == ">":
+            depth -= 1
+            if depth:
+                continue
+            rest = toks[i + 1:i + 3]
+            if len(rest) == 2 and [t.value for t in rest] == ["[", "]"]:
+                element = _text(source, toks[start + 1:i])
+                return "Массив<%s>" % element
+            return None
+    return None
+
+
 @rule("style/redundant-type", "style/redundant-type.title", "C",
       severity=Severity.WARNING)
 def redundant_type(source: SourceFile) -> Iterable[Diagnostic]:
@@ -220,6 +248,8 @@ def redundant_type(source: SourceFile) -> Iterable[Diagnostic]:
         elif value.kind == "KEYWORD" and value.canonical == "NEW":
             ctor = type_expr(toks, decl.value_start + 1)
             inferred = _text(source, ctor.toks) if ctor is not None else None
+        elif value.kind == "OP" and value.value == "<":
+            inferred = _typed_empty_array(source, toks, decl.value_start)
 
         if inferred is None:
             continue

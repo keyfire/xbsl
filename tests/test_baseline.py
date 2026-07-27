@@ -116,17 +116,23 @@ def test_text_summary_reports_baseline(tmp_path, capsys):
 
 
 def test_enable_adds_rule_on_top_of_defaults(tmp_path, capsys):
-    long_line = "    пер Переменная = 1  # " + "х" * 120
+    """`--enable` adds a rule that the default set leaves out.
+
+    The example is `code/unused-method`: the style rules used to serve here, but they are
+    documented platform conventions and now run by default, so they no longer demonstrate
+    anything. A rule stays out of the default set only when its finding may legitimately be
+    a false positive - that is the class this flag exists for.
+    """
     f = tmp_path / "Ч.xbsl"
-    f.write_text(f"метод Ф()\n{long_line}\n    возврат Переменная  \n;\n", encoding="utf-8")
+    f.write_text("метод НикемНеВызываемый()\n    возврат 1  \n;\n", encoding="utf-8")
 
     code, payload = _run_json([str(f)], capsys)
     rules = {d["rule"] for d in payload["diagnostics"]}
-    assert "whitespace/trailing" in rules and "style/line-length" not in rules
+    assert "whitespace/trailing" in rules and "code/unused-method" not in rules
 
-    code, payload = _run_json(["--enable", "style/line-length", str(f)], capsys)
+    code, payload = _run_json(["--enable", "code/unused-method", str(f)], capsys)
     rules = {d["rule"] for d in payload["diagnostics"]}
-    assert {"whitespace/trailing", "style/line-length"} <= rules
+    assert {"whitespace/trailing", "code/unused-method"} <= rules
 
 
 def test_enable_respects_ignore(tmp_path, capsys):

@@ -134,7 +134,7 @@ def _structure_ranges(toks: list[Token]) -> list[tuple[int, int]]:
 
 @rule(
     "style/camel-case", "style/camel-case.title", "C",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.WARNING,
 )
 def camel_case(source: SourceFile) -> Iterable[Diagnostic]:
     """2.1: `ВходящееСообщение`, not `входящееСообщение` and not `Степень_Важности`.
@@ -167,7 +167,7 @@ def camel_case(source: SourceFile) -> Iterable[Diagnostic]:
         if key is None:
             continue
         yield Diagnostic(
-            source.rel, tok.line, tok.col, "style/camel-case", Severity.INFO,
+            source.rel, tok.line, tok.col, "style/camel-case", Severity.WARNING,
             i18n.t(key, name=name),
         )
 
@@ -214,7 +214,7 @@ def _suggest(name: str) -> str:
 
 @rule(
     "style/abbreviation-case", "style/abbreviation-case.title", "C",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.WARNING,
 )
 def abbreviation_case(source: SourceFile) -> Iterable[Diagnostic]:
     """2.2: in abbreviations only the first letter is capital (as in `Url`, `КлиентHttp`)."""
@@ -224,7 +224,7 @@ def abbreviation_case(source: SourceFile) -> Iterable[Diagnostic]:
         if not _ABBREV_RE.search(tok.value):
             continue
         yield Diagnostic(
-            source.rel, tok.line, tok.col, "style/abbreviation-case", Severity.INFO,
+            source.rel, tok.line, tok.col, "style/abbreviation-case", Severity.WARNING,
             i18n.t("style/abbreviation-case.caps", name=tok.value, suggestion=_suggest(tok.value)),
         )
 

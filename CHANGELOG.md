@@ -12,6 +12,29 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-27 – 0.44.0
+
+### Changed
+- **What the platform documents as a code-writing convention is now a standard: seven `style/`
+  rules run by default and report at `warning`** – line length, comparing a boolean with
+  `Истина`/`Ложь`, UpperCamelCase, collection literals, string interpolation, a redundant
+  `.ВСтроку()` and the case of abbreviations. They used to be `info` and off, treated as
+  accumulated debt; a convention that is documented and never enforced is not a convention.
+  Existing debt belongs in a baseline, and new violations are visible from the first run.
+  Off by default remain only the two checks whose finding may legitimately be a false positive:
+  `code/unused-method` and `yaml/size-needs-no-stretch`.
+- **A rule that is off by default says WHY, in the listing itself.** `--list-rules` prints the
+  reason under the rule and the machine-readable listing carries it in `off_reason` – the
+  reason used to live in the rule's docstring, a column of `docs/RULES.md` and nowhere the
+  reader looks. A new `off_reason=` argument of `rule()` carries a catalog key, so the text is
+  translated like everything else; a guard requires it from every disabled rule.
+
+### Added
+- `style/redundant-type` now sees the typed empty literal: `пер Артикулы: Массив<Число> =
+  <Число>[]` states the type twice, and the platform's "Идиомы" document the short form
+  (`знч Артикулы = <Число>[]`). Only the array spelling is recognised – the empty set and map
+  forms are not in the documentation, and guessing at them would risk a false positive.
+
 ## 2026-07-27 – 0.43.0
 
 ### Fixed

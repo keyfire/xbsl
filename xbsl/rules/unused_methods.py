@@ -150,7 +150,7 @@ def _unused_mapper(source: SourceFile) -> dict | None:
 
 @rule(
     "code/unused-method", "code/unused-method.title", "D",
-    scope="project", severity=Severity.WARNING, enabled_by_default=False,
+    scope="project", severity=Severity.WARNING, enabled_by_default=False, off_reason="code/unused-method.off",
     mapper=_unused_mapper,
 )
 def unused_method(facts: dict[str, dict]) -> Iterable[Diagnostic]:

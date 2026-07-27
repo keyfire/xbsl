@@ -106,7 +106,7 @@ def tab_indent(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule(
     "style/line-length", "style/line-length.title", "B",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.WARNING,
 )
 def line_length(source: SourceFile) -> Iterable[Diagnostic]:
     """1.2: the maximum line length is 120 characters.
@@ -126,7 +126,7 @@ def line_length(source: SourceFile) -> Iterable[Diagnostic]:
         if inside(strings, overflow) or in_query(source, overflow):
             continue
         yield Diagnostic(
-            source.rel, num, MAX_LINE + 1, "style/line-length", Severity.INFO,
+            source.rel, num, MAX_LINE + 1, "style/line-length", Severity.WARNING,
             i18n.t("style/line-length.over", length=len(text), limit=MAX_LINE),
         )
 

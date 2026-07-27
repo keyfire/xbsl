@@ -66,7 +66,7 @@ def _is_op(tok: Token, *values: str) -> bool:
 
 
 @rule("style/collection-literal", "style/collection-literal.title", "C",
-      severity=Severity.INFO, enabled_by_default=False)
+      severity=Severity.WARNING)
 def collection_literal(source: SourceFile) -> Iterable[Diagnostic]:
     """4.1: `пер Кнопки = [Да, Нет]` instead of a constructor and a `.Добавить()` chain.
 
@@ -105,7 +105,7 @@ def collection_literal(source: SourceFile) -> Iterable[Diagnostic]:
 
         yield Diagnostic(
             source.rel, decl.keyword.line, decl.keyword.col,
-            "style/collection-literal", Severity.INFO,
+            "style/collection-literal", Severity.WARNING,
             i18n.t("style/collection-literal.filled", name=name, method=toks[j + 2].value),
         )
 
@@ -118,7 +118,7 @@ def _tokens_by_line(toks: list[Token]) -> dict[int, list[Token]]:
 
 
 @rule("style/redundant-tostring", "style/redundant-tostring.title", "C",
-      severity=Severity.INFO, enabled_by_default=False)
+      severity=Severity.WARNING)
 def redundant_tostring(source: SourceFile) -> Iterable[Diagnostic]:
     """5.1: `"Итерация №" + Счетчик`, not `... + Счетчик.ВСтроку()` – the conversion is implicit."""
     if source.kind != "xbsl":
@@ -137,13 +137,13 @@ def redundant_tostring(source: SourceFile) -> Iterable[Diagnostic]:
         if has_plus and has_string:
             yield Diagnostic(
                 source.rel, toks[i + 1].line, toks[i + 1].col,
-                "style/redundant-tostring", Severity.INFO,
+                "style/redundant-tostring", Severity.WARNING,
                 i18n.t("style/redundant-tostring.concat"),
             )
 
 
 @rule("style/interpolation", "style/interpolation.title", "C",
-      severity=Severity.INFO, enabled_by_default=False)
+      severity=Severity.WARNING)
 def interpolation(source: SourceFile) -> Iterable[Diagnostic]:
     """5.2: `"Итерация №%Счетчик"` instead of `"Итерация №" + Счетчик`.
 
@@ -179,6 +179,6 @@ def interpolation(source: SourceFile) -> Iterable[Diagnostic]:
             continue
         reported[-1] = True
         yield Diagnostic(
-            source.rel, tok.line, tok.col, "style/interpolation", Severity.INFO,
+            source.rel, tok.line, tok.col, "style/interpolation", Severity.WARNING,
             i18n.t("style/interpolation.concat"),
         )

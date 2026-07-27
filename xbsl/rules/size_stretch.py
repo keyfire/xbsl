@@ -90,7 +90,7 @@ def _fixed_size(node) -> bool:
 
 @rule(
     "yaml/size-needs-no-stretch", "yaml/size-needs-no-stretch.title", "D",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.INFO, enabled_by_default=False, off_reason="yaml/size-needs-no-stretch.off",
 )
 def size_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "yaml" or not _HAVE_YAML:

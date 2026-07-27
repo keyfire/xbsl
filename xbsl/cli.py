@@ -859,6 +859,10 @@ def main(argv: list[str] | None = None) -> int:
         for r in sorted(RULES, key=lambda x: (x.tier, x.id)):
             mark = "   " if r.enabled_by_default else "off"
             print(f"{r.tier} {mark} {r.id:30} {r.severity.value:7} {r.title}")
+            # A bare "off" leaves the reader guessing whether the rule is broken, noisy or
+            # simply not for them - so a disabled rule states its reason right here.
+            if r.off_reason_text:
+                print(f"       {i18n.t('cli.rule-off')}: {r.off_reason_text}")
         if not RULES:
             print(i18n.t("cli.no-rules"))
         return 0

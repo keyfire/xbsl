@@ -90,7 +90,7 @@ def _hits(source: SourceFile, kinds: tuple[str, ...], chars: str):
 # default and carry severity=info (enable them with --select).
 @rule(
     "typography/em-dash", "typography/em-dash.title", "B",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.INFO, enabled_by_default=False, off_reason="typography/em-dash.off",
 )
 def em_dash(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "xbsl":
@@ -129,7 +129,7 @@ def curly_quotes(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule(
     "typography/guillemets-comment", "typography/guillemets-comment.title", "B",
-    severity=Severity.INFO, enabled_by_default=False,
+    severity=Severity.INFO, enabled_by_default=False, off_reason="typography/guillemets-comment.off",
 )
 def guillemets_in_comment(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "xbsl":

@@ -60,7 +60,7 @@ def _is_kw(tok: Token, *canonicals: str) -> bool:
 
 
 @rule("style/boolean-compare", "style/boolean-compare.title", "C",
-      severity=Severity.INFO, enabled_by_default=False)
+      severity=Severity.WARNING)
 def boolean_compare(source: SourceFile) -> Iterable[Diagnostic]:
     """8.1: `если Переменная`, not `если Переменная == Истина`.
 
@@ -82,7 +82,7 @@ def boolean_compare(source: SourceFile) -> Iterable[Diagnostic]:
         if literal is None:
             continue
         yield Diagnostic(
-            source.rel, tok.line, tok.col, "style/boolean-compare", Severity.INFO,
+            source.rel, tok.line, tok.col, "style/boolean-compare", Severity.WARNING,
             i18n.t("style/boolean-compare.msg", keyword=_BOOLEAN_KEYWORDS[literal.canonical]),
         )
 
