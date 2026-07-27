@@ -13,7 +13,7 @@ ships as a Python engine and a VS Code extension built on top of it.
 
 ## What is in the box
 
-- **Linter with autofixes** – 122 rules in four tiers: yaml structure, text and typography
+- **Linter with autofixes** – 123 rules in four tiers: yaml structure, text and typography
   conventions, code structure, and semantics checked against the platform data and the project
   itself.
 - **LSP server** – live diagnostics, go-to-definition and completion for any LSP-capable editor.

@@ -14,6 +14,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## 2026-07-27 – 0.45.0
 
+### Added
+- **`code/bound-property-assign` – a property COMPUTED by an expression must not be assigned from
+  code.** The platform refuses `Component.Property = value` when the markup computes that property
+  (`Height: =Common.IsMobile()?820:528`) and answers "Cannot set the value of property ... specified
+  by expression"; inside the usual `try/catch` cascade the refusal is invisible and the symptom is a
+  layout that quietly ignores the code. A DATA BINDING is left alone: `Value: =Record.Value` is a
+  bare path, the documentation calls such a link two-way for an editable component, and writing to
+  it is how an editor gives the value back - so the rule judges the SHAPE of the expression, a path
+  against anything computed. The paired yaml is read from the disk neighbour, so the rule stays
+  file-scope and the editor reports it on every keystroke.
+
 ### Fixed
 - **`style/boolean-compare` no longer fires where the comparison is mandatory.** The rule stood on
   tokens alone and reported every `== True`, so on a real project all of its findings were false:

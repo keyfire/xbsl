@@ -37,6 +37,7 @@ from . import (  # noqa: F401
 
 # Tier D – semantics over stdlib, forms and the metamodel:
 from . import (  # noqa: F401
+    bound_properties,
     catch_exceptions,
     choice_list,
     component_since,

@@ -64,6 +64,7 @@ _DATA_DEPENDENT = {
     "test_rule_resources",  # the rule tokenizes the module
     "test_rule_presentation_field",  # the rule needs the metamodel
     "test_rule_static_context",  # the rules parse and tokenize the module
+    "test_rule_bound_property",  # the rule tokenizes the module
 }
 
 
