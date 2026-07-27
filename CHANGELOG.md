@@ -40,7 +40,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **The type catalog keeps the full spelling of a union result type.** The extractor cut a member's
   type at the head (`Auto` instead of `Auto|Boolean`, `Boolean` instead of
   `Boolean|JsObject|Number|String|?`), so the data could not tell "a boolean" from "a value that
-  may be a boolean" - 438 members in 10.0.1 and 359 in 9.2.8+11 were stored short. Consumers that
+  may be a boolean" - 438 members in the current dataset and 359 in the previous one were stored
+  short. Consumers that
   work in nominal heads are unaffected: `dataset.member_type_head` cuts the union the same way it
   always did.
 

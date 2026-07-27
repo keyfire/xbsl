@@ -19,9 +19,133 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3
+## 2026-07-27 – 0.45.0
+
+### Added
+- **`code/bound-property-assign` – a property COMPUTED by an expression must not be assigned from
+  code.** The platform refuses `Component.Property = value` when the markup computes that property
+  (`Height: =Common.IsMobile()?820:528`) and answers "Cannot set the value of property ... specified
+  by expression"; inside the usual `try/catch` cascade the refusal is invisible and the symptom is a
+  layout that quietly ignores the code. A DATA BINDING is left alone: `Value: =Record.Value` is a
+  bare path, the documentation calls such a link two-way for an editable component, and writing to
+  it is how an editor gives the value back - so the rule judges the SHAPE of the expression, a path
+  against anything computed. The paired yaml is read from the disk neighbour, so the rule stays
+  file-scope and the editor reports it on every keystroke.
+
+### Fixed
+- **`style/boolean-compare` no longer fires where the comparison is mandatory.** The rule stood on
+  tokens alone and reported every `== True`, so on a real project all of its findings were false:
+  the short form does not compile ("Boolean expression is expected") as soon as the value is
+  nullable or composite - a component property is `Auto|Boolean`, `HtmlContainer.GetVariable`
+  returns `Boolean|JsObject|Number|String|?`, `Form.OpenInModalWindow` returns `ResultType?`. The
+  operand is now typed: by the catalog for a member access or a call, by the annotation for a
+  parameter or a local, and by the initializer's last link for a variable. A comparison stays a
+  violation only when the type is exactly `Boolean`; what the file cannot type at all is still
+  reported, because an unknown name is the usual violation the rule exists for.
 
 ### Changed
+- **The type catalog keeps the full spelling of a union result type.** The extractor cut a member's
+  type at the head (`Auto` instead of `Auto|Boolean`, `Boolean` instead of
+  `Boolean|JsObject|Number|String|?`), so the data could not tell "a boolean" from "a value that
+  may be a boolean" - 438 members in the current dataset and 359 in the previous one were stored
+  short. Consumers that
+  work in nominal heads are unaffected: `dataset.member_type_head` cuts the union the same way it
+  always did.
+
+## 2026-07-27 – 0.44.0
+
+### Changed
+- **What the platform documents as a code-writing convention is now a standard: seven `style/`
+  rules run by default and report at `warning`** – line length, comparing a boolean with
+  `True`/`False`, UpperCamelCase, collection literals, string interpolation, a redundant
+  `.ToString()` and the case of abbreviations. They used to be `info` and off, treated as
+  accumulated debt; a convention that is documented and never enforced is not a convention.
+  Existing debt belongs in a baseline, and new violations are visible from the first run.
+  Off by default remain only the two checks whose finding may legitimately be a false positive:
+  `code/unused-method` and `yaml/size-needs-no-stretch`.
+- **A rule that is off by default says WHY, in the listing itself.** `--list-rules` prints the
+  reason under the rule and the machine-readable listing carries it in `off_reason` – the
+  reason used to live in the rule's docstring, a column of `docs/RULES.md` and nowhere the
+  reader looks. A new `off_reason=` argument of `rule()` carries a catalog key, so the text is
+  translated like everything else; a guard requires it from every disabled rule.
+
+### Added
+- `style/redundant-type` now sees the typed empty literal: `var Articles: Array<Number> =
+  <Number>[]` states the type twice, and the platform's "Idioms" article documents the short
+  form (`val Articles = <Number>[]`). Only the array spelling is recognised – the empty set and
+  map forms are not in the documentation, and guessing at them would risk a false positive.
+
+## 2026-07-27 – 0.43.0
+
+### Fixed
+- **Scaffolding reads a project written with English metadata keys.** Only writing was bilingual:
+  every yaml READER in the scaffolding matched Russian spellings, so `rename-object`, `object-info`,
+  `add-field`, `set-access`, `add-form` and `add-route` answered "no such object" on an
+  English-spelled project - and three operations were worse than that, answering successfully with
+  the wrong result: `project-info` reported an empty object list, `add-dependency` appended a second
+  library entry instead of updating the version in place, and `add-subsystem` wrote a Russian
+  descriptor into an English project. `object-info` also invented a standard `Наименование`
+  alongside the declared `Name`, which would have reached a generated form as a column. Readers now
+  accept both spellings and write in the language of the file. The pairs come from the platform's
+  own metamodel (`english_name`), never from a hand-written table: `terms` is the source for VALUES
+  (kinds, enumerations) and the metamodel for KEYS, and they genuinely differ. A name the platform
+  spells ambiguously across classes (`Элементы` is `Items` on an enumeration and `Elements`
+  elsewhere) stays Russian on purpose - guessing costs more than staying silent. Without the
+  platform data everything degrades to the previous Russian-only behaviour.
+
+## 2026-07-27 – 0.42.1
+
+### Fixed
+- **A parallel run of the released wheel no longer dies as `BrokenProcessPool`.** With `--jobs`
+  left at its default the engine goes parallel on its own once a run has at least 120 files and the
+  machine has at least 4 cores, so `xbsl lint` over a real project failed outright – no flag
+  needed. The pool broke while the PARENT unpickled a worker's result: a fact carried a whole
+  `SourceFile`, and with it the file's cache holding a `lexer._LineMap`. In the native build that
+  class is a C extension: it pickles, but unpickling calls `cls.__new__(cls)` with no arguments and
+  its generated constructor refuses. The exception surfaced only as a broken pool, and only in the
+  wheel – a pure-Python run was never affected, which is why neither CI nor development saw it.
+  Sources now leave their cache out of the pickle (derived, process-local data, rebuilt on demand),
+  which closes the whole class rather than the one entry that tripped it, and shrinks a worker's
+  result from 1.96 MB to 0.58 MB. Guarded by new tests that do not depend on the build.
+
+## 2026-07-27 – 0.42.0
+
+### Fixed
+- **An object rename that only changes letter case is no longer refused.** `xbsl rename-object` /
+  `meta_rename_object` answered "Файл уже существует" to a rename of `Goods` into `goods`: a
+  case-insensitive filesystem (Windows, macOS) addresses the old and the new name as one file, and
+  the occupied-name check read it as a foreign one. Such a rename is now recognised (the names
+  match case-insensitively AND it is the same file) and applied in two steps through a temporary
+  name; a failure of the second step undoes the first, and no temporary name is left on disk. A
+  name held by ANOTHER file is still refused. On a case-sensitive filesystem nothing changed -
+  there the name is free, the rename runs in a single step and no intermediate name appears in the
+  report.
+- **A case-only rename warns about the version control system.** The tool renames the files
+  itself, but git on a case-insensitive filesystem folds ASCII letters only: a Latin rename goes
+  unnoticed (`git mv` is needed), while a Cyrillic one is recorded as a delete plus an add - and
+  then every other clone on such a filesystem stops at "untracked working tree files would be
+  overwritten by merge". A new note in the tool's answer says so.
+
+
+## 2026-07-27 – 0.41.0
+
+### Added
+- **`xbsl/metaKeys` – the element key pairs for surfaces outside python** (`Attributes` ->
+  `Реквизиты`), the metadata counterpart of `xbsl/formKeys`. The metadata tree of the editor
+  parses the yaml itself, so an English object used to show empty branches: the sections were
+  looked up by their Russian names while the file spells English ones. Pairs are collected from
+  the `en` of the metamodel classes - the whole model, not one kind, because a section item is a
+  class of its own and the tree descends into it. Without the data the request answers
+  `{"available": false}` and the reader keeps working on Russian keys.
+## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0, 0.40.0
+
+### Changed
+- **A guard over the English documents.** Russian spellings of platform names in the English
+  documents (`Группа` for `Group`, `Ид` for `Id`) drifted in with every wave of rules and were
+  caught by eye alone. A test refuses them now, knowing the three legitimate cases: a file name the
+  platform keeps Russian for projects of either language, a single letter that is the subject
+  itself, and a link to the Russian twin. The divergences it found in the rule table and in the
+  extension settings strings are fixed.
 - **0.37.3: the last docstrings and the demo README state the facts too.** What the compiler
   accepts and what a rule guards against stay; the rest is gone. No rule changed its behaviour.
 - **0.37.2: the texts state the facts, not how they were obtained.** The changelog, the rule
@@ -32,15 +156,64 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   declares; only the example in the module docstring dropped the number.
 
 ### Added
+- **0.40.0: four rules - per-object permissions and localization** (122 rules now).
+  - `code/per-object-permissions-need-common` (warning): an object asks for its permissions to be
+    decided per record while its module declares no common `ComputeAccessPermissions` handler. It
+    is required even then, if only to return an empty array; without it the object has no general
+    permissions at all and the per-object calculation is never reached.
+  - `code/permission-field-not-declared` (warning): inside `ComputeAccessPermissionsForObjects` a
+    field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity`
+    instead of the record. The declared list is what tells the second shape apart: `Entity.Privilege`
+    is a legitimate namespace and appears in the very same handler.
+  - `yaml/placeholder-key-in-strings` (error): a key carrying the `$0` placeholder in the `Strings`
+    section of a dictionary. The section compiles to a method WITHOUT parameters, so a call with an
+    argument fails the apply - and the answer names the key but never the section, pointing away
+    from the cause.
+  - `code/compare-with-localized` (warning): a localized value compared against a literal or a
+    second localized value - in another language the branch simply never runs. Branch on the value
+    behind the presentation instead. A comparison against a variable is deliberately not judged.
+
+- **0.39.0: `yaml/delete-current-needs-immediate`** (118 rules now). A reference attribute with
+  `OnReferencedObjectDeletion: DeleteCurrent` whose owner has a `DeletionMode` that only marks the
+  record brings the whole apply down: `Action DeleteCurrent cannot apply to object with a
+  DeletionMark`. An object that never declares the mode is in the same trap - `DeletionMark` is the
+  default, and the rule takes it from the metamodel rather than from its own text. Both facts live
+  in one file, so the check is a file rule and highlights while you type; keys and values are read
+  in either spelling.
+
+- **0.38.0: two rules over the execution environment** (117 rules now). Both close an apply
+  failure that leaves no line in a local build: `elemctl build` packs an archive, while the
+  environment is checked only by the server-side compilation.
+  - `code/client-available-needs-context` (error): `@AvailableFromClient` on a method of an
+    interface component module that is declared neither `static` nor `@Contextual`. The component
+    type is not a singleton, so the apply answers `Modifier "AvailableFromClient" can only be used
+    in static methods, singleton-type methods, or methods with modifier "Contextual"`. Both
+    documented forms pass in silence: the static method that hands execution from the client to the
+    server, and the contextual one that keeps the instance context. The check is confined to
+    interface components on purpose - `@Contextual` is available in their modules alone, while
+    common modules, catalogs and information registers are singleton types, where the plain form is
+    correct.
+  - `code/server-module-in-client-context` (error): a `Module.Member(...)` access to a common
+    module with `Environment: Server` from a method that runs on the client. The mirror of
+    `code/client-module-in-http-service`, except that the failure here is not a runtime one but a
+    compile-time one - `<Client> Type "X" is unavailable in the current environment`, and the
+    application is never created; hence the error level. Only the bodies of methods without
+    `@OnServer` are read: a method carrying that annotation runs on the server, where the type does
+    exist. The modules judged are the ones that live in the Client environment - interface
+    components, commands, storable structures and common modules with `Environment: Client`.
+
+  Both rules read the platform names in either spelling (`terms.json`), so an English project is
+  caught just like a Russian one.
+
 - **Five rules over what the platform ACCEPTS but does not do** (115 rules now). The compiler is
   happy in every one of these cases and the defect surfaces later - on the screen, on the deploy or
   in the database.
-  - `yaml/empty-group-sized` (warning): an empty `Группа` with a fixed `Высота`/`Ширина` is thrown
+  - `yaml/empty-group-sized` (warning): an empty `Group` with a fixed `Height`/`Width` is thrown
     out of the DOM entirely, so the spacer leaves no gap. The cure is a non-empty transparent insert
     of the same height.
-  - `yaml/hint-too-long` (warning): the renderer cuts a `Подсказка` off at about 290 characters
+  - `yaml/hint-too-long` (warning): the renderer cuts a `Tooltip` off at about 290 characters
     without a scroll or a "more" affordance - the tail is simply lost.
-  - `code/close-in-before-close` (warning): a `Закрыть()` call in the own flow of `ПередЗакрытием`
+  - `code/close-in-before-close` (warning): a `Close()` call in the own flow of `BeforeClose`
     is ignored by the platform while the closing stays unfinished, and after that nothing closes the
     form. The recommended cure - the call handed to a one-shot timer inside a lambda - the rule
     passes over in silence.
@@ -133,11 +306,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Added
 - Rule **`code/local-method-cross-module`** (tier D, error, project-scoped; 101 rules now):
-  `Module.Method(...)` must target a method that carries a visibility annotation. @Локально is
+  `Module.Method(...)` must target a method that carries a visibility annotation. @Local is
   the DEFAULT visibility of a language construct, so a method with no annotation is reachable
   from its own module alone and the compiler rejects the call on build. The sibling
   `code/local-method-cross-component` covers the same invariant reached through a component
-  INSTANCE (`Компоненты.X.Method(...)`, a runtime failure); this one goes through the module
+  INSTANCE (`Components.X.Method(...)`, a runtime failure); this one goes through the module
   name and resolves it by the file stem, the resolution of `code/call-arity-cross`.
 
 ### Changed
@@ -151,7 +324,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - The metadata scaffolding writes a **slot by its cardinality**: a first child of a slot the ui
   schema declares `Array<Component>` (`Group.Content` and friends) lands as a "-" list item, not
   as a single nested mapping. A singleton there compiles into "Значение типа ... не может быть
-  присвоено в Массив<Компонент>" and takes the whole `Компоненты.<Name>` resolution down with it -
+  присвоено в Массив<Компонент>" and takes the whole `Components.<Name>` resolution down with it -
   the trap `meta_move_components` fell into when a table moved into a fresh group. Slots declared
   with a single type keep the mapping spelling; an owner the schema cannot name (a page item
   carries no `Type`) keeps it too.
@@ -235,8 +408,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   hierarchy sections list base types as links with unqualified texts, so the qualified-name
   marker matched nothing and the built-in property sets survived for one component out of
   dozens; the link target is now accepted as the marker as well.
-- A variable named `Запрос` (the Query keyword) was read as the query-literal keyword
-  everywhere: the declaration dropped out of the token utilities, a `Запрос.Выполнить()`
+- A variable named `Query` (the keyword spelling) was read as the query-literal keyword
+  everywhere: the declaration dropped out of the token utilities, a `Query.Execute()`
   chain fell into the literal path, and the hover documented the database query type.
   Like the parser, the tokenizer now reads it as a plain name when no `{` follows.
 - A single-file check (the way the editor lints a saved module) lost the paired yaml's
@@ -256,9 +429,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - `code/resource-bare-name` no longer treats an `inbase/…` reference as a folder path: a resource
   uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
   (the compiler verifies its existence at apply) (0.31.0).
-- A resource key is a path relative to the subsystem's `Ресурсы` folder: `code/resource-bare-name`
-  now flags only a key that spells the `Ресурсы` folder out, and subdirectory references
-  (`Подкаталог/Файл.svg`) are legal instead of being reported (0.31.1).
+- A resource key is a path relative to the subsystem's `Resources` folder: `code/resource-bare-name`
+  now flags only a key that spells the `Resources` folder out, and subdirectory references
+  (`Subfolder/File.svg`) are legal instead of being reported (0.31.1).
 
 ## 2026-07-22 – 0.28.0, 0.29.0, 0.30.0, 0.30.1
 
