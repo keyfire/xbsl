@@ -30,6 +30,17 @@ CLI subcommands from the clone: `python -m xbsl` parses the check mode only (a s
 is taken for a path and lints 0 files); use
 `python -c "from xbsl.cli import main; main()" list-rules`.
 
+### Which xbsl is actually running
+
+`python -m xbsl` from the clone puts the working directory first on `sys.path`, so the
+sources silently take over from an installed wheel - a probe then passes or fails depending
+on where it was started, and the defect looks intermittent. State the provenance instead of
+assuming it:
+
+```sh
+python -c "import xbsl.lexer as L; print(L.__file__)"
+```
+
 ## How to add a rule
 
 1. Create a module under `xbsl/rules/` (or extend an existing one).
