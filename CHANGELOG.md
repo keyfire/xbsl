@@ -12,6 +12,27 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-27 – 0.45.0
+
+### Fixed
+- **`style/boolean-compare` no longer fires where the comparison is mandatory.** The rule stood on
+  tokens alone and reported every `== True`, so on a real project all of its findings were false:
+  the short form does not compile ("Boolean expression is expected") as soon as the value is
+  nullable or composite - a component property is `Auto|Boolean`, `HtmlContainer.GetVariable`
+  returns `Boolean|JsObject|Number|String|?`, `Form.OpenInModalWindow` returns `ResultType?`. The
+  operand is now typed: by the catalog for a member access or a call, by the annotation for a
+  parameter or a local, and by the initializer's last link for a variable. A comparison stays a
+  violation only when the type is exactly `Boolean`; what the file cannot type at all is still
+  reported, because an unknown name is the usual violation the rule exists for.
+
+### Changed
+- **The type catalog keeps the full spelling of a union result type.** The extractor cut a member's
+  type at the head (`Auto` instead of `Auto|Boolean`, `Boolean` instead of
+  `Boolean|JsObject|Number|String|?`), so the data could not tell "a boolean" from "a value that
+  may be a boolean" - 438 members in 10.0.1 and 359 in 9.2.8+11 were stored short. Consumers that
+  work in nominal heads are unaffected: `dataset.member_type_head` cuts the union the same way it
+  always did.
+
 ## 2026-07-27 – 0.44.0
 
 ### Changed

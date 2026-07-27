@@ -374,6 +374,75 @@ def test_boolean_check_without_compare_ok():
                   "style/boolean-compare")
 
 
+def test_compare_with_literal_on_the_left_flagged():
+    """`Истина == Флаг` – то же нарушение, операнд просто справа."""
+    d = _lint("метод Ф(Флаг: Булево)\n    если Истина == Флаг\n        Метод1()\n    ;\n;\n",
+              "style/boolean-compare")
+    assert len(d) == 1
+
+
+def test_nullable_parameter_comparison_ok():
+    """Для nullable краткая форма не компилируется – сравнение обязательно."""
+    assert _clean("метод Ф(Флаг: Булево?)\n    если Флаг == Истина\n        Метод1()\n    ;\n;\n",
+                  "style/boolean-compare")
+
+
+def test_nullable_local_comparison_ok():
+    assert _clean(
+        "метод Ф()\n    знч Флаг: Булево? = Неопределено\n    если Флаг == Истина\n"
+        "        Метод1()\n    ;\n;\n",
+        "style/boolean-compare",
+    )
+
+
+def test_composite_component_property_comparison_ok():
+    """Свойство компонента имеет тип Авто|Булево – каталог это знает."""
+    assert _clean(
+        "метод Ф()\n    если Компоненты.Флажок.Видимость == Истина\n        Метод1()\n    ;\n;\n",
+        "style/boolean-compare",
+    )
+
+
+def test_nullable_call_result_comparison_ok():
+    """Возврат составного типа (Булево|ОбъектJs|Число|Строка|?) сравнивают с Истина."""
+    assert _clean(
+        "метод Ф(Контейнер: КонтейнерHtml)\n"
+        "    если Контейнер.ПолучитьПеременную(\"Готово\") == Истина\n        Метод1()\n    ;\n;\n",
+        "style/boolean-compare",
+    )
+
+
+def test_variable_holding_a_composite_call_result_comparison_ok():
+    """Тот же случай через переменную: тип берётся у последнего звена инициализации."""
+    assert _clean(
+        "метод Ф(Контейнер: КонтейнерHtml)\n"
+        "    знч Готово = Контейнер.ПолучитьПеременную(\"Готово\")\n"
+        "    если Готово != Истина\n        возврат\n    ;\n;\n",
+        "style/boolean-compare",
+    )
+
+
+def test_plain_boolean_property_comparison_flagged():
+    """Отрицательный контроль отсева: у свойства в каталоге ровно Булево – нарушение остаётся.
+
+    Шрифт.Полужирный объявлен именно так, поэтому здесь краткая форма компилируется,
+    и отсев по каталогу молчать не должен.
+    """
+    d = _lint(
+        "метод Ф(Шрифт: АбсолютныйШрифт)\n"
+        "    если Шрифт.Полужирный == Истина\n        Метод1()\n    ;\n;\n",
+        "style/boolean-compare",
+    )
+    assert len(d) == 1
+
+
+def test_unknown_name_is_still_reported():
+    """Чего файл не типизирует – о том сообщаем: это обычное нарушение правила."""
+    d = _lint("метод Ф()\n    если Активен == Истина\n        Метод1()\n    ;\n;\n",
+              "style/boolean-compare")
+    assert len(d) == 1
+
+
 def test_is_undefined_flagged():
     d = _lint("метод Ф(Значение: Строка?)\n    если Значение это Неопределено\n        Метод1()\n    ;\n;\n",
               "style/undefined-is")

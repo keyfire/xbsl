@@ -217,13 +217,16 @@ _SIG_CODE_RE = re.compile(r"<pre class=\"highlight\"><code>(.*?)</code></pre>", 
 # a dotted facet name (Пользователи.Объект).
 _RETURN_HEAD_RE = re.compile(r"^\s*([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*(?:\.[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)?)")
 # The full spelling of a result type: the head plus a generic parameter (one or two nesting
-# levels) and the nullable marker - what the docs signature actually prints. An alternative
-# (А|Б) or deeper nesting is not captured beyond the head - the catalog then stores the head,
-# exactly what it stored before full spellings were kept.
-_RETURN_FULL_RE = re.compile(
-    r"^\s*([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*(?:\.[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)?"
-    r"(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\??)"
+# levels), the nullable marker AND the alternatives of a union - what the docs signature
+# actually prints (`Авто|Булево`, `Булево|ОбъектJs|Число|Строка|?`). The union matters to the
+# consumers: a value of type `Булево` and a value of type `Авто|Булево` are checked in code
+# differently, and by the head alone they are indistinguishable. A lone `?` is a legal
+# alternative (the docs write "or nothing"), so it is matched as one.
+_ALTERNATIVE = (
+    r"(?:[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*(?:\.[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)?"
+    r"(?:<[^<>]*(?:<[^<>]*>[^<>]*)*>)?\??|\?)"
 )
+_RETURN_FULL_RE = re.compile(r"^\s*(" + _ALTERNATIVE + r"(?:\s*\|\s*" + _ALTERNATIVE + r")*)")
 
 
 def page_member_types(raw: str) -> dict[str, str]:
