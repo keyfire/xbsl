@@ -2,6 +2,7 @@
 
 from xbsl import engine
 from xbsl.cli import discover
+from xbsl.rules import localization
 
 RULE = "yaml/placeholder-key-in-strings"
 
@@ -151,3 +152,41 @@ def test_call_of_a_module_that_is_not_a_dictionary_ok(tmp_path):
     )
     d = engine.run(discover([str(tmp_path)]), select={COMPARE})
     assert not _has(d, COMPARE)
+
+
+def test_map_phase_ships_candidates_not_the_file(tmp_path):
+    """Факт правила едет между процессами – в нём не должно быть исходника.
+
+    Раньше маппер клал в факт целый SourceFile: пикл рос вместе с проектом, а родитель
+    заново токенизировал каждый модуль в редьюсе.
+    """
+    import pickle
+
+    module = tmp_path / "Модуль.xbsl"
+    module.write_text(
+        '@ВПроекте\nметод Проба(): Булево\n    возврат Словарь.Новость() == "Новость"\n;\n',
+        encoding="utf-8",
+    )
+    fact = localization._compare_mapper(engine.load(module))
+    assert fact is not None and "source" not in fact
+    assert [span["what"] for span in fact["spans"]] == ["Словарь.Новость"]
+
+    # Размер факта не зависит от размера модуля – только от числа сравнений.
+    padding = "".join("метод Пустой%d()\n;\n" % n for n in range(300))
+    big = tmp_path / "Большой.xbsl"
+    big.write_text(module.read_text(encoding="utf-8") + padding, encoding="utf-8")
+    small_blob = pickle.dumps(fact, protocol=pickle.HIGHEST_PROTOCOL)
+    big_blob = pickle.dumps(
+        localization._compare_mapper(engine.load(big)), protocol=pickle.HIGHEST_PROTOCOL
+    )
+    assert len(big_blob) == len(small_blob)
+    assert len(big.read_bytes()) > 20 * len(module.read_bytes())
+
+
+def test_module_without_comparisons_contributes_nothing(tmp_path):
+    """Кандидаты сужены сравнением: обычный модуль в редьюс не едет вовсе."""
+    module = tmp_path / "Модуль.xbsl"
+    module.write_text(
+        "@ВПроекте\nметод Проба(): Строка\n    возврат Модуль.Значение()\n;\n", encoding="utf-8"
+    )
+    assert localization._compare_mapper(engine.load(module)) is None

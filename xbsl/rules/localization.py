@@ -177,31 +177,63 @@ def _call_end(toks: list, name_at: int) -> int | None:
     return j if not depth else None
 
 
-def _localized_spans(toks: list, dictionaries: frozenset[str]) -> list[tuple[int, int, str]]:
-    """(first token, past-the-end token, what it is) of every localized expression."""
-    spans: list[tuple[int, int, str]] = []
+def _comparison_candidates(toks: list) -> list[dict]:
+    """Localized calls that STAND NEXT TO a comparison, with everything the reduce needs.
+
+    The map phase cannot judge on its own - which names are dictionaries is known only
+    after every yaml has been read - but it can do all the token work here and ship a
+    handful of records instead of the source: the reduce then only filters by name. The
+    candidates are narrowed by the comparison itself, so a module full of ordinary calls
+    contributes nothing at all.
+    """
     presentation = _presentation_names()
+    spans: list[tuple[int, int, str, str]] = []  # start, end, what, base ("" - Представление)
     n = len(toks)
     for i, t in enumerate(toks):
         if t.kind != "IDENT":
             continue
-        if (t.value in dictionaries and i + 2 < n
-                and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
+        if (i + 2 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
                 and toks[i + 2].kind == "IDENT"):
             end = _call_end(toks, i + 2)
             if end is not None:
-                spans.append((i, end, f"{t.value}.{toks[i + 2].value}"))
+                spans.append((i, end, f"{t.value}.{toks[i + 2].value}", t.value))
         elif (t.value in presentation and i
               and toks[i - 1].kind == "OP" and toks[i - 1].value == "."):
             end = _call_end(toks, i)
             if end is not None:
-                spans.append((i - 1, end, f".{t.value}()"))
-    return spans
+                spans.append((i - 1, end, f".{t.value}()", ""))
+    starts = {start: number for number, (start, _e, _w, _b) in enumerate(spans)}
+    ends = {end: number for number, (_s, end, _w, _b) in enumerate(spans)}
+
+    found: list[dict] = []
+    for start, end, what, base in spans:
+        sides = []
+        for op_at, other_at, peer in (
+            (start - 1, start - 2, ends.get(start - 1)),
+            (end, end + 1, starts.get(end + 1)),
+        ):
+            if not (0 <= op_at < n and 0 <= other_at < n):
+                continue
+            op = toks[op_at]
+            if not (op.kind == "OP" and op.value in _COMPARISONS):
+                continue
+            other = toks[other_at]
+            sides.append({
+                "op_at": op_at, "peer": peer,
+                "kind": other.kind, "value": other.value,
+            })
+        if sides:
+            anchor = toks[start]
+            found.append({
+                "base": base, "what": what,
+                "line": anchor.line, "col": anchor.col, "sides": sides,
+            })
+    return found
 
 
 def _compare_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a yaml names a dictionary of the project, a module contributes its
-    tokens' shape - the reduce needs the dictionary names before it can read a module."""
+    """The map phase: a yaml names a dictionary of the project, a module contributes the
+    candidates found in its own tokens - the reduce needs the dictionary names to judge."""
     if not _HAVE_YAML:
         return None
     if source.kind == "yaml":
@@ -214,7 +246,8 @@ def _compare_mapper(source: SourceFile) -> dict | None:
         return {"k": "y", "name": name}
     if source.kind != "xbsl":
         return None
-    return {"k": "x", "source": source}
+    candidates = _comparison_candidates(code_tokens(source))
+    return {"k": "x", "spans": candidates} if candidates else None
 
 
 @rule(
@@ -222,44 +255,35 @@ def _compare_mapper(source: SourceFile) -> dict | None:
     scope="project", severity=Severity.WARNING, mapper=_compare_mapper,
 )
 def compare_with_localized(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """The reduce phase: keep the candidates whose base is a dictionary of THIS project."""
     dictionaries = frozenset(f["name"] for f in facts.values() if f["k"] == "y")
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
-        source = fact["source"]
-        toks = code_tokens(source)
-        spans = _localized_spans(toks, dictionaries)
-        if not spans:
-            continue
-        starts = {start: (end, what) for start, end, what in spans}
-        ends = {end: (start, what) for start, end, what in spans}
-        n = len(toks)
+        spans = fact["spans"]
+        # A candidate is localized when its base is a project dictionary; `Представление`
+        # is localized by the platform itself and carries no base.
+        live = {
+            number for number, span in enumerate(spans)
+            if not span["base"] or span["base"] in dictionaries
+        }
         seen: set[int] = set()
-        for start, end, what in spans:
-            for op_at, other_at, other_dir in (
-                (start - 1, start - 2, "before"), (end, end + 1, "after"),
-            ):
-                if not (0 <= op_at < n):
+        for number in sorted(live):
+            span = spans[number]
+            for side in span["sides"]:
+                op_at = side["op_at"]
+                if op_at in seen:
                     continue
-                op = toks[op_at]
-                if not (op.kind == "OP" and op.value in _COMPARISONS) or op_at in seen:
-                    continue
-                other = toks[other_at] if 0 <= other_at < n else None
-                if other is None:
-                    continue
-                if other_dir == "before" and op_at in ends:
-                    key, args = "code/compare-with-localized.both", {"what": what}
-                elif other_dir == "after" and (other_at in starts):
-                    key, args = "code/compare-with-localized.both", {"what": what}
-                elif other.kind == "STRING":
+                if side["peer"] in live:
+                    key, args = "code/compare-with-localized.both", {"what": span["what"]}
+                elif side["kind"] == "STRING":
                     key = "code/compare-with-localized.literal"
-                    args = {"what": what, "literal": other.value}
+                    args = {"what": span["what"], "literal": side["value"]}
                 else:
                     continue  # comparing against a value, not against text
                 seen.add(op_at)
-                anchor = toks[start]
                 yield Diagnostic(
-                    rel, anchor.line, anchor.col,
+                    rel, span["line"], span["col"],
                     "code/compare-with-localized", Severity.WARNING,
                     i18n.t(key, **args),
                 )

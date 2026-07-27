@@ -14,6 +14,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## 2026-07-27 – 0.46.0
 
+### Fixed
+- **The project-scope localization rule no longer ships whole source files between
+  processes.** `code/compare-with-localized` needs the project's dictionary names before it
+  can judge a module, and used to defer everything: the map phase put the source file into
+  the fact and the parent re-tokenized every module of the project in the reduce. The token
+  work now happens in the worker that already has the tokens, and the fact carries only the
+  localized calls that stand NEXT TO a comparison - a module without comparisons contributes
+  nothing at all. What travels between processes stops growing with the project, and the
+  parallel run gets the time back.
+
 ### Changed
 - **`self-update` no longer trades a working installation for an empty directory.** The
   command now renames the installed package aside FIRST – a rename fails while a file inside
