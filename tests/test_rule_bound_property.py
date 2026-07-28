@@ -40,7 +40,7 @@ def _pair(tmp_path: Path, *, value: str, height: str, code: str) -> list:
 
 
 def test_computed_property_assignment_flagged(tmp_path):
-    """Ровно случай ESITE-33: высота вычисляется выражением, а код её присваивает."""
+    """Ровно живой случай: высота вычисляется выражением, а код её присваивает."""
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",

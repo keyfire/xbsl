@@ -30,7 +30,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   The rule joins the form's base type (`ObjectForm<Entity.Object>`) or the entity's own
   modules to the declared tabular sections and judges the member against the array catalog,
   with the habitual `Count -> Size` hint difflib cannot bridge. A module named after a
-  section shadows the bare name - living BizKub code keeps one - and an attribute is never
+  section shadows the bare name - real projects keep such modules - and an attribute is never
   judged.
 - **`code/global-unavailable` - a global context name called outside its environment.** The
   docs print availability per member of the global context packages, and the stdlib extractor

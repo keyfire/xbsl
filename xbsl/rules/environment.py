@@ -830,7 +830,7 @@ def _global_env_mapper(source: SourceFile) -> dict | None:
     """The map phase. The yaml names the environment role of its pair (a server-kind
     element or a common module with an explicit `Environment`); the module contributes its
     bare calls of one-environment globals, each with the execution side of its method:
-    @НаСервере pins the server, @НаКлиенте pins the client (living BizKub code carries
+    @НаСервере pins the server, @НаКлиенте pins the client (living reference code carries
     @НаКлиенте methods inside catalog modules), no annotation leaves the module's own
     environment. A method carrying both runs where it is called from and is skipped
     rather than guessed - as in the other checks of this file.
@@ -906,7 +906,7 @@ def global_unavailable(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     (topics/module-execution) and the per-member "Доступность" lines of the global context
     packages (`Сообщить` - Клиент, `Вычислить`/`Пауза` - Сервер). A method executes in
     its module's environment unless an annotation pins the side: @НаСервере is server
-    anywhere, @НаКлиенте is client anywhere (catalog modules of living BizKub code carry
+    anywhere, @НаКлиенте is client anywhere (catalog modules of living reference code carry
     such methods). A client-only global in server-side code is the shape that passed the
     linter and failed a live apply with "Метод \"Сообщить\" недоступен в текущем
     окружении"; the server-only global in client-side code is the same refusal mirrored.

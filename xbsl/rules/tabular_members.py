@@ -1,11 +1,11 @@
 """Tier D: a member access on a tabular section's row collection must exist on it.
 
 The collection of a tabular section is an array - the compiler names it outright
-(`Массив<Программы.МобПриложения>`), so its members are the array members of the stdlib
+(`Массив<Задачи.Шаги>`), so its members are the array members of the stdlib
 catalog. Neither unknown-member rule sees the shape though: the receiver is typed by the
-PROJECT's metadata, not by a declaration - `Объект.МобПриложения` in a form module (the
-implicit data object of `ФормаОбъекта<Программы.Объект>`), the bare section name or
-`этот.МобПриложения` in the entity's own modules. That is how `.Количество()` (the array
+PROJECT's metadata, not by a declaration - `Объект.Шаги` in a form module (the
+implicit data object of `ФормаОбъекта<Задачи.Объект>`), the bare section name or
+`этот.Шаги` in the entity's own modules. That is how `.Количество()` (the array
 member is called `Размер`) passed the linter and failed the server apply.
 
 Narrow by design: only the middle link that IS a declared tabular section of the resolved
@@ -272,7 +272,7 @@ def _tabular_mapper(source: SourceFile) -> dict | None:
         return None
     # The callable name of a module is its file stem (dotted stems are not reachable
     # bare); every module contributes its stem, so the reduce can tell a bare section
-    # name from a same-named module - BizKub keeps a module called after a section.
+    # name from a same-named module - real projects keep modules called after a section.
     stem = _pair_stem(source.rel)
     callable_name = stem.rsplit("/", 1)[-1]
     if "." in callable_name:

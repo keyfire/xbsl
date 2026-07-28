@@ -10,10 +10,10 @@ from xbsl import engine, i18n
 RULE = "code/global-unavailable"
 
 _CATALOG = engine.load_text(
-    "Программы.yaml",
+    "Задачи.yaml",
     "ВидЭлемента: Справочник\n"
     "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3aa\n"
-    "Имя: Программы\n",
+    "Имя: Задачи\n",
 )
 
 _FORM = engine.load_text(
@@ -32,7 +32,7 @@ def test_client_global_in_catalog_module_flagged():
     i18n.set_lang("ru")
     try:
         d = _lint(_CATALOG, engine.load_text(
-            "Программы.xbsl",
+            "Задачи.xbsl",
             "метод Предупредить()\n    Сообщить(\"нельзя\")\n;\n"))
         assert len(d) == 1
         assert d[0].rule_id == RULE and d[0].severity.value == "error"
@@ -45,7 +45,7 @@ def test_client_global_in_catalog_module_flagged():
 def test_object_module_judged_via_entity_yaml():
     """X.Объект.xbsl adds one dotted suffix to the entity's stem and is server code too."""
     d = _lint(_CATALOG, engine.load_text(
-        "Программы.Объект.xbsl",
+        "Задачи.Объект.xbsl",
         "метод ПередЗаписью()\n    Сообщить(\"нельзя\")\n;\n"))
     assert len(d) == 1
 
@@ -57,10 +57,10 @@ def test_client_global_in_form_module_silent():
 
 
 def test_on_client_method_makes_it_client_code():
-    """Living BizKub code keeps @НаКлиенте methods inside catalog modules - the annotation
+    """Living reference code keeps @НаКлиенте methods inside catalog modules - the annotation
     pins the client side, and a client-only global is at home there."""
     assert _lint(_CATALOG, engine.load_text(
-        "Программы.xbsl",
+        "Задачи.xbsl",
         "@НаКлиенте\nметод Показать()\n    Сообщить(\"можно\")\n;\n")) == []
 
 
@@ -112,7 +112,7 @@ def test_common_module_by_environment():
 def test_own_method_shadows_the_global():
     """A module method called Сообщить is the project's own name - nothing is judged."""
     assert _lint(_CATALOG, engine.load_text(
-        "Программы.xbsl",
+        "Задачи.xbsl",
         "метод Сообщить(Текст: Строка)\n    ЖурналСобытий.Записать(Текст)\n;\n"
         "метод Предупредить()\n    Сообщить(\"своё\")\n;\n")) == []
 
@@ -120,7 +120,7 @@ def test_own_method_shadows_the_global():
 def test_everywhere_global_silent():
     """Округлить and the other КлиентИСервер names are at home on both sides."""
     assert _lint(_CATALOG, engine.load_text(
-        "Программы.xbsl",
+        "Задачи.xbsl",
         "метод Посчитать()\n    знч С = Округлить(1.5)\n;\n")) == []
 
 
@@ -128,7 +128,7 @@ def test_message_is_bilingual():
     i18n.set_lang("en")
     try:
         d = _lint(_CATALOG, engine.load_text(
-            "Программы.xbsl",
+            "Задачи.xbsl",
             "метод Предупредить()\n    Сообщить(\"нельзя\")\n;\n"))
         assert d and "on the client only" in d[0].message
     finally:
