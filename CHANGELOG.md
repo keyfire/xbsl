@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-28 – 0.47.2
+
+### Changed
+- **The texts of the two new rules speak in the demo project's vocabulary.** Docstrings,
+  tests and the changelog entries of `code/unknown-tabular-member` and
+  `code/global-unavailable` now take their examples from the demo project
+  (`Задачи`/`Шаги`), like the rest of the documentation.
+
 ## 2026-07-28 – 0.47.1
 
 ### Fixed
