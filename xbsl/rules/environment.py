@@ -759,3 +759,183 @@ def query_needs_server(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "code/query-needs-server", Severity.ERROR,
                 i18n.t("code/query-needs-server.found", name=name, env=env),
             )
+
+
+# --- A global name outside its environment ----------------------------------------------
+
+MESSAGES_GLOBALS = {
+    "code/global-unavailable.title": {
+        "ru": "Глобальное имя вне своего окружения",
+        "en": "A global name outside its environment",
+    },
+    "code/global-unavailable.on-server": {
+        "ru": "Глобальное имя '{name}' существует только на клиенте, а метод '{method}' "
+              "исполняется на сервере – применение отвечает \"Метод недоступен в текущем "
+              "окружении\". Перенесите вызов в клиентский код (метод @НаКлиенте, модуль "
+              "формы или команды).",
+        "en": "The global name '{name}' exists on the client only, while method "
+              "'{method}' runs on the server - the apply answers \"the method is "
+              "unavailable in the current environment\". Move the call to client code "
+              "(a @{n[НаКлиенте]} method, a form or command module).",
+    },
+    "code/global-unavailable.on-client": {
+        "ru": "Глобальное имя '{name}' существует только на сервере, а метод '{method}' "
+              "исполняется на клиенте – пометьте его @НаСервере.",
+        "en": "The global name '{name}' exists on the server only, while method "
+              "'{method}' runs on the client - annotate it @{n[НаСервере]}.",
+    },
+}
+i18n.register(MESSAGES_GLOBALS)
+
+# Kinds whose modules exist in the Server environment (docs topics/module-execution);
+# a common module is judged by its own `Environment`, as everywhere in this file.
+_SERVER_ENV_KINDS = ("HttpСервис", "КлючДоступа", "Пользователи", "ПроцессИнтеграции",
+                     "РегистрСведений", "Справочник")
+
+
+_globals_env_cache: dict[str, str] | None = None
+
+
+def _global_availability() -> dict[str, str]:
+    """Global name -> its environment, for the names whose docs print one (Сообщить -
+    Клиент, Вычислить - Сервер); the names available everywhere carry КлиентИСервер."""
+    global _globals_env_cache
+    if _globals_env_cache is None:
+        try:
+            data = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - no data, no rule
+            data = {}
+        _globals_env_cache = data.get("global_availability") or {}
+    return _globals_env_cache
+
+
+def _reset_globals_env() -> None:
+    global _globals_env_cache
+    _globals_env_cache = None
+
+
+dataset.register_reset(_reset_globals_env)
+
+
+@lru_cache(maxsize=1)
+def _on_client_forms() -> frozenset[str]:
+    """Both spellings of the @НаКлиенте annotation (from terms.json)."""
+    return frozenset(terms.key_forms("НаКлиенте"))
+
+
+dataset.register_reset(_on_client_forms.cache_clear)
+
+
+def _global_env_mapper(source: SourceFile) -> dict | None:
+    """The map phase. The yaml names the environment role of its pair (a server-kind
+    element or a common module with an explicit `Environment`); the module contributes its
+    bare calls of one-environment globals, each with the execution side of its method:
+    @НаСервере pins the server, @НаКлиенте pins the client (living BizKub code carries
+    @НаКлиенте methods inside catalog modules), no annotation leaves the module's own
+    environment. A method carrying both runs where it is called from and is skipped
+    rather than guessed - as in the other checks of this file.
+    """
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        kind = object_kind(data)
+        server_env, client_env = _environment_forms()
+        if kind == "ОбщийМодуль":
+            env = value_of(data, "Окружение", kind)
+            if env in server_env:
+                return {"k": "y", "stem": _pair_stem(source.rel), "role": "server"}
+            if env in client_env:
+                return {"k": "y", "stem": _pair_stem(source.rel), "role": "client"}
+            return None
+        if kind in _SERVER_ENV_KINDS:
+            return {"k": "y", "stem": _pair_stem(source.rel), "role": "server"}
+        if kind in _CLIENT_ENV_KINDS:
+            return {"k": "y", "stem": _pair_stem(source.rel), "role": "client"}
+        return None
+    if source.kind != "xbsl":
+        return None
+    availability = _global_availability()
+    if not availability:
+        return None
+    toks = code_tokens(source)
+    decls, methods = _module_decls(toks)
+    on_server = _on_server_forms()
+    on_client = _on_client_forms()
+    bodies = _method_bodies(toks, methods, _decl_anchors(toks))
+    anns = {name: a for name, a, _ in methods}
+    shadowed = _shadowed_names(toks)
+    n = len(toks)
+    calls: list[list] = []
+    for method, (start, end) in bodies.items():
+        method_anns = anns.get(method, frozenset())
+        server_ann = bool(method_anns & on_server)
+        client_ann = bool(method_anns & on_client)
+        if server_ann and client_ann:
+            continue  # runs where called from - not judged
+        side = "server" if server_ann else "client" if client_ann else "module"
+        for i in range(start, min(end, n)):
+            t = toks[i]
+            if t.kind != "IDENT":
+                continue
+            env = availability.get(t.value)
+            if env is None or env == "КлиентИСервер":
+                continue
+            if t.value in shadowed or t.value in decls:
+                continue  # the project gives the name its own meaning
+            if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == ".":
+                continue  # a member of something, not the global
+            if not (i + 1 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "("):
+                continue  # only the call form is judged
+            calls.append([t.value, env, method, side, t.line, t.col])
+    if not calls:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "calls": calls}
+
+
+@rule(
+    "code/global-unavailable", "code/global-unavailable.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_global_env_mapper,
+)
+def global_unavailable(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A call of a one-environment global from code that runs in the other environment.
+
+    The environments come from the docs: the standard module environments by element kind
+    (topics/module-execution) and the per-member "Доступность" lines of the global context
+    packages (`Сообщить` - Клиент, `Вычислить`/`Пауза` - Сервер). A method executes in
+    its module's environment unless an annotation pins the side: @НаСервере is server
+    anywhere, @НаКлиенте is client anywhere (catalog modules of living BizKub code carry
+    such methods). A client-only global in server-side code is the shape that passed the
+    linter and failed a live apply with "Метод \"Сообщить\" недоступен в текущем
+    окружении"; the server-only global in client-side code is the same refusal mirrored.
+    """
+    roles: dict[str, str] = {}
+    for fact in facts.values():
+        if fact["k"] == "y":
+            roles[fact["stem"]] = fact["role"]
+    if not roles:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        stem = fact["stem"]
+        # The entity's own modules: X.xbsl pairs the yaml outright, X.Объект.xbsl adds
+        # one dotted suffix to the same stem.
+        role = roles.get(stem) or roles.get(stem.rsplit(".", 1)[0])
+        if role is None:
+            continue
+        for name, env, method, side, line, col in fact["calls"]:
+            runs_on = role if side == "module" else side
+            if env == "Клиент" and runs_on == "server":
+                message = i18n.t("code/global-unavailable.on-server",
+                                 name=name, method=method)
+            elif env == "Сервер" and runs_on == "client":
+                message = i18n.t("code/global-unavailable.on-client",
+                                 name=name, method=method)
+            else:
+                continue
+            yield Diagnostic(
+                rel, line, col, "code/global-unavailable", Severity.ERROR, message,
+            )
