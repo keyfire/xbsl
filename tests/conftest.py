@@ -36,6 +36,8 @@ _DATA_DEPENDENT = {
     "test_rule_ns_objects",
     "test_rules",
     "test_rule_environment",
+    "test_rule_global_unavailable",
+    "test_rule_unknown_tabular_member",
     "test_style_rules",
     "test_mcp",
     "test_cli",

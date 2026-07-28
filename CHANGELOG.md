@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-28
+## 2026-07-28 – 0.47.0
 
 ### Added
 - **`code/unknown-tabular-member` - a member access on a tabular section's rows must exist
