@@ -12,6 +12,34 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-28
+
+### Added
+- **`code/collection-field-needs-req` - a structure field whose generic type cannot be built
+  empty.** `var texts: ReadableArray<String>` is refused by the apply ("cannot be initialized
+  with a default value and is not marked as required for the constructor"): the type's only
+  constructor is the copying one, so there is no default value to fall back on. `Array<String>`,
+  `Set<String>` and `Map<String, Number>` are the opposite case and are left alone - each has an
+  argument-less constructor, the platform documentation itself declares a variable that way, and
+  on real code such fields are commonplace. Which is which is now a FACT IN THE CATALOG: the stdlib
+  extractor reads the "Constructors" section of every type page and stores `type_ctors` -
+  `empty` (callable with no arguments), `args` (all of them demand arguments) or `none` (none
+  documented). The rule judges only a type written WITH a type argument: for a bare name the
+  constructor alone would mislead, since `String` and `Boolean` take arguments and still have a
+  default value of their own. File scope, so the editor reports it on every keystroke.
+
+- **`code/var-needs-init` - a variable declared by a type that has neither a constructor nor a
+  default value.** `var Response: HttpResponse` (declare first, assign inside the try) does not
+  compile - the type is only ever handed out by the platform, and the compiler answers exactly
+  that: no constructor and no default value. The rule flags a declaration whose type the catalog
+  reports as `none`; a type with an argument-taking constructor is left alone, because a bare
+  name may still be a primitive with a default of its own, and so are the hierarchies where a
+  default is plausible - an enumeration, an annotation, a singleton. It is project-scope for one
+  reason: a bare name may belong to a PROJECT type of the same name - real projects do declare a
+  structure or an object named after a platform type with no constructor - and only the whole
+  project can tell. The fix is `Type?` plus a check, or reading what is needed inside the try
+  into plain variables.
+
 ## 2026-07-27 – 0.46.0
 
 ### Fixed

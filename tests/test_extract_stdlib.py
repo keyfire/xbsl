@@ -148,3 +148,82 @@ def test_extract_merges_topic_only_types(tmp_path):
     names = _МОДУЛЬ.extract(tmp_path)[0]
     assert _МОДУЛЬ.TOPIC_ONLY_TYPES <= names
     assert "КонтекстДоступа" in names  # the ordinary page walk is intact
+
+
+# --- constructors: "empty" / "args" / "none" (page_constructors) ----------------------------
+
+def _ctor_page(*, name: str, body: str) -> str:
+    """A type page carrying the given constructors section - the markup is the real one."""
+    return (
+        f"<html><head><title>{name} | 1С:Предприятие.Элемент</title></head><body>"
+        f"<article><h1>{name}</h1>"
+        "<h2>Иерархия типа​</h2><p>Базовые типы: <a href='/Object_ru/'>Объект</a></p>"
+        f"{body}"
+        "<h2>Методы​</h2><h3>ВСтроку​</h3>"
+        '<pre class="highlight"><code>ВСтроку(): <a href="/String_ru/">Строка</a></code></pre>'
+        "</article></body></html>"
+    )
+
+
+def test_page_constructors_empty_overload_wins():
+    """Two overloads, one of them argument-less: the type is constructible empty."""
+    body = (
+        "<h2>Конструкторы​</h2><h3>Массив​</h3>"
+        '<pre class="highlight"><code>Массив()</code></pre>'
+        "<h3>Массив​</h3>"
+        '<pre class="highlight"><code>Массив(Обходимое: '
+        '<a href="/Iterable_ru/">Обходимое</a>&lt;ТипЭлемента&gt;)</code></pre>'
+    )
+    raw = _ctor_page(name="Массив", body=body)
+    assert _МОДУЛЬ.page_constructors(raw, "Массив") == _МОДУЛЬ.CTOR_EMPTY
+
+
+def test_page_constructors_only_copying_one_is_args():
+    """A copying constructor alone: the type has no default value."""
+    body = (
+        "<h2>Конструкторы​</h2><h3>ЧитаемыйМассив​</h3>"
+        '<pre class="highlight"><code>ЧитаемыйМассив(Обходимое: '
+        '<a href="/Iterable_ru/">Обходимое</a>&lt;ТипЭлемента&gt;)</code></pre>'
+    )
+    raw = _ctor_page(name="ЧитаемыйМассив", body=body)
+    assert _МОДУЛЬ.page_constructors(raw, "ЧитаемыйМассив") == _МОДУЛЬ.CTOR_ARGS
+
+
+def test_page_constructors_all_parameters_defaulted_is_empty():
+    body = (
+        "<h2>Конструкторы​</h2><h3>Настройка​</h3>"
+        '<pre class="highlight"><code>Настройка(Режим: '
+        '<a href="/Mode_ru/">Режим</a> = Режим.Обычный)</code></pre>'
+    )
+    raw = _ctor_page(name="Настройка", body=body)
+    assert _МОДУЛЬ.page_constructors(raw, "Настройка") == _МОДУЛЬ.CTOR_EMPTY
+
+
+def test_page_constructors_generic_argument_does_not_split_parameters():
+    """A comma inside a generic argument does not make two parameters out of one."""
+    body = (
+        "<h2>Конструкторы​</h2><h3>Обёртка​</h3>"
+        '<pre class="highlight"><code>Обёртка(Данные: '
+        '<a href="/Map_ru/">Соответствие</a>&lt;<a href="/String_ru/">Строка</a>, '
+        '<a href="/Number_ru/">Число</a>&gt;)</code></pre>'
+    )
+    raw = _ctor_page(name="Обёртка", body=body)
+    assert _МОДУЛЬ.page_constructors(raw, "Обёртка") == _МОДУЛЬ.CTOR_ARGS
+
+
+def test_page_constructors_example_block_is_not_an_overload():
+    """An examples block follows the signature under the same H3 - it is not an overload."""
+    body = (
+        "<h2>Конструкторы​</h2><h3>УзелДанных​</h3>"
+        '<pre class="highlight"><code>УзелДанных(Данные: '
+        '<a href="/String_ru/">Строка</a>)</code></pre>'
+        "<h4>Примеры​</h4>"
+        '<pre class="highlight"><code>знч Узел = новый УзелДанных()</code></pre>'
+    )
+    raw = _ctor_page(name="УзелДанных", body=body)
+    assert _МОДУЛЬ.page_constructors(raw, "УзелДанных") == _МОДУЛЬ.CTOR_ARGS
+
+
+def test_page_constructors_absent_section_is_none():
+    raw = _ctor_page(name="ОтветHttp", body="")
+    assert _МОДУЛЬ.page_constructors(raw, "ОтветHttp") == _МОДУЛЬ.CTOR_NONE

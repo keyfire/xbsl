@@ -229,6 +229,68 @@ _ALTERNATIVE = (
 _RETURN_FULL_RE = re.compile(r"^\s*(" + _ALTERNATIVE + r"(?:\s*\|\s*" + _ALTERNATIVE + r")*)")
 
 
+#: How a type can be constructed, from the constructors section of its page (see
+#: page_constructors).
+CTOR_EMPTY = "empty"
+CTOR_ARGS = "args"
+CTOR_NONE = "none"
+#: Two types from different packages may share a bare name (a `WebChat` value type and the
+#: interface component of the same name, a `Geofence` of the geolocation package and the one
+#: of the maps) - the catalog is keyed by that name and cannot tell them apart. The kinds
+#: collapse to the most PERMISSIVE of the two, the one that makes the consumers keep quiet: a
+#: type that can be constructed empty must never be reported as one that cannot.
+CTOR_RANK = {CTOR_NONE: 0, CTOR_ARGS: 1, CTOR_EMPTY: 2}
+# Parameters of a signature, split at the top level only: a generic argument carries commas
+# of its own (`Map<String, Number>`) and must not break the parameter list apart.
+_PARAM_SPLIT_RE = re.compile(r",(?![^<>]*>)")
+
+
+def page_constructors(raw: str, title: str) -> str:
+    """How the type is constructed: CTOR_EMPTY / CTOR_ARGS / CTOR_NONE.
+
+    The constructors section holds one H3 per overload, and under it the signature in a code
+    block - the same layout the methods use. A signature that can be called with NO arguments
+    (empty parentheses, or every parameter with a default value) makes the type
+    default-constructible: the argument-less `Array()` is why a field typed `Array<String>`
+    needs no initializer. `ReadableArray` is the opposite case - a constructor exists, but it
+    copies an `Iterable` and none can be called empty, so the compiler refuses to initialize
+    a field or a variable of that type ("cannot be initialized with a default value").
+    CTOR_NONE means the documentation lists no constructor at all - the type is only ever
+    obtained from the platform (`HttpResponse`).
+
+    Not the same as "has a default value": a primitive (`String`, `Boolean`, `Date`) has one
+    although its only constructor takes arguments. The consumers narrow accordingly - the
+    fact answers the constructor question alone.
+
+    Only the FIRST code block under each H3 is the signature; the ones that follow belong to
+    the examples subsection and would otherwise be read as overloads. Section and heading
+    texts are matched in Russian because the documentation of the distribution is Russian-only.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return CTOR_NONE
+    seen = False
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Конструктор"):
+            continue
+        parts = _H3_RE.split(section)
+        for k in range(1, len(parts) - 1, 2):
+            if _plain_text(parts[k]) != title:
+                continue  # an overload heading always repeats the type name
+            m = _SIG_CODE_RE.search(parts[k + 1])
+            if m is None:
+                continue
+            sig = html.unescape(_plain_text(m.group(1)))
+            open_paren, close_paren = sig.find("("), sig.rfind(")")
+            if open_paren < 0 or close_paren < open_paren:
+                continue
+            seen = True
+            params = [p for p in _PARAM_SPLIT_RE.split(sig[open_paren + 1:close_paren]) if p.strip()]
+            if not params or all("=" in p for p in params):
+                return CTOR_EMPTY
+    return CTOR_ARGS if seen else CTOR_NONE
+
+
 def page_member_types(raw: str) -> dict[str, str]:
     """Page member -> its result type (to infer the type of access chains).
 
@@ -360,6 +422,7 @@ def extract(
     facets: dict[str, dict[str, set[str]]] = {}
     returns: dict[str, dict[str, str]] = {}
     bases: dict[str, list[str]] = {}
+    ctors: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -384,6 +447,10 @@ def extract(
             page_base_list = page_bases(raw)
             if page_base_list and key:
                 bases.setdefault(key, page_base_list)
+            if key and title:
+                kind = page_constructors(raw, title)
+                if CTOR_RANK[kind] >= CTOR_RANK.get(ctors.get(key, CTOR_NONE), 0):
+                    ctors[key] = kind
             # Global context: the properties and methods of the Стд page itself and of its
             # PACKAGE pages (Стд::Интерфейс, Стд::Данные... - a top-level directory without
             # the _ru suffix) are available in code by bare name (ПерейтиПоСсылке, Сообщить,
@@ -440,7 +507,7 @@ def extract(
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
     names |= TOPIC_ONLY_TYPES
-    return names, members, components, types, globals_, managers, facets, returns, bases
+    return names, members, components, types, globals_, managers, facets, returns, bases, ctors
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -499,7 +566,8 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    names, members, components, types, globals_, managers, facets, returns, bases = extract(dist)
+    (names, members, components, types, globals_, managers, facets, returns, bases,
+     ctors) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -541,6 +609,12 @@ def main(argv=None) -> int:
         # Type hierarchy: the WHOLE ancestor chain a page prints under "Иерархия типа", so a
         # check needs no resolution of its own - `"Исключение" in bases[type]` decides.
         "bases": {k: v for k, v in sorted(bases.items())},
+        # How the type is constructed (page_constructors): "empty" - a constructor callable
+        # with no arguments, "args" - constructors that all demand arguments, "none" - the
+        # documentation lists none at all. A field or a variable of a type that is not
+        # "empty" cannot be left uninitialized unless the type has a default value of its
+        # own (a primitive does, a collection does not).
+        "type_ctors": {k: v for k, v in sorted(ctors.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"

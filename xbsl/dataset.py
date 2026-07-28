@@ -211,7 +211,7 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     """
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
-    for section in ("type_members", "member_types", "bases"):
+    for section in ("type_members", "member_types", "bases", "type_ctors"):
         entries = data.get(section)
         if not entries:
             continue
