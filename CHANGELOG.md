@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-28 – 0.47.1
+
+### Fixed
+- **The `mcp` extra is pinned below 2.** `mcp 2.0.0` (released the same day) dropped
+  `mcp.server.fastmcp`, which the MCP server imports: a fresh `pip install "xbsl[mcp]"`
+  picked the new major and the server refused to start. The pin keeps 1.x until the
+  server moves to the new API.
+
 ## 2026-07-28 – 0.47.0
 
 ### Added
