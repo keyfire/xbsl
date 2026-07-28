@@ -55,6 +55,7 @@ from . import (  # noqa: F401
     row_fields,
     semantics,
     size_stretch,
+    type_defaults,
     unknown_members,
     unused_methods,
     access_control,

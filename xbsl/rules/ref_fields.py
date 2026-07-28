@@ -166,6 +166,20 @@ def _structure_field_decls(toks: list[Token]) -> list[tuple[int, bool]]:
     return out
 
 
+def structure_field_decls(source: SourceFile) -> list[tuple[int, bool]]:
+    """_structure_field_decls over the source's tokens, cached per file.
+
+    Three rules of the "no default value" family walk the same fields (the reference one
+    here, the collection and the variable ones in type_defaults); without the cache the
+    block-tracking pass repeated once per rule on every module.
+    """
+    cached = source.cache.get("structure_field_decls")
+    if cached is None:
+        cached = _structure_field_decls(code_tokens(source))
+        source.cache["structure_field_decls"] = cached
+    return cached
+
+
 def _decl_names(toks: list[Token], start: int) -> tuple[list[Token], int]:
     """The name tokens of a declaration (`Имя` or `Имя1, Имя2`) and the index past them."""
     names: list[Token] = []
@@ -212,7 +226,7 @@ def ref_field_needs_req(source: SourceFile) -> Iterable[Diagnostic]:
     n = len(toks)
     diags: list[Diagnostic] = []
 
-    for i, has_req in _structure_field_decls(toks):
+    for i, has_req in structure_field_decls(source):
         if has_req:
             continue
         names, j = _decl_names(toks, i + 1)

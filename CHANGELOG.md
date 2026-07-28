@@ -12,6 +12,22 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-28
+
+### Added
+- **`code/collection-field-needs-req` - a structure field whose generic type cannot be built
+  empty.** `var texts: ReadableArray<String>` is refused by the apply ("cannot be initialized
+  with a default value and is not marked as required for the constructor"): the type's only
+  constructor is the copying one, so there is no default value to fall back on. `Array<String>`,
+  `Set<String>` and `Map<String, Number>` are the opposite case and are left alone - each has an
+  argument-less constructor, the platform documentation itself declares a variable that way, and
+  on real code such fields are commonplace. Which is which is now a FACT IN THE CATALOG: the stdlib
+  extractor reads the "Constructors" section of every type page and stores `type_ctors` -
+  `empty` (callable with no arguments), `args` (all of them demand arguments) or `none` (none
+  documented). The rule judges only a type written WITH a type argument: for a bare name the
+  constructor alone would mislead, since `String` and `Boolean` take arguments and still have a
+  default value of their own. File scope, so the editor reports it on every keystroke.
+
 ## 2026-07-27 – 0.46.0
 
 ### Fixed
