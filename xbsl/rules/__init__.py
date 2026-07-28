@@ -46,6 +46,7 @@ from . import (  # noqa: F401
     enum_nullable,
     enum_values,
     environment,
+    event_log,
     handlers,
     local_visibility,
     naming,

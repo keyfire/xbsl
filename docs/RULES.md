@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 123 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 124 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -206,6 +206,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 121 | `yaml/placeholder-key-in-strings` | error | on | file | A key carrying the placeholder `$0` in the `Strings` section of a `LocalizedStrings` dictionary: the section compiles to a method WITHOUT parameters, so a call with an argument fails the apply with an "unknown method" answer | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
 | 122 | `code/compare-with-localized` | warning | on | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
 | 123 | `code/bound-property-assign` | warning | on | file | A property COMPUTED by an expression in the paired markup (`Height: =Common.IsMobile()?820:528`) is assigned from code - the platform refuses such an assignment, and inside a try/catch the refusal is invisible; a data binding (a bare path) is left alone, it is two-way by design | – |
+| 124 | `yaml/event-needs-importance` | warning | on | file | An `EventLogEvent` description that does not set `Importance`: its default is `FromConstructor`, so the platform then demands the value in EVERY constructor, and one write that omits it fails the apply on the constructor line; an explicit `Importance: FromConstructor` states the choice and silences the rule | [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
 
 ## Group details
 

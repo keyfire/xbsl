@@ -172,6 +172,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   {
+    match: (r) => r === "yaml/event-needs-importance",
+    page: "topics/event-properties",
+    anchor: "важность",
+  },
+  {
     match: (r) => r === "yaml/choice-needs-static-list",
     page: "stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru",
     anchor: "списоквыбора",
