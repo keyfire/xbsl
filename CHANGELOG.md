@@ -12,6 +12,24 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Fixed
+- **`self-update` of a native install can finally update itself.** Two defects, both met on
+  a live update and both previously ending in a rollback (the insurance worked, the update
+  did not happen). First, `--stop-holders` offered the command's OWN process tree for
+  stopping - started via the installed shim, the command runs as a python child of an
+  `xbsl.exe` launcher that looks exactly like a holder by name; stopping it cut the update
+  short. Holders now exclude the command's ancestors and descendants; other live xbsl
+  processes are still named and stopped. Second, the mypyc shared libraries that live in
+  the site-packages ROOT (next to the package, not inside it) were overwritten in place by
+  the extraction - and that fails with `Errno 13` while the running self-update itself
+  keeps them loaded. They are now renamed aside like the package directory: a rename of a
+  loaded module passes where an overwrite does not. The list of root files is read from
+  the installed RECORD, not globbed - another mypyc-built distribution keeps its own
+  library in the same root and must not be touched. A file backup the finished process
+  still held is swept by the next run.
+
 ## 2026-07-28 – 0.47.2
 
 ### Changed

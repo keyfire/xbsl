@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import zipfile
 
 import pytest
@@ -238,16 +239,132 @@ def test_holders_are_our_own_processes_only(monkeypatch):
     monkeypatch.setattr(
         selfupdate, "_process_listing",
         lambda: [
-            (11, "xbsl-lsp.exe", "xbsl-lsp --project-root app"),
-            (12, "python.exe", "python.exe -m xbsl.mcp_server"),
-            (13, "python.exe", "python.exe -m http.server"),
-            (14, "claude.exe", "claude.exe --baseline /repo/.xbsllint-baseline"),
-            (15, "Code.exe", "Code.exe --folder-uri file:///d:/repo/xbsl"),
+            (11, 1, "xbsl-lsp.exe", "xbsl-lsp --project-root app"),
+            (12, 1, "python.exe", "python.exe -m xbsl.mcp_server"),
+            (13, 1, "python.exe", "python.exe -m http.server"),
+            (14, 1, "claude.exe", "claude.exe --baseline /repo/.xbsllint-baseline"),
+            (15, 1, "Code.exe", "Code.exe --folder-uri file:///d:/repo/xbsl"),
         ],
     )
     monkeypatch.setitem(__import__("sys").modules, "psutil", None)
     found = {item["pid"] for item in selfupdate.holders()}
     assert found == {11, 12}
+
+
+def test_holders_exclude_own_process_tree(monkeypatch):
+    """Обёртка, запустившая команду, и её дерево – не держатели.
+
+    Живой отказ 28.07: `--stop-holders` снял собственный родительский `xbsl.exe`,
+    обрыв обновления, версия осталась прежней. Свои: предки (обёртка и то, что её
+    запустило) и потомки; чужой процесс с тем же именем остаётся держателем.
+    """
+    own = os.getpid()
+    monkeypatch.setattr(
+        selfupdate, "_process_listing",
+        lambda: [
+            (70, 1, "explorer.exe", "explorer.exe"),      # предок-не-держатель
+            (77, 70, "xbsl.exe", "xbsl self-update"),     # наша обёртка
+            (own, 77, "python.exe", "python -m xbsl self-update"),
+            (88, own, "xbsl-lsp.exe", "xbsl-lsp child"),  # наш потомок
+            (11, 1, "xbsl-lsp.exe", "xbsl-lsp --project-root app"),  # чужой LSP
+        ],
+    )
+    monkeypatch.setitem(__import__("sys").modules, "psutil", None)
+    assert {item["pid"] for item in selfupdate.holders()} == {11}
+
+
+def test_family_pids_survives_a_parent_loop():
+    """Кольцо в ppid (битый листинг или переиспользованный pid) не должно зациклить обход."""
+    own = os.getpid()
+    rows = [
+        (own, 50, "python.exe", "python -m xbsl self-update"),
+        (50, 51, "xbsl.exe", "xbsl self-update"),
+        (51, 50, "cmd.exe", "cmd"),  # кольцо 50 <-> 51
+    ]
+    assert selfupdate._family_pids(rows) == {own, 50, 51}
+
+
+# -- корневые нативные модули mypyc ---------------------------------------------------------
+#
+# mypyc кладёт общую библиотеку РЯДОМ с пакетом, в корень site-packages, под именем,
+# одинаковым между версиями. Живой отказ 28.07: распаковка перезаписывала её на месте и
+# падала Errno 13 – файл держит импорт самого процесса self-update (переименование
+# занятого модуля проходит, перезапись нет). Список своих корневых файлов берётся из
+# RECORD: голый glob зацепил бы mypyc-библиотеку ЧУЖОГО пакета в том же корне.
+
+_MYPYC = "0155c65d__mypyc.cp314-win_amd64.pyd"
+
+
+def _native_site(fake_site):
+    """Дополнить fake_site корневой mypyc-библиотекой, её RECORD и ЧУЖИМ соседом."""
+    (fake_site / _MYPYC).write_bytes(b"old native payload")
+    (fake_site / "xbsl-0.0.1.dist-info" / "RECORD").write_text(
+        f"{_MYPYC},sha256=abc,18\n"
+        "xbsl/__init__.py,sha256=def,25\n"
+        "xbsl/lexer.cp314-win_amd64.pyd,sha256=ghi,10\n",
+        encoding="utf-8",
+    )
+    foreign = fake_site / "ada92cb5__mypyc.cp314-win_amd64.pyd"
+    foreign.write_bytes(b"another distribution's library")
+    return foreign
+
+
+def test_root_native_modules_come_from_record(fake_site):
+    _native_site(fake_site)
+    assert selfupdate._native_root_modules(fake_site) == [fake_site / _MYPYC]
+
+
+def test_update_replaces_the_root_native_module_and_spares_the_foreign_one(fake_site, monkeypatch):
+    foreign = _native_site(fake_site)
+    wheel = io.BytesIO()
+    with zipfile.ZipFile(wheel, "w") as archive:
+        archive.writestr("xbsl/__init__.py", '__version__ = "9.9.9"\n')
+        archive.writestr("xbsllint/__init__.py", "import xbsl\n")
+        archive.writestr(_MYPYC, "new native payload")  # то же имя - тот самый случай перезаписи
+        archive.writestr(f"xbsl-9.9.9.dist-info/RECORD", f"{_MYPYC},sha256=new,18\n")
+    _stub_download(monkeypatch, payload=wheel.getvalue())
+
+    selfupdate.self_update(log=lambda *a: None)
+
+    assert (fake_site / _MYPYC).read_bytes() == b"new native payload"
+    assert foreign.read_bytes() == b"another distribution's library"
+    assert not list(fake_site.glob("*" + selfupdate._BACKUP_SUFFIX))
+
+
+def test_busy_root_native_module_rolls_back_whole(fake_site, monkeypatch):
+    """Отказ на корневом модуле возвращает на место ВСЁ уже отложенное."""
+    _native_site(fake_site)
+    _stub_download(monkeypatch)
+    original = selfupdate.Path.rename
+
+    def refuse(self, target):
+        if "__mypyc" in self.name and not self.name.endswith(selfupdate._BACKUP_SUFFIX):
+            raise OSError(13, "Файл занят другим процессом")
+        return original(self, target)
+
+    monkeypatch.setattr(selfupdate.Path, "rename", refuse)
+    monkeypatch.setattr(selfupdate, "holders", list)
+
+    with pytest.raises(selfupdate.SelfUpdateError):
+        selfupdate.self_update(log=lambda *a: None)
+
+    assert (fake_site / _MYPYC).read_bytes() == b"old native payload"
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "0.0.1"'
+
+
+def test_stale_file_backup_is_swept_by_the_next_run(fake_site, monkeypatch):
+    """Бэкап-ФАЙЛ, который держал сам обновлявший процесс, не удаляется сразу.
+
+    Загруженный модуль нельзя удалить, только переименовать - поэтому _drop_backups
+    оставляет его, а подметает следующий прогон.
+    """
+    stale = fake_site / (_MYPYC + selfupdate._BACKUP_SUFFIX)
+    stale.write_bytes(b"held by the previous run")
+    _stub_download(monkeypatch)
+
+    selfupdate.self_update(log=lambda *a: None)
+
+    assert not stale.exists()
 
 
 def test_interpreter_tag_is_the_wheel_spelling():

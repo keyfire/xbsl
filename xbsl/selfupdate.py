@@ -10,7 +10,11 @@ built so that the same situation ends with a working installation instead:
 1. **Holders are named before anything is touched.** The package directory is renamed
    first - a rename fails fast while a file inside is open, and nothing has been deleted
    yet at that point. The processes are then listed by name and pid; `--stop-holders`
-   ends them, otherwise the command stops and says who to close.
+   ends them, otherwise the command stops and says who to close. The command's own
+   process tree is never offered: the shim that started it looks like a holder by name,
+   and stopping it would end the update midway. The mypyc shared libraries living in the
+   site-packages ROOT are renamed aside as well - a rename of a loaded module passes
+   where an overwrite fails, and the running command itself keeps them loaded.
 2. **The wheel matches what is installed.** A native install (compiled `lexer`/`parser`)
    is updated from the wheel built for this interpreter and platform - taking the portable
    one would silently swap the compiled modules for pure Python and cost several times the
@@ -167,25 +171,62 @@ def holders() -> list[dict]:
     Best effort by design: the answer only makes the message useful ("close these"), it is
     never a precondition. `psutil` is used when it happens to be installed, otherwise the
     system process listing is read - and if neither works, the caller still reports the
-    lock itself, just without names.
+    lock itself, just without names. The command's own process tree is excluded: started
+    via the installed shim, the command is a python child of an `xbsl.exe` launcher that
+    looks exactly like a holder by name - and stopping it ends the update midway.
     """
-    found: list[dict] = []
-    own = os.getpid()
+    rows = _psutil_listing()
+    if rows is None:
+        rows = _process_listing()
+    family = _family_pids(rows)
+    return [
+        {"pid": pid, "name": name}
+        for pid, _ppid, name, line in rows
+        if pid not in family and is_holder(name, line)
+    ]
+
+
+def _psutil_listing() -> list[tuple[int, int, str, str]] | None:
+    """The process listing via psutil, or None when psutil is absent or broken."""
     try:  # psutil comes with some extras; when absent, fall back to the OS listing
         import psutil  # noqa: PLC0415 - optional dependency, imported on demand
 
-        for process in psutil.process_iter(["pid", "name", "cmdline"]):
-            line = " ".join(process.info.get("cmdline") or [])
-            name = process.info.get("name") or ""
-            if process.info["pid"] != own and is_holder(name, line):
-                found.append({"pid": process.info["pid"], "name": name})
-        return found
+        return [
+            (process.info["pid"], process.info.get("ppid") or 0,
+             process.info.get("name") or "", " ".join(process.info.get("cmdline") or []))
+            for process in psutil.process_iter(["pid", "ppid", "name", "cmdline"])
+        ]
     except Exception:  # noqa: BLE001 - any psutil trouble degrades to the OS listing
-        pass
-    for pid, name, line in _process_listing():
-        if pid != own and is_holder(name, line):
-            found.append({"pid": pid, "name": name})
-    return found
+        return None
+
+
+def _family_pids(rows: list[tuple[int, int, str, str]]) -> set[int]:
+    """Pids of our own process tree: self, ancestors and descendants.
+
+    Ancestors and descendants are excluded from the holders wholesale - stopping the shim
+    that started this very command kills the command itself (the launcher's job object
+    takes the child down with it). A reused pid can only put an extra process into the
+    set, which errs on the safe side: a skipped holder, never a killed stranger.
+    """
+    own = os.getpid()
+    parent_of = {pid: ppid for pid, ppid, _name, _line in rows}
+    children_of: dict[int, list[int]] = {}
+    for pid, ppid, _name, _line in rows:
+        children_of.setdefault(ppid, []).append(pid)
+    family = {own}
+    cursor = own
+    for _hop in range(64):  # bounded walk: a broken listing must not loop forever
+        cursor = parent_of.get(cursor, 0)
+        if cursor <= 0 or cursor in family:
+            break
+        family.add(cursor)
+    queue = [own]
+    while queue:
+        for child in children_of.get(queue.pop(), ()):
+            if child not in family:
+                family.add(child)
+                queue.append(child)
+    return family
 
 
 def is_holder(name: str, command_line: str) -> bool:
@@ -207,16 +248,16 @@ def is_holder(name: str, command_line: str) -> bool:
     return any(f"{script}.exe" in lowered or lowered.endswith(script) for script in _HOLDER_EXECUTABLES)
 
 
-def _process_listing() -> list[tuple[int, str, str]]:
-    """(pid, name, command line) from the system tools; empty list when they are unavailable."""
+def _process_listing() -> list[tuple[int, int, str, str]]:
+    """(pid, ppid, name, command line) from the system tools; empty list when they are unavailable."""
     if sys.platform == "win32":
         command = [
             "powershell", "-NoProfile", "-Command",
             "Get-CimInstance Win32_Process | "
-            "Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress",
+            "Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress",
         ]
     else:
-        command = ["ps", "-eo", "pid=,comm=,args="]
+        command = ["ps", "-eo", "pid=,ppid=,comm=,args="]
     try:
         out = subprocess.run(
             command, capture_output=True, text=True, timeout=30, encoding="utf-8", errors="replace"
@@ -226,9 +267,9 @@ def _process_listing() -> list[tuple[int, str, str]]:
     if sys.platform != "win32":
         rows = []
         for line in out.splitlines():
-            parts = line.strip().split(None, 2)
-            if len(parts) == 3 and parts[0].isdigit():
-                rows.append((int(parts[0]), parts[1], parts[2]))
+            parts = line.strip().split(None, 3)
+            if len(parts) == 4 and parts[0].isdigit() and parts[1].isdigit():
+                rows.append((int(parts[0]), int(parts[1]), parts[2], parts[3]))
         return rows
     try:
         data = json.loads(out or "[]")
@@ -237,7 +278,8 @@ def _process_listing() -> list[tuple[int, str, str]]:
     if isinstance(data, dict):
         data = [data]
     return [
-        (int(item.get("ProcessId") or 0), str(item.get("Name") or ""), str(item.get("CommandLine") or ""))
+        (int(item.get("ProcessId") or 0), int(item.get("ParentProcessId") or 0),
+         str(item.get("Name") or ""), str(item.get("CommandLine") or ""))
         for item in data
     ]
 
@@ -272,22 +314,68 @@ def _holders_message(processes: list[dict]) -> str:
 # -- the update itself ---------------------------------------------------------------------
 
 
+def _native_root_modules(site: Path) -> list[Path]:
+    """Root-level native modules of THIS distribution (the mypyc shared libraries).
+
+    mypyc puts its shared library NEXT to the package, in the site-packages root, under a
+    name that is stable across versions - so extraction OVERWRITES it in place, and that
+    fails with Errno 13 while the running self-update itself keeps the module loaded (a
+    rename of a loaded module passes, an overwrite does not). The list is read from the
+    installed RECORD rather than globbed: another distribution built with mypyc keeps its
+    own `*__mypyc*` library in the same root, and that one must not be touched.
+    """
+    files: list[Path] = []
+    for dist_info in site.glob("xbsl-*.dist-info"):
+        if dist_info.name.endswith(_BACKUP_SUFFIX):
+            continue
+        try:
+            text = (dist_info / "RECORD").read_text(encoding="utf-8")
+        except OSError:
+            continue
+        for line in text.splitlines():
+            name = line.split(",")[0].strip()
+            if not name or "/" in name or "\\" in name:
+                continue
+            if name.lower().endswith(_NATIVE_SUFFIXES) and (site / name).is_file():
+                files.append(site / name)
+    return files
+
+
+def _remove_any(path: Path) -> None:
+    """Remove a directory or a file, quietly: leftovers are cleaned up, never fought over."""
+    if path.is_dir():
+        shutil.rmtree(path, ignore_errors=True)
+    else:
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
 def _move_aside(site: Path) -> list[tuple[Path, Path]]:
     """Move the current installation aside. Raises when a file inside is open.
 
     A rename is the gate of the whole procedure: while a compiled module is loaded by a
     live process, Windows refuses it - and at that moment nothing has been removed yet.
+    The root-level mypyc libraries go aside too - for those the rename passes even under
+    our own process, which is the point: extraction then writes a fresh file instead of
+    failing to overwrite a loaded one.
     """
+    for stale in site.glob("*" + _BACKUP_SUFFIX):
+        _remove_any(stale)  # a file backup our own process held last time (see _drop_backups)
     moved: list[tuple[Path, Path]] = []
+    targets = _native_root_modules(site)
     try:
         for pattern in _OWNED_PATTERNS:
-            for path in sorted(site.glob(pattern)):
-                if path.name.endswith(_BACKUP_SUFFIX):
-                    continue
-                backup = path.with_name(path.name + _BACKUP_SUFFIX)
-                shutil.rmtree(backup, ignore_errors=True)
-                path.rename(backup)
-                moved.append((path, backup))
+            targets.extend(
+                path for path in sorted(site.glob(pattern))
+                if not path.name.endswith(_BACKUP_SUFFIX)
+            )
+        for path in targets:
+            backup = path.with_name(path.name + _BACKUP_SUFFIX)
+            _remove_any(backup)
+            path.rename(backup)
+            moved.append((path, backup))
     except OSError:
         _restore(moved)
         raise
@@ -306,8 +394,14 @@ def _restore(moved: list[tuple[Path, Path]]) -> None:
 
 
 def _drop_backups(moved: list[tuple[Path, Path]]) -> None:
+    """Drop the kept-aside installation once the new one is proven.
+
+    A FILE backup may refuse to go: the renamed mypyc library is still loaded by this very
+    process, and a loaded module cannot be deleted - only renamed. Such a leftover is
+    removed by the next run's sweep in `_move_aside`.
+    """
     for _path, backup in moved:
-        shutil.rmtree(backup, ignore_errors=True)
+        _remove_any(backup)
 
 
 def verify_install(site: Path, expected: str) -> str:
