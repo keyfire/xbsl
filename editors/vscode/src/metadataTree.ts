@@ -263,10 +263,10 @@ interface Element {
   objectModulePath?: string;
   ownerType?: string;
   text: string;
-  translations?: Translation[]; // ЛокализованныеСтроки: the files of the Локализация section
+  translations?: Translation[]; // LocalizedStrings: the files of the Localization section
 }
 
-// One language of the Локализация section: the file with the strings translated into it.
+// One language of the Localization section: the file with the strings translated into it.
 interface Translation {
   lang: string;
   yamlPath: string;
@@ -388,10 +388,10 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     });
   };
 
-  // A file of the Локализация section is held back: it belongs UNDER the element it translates,
+  // A file of the Localization section is held back: it belongs UNDER the element it translates,
   // not next to it. The guess is confirmed afterwards by the owner - a file whose owner is not a
-  // ЛокализованныеСтроки element goes through the regular path (a folder may be named Локализация
-  // for its own reasons).
+  // LocalizedStrings element goes through the regular path (a folder may be named after the
+  // section for its own reasons).
   const pending: Array<{ yamlPath: string; lang: string; ownerPath: string }> = [];
   for (const yamlPath of yamlPaths) {
     const ref = translationRef(yamlPath);
@@ -686,7 +686,7 @@ function displayGroupNode(label: string, icon: string, yamlPath: string, fields:
   return node;
 }
 
-// One language of the Локализация section: the label is the language folder as the platform wrote
+// One language of the Localization section: the label is the language folder as the platform wrote
 // it (En), a click opens that file - the strings of the element translated into this language.
 function translationNode(tr: Translation): XbslNode {
   const node = new XbslNode(tr.lang, vscode.TreeItemCollapsibleState.None);
