@@ -20,6 +20,7 @@ import {
   MetaInternals,
   parseInternals,
   standardAttrNames,
+  translationRef,
 } from "./metadataCore";
 import { updatePropsFromSelection } from "./formProps";
 import { editorColumnFor, revealContent } from "./reveal";
@@ -112,6 +113,7 @@ const ALL_CATEGORY_GROUPS: ReadonlyArray<{ group: string; icon: string; order: n
 })();
 
 const FORM_KIND = "КомпонентИнтерфейса";
+const LOCALIZED_STRINGS_KIND = "ЛокализованныеСтроки";
 // English label keys (see the comment at KIND_ROWS): displayed via l10n.t.
 const OTHER_GROUP = "Other";
 const COMMON_FORMS_GROUP = "Common forms";
@@ -261,6 +263,13 @@ interface Element {
   objectModulePath?: string;
   ownerType?: string;
   text: string;
+  translations?: Translation[]; // ЛокализованныеСтроки: the files of the Локализация section
+}
+
+// One language of the Локализация section: the file with the strings translated into it.
+interface Translation {
+  lang: string;
+  yamlPath: string;
 }
 
 interface Project {
@@ -323,24 +332,25 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
   const elements: Element[] = [];
   const projects: Project[] = [];
   const subsystems: Subsystem[] = [];
-  for (const yamlPath of yamlPaths) {
+
+  const addYaml = async (yamlPath: string): Promise<void> => {
     const key = yamlPath.toLowerCase();
     if (seen.has(key)) {
-      continue;
+      return;
     }
     seen.add(key);
     // Подсистема.yaml - a subsystem folder (the name is not parsed, it = the folder name).
     if (path.basename(yamlPath) === "Подсистема.yaml") {
       const dir = path.dirname(yamlPath);
       subsystems.push({ name: path.basename(dir), dir });
-      continue;
+      return;
     }
     let text: string;
     try {
       const raw = await fs.promises.readFile(yamlPath, "utf8");
       text = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
     } catch {
-      continue;
+      return;
     }
     // Проект.yaml - has no ВидЭлемента: a separate tree root.
     if (path.basename(yamlPath) === "Проект.yaml") {
@@ -352,11 +362,11 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
         dir,
         appModulePath: xbslSet.has(appModule.toLowerCase()) ? appModule : undefined,
       });
-      continue;
+      return;
     }
     const declared = RE_KIND.exec(text)?.[1];
     if (!declared) {
-      continue;
+      return;
     }
     const kind = canonicalKind(declared);
     // Which spelling the file itself used: a new object of this project should be named the same
@@ -376,6 +386,34 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
       ownerType: kind === FORM_KIND ? RE_OWNER_TYPE.exec(text)?.[1]?.split(".")[0] : undefined,
       text,
     });
+  };
+
+  // A file of the Локализация section is held back: it belongs UNDER the element it translates,
+  // not next to it. The guess is confirmed afterwards by the owner - a file whose owner is not a
+  // ЛокализованныеСтроки element goes through the regular path (a folder may be named Локализация
+  // for its own reasons).
+  const pending: Array<{ yamlPath: string; lang: string; ownerPath: string }> = [];
+  for (const yamlPath of yamlPaths) {
+    const ref = translationRef(yamlPath);
+    if (ref) {
+      pending.push({ yamlPath, lang: ref.lang, ownerPath: ref.ownerPath });
+    } else {
+      await addYaml(yamlPath);
+    }
+  }
+  const localized = new Map<string, Element>();
+  for (const el of elements) {
+    if (el.kind === LOCALIZED_STRINGS_KIND) {
+      localized.set(el.yamlPath.toLowerCase(), el);
+    }
+  }
+  for (const { yamlPath, lang, ownerPath } of pending) {
+    const owner = localized.get(ownerPath.toLowerCase());
+    if (!owner) {
+      await addYaml(yamlPath);
+      continue;
+    }
+    owner.translations = [...(owner.translations ?? []), { lang, yamlPath }];
   }
   return { elements, projects, subsystems };
 }
@@ -648,6 +686,28 @@ function displayGroupNode(label: string, icon: string, yamlPath: string, fields:
   return node;
 }
 
+// One language of the Локализация section: the label is the language folder as the platform wrote
+// it (En), a click opens that file - the strings of the element translated into this language.
+function translationNode(tr: Translation): XbslNode {
+  const node = new XbslNode(tr.lang, vscode.TreeItemCollapsibleState.None);
+  node.iconPath = new vscode.ThemeIcon("globe");
+  node.yamlPath = tr.yamlPath;
+  node.resourceUri = vscode.Uri.file(tr.yamlPath); // git statuses (color/badge), keeping our own icon
+  node.contextValue = "member translation yaml";
+  node.command = { command: "xbsl.metadata.openYaml", title: "", arguments: [node] };
+  node.tooltip = vscode.l10n.t("Localization");
+  return node;
+}
+
+function translationsGroupNode(translations: Translation[]): XbslNode {
+  const node = new XbslNode(vscode.l10n.t("Localization"), vscode.TreeItemCollapsibleState.Collapsed);
+  node.iconPath = new vscode.ThemeIcon("globe");
+  node.description = String(translations.length);
+  node.contextValue = "group";
+  node.children = [...translations].sort((a, b) => a.lang.localeCompare(b.lang)).map(translationNode);
+  return node;
+}
+
 function formNode(el: Element): XbslNode {
   const node = new XbslNode(el.name, vscode.TreeItemCollapsibleState.None);
   node.iconPath = new vscode.ThemeIcon(formIcon(el.name));
@@ -705,6 +765,9 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
   const canAddForm = el.kind === "Справочник" || el.kind === "Документ";
   if (boundForms.length || canAddForm) {
     groups.push(formsGroupNode(boundForms, canAddForm ? { name: el.name, yamlPath: el.yamlPath } : undefined));
+  }
+  if (el.translations?.length) {
+    groups.push(translationsGroupNode(el.translations));
   }
 
   const node = new XbslNode(
@@ -1213,7 +1276,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     const node = findNode(
       roots,
       (n) =>
-        /\b(element|form|subsystem)\b/.test(n.contextValue ?? "") &&
+        /\b(element|form|subsystem|translation)\b/.test(n.contextValue ?? "") &&
         (n.yamlPath === fsPath || n.modulePath === fsPath || n.objectModulePath === fsPath)
     );
     if (node) {

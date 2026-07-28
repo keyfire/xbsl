@@ -11,6 +11,7 @@ import {
   parseInternals,
   setMetaKeyAliases,
   stringAttributeNames,
+  translationRef,
 } from "../src/metadataCore";
 
 let failed = 0;
@@ -382,6 +383,36 @@ test("hintName: the spelling follows the project, not the editor", () => {
   // A name the table does not carry comes back unchanged - an invented English spelling would
   // send the user looking for a key that is not in the file.
   assert.strictEqual(hintName("Реквизиты", true), "Реквизиты");
+});
+
+test("translationRef: the section file points at the element it translates", () => {
+  assert.deepStrictEqual(translationRef("D:\\proj\\Основное\\Локализация\\En\\ЛокализованныеСтроки.yaml"), {
+    ownerPath: "D:\\proj\\Основное\\ЛокализованныеСтроки.yaml",
+    lang: "En",
+  });
+  // The separator of the incoming path is kept - the caller compares the result with paths of its own.
+  assert.deepStrictEqual(translationRef("/proj/Мероприятия/Локализация/En/ЛокализованныеСтроки.yaml"), {
+    ownerPath: "/proj/Мероприятия/ЛокализованныеСтроки.yaml",
+    lang: "En",
+  });
+});
+
+test("translationRef: the section spelled in English, and the package nesting kept", () => {
+  assert.deepStrictEqual(translationRef("/p/Main/Localization/En/Strings.yaml"), {
+    ownerPath: "/p/Main/Strings.yaml",
+    lang: "En",
+  });
+  // The tail after the language folder repeats where the element lies inside the subsystem.
+  assert.deepStrictEqual(translationRef("/p/Основное/Локализация/En/Пакет/Строки.yaml"), {
+    ownerPath: "/p/Основное/Пакет/Строки.yaml",
+    lang: "En",
+  });
+});
+
+test("translationRef: a path without the section is not a translation", () => {
+  assert.strictEqual(translationRef("/p/Основное/ОсновноеЛокализация.yaml"), undefined);
+  // A folder named Локализация with the file right in it: no language folder - no translation.
+  assert.strictEqual(translationRef("/p/Локализация/Строки.yaml"), undefined);
 });
 
 console.log(`\nитого: ${passed} ok, ${failed} fail`);

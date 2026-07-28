@@ -429,6 +429,46 @@ function detectIndent(bodySlice: string, headerIndentLen: number): { item: strin
   return { item: " ".repeat(headerIndentLen + 4), field: " ".repeat(headerIndentLen + 8) };
 }
 
+// -- localization section -----------------------------------------------------------------
+
+// Translations of a ЛокализованныеСтроки element live in a separate project section rather than
+// inside the element: <where the element lies>/Локализация/<language>/<Имя>.yaml, one file per
+// language of ЯзыкиЛокализации. Such a file carries the string sections alone, without
+// ВидЭлемента - so the tree, which collects elements by that key, never saw the translations and
+// there was no way to open the English text from the tree at all.
+export interface TranslationRef {
+  ownerPath: string; // the yaml of the element being translated
+  lang: string; // the language folder as the platform wrote it (En)
+}
+
+// Both spellings of the section folder - a project written in English is legal code.
+const LOCALIZATION_DIRS = new Set(["локализация", "localization"]);
+
+// The element a translation file belongs to, or undefined when the path is not a translation.
+// The tail after the language folder is kept as is: the section repeats the package nesting of
+// the element it translates. The caller confirms the guess - a translation counts as one only
+// when the owner it points at exists and is a ЛокализованныеСтроки element.
+export function translationRef(yamlPath: string): TranslationRef | undefined {
+  const parts = yamlPath.split(/[\\/]/);
+  // The language folder plus at least the file itself must follow the section folder; of several
+  // such folders the innermost one wins - it is the section the file actually lies in.
+  let section = -1;
+  for (let i = parts.length - 3; i >= 0; i--) {
+    if (LOCALIZATION_DIRS.has(parts[i].toLowerCase())) {
+      section = i;
+      break;
+    }
+  }
+  if (section < 0) {
+    return undefined;
+  }
+  const sep = yamlPath.includes("\\") ? "\\" : "/";
+  return {
+    ownerPath: [...parts.slice(0, section), ...parts.slice(section + 2)].join(sep),
+    lang: parts[section + 1],
+  };
+}
+
 const LINE_INDENT = /^([ \t]*)/;
 
 // Targeted insertion of a new item (a set of field lines itemLines, e.g. ["Ид: ...","Имя: ...",

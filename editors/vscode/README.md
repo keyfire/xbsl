@@ -408,7 +408,8 @@ forms** section.
 **Object subtrees.** A catalog/document expands into **Attributes**, **Tabular sections**, **Forms**;
 a register into **Dimensions**, **Resources**, **Attributes**; an enumeration into **Values**; a
 structure into **Fields**; client-work parameters into **Parameters**; an HTTP service into **URL
-templates** with their methods.
+templates** with their methods; localized strings into **Localization** - a node per language of
+the section (`Localization/<language>/<Name>.yaml`), a click opens the translated text.
 
 **Clicks.** An object or a field opens the **properties panel** on the right (a field's `Type` is a
 combo of primitives, reference types (`<Object>.Reference?`) and the project enumerations, and still

@@ -9,6 +9,17 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.42.0
+
+- **A translation opens from the tree.** Translated strings live in a section of their own -
+  `<where the element lies>/Локализация/<language>/<Name>.yaml`, one file per language - and such
+  a file carries the string sections alone, without `ElementKind`. The tree collects elements by
+  that very key, so the translations were invisible in it and the English text could only be
+  opened as a file, by name. Now a LocalizedStrings element expands into **Localization** with a
+  node per language folder: a click opens that file, and opening it in the editor selects the node
+  back in the tree. The guess is confirmed by the owner - a file under a folder named Локализация
+  that translates nothing goes the regular way, as before.
+
 ## 0.41.0
 
 - **The extension says when a newer one is published.** It is installed from a vsix, and the
