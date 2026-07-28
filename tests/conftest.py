@@ -51,6 +51,7 @@ _DATA_DEPENDENT = {
     "test_rule_unknown_attribute_property",  # the rule needs the metamodel
     "test_rule_item_id",  # the rule needs the metamodel
     "test_rule_deletion",  # the rule needs the metamodel (property default) and terms
+    "test_rule_event_importance",  # the rule needs the metamodel (property default) and terms
     "test_rule_access_control",  # the rules read the platform names from terms
     "test_rule_localization",  # the rule reads the section names from the metamodel
     "test_rule_property_since",  # the rule needs the ui schema
