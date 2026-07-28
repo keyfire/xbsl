@@ -111,7 +111,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "code/client-module-in-http-service"
       || r === "code/server-module-in-client-context"
       || r === "code/server-call-from-handler"
-      || r === "code/query-needs-server",
+      || r === "code/query-needs-server"
+      || r === "code/global-unavailable",
     page: EXEC,
   },
   {

@@ -15,6 +15,24 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-28
 
 ### Added
+- **`code/unknown-tabular-member` - a member access on a tabular section's rows must exist
+  on the array type.** The receiver is typed by the PROJECT's metadata, not by a declaration,
+  so neither unknown-member rule saw the shape: `Object.Sections.Count()` in an object form
+  module passed the linter and failed the live apply (the array member is called `Size`).
+  The rule joins the form's base type (`ObjectForm<Entity.Object>`) or the entity's own
+  modules to the declared tabular sections and judges the member against the array catalog,
+  with the habitual `Count -> Size` hint difflib cannot bridge. A module named after a
+  section shadows the bare name - living BizKub code keeps one - and an attribute is never
+  judged.
+- **`code/global-unavailable` - a global context name called outside its environment.** The
+  docs print availability per member of the global context packages, and the stdlib extractor
+  now stores it (`global_availability`): `Message` exists on the client only, the dynamic
+  evaluation globals on the server only. A method executes in its module's environment - the
+  standard one of the element kind (a catalog or register module and an HTTP service are
+  server code) - unless `@OnServer` or `@OnClient` pins the side. `Message(...)` in a catalog
+  module is the shape that passed the linter and failed the live apply with "the method is
+  unavailable in the current environment"; the mirrored direction (a server-only global in a
+  client method) names the fix - `@OnServer`.
 - **`code/collection-field-needs-req` - a structure field whose generic type cannot be built
   empty.** `var texts: ReadableArray<String>` is refused by the apply ("cannot be initialized
   with a default value and is not marked as required for the constructor"): the type's only

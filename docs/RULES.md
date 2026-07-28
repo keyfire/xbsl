@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 127 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 129 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -210,6 +210,8 @@ the execution model (client/server), form handlers, properties and queries.
 | 125 | `yaml/event-needs-importance` | warning | on | file | An `EventLogEvent` description that does not set `Importance`: its default is `FromConstructor`, so the platform then demands the value in EVERY constructor, and one write that omits it fails the apply on the constructor line; an explicit `Importance: FromConstructor` states the choice and silences the rule | [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
 | 126 | `code/collection-field-needs-req` | error | on | file | A structure field whose generic type has no argument-less constructor (`ReadableArray<String>`) and no `req`, `?` or initializer - the apply answers "cannot be initialized with a default value"; `Array<String>` and the like are constructible empty and are left alone | [docs](https://1cmycloud.com/docs/help/topics/structure/) |
 | 127 | `code/var-needs-init` | warning | on | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) - the compilation answers "has neither a constructor nor a default value"; an enumeration, an annotation, a singleton and a name shadowed by a project type are skipped | [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| 128 | `code/unknown-tabular-member` | error | on | project | A member access on a tabular section's row collection that the array type does not have (`Object.Section.Member` in an object form module, the bare section name or `this.Section` in the entity's modules) - the collection is `Array<Entity.Section>`, and the other platform's habitual `Count()` is called `Size()` here; a module named after the section shadows it, attributes are not judged | – |
+| 129 | `code/global-unavailable` | error | on | project | A call of a global name outside its environment: `Message` (client-only) in a server module - the apply answers "the method is unavailable in the current environment", the dynamic evaluation globals (server-only) in a client method without `@OnServer`; `@OnClient`/`@OnServer` override the module's environment, the availability comes from the per-member availability lines of the global context packages | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 
 ## Group details
 
