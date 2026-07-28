@@ -383,6 +383,42 @@ def package_members(raw: str) -> set[str]:
     return out
 
 
+# The availability line right under a member heading: `Доступность: Клиент`. The longest
+# alternative goes first - `Клиент` is a prefix of `КлиентИСервер`.
+_AVAILABILITY_RE = re.compile(r"Доступность:\s*(КлиентИСервер|Клиент|Сервер)")
+
+# Both member heading levels of a package page, split with the heading text captured.
+_H23_SPLIT_RE = re.compile(r"<h[23][^>]*>(.*?)</h[23]>", re.S)
+
+
+def package_member_availability(raw: str) -> dict[str, str]:
+    """Member of a package page -> its availability (Клиент / Сервер / КлиентИСервер).
+
+    The docs print availability per member, right under its heading (`<h3>Сообщить</h3>
+    <p><code>Доступность: Клиент</code></p>`) - the page-level column of docs.sqlite shows
+    the first member's value, not the package's, so the per-member read is the only correct
+    one. A member whose chunk names no availability is left out rather than guessed.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return {}
+    out: dict[str, str] = {}
+    for section in _H1_OPEN_RE.split(ma.group(1))[1:]:
+        head = _plain_text(section[:200])
+        if not head.startswith(("Свойства", "Методы")):
+            continue
+        parts = _H23_SPLIT_RE.split(section)
+        # parts = [before, name1, body1, name2, body2, ...]
+        for k in range(1, len(parts) - 1, 2):
+            name = _plain_text(parts[k])
+            if not _PROP_NAME_RE.match(name):
+                continue
+            m = _AVAILABILITY_RE.search(parts[k + 1])
+            if m:
+                out[name] = m.group(1)
+    return out
+
+
 def _english_from_path(entry: str) -> str | None:
     """The English type name from the `.../<Имя>_ru/index.html` path segment (no dots)."""
     name = _path_name(entry)
@@ -405,19 +441,18 @@ def _path_name(entry: str) -> str | None:
     return dirname[:-3] or None
 
 
-def extract(
-    dist: Path,
-) -> tuple[
-    set[str], dict[str, set[str]], dict[str, set[str]], dict[str, dict[str, set[str]]],
-    set[str], dict[str, set[str]], dict[str, dict[str, set[str]]], dict[str, list[str]],
-]:
-    """Stdlib names (bilingual), spawned members by kind, component properties, type members."""
+def extract(dist: Path) -> tuple:
+    """Stdlib names (bilingual), spawned members by kind, component properties, type members,
+    the global context with per-name availability, managers, facets, member types, bases and
+    constructor kinds - the tuple main() unpacks."""
     car = _distro.find_car(dist)
     names: set[str] = set()
     members: dict[str, set[str]] = {}
     components: dict[str, set[str]] = {}
     types: dict[str, dict[str, set[str]]] = {}
     globals_: set[str] = set()
+    global_env: dict[str, str] = {}
+    conflicted_env: set[str] = set()
     managers: dict[str, set[str]] = {}
     facets: dict[str, dict[str, set[str]]] = {}
     returns: dict[str, dict[str, str]] = {}
@@ -460,6 +495,10 @@ def extract(
             top = rest.split("/", 1)[0]
             if rest == "index.html" or (rest.count("/") == 1 and not top.endswith("_ru")):
                 globals_ |= package_members(raw)
+                for member, env in package_member_availability(raw).items():
+                    # A name two packages give different environments is unjudgeable.
+                    if global_env.setdefault(member, env) != env:
+                        conflicted_env.add(member)
             if props or methods:
                 rets = page_member_types(raw)
                 if key:
@@ -507,7 +546,10 @@ def extract(
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
     names |= TOPIC_ONLY_TYPES
-    return names, members, components, types, globals_, managers, facets, returns, bases, ctors
+    for member in conflicted_env:
+        global_env.pop(member, None)
+    return (names, members, components, types, globals_, global_env, managers, facets,
+            returns, bases, ctors)
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -566,8 +608,8 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    (names, members, components, types, globals_, managers, facets, returns, bases,
-     ctors) = extract(dist)
+    (names, members, components, types, globals_, global_env, managers, facets, returns,
+     bases, ctors) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -599,6 +641,10 @@ def main(argv=None) -> int:
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.
         "globals": sorted(globals_),
+        # The environment a global name exists in (the member's own "Доступность" line of
+        # its package page): Клиент / Сервер / КлиентИСервер. A name whose availability the
+        # docs do not print, or print differently in two packages, is absent here.
+        "global_availability": dict(sorted(global_env.items())),
         # Kind manager methods (the <Kind>Name_ru template page): bare names in the manager module.
         "manager_members": {k: sorted(v) for k, v in sorted(managers.items())},
         # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record and
@@ -626,7 +672,8 @@ def main(argv=None) -> int:
     print(f"  имён stdlib (двуязычно): {len(names)}")
     print(f"  видов с порождаемыми членами: {len(members)}")
     print(f"  компонентов интерфейса со свойствами: {len(components)}")
-    print(f"  глобальных имён контекста: {len(globals_)}")
+    print(f"  глобальных имён контекста: {len(globals_)}"
+          f" (с доступностью: {len(global_env)})")
     print(f"  видов с членами менеджера: {len(managers)}")
     print(f"  типов с членами: {len(types)}"
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
