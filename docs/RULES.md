@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 124 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 125 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -207,6 +207,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 122 | `code/compare-with-localized` | warning | on | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
 | 123 | `code/bound-property-assign` | warning | on | file | A property COMPUTED by an expression in the paired markup (`Height: =Common.IsMobile()?820:528`) is assigned from code - the platform refuses such an assignment, and inside a try/catch the refusal is invisible; a data binding (a bare path) is left alone, it is two-way by design | – |
 | 124 | `code/collection-field-needs-req` | error | on | file | A structure field whose generic type has no argument-less constructor (`ReadableArray<String>`) and no `req`, `?` or initializer - the apply answers "cannot be initialized with a default value"; `Array<String>` and the like are constructible empty and are left alone | [docs](https://1cmycloud.com/docs/help/topics/structure/) |
+| 125 | `code/var-needs-init` | warning | on | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) - the compilation answers "has neither a constructor nor a default value"; an enumeration, an annotation, a singleton and a name shadowed by a project type are skipped | [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 
 ## Group details
 

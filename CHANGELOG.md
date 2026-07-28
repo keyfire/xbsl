@@ -28,6 +28,18 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   constructor alone would mislead, since `String` and `Boolean` take arguments and still have a
   default value of their own. File scope, so the editor reports it on every keystroke.
 
+- **`code/var-needs-init` - a variable declared by a type that has neither a constructor nor a
+  default value.** `var Response: HttpResponse` (declare first, assign inside the try) does not
+  compile - the type is only ever handed out by the platform, and the compiler answers exactly
+  that: no constructor and no default value. The rule flags a declaration whose type the catalog
+  reports as `none`; a type with an argument-taking constructor is left alone, because a bare
+  name may still be a primitive with a default of its own, and so are the hierarchies where a
+  default is plausible - an enumeration, an annotation, a singleton. It is project-scope for one
+  reason: a bare name may belong to a PROJECT type of the same name - real projects do declare a
+  structure or an object named after a platform type with no constructor - and only the whole
+  project can tell. The fix is `Type?` plus a check, or reading what is needed inside the try
+  into plain variables.
+
 ## 2026-07-27 – 0.46.0
 
 ### Fixed
