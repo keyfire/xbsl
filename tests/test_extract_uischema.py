@@ -203,8 +203,35 @@ _PAGES = [
 ]
 
 
+#: A guide topic: it describes the INSTANCE description, so its headings are the yaml keys -
+#: including the auto-interface flag, which no reference page states, and the structural keys.
+_GUIDE_PAGES = [
+    {
+        "id": "topics/acme-card-component",
+        "title": "Компонент интерфейса «КарточкаАкме»",
+        "html": (
+            "<h1>Компонент интерфейса «КарточкаАкме»</h1> <p>Карточка.</p> "
+            '<h2 id="свойства">Свойства</h2> '
+            '<h3 id="заголовок">Заголовок</h3> <p>Заголовок карточки.</p> '
+            '<h3 id="включатьвавтоинтерфейс">ВключатьВАвтоИнтерфейс</h3> <p>Признак.</p> '
+            '<h3 id="тип">Тип</h3> <p>Тип наследуемого компонента.</p> '
+            '<h3 id="свойство-разработчика">&lt;Свойство разработчика&gt;</h3> <p>Своё.</p> '
+            '<h2 id="события">События</h2> '
+            '<h3 id="послесоздания">ПослеСоздания</h3> <p>Переопределяемый обработчик.</p> '
+            '<h2 id="см-также">См. также</h2> <h3 id="прочее">Прочее</h3> <p>Не свойство.</p>'
+        ),
+    },
+    {
+        "id": "topics/modular-development",
+        "title": "Модульная разработка",
+        "html": '<h1>Модульная разработка</h1> <h2 id="свойства">Свойства</h2> '
+                '<h3 id="импорт">Импорт</h3> <p>Не компонентная страница.</p>',
+    },
+]
+
+
 def _schema() -> dict:
-    return ux.build_schema(_PAGES, "9.9.9+0")
+    return ux.build_schema(_PAGES, "9.9.9+0", _GUIDE_PAGES)
 
 
 # --- helper units ------------------------------------------------------------------------
@@ -351,6 +378,36 @@ def test_abstract_component_props_from_sections():
     assert props["ПриНаведении"]["event"] == "(Компонент, СобытиеКомпонента)->ничто"
 
 
+def test_topic_property_names_only_from_component_topics():
+    names = ux.topic_property_names(_GUIDE_PAGES)
+    assert set(names) == {"КарточкаАкме"}  # the guide about modular development is not one
+    # the headings of the property and event sections; the placeholder headings are dropped
+    assert names["КарточкаАкме"] == {
+        "Заголовок", "ВключатьВАвтоИнтерфейс", "Тип", "ПослеСоздания",
+    }
+
+
+def test_yaml_props_carry_documented_names_outside_the_typed_set():
+    comps = _schema()["components"]
+    card = comps["КарточкаАкме"]
+    # from the guide topic: neither is a constructor parameter
+    assert "ВключатьВАвтоИнтерфейс" in card["yaml_props"]
+    assert "ПослеСоздания" in card["yaml_props"]
+    # from the inherited property sections: a read-only runtime member is not a ctor parameter
+    assert "ЕстьНаведение" in card["yaml_props"]
+    # a typed property is never repeated here
+    assert "ВидОтображения" not in card["yaml_props"]
+    assert card["yaml_props"] == sorted(card["yaml_props"])
+    # a component without a guide topic gets the documented names of the hierarchy only
+    assert "ВключатьВАвтоИнтерфейс" not in comps["Виджет"]["yaml_props"]
+    assert "ЕстьНаведение" in comps["Виджет"]["yaml_props"]
+
+
+def test_schema_without_guides_has_no_yaml_props_from_topics():
+    comps = ux.build_schema(_PAGES, "9.9.9+0")["components"]
+    assert "ВключатьВАвтоИнтерфейс" not in (comps["КарточкаАкме"].get("yaml_props") or [])
+
+
 def test_component_since_only_without_deleted_overloads():
     comps = _schema()["components"]
     # КарточкаАкме has a struck-out overload - it predates the current constructor
@@ -437,6 +494,11 @@ def test_end_to_end_writes_next_to_docs(tmp_path, monkeypatch):
             "INSERT INTO pages VALUES(?, 'type', ?, ?, '', '', ?)",
             (p["id"], p["title"], p["qualified"], p["html"]),
         )
+    for p in _GUIDE_PAGES:  # the guides are read through docs.guide_pages (kind <> 'type')
+        con.execute(
+            "INSERT INTO pages VALUES(?, 'member', ?, '', '', '', ?)",
+            (p["id"], p["title"], p["html"]),
+        )
     con.commit()
     con.close()
     (tmp_path / "index.json").write_text(
@@ -452,3 +514,5 @@ def test_end_to_end_writes_next_to_docs(tmp_path, monkeypatch):
     assert data["meta"]["element_version"] == ver
     assert "КарточкаАкме" in data["components"]
     assert data["components"]["Компонент"]["abstract"] is True
+    # the guide topic of the card reached the schema through docs.guide_pages
+    assert "ВключатьВАвтоИнтерфейс" in data["components"]["КарточкаАкме"]["yaml_props"]

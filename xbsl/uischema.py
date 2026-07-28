@@ -225,6 +225,12 @@ def _english_components() -> dict[str, str]:
         english = terms.english(name, "types") or terms.common_english(name)
         if english:
             out[english] = name
+    # The distribution names the components itself (uiterms.json, extracted from the runtime's
+    # own descriptions) - it covers what the compiler dictionary does not, and the two agree
+    # wherever both answer, so the dictionary keeps precedence and this only fills the gaps.
+    for english, russian in (_ui_terms().get("types") or {}).items():
+        if isinstance(english, str) and isinstance(russian, str):
+            out.setdefault(english, russian)
     return out
 
 
@@ -244,6 +250,12 @@ def _english_properties() -> dict[str, str]:
             if english:
                 pairs.setdefault(english, set()).add(name)
     resolved = {english: names.pop() for english, names in pairs.items() if len(names) == 1}
+    # The pairs the distribution states for the properties, events and methods of the components
+    # (uiterms.json). The documentation is Russian-only, so for most of them this is the only
+    # source there is - `Видимость` (Visible), `SeoОписание` (SeoDescription), `ОсиX` (XAxes).
+    for english, russian in (_ui_terms().get("properties") or {}).items():
+        if isinstance(english, str) and isinstance(russian, str):
+            resolved.setdefault(english, russian)
     # The structural keys of a form node are not component properties, yet a rule reads them off
     # the same mapping: `Тип` tells which component this is, `Имя` names the node.
     for structural in ("Тип", "Имя"):
