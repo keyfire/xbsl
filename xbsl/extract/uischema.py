@@ -23,6 +23,15 @@ What is derived from where:
 - Property docs, since-versions, read-only markers and defaults come from the property
   sections of the page and its ancestors (nearest ancestor wins, the page itself wins
   over all).
+- "yaml_props" lists the property names a source may write on the component that the
+  typed "props" do NOT carry: the property sections of the page and its ancestors beyond
+  the constructor (`ListForm.TableComponent`, `SeparatingGroup.UseSeparator`), plus the
+  headings of the "Свойства"/"События" sections of the per-component guide topic. The guide
+  is the only source for the keys of an instance description that no type page states -
+  `IncludeInAutoInterface`, `TrackDataModification`, and a property the reference page
+  plainly omits (`FilesChoice.Title`, documented as a property by the guide and used by its
+  own example). Names only, no types: what the guide gives is the fact that the key is
+  legal.
 - Enum values are the OWN property headings of the enumeration's page ("Свойства"
   section). The service members (Индекс, ВСтроку, ПолучитьТип, Представление) live only
   in the inherited-members sections, so taking own headings IS the filter - no name
@@ -48,7 +57,8 @@ treats an absent key as false/null):
             "ПриНажатии":     {"event": "(Карточка, СобытиеПриНажатии)->ничто", "doc": "..."},
             "Картинка":       {"types": ["Картинка"], "nullable": true, "slot": true},
             "Содержимое":     {"types": ["Компонент", "Строка"], "slot": true}
-          } } },
+          },
+          "yaml_props": ["ВключатьВАвтоИнтерфейс", "ОтслеживатьИзменениеДанных"] } },
       "enums": {"ВидОтображенияСтандартнойКарточки": {
           "package": "Стд::Интерфейс::ОбщиеКомпоненты",
           "values": ["Карточка", "Баннер"]}},
@@ -150,6 +160,11 @@ _TYPE_REF_RE = re.compile(r"[А-ЯЁA-Z][0-9A-Za-zА-Яа-яЁё_]*(?:\.[0-9A-Za
 _TYPE_LITERAL_RE = re.compile(r"(?<![0-9A-Za-zА-Яа-яЁё_])Тип<")
 #: Boilerplate paragraphs of the page header that are not the description.
 _NOT_DOC = ("Сравнение", "Ссылочное", "Значимое")
+#: The title of a per-component guide topic, which names the component in guillemets. Such
+#: a topic lists the keys of an INSTANCE description - not the same set as the reference page.
+_COMPONENT_TOPIC_RE = re.compile(r"^Компонент интерфейса\s*[«\"'](.+?)[»\"']$")
+#: Sections of a guide topic whose H3 headings are yaml keys.
+_TOPIC_SECTIONS = ("Свойства", "События")
 
 
 def _plain(html: str) -> str:
@@ -441,6 +456,31 @@ def _parse_props(info: PageInfo, section: str) -> None:
         info.value_names.append(name)
 
 
+def topic_property_names(pages: list[dict]) -> dict[str, set[str]]:
+    """{component: the names its guide topic lists as properties and events}.
+
+    A guide topic describes the INSTANCE description of a component, so its headings are the
+    yaml keys a source may write - the type reference page does not answer that question in
+    full (see the module docstring). Pages that are not component topics are ignored.
+    """
+    out: dict[str, set[str]] = {}
+    for rec in pages:
+        m = _COMPONENT_TOPIC_RE.match(_plain(rec.get("title") or ""))
+        if not m:
+            continue
+        names: set[str] = set()
+        parts = _H2_RE.split(rec.get("html") or "")
+        for heading, body in zip(parts[1::2], parts[2::2]):
+            if not _plain(heading).startswith(_TOPIC_SECTIONS):
+                continue
+            for name, deleted, _text in _h3_blocks(body):
+                if not deleted and _NAME_RE.match(name):
+                    names.add(name)
+        if names:
+            out.setdefault(m.group(1).strip(), set()).update(names)
+    return out
+
+
 def _pick_namesake(infos: list[PageInfo]) -> PageInfo:
     """The winner among same-named pages: Стд::Интерфейс first, shorter name, alphabet."""
     return min(
@@ -497,9 +537,16 @@ def _prop_record(
     return rec
 
 
-def build_schema(pages: list[dict], element_version: str) -> dict:
-    """The full uischema dictionary from the type pages of the documentation dataset."""
+def build_schema(pages: list[dict], element_version: str, guides: list[dict] | None = None) -> dict:
+    """The full uischema dictionary from the type pages of the documentation dataset.
+
+    `guides` are the non-reference pages; the component topics among them contribute the
+    yaml keys the reference does not state (see "yaml_props" in the module docstring). The
+    argument is optional so an older caller keeps working - the schema then simply carries
+    what the type pages know.
+    """
     infos = [parse_page(rec) for rec in pages]
+    topic_names = topic_property_names(guides or [])
     by_id = {p.id: p for p in infos}
     component_base_ids = {p.id for p in infos if p.qualified == COMPONENT_BASE_QUALIFIED}
     enum_base_ids = {p.id for p in infos if p.qualified == ENUM_BASE_QUALIFIED}
@@ -566,6 +613,12 @@ def build_schema(pages: list[dict], element_version: str) -> dict:
         if losers:
             rec["conflicts"] = losers
         rec["props"] = props
+        # Documented names beyond the typed set: the property sections of the page and its
+        # ancestors (a component with a constructor takes its props from the constructor
+        # alone) plus the headings of the guide topic.
+        extra = sorted((set(merged) | topic_names.get(name, set())) - set(props))
+        if extra:
+            rec["yaml_props"] = extra
         components[name] = rec
 
     enums = {
@@ -618,7 +671,7 @@ def main(argv=None) -> int:
             "tools/extract_docs.py"
         )
 
-    schema = build_schema(docs.type_pages(version), version)
+    schema = build_schema(docs.type_pages(version), version, docs.guide_pages(version))
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uischema.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     # newline="\n": keep the generated file LF on every platform (git-friendly data).
@@ -636,6 +689,8 @@ def main(argv=None) -> int:
           f" слотов: {sum(1 for p in props if p.get('slot'))},"
           f" с перечислением: {sum(1 for p in props if 'enum' in p)},"
           f" с описанием: {sum(1 for p in props if 'doc' in p)})")
+    print("  документированных имён вне типизированных свойств: "
+          f"{sum(len(c.get('yaml_props') or ()) for c in comps.values())}")
     print(f"  перечислений со значениями: {len(schema['enums'])}")
     return 0
 

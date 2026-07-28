@@ -151,6 +151,27 @@ def type_pages(version: str | None = None) -> list[dict]:
         con.close()
 
 
+def guide_pages(version: str | None = None) -> list[dict]:
+    """All pages that are NOT type reference articles (id, title, html), ordered by id.
+
+    The guides carry what the reference does not: the yaml keys of a component instance are
+    listed by the per-component guide topics, and some of them (the auto-interface flag, a
+    property the reference page simply omits) appear nowhere else. A bulk read for offline
+    consumers - xbsl/extract/uischema.py folds those names into the ui schema. Empty list
+    when the documentation is absent.
+    """
+    con = _open(version)
+    if con is None:
+        return []
+    try:
+        rows = con.execute(
+            "SELECT id, title, html FROM pages WHERE kind <> 'type' ORDER BY id"
+        ).fetchall()
+        return [dict(r) for r in rows]
+    finally:
+        con.close()
+
+
 def tree(version: str | None = None) -> list[dict]:
     """Flat list of curated table-of-contents nodes - the consumer builds the tree.
 
