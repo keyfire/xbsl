@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 124 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 127 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -71,6 +71,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | 11 | `project/version` | warning | on | file | Project version is not A.B.C | [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | 12 | `structure/xbsl-pair` | warning | on | file | Module .xbsl without a paired .yaml | – |
 | 13 | `project/path-matches-descriptor` | error | on | file | The `{{vendor}}/{{name}}` path diverged from the descriptor – a build refuses the project before compiling | [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
+| 14 | `yaml/unknown-component-property` | error | on | file | A markup key the component does not declare while ANOTHER component of the ui schema does (`Checkbox` + `PlaceholderText`, a property of `Edit`) - apply rejects the markup node as an unknown property; a name no component declares is left alone, the documentation does not list the yaml keys in full | [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 
 ### Tier B - text and conventions
 
@@ -79,16 +80,16 @@ in the sources.
 
 | # | Rule | Severity | Default | Scope | What it checks | Docs |
 |---|---|---|---|---|---|---|
-| 14 | `security/hardcoded-secret` | error | on | file | A key or a password as a literal | – |
-| 15 | `typography/em-dash` | info | off | file | Em dash in a comment | – |
-| 16 | `typography/ellipsis` | warning | on | file | Ellipsis character in a comment | – |
-| 17 | `typography/curly-quotes` | warning | on | file | Curly quotes | – |
-| 18 | `typography/guillemets-comment` | info | off | file | Guillemets in a comment | – |
-| 19 | `whitespace/trailing` | warning | on | file | Trailing whitespace | – |
-| 20 | `whitespace/mixed-newline` | warning | on | file | Mixed newlines | – |
-| 21 | `encoding/utf8` | error | on | file | File is not UTF-8 | – |
-| 22 | `style/tab-indent` | warning | on | file | Tab in the indentation | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 23 | `style/line-length` | warning | on | file | Line longer than 120 characters | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+| 15 | `security/hardcoded-secret` | error | on | file | A key or a password as a literal | – |
+| 16 | `typography/em-dash` | info | off | file | Em dash in a comment | – |
+| 17 | `typography/ellipsis` | warning | on | file | Ellipsis character in a comment | – |
+| 18 | `typography/curly-quotes` | warning | on | file | Curly quotes | – |
+| 19 | `typography/guillemets-comment` | info | off | file | Guillemets in a comment | – |
+| 20 | `whitespace/trailing` | warning | on | file | Trailing whitespace | – |
+| 21 | `whitespace/mixed-newline` | warning | on | file | Mixed newlines | – |
+| 22 | `encoding/utf8` | error | on | file | File is not UTF-8 | – |
+| 23 | `style/tab-indent` | warning | on | file | Tab in the indentation | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+| 24 | `style/line-length` | warning | on | file | Line longer than 120 characters | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
 
 ### Tier C - code structure, basic syntax and code-writing conventions
 
@@ -98,44 +99,44 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 
 | # | Rule | Severity | Default | Scope | What it checks | Docs |
 |---|---|---|---|---|---|---|
-| 24 | `code/parse-error` | error | on | file | Syntax error (a full parse against the platform grammar) | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 25 | `code/statement-no-effect` | warning | on | file | Expression statement with no effect: the value is dropped (often a keyword typo, `retun 5` for `return 5`) | – |
-| 26 | `code/return-mismatch` | error | on | file | Return does not match the method signature (a value in a void method, a bare `return` in a typed one) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 27 | `code/call-arity` | error | on | file | Argument count of a local call outside the method's [required, total] range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 28 | `code/brackets` | error | on | file | Unbalanced brackets () [] {} | – |
-| 29 | `code/blocks` | error | on | file | Unbalanced blocks and ';' | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 30 | `code/ternary-and-or` | error | on | file | Compound ternary condition without parentheses | [docs](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
-| 31 | `code/param-type-required` | error | on | file | Parameter without a type and without a default value | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 32 | `code/loop-header` | error | on | file | Malformed 'for' loop header | [docs](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
-| 33 | `code/invalid-string-escape` | error | on | file | Invalid escape sequence in a string literal (`\'`, regex-style `\d`) - the compiler rejects such a literal; valid are `\н \в \т \\ \" \% \$ \ю<code>` and the Latin spellings | [docs](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
-| 34 | `code/unused-local` | warning | on | file | Unused local variable | – |
-| 35 | `code/unused-loop-var` | warning | on | file | Unused loop variable | – |
-| 36 | `code/ref-field-needs-req` | error | on | file | Structure reference field without 'req' | [docs](https://1cmycloud.com/docs/help/topics/structure/) |
-| 37 | `style/boolean-compare` | warning | on | file | Comparing a boolean value with True/False | [docs](https://1cmycloud.com/docs/help/topics/check-logical-values/) |
-| 38 | `style/undefined-is` | warning | on | file | Checking Undefined with the 'is' operator | [docs](https://1cmycloud.com/docs/help/topics/check-if-undefined/) |
-| 39 | `style/negated-is` | warning | on | file | Negating the 'is' operator on the outside | [docs](https://1cmycloud.com/docs/help/topics/is-operator/) |
-| 40 | `style/semicolon-line` | warning | on | file | ';' not on its own line | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 41 | `style/wrap-operator` | warning | on | file | Operator at the end of a wrapped line | [docs](https://1cmycloud.com/docs/help/topics/split-expressions/) |
-| 42 | `style/wrap-comma` | warning | on | file | Comma at the start of a wrapped line | [docs](https://1cmycloud.com/docs/help/topics/split-expressions/) |
-| 43 | `style/camel-case` | warning | on | file | Name is not in UpperCamelCase | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 44 | `style/const-case` | warning | on | file | Constant is not in ALL_CAPS | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 45 | `style/exception-prefix` | warning | on | file | Exception name without the exception prefix | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 46 | `style/abbreviation-case` | warning | on | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 47 | `style/enum-name-vid` | warning | on | file | Enumeration name starts with "Type" | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 48 | `style/collection-literal` | warning | on | file | Manual collection fill instead of a literal | [docs](https://1cmycloud.com/docs/help/topics/collection-literals-usage/) |
-| 49 | `style/redundant-tostring` | warning | on | file | An explicit `ToString()` call in a concatenation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
-| 50 | `style/interpolation` | warning | on | file | Concatenation instead of interpolation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
-| 51 | `style/type-colon-space` | warning | on | file | Spaces around the type colon | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 52 | `style/union-spaces` | warning | on | file | Spaces around '\|' in a union type | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 53 | `style/nullable-shorthand` | warning | on | file | Undefined in a type without the '?' shorthand | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 54 | `style/redundant-type` | warning | on | file | Redundant type annotation on initialization | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 55 | `style/optional-params-last` | warning | on | file | Optional parameter before a required one | [docs](https://1cmycloud.com/docs/help/topics/method-declarations/) |
-| 56 | `code/resource-bare-name` | error | on | file | `Resource{Resources/<file>.svg}` - the key is a path RELATIVE to the Resources folder; spelling that folder out breaks the lookup | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
-| 57 | `query/named-parameter` | error | on | file | A named parameter `&Name` inside a query literal - the literal takes its values by interpolation (`%Name`) | [docs](https://1cmycloud.com/docs/help/topics/query-literal/) |
-| 58 | `code/this-in-static-method` | error | on | file | The keyword `this` inside the body of a static method - a static method is common to the whole type and has no object context, the compiler rejects the project | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
-| 59 | `code/instance-call-from-static` | error | on | file | A bare call of an instance method of the same owner from a static method - the docs forbid it outright; call the method on a value or make it static | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
-| 60 | `code/close-in-before-close` | warning | on | file | `Close()` inside `BeforeClose` – the platform ignores the call and nothing closes the form afterwards | – |
-| 61 | `query/no-isnull` | error | on | file | `ISNULL(` inside a query literal – the query language has no such function | – |
+| 25 | `code/parse-error` | error | on | file | Syntax error (a full parse against the platform grammar) | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+| 26 | `code/statement-no-effect` | warning | on | file | Expression statement with no effect: the value is dropped (often a keyword typo, `retun 5` for `return 5`) | – |
+| 27 | `code/return-mismatch` | error | on | file | Return does not match the method signature (a value in a void method, a bare `return` in a typed one) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| 28 | `code/call-arity` | error | on | file | Argument count of a local call outside the method's [required, total] range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| 29 | `code/brackets` | error | on | file | Unbalanced brackets () [] {} | – |
+| 30 | `code/blocks` | error | on | file | Unbalanced blocks and ';' | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+| 31 | `code/ternary-and-or` | error | on | file | Compound ternary condition without parentheses | [docs](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
+| 32 | `code/param-type-required` | error | on | file | Parameter without a type and without a default value | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| 33 | `code/loop-header` | error | on | file | Malformed 'for' loop header | [docs](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
+| 34 | `code/invalid-string-escape` | error | on | file | Invalid escape sequence in a string literal (`\'`, regex-style `\d`) - the compiler rejects such a literal; valid are `\н \в \т \\ \" \% \$ \ю<code>` and the Latin spellings | [docs](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
+| 35 | `code/unused-local` | warning | on | file | Unused local variable | – |
+| 36 | `code/unused-loop-var` | warning | on | file | Unused loop variable | – |
+| 37 | `code/ref-field-needs-req` | error | on | file | Structure reference field without 'req' | [docs](https://1cmycloud.com/docs/help/topics/structure/) |
+| 38 | `style/boolean-compare` | warning | on | file | Comparing a boolean value with True/False | [docs](https://1cmycloud.com/docs/help/topics/check-logical-values/) |
+| 39 | `style/undefined-is` | warning | on | file | Checking Undefined with the 'is' operator | [docs](https://1cmycloud.com/docs/help/topics/check-if-undefined/) |
+| 40 | `style/negated-is` | warning | on | file | Negating the 'is' operator on the outside | [docs](https://1cmycloud.com/docs/help/topics/is-operator/) |
+| 41 | `style/semicolon-line` | warning | on | file | ';' not on its own line | [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+| 42 | `style/wrap-operator` | warning | on | file | Operator at the end of a wrapped line | [docs](https://1cmycloud.com/docs/help/topics/split-expressions/) |
+| 43 | `style/wrap-comma` | warning | on | file | Comma at the start of a wrapped line | [docs](https://1cmycloud.com/docs/help/topics/split-expressions/) |
+| 44 | `style/camel-case` | warning | on | file | Name is not in UpperCamelCase | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 45 | `style/const-case` | warning | on | file | Constant is not in ALL_CAPS | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 46 | `style/exception-prefix` | warning | on | file | Exception name without the exception prefix | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 47 | `style/abbreviation-case` | warning | on | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 48 | `style/enum-name-vid` | warning | on | file | Enumeration name starts with "Type" | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 49 | `style/collection-literal` | warning | on | file | Manual collection fill instead of a literal | [docs](https://1cmycloud.com/docs/help/topics/collection-literals-usage/) |
+| 50 | `style/redundant-tostring` | warning | on | file | An explicit `ToString()` call in a concatenation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
+| 51 | `style/interpolation` | warning | on | file | Concatenation instead of interpolation | [docs](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
+| 52 | `style/type-colon-space` | warning | on | file | Spaces around the type colon | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| 53 | `style/union-spaces` | warning | on | file | Spaces around '\|' in a union type | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| 54 | `style/nullable-shorthand` | warning | on | file | Undefined in a type without the '?' shorthand | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| 55 | `style/redundant-type` | warning | on | file | Redundant type annotation on initialization | [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| 56 | `style/optional-params-last` | warning | on | file | Optional parameter before a required one | [docs](https://1cmycloud.com/docs/help/topics/method-declarations/) |
+| 57 | `code/resource-bare-name` | error | on | file | `Resource{Resources/<file>.svg}` - the key is a path RELATIVE to the Resources folder; spelling that folder out breaks the lookup | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
+| 58 | `query/named-parameter` | error | on | file | A named parameter `&Name` inside a query literal - the literal takes its values by interpolation (`%Name`) | [docs](https://1cmycloud.com/docs/help/topics/query-literal/) |
+| 59 | `code/this-in-static-method` | error | on | file | The keyword `this` inside the body of a static method - a static method is common to the whole type and has no object context, the compiler rejects the project | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
+| 60 | `code/instance-call-from-static` | error | on | file | A bare call of an instance method of the same owner from a static method - the docs forbid it outright; call the method on a value or make it static | [docs](https://1cmycloud.com/docs/help/topics/static-methods/) |
+| 61 | `code/close-in-before-close` | warning | on | file | `Close()` inside `BeforeClose` – the platform ignores the call and nothing closes the form afterwards | – |
+| 62 | `query/no-isnull` | error | on | file | `ISNULL(` inside a query literal – the query language has no such function | – |
 
 ### Tier D - semantics over stdlib, forms and the metamodel
 
@@ -144,69 +145,71 @@ the execution model (client/server), form handlers, properties and queries.
 
 | # | Rule | Severity | Default | Scope | What it checks | Docs |
 |---|---|---|---|---|---|---|
-| 62 | `yaml/choice-needs-static-list` | warning | on | file | ValueChoice without a static `ChoiceList` | [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
-| 63 | `code/unknown-type` | warning | on | project | Unknown type | – |
-| 64 | `code/catch-non-exception` | error | on | file | The type in `catch` is not an exception (a stdlib non-exception or a local `structure`) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/exceptions/) |
-| 65 | `code/unknown-member` | error | on | file | A member access on a variable of a known stdlib type - plain or a generic, whose arguments type the members and do not name them - that the type does not have (first hop, typos get a hint) | – |
-| 66 | `code/unknown-static-member` | error | on | project | A member reached through a type name (`DateTime.Minimal()`) that the type does not have; the type of such a call carries on to the next hop. A bare name is read as a type only when the project gives it no other meaning; the module's paired yaml counts even in a single-file check | – |
-| 67 | `yaml/foreign-not-public` | error | on | project | A yaml reference (a type position or a `FormType` navigation target) to an element of another subsystem whose `VisibilityScope` is not `InProject`/`Global` - unreachable from outside its subsystem, and no import helps | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 68 | `code/call-arity-cross` | error | on | project | Argument count of a `<Module>.<Method>(...)` call outside the target module's signature range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 69 | `code/undefined-name` | error | on | project | Undefined name in an expression (a typo in a name) and in a short string interpolation (`"?$format=json"` substitutes the name `format`, `\$` is needed) - the compiler rejects such code | – |
-| 70 | `code/unknown-object-type` | warning | on | project | Unknown project-object type | – |
-| 71 | `yaml/unknown-type` | warning | on | project | Unknown type in yaml | – |
-| 72 | `yaml/dynlist-missing-field` | warning | on | project | Missing dynamic-list field | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 73 | `code/unknown-enum-value` | warning | on | project | Unknown enumeration value | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
-| 74 | `yaml/enum-needs-nullable` | warning | on | project | Enumeration without nullable | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
-| 75 | `yaml/unknown-enum-value` | error | on | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top`, `Center`, `Bottom`, `Baseline` and no `End`) | – |
-| 76 | `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal, an `=` binding or a `$` localized-string reference | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
-| 77 | `code/unknown-resource` | error | on | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
-| 78 | `form/unknown-handler` | warning | on | project | Form handler not found in the module | [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
-| 79 | `code/server-call-from-handler` | warning | on | project | Server method is unavailable to a client handler | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 80 | `code/client-annotation-in-server-module` | warning | on | project | Client annotation in a server common module | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 81 | `code/client-module-in-http-service` | warning | on | project | Client common module in an HTTP service | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 82 | `code/query-needs-server` | error | on | project | A `Query{...}` block in a method of a client-side module (a form, or a common module whose `Environment` involves the client) that carries no `@OnServer` - the type does not exist on the client and the compiler rejects the build | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 83 | `code/local-method-cross-component` | warning | on | project | Cross-component call of a local method | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 84 | `code/local-method-cross-module` | error | on | project | Cross-module call of a local method | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 85 | `naming/yo` | warning | on | file | The letter yo in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 86 | `naming/underscore` | warning | on | file | Underscore in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 87 | `naming/abbreviation` | warning | on | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 88 | `naming/latin-term` | warning | on | file | English term spelled in Cyrillic | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 89 | `naming/enum-vid` | warning | on | file | Enumeration name with the word "Type" | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 90 | `naming/kind-in-name` | warning | on | file | Element kind inside its name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 91 | `naming/filler-word` | warning | on | file | Filler word in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 92 | `naming/module-suffix` | warning | on | file | Environment suffix in a common module name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 93 | `naming/number` | warning | on | file | Wrong number for the element kind | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 94 | `naming/boolean-name` | warning | on | file | Boolean attribute name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 95 | `naming/presentation` | warning | on | file | Element presentation | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 96 | `naming/prefix-by-kind` | warning | on | file | Kind-specific name without its prefix | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 97 | `code/unknown-ns-object` | warning | on | project | Unknown object in a kind namespace | – |
-| 98 | `query/unknown-table` | warning | on | project | Unknown table in a query | [docs](https://1cmycloud.com/docs/help/topics/select-from/) |
-| 99 | `query/in-subquery-composite` | warning | on | project | 'IN' with a subquery over a composite type | [docs](https://1cmycloud.com/docs/help/topics/in-expression/) |
-| 100 | `yaml/unknown-property` | warning | on | file | Unknown object property | – |
-| 101 | `code/reserved-name` | warning | on | file | Reserved name | – |
-| 102 | `yaml/builtin-property-name` | warning | on | file | Built-in property name clash | – |
-| 103 | `yaml/size-needs-no-stretch` | info | off | file | A size without disabling the stretch | [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
-| 104 | `code/unused-method` | warning | off | project | Method is never referenced | – |
-| 105 | `yaml/missing-import` | warning | on | project | A yaml reference (a type position or a `FormType` navigation target) to a public element of another subsystem that the `Import` section does not list | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 106 | `yaml/presentation-field` | error | on | file | The presentation field of an object | [docs](https://1cmycloud.com/docs/help/topics/element-view/) |
-| 107 | `yaml/unexpected-type-argument` | error | on | file | A type argument on a property the ui schema declares without one - another type, rejected when the build is applied (a form's `AdditionalCommands` takes `CommandInterfaceFragment`, not `CommandInterfaceFragment<UsualCommand>`) | [docs](https://1cmycloud.com/docs/help/topics/command-interface/) |
-| 108 | `yaml/property-since-compat` | error | on | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property | [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
-| 109 | `query/deletion-mark-immediate` | error | on | project | A deletion-mark condition in a query on an object whose `DeletionMode` is `Immediately` - such an object has no mark and the query fails on apply | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| 110 | `yaml/item-id-required` | error | on | file | A metadata collection item (an attribute, a tabular section, an enumeration item, an access-key parameter) without the `Id` its class declares - apply answers `ID required` | – |
-| 111 | `code/unknown-row-field` | error | on | project | A field addressed on a dynamic list row (`DynamicListRow<Form.Type>`) that the list's `Fields` do not declare | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 112 | `code/row-field-null` | error | on | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 113 | `yaml/unknown-attribute-property` | error | on | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object | – |
-| 114 | `yaml/empty-group-sized` | warning | on | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap | – |
-| 115 | `yaml/hint-too-long` | warning | on | file | A `Tooltip` longer than the render limit – the tail is not shown at all | – |
-| 116 | `code/client-available-needs-context` | error | on | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 117 | `code/server-module-in-client-context` | error | on | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 118 | `yaml/delete-current-needs-immediate` | error | on | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute whose owner has a `DeletionMode` that only marks (`DeletionMark` is also the default) – the apply answers `Action DeleteCurrent cannot apply to object with a DeletionMark` | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| 119 | `code/per-object-permissions-need-common` | warning | on | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| 120 | `code/permission-field-not-declared` | warning | on | project | Inside `ComputeAccessPermissionsForObjects` a field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity` instead of the record | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| 121 | `yaml/placeholder-key-in-strings` | error | on | file | A key carrying the placeholder `$0` in the `Strings` section of a `LocalizedStrings` dictionary: the section compiles to a method WITHOUT parameters, so a call with an argument fails the apply with an "unknown method" answer | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
-| 122 | `code/compare-with-localized` | warning | on | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
-| 123 | `code/bound-property-assign` | warning | on | file | A property COMPUTED by an expression in the paired markup (`Height: =Common.IsMobile()?820:528`) is assigned from code - the platform refuses such an assignment, and inside a try/catch the refusal is invisible; a data binding (a bare path) is left alone, it is two-way by design | – |
-| 124 | `yaml/event-needs-importance` | warning | on | file | An `EventLogEvent` description that does not set `Importance`: its default is `FromConstructor`, so the platform then demands the value in EVERY constructor, and one write that omits it fails the apply on the constructor line; an explicit `Importance: FromConstructor` states the choice and silences the rule | [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| 63 | `yaml/choice-needs-static-list` | warning | on | file | ValueChoice without a static `ChoiceList` | [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
+| 64 | `code/unknown-type` | warning | on | project | Unknown type | – |
+| 65 | `code/catch-non-exception` | error | on | file | The type in `catch` is not an exception (a stdlib non-exception or a local `structure`) - the compiler rejects such code | [docs](https://1cmycloud.com/docs/help/topics/exceptions/) |
+| 66 | `code/unknown-member` | error | on | file | A member access on a variable of a known stdlib type - plain or a generic, whose arguments type the members and do not name them - that the type does not have (first hop, typos get a hint) | – |
+| 67 | `code/unknown-static-member` | error | on | project | A member reached through a type name (`DateTime.Minimal()`) that the type does not have; the type of such a call carries on to the next hop. A bare name is read as a type only when the project gives it no other meaning; the module's paired yaml counts even in a single-file check | – |
+| 68 | `yaml/foreign-not-public` | error | on | project | A yaml reference (a type position or a `FormType` navigation target) to an element of another subsystem whose `VisibilityScope` is not `InProject`/`Global` - unreachable from outside its subsystem, and no import helps | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| 69 | `code/call-arity-cross` | error | on | project | Argument count of a `<Module>.<Method>(...)` call outside the target module's signature range | [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| 70 | `code/undefined-name` | error | on | project | Undefined name in an expression (a typo in a name) and in a short string interpolation (`"?$format=json"` substitutes the name `format`, `\$` is needed) - the compiler rejects such code | – |
+| 71 | `code/unknown-object-type` | warning | on | project | Unknown project-object type | – |
+| 72 | `yaml/unknown-type` | warning | on | project | Unknown type in yaml | – |
+| 73 | `yaml/dynlist-missing-field` | warning | on | project | Missing dynamic-list field | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| 74 | `code/unknown-enum-value` | warning | on | project | Unknown enumeration value | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
+| 75 | `yaml/enum-needs-nullable` | warning | on | project | Enumeration without nullable | [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
+| 76 | `yaml/unknown-enum-value` | error | on | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top`, `Center`, `Bottom`, `Baseline` and no `End`) | – |
+| 77 | `yaml/bare-object-value` | error | on | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal, an `=` binding or a `$` localized-string reference | [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
+| 78 | `code/unknown-resource` | error | on | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library | [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
+| 79 | `form/unknown-handler` | warning | on | project | Form handler not found in the module | [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
+| 80 | `code/server-call-from-handler` | warning | on | project | Server method is unavailable to a client handler | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 81 | `code/client-annotation-in-server-module` | warning | on | project | Client annotation in a server common module | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 82 | `code/client-module-in-http-service` | warning | on | project | Client common module in an HTTP service | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 83 | `code/query-needs-server` | error | on | project | A `Query{...}` block in a method of a client-side module (a form, or a common module whose `Environment` involves the client) that carries no `@OnServer` - the type does not exist on the client and the compiler rejects the build | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 84 | `code/local-method-cross-component` | warning | on | project | Cross-component call of a local method | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| 85 | `code/local-method-cross-module` | error | on | project | Cross-module call of a local method | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| 86 | `naming/yo` | warning | on | file | The letter yo in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 87 | `naming/underscore` | warning | on | file | Underscore in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 88 | `naming/abbreviation` | warning | on | file | All-caps abbreviation in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 89 | `naming/latin-term` | warning | on | file | English term spelled in Cyrillic | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 90 | `naming/enum-vid` | warning | on | file | Enumeration name with the word "Type" | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 91 | `naming/kind-in-name` | warning | on | file | Element kind inside its name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 92 | `naming/filler-word` | warning | on | file | Filler word in a name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 93 | `naming/module-suffix` | warning | on | file | Environment suffix in a common module name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 94 | `naming/number` | warning | on | file | Wrong number for the element kind | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 95 | `naming/boolean-name` | warning | on | file | Boolean attribute name | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 96 | `naming/presentation` | warning | on | file | Element presentation | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 97 | `naming/prefix-by-kind` | warning | on | file | Kind-specific name without its prefix | [docs](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| 98 | `code/unknown-ns-object` | warning | on | project | Unknown object in a kind namespace | – |
+| 99 | `query/unknown-table` | warning | on | project | Unknown table in a query | [docs](https://1cmycloud.com/docs/help/topics/select-from/) |
+| 100 | `query/in-subquery-composite` | warning | on | project | 'IN' with a subquery over a composite type | [docs](https://1cmycloud.com/docs/help/topics/in-expression/) |
+| 101 | `yaml/unknown-property` | warning | on | file | Unknown object property | – |
+| 102 | `code/reserved-name` | warning | on | file | Reserved name | – |
+| 103 | `yaml/builtin-property-name` | warning | on | file | Built-in property name clash | – |
+| 104 | `yaml/size-needs-no-stretch` | info | off | file | A size without disabling the stretch | [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| 105 | `code/unused-method` | warning | off | project | Method is never referenced | – |
+| 106 | `yaml/missing-import` | warning | on | project | A yaml reference (a type position or a `FormType` navigation target) to a public element of another subsystem that the `Import` section does not list | [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| 107 | `yaml/presentation-field` | error | on | file | The presentation field of an object | [docs](https://1cmycloud.com/docs/help/topics/element-view/) |
+| 108 | `yaml/unexpected-type-argument` | error | on | file | A type argument on a property the ui schema declares without one - another type, rejected when the build is applied (a form's `AdditionalCommands` takes `CommandInterfaceFragment`, not `CommandInterfaceFragment<UsualCommand>`) | [docs](https://1cmycloud.com/docs/help/topics/command-interface/) |
+| 109 | `yaml/property-since-compat` | error | on | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property | [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
+| 110 | `query/deletion-mark-immediate` | error | on | project | A deletion-mark condition in a query on an object whose `DeletionMode` is `Immediately` - such an object has no mark and the query fails on apply | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| 111 | `yaml/item-id-required` | error | on | file | A metadata collection item (an attribute, a tabular section, an enumeration item, an access-key parameter) without the `Id` its class declares - apply answers `ID required` | – |
+| 112 | `code/unknown-row-field` | error | on | project | A field addressed on a dynamic list row (`DynamicListRow<Form.Type>`) that the list's `Fields` do not declare | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| 113 | `code/row-field-null` | error | on | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` | [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| 114 | `yaml/unknown-attribute-property` | error | on | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object | – |
+| 115 | `yaml/empty-group-sized` | warning | on | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap | – |
+| 116 | `yaml/hint-too-long` | warning | on | file | A `Tooltip` longer than the render limit – the tail is not shown at all | – |
+| 117 | `code/client-available-needs-context` | error | on | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 118 | `code/server-module-in-client-context` | error | on | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| 119 | `yaml/delete-current-needs-immediate` | error | on | file | `OnReferencedObjectDeletion: DeleteCurrent` on an attribute whose owner has a `DeletionMode` that only marks (`DeletionMark` is also the default) – the apply answers `Action DeleteCurrent cannot apply to object with a DeletionMark` | [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| 120 | `code/per-object-permissions-need-common` | warning | on | project | An object calculates its permissions per object, but its module declares no `ComputeAccessPermissions` handler – the common calculation is required even then, if only to return an empty array | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| 121 | `code/permission-field-not-declared` | warning | on | project | Inside `ComputeAccessPermissionsForObjects` a field outside `ComputePermissionsBy` is read, or a declared field is reached through `Entity` instead of the record | [docs](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| 122 | `yaml/placeholder-key-in-strings` | error | on | file | A key carrying the placeholder `$0` in the `Strings` section of a `LocalizedStrings` dictionary: the section compiles to a method WITHOUT parameters, so a call with an argument fails the apply with an "unknown method" answer | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
+| 123 | `code/compare-with-localized` | warning | on | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs | [docs](https://1cmycloud.com/docs/help/topics/localization/) |
+| 124 | `code/bound-property-assign` | warning | on | file | A property COMPUTED by an expression in the paired markup (`Height: =Common.IsMobile()?820:528`) is assigned from code - the platform refuses such an assignment, and inside a try/catch the refusal is invisible; a data binding (a bare path) is left alone, it is two-way by design | – |
+| 125 | `yaml/event-needs-importance` | warning | on | file | An `EventLogEvent` description that does not set `Importance`: its default is `FromConstructor`, so the platform then demands the value in EVERY constructor, and one write that omits it fails the apply on the constructor line; an explicit `Importance: FromConstructor` states the choice and silences the rule | [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| 126 | `code/collection-field-needs-req` | error | on | file | A structure field whose generic type has no argument-less constructor (`ReadableArray<String>`) and no `req`, `?` or initializer - the apply answers "cannot be initialized with a default value"; `Array<String>` and the like are constructible empty and are left alone | [docs](https://1cmycloud.com/docs/help/topics/structure/) |
+| 127 | `code/var-needs-init` | warning | on | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) - the compilation answers "has neither a constructor nor a default value"; an enumeration, an annotation, a singleton and a name shadowed by a project type are skipped | [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 
 ## Group details
 
