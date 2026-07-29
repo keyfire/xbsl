@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.43.0
+
+- **The variable-and-constant-names standard is wired into the editor.** Engine 0.48.0 ships
+  six new `style/` rules for the standard; the extension now opens the platform's naming
+  section from each of their findings (the docs button in the Problems panel), and the
+  `style` group description states the current default - 27 rules at warning.
+
 ## 0.42.0
 
 - **A translation opens from the tree.** Translated strings live in a section of their own -
