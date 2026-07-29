@@ -90,7 +90,7 @@
   "config.groups.enum.off": "Disable the group: the rules are skipped, the findings are hidden",
   "config.groups.code": "XBSL code: brackets and blocks balance, unused locals and methods, unknown types and enum values, a server call from a client handler, and other code errors. Defaults: 28 rules at error, 19 at warning.",
   "config.groups.yaml": "Element descriptions (.yaml): Id validity and uniqueness, unknown types and properties, missing subsystem imports, dynamic list fields, and other description errors. Defaults: 17 rules at error, 12 at warning, 1 at info.",
-  "config.groups.style": "The platform code style conventions: naming, types and signatures, collection literals, string interpolation, wrapping and checks. Defaults: 21 rules at warning - what the platform documents as a code-writing convention is a standard, and a standard is enforced.",
+  "config.groups.style": "The platform code style conventions and the variable-names standard: naming, types and signatures, collection literals, string interpolation, wrapping and checks. Defaults: 27 rules at warning - what the platform documents as a code-writing convention is a standard, and a standard is enforced.",
   "config.groups.typography": "Typography in comments and code: em dash, the ellipsis character, curly quotes and guillemets. Defaults: 2 rules at warning, 2 at info.",
   "config.groups.whitespace": "Whitespace: trailing spaces and mixed newlines. Default: warning.",
   "config.groups.encoding": "File encoding (UTF-8). Default: error.",

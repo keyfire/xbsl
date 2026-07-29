@@ -38,6 +38,7 @@ _DATA_DEPENDENT = {
     "test_rule_environment",
     "test_rule_global_unavailable",
     "test_rule_unknown_tabular_member",
+    "test_rule_variable_names",  # code rules tokenize the module
     "test_style_rules",
     "test_mcp",
     "test_cli",

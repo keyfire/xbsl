@@ -132,6 +132,29 @@ def test_abbreviation_in_parameter_flagged():
     assert len(d) == 1 and "ТелоJson" in d[0].message
 
 
+def test_abbreviation_cyrillic_flagged():
+    # The variable-names standard spells accepted short words as one word (Ид, Ндс, Фио).
+    d = _lint("метод Ф()\n    знч СуммаНДС = 1\n;\n", "style/abbreviation-case")
+    assert len(d) == 1 and "СуммаНдс" in d[0].message
+
+
+def test_abbreviation_cyrillic_mid_name_flagged():
+    # The trailing capital starts the next word: the abbreviation core is КМС.
+    d = _lint("метод ЗапросыКМССервер()\n;\n", "style/abbreviation-case")
+    assert len(d) == 1 and "ЗапросыКмсСервер" in d[0].message
+
+
+def test_glued_conjunction_ok():
+    # И/К before a word is a single-letter conjunction or preposition, not an abbreviation.
+    assert _clean("метод Ф()\n    знч СтрокаИЧисло = 1\n;\n", "style/abbreviation-case")
+    assert _clean("метод Ф()\n    знч ДоступКПриложениям = 1\n;\n", "style/abbreviation-case")
+
+
+def test_cyrillic_constant_stays_all_caps():
+    # ALL_CAPS is the law for constants (2.3) - the abbreviation rule keeps out.
+    assert _clean("конст ВЕРСИЯ_НДС = 1\n", "style/abbreviation-case")
+
+
 def test_enum_named_tip_flagged():
     d = _lint("перечисление ТипКнопки\n    Да\n;\n", "style/enum-name-vid")
     assert len(d) == 1 and "ВидКнопки" in d[0].message

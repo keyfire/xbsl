@@ -33,6 +33,7 @@ from . import (  # noqa: F401
     style_naming,
     style_strings,
     style_types,
+    style_variables,
 )
 
 # Tier D – semantics over stdlib, forms and the metamodel:

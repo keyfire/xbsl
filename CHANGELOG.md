@@ -14,6 +14,31 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## Unreleased
 
+### Added
+- **The "Variable and constant names" development standard as rules** (135 rules total). Six
+  new `style/` rules cover the token-provable part of the standard: `style/abstract-name`
+  (names like `Data`, `Item`, `Object` - exact or with a digit tail - say nothing about the
+  variable; structure fields as a serialization contract are exempt), `style/single-letter-name`
+  (one-letter names belong only to short lambda parameters - the standard's own exception, and
+  lambdas declare nothing, so the rule never sees them), `style/negated-boolean-name`
+  (`NotConnected` wants to be `Connected`; judged only where the boolean type is proven),
+  `style/type-in-name` (a container type has no business inside a variable name),
+  `style/numeral-in-const-name` (`TIMEOUT_ONE_MINUTE` spells its value - the wider half of the
+  "abstract constant names" clause cannot be told from a legitimate enumeration-member constant
+  and is left to review), and the project-scope `style/shadow-project-name` (a variable named
+  like a project element hides that element for its scope; stdlib shadowing is deliberately NOT
+  judged - platform handler signatures collide with type names en masse, a corpus run gave over
+  900 forced hits). All six default to `warning`, matching the owner's decision that a documented
+  standard is enforced.
+
+### Changed
+- **`style/abbreviation-case` reads Cyrillic abbreviations too.** The standard spells the
+  accepted short words as one word each (`Ид`, `Ндс`, `Фио`), so an all-caps Cyrillic run in a
+  declared name is now reported with a suggestion, same as Latin ones. The abbreviation core
+  logic is shared with the yaml naming rule: the trailing capital belongs to the next word, and
+  a single-letter remainder is a glued conjunction, not an abbreviation - so compound names with
+  one-letter unions stay clean, and constants stay out (ALL_CAPS is their law).
+
 ### Fixed
 - **`self-update` of a native install can finally update itself.** Two defects, both met on
   a live update and both previously ending in a rollback (the insurance worked, the update

@@ -22,6 +22,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
 from xbsl.rules._syntax import code_tokens, declarations, signatures
+from xbsl.rules.naming import _abbrev_core
 
 MESSAGES = {
     "style/camel-case.title": {
@@ -78,8 +79,10 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# Two or more consecutive uppercase Latin letters inside a name – an all-caps abbreviation.
-_ABBREV_RE = re.compile(r"[A-Z]{2,}")
+# Two or more consecutive capitals (either script) inside a name – an all-caps abbreviation
+# candidate. The core logic (naming._abbrev_core) hands the trailing capital to the next word
+# and dismisses a single-letter remainder as a glued conjunction (СтрокаИЧисло is clean).
+_ABBREV_RE = re.compile(r"[А-ЯЁA-Z]{2,}")
 _LOCAL_TYPE_KEYWORDS = ("STRUCTURE", "ENUMERATION", "EXCEPTION")
 _ENUM_BAD_PREFIXES = ("Тип", "Type")
 _EXCEPTION_PREFIXES = ("Исключение", "Exception")
@@ -208,8 +211,21 @@ def exception_prefix(source: SourceFile) -> Iterable[Diagnostic]:
 
 
 def _suggest(name: str) -> str:
-    """Bring all-caps abbreviations to a single-capital form: ТелоJSON -> ТелоJson."""
-    return _ABBREV_RE.sub(lambda m: m.group(0)[0] + m.group(0)[1:].lower(), name)
+    """Bring all-caps abbreviations to a single-capital form: ТелоJSON -> ТелоJson,
+    СуммаНДС -> СуммаНдс. A glued conjunction before a word is left alone."""
+    def fix(m: re.Match) -> str:
+        core = _abbrev_core(name, m)
+        if len(core) < 2:
+            return m.group(0)
+        rest = m.group(0)[len(core):]
+        return core[0] + core[1:].lower() + rest
+
+    return _ABBREV_RE.sub(fix, name)
+
+
+def _has_abbreviation(name: str) -> bool:
+    """Whether the name carries an all-caps abbreviation (a core of 2+ capitals)."""
+    return any(len(_abbrev_core(name, m)) >= 2 for m in _ABBREV_RE.finditer(name))
 
 
 @rule(
@@ -217,11 +233,16 @@ def _suggest(name: str) -> str:
     severity=Severity.WARNING,
 )
 def abbreviation_case(source: SourceFile) -> Iterable[Diagnostic]:
-    """2.2: in abbreviations only the first letter is capital (as in `Url`, `КлиентHttp`)."""
+    """2.2: in abbreviations only the first letter is capital (as in `Url`, `КлиентHttp`).
+
+    Cyrillic abbreviations obey the same law - the variable-names standard spells the
+    accepted short words as one word each (Ид, Ндс, Фио, Мчд, Мсфо), so СуммаНДС is
+    reported with СуммаНдс suggested. Constants stay out (ALL_CAPS is their law, 2.3).
+    """
     if source.kind != "xbsl":
         return
     for tok in _declared_names(source):
-        if not _ABBREV_RE.search(tok.value):
+        if not _has_abbreviation(tok.value):
             continue
         yield Diagnostic(
             source.rel, tok.line, tok.col, "style/abbreviation-case", Severity.WARNING,

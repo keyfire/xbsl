@@ -45,7 +45,7 @@ def test_new_same_kind_finding_surfaces(tmp_path, capsys):
 
     # a second violation of the same rule with the same message: the budget is 1 - the first
     # one in line order is suppressed, the new one surfaces
-    f.write_text("метод Ф(): Число\n    пер А = 1  \n    возврат А  \n;\n", encoding="utf-8")
+    f.write_text("метод Ф(): Число\n    пер Итог = 1  \n    возврат Итог  \n;\n", encoding="utf-8")
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
     diags = payload["diagnostics"]
     assert len(diags) == 1 and diags[0]["line"] == 3

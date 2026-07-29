@@ -62,6 +62,14 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "style/enum-name-vid", page: NAMING, anchor: "перечисления" },
   { match: (r) => r === "style/exception-prefix", page: NAMING, anchor: "исключения" },
 
+  // --- the variable-and-constant-names standard ---
+  { match: (r) => r === "style/abstract-name", page: NAMING, anchor: "общие-рекомендации" },
+  { match: (r) => r === "style/single-letter-name", page: NAMING, anchor: "общие-рекомендации" },
+  { match: (r) => r === "style/negated-boolean-name", page: NAMING, anchor: "общие-рекомендации" },
+  { match: (r) => r === "style/type-in-name", page: NAMING, anchor: "общие-рекомендации" },
+  { match: (r) => r === "style/numeral-in-const-name", page: NAMING, anchor: "константы" },
+  { match: (r) => r === "style/shadow-project-name", page: NAMING, anchor: "общие-рекомендации" },
+
   // --- recommendations: types and initialization ---
   { match: (r) => r === "style/type-colon-space", page: TYPES, anchor: "синтаксис" },
   { match: (r) => r === "style/union-spaces", page: TYPES, anchor: "составной-тип" },
