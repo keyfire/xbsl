@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-07-29 – 0.48.0
 
 ### Added
 - **The "Variable and constant names" development standard as rules** (135 rules total). Six
@@ -33,7 +33,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Changed
 - **`style/abbreviation-case` reads Cyrillic abbreviations too.** The standard spells the
-  accepted short words as one word each (`Ид`, `Ндс`, `Фио`), so an all-caps Cyrillic run in a
+  accepted short words as one word each (`Ндс`, `Фио`, `Мчд`), so an all-caps Cyrillic run in a
   declared name is now reported with a suggestion, same as Latin ones. The abbreviation core
   logic is shared with the yaml naming rule: the trailing capital belongs to the next word, and
   a single-letter remainder is a glued conjunction, not an abbreviation - so compound names with
