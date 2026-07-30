@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.44.0
+
+- **The new rule of engine 0.50.0 is wired into the editor.** `code/unclosed-resource` - a
+  closeable resource left open by an early exit from the loop over it - gets its documentation
+  link (`topics/closeable-type`, the article that describes the `use` modifier), and the rule
+  counters of the `code` group are back in step with the engine.
+
 ## 0.43.0
 
 - **The variable-and-constant-names standard is wired into the editor.** Engine 0.48.0 ships
