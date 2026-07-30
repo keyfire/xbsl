@@ -34,7 +34,7 @@ Changelog = "https://github.com/keyfire/xbsl/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["pytest>=7", "pymorphy3>=2.0"]
-mcp = ["mcp>=1.2,<2"]
+mcp = ["mcp>=1.2,<3"]
 lsp = ["pygls>=1.3,<2"]
 # Морфология русского языка: правило naming/number (справочники во множественном числе,
 # перечисления в единственном) без неё молчит - гадать по окончаниям нельзя.

@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import argparse
 import difflib
+import inspect
 import re
 from html import unescape
 from pathlib import Path
 
+from xbsl import __version__
 from xbsl import (
     dataset, docs, formedits, formhandlers, formmodel, i18n, metamodel, report, scaffold, uischema,
 )
@@ -30,15 +32,36 @@ from xbsl.engine import RULES, load, load_text, run, run_sources
 
 _TAGS_RE = re.compile(r"<[^>]+>")
 
+# mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
+# became MCPServer in mcp.server.mcpserver, and the old module is gone rather than aliased -
+# an untouched server meets the rename as a ModuleNotFoundError the moment the environment
+# resolves mcp to 2.x. Nothing else the server uses changed: @tool() registration, the private
+# _tool_manager that _forbid_unknown_arguments reaches into (checked on 2.0.0 - ToolManager,
+# list_tools() and fn_metadata.arg_model are all still there) and run() over stdio.
 try:
-    from mcp.server.fastmcp import FastMCP
-except ModuleNotFoundError as exc:  # pragma: no cover - hint when the dependency is absent
-    raise SystemExit(
-        "The 'mcp' package is missing. Install the MCP extra: pip install \"xbsl[mcp]\""
-    ) from exc
+    from mcp.server.mcpserver import MCPServer as McpServer  # mcp 2.x
+except ImportError:
+    try:
+        from mcp.server.fastmcp import FastMCP as McpServer  # mcp 1.x
+    except ImportError as exc:  # pragma: no cover - hint when the dependency is absent
+        raise SystemExit(
+            "The 'mcp' package is missing. Install the MCP extra: pip install \"xbsl[mcp]\""
+        ) from exc
 
 
-mcp = FastMCP("xbsl")
+def _new_server():
+    """The server object, with the version passed wherever the class takes one.
+
+    The version parameter is 2.x only, and without it serverInfo comes out empty there;
+    1.x had no such parameter and stamped the version of the mcp package itself.
+    """
+    options = {}
+    if "version" in inspect.signature(McpServer).parameters:
+        options["version"] = __version__
+    return McpServer("xbsl", **options)
+
+
+mcp = _new_server()
 
 
 def _as_set(value: list[str] | None) -> set[str] | None:

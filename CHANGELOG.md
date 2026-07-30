@@ -12,6 +12,20 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-31 – 0.50.0
+
+### Changed
+- **The MCP server runs on both majors of `mcp`, and the pin is gone** (`mcp>=1.2,<3`).
+  `mcp 2.0` renamed the ergonomic server class and moved it - `FastMCP` from
+  `mcp.server.fastmcp` became `MCPServer` in `mcp.server.mcpserver`, with no alias left
+  behind - so a fresh install that resolved `mcp` to 2.x met the rename as a missing module
+  and the server did not start at all. The import now tries the new home first and falls back
+  to the old one; everything else the adapter uses is unchanged on both, including the private
+  tool manager behind the "unknown argument is an error, not a silent default" guard. The
+  server version is passed where the class accepts it, so `serverInfo` on 2.x names the
+  toolkit instead of coming out empty. Proven by talking JSON-RPC to a real server process on
+  1.28.1 and on 2.0.0: the same 30 tools, the same schemas, the guard firing on both.
+
 ## 2026-07-31 – 0.49.0
 
 ### Added
