@@ -474,7 +474,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   platform actually exposes (0.31.0).
 
 ### Fixed
-- `code/resource-bare-name` no longer treats an `inbase/…` reference as a folder path: a resource
+- `code/resource-bare-name` no longer treats an `inbase/...` reference as a folder path: a resource
   uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
   (the compiler verifies its existence at apply) (0.31.0).
 - A resource key is a path relative to the subsystem's `Resources` folder: `code/resource-bare-name`

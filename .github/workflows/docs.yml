@@ -1,6 +1,6 @@
 # Публикация сайта документации (blume.config.ts) на GitHub Pages. Источник Pages в
 # настройках репозитория должен быть "GitHub Actions" (Settings -> Pages -> Source).
-# Сборка проверяется тем же `npx blume build`, что и локально; вывод — в dist/.
+# Сборка проверяется тем же `npx blume build`, что и локально; вывод – в dist/.
 name: Docs
 
 on:
@@ -12,7 +12,7 @@ on:
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs.yml"
-      # Зеркальные страницы сайта: расширение — из README, changelog — из CHANGELOG
+      # Зеркальные страницы сайта: расширение – из README, changelog – из CHANGELOG
       # (см. scripts/sync-docs.mjs).
       - "editors/vscode/README.md"
       - "editors/vscode/README.ru.md"
