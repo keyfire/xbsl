@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-07-31 – 0.49.0
 
 ### Added
 - **Rule `code/unclosed-resource` - a resource left unclosed by an early exit from the loop**
