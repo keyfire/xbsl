@@ -41,6 +41,7 @@ from . import (  # noqa: F401
     bound_properties,
     catch_exceptions,
     choice_list,
+    closeable,
     component_since,
     component_values,
     dynlist_fields,

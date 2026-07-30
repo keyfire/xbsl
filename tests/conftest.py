@@ -62,6 +62,7 @@ _DATA_DEPENDENT = {
     "test_statement_no_effect",  # the rule parses code with the parser
     "test_return_mismatch",  # the rule parses code with the parser
     "test_catch_exceptions",  # the rule needs the stdlib catalog
+    "test_rule_unclosed_resource",  # the rule parses the module and needs the stdlib catalog
     "test_call_arity",  # the rule parses code with the parser
     "test_call_arity_cross",  # the rule needs the stdlib catalog
     "test_unknown_members",  # the rule needs the stdlib catalog

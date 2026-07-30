@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 135 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 136 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -25,11 +25,14 @@ checks at all: code-writing conventions, typography, project structure (duplicat
 file pairing), unused variables, secrets in the sources.
 
 What the linter does not do is anything that needs full inference of expression types: a
-redundant cast, an unclosed resource, whether the TYPE of a returned value matches the
-signature. That last one is worth separating: a structural mismatch (a value in a void
-method, a bare `return` in a typed one) is caught by `code/return-mismatch`, while a
-`return` of a string from a method declared `: Number` slips through - telling that apart
-needs the expression's type.
+redundant cast, a leaked resource in the general case, whether the TYPE of a returned value
+matches the signature. Two of those are worth separating. A structural return mismatch (a
+value in a void method, a bare `return` in a typed one) is caught by `code/return-mismatch`,
+while a `return` of a string from a method declared `: Number` slips through - telling that
+apart needs the expression's type. And a resource is judged only in the one shape where the
+declaration itself says everything: `code/unclosed-resource` follows a closeable from its
+declaration to the loop over it in the same method; a resource that travels through calls or
+collections stays out of reach.
 
 Code correctness is verified by the server-side compilation on deploy; the linter runs before
 it and removes common mistakes early.
@@ -218,6 +221,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 133 | `code/unknown-tabular-member` | error | on | project | A member access on a tabular section's row collection that the array type does not have (`Object.Section.Member` in an object form module, the bare section name or `this.Section` in the entity's modules) - the collection is `Array<Entity.Section>`, and the other platform's habitual `Count()` is called `Size()` here; a module named after the section shadows it, attributes are not judged | – |
 | 134 | `code/global-unavailable` | error | on | project | A call of a global name outside its environment: `Message` (client-only) in a server module - the apply answers "the method is unavailable in the current environment", the dynamic evaluation globals (server-only) in a client method without `@OnServer`; `@OnClient`/`@OnServer` override the module's environment, the availability comes from the per-member availability lines of the global context packages | [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | 135 | `style/shadow-project-name` | warning | on | project | A variable, parameter or method named like a project element (a `Subscribers` variable next to the `Subscribers` catalog) - the declaration shadows the element for that scope; platform handler parameter names never collide with project names | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| 136 | `code/unclosed-resource` | warning | on | file | A closeable resource (`val Selection = Query{...}.Execute()`) abandoned by an early exit from the loop over it: the platform closes a full pass by itself, while a `return` or a `break` in the middle leaves the resource open and the platform logs an unclosed-resource event; declaring the variable with `use` closes it on every exit path. A resource that arrived as a parameter, one the method closes by hand and one it returns to its caller are left to the author | [docs](https://1cmycloud.com/docs/help/topics/closeable-type/) |
 
 ## Group details
 

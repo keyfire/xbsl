@@ -12,6 +12,28 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **Rule `code/unclosed-resource` - a resource left unclosed by an early exit from the loop**
+  (136 rules total, tier D, `warning`, on by default, file scope). A query result bound to an
+  ordinary variable (`val Selection = Query{...}.Execute()`) is a descendant of `Closeable`:
+  the platform closes a full pass by itself, while a `return` or a `break` in the middle of the
+  loop leaves the resource open and the event log records an unclosed resource. Nothing fails
+  at that moment, which is why the leak survives review and shows up only in the log of a
+  running application. The cure is the `use` modifier - the close method "will be called
+  automatically the moment the variable leaves its scope" (topics/closeable-type), on every
+  exit path.
+
+  Zero false positives are bought by narrowing rather than by guessing: the type comes from the
+  catalog by inheritance from `Closeable` (never from the variable's name), the loop is joined
+  to the NEAREST PRECEDING declaration of that name INSIDE THE SAME method (keyed by name
+  alone, a `Result` declared in a dozen methods was pure noise), a resource that arrived as a
+  parameter belongs to the caller, `break` is credited to the loop it actually leaves,
+  `continue` is no exit at all, and a `return` inside a lambda is unreachable by construction -
+  the walk never descends into expressions. A method that calls the close method itself, or
+  that returns the resource to its caller, manages the lifetime by hand and is left alone.
+
 ## 2026-07-29 – 0.48.0
 
 ### Added
