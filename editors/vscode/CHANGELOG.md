@@ -9,6 +9,17 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.45.0
+
+- **The column grid of the wireframe is measured, not invented.** `ШиринаВКолонках` used to be
+  drawn against a base of 220px picked to keep the ratios right, because the platform names the
+  scale but never says what a column is. A probe of all five sizes on a deployed form, read at
+  six viewport widths, shows the column is not a constant at all: the gap is always 24px, the
+  number of columns is the largest n <= 4 whose column `(row - (n-1)*24) / n` is at least 250px,
+  and a size of N columns is `N * column + (N-1) * 24`. Half a column is half of ONE column with
+  the gap taken out of it, not half a track. The wireframe now lays the row out as that grid, so
+  a size follows the width of the preview the way it follows the width of a form.
+
 ## 0.44.0
 
 - **The new rule of engine 0.50.0 is wired into the editor.** `code/unclosed-resource` - a

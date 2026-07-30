@@ -178,15 +178,32 @@ function clipStyle(node: unknown): string {
 }
 
 
-// ШиринаВКолонках: the platform states the scale by name (half a column ... four columns,
-// unlimited) but never the width of a column in pixels, and the property only shows up on forms
-// that live behind a login, so it could not be measured the way РазмерОтступа was. The wireframe
-// therefore keeps the RATIOS exact against a base of its own: Двойная is twice Одинарная,
-// Половинная is half of it, Неограниченная takes the row. Calibrating the base against a
-// deployed form is a note in the toolkit backlog.
-const COLUMN_BASE_PX = 220;
-const COLUMN_FACTOR: Record<string, number> = {
-  Половинная: 0.5,
+// ШиринаВКолонках. The platform states the scale by name (half a column ... four columns,
+// unlimited) and never says what a column is, so the wireframe used to invent a fixed base and
+// keep the ratios exact against it. MEASURED on a deployed form (a probe of all five sizes,
+// read at six viewport widths), the platform turns out to do something else entirely - the
+// column is not a constant but a share of the row:
+//
+//   gap between columns    24px, always;
+//   number of columns      the largest n <= 4 whose column (row - (n-1)*24) / n is >= 250px;
+//   a size of N columns    N * column + (N-1) * 24;
+//   half a column          (column - 24) / 2, so two halves fill one column with a gap;
+//   Неограниченная         the whole row.
+//
+// Every reading fits: a row of 1572.4 gives four columns of 375.1, a row of 1052.4 three of
+// 334.8 (four would be 245.1 - under the minimum), a row of 732.4 two of 354.2. The cap of four
+// is real: a 1572-wide row has space for five 250px columns and still lays out four.
+//
+// CSS says all of that natively. `auto-fit` with a minimum of max(250px, a quarter of the row)
+// yields the same count the platform picks - the quarter is what caps it at four - and a size
+// of N columns is a span of N tracks.
+const COLUMN_MIN_PX = 250;
+const COLUMN_GAP_PX = 24;
+const COLUMN_GRID =
+  `gap:${COLUMN_GAP_PX}px;grid-template-columns:repeat(auto-fit,minmax(` +
+  `max(${COLUMN_MIN_PX}px,calc((100% - ${COLUMN_GAP_PX * 3}px) / 4)),1fr))`;
+
+const COLUMN_SPAN: Record<string, number> = {
   Одинарная: 1,
   Двойная: 2,
   Тройная: 3,
@@ -205,10 +222,15 @@ function columnWidthStyle(node: unknown, byColumns: boolean): string {
     return "";
   }
   if (value === "Неограниченная") {
-    return "width:100%";
+    return "grid-column:1 / -1";
   }
-  const factor = COLUMN_FACTOR[value];
-  return factor ? `width:${Math.round(COLUMN_BASE_PX * factor)}px;max-width:100%` : "";
+  if (value === "Половинная") {
+    // Half a column is not half a track: the platform puts two halves INTO one column, and the
+    // gap between them comes out of it.
+    return `width:calc(50% - ${COLUMN_GAP_PX / 2}px)`;
+  }
+  const span = COLUMN_SPAN[value];
+  return span ? `grid-column:span ${span}` : "";
 }
 
 
@@ -376,7 +398,8 @@ function layoutClass(node: unknown): { cls: string; horizontal: boolean; style: 
     case "Горизонтальная":
       return { cls: "row", horizontal: true, style: "flex-wrap:nowrap", byColumns: false };
     case "ПоКолонкам":
-      return { cls: "row", horizontal: true, style: "", byColumns: true };
+      // A real grid, because that is what the platform builds: see COLUMN_GRID below.
+      return { cls: "grid", horizontal: true, style: COLUMN_GRID, byColumns: true };
     case "Карусель":
       return { cls: "row", horizontal: true, style: "flex-wrap:nowrap;overflow-x:auto", byColumns: false };
     case "Матричная":
