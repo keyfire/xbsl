@@ -360,15 +360,16 @@ if (aligned.ok) {
   const html = aligned.html;
   check("содержимое по главной оси", html.includes("justify-content:flex-end"));
   check("содержимое по поперечной оси", html.includes("align-items:center"));
-  // Ширина в колонках работает ТОЛЬКО в компоновке ПоКолонкам - так её применяет платформа.
-  // Сетка ИЗМЕРЕНА на развёрнутой форме: зазор 24, колонок не больше четырёх, колонка не уже
-  // 250 - поэтому размер в N колонок это span на N дорожек, а не выдуманные пиксели.
-  check("сетка колонок: зазор", html.includes("gap:24px"));
-  check("сетка колонок: минимум колонки и потолок в четыре", html.includes("max(250px,calc((100% - 72px) / 4))"));
-  check("ширина в колонках: двойная", html.includes("grid-column:span 2"));
-  // Половина колонки - не половина дорожки: две половины делят ОДНУ колонку, зазор из неё же.
-  check("ширина в колонках: половинная", html.includes("width:calc(50% - 12px)"));
-  check("ширина в колонках: неограниченная", html.includes("grid-column:1 / -1"));
+  // WidthInColumns applies ONLY under the ByColumns layout - that is how the platform uses it.
+  // The grid itself is MEASURED on a deployed form: the gap is 24, there are at most four
+  // columns and a column is never narrower than 250 - so a size of N columns is a span of N
+  // tracks rather than a made-up number of pixels.
+  check("column grid: gap", html.includes("gap:24px"));
+  check("column grid: column minimum and the cap of four", html.includes("max(250px,calc((100% - 72px) / 4))"));
+  check("width in columns: two", html.includes("grid-column:span 2"));
+  // Half a column is not half a track: two halves share ONE column, the gap coming out of it.
+  check("width in columns: half", html.includes("width:calc(50% - 12px)"));
+  check("width in columns: unlimited", html.includes("grid-column:1 / -1"));
 }
 
 // --- layouts: the platform has six, the wireframe used to know two ------------------------

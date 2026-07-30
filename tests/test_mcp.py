@@ -58,11 +58,11 @@ def test_unknown_argument_is_rejected_not_ignored():
     sys.modules.pop("xbsl.mcp_server", None)
 
 
-# -- совместимость с двумя мажорами mcp ----------------------------------------
+# -- compatibility with both mcp majors ----------------------------------------
 
 
 class _FakeMcpServer(_FakeMCP):
-    """Заглушка вида mcp 2.x: класс принимает version, 1.x такого параметра не имел."""
+    """A stand-in of the mcp 2.x shape: the class takes a version, 1.x had no such parameter."""
 
     def __init__(self, name, version=None):
         super().__init__(name)
@@ -70,12 +70,12 @@ class _FakeMcpServer(_FakeMCP):
 
 
 def _load_copy(monkeypatch, *, mcpserver, fastmcp):
-    """Отдельная копия xbsl.mcp_server, загруженная с подменёнными домами класса.
+    """A private copy of xbsl.mcp_server loaded with the homes of the class substituted.
 
-    Два мажора рядом не поставить, поэтому не-установленная ветка доказывается подменой:
-    модули, к которым тянется совместимый импорт, кладутся в sys.modules, а файл
-    исполняется заново под собственным именем. None в качестве значения делает модуль
-    неимпортируемым - именно так проверяется отсутствие дома.
+    The two majors cannot be installed side by side, so the branch that is not the installed
+    one is proven by substitution: the modules the compatibility import reaches for are put
+    into sys.modules and the file is executed again. None as the value is how a module is made
+    unimportable - that is what proves a missing home.
     """
     monkeypatch.setitem(sys.modules, "mcp", types.ModuleType("mcp"))
     monkeypatch.setitem(sys.modules, "mcp.server", types.ModuleType("mcp.server"))
@@ -94,7 +94,7 @@ def _home(name, klass):
 
 
 def test_the_new_home_of_the_server_class_wins(monkeypatch):
-    """mcp 2.x переименовал FastMCP в MCPServer и перенёс его – предпочитается он."""
+    """mcp 2.x renamed FastMCP to MCPServer and moved it; that one is preferred."""
     module = _load_copy(
         monkeypatch,
         mcpserver=_home("mcp.server.mcpserver", _FakeMcpServer),
@@ -104,7 +104,7 @@ def test_the_new_home_of_the_server_class_wins(monkeypatch):
 
 
 def test_the_old_home_is_the_fallback(monkeypatch):
-    """Нет mcp.server.mcpserver – значит mcp 1.x, и класс лежит в fastmcp."""
+    """No mcp.server.mcpserver means mcp 1.x, and the class lives in fastmcp."""
     module = _load_copy(
         monkeypatch, mcpserver=None, fastmcp=_home("mcp.server.fastmcp", _FakeMCP)
     )
@@ -112,8 +112,8 @@ def test_the_old_home_is_the_fallback(monkeypatch):
 
 
 def test_the_version_goes_only_to_a_class_that_takes_one(monkeypatch):
-    """Параметр version есть только у 2.x; без него serverInfo там уезжает пустым, а
-    передать его классу 1.x нельзя – он такого не принимает."""
+    """The version parameter is 2.x only: without it serverInfo comes out empty there, and a
+    1.x class cannot be given one - it does not accept it."""
     from xbsl import __version__
 
     new = _load_copy(
@@ -129,6 +129,6 @@ def test_the_version_goes_only_to_a_class_that_takes_one(monkeypatch):
 
 
 def test_without_either_home_the_message_names_the_extra(monkeypatch):
-    """Ни того ни другого – extra не поставлена, и сообщение говорит именно это."""
+    """Neither of the two - the extra is not installed, and the message says exactly that."""
     with pytest.raises(SystemExit, match=r"xbsl\[mcp\]"):
         _load_copy(monkeypatch, mcpserver=None, fastmcp=None)

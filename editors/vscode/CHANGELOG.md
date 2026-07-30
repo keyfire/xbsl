@@ -11,7 +11,7 @@
 
 ## 0.45.0
 
-- **The column grid of the wireframe is measured, not invented.** `ШиринаВКолонках` used to be
+- **The column grid of the wireframe is measured, not invented.** `WidthInColumns` used to be
   drawn against a base of 220px picked to keep the ratios right, because the platform names the
   scale but never says what a column is. A probe of all five sizes on a deployed form, read at
   six viewport widths, shows the column is not a constant at all: the gap is always 24px, the

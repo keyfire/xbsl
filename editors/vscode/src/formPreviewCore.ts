@@ -178,7 +178,7 @@ function clipStyle(node: unknown): string {
 }
 
 
-// ШиринаВКолонках. The platform states the scale by name (half a column ... four columns,
+// WidthInColumns. The platform states the scale by name (half a column ... four columns,
 // unlimited) and never says what a column is, so the wireframe used to invent a fixed base and
 // keep the ratios exact against it. MEASURED on a deployed form (a probe of all five sizes,
 // read at six viewport widths), the platform turns out to do something else entirely - the
@@ -188,7 +188,7 @@ function clipStyle(node: unknown): string {
 //   number of columns      the largest n <= 4 whose column (row - (n-1)*24) / n is >= 250px;
 //   a size of N columns    N * column + (N-1) * 24;
 //   half a column          (column - 24) / 2, so two halves fill one column with a gap;
-//   Неограниченная         the whole row.
+//   the unlimited size      the whole row.
 //
 // Every reading fits: a row of 1572.4 gives four columns of 375.1, a row of 1052.4 three of
 // 334.8 (four would be 245.1 - under the minimum), a row of 732.4 two of 354.2. The cap of four
