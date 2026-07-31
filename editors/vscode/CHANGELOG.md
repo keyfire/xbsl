@@ -9,6 +9,21 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.47.0
+
+- **F12 over a member of the platform opens its documentation instead of saying "no
+  definition".** Go to Definition is answered from the project index, so a stdlib member -
+  `HttpResponse.StatusCode`, `JsonSerialization.WriteObject` - had no source to jump to, and
+  the page IS the definition of such a member. The key now asks the definition providers
+  first: a real definition always wins, a member with no source opens the docs panel at its
+  page, and with neither the command is passed on to VS Code so IT reports the miss in its own
+  words.
+- **The cards of engine 0.52.0 reach the editor.** A platform method shows the PARAMETERS of
+  its signature (every overload, when the documentation prints more than one) instead of a
+  bare `Name()`, and a name from the global catalogue - `Message`, `Max`, `Sqrt`,
+  `FilesUpload` - has a card at all, naming its kind and the environment it exists in.
+  Regenerated engine data is what carries the signatures.
+
 ## 0.46.0
 
 - **The hovers of engine 0.51.0 reach the editor.** A member of a platform type
@@ -84,7 +99,7 @@
 ## 0.39.0
 
 - **The metadata tree fills its branches in an English project.** The reader knew the section keys
-  by their Russian names only (`Реквизиты`, `ТабличныеЧасти`, `ШаблоныUrl` ...), so an English
+  by their Russian names only (`Реквизиты`/`Attributes`, `ТабличныеЧасти`/`TabularParts` ...), so an English
   object showed a bare node: on the demo catalog it reported 0 attributes and 0 tabular parts
   where the file declares 5 and 1. The pairs now come from the engine (`xbsl/metaKeys`), asked
   once per session, and nested collections use the same lookup - a tabular section spells its own
@@ -138,8 +153,9 @@
 ## 0.34.0
 
 - **The properties panel understands an English-spelled project.** `classifyEditor`, `metaKindOf`
-  and the designer's own form test looked for `КомпонентИнтерфейса`/`ВидЭлемента` only, so an
-  English form was not recognised as a component and the panel headed the card with "?" instead
+  and the designer's own form test looked for `КомпонентИнтерфейса`/`ВидЭлемента` and never for
+  `InterfaceComponent`/`ElementKind`, so an English form was not recognised as a component and
+  the panel headed the card with "?" instead
   of the element kind. Both spellings are read now, and the metadata rows fall back to the English
   key pair (`Name`, `Type`, `Id`, `ElementKind`).
 - **The English messages no longer name a kind in Russian**: "open a form yaml
@@ -161,7 +177,8 @@
   still be dragged between the bars, and *View: Reset View Locations* restores the default.
 
 - **The metadata tree sees an English-spelled project.** It recognized an object by
-  `ВидЭлемента:` alone, so an English project showed empty sections - and with every section empty
+  `ВидЭлемента:` alone and never by `ElementKind:`, so an English project showed empty sections -
+  and with every section empty
   the "hide empty categories" toggle looked broken too. Every key the tree reads is now matched in
   both spellings, and the kind is brought back to the one its tables are keyed by; the English
   spellings come from the platform's dictionary and a guard test keeps them from drifting.
@@ -182,7 +199,7 @@
   `HorizontalIndent` the group's own padding; before this every group carried one hardcoded
   padding and no gap at all, so a dense group and a loose one looked the same. The scale is
   measured on a deployed application, not guessed: every gap the platform sets falls on
-  0/8/16/24/32 pixels, and 16 - the documented default `Авто равно Одинарный` - dominates.
+  0/8/16/24/32 pixels, and 16 - the documented default, "Авто равно Одинарный" - dominates.
 - **A node the platform does not draw is dimmed.** `Visibility: False` used to render at full
   strength, so a wizard whose pages are all hidden but one looked like every page was on screen
   at once; the node stays in place (the wireframe and the yaml keep the same shape) but reads as
@@ -208,7 +225,7 @@
   as four stacked cards and the site footer broke into two lines.
 - **A computed visibility is marked apart from a switched-off one.** `Visibility: =expression` is
   decided at runtime - two such groups are often mutually exclusive (a desktop footer and a mobile
-  one) - so the node is dimmed lightly, with the expression in the tooltip, while `Ложь` stays
+  one) - so the node is dimmed lightly, with the expression in the tooltip, while `False` stays
   dimmed hard.
 
 - **Stretching beats alignment, and the column size applies where the platform applies it.**
@@ -251,7 +268,7 @@
   single given dimension frees the other for the image's aspect ratio), a button with
   TitleDisplayKind: Icon draws as a compact icon, an Image next to a text title draws
   beside the text, ActionSeverity tints the button (red for high, amber for medium), field
-  commands (the Команды block) show as icons at the input's edge with the tooltip and the
+  commands (the `Commands` block) show as icons at the input's edge with the tooltip and the
   jump to yaml, an explicit image Color repaints the SVG through a mask, and an explicit
   "do not stretch" pins the component to the container start.
 - **The True/False captions follow the UI locale.** In the English locale the tristate
@@ -365,7 +382,8 @@
 
 - **Completion follows the language your project is written in.** The platform keeps both
   spellings of every stdlib member, and after the term dictionary grew the English half started
-  showing up interleaved with the Russian one. The server now reads `ЯзыкРазработки` from the
+  showing up interleaved with the Russian one. The server now reads `ЯзыкРазработки`
+  (`DevelopmentLanguage`) from the
   project file and offers the names of that language first; nothing is hidden, only reordered.
 - The rule table in the documentation gained a leading column that numbers the rules 1-97, the
   same numbers in both locales.

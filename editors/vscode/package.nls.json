@@ -13,6 +13,7 @@
   "cmd.docs.showForSymbol": "XBSL: documentation for the symbol",
   "cmd.docs.refresh": "XBSL: refresh the documentation tree",
   "cmd.docs.open": "XBSL: open a documentation page",
+  "cmd.goToDefinition": "XBSL: go to definition, or to its documentation",
   "view.metadataContainer": "1C:Element • Project",
   "view.propsContainer": "1C:Element • Inspector",
   "view.metadata": "Metadata",

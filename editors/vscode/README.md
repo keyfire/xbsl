@@ -528,6 +528,11 @@ a **Documentation** link; in the form designer the *Open documentation* action s
 item (a short description also rides in its tooltip). Both open the page in this same panel –
 reading up on an unfamiliar component costs no trip out of the editor.
 
+**F12 falls back to the page.** Go to Definition is answered from the project index, so a member of
+the platform has no source to jump to – there the key opens the documentation page instead of
+reporting a miss. A real definition always wins, and when there is neither, VS Code reports it as
+usual.
+
 The data comes from the linter's LSP server, so it needs [LSP mode](#lsp-mode-default) and the
 documentation database built from your distribution (`xbsl` ≥ 0.12.0, see
 [the linter README](https://github.com/keyfire/xbsl#documentation-searching-the-element-reference)).

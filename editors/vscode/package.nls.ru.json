@@ -13,6 +13,7 @@
   "cmd.docs.showForSymbol": "XBSL: документация по символу",
   "cmd.docs.refresh": "XBSL: обновить дерево документации",
   "cmd.docs.open": "XBSL: открыть страницу документации",
+  "cmd.goToDefinition": "XBSL: перейти к определению или к его документации",
   "view.metadataContainer": "1С:Элемент • Проект",
   "view.propsContainer": "1С:Элемент • Инспектор",
   "view.metadata": "Метаданные",

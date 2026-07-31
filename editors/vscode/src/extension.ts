@@ -19,6 +19,7 @@ import { registerFormProps } from "./formProps";
 import { registerFormSearch } from "./formSearch";
 import { registerDocs } from "./docsTree";
 import { registerHoverDocs } from "./hoverDocs";
+import { registerDefinitionDocs } from "./definitionDocs";
 import { registerStatusBar } from "./statusBar";
 import { registerUpdateCheck } from "./updateCheck";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
@@ -447,6 +448,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
   registerDocs(context);
   registerHoverDocs(context);
+  // F12 over a member of the platform has nowhere to jump (the index holds the project only),
+  // so the key falls back to the documentation page instead of answering "no definition".
+  registerDefinitionDocs(context);
   // The visual form designer. The structure and data MODELS are thin clients of the engine
   // (xbsl/formTree, xbsl/formEdit, xbsl/objectInfo); the form panel paints both of them next to
   // the wireframe frame and drives their lifecycle, and the palette (in the metadata container)
