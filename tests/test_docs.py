@@ -169,6 +169,22 @@ def test_for_symbol_confident_only(docs_root):
     assert docs.for_symbol("такого-нет-нигде") is None
 
 
+def test_for_symbol_ignores_a_qualifier_borrowed_by_a_topic(tmp_path):
+    """A topic's `qualified` is whatever `Std::...` its prose quotes first - matching on it
+    documented `Add` with an article about breakpoints. Reference pages only."""
+    pages = list(_PAGES) + [
+        ("topics/set-method-breakpoint", "topic", "Как установить точку останова",
+         "Стд::Массив::Добавить", "", "https://host/bp/", "<h1>Точка останова</h1>", "точка"),
+    ]
+    _write_docs(tmp_path, pages)
+    dataset.set_data_root(tmp_path)
+    try:
+        assert docs.for_symbol("Добавить") is None
+        assert docs.for_symbol("Массив") == _ARRAY  # the reference page still answers
+    finally:
+        dataset.set_data_root(None)
+
+
 def test_type_pages(docs_root):
     # the bulk read for extract_uischema: type pages only, ordered by id
     pages = docs.type_pages()

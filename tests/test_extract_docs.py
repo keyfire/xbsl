@@ -43,6 +43,14 @@ def test_fields_extracted():
     assert r["url"] == ORIGIN + "/docs/help/stdlib/element/xbsl/Std/Collections/Array_ru/"
 
 
+def test_topic_does_not_borrow_a_qualifier():
+    # On a guide topic the same `Стд::...` pattern matches a name QUOTED in its prose; stored
+    # as the page's own qualifier it would then answer symbol lookups for that name.
+    topic = ex._record("data/docs/help/ru/topics/set-method-breakpoint/index.html", PAGE, ORIGIN)
+    assert topic["id"] == "topics/set-method-breakpoint"
+    assert topic["qualified"] == ""
+
+
 def test_kind_heuristic():
     assert ex._kind("... Иерархия типа ...") == "type"
     assert ex._kind("... Места применения ...") == "annotation"

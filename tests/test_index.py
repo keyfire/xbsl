@@ -128,7 +128,9 @@ def test_meta_and_schema(project):
         assert set(obj) >= {"name", "kind", "path", "line", "tabular", "local_types", "family"}
         assert "\\" not in obj["path"]  # paths are POSIX, relative to meta.root
     for m in idx["methods"]:
-        assert set(m) == {"module", "name", "path", "line", "annotations"}
+        assert set(m) == {
+            "module", "name", "path", "line", "annotations", "params", "returns", "doc",
+        }
     for c in idx["components"]:
         assert set(c) == {"form", "name", "type", "path", "line"}
 
@@ -174,6 +176,39 @@ def test_methods_with_annotations(project):
 
     assert methods["Обработать"]["annotations"] == ["Обработчик"]  # the arguments are dropped
     assert methods["БезАннотаций"]["annotations"] == []
+
+
+_DOC_XBSL = "\n".join([
+    "// --- Раздел ---",                             # 1 - a section banner, not a description
+    "",                                              # 2
+    "// Логин пользователя для журнала.",            # 3
+    "// Пусто на служебном сеансе.",                 # 4
+    "@НаСервере @ВПроекте",                          # 5
+    "метод Логин(Ид: Строка = \"\"): Массив<Строка>",  # 6
+    "    возврат []",                                # 7
+    ";",                                             # 8
+    "",                                              # 9
+    "// --- Служебное ---",                          # 10
+    "метод Служебный()",                             # 11
+    ";",                                             # 12
+    "",
+])
+
+
+def test_method_signature_and_description(tmp_path):
+    # The hover reads three things off a method declaration: the call as written, the return
+    # type head (that is how `val X = Module.Method()` gets a type) and the comment above it.
+    (tmp_path / "Журнал.xbsl").write_text(_DOC_XBSL, encoding="utf-8")
+    methods = {m["name"]: m for m in build_index(tmp_path)["methods"]}
+
+    login = methods["Логин"]
+    assert login["params"] == '(Ид: Строка = "")'
+    assert login["returns"] == "Массив"  # nominal head, generic arguments dropped
+    assert login["doc"] == "Логин пользователя для журнала.\nПусто на служебном сеансе."
+
+    # a banner describes the section, not the method that happens to follow it
+    plain = methods["Служебный"]
+    assert (plain["doc"], plain["returns"], plain["params"]) == ("", "", "()")
 
 
 def test_components(project):

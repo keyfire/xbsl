@@ -1,4 +1,6 @@
-"""Pure LSP server helpers (no pygls): the word under the cursor and parameter parsing."""
+"""LSP server helpers: the word under the cursor, parameter parsing, the hover cards."""
+
+import pytest
 
 from xbsl import lsp
 
@@ -114,3 +116,55 @@ def test_templates_stay_ahead_of_every_name():
     template = {"kind": "snippet", "label": "если"}
     name = {"kind": "member", "label": "Ссылка"}
     assert lsp._sort_text(template, "ru") < lsp._sort_text(name, "ru")
+
+
+# --- hover over platform members (the server needs the dataset and pygls) ---------------
+
+def _hover_text(tmp_path, code: str, line: int, character: int):
+    """Hover text the server answers for a position in a file on disk."""
+    pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
+    from types import SimpleNamespace
+
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    path = tmp_path / "Модуль.xbsl"
+    path.write_text(code, encoding="utf-8")
+    server = lsp._make_server()
+    # A bare server has no workspace until the client initializes it; the hover reads the
+    # document through it, and an unopened file is read from disk.
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+    lsp.STATE.lookup = lsp.IndexLookup({})
+    params = SimpleNamespace(
+        text_document=SimpleNamespace(uri=uris.from_fs_path(str(path))),
+        position=SimpleNamespace(line=line, character=character),
+    )
+    got = features[lsp.lsp.TEXT_DOCUMENT_HOVER](params)
+    return got.contents.value if got else None
+
+
+CODE = "\n".join([
+    "@НаСервере",
+    "метод Проба()",
+    "    знч Клиент = новый КлиентHttp()",
+    "    знч Ответ = Клиент.ЗапросPost(\"/x\").Выполнить()",
+    "    возврат Ответ.КодСтатуса",
+    ";",
+    "",
+])
+
+
+@pytest.mark.needs_data
+def test_hover_of_a_platform_method(tmp_path):
+    # `Клиент.ЗапросPost` - the owner comes from the variable's inferred type, the card from
+    # the dataset: without it the navigation core (project index only) answered nothing.
+    text = _hover_text(tmp_path, CODE, 3, 24)
+    assert text is not None and "метод КлиентHttp.ЗапросPost(): ЗапросHttp" in text
+
+
+@pytest.mark.needs_data
+def test_hover_of_a_platform_property(tmp_path):
+    text = _hover_text(tmp_path, CODE, 4, 20)
+    assert text is not None and "свойство ОтветHttp.КодСтатуса: Число" in text

@@ -202,6 +202,10 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     There is NO fuzzy (full-text) fallback here: a method section (e.g. `Настроить`) has
     no exact page, and a guide topic guessed by the word is confusing - candidates are
     picked by the caller via search().
+
+    The qualifier match is REFERENCE pages only: a topic's `qualified` is whatever `Std::...`
+    its text happened to mention first (the topic about breakpoints quotes `Std::Array::Add`),
+    so matching topics that way documents a name with an unrelated article.
     """
     if not name:
         return None
@@ -218,8 +222,8 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
         if exact:
             return exact["id"]
         byq = con.execute(
-            "SELECT id FROM pages WHERE qualified LIKE ? "
-            "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
+            "SELECT id FROM pages WHERE qualified LIKE ? AND id LIKE 'stdlib/%' "
+            "ORDER BY length(qualified) LIMIT 1",
             (f"%::{name}",),
         ).fetchone()
         return byq["id"] if byq else None

@@ -80,6 +80,8 @@ _CODE_SLOT_RE = re.compile(r"\x00(\d+)\x00")  # placeholder of a stashed code bl
 _CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f​‌‍﻿­]")
 
 _QUALIFIED_RE = re.compile(r"<code>(Стд(?:::[^<]+)*)</code>")
+#: Reference (type/member) pages, told from the guide topics by their path in the site.
+_REFERENCE_PREFIX = "stdlib/"
 _AVAIL_RE = re.compile(r"Доступность:\s*([^<]+?)\s*</code>")
 _H1_RE = re.compile(r"<h1>(.*?)</h1>", re.S)
 # Section headings (with the id anchor kept) - for the page's outline in the tree.
@@ -187,7 +189,10 @@ def _record(entry: str, raw: str, origin: str) -> dict | None:
     doc_id = entry[len(SITE_ROOT):].rsplit("/", 1)[0]  # the URL path without /index.html
     mh = _H1_RE.search(html)
     title = unescape(_TAG_RE.sub("", mh.group(1)).strip()) if mh else doc_id.rsplit("/", 1)[-1]
-    mq = _QUALIFIED_RE.search(raw)
+    # The qualified name is a property of a REFERENCE page (it stands in its header); on a
+    # guide topic the same pattern matches the first `Std::...` its prose quotes, and that
+    # borrowed qualifier would then answer symbol lookups (`Add` -> a breakpoint topic).
+    mq = _QUALIFIED_RE.search(raw) if doc_id.startswith(_REFERENCE_PREFIX) else None
     ma = _AVAIL_RE.search(raw)
     return {
         "id": doc_id,

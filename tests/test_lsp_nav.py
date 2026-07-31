@@ -18,6 +18,7 @@ from xbsl.lsp_nav import (
     resolve_definition,
     resolve_hover,
     resolve_references,
+    stdlib_member_hover,
 )
 from xbsl.rules._syntax import (
     chain_type_at,
@@ -53,7 +54,9 @@ INDEX = {
         },
     ],
     "methods": [
-        {"module": "Товар", "name": "Загрузить", "path": "Каталог/Товар.xbsl", "line": 20, "annotations": ["НаСервере"]},
+        {"module": "Товар", "name": "Загрузить", "path": "Каталог/Товар.xbsl", "line": 20,
+         "annotations": ["НаСервере"], "params": "(Слаг: Строка)", "returns": "ДанныеКарточки",
+         "doc": "Данные карточки товара.\nПусто, когда слаг неизвестен."},
         {"module": "ГлавнаяФорма", "name": "Обновить", "path": "Каталог/ГлавнаяФорма.xbsl", "line": 5, "annotations": []},
         {"module": "Кнопка", "name": "Нажать", "path": "Каталог/Кнопка.xbsl", "line": 7, "annotations": ["Локально"]},
     ],
@@ -311,6 +314,22 @@ def test_completion_local_var_project_type_none():
         local_vars={"Строки": "КэшДанныхСервиса.СтрокаПодписки"},
     )
     assert got is None
+
+
+def test_completion_after_call_of_project_type():
+    # A chain that ends in a value of a PROJECT type (`Модуль.Метод(...).`): the members come
+    # from the module-declared structure, the same source the variable path uses.
+    idx = dict(INDEX)
+    idx["struct_members"] = {"ДанныеКарточки": {"properties": ["Название", "Цена"]}}
+    got = resolve_completions(
+        IndexLookup(idx),
+        language_id="xbsl",
+        line_prefix="    возврат Товар.Загрузить(Слаг).",
+        file_stem="ГлавнаяФорма",
+        stdlib_members={"Массив": {"methods": ["Добавить"]}},
+        expr_type="ДанныеКарточки",
+    )
+    assert got is not None and {e["label"] for e in got} == {"Название", "Цена"}
 
 
 def test_completion_unknown_dot_none():
@@ -847,6 +866,43 @@ def test_templates_do_not_leak_after_a_dot():
 
 def test_completion_without_templates_is_unchanged():
     assert [e["kind"] for e in ct("    ", None) if e["kind"] == "snippet"] == []
+
+
+def test_hover_method_shows_signature_and_description():
+    # The method card answers what a reader needs before jumping to the source: the call as
+    # declared, the result type and the comment the author wrote above the declaration.
+    h = resolve_hover(LOOKUP, language_id="xbsl", line_text="Товар.Загрузить(Слаг)",
+                      character=8, file_stem="ГлавнаяФорма")
+    assert "**метод Товар.Загрузить(Слаг: Строка): ДанныеКарточки**" in h
+    assert "@НаСервере" in h
+    assert "Данные карточки товара." in h
+    assert "Каталог/Товар.xbsl:20" in h
+    # a method indexed before these fields existed still renders - empty parentheses, no body
+    plain = resolve_hover(LOOKUP, language_id="xbsl", line_text="Обновить()",
+                          character=3, file_stem="ГлавнаяФорма")
+    assert "**метод ГлавнаяФорма.Обновить()**" in plain
+
+
+def test_method_returns_catalogue():
+    # The shape the type inference expects of the stdlib catalogue: {module: {method: type}},
+    # methods without a declared return type left out.
+    assert LOOKUP.method_returns() == {"Товар": {"Загрузить": "ДанныеКарточки"}}
+
+
+def test_stdlib_member_hover_kind_and_result():
+    members = {"КлиентHttp": {"properties": ["БазовыйUrl"], "methods": ["ЗапросPost"]}}
+    types = {"КлиентHttp": {"БазовыйUrl": "Строка", "ЗапросPost": "ЗапросHttp"}}
+    method = stdlib_member_hover("КлиентHttp", "ЗапросPost",
+                                 stdlib_members=members, member_types=types)
+    assert method.startswith("**метод КлиентHttp.ЗапросPost(): ЗапросHttp**")
+    prop = stdlib_member_hover("КлиентHttp", "БазовыйUrl",
+                               stdlib_members=members, member_types=types)
+    assert prop.startswith("**свойство КлиентHttp.БазовыйUrl: Строка**")
+    # a member the catalogue does not know invents nothing, and neither does an unknown type
+    assert stdlib_member_hover("КлиентHttp", "Неведомое",
+                               stdlib_members=members, member_types=types) is None
+    assert stdlib_member_hover("Неведомый", "ЗапросPost",
+                               stdlib_members=members, member_types=types) is None
 
 
 def test_hover_component_carries_type_for_docs_link():

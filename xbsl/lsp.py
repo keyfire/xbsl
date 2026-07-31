@@ -51,6 +51,7 @@ from xbsl.lsp_nav import (
     resolve_definition,
     resolve_hover,
     resolve_references,
+    stdlib_member_hover,
 )
 from xbsl.rules._syntax import (
     chain_type_at,
@@ -586,6 +587,31 @@ def _make_server() -> "LanguageServer":
         ]
         return result or None
 
+    def _inference_inputs() -> tuple[dict, dict, set]:
+        """(stdlib members, return-type catalogue, static roots) for the type inference.
+
+        The catalogue joins the platform (`member_types` of the dataset) with the PROJECT:
+        a module is a static root just like a stdlib type, and its methods' return types come
+        from the index. Without the project half `val P = Module.Method()` stays untyped and
+        the dot after `P` offers nothing.
+        """
+        try:
+            catalog = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - a missing dataset must not break the editor
+            catalog = {}
+        members = {
+            **(catalog.get("type_members") or {}),
+            **(catalog.get("facet_members") or {}),
+        }
+        returns = dict(catalog.get("member_types") or {})
+        roots = set(members)
+        if STATE.lookup is not None:
+            project = STATE.lookup.method_returns()
+            for module, by_name in project.items():
+                returns[module] = {**returns.get(module, {}), **by_name}
+            roots |= set(project)
+        return members, returns, roots
+
     @server.feature(
         lsp.TEXT_DOCUMENT_COMPLETION,
         lsp.CompletionOptions(trigger_characters=[".", ":"]),
@@ -612,18 +638,15 @@ def _make_server() -> "LanguageServer":
         except Exception:  # noqa: BLE001 - the dataset may have failed to load, do not break completion
             catalog = {}
         # Entity facets (Пользователи.Объект) complete like any other type; method
-        # returns feed the chain-type inference of variables and dotted calls.
-        stdlib_members = {
-            **(catalog.get("type_members") or {}),
-            **(catalog.get("facet_members") or {}),
-        }
-        returns = catalog.get("member_types") or {}
+        # returns feed the chain-type inference of variables and dotted calls - of the
+        # platform and of the project's own modules alike.
+        stdlib_members, returns, static_roots = _inference_inputs()
         try:
             src = engine.load_text(path.name, doc.source)
             in_query = any(a <= offset < b for a, b in query_ranges(src))
             query_tables = query_aliases(src, offset) if in_query else {}
             local_vars = local_var_types(
-                src, offset, returns=returns, static_roots=stdlib_members.keys(),
+                src, offset, returns=returns, static_roots=static_roots,
             )
             query_rows = query_row_columns(src, offset)
             # `ЗапросКБД.Выполнить().` or `Список.НастройкиСервисов.` - the dot continues
@@ -634,7 +657,7 @@ def _make_server() -> "LanguageServer":
             if not in_query and CHAIN_TAIL_RE.search(prefix):
                 expr_type = chain_type_at(
                     src, offset, var_types=local_vars,
-                    returns=returns, static_roots=stdlib_members.keys(),
+                    returns=returns, static_roots=static_roots,
                 )
         except Exception:  # noqa: BLE001 - completion must not fail because of parsing
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
@@ -699,16 +722,10 @@ def _make_server() -> "LanguageServer":
         word = m.group(0)
         offset = sum(len(lines[k]) + 1 for k in range(line_no)) + m.end()
         try:
-            catalog = dataset.load_json("stdlib.json")
-            members = {
-                **(catalog.get("type_members") or {}),
-                **(catalog.get("facet_members") or {}),
-            }
+            _members, returns, static_roots = _inference_inputs()
             src = engine.load_text(path.name, doc.source)
             local_vars = local_var_types(
-                src, offset,
-                returns=catalog.get("member_types") or {},
-                static_roots=members.keys(),
+                src, offset, returns=returns, static_roots=static_roots,
             )
         except Exception:  # noqa: BLE001 - hover must not fail because of parsing
             return None
@@ -724,6 +741,48 @@ def _make_server() -> "LanguageServer":
             return None
         word, var_type = hit
         return f"**{word}: {var_type}**\n\nлокальная переменная"
+
+    def _member_hover(params: lsp.HoverParams) -> Optional[str]:
+        """Hover over a member of a PLATFORM type - `JsonSerialization.WriteObject`,
+        `Response.StatusCode`, `AccessContext.Privileged`.
+
+        The project index knows nothing about these, so the navigation core answers nothing:
+        the owner is whatever the chain to the left of the dot evaluates to (a variable's
+        inferred type or a type used statically), and the card is built from the dataset.
+        """
+        uri = params.text_document.uri
+        path = uri_to_path(uri)
+        if path is None or language_of(path) != "xbsl":
+            return None
+        doc = server.workspace.get_text_document(uri)
+        lines = doc.source.split("\n")
+        if params.position.line >= len(lines):
+            return None
+        line_text = lines[params.position.line].rstrip("\r")
+        word = _word_at(line_text, params.position.character)
+        if not word:
+            return None
+        start = max(0, min(params.position.character, len(line_text)))
+        while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] == "_"):
+            start -= 1
+        if start < 1 or line_text[start - 1] != ".":
+            return None
+        offset = sum(len(lines[k]) + 1 for k in range(params.position.line)) + start
+        try:
+            members, returns, static_roots = _inference_inputs()
+            src = engine.load_text(path.name, doc.source)
+            local_vars = local_var_types(
+                src, offset, returns=returns, static_roots=static_roots,
+            )
+            owner = chain_type_at(
+                src, offset, var_types=local_vars,
+                returns=returns, static_roots=static_roots,
+            )
+        except Exception:  # noqa: BLE001 - hover must not fail because of parsing
+            return None
+        return stdlib_member_hover(
+            owner or "", word, stdlib_members=members, member_types=returns,
+        )
 
     def _hover_type_root(params: object) -> Optional[str]:
         """The stdlib type root to document for the hover target: a local variable's inferred type,
@@ -761,7 +820,7 @@ def _make_server() -> "LanguageServer":
         q = nav_query(params.text_document.uri, params.position)
         if q is None or STATE.lookup is None:
             return None
-        text = resolve_hover(STATE.lookup, **q) or _variable_hover(params)
+        text = resolve_hover(STATE.lookup, **q) or _variable_hover(params) or _member_hover(params)
         if not text:
             return None
         return lsp.Hover(contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=text))
@@ -855,14 +914,21 @@ def _make_server() -> "LanguageServer":
         while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] == "_"):
             start -= 1
         query = word
+        receiver = ""
         if start >= 1 and line_text[start - 1] == ".":
             receiver = _word_at(line_text, start - 1)
             if receiver and receiver != word:
                 query = f"{receiver} {word}"
+            else:
+                receiver = ""
         offset = sum(len(lines[k]) + 1 for k in range(line)) + character
         try:
             src = engine.load_text(path.name, doc.source)
-            var_type = local_var_types(src, offset).get(word)
+            _members, returns, static_roots = _inference_inputs()
+            local_vars = local_var_types(
+                src, offset, returns=returns, static_roots=static_roots,
+            )
+            var_type = local_vars.get(word)
             if var_type is None and (
                 word in local_var_names(src, offset) or word in pair_yaml_names(path)
             ):
@@ -870,6 +936,16 @@ def _make_server() -> "LanguageServer":
                 # (a form data attribute, a component): the word must not be documented as
                 # a same-named stdlib type - candidates by the query are still offered.
                 return None, query
+            if var_type is None and receiver:
+                # A MEMBER after a dot has no page of its own - a method is a section of its
+                # type's page. So the page is resolved through the receiver (a variable's type
+                # or a type used statically); documenting the bare member name would land on
+                # whatever page happens to carry that qualifier (`Add` -> a topic about
+                # breakpoints), which is worse than no page at all.
+                recv_type = local_vars.get(receiver) or (
+                    receiver if receiver in static_roots else None
+                )
+                return (recv_type, query) if recv_type else (None, query)
         except Exception:  # noqa: BLE001 - parsing must not break the request
             var_type = None
         return (var_type or word), query

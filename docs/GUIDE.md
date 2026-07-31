@@ -86,7 +86,8 @@ rules only); the JSON payload (`{diagnostics, summary}`) is the same one the MCP
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting – the
 objects (with their `TabularParts`, module-declared local types and the member families for dot
-completion), the method declarations with their annotations and the named form components, with
+completion), the method declarations (annotations, the parameter list as written, the return type
+and the description comment above the declaration) and the named form components, with
 POSIX paths relative to the root and 1-based lines – for go-to-definition and completion in
 editors.
 

@@ -12,6 +12,33 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-31 – 0.51.0
+
+### Added
+- **The hover answers over the platform, not only over the project.** A member read on a
+  platform type - `HttpClient.RequestPost`, `HttpResponse.StatusCode`,
+  `AccessContext.Privileged`, `JsonSerialization.WriteObject` - had no hover at all: the
+  navigation core knows the project index and nothing else, so a name that belongs to the
+  catalogue produced silence. The owner is now whatever the chain to the left of the dot
+  evaluates to (a variable's inferred type or a type used statically) and the card names the
+  kind and the result type, from the dataset tables that already carried them.
+- **A project method's card carries its signature and its description.** The index keeps the
+  parameter list as written, the return type and the comment block above the declaration
+  (annotations included in the search, a section banner excluded), so the hover shows the call
+  and what the author wrote about it instead of the bare name and a file position.
+- **A value returned by a project method gets a type.** Return types of project methods join
+  the stdlib catalogue the inference uses, and a module is a static root like a platform type:
+  `val P = Module.Method(...)` is now typed, so the dot after `P` offers the members of the
+  structure it returns - and a chain ending in such a call completes too.
+
+### Fixed
+- **The doc link of a member no longer lands on a random article.** A method has no page of
+  its own - it is a section of its type's page - and the lookup by bare name matched whatever
+  page carried that qualifier: hovering `Add` offered an article about breakpoints. The page
+  is now resolved through the receiver, and the qualifier lookup is restricted to reference
+  pages. The cause was in the extraction as well: a guide topic stored the first `Std::...`
+  its prose quoted as its own qualified name (21 topics of 792); it no longer does.
+
 ## 2026-07-31 – 0.50.0
 
 ### Changed

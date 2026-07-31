@@ -98,6 +98,20 @@ class IndexLookup:
         """Members of a module-declared type (structure/exception/enumeration)."""
         return (self.index.get("struct_members") or {}).get(name)
 
+    def method_returns(self) -> dict[str, dict[str, str]]:
+        """{module: {method: return type head}} - project methods in the shape the type
+        inference expects of the stdlib catalogue, so that `val X = Module.Method(...)` is
+        typed the same way a platform call is. Only methods that declare a return type."""
+        cached = getattr(self, "_method_returns", None)
+        if cached is None:
+            cached = {}
+            for module, methods in self._module_methods.items():
+                by_name = {m["name"]: m["returns"] for m in methods if m.get("returns")}
+                if by_name:
+                    cached[module] = by_name
+            self._method_returns = cached
+        return cached
+
 
 def chain_at(line_text: str, character: int) -> Optional[tuple[list[str], int]]:
     """Dot-separated identifier chain at position `character` (0-based) and the segment index."""
@@ -520,6 +534,9 @@ def resolve_completions(
         members = (stdlib_members or {}).get(expr_type)
         if members:
             return _stdlib_entries(members)
+        project = _project_type_entries(lookup, expr_type)
+        if project:
+            return project
     m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
     if m:
         return [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
@@ -622,11 +639,49 @@ def _hover_object(obj: dict) -> str:
 
 
 def _hover_method(m: dict) -> str:
+    """Hover card of a project method: the signature line, the author's description comment
+    above it (that is where a module says what its method does) and the source position."""
     annotations = " ".join("@" + a for a in (m.get("annotations") or []))
-    head = f"**метод {m.get('module', '')}.{m.get('name', '')}**"
+    signature = f"{m.get('module', '')}.{m.get('name', '')}{m.get('params') or '()'}"
+    if m.get("returns"):
+        signature += f": {m['returns']}"
+    head = f"**метод {signature}**"
     if annotations:
         head += f" {annotations}"
-    return f"{head}\n\n`{m.get('path', '')}:{m.get('line', 1)}`"
+    lines = [head]
+    if m.get("doc"):
+        lines += ["", str(m["doc"])]
+    lines += ["", f"`{m.get('path', '')}:{m.get('line', 1)}`"]
+    return "\n".join(lines)
+
+
+def stdlib_member_hover(
+    owner: str, member: str, *,
+    stdlib_members: Optional[dict] = None,
+    member_types: Optional[dict] = None,
+) -> Optional[str]:
+    """Hover card of a PLATFORM member: `**метод HttpClient.WithProxy(): HttpClient**`.
+
+    The owner is the type the member is read on - a variable's inferred type or a type used
+    statically (`JsonSerialization`, `AccessContext`). Kind and result come from the two
+    dataset tables (`type_members`, `member_types`); a member the catalogue does not know
+    yields None, so a wrong name shows nothing rather than an invented signature. The card
+    itself is Russian, like the other hover and completion labels of this module.
+    """
+    if not owner or not member:
+        return None
+    table = (stdlib_members or {}).get(owner)
+    if not isinstance(table, dict):
+        return None
+    if member in (table.get("methods") or ()):
+        kind, call = "метод", "()"
+    elif member in (table.get("properties") or ()):
+        kind, call = "свойство", ""
+    else:
+        return None
+    result = ((member_types or {}).get(owner) or {}).get(member)
+    tail = f": {result}" if result else ""
+    return f"**{kind} {owner}.{member}{call}{tail}**\n\nтип платформы `{owner}`"
 
 
 def resolve_hover(

@@ -12,7 +12,9 @@ The index shape is frozen (fields may be added but not renamed):
                  local types of the object's modules (`<Имя>.xbsl`, `<Имя>.<Часть>.xbsl`),
                  the member family for dot completion, enumeration values
                  (Перечисление only);
-    methods    - method and constructor declarations of all modules, annotations without `@`;
+    methods    - method and constructor declarations of all modules, annotations without `@`,
+                 the parameter list as written, the return type head and the description
+                 comment above the declaration;
     components - yaml nodes for КомпонентИнтерфейса that have both Имя and Тип;
     references - usages of indexable names (objects, methods, components) in modules and
                  in yaml handlers: name/qualifier/module/path/line/col - for "find usages"
@@ -36,6 +38,7 @@ from xbsl import parser as P
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
+from xbsl.rules._syntax import _skip_balanced, _type_head, code_tokens, signatures
 from xbsl.rules.semantics import _file_local_type_decls, _member_family, _row_type_names
 from xbsl.rules.yaml_schema import _HAVE_YAML, _NAME_LINE_RE, _parsed, object_kind
 
@@ -148,11 +151,83 @@ def _annotations_before(toks: list, i: int) -> list[str]:
     return names
 
 
+#: Whitespace run - a parameter list broken over several lines reads as one line in a hover.
+_WS_RE = re.compile(r"\s+")
+# Comment markers stripped from a description: line (`//`) and block (`/* */`, leading `*`).
+_COMMENT_MARK_RE = re.compile(r"^\s*(?://+|/\*+|\*+/?)|\*+/\s*$")
+# A section banner (`--- Configuration ---`, `=== Internals ===`) sits above the first method
+# of a section but describes the SECTION: as a method description it would mislead.
+_BANNER_RE = re.compile(r"^[-=*#~]{2,}.*[-=*#~]{2,}$|^[-=*#~\s]+$")
+
+
+def _signature_info(s: SourceFile) -> dict[tuple[str, int], tuple[str, str]]:
+    """(return type head, parameter list as written) per (method name, declaration line).
+
+    The return type is what lets the editor type `val X = Module.Method(...)`: the catalogue
+    of stdlib member types has nothing to say about a project method, so its return type has
+    to come from the project index. The head is nominal (`Array<String>` -> `Array`), like
+    every other inferred type. The parameter list is kept verbatim (defaults included) - the
+    hover shows the call the way the module declares it.
+    """
+    out: dict[tuple[str, int], tuple[str, str]] = {}
+    toks = code_tokens(s)
+    n = len(toks)
+    for sig in signatures(toks):
+        head = _type_head(toks, sig.return_type_start) if sig.return_type_start is not None else None
+        params = ""
+        i = next(
+            (k for k in range(n) if toks[k].start >= sig.name.end
+             and toks[k].kind == "OP" and toks[k].value == "("),
+            None,
+        )
+        if i is not None:
+            end = _skip_balanced(toks, i, "(", ")")
+            if 0 < end <= n:
+                params = _WS_RE.sub(" ", s.text[toks[i].start:toks[end - 1].end]).strip()
+        out[(sig.name.value, sig.name.line)] = (head or "", params)
+    return out
+
+
+def _doc_above(toks: list, i: int, annotations: list[str]) -> str:
+    """The comment block written directly above the declaration at index i, `//` stripped.
+
+    The annotations belong to the declaration, so the block is looked for above THEM: the
+    author writes the description over `@OnServer method ...`, not between the two. Only
+    consecutive lines count (a blank line ends the block), which keeps a section banner
+    further up out of a method's description. Empty when there is no comment.
+    """
+    k = i - 1
+    for _ in annotations:  # back over `@Имя` / `@Имя(...)`, comments between them skipped
+        while k >= 0 and toks[k].kind == "COMMENT":
+            k -= 1
+        if k >= 0 and toks[k].kind == "OP" and toks[k].value == ")":
+            depth = 1
+            k -= 1
+            while k >= 0 and depth:
+                if toks[k].kind == "OP":
+                    depth += 1 if toks[k].value == ")" else -1 if toks[k].value == "(" else 0
+                k -= 1
+        if not (k >= 1 and toks[k].kind == "IDENT" and toks[k - 1].kind == "OP" and toks[k - 1].value == "@"):
+            break
+        k -= 2
+    top_line = toks[k + 1].line if k + 1 < len(toks) else toks[i].line
+    lines: list[str] = []
+    while k >= 0 and toks[k].kind == "COMMENT" and toks[k].end_line == top_line - 1:
+        text = _COMMENT_MARK_RE.sub("", toks[k].value).strip()
+        if _BANNER_RE.match(text):
+            break
+        lines.append(text)
+        top_line = toks[k].line
+        k -= 1
+    return "\n".join(reversed(lines)).strip()
+
+
 def _method_decls(s: SourceFile) -> list[dict]:
-    """{name, line, annotations} of method and constructor declarations of a single module."""
+    """{name, line, annotations, params, returns, doc} of method and constructor declarations."""
     decls: list[dict] = []
     toks = tokens(s)
     n = len(toks)
+    sigs = _signature_info(s)
     for i, t in enumerate(toks):
         if t.kind != "KEYWORD" or t.canonical not in ("METHOD", "CONSTRUCTOR"):
             continue
@@ -162,10 +237,15 @@ def _method_decls(s: SourceFile) -> list[dict]:
         while j < n and toks[j].kind == "COMMENT":
             j += 1
         if j < n and toks[j].kind == "IDENT":
+            annotations = _annotations_before(toks, i)
+            returns, params = sigs.get((toks[j].value, toks[j].line), ("", ""))
             decls.append({
                 "name": toks[j].value,
                 "line": toks[j].line,
-                "annotations": _annotations_before(toks, i),
+                "annotations": annotations,
+                "params": params,
+                "returns": returns,
+                "doc": _doc_above(toks, i, annotations),
             })
     return decls
 
@@ -405,6 +485,9 @@ def build_index(root: Path) -> dict:
                 "path": module_path,
                 "line": decl["line"],
                 "annotations": decl["annotations"],
+                "params": decl["params"],
+                "returns": decl["returns"],
+                "doc": decl["doc"],
             })
 
     # Usages (for "find usages"): names of objects, components and methods encountered as a
