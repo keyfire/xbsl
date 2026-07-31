@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.46.0
+
+- **The hovers of engine 0.51.0 reach the editor.** A member of a platform type
+  (`HttpClient.RequestPost`, `HttpResponse.StatusCode`, `AccessContext.Privileged`) now has a
+  hover card naming its kind and result type, a project method shows its signature and the
+  description comment above its declaration, and the documentation link of a member points at
+  the page of its type instead of an article that merely quotes the name. Completion follows a
+  value returned by a project method - the dot after `val P = Module.Method(...)` offers the
+  members of the structure it returns.
+
 ## 0.45.0
 
 - **The column grid of the wireframe is measured, not invented.** `WidthInColumns` used to be
