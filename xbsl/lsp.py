@@ -51,6 +51,7 @@ from xbsl.lsp_nav import (
     resolve_definition,
     resolve_hover,
     resolve_references,
+    stdlib_global_hover,
     stdlib_member_hover,
 )
 from xbsl.rules._syntax import (
@@ -780,8 +781,50 @@ def _make_server() -> "LanguageServer":
             )
         except Exception:  # noqa: BLE001 - hover must not fail because of parsing
             return None
+        try:
+            signatures = dataset.load_json("stdlib.json").get("member_signatures") or {}
+        except Exception:  # noqa: BLE001 - a card without parameters beats no card at all
+            signatures = {}
         return stdlib_member_hover(
-            owner or "", word, stdlib_members=members, member_types=returns,
+            owner or "", word,
+            stdlib_members=members, member_types=returns, member_signatures=signatures,
+        )
+
+    def _global_hover(params: lsp.HoverParams) -> Optional[str]:
+        """Hover over a name of the platform's GLOBAL catalog - `Сообщить`, `Макс`, `КлиентHttp`.
+
+        Last in the chain and deliberately so: a project name of the same spelling, a local
+        variable and a member all answer first. A word with a dot before it is a member and
+        is left to `_member_hover` - otherwise an unknown member of a known type would be
+        described as a global function of the same name.
+        """
+        uri = params.text_document.uri
+        path = uri_to_path(uri)
+        if path is None or language_of(path) != "xbsl":
+            return None
+        doc = server.workspace.get_text_document(uri)
+        lines = doc.source.split("\n")
+        if params.position.line >= len(lines):
+            return None
+        line_text = lines[params.position.line].rstrip("\r")
+        word = _word_at(line_text, params.position.character)
+        if not word:
+            return None
+        start = max(0, min(params.position.character, len(line_text)))
+        while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] == "_"):
+            start -= 1
+        if start > 0 and line_text[start - 1] == ".":
+            return None
+        try:
+            catalog = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - a missing dataset must not break the hover
+            return None
+        members, _returns, _roots = _inference_inputs()
+        return stdlib_global_hover(
+            word,
+            stdlib_globals=catalog.get("globals"),
+            availability=catalog.get("global_availability"),
+            stdlib_members=members,
         )
 
     def _hover_type_root(params: object) -> Optional[str]:
@@ -820,7 +863,12 @@ def _make_server() -> "LanguageServer":
         q = nav_query(params.text_document.uri, params.position)
         if q is None or STATE.lookup is None:
             return None
-        text = resolve_hover(STATE.lookup, **q) or _variable_hover(params) or _member_hover(params)
+        text = (
+            resolve_hover(STATE.lookup, **q)
+            or _variable_hover(params)
+            or _member_hover(params)
+            or _global_hover(params)
+        )
         if not text:
             return None
         return lsp.Hover(contents=lsp.MarkupContent(kind=lsp.MarkupKind.Markdown, value=text))

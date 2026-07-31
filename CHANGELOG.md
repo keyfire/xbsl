@@ -12,6 +12,52 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-07-31 – 0.52.0
+
+### Added
+- **The card of a platform method shows its parameters.** The dataset carried the result type
+  alone, so a method read as `Name()` - a call that takes nothing. The signatures the
+  documentation prints are extracted next to the members (`member_signatures` of
+  `stdlib.json`, 1886 methods of 485 types in the current distribution), one string per
+  overload: `AccessContext`
+  has two `Append` signatures and the card lists both, because picking one would answer "what
+  do I pass?" with half the truth. Inherited methods get the signature of the type that
+  declares them, through the same `bases` expansion the members use. The data has to be
+  regenerated for this (`xbsl extract --dist ... --only stdlib`); a dataset made before it
+  still renders the old card.
+- **The hover answers over the GLOBAL catalogue.** `Message`, `Max`, `Sqrt`, `Execute`,
+  `FilesUpload` sit next to the types rather than inside one, so the member branch - which
+  needs a receiver to the left of a dot - never saw them and the card was empty. The card now
+  names the kind and the environment the name exists in (`Client`, `Server`, `ClientAndServer`
+  - the same table the `code/global-unavailable` rule is judged by), and a global the
+  catalogue also knows as a type is named a type, not a function.
+
+### Fixed
+- **`self-update` right after a release no longer claims there is no wheel.** The file list
+  came from the JSON metadata of PyPI, a cache that catches up minutes after an upload:
+  `self-update --version 0.51.0` answered "PyPI has no suitable xbsl wheel" while the wheel was
+  already served by the index, and naming the version explicitly did not help - the files were
+  read from that same lagging document. The list now comes from the SIMPLE index (PEP 691),
+  the newest release is ranked numerically (`0.9.0` before `0.51.0`, no pre-releases, no yanked
+  files), and the JSON metadata stays as the fallback for an index that does not speak PEP 691.
+
+### Changed
+- **The language of the sources is guarded, not remembered.** The repository is written in
+  English, and until now that rested on attention alone - a wave of new code shipped Russian
+  comments and test docstrings, plus a Russian platform name in an English comment, and nothing
+  looked at it. `python tools/langguard.py` reads the lines a change ADDS (uncommitted work by
+  default, `--base <ref>` for a commit or a branch, `--all` for the size of the debt) and
+  reports Cyrillic in comments, docstrings and Python identifiers; CI runs it over every push
+  and pull request. The tree's own legacy - some 1200 chunks over 166 files - stays out of
+  scope by design: it is rewritten opportunistically, and a guard that can never be green
+  teaches nothing.
+- **Both English changelogs are guarded, by two rules instead of one.** The extension's
+  changelog was never checked, which is exactly where the last miss landed. The dictionary
+  rule (a Russian name whose English twin is missing from the entry) now reads both files and
+  judges whole tokens, so a mixed name is no longer reported by its Cyrillic half; the new
+  dictionary-free rule - Russian prose outside citations and quotes - runs everywhere,
+  including a public checkout where the term dictionary is absent.
+
 ## 2026-07-31 – 0.51.0
 
 ### Added

@@ -18,6 +18,7 @@ from xbsl.lsp_nav import (
     resolve_definition,
     resolve_hover,
     resolve_references,
+    stdlib_global_hover,
     stdlib_member_hover,
 )
 from xbsl.rules._syntax import (
@@ -903,6 +904,57 @@ def test_stdlib_member_hover_kind_and_result():
                                stdlib_members=members, member_types=types) is None
     assert stdlib_member_hover("Неведомый", "ЗапросPost",
                                stdlib_members=members, member_types=types) is None
+
+
+def test_stdlib_member_hover_shows_the_parameters():
+    """The result type alone left the card reading `Имя()` - a method that takes nothing."""
+    members = {"КлиентHttp": {"methods": ["ЗапросPost"]}}
+    types = {"КлиентHttp": {"ЗапросPost": "ЗапросHttp"}}
+    sigs = {"КлиентHttp": {"ЗапросPost": ["ЗапросPost(Url: Url|Строка): ЗапросHttp"]}}
+    card = stdlib_member_hover("КлиентHttp", "ЗапросPost", stdlib_members=members,
+                               member_types=types, member_signatures=sigs)
+    assert card.startswith("**метод КлиентHttp.ЗапросPost(Url: Url|Строка): ЗапросHttp**")
+
+
+def test_stdlib_member_hover_lists_every_overload():
+    members = {"КонтекстДоступа": {"methods": ["Дополнить"]}}
+    sigs = {"КонтекстДоступа": {"Дополнить": [
+        "Дополнить(Ключи: ЧитаемаяКоллекция<КлючДоступа.Объект>): КонтекстДоступа",
+        "Дополнить(Тип: Тип, Права: ЧитаемаяКоллекция<ПравоНаЭлемент>): КонтекстДоступа",
+    ]}}
+    card = stdlib_member_hover("КонтекстДоступа", "Дополнить",
+                               stdlib_members=members, member_signatures=sigs)
+    assert card.startswith("**метод КонтекстДоступа.Дополнить**")
+    # A list, not bare lines: a single newline is a soft break and would glue them together.
+    assert card.count("\n- `КонтекстДоступа.Дополнить(") == 2
+
+
+def test_stdlib_member_hover_without_signatures_keeps_the_old_shape():
+    """Data generated before the signatures existed must still produce a card."""
+    members = {"КлиентHttp": {"methods": ["ЗапросPost"], "properties": ["БазовыйUrl"]}}
+    types = {"КлиентHttp": {"ЗапросPost": "ЗапросHttp", "БазовыйUrl": "Строка"}}
+    method = stdlib_member_hover("КлиентHttp", "ЗапросPost",
+                                 stdlib_members=members, member_types=types)
+    assert method.startswith("**метод КлиентHttp.ЗапросPost(): ЗапросHttp**")
+    prop = stdlib_member_hover("КлиентHttp", "БазовыйUrl", stdlib_members=members,
+                               member_types=types, member_signatures={"КлиентHttp": {}})
+    assert prop.startswith("**свойство КлиентHttp.БазовыйUrl: Строка**")
+
+
+def test_stdlib_global_hover_names_the_kind_and_the_environment():
+    """Globals live outside the types, so the member branch never saw them."""
+    catalog = ["Сообщить", "КлиентHttp"]
+    where = {"Сообщить": "Клиент", "КлиентHttp": "Сервер"}
+    members = {"КлиентHttp": {"methods": ["ЗапросPost"]}}
+    function = stdlib_global_hover("Сообщить", stdlib_globals=catalog, availability=where,
+                                   stdlib_members=members)
+    assert function == "**глобальная функция Сообщить()**\n\nдоступно: Клиент"
+    # A global the catalogue also knows as a type is named a type, not a function.
+    kind = stdlib_global_hover("КлиентHttp", stdlib_globals=catalog, availability=where,
+                               stdlib_members=members)
+    assert kind.startswith("**тип платформы КлиентHttp**")
+    # A name outside the catalogue invents nothing.
+    assert stdlib_global_hover("Неведомое", stdlib_globals=catalog) is None
 
 
 def test_hover_component_carries_type_for_docs_link():

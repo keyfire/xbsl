@@ -659,29 +659,69 @@ def stdlib_member_hover(
     owner: str, member: str, *,
     stdlib_members: Optional[dict] = None,
     member_types: Optional[dict] = None,
+    member_signatures: Optional[dict] = None,
 ) -> Optional[str]:
     """Hover card of a PLATFORM member: `**метод HttpClient.WithProxy(): HttpClient**`.
 
     The owner is the type the member is read on - a variable's inferred type or a type used
-    statically (`JsonSerialization`, `AccessContext`). Kind and result come from the two
-    dataset tables (`type_members`, `member_types`); a member the catalogue does not know
-    yields None, so a wrong name shows nothing rather than an invented signature. The card
-    itself is Russian, like the other hover and completion labels of this module.
+    statically (`JsonSerialization`, `AccessContext`). Kind and result come from the dataset
+    tables (`type_members`, `member_types`); a member the catalogue does not know yields
+    None, so a wrong name shows nothing rather than an invented signature. The card itself is
+    Russian, like the other hover and completion labels of this module.
+
+    Parameters come from `member_signatures` - the signature the documentation prints, one
+    per overload. Without them the card used to show a method as `Имя()`, which reads like a
+    method that takes nothing; a dataset generated before they existed still renders that
+    way, just without the parameters, rather than breaking.
     """
     if not owner or not member:
         return None
     table = (stdlib_members or {}).get(owner)
     if not isinstance(table, dict):
         return None
-    if member in (table.get("methods") or ()):
-        kind, call = "метод", "()"
-    elif member in (table.get("properties") or ()):
-        kind, call = "свойство", ""
-    else:
-        return None
     result = ((member_types or {}).get(owner) or {}).get(member)
     tail = f": {result}" if result else ""
-    return f"**{kind} {owner}.{member}{call}{tail}**\n\nтип платформы `{owner}`"
+    place = f"тип платформы `{owner}`"
+    if member in (table.get("methods") or ()):
+        signatures = ((member_signatures or {}).get(owner) or {}).get(member) or []
+        if len(signatures) == 1:
+            return f"**метод {owner}.{signatures[0]}**\n\n{place}"
+        if signatures:
+            # Overloads are listed in full: picking one of them would answer the question
+            # ("what do I pass?") with half the truth. A list, not bare lines - a single
+            # newline is a soft break in Markdown and would glue the overloads together.
+            lines = "\n".join(f"- `{owner}.{sig}`" for sig in signatures)
+            return f"**метод {owner}.{member}**\n\n{lines}\n\n{place}"
+        return f"**метод {owner}.{member}(){tail}**\n\n{place}"
+    if member in (table.get("properties") or ()):
+        return f"**свойство {owner}.{member}{tail}**\n\n{place}"
+    return None
+
+
+def stdlib_global_hover(
+    name: str, *,
+    stdlib_globals: Optional[Any] = None,
+    availability: Optional[dict] = None,
+    stdlib_members: Optional[dict] = None,
+) -> Optional[str]:
+    """Hover card of a name from the GLOBAL catalog - `Сообщить`, `Макс`, `КлиентHttp`.
+
+    Globals sit next to the types rather than inside one, so the member branch - which needs
+    a receiver to the left of a dot - never sees them, and the card over `Выполнить()` was
+    empty. A global that the catalogue also knows as a type is named a type (all three of
+    those - `ЗагрузкаФайлов`, `КлиентHttp`, `КлиентскоеПриложение` - carry members and a
+    constructor); everything else in the catalog is a function, `Корень` included - it is
+    the square root, not an object. The environment comes from `global_availability`, the
+    same table the `code/global-unavailable` rule is judged by, so the card answers the
+    question that actually gets asked here - may I call this on the client?
+    """
+    if not name or name not in set(stdlib_globals or ()):
+        return None
+    is_type = isinstance((stdlib_members or {}).get(name), dict)
+    kind, call = ("тип платформы", "") if is_type else ("глобальная функция", "()")
+    where = (availability or {}).get(name)
+    tail = f"доступно: {where}" if where else "глобальный контекст платформы"
+    return f"**{kind} {name}{call}**\n\n{tail}"
 
 
 def resolve_hover(

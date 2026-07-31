@@ -47,6 +47,10 @@ def _own_dataset():
             "База": {"Поле": "Число"},
             "Наследник": {"Своё": "Булево"},
         },
+        "member_signatures": {
+            "Объект": {"ВСтроку": ["ВСтроку(): Строка"]},
+            "База": {"Метод": ["Метод(Имя: Строка): Булево"]},
+        },
     }
 
 
@@ -68,6 +72,22 @@ def test_expand_inherited_keeps_an_overridden_result_type():
     data["member_types"]["Наследник"]["ВСтроку"] = "Представление"  # override the object's
     full = dataset._expand_inherited(data)["member_types"]
     assert full["Наследник"]["ВСтроку"] == "Представление"  # own wins over the ancestor's
+
+
+def test_expand_inherited_completes_member_signatures():
+    """An heir shows the signature of the method it inherits - the card says what to pass."""
+    full = dataset._expand_inherited(_own_dataset())["member_signatures"]
+    assert full["Наследник"] == {
+        "ВСтроку": ["ВСтроку(): Строка"],
+        "Метод": ["Метод(Имя: Строка): Булево"],
+    }
+
+
+def test_a_dataset_without_signatures_gains_no_such_section():
+    """Data generated before the signatures existed still loads - the card just has none."""
+    data = _own_dataset()
+    del data["member_signatures"]
+    assert "member_signatures" not in dataset._expand_inherited(data)
 
 
 def test_expand_inherited_leaves_full_datasets_untouched():

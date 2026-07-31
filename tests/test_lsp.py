@@ -160,11 +160,44 @@ CODE = "\n".join([
 def test_hover_of_a_platform_method(tmp_path):
     # `Клиент.ЗапросPost` - the owner comes from the variable's inferred type, the card from
     # the dataset: without it the navigation core (project index only) answered nothing.
+    # The signature comes from the dataset too - what to pass, not only what comes back.
     text = _hover_text(tmp_path, CODE, 3, 24)
-    assert text is not None and "метод КлиентHttp.ЗапросPost(): ЗапросHttp" in text
+    assert text is not None and "метод КлиентHttp.ЗапросPost(Url: Url|Строка): ЗапросHttp" in text
 
 
 @pytest.mark.needs_data
 def test_hover_of_a_platform_property(tmp_path):
     text = _hover_text(tmp_path, CODE, 4, 20)
     assert text is not None and "свойство ОтветHttp.КодСтатуса: Число" in text
+
+
+GLOBALS_CODE = "\n".join([
+    "@НаКлиенте",
+    "метод Проба()",
+    "    Сообщить(\"привет\")",
+    "    знч Клиент = новый КлиентHttp()",
+    "    знч Ответ = Клиент.Неизвестное",
+    ";",
+    "",
+])
+
+
+@pytest.mark.needs_data
+def test_hover_of_a_global_function(tmp_path):
+    # `Сообщить` lives in the GLOBAL catalogue, not inside a type, so the member branch -
+    # which needs a receiver - never saw it and the card was empty.
+    text = _hover_text(tmp_path, GLOBALS_CODE, 2, 6)
+    assert text is not None and "глобальная функция Сообщить()" in text
+    assert "доступно: Клиент" in text  # the table the global-unavailable rule is judged by
+
+
+@pytest.mark.needs_data
+def test_hover_of_a_global_type(tmp_path):
+    text = _hover_text(tmp_path, GLOBALS_CODE, 3, 26)
+    assert text is not None and "тип платформы КлиентHttp" in text
+
+
+@pytest.mark.needs_data
+def test_an_unknown_member_is_not_answered_as_a_global(tmp_path):
+    """Negative control: a word AFTER a dot is a member, whatever the global catalogue holds."""
+    assert _hover_text(tmp_path, GLOBALS_CODE, 4, 26) is None

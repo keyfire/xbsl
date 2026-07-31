@@ -21,10 +21,14 @@ Three things are legitimately Cyrillic in an English text and are allowed here:
     letters of a string literal and the letter `ё` that `naming/yo` is about;
   * a link to the Russian twin of the document.
 
-The changelogs are deliberately out of scope: their entries explain what the platform calls a
-thing in each language ("`Type` is the English of both `Тип` and `ТипЭлементаПроекта`"), so
-both spellings have to appear on the same line, and a rule that told those apart from a defect
-would need the term dictionary - which a public checkout does not have.
+The changelogs are judged apart, at the bottom of this file, and by their own rules: an entry
+explains what the platform calls a thing in each language ("`Type` is the English of both `Тип`
+and `ТипЭлементаПроекта`"), so both spellings legitimately stand side by side. Two guards
+cover them, because one alone left a hole each way. The dictionary guard - a Russian name whose
+English twin is missing from the entry - is the precise one, but it needs the term dictionary
+and therefore sleeps in a public checkout; the bare-prose guard needs nothing and runs
+everywhere. Both read BOTH English changelogs: the engine's own was guarded from the start and
+the extension's was not, which is where the miss of 31.07.2026 landed.
 
 The second half of the file guards the strings the extension shows at RUNTIME - the message
 argument of `vscode.l10n.t(...)`. The rule there is not "no Cyrillic on screen": a hint that
@@ -193,9 +197,18 @@ def test_hint_guard_allows_the_legitimate_cases():
     assert _hint_offenders('const KIND = "Справочник";') == []
 
 
-# --- the changelog: a name that has an English spelling must use it -------------------
+# --- the changelogs: a name that has an English spelling must use it -------------------
+#
+# BOTH English changelogs are read here. The engine's own was guarded from the start, the
+# extension's was not - and that is exactly where the miss of 31.07.2026 landed
+# (`ШиринаВКолонках` in the entry of 0.45.0, while the platform spells it `WidthInColumns`).
+
+ENGLISH_CHANGELOGS = ["CHANGELOG.md", "editors/vscode/CHANGELOG.md"]
 
 _QUOTED_MESSAGE = re.compile(r'"[^"]*"', re.S)
+#: A whole word of a name, either spelling - so a mixed token (`ШаблоныUrl`) is taken whole
+#: rather than by its Cyrillic half, which the dictionary would answer for on its own.
+_NAME_TOKEN = re.compile(r"[A-Za-zЀ-ӿ0-9_]+")
 
 
 def _changelog_entries(text: str):
@@ -224,15 +237,56 @@ def _wrong_spellings(text: str) -> list[tuple[int, str, str]]:
     for number, entry in _changelog_entries(text):
         # Цитата сообщения платформы законна: платформа так и напечатала.
         body = _QUOTED_MESSAGE.sub(" ", entry)
-        for word in sorted(set(_CYRILLIC.findall(body))):
+        words = {token for token in _NAME_TOKEN.findall(body) if _CYRILLIC.fullmatch(token)}
+        for word in sorted(words):
             english = terms.common_english(word)
             if english and english not in entry:
                 found.append((number, word, english))
     return found
 
 
+def _bare_russian(text: str) -> list[tuple[int, str]]:
+    """Russian words of an English changelog outside citations - the check WITHOUT the dictionary.
+
+    The platform's dictionary is not part of the repository, so the check above is skipped in
+    a public checkout and in CI - which is exactly where a guard is needed. This rule is
+    narrow but works everywhere: a name in backticks is a citation, a text in quotes is a
+    message of the platform, and anything else in Russian has no place in an English document.
+    """
+    found = []
+    for number, entry in _changelog_entries(text):
+        if _RUSSIAN_TWIN.search(entry):
+            continue
+        body = _PLATFORM_FILENAME.sub(" ", _QUOTED_MESSAGE.sub(" ", re.sub(r"`[^`]*`", " ", entry)))
+        words = [word for word in _CYRILLIC.findall(body) if len(word) > 1]
+        if words:
+            found.append((number, " ".join(sorted(set(words)))))
+    return found
+
+
+@pytest.mark.parametrize("name", ENGLISH_CHANGELOGS)
+def test_english_changelog_has_no_bare_russian_prose(name: str):
+    """The dictionary-free guard: it works where the Element data is absent (a public clone, CI)."""
+    problems = _bare_russian((ROOT / name).read_text(encoding="utf-8"))
+    assert not problems, (
+        f"{name}: русский текст вне цитат в английском чейнджлоге – имя платформы берите в "
+        f"обратные кавычки, цитату сообщения в кавычки, прозу пишите по-английски:\n"
+        + "\n".join(f"  строка {n}: {w}" for n, w in problems)
+    )
+
+
+def test_bare_russian_guard_catches_a_planted_defect():
+    """A silent guard is indistinguishable from a broken pattern until it catches a defect."""
+    assert _bare_russian("- Ширина колонки измеряется.\n") == [(1, "Ширина измеряется колонки")]
+    # The legitimate cases: a name in backticks, a message of the platform, the Russian twin.
+    assert _bare_russian("- The `ШиринаВКолонках` scale is measured now.\n") == []
+    assert _bare_russian('- It answers "Значение типа не может быть присвоено" now.\n') == []
+    assert _bare_russian("[Русский](CHANGELOG.ru.md)\n") == []
+
+
 @pytest.mark.needs_data
-def test_english_changelog_uses_english_spellings():
+@pytest.mark.parametrize("name", ENGLISH_CHANGELOGS)
+def test_english_changelog_uses_english_spellings(name: str):
     """У имени платформы есть английское написание – в английском чейнджлоге стоит оно.
 
     Чейнджлоги когда-то были выведены из-под этой проверки: их записи объясняют, как
@@ -242,9 +296,8 @@ def test_english_changelog_uses_english_spellings():
     русское написание законно, если в ТОЙ ЖЕ записи стоит его английский двойник (тогда
     запись и объясняет пару) либо если оно внутри цитаты сообщения платформы.
     """
-    text = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    wrong = _wrong_spellings(text)
-    assert not wrong, "в английском чейнджлоге русские написания: " + "; ".join(
+    wrong = _wrong_spellings((ROOT / name).read_text(encoding="utf-8"))
+    assert not wrong, f"{name}: в английском чейнджлоге русские написания: " + "; ".join(
         f"строка {n}: {word} – должно быть {english}" for n, word, english in wrong[:8]
     )
 

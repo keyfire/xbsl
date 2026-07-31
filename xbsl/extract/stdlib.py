@@ -357,6 +357,46 @@ def page_member_types(raw: str) -> dict[str, str]:
     return out
 
 
+#: A comma of a parameter list that the documentation prints without a space after it.
+_TIGHT_COMMA_RE = re.compile(r",(?=\S)")
+
+
+def page_member_signatures(raw: str) -> dict[str, list[str]]:
+    """Method -> the signatures the page prints, one string per overload, in page order.
+
+    The result type alone (`page_member_types`) answers the inference but not the question a
+    reader has in front of a method - what do I pass? The parameters are printed in the very
+    same code block, so they cost no extra page: a block counts as a signature when it opens
+    with the member's own name and a parenthesis, which leaves the example blocks under the
+    same heading out (those open with `знч` or a call of something else).
+
+    Overloads are separate H3 headings of the same name (`КонтекстДоступа.Дополнить` has
+    two), so the strings simply accumulate; identical ones collapse. The docs print the list
+    without a space after the comma - that is a rendering artifact of the page, not the
+    platform's spelling, and it is normalized here so the hover card reads like code.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return {}
+    out: dict[str, list[str]] = {}
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Методы"):
+            continue
+        parts = _H3_RE.split(section)
+        for k in range(1, len(parts) - 1, 2):
+            name = _plain_text(parts[k])
+            if not _PROP_NAME_RE.match(name):
+                continue
+            for m in _SIG_CODE_RE.finditer(parts[k + 1]):
+                text = _TIGHT_COMMA_RE.sub(", ", html.unescape(_plain_text(m.group(1))).strip())
+                if not text.startswith(name + "("):
+                    continue
+                found = out.setdefault(name, [])
+                if text not in found:
+                    found.append(text)
+    return out
+
+
 _H1_OPEN_RE = re.compile(r"<h1[^>]*>")
 _H2_RE = re.compile(r"<h2[^>]*>(.*?)</h2>", re.S)
 
@@ -441,6 +481,17 @@ def _path_name(entry: str) -> str | None:
     return dirname[:-3] or None
 
 
+def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -> None:
+    """Add the signatures of one page to a type's set, keeping order and dropping repeats.
+
+    A type is described by more than one page when its name is shared (a value type and an
+    interface component of the same spelling), so the lists are merged rather than replaced.
+    """
+    for member, sigs in found.items():
+        slot = into.setdefault(member, [])
+        slot.extend(sig for sig in sigs if sig not in slot)
+
+
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
     the global context with per-name availability, managers, facets, member types, bases and
@@ -456,6 +507,7 @@ def extract(dist: Path) -> tuple:
     managers: dict[str, set[str]] = {}
     facets: dict[str, dict[str, set[str]]] = {}
     returns: dict[str, dict[str, str]] = {}
+    signatures: dict[str, dict[str, list[str]]] = {}
     bases: dict[str, list[str]] = {}
     ctors: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
@@ -501,12 +553,15 @@ def extract(dist: Path) -> tuple:
                         conflicted_env.add(member)
             if props or methods:
                 rets = page_member_types(raw)
+                sigs = page_member_signatures(raw)
                 if key:
                     slot = types.setdefault(key, {"properties": set(), "methods": set()})
                     slot["properties"] |= props
                     slot["methods"] |= methods
                     if rets:
                         returns.setdefault(key, {}).update(rets)
+                    if sigs:
+                        _merge_signatures(signatures.setdefault(key, {}), sigs)
                 # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record
                 # and reference members go into a separate dictionary, under the Russian form.
                 facet_key = (title if _FACET_TITLE_RE.match(title) else "") or _english_facet_from_path(n)
@@ -516,6 +571,8 @@ def extract(dist: Path) -> tuple:
                     slot["methods"] |= methods
                     if rets:
                         returns.setdefault(facet_key, {}).update(rets)
+                    if sigs:
+                        _merge_signatures(signatures.setdefault(facet_key, {}), sigs)
             got = component_props(n, raw)
             if got is not None:
                 comp, props = got
@@ -549,7 +606,7 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, facets,
-            returns, bases, ctors)
+            returns, signatures, bases, ctors)
 
 
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
@@ -560,8 +617,9 @@ def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
 def _own_members(
     types: dict[str, dict[str, set[str]]],
     returns: dict[str, dict[str, str]],
+    signatures: dict[str, dict[str, list[str]]],
     bases: dict[str, list[str]],
-) -> tuple[dict[str, dict[str, set[str]]], dict[str, dict[str, str]]]:
+) -> tuple[dict[str, dict[str, set[str]]], dict[str, dict[str, str]], dict[str, dict[str, list[str]]]]:
     """Strip inherited members, leaving only each type's own - the loader re-expands them.
 
     `bases` is the transitively closed ancestor list, so subtracting every ancestor's FULL
@@ -587,7 +645,16 @@ def _own_members(
             member: rtype for member, rtype in member_types.items()
             if inherited.get(member) != rtype
         }
-    return own_types, own_returns
+    own_signatures: dict[str, dict[str, list[str]]] = {}
+    for name, member_sigs in signatures.items():
+        inherited_sigs: dict[str, list[str]] = {}
+        for base in bases.get(name, ()):
+            inherited_sigs.update(signatures.get(base, {}))
+        own_signatures[name] = {
+            member: sigs for member, sigs in member_sigs.items()
+            if inherited_sigs.get(member) != sigs
+        }
+    return own_types, own_returns, own_signatures
 
 
 def main(argv=None) -> int:
@@ -609,13 +676,13 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, facets, returns,
-     bases, ctors) = extract(dist)
+     signatures, bases, ctors) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
     # every ancestor's own set. This also fills the pages the docs left incomplete (a heir
     # that fails to list a member its base owns still gets it back on expansion).
-    own_types, own_returns = _own_members(types, returns, bases)
+    own_types, own_returns, own_signatures = _own_members(types, returns, signatures, bases)
     data = {
         "meta": {
             "element_version": version,
@@ -652,6 +719,11 @@ def main(argv=None) -> int:
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
         # Result type roots of members (page signatures: method returns and property types).
         "member_types": {k: dict(sorted(v.items())) for k, v in sorted(own_returns.items())},
+        # Method signatures as the page prints them, one string per overload: what the result
+        # type alone cannot answer - which parameters to pass. Only methods have them.
+        "member_signatures": {
+            k: dict(sorted(v.items())) for k, v in sorted(own_signatures.items()) if v
+        },
         # Type hierarchy: the WHOLE ancestor chain a page prints under "Иерархия типа", so a
         # check needs no resolution of its own - `"Исключение" in bases[type]` decides.
         "bases": {k: v for k, v in sorted(bases.items())},
@@ -681,6 +753,9 @@ def main(argv=None) -> int:
     print(f"  фасетов сущностных типов: {len(facets)}")
     print(f"  типов с типами членов: {len(returns)}"
           f" (членов с типом: {sum(len(v) for v in returns.values())})")
+    print(f"  типов с сигнатурами методов: {len(signatures)}"
+          f" (методов: {sum(len(v) for v in signatures.values())},"
+          f" перегрузок: {sum(len(s) for v in signatures.values() for s in v.values())})")
     return 0
 
 

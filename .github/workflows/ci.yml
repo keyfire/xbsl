@@ -31,3 +31,26 @@ jobs:
         run: |
           pip install mypy
           mypy xbsl/lexer.py xbsl/parser.py --ignore-missing-imports
+
+  # The repository is written in English, and until 31.07.2026 that was held by attention
+  # alone - a wave of new code shipped Russian comments and test docstrings, and nothing
+  # looked at it. The guard judges the lines a change ADDS (the tree still carries the old
+  # debt), so it needs the history the default shallow checkout does not fetch.
+  language:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Language guard (added lines)
+        run: |
+          base="${{ github.event.pull_request.base.sha || github.event.before }}"
+          case "$base" in
+            ""|0000000000000000000000000000000000000000)
+              base="$(git rev-parse HEAD~1 2>/dev/null || echo HEAD)" ;;
+          esac
+          echo "base: $base"
+          python tools/langguard.py --base "$base"

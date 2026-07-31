@@ -211,7 +211,7 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     """
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
-    for section in ("type_members", "member_types", "bases", "type_ctors"):
+    for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors"):
         entries = data.get(section)
         if not entries:
             continue
@@ -256,8 +256,21 @@ def _expand_inherited(data: dict) -> dict:
             merged.update(own_returns.get(base, {}))
         merged.update(own)
         full_returns[name] = merged
+    # Method signatures merge exactly like the result types - an inherited method keeps the
+    # signature of the type that declares it, an overridden one its own.
+    own_signatures = data.get("member_signatures") or {}
+    full_signatures: dict[str, dict[str, list[str]]] = {}
+    for name in set(own_signatures) | {n for n in own_members if bases.get(n)}:
+        merged_sigs: dict[str, list[str]] = {}
+        for base in bases.get(name, ()):
+            merged_sigs.update(own_signatures.get(base, {}))
+        merged_sigs.update(own_signatures.get(name, {}))
+        if merged_sigs:
+            full_signatures[name] = merged_sigs
     data["type_members"] = full_members
     data["member_types"] = full_returns
+    if own_signatures:
+        data["member_signatures"] = full_signatures
     return data
 
 
