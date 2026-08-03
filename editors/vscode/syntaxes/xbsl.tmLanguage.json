@@ -7,6 +7,7 @@
     { "include": "#strings" },
     { "include": "#numbers" },
     { "include": "#decorators" },
+    { "include": "#function-declaration" },
     { "include": "#keywords-control" },
     { "include": "#storage" },
     { "include": "#modifiers" },
@@ -14,6 +15,7 @@
     { "include": "#constants" },
     { "include": "#language-variables" },
     { "include": "#generic-type" },
+    { "include": "#function-call" },
     { "include": "#operators" }
   ],
   "repository": {
@@ -64,6 +66,19 @@
     "decorators": {
       "name": "storage.type.annotation.xbsl",
       "match": "@[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*"
+    },
+    "function-declaration": {
+      "comment": "The declared name of a method: the keyword keeps its own scope, the name becomes a function name. The rule stands BEFORE #storage - both match at the keyword, and a tie at the same position is broken by the order of the patterns, not by the match length.",
+      "match": "(?i)\\b(метод|method|конструктор|constructor)([ \\t]+)([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*)",
+      "captures": {
+        "1": { "name": "storage.type.xbsl" },
+        "3": { "name": "entity.name.function.xbsl" }
+      }
+    },
+    "function-call": {
+      "comment": "A called name. The rule stands AFTER the keyword ones, so 'если (', 'выбор (' and the constructor keyword are taken as keywords first; what is left before an opening parenthesis is a method - of this module, of another one, or of the platform.",
+      "name": "entity.name.function.xbsl",
+      "match": "[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*(?=[ \\t]*\\()"
     },
     "keywords-control": {
       "name": "keyword.control.xbsl",

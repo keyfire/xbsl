@@ -11,6 +11,13 @@
 
 ## Unreleased
 
+### Fixed
+- **Method names are coloured on purpose now.** The grammar carried no rule for them at all -
+  neither for a declaration nor for a call - so a method name took whatever colour fell out of
+  the theme, and the same name looked different in the two places. A declaration now scopes the
+  name as a function name (the keyword keeps its own scope), and so does a called name; the
+  rules are ordered so that the keywords still win where they must.
+
 ### Removed
 - **The second navigation, the one written in TypeScript, is gone** – together with the
   `xbsl.navigation.enabled` setting. It kept its own parser of the project index and its own
