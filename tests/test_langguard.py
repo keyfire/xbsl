@@ -51,7 +51,9 @@ def test_a_russian_identifier_is_caught(tmp_path):
 
 def test_the_allowed_cyrillic_is_left_alone(tmp_path):
     source = (
-        '"""A citation of a platform name is legitimate: `ВидЭлемента`.\n\n'
+        # A citation the dictionary cannot spell in English stays a citation; a name it CAN
+        # (`ВидЭлемента` -> ElementKind) is a finding of its own - see the citation tests above.
+        '"""A citation of a name of ours is legitimate: `ПробныйСправочник`.\n\n'
         'A quote of the platform message - "Значение типа не может быть присвоено" - too,\n'
         'and so are the descriptor Проект.yaml and the letter ё the rule is about.\n"""\n'
         'MESSAGE = "русский текст сообщения"  # a literal is not a comment\n'
@@ -62,6 +64,33 @@ def test_the_allowed_cyrillic_is_left_alone(tmp_path):
 
 def test_a_broken_source_is_skipped_rather_than_crashing(tmp_path):
     assert _check(tmp_path, "sample.py", "def (:\n  # русский комментарий\n") == []
+
+
+# -- a quoted name the dictionary can spell ------------------------------------------------
+
+
+@pytest.mark.needs_data
+def test_a_backticked_name_with_an_english_spelling_is_caught(tmp_path):
+    """The citation exception used to swallow the rule: `Обработчик` in a comment read as
+    legal while the repository has an English spelling for it and writes it everywhere else."""
+    source = "# the `Обработчик` of an HTTP method sits at a yaml offset\nX = 1\n"
+    found = _check(tmp_path, "sample.py", source)
+    assert found == [(1, "citation", "Обработчик -> Handler")]
+
+
+@pytest.mark.needs_data
+def test_a_quoted_document_heading_stays_a_citation(tmp_path):
+    """Double quotes hold a QUOTE - the heading a parser matches, the text of a message.
+    Rewriting it in English would misreport what the code looks for."""
+    source = '# own members are the H3 headings of the "Свойства" section\nX = 1\n'
+    assert _check(tmp_path, "sample.py", source) == []
+
+
+@pytest.mark.needs_data
+def test_a_code_citation_is_not_a_name(tmp_path):
+    """A longer citation quotes generated CODE, and that code really is written in Russian."""
+    source = "# the stub itself: `метод Имя(П: Тип)` plus a TODO body\nX = 1\n"
+    assert _check(tmp_path, "sample.py", source) == []
 
 
 # -- TypeScript -----------------------------------------------------------------------------

@@ -170,7 +170,7 @@ def test_prune_drops_empty_branches():
 
 def test_a_member_that_changed_kind_is_a_move_not_a_removal():
     """A newer documentation gave events a section of their own, and the diff of the datasets reported
-    dozens of them as REMOVED - a button without its `ПриНажатии`, an edit without its `ПриИзменении` -
+    dozens of them as REMOVED - a Button without its OnClick, an Edit without its OnChange -
     while the API had not changed at all. A member that left one kind and joined another is
     reported as a move, and neither half is counted as a change of the API."""
     old = {"type_members": {"Кнопка": {"properties": ["Заголовок", "ПриНажатии"]}}, "bases": {}}

@@ -76,15 +76,15 @@ def _section_span(text: str, key: str) -> tuple[int, int] | None:
 
 #: A placeholder of a template string: the platform substitutes the call arguments for them.
 _PLACEHOLDER_RE = re.compile(r"\$(\d+)")
-#: A key of a MAPPING section (`Строки`/`Шаблоны` of a dictionary) with its value as written.
+#: A key of a MAPPING section (Strings/Templates of a dictionary) with its value as written.
 _MAPPING_KEY_RE = re.compile(r"(?m)^([ \t]+)([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*)[ \t]*:[ \t]*(.*)$")
 
 
 def _mapping_entries(s: SourceFile, key: str) -> list[tuple[str, int, str]]:
     """(name, line, value) of the top-level keys of a MAPPING section.
 
-    The `Строки` and `Шаблоны` of a dictionary are written as `Ключ: значение`, not as a list
-    of items with `Имя`, so _section_item_lines does not see them. Only the keys at the minimal
+    The Strings and Templates of a dictionary are written as `Key: value`, not as a list of
+    items with a Name, so _section_item_lines does not see them. Only the keys at the minimal
     indent of the section count - a deeper one would belong to a nested structure.
     """
     span = _section_span(s.text, key)
@@ -110,11 +110,11 @@ def _mapping_entries(s: SourceFile, key: str) -> list[tuple[str, int, str]]:
 
 
 def _dictionary_methods(s: SourceFile, name: str, path: str) -> list[dict]:
-    """The keys of a `ЛокализованныеСтроки` element as the methods they compile into.
+    """The keys of a LocalizedStrings element as the methods they compile into.
 
-    A dictionary has no module: the platform turns every key of `Строки` into a
-    parameterless method and every key of `Шаблоны` into one taking the substitutions the
-    text names ($0, $1 ...), and the code calls them as `Словарь.Ключ()`. Without this the
+    A dictionary has no module: the platform turns every key of Strings into a parameterless
+    method and every key of Templates into one taking the substitutions the text names
+    ($0, $1 ...), and the code calls them as Dictionary.Key(). Without this the
     index knows no such members at all - go to definition answers "not found", completion
     after the dot offers nothing, and the text itself is nowhere to be seen while writing
     code. The value becomes the description, so hovering a key shows the string it stands for.
@@ -508,7 +508,7 @@ def build_index(root: Path) -> dict:
     objects: list[dict] = []
     components: list[dict] = []
     # Keys of the dictionaries, collected while their yaml is parsed and joined to the module
-    # methods below: for the caller they are members of the same kind (`Словарь.Ключ()`).
+    # methods below: for the caller they are members of the same kind (Dictionary.Key()).
     dictionary_methods: list[dict] = []
     if _HAVE_YAML:
         for s in yaml_sources:

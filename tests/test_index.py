@@ -323,7 +323,7 @@ def test_cli_index_needs_single_path(project, capsys):
 
 
 def test_dictionary_keys_are_indexed_as_methods(project):
-    """Without this the editor knows no members of a dictionary at all: F12 on `Словарь.Отправить`
+    """Without this the editor knows no members of a dictionary at all: F12 on Dictionary.Send
     answers "not found" and the dot offers nothing, while the code calls exactly that."""
     idx = build_index(project)
     keys = {m["name"]: m for m in idx["methods"] if m["module"] == "Словарь"}
@@ -339,7 +339,7 @@ def test_dictionary_keys_are_indexed_as_methods(project):
 
 
 def test_dictionary_arity_follows_the_placeholders(project):
-    """The `Строки` section compiles parameterless methods (that is the whole point of the
+    """The Strings section compiles parameterless methods (that is the whole point of the
     placeholder rule), a
     template takes the substitutions its text names - numbered, so the HIGHEST one decides."""
     idx = build_index(project)

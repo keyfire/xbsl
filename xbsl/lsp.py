@@ -1485,7 +1485,7 @@ def _make_server() -> "LanguageServer":
     def _add_module_method(params: object) -> dict:
         """Flat params {uri, method, key?} -> the module-only plan.
 
-        The metadata counterpart of xbsl/addHandler. A metadata handler (the `Обработчик` of an
+        The metadata counterpart of xbsl/addHandler. A metadata handler (the Handler of an
         HTTP method, of a job, of a log event) sits at a yaml OFFSET rather than at a
         component node, and the panel writes that property the way it writes any other one -
         so the engine is asked for the code alone. With `key` the stub is shaped after a

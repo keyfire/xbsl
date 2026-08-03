@@ -305,7 +305,7 @@ function schemaRowEditor(
         ? { control: "enum", options: prop.options }
         : { control: "combo", options: typeCandidates ?? [] };
     case "string":
-      // A HANDLER (the `Обработчик` of an HTTP method, of a job, of a log event) gets the very
+      // A HANDLER (the Handler of an HTTP method, of a job, of a log event) gets the very
       // editor a form event has: the methods of the paired module in a dropdown, a jump to
       // the chosen one, and "(create a handler...)" for the one that does not exist yet.
       // The metamodel names them by their declared type, so every kind is covered at once

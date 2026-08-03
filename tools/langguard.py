@@ -23,9 +23,12 @@ GROWING, and that is exactly what a diff answers.
 Exit code 1 when something is found, 0 when clean - so CI and a pre-commit run can gate on
 it. What counts as a find:
 
-  * Cyrillic inside a COMMENT or a docstring, outside backticks (`Имя` - a citation of a
-    platform name) and outside quotes ("Значение типа ..." - a quote of a platform message
-    or of the documentation);
+  * Cyrillic inside a COMMENT or a docstring, outside backticks and outside quotes
+    ("Значение типа ..." - a quote of a platform message or of the documentation);
+  * a QUOTED platform name that the compiler dictionary can spell in English: the citation
+    exception is for what the dictionary does not know, not for names the repository has an
+    English form for (`Обработчик` -> Handler). Needs the Element data; without it this half
+    stays silent;
   * Cyrillic in an IDENTIFIER of a Python source - a Russian test name, variable or helper
     (in TypeScript a bare Cyrillic token is a platform key, see `_typescript_regions`).
 
@@ -53,6 +56,8 @@ SKIP_PARTS = frozenset({"node_modules", "dist", "build", "out", ".venv", "__pyca
 _CYRILLIC = re.compile("[Ѐ-ӿԀ-ԯ]+")
 #: Spans a comment may legitimately hold in Cyrillic: a citation and a quote.
 _CITATION = re.compile(r"`[^`]*`|\"[^\"]*\"|«[^»]*»|'[^']{2,}'")
+#: A citation of a NAME - the form judged against the dictionary (see _translatable).
+_BACKTICKED = re.compile(r"`[^`]*`")
 #: A file name the platform fixes in Russian whatever the project's language.
 _PLATFORM_FILENAME = re.compile(r"[Ѐ-ӿ]+\.(yaml|xbsl|xbql)\b")
 
@@ -65,6 +70,46 @@ def _words(text: str) -> list[str]:
     """
     rest = _PLATFORM_FILENAME.sub(" ", _CITATION.sub(" ", text))
     return sorted({word for word in _CYRILLIC.findall(rest) if len(word) > 1})
+
+
+def _translatable(text: str) -> list[tuple[str, str]]:
+    """(Russian name, its English spelling) for names quoted in a comment.
+
+    A citation in backticks is how the rule ALLOWED a platform name to stay Russian - and
+    that exception swallowed the rule: a comment saying `Обработчик` reads as legal while
+    the name has a published English spelling and the repository writes it. So a quoted
+    name is judged too, but only against the DICTIONARY: a word the compiler dictionary
+    pairs must be written in its English form, a word it does not know (a documentation
+    heading, a fixture) stays a citation and is left alone.
+
+    Without the Element data (a clean public clone) there is no dictionary and the check
+    answers empty - the wordless one still guards the prose.
+    """
+    try:
+        from xbsl import terms
+    except Exception:  # noqa: BLE001 - a guard must not fall over a missing dataset
+        return []
+    found: dict[str, str] = {}
+    # Backticks only. A double-quoted span is a quote of a MESSAGE or of the documentation
+    # ("Свойства" - the heading a parser matches), and rewriting it in English would misreport
+    # what the code looks for; backticks are how this repository cites a NAME.
+    for citation in _BACKTICKED.findall(text):
+        body = citation[1:-1].strip()
+        # Only a citation that is ONE name is judged. A longer one quotes CODE or a heading
+        # ("метод Имя(П: Тип)", "Список унаследованных событий"): the generated stub really is
+        # written in Russian, and rewriting the quote would misreport what the code produces.
+        if not body or len(body.split()) > 1 or not body.replace("_", "").isalnum():
+            continue
+        for word in _CYRILLIC.findall(body):
+            if len(word) < 2:
+                continue
+            try:
+                english = terms.common_english(word)
+            except Exception:  # noqa: BLE001 - same reason
+                return []
+            if english and english != word:
+                found[word] = english
+    return sorted(found.items())
 
 
 # -- where the comments and the identifiers are --------------------------------------------
@@ -227,6 +272,11 @@ def regions(path: Path, text: str) -> tuple[dict[int, str], dict[int, str]]:
     return _typescript_regions(text)
 
 
+#: The guard's own source AND its tests: both quote the very names the citation half judges -
+#: the rule's examples and its planted defects. The same exemption the typography rule has.
+_SELF = ("tools/langguard.py", "tests/test_langguard.py")
+
+
 def check_file(path: Path, wanted: set[int] | None = None) -> list[tuple[int, str, str]]:
     """Finds in one file: `(line, kind, words)`, limited to `wanted` lines when given."""
     try:
@@ -241,6 +291,13 @@ def check_file(path: Path, wanted: set[int] | None = None) -> list[tuple[int, st
         words = _words(line)
         if words:
             found.append((number, "comment", " ".join(words)))
+        own = any(path.as_posix().endswith(name) for name in _SELF)
+        quoted = [] if own else _translatable(line)
+        if quoted:
+            found.append((
+                number, "citation",
+                "; ".join(f"{word} -> {english}" for word, english in quoted),
+            ))
     for number, line in sorted(identifiers.items()):
         if wanted is not None and number not in wanted:
             continue
