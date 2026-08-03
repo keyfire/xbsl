@@ -12,40 +12,34 @@
 ## Unreleased
 
 ### Added
-- **URL templates and HTTP methods are added from the metadata tree.** The routes of an HTTP
-  service were shown but not editable: a new template or another verb on an existing one meant
-  writing the yaml by hand and then the handler stub next to it. The templates group now offers
-  "add a URL template" and every template offers "add an HTTP method"; the engine writes both
-  halves in one operation and extends an existing template with the missing verbs only. The verbs
-  offered come from the engine as well - one list, not a copy in the editor.
-
-### Fixed
-- **Method names are coloured on purpose now.** The grammar carried no rule for them at all -
-  neither for a declaration nor for a call - so a method name took whatever colour fell out of
-  the theme, and the same name looked different in the two places. A declaration now scopes the
-  name as a function name (the keyword keeps its own scope), and so does a called name; the
-  rules are ordered so that the keywords still win where they must.
-
-### Removed
-- **The second navigation, the one written in TypeScript, is gone** – together with the
-  `xbsl.navigation.enabled` setting. It kept its own parser of the project index and its own
-  definition and completion providers, that is a lagging copy of what the language server does:
-  it knew nothing of the return types of project methods or of the newer hovers, and every fix
-  had to be made twice. Navigation now comes from the engine alone; without the LSP mode there
-  is none, and the CLI mode says so instead of answering worse.
+- **URL templates and HTTP methods are added from the metadata tree.** The templates group offers
+  "add a URL template", every template offers "add an HTTP method"; the engine writes the yaml and
+  the handler stub in one operation and extends an existing template with the missing verbs only.
+  The verbs offered come from the engine - one list, not a copy.
+- **A palette entry for method names, and a "Muted" palette.** The new function scope had no
+  colour of its own, so names fell back to the theme; the muted palette greys the keywords down so
+  that names stand out instead.
 
 ### Changed
 - **A metadata handler is edited exactly like a form event.** A property the metamodel declares
-  as `BslHandler` - the `Handler` of an HTTP method, of a job, of a log event - was a plain text
-  box: no list of the module's methods, no jump, no way to create the one that does not exist.
-  It now gets the very editor an event row has, and the kinds are covered by the declared type
-  rather than by a list of property names. The two-file reset stays with events: a metadata
-  handler is an ordinary property, so clearing it leaves the module alone.
+  as `BslHandler` was a plain text box - no method list, no jump, no way to create a missing
+  handler. It now gets the event row's editor, and the kinds are covered by the declared type
+  rather than by a list of names. The two-file reset stays with events: clearing a metadata
+  handler leaves the module alone.
 - **The localization of an element sits right under it.** The "Localization" group held a single
-  language and cost a click to open; the languages now hang under the element itself. Their icon
-  is the one of localized strings - the globe stays where URLs are, so an HTTP service and a
-  translation no longer read as the same thing in the tree.
+  language and cost a click. The languages now hang under the element with the icon of localized
+  strings; the globe stays where URLs are, so a service and a translation no longer look alike.
 
+### Fixed
+- **Method names are coloured on purpose.** The grammar had no rule for them at all, so a name
+  took whatever colour fell out of the theme and looked different in a declaration and in a call.
+  Both are scoped as function names now, after the keywords.
+
+### Removed
+- **The second navigation, written in TypeScript, is gone** - with the `xbsl.navigation.enabled`
+  setting. It was a lagging copy of what the language server does (it knew neither the return
+  types of project methods nor the newer hovers), and every fix had to be made twice. Navigation
+  comes from the engine alone; without the LSP mode there is none, and the CLI mode says so.
 ## 0.47.0
 
 - **F12 over a member of the platform opens its documentation instead of saying "no
