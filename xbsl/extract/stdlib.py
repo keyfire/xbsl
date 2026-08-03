@@ -48,6 +48,7 @@ import re
 import zipfile
 from pathlib import Path
 
+from xbsl.dataset import MEMBER_KINDS
 from xbsl.extract import _distro
 
 STD_BASE = "data/docs/help/ru/stdlib/element/xbsl/Std/"
@@ -156,34 +157,46 @@ def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
     return (title, props) if is_component else None
 
 
-def page_members(raw: str) -> tuple[set[str], set[str]]:
-    """Type members for dot completion: (properties, methods).
+def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
+    """Type members for dot completion: (properties, methods, events).
 
-    Own members are the H3 headings of the "Свойства" / "Методы" sections, inherited ones are
-    the link texts of the "Список унаследованных свойств" / "Список унаследованных методов"
-    sections (H3s there are base type names, not members). Constructors, literals and the
-    hierarchy do not count.
+    Own members are the H3 headings of the "Свойства" / "Методы" / "События" sections,
+    inherited ones are the link texts of the matching "Список унаследованных ..." sections
+    (H3s there are base type names, not members). Constructors, literals and the hierarchy do
+    not count.
 
     Most stdlib types have no properties at all (in Element even Длина() is a method); the
     "Свойства" section mostly belongs to interface components and record types.
+
+    EVENTS have a section of their own, and reading only the two others cost a false alarm:
+    the diff of 9.2.8+11 against 10.0.1 reported dozens of members as REMOVED (Кнопка without
+    ПриНажатии, КонтейнерHtml without ПослеЗагрузкиСодержимого) because the newer documents
+    moved the events out of the properties section - the API had not changed at all.
     """
     ma = _ARTICLE_RE.search(raw)
     if not ma:
-        return set(), set()
+        return set(), set(), set()
     props: set[str] = set()
     methods: set[str] = set()
+    events: set[str] = set()
+    # The longest heading first: "Список унаследованных событий" also starts with "Список
+    # унаследованных", and "События" must not be read as a property section.
+    inherited = (("Список унаследованных методов", methods),
+                 ("Список унаследованных событий", events),
+                 ("Список унаследованных свойств", props))
+    own = (("Методы", methods), ("События", events), ("Свойства", props))
     for section in _H2_OPEN_RE.split(ma.group(1)):
         head = _plain_text(section[:200])
-        if head.startswith("Список унаследованных"):
-            target = methods if head.startswith("Список унаследованных методов") else props
+        target = next((t for prefix, t in inherited if head.startswith(prefix)), None)
+        if target is not None:
             found = (_plain_text(m.group(1)) for m in _LINK_RE.finditer(section))
-        elif head.startswith(("Свойства", "Методы")):
-            target = methods if head.startswith("Методы") else props
-            found = (_plain_text(m.group(1)) for m in _H3_RE.finditer(section))
         else:
-            continue
+            target = next((t for prefix, t in own if head.startswith(prefix)), None)
+            if target is None:
+                continue
+            found = (_plain_text(m.group(1)) for m in _H3_RE.finditer(section))
         target.update(name for name in found if _PROP_NAME_RE.match(name))
-    return props, methods
+    return props, methods, events
 
 
 def page_bases(raw: str) -> list[str]:
@@ -525,7 +538,7 @@ def extract(dist: Path) -> tuple:
                 names.add(eng)
             # Type members (dot access) under BOTH name forms - to complete globals and types
             # (e.g. КонтекстДоступа./AccessContext., Массив./Array.). "::" (namespaced) names are skipped.
-            props, methods = page_members(raw)
+            props, methods, events = page_members(raw)
             # One key per type - the Russian title (or the Latin one for a type that has no
             # Russian name). The English spelling is not stored: the loader adds it by terms.json,
             # which pairs the two forms. So members, bases and facets are kept once, not twice.
@@ -551,13 +564,14 @@ def extract(dist: Path) -> tuple:
                     # A name two packages give different environments is unjudgeable.
                     if global_env.setdefault(member, env) != env:
                         conflicted_env.add(member)
-            if props or methods:
+            if props or methods or events:
                 rets = page_member_types(raw)
                 sigs = page_member_signatures(raw)
                 if key:
-                    slot = types.setdefault(key, {"properties": set(), "methods": set()})
+                    slot = types.setdefault(key, _empty_member_slot())
                     slot["properties"] |= props
                     slot["methods"] |= methods
+                    slot["events"] |= events
                     if rets:
                         returns.setdefault(key, {}).update(rets)
                     if sigs:
@@ -566,9 +580,10 @@ def extract(dist: Path) -> tuple:
                 # and reference members go into a separate dictionary, under the Russian form.
                 facet_key = (title if _FACET_TITLE_RE.match(title) else "") or _english_facet_from_path(n)
                 if facet_key:
-                    slot = facets.setdefault(facet_key, {"properties": set(), "methods": set()})
+                    slot = facets.setdefault(facet_key, _empty_member_slot())
                     slot["properties"] |= props
                     slot["methods"] |= methods
+                    slot["events"] |= events
                     if rets:
                         returns.setdefault(facet_key, {}).update(rets)
                     if sigs:
@@ -590,8 +605,10 @@ def extract(dist: Path) -> tuple:
                 # (Записать, Заблокировать, НайтиПоКоду...) are available by bare name in
                 # the object's manager module.
                 raw = z.read(n).decode("utf-8", "replace")
-                props, methods = page_members(raw)
+                props, methods, events = page_members(raw)
                 if props or methods:
+                    # A manager has no events; nothing is dropped silently - the pages of the
+                    # kinds carry none, and an event there would show up in the diff.
                     managers.setdefault(kind, set()).update(props | methods)
                 continue
             raw = z.read(n).decode("utf-8", "replace")
@@ -609,9 +626,13 @@ def extract(dist: Path) -> tuple:
             returns, signatures, bases, ctors)
 
 
+def _empty_member_slot() -> dict[str, set[str]]:
+    return {kind: set() for kind in MEMBER_KINDS}
+
+
 def _members_json(members: dict[str, set[str]]) -> dict[str, list[str]]:
-    """Type members as JSON: properties and methods separately, an empty section is omitted."""
-    return {kind: sorted(members[kind]) for kind in ("properties", "methods") if members.get(kind)}
+    """Type members as JSON: by kind, an empty section is omitted."""
+    return {kind: sorted(members[kind]) for kind in MEMBER_KINDS if members.get(kind)}
 
 
 def _own_members(
@@ -629,12 +650,12 @@ def _own_members(
     """
     own_types: dict[str, dict[str, set[str]]] = {}
     for name, sets in types.items():
-        inherited = {"properties": set(), "methods": set()}
+        inherited = {kind: set() for kind in MEMBER_KINDS}
         for base in bases.get(name, ()):
-            for kind in ("properties", "methods"):
+            for kind in MEMBER_KINDS:
                 inherited[kind] |= types.get(base, {}).get(kind, set())
         own_types[name] = {
-            kind: sets.get(kind, set()) - inherited[kind] for kind in ("properties", "methods")
+            kind: sets.get(kind, set()) - inherited[kind] for kind in MEMBER_KINDS
         }
     own_returns: dict[str, dict[str, str]] = {}
     for name, member_types in returns.items():

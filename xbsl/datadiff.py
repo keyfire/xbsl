@@ -20,6 +20,7 @@ import sqlite3
 from pathlib import Path
 
 from xbsl import dataset, i18n
+from xbsl.dataset import MEMBER_KINDS
 
 MESSAGES = {
     "datadiff.description": {
@@ -226,13 +227,12 @@ def _expand_members(data: dict) -> dict[str, dict[str, set[str]]]:
     own = data.get("type_members") or {}
     full = {}
     for name, entry in own.items():
-        methods = set(entry.get("methods") or ())
-        props = set(entry.get("properties") or ())
+        merged = {kind: set(entry.get(kind) or ()) for kind in MEMBER_KINDS}
         for base in bases.get(name, ()):
             base_entry = own.get(base) or {}
-            methods |= set(base_entry.get("methods") or ())
-            props |= set(base_entry.get("properties") or ())
-        full[name] = {"methods": methods, "properties": props}
+            for kind in MEMBER_KINDS:
+                merged[kind] |= set(base_entry.get(kind) or ())
+        full[name] = merged
     return full
 
 
@@ -259,15 +259,25 @@ def _diff_expanded_members(old_full: dict, new_full: dict,
     """
     deltas: dict[str, dict[str, dict[str, list[str]]]] = {}
     marks: dict[tuple[str, str, str], set[str]] = {}
+    moves: dict[str, dict[str, list[str]]] = {}
     for name in set(old_full) & set(new_full):
         entry = {}
-        for kind in ("methods", "properties"):
-            delta = _added_removed(old_full[name][kind], new_full[name][kind])
+        for kind in MEMBER_KINDS:
+            delta = _added_removed(old_full[name].get(kind, set()),
+                                   new_full[name].get(kind, set()))
             if delta:
                 entry[kind] = delta
-                for sign, members in delta.items():
-                    for member in members:
-                        marks.setdefault((kind, member, sign), set()).add(name)
+        # A member that LEFT one kind and JOINED another did not disappear - the document was
+        # rebuilt around it. Reporting the two halves apart is how a whole shelf of events read
+        # as "removed" when 10.0.1 gave them a section of their own; a move says what happened.
+        moved = _moved_between_kinds(entry)
+        if moved:
+            moves[name] = moved
+            entry = _without_moved(entry, moved)
+        for kind, delta in entry.items():
+            for sign, members in delta.items():
+                for member in members:
+                    marks.setdefault((kind, member, sign), set()).add(name)
         if entry:
             deltas[name] = entry
     lifted = {}
@@ -287,7 +297,32 @@ def _diff_expanded_members(old_full: dict, new_full: dict,
                 entry[kind] = kept
         if entry:
             lifted[name] = entry
+    for name, moved in moves.items():
+        lifted.setdefault(name, {})["moved"] = moved
     return lifted
+
+
+def _moved_between_kinds(entry: dict) -> dict[str, list[str]]:
+    """{member: [where it was, where it is now]} for members that changed kind, not existence."""
+    gone = {m: kind for kind, delta in entry.items() for m in delta.get("removed", ())}
+    moved: dict[str, list[str]] = {}
+    for kind, delta in entry.items():
+        for member in delta.get("added", ()):
+            was = gone.get(member)
+            if was is not None and was != kind:
+                moved[member] = [was, kind]
+    return moved
+
+
+def _without_moved(entry: dict, moved: dict[str, list[str]]) -> dict:
+    """The same delta with the moved members taken out of both halves."""
+    out: dict[str, dict[str, list[str]]] = {}
+    for kind, delta in entry.items():
+        kept = {sign: [m for m in members if m not in moved] for sign, members in delta.items()}
+        kept = {sign: members for sign, members in kept.items() if members}
+        if kept:
+            out[kind] = kept
+    return out
 
 
 def diff_stdlib(old: dict, new: dict) -> dict:

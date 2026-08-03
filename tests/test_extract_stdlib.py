@@ -58,12 +58,39 @@ _NOISY_PAGE = (
 )
 
 
+_EVENT_PAGE = (
+    "<html><head><title>Кнопка | 1С:Предприятие.Элемент</title></head><body>"
+    "<article><h1>Кнопка</h1>"
+    "<h2>Иерархия типа​</h2><p>Базовые типы: <a href='/Component_ru/'>Компонент</a></p>"
+    "<h2>Свойства​</h2><h3>Заголовок​</h3>"
+    "<h2>Методы​</h2><h3>Активировать​</h3>"
+    "<h2>События​</h2><h3>ПриНажатии​</h3>"
+    "<h2>Список унаследованных событий​</h2>"
+    "<h3 class='anchor' id='компонент'>Компонент</h3>"
+    "<p><a href='/Component_ru/#принаведении'>ПриНаведении</a>, "
+    "<a href='/Component_ru/#припотеренаведения'>ПриПотереНаведения</a></p>"
+    "</article></body></html>"
+)
+
+
+def test_page_members_reads_the_events_section():
+    """10.0.1 moved events out of the properties section, and reading only two sections made
+    the data-diff report dozens of members as REMOVED while the API had not changed."""
+    props, methods, events = _MODULE.page_members(_EVENT_PAGE)
+    assert props == {"Заголовок"} and methods == {"Активировать"}
+    assert events == {"ПриНажатии", "ПриНаведении", "ПриПотереНаведения"}
+    # An event is not a property: the kinds stay apart, or the consumers would offer an event
+    # where a property is expected.
+    assert not events & props
+
+
 def test_page_members_props_and_methods():
     # type members = properties (H3) and methods (H3) separately + inherited ones (links of their
     # own section), without constructors and the hierarchy
-    props, methods = _MODULE.page_members(_TYPE_PAGE)
+    props, methods, events = _MODULE.page_members(_TYPE_PAGE)
     assert props == {"ТекущийПользователь"}
     assert methods == {"Привилегированный", "ВыполнитьСПравами", "ТипЗначения"}
+    assert events == set()
     assert "Объект" not in props | methods  # a base type from the hierarchy is not a member
 
 
@@ -71,7 +98,7 @@ def test_page_members_control_chars_cleaned():
     # on some docs pages headings and names arrive with control characters inside the word:
     # without cleaning, the section is not recognized and the name fails validation - members
     # get lost silently
-    props, methods = _MODULE.page_members(_NOISY_PAGE)
+    props, methods, _events = _MODULE.page_members(_NOISY_PAGE)
     assert props == {"Позиция"} and methods == {"Закрыть"}
 
 

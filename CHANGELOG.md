@@ -15,6 +15,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **The documentation extractor reads the events section.** A type page of 10.0.1 gives events a
+  section of their own ("События" plus "Список унаследованных событий"), while the extractor read
+  the properties and methods sections alone - so `type_members` said a button has no `ПриНажатии`
+  and a data-diff of the two releases reported dozens of members as REMOVED although the API had
+  not changed. Events are now collected as a kind of their own, kept apart from the properties,
+  and `data-diff` reports a member that left one kind for another as a MOVE rather than as a
+  removal plus an addition. The datasets have to be regenerated for the effect - an existing one
+  carries what the extractor of its day collected.
 - **The keys of a dictionary are indexed as the members they are.** A `LocalizedStrings`
   element has no module, and the index knew nothing about it: go to definition on
   `Dictionary.Key()` answered "not found", the dot after the dictionary name offered nothing,
