@@ -713,7 +713,7 @@ test("buildMetaPanelModel: a URL template is editable in the panel", () => {
   const byKey = Object.fromEntries(model.sections.flatMap((s) => s.rows).map((r) => [r.key, r]));
   assert.strictEqual(byKey["Имя"].editor.control, "text");
   assert.strictEqual(byKey["Шаблон"].editor.control, "text");
-  // A handler property is a handler row at every level - here it is the template's ЛюбойМетод.
+  // A handler property is a handler row at every level - here it is the template's `ЛюбойМетод`.
   assert.strictEqual(byKey["ЛюбойМетод"].editor.control, "handler");
   // The collection belongs to the tree, not to the panel: visible, not edited here.
   assert.strictEqual(byKey["Методы"].editor.control, "readonly");

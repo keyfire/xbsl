@@ -169,9 +169,9 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
     "Свойства" section mostly belongs to interface components and record types.
 
     EVENTS have a section of their own, and reading only the two others cost a false alarm:
-    the diff of two data versions reported dozens of members as REMOVED (Кнопка without
-    ПриНажатии, КонтейнерHtml without ПослеЗагрузкиСодержимого) because the newer documents
-    moved the events out of the properties section - the API had not changed at all.
+    the diff of two data versions reported dozens of members as REMOVED (a button without its
+    `ПриНажатии`, an html container without its `ПослеЗагрузкиСодержимого`) because the newer
+    documents moved the events out of the properties section - the API had not changed at all.
     """
     ma = _ARTICLE_RE.search(raw)
     if not ma:
@@ -179,8 +179,8 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
     props: set[str] = set()
     methods: set[str] = set()
     events: set[str] = set()
-    # The longest heading first: "Список унаследованных событий" also starts with "Список
-    # унаследованных", and "События" must not be read as a property section.
+    # The longest heading first: `Список унаследованных событий` also starts with
+    # `Список унаследованных`, and `События` must not be read as a property section.
     inherited = (("Список унаследованных методов", methods),
                  ("Список унаследованных событий", events),
                  ("Список унаследованных свойств", props))

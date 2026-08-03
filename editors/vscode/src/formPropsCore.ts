@@ -189,7 +189,7 @@ export type RowEditor =
   // xbsl/moduleHandlers payload).
   // mode - which engine operation the row drives. "form" (default): a component event, one
   // xbsl/addHandler round trip writes both the binding and the stub. "meta": a metadata
-  // handler (Обработчик of an HTTP method, of a job) - it sits at a yaml offset instead of a
+  // handler (the `Обработчик` of an HTTP method, of a job) - it sits at a yaml offset instead of a
   // component node, so the binding is an ordinary property edit and the code comes from
   // xbsl/addModuleMethod. The editor itself is the same one in both modes.
   | { control: "handler"; choices?: HandlerChoices; mode?: "form" | "meta" }

@@ -429,7 +429,7 @@ class XbslNode extends vscode.TreeItem {
   appModulePath?: string;
   offset?: number; // node offset in the yaml - for navigation
   addKind?: string; // group: the ADD_SPECS key for "add"
-  routeTemplate?: string; // URL template node: its Шаблон - how the engine addresses a route
+  routeTemplate?: string; // URL template node: its `Шаблон` - how the engine addresses a route
   newObjectKind?: string; // category: the kind of the object being created
   ownerName?: string; // "Forms" group: the owner object (for adding a form)
   codeKind?: boolean; // code kind (module/HTTP service): click opens the module on the left
