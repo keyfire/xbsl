@@ -196,7 +196,12 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
                 continue
             found = (_plain_text(m.group(1)) for m in _H3_RE.finditer(section))
         target.update(name for name in found if _PROP_NAME_RE.match(name))
-    return props, methods, events
+    # A name the page ALSO lists as a property or a method is not an event, whatever the
+    # heading it appeared under. Some pages state the inherited PROPERTIES under the
+    # inherited-events heading (the links there point at the property anchors of the base) -
+    # observed on the list and diagram components. Copying that verbatim would put a dozen
+    # sizing properties among the events of every such type.
+    return props, methods, events - props - methods
 
 
 def page_bases(raw: str) -> list[str]:

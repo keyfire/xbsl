@@ -84,6 +84,23 @@ def test_page_members_reads_the_events_section():
     assert not events & props
 
 
+def test_a_property_listed_under_the_events_heading_stays_a_property():
+    """Observed in the distribution: the list and diagram pages state the inherited PROPERTIES
+    under the inherited-events heading, with links to the property anchors of the base. Copied
+    verbatim, a dozen sizing properties would become events of every such type."""
+    page = _EVENT_PAGE.replace(
+        "<p><a href='/Component_ru/#принаведении'>ПриНаведении</a>, ",
+        "<p><a href='/Component_ru/#видимость'>Видимость</a>, "
+        "<a href='/Component_ru/#принаведении'>ПриНаведении</a>, ",
+    ).replace("<h2>Свойства​</h2><h3>Заголовок​</h3>",
+              "<h2>Свойства​</h2><h3>Заголовок​</h3><h3>Видимость​</h3>")
+    props, _methods, events = _MODULE.page_members(page)
+
+    assert "Видимость" in props
+    assert "Видимость" not in events
+    assert {"ПриНажатии", "ПриНаведении", "ПриПотереНаведения"} <= events
+
+
 def test_page_members_props_and_methods():
     # type members = properties (H3) and methods (H3) separately + inherited ones (links of their
     # own section), without constructors and the hierarchy
