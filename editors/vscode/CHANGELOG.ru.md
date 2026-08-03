@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.48.0
 
 ### Добавлено
 - **Шаблоны URL и HTTP-методы добавляются из дерева метаданных.** У группы шаблонов – "Добавить
