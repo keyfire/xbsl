@@ -411,3 +411,98 @@ def test_remove_handler_reports_what_it_could_not_delete():
     plan = formhandlers.remove_handler(_bound("Отсутствует"), MODULE, BUTTON, "ПриНажатии", drop_method=True)
     assert plan.method == "Отсутствует" and plan.method_removed is False
     assert plan.notes and "в модуле нет" in plan.notes[0]
+
+
+# --- the metadata half: a module method for a handler that is not a form event ----------------
+
+SERVICE_YAML = """\
+ВидЭлемента: HttpСервис
+Ид: 6f0b6a44-0000-4000-8000-000000000205
+Имя: ПробныйСервис
+ШаблоныUrl:
+    -
+        Имя: Ресурс
+        Шаблон: /res/{ключ}
+        Методы:
+            -
+                Метод: GET
+                Обработчик: ОтдатьРесурс
+    -
+        Имя: Поле
+        Шаблон: /pic/{вид}
+        Методы:
+            -
+                Метод: GET
+                Обработчик: ОтдатьПоле
+"""
+
+SERVICE_MODULE = """\
+метод ОтдатьРесурс(Запрос: HttpСервисЗапрос)
+    // отдаёт ресурс
+;
+"""
+
+
+def test_add_module_method_creates_the_module_of_a_service_without_one():
+    """No module file yet: the plan carries the whole content, the cursor sits on the name."""
+    plan = formhandlers.add_module_method(None, "ОтдатьПоле", [("Запрос", "HttpСервисЗапрос")])
+    assert plan.created is True and plan.method_added is True
+    assert plan.module_edits == []
+    assert plan.new_module_text.startswith("метод ОтдатьПоле(Запрос: HttpСервисЗапрос)")
+    at = plan.cursor_offset
+    assert plan.new_module_text[at : at + len("ОтдатьПоле")] == "ОтдатьПоле"
+
+
+@pytest.mark.needs_data
+def test_add_module_method_appends_a_stub_to_an_existing_module():
+    plan = formhandlers.add_module_method(
+        SERVICE_MODULE, "ОтдатьПоле", [("Запрос", "HttpСервисЗапрос")]
+    )
+    assert plan.created is False and plan.method_added is True
+    assert plan.new_module_text.startswith(SERVICE_MODULE)  # what was there is untouched
+    assert "метод ОтдатьПоле(Запрос: HttpСервисЗапрос)" in plan.new_module_text
+    at = plan.cursor_offset
+    assert plan.new_module_text[at : at + len("ОтдатьПоле")] == "ОтдатьПоле"
+
+
+@pytest.mark.needs_data
+def test_add_module_method_does_not_write_a_method_the_module_already_has():
+    """The jump target of an existing method, and not a second copy of it."""
+    plan = formhandlers.add_module_method(SERVICE_MODULE, "ОтдатьРесурс")
+    assert plan.method_added is False and plan.module_edits == []
+    assert plan.new_module_text == SERVICE_MODULE
+    at = plan.cursor_offset
+    assert SERVICE_MODULE[at : at + len("ОтдатьРесурс")] == "ОтдатьРесурс"
+    assert plan.notes and "уже есть" in plan.notes[0]
+
+
+@pytest.mark.needs_data
+def test_signature_like_copies_the_neighbour_bound_to_the_same_key():
+    """Nothing declares what the platform passes to a metadata handler - the working code does:
+    the other handlers of the same element are written against the same contract."""
+    methods, _errors = formhandlers.module_methods(SERVICE_MODULE)
+    params, returns, like = formhandlers.signature_like(
+        SERVICE_YAML, "Обработчик", methods, exclude="ОтдатьПоле"
+    )
+    assert like == "ОтдатьРесурс"
+    assert params == [("Запрос", "HttpСервисЗапрос")]
+    assert returns is None
+
+
+@pytest.mark.needs_data
+def test_signature_like_skips_the_method_being_created_and_finds_nothing_else():
+    """The only neighbour is the handler itself - a parameterless stub is the honest answer."""
+    methods, _errors = formhandlers.module_methods(SERVICE_MODULE)
+    params, returns, like = formhandlers.signature_like(
+        SERVICE_YAML.replace("ОтдатьРесурс", "ОтдатьПоле"), "Обработчик", methods,
+        exclude="ОтдатьПоле",
+    )
+    assert (params, returns, like) == ([], None, "")
+
+
+@pytest.mark.needs_data
+def test_signature_like_ignores_expressions_and_names_the_module_does_not_have():
+    methods, _errors = formhandlers.module_methods(SERVICE_MODULE)
+    text = SERVICE_YAML.replace("Обработчик: ОтдатьРесурс", "Обработчик: =Что.То()")
+    text = text.replace("Обработчик: ОтдатьПоле", "Обработчик: Отсутствует")
+    assert formhandlers.signature_like(text, "Обработчик", methods) == ([], None, "")

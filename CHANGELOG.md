@@ -12,6 +12,18 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **A method stub for a handler that is not a form event.** `xbsl/addModuleMethod` writes the
+  code half alone: a metadata handler (the `Handler` of an HTTP method, of a job, of a log
+  event) sits at a yaml offset rather than at a component node, so the editor writes that
+  property the way it writes any other one and asks the engine for the method. Nothing declares
+  what the platform passes to such a handler - `signature_like` therefore shapes the stub after
+  a handler already bound to the same key elsewhere in the same yaml, which is how the working
+  code states the contract (every handler of an HTTP service takes its request). With no
+  neighbour to learn from the stub is parameterless and says so.
+
 ## 2026-07-31 – 0.52.0
 
 ### Added

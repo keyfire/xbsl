@@ -608,6 +608,82 @@ test("metaPropertyEdits: a materialized standard attribute edits its record by n
   assert.ok(!out.includes("Длина: 250"));
 });
 
+// --- handler rows of the metadata mode ------------------------------------------------------
+
+// An HTTP service: its URL template method carries the handler property the panel must turn
+// into the very editor a form event has.
+const SERVICE = `ВидЭлемента: HttpСервис
+Ид: 6f0b6a44-0000-4000-8000-000000000301
+Имя: ПробныйСервис
+ШаблоныUrl:
+    -
+        Имя: Поле
+        Шаблон: /pic/{вид}
+        Методы:
+            -
+                Метод: GET
+                Обработчик: ОтдатьПоле
+`;
+
+// What the engine answers for a method of a URL template (MethodDescriptor).
+const METHOD_SCHEMA = {
+  kind: "HttpСервис",
+  props: {
+    Метод: { kind: "string", type: "HttpMethod", priority: 9700 },
+    Обработчик: { kind: "string", type: "BslHandler", priority: 9350 },
+  },
+  enums: {},
+};
+
+const MODULE_METHODS = {
+  available: true,
+  module: "file:///p/ПробныйСервис.xbsl",
+  methods: [
+    { name: "ОтдатьПоле", params: [{ name: "Запрос", type: "HttpСервисЗапрос" }] },
+    { name: "ОтдатьРесурс", params: [{ name: "Запрос", type: "HttpСервисЗапрос" }] },
+    { name: "Абстрактный", abstract: true, params: [] },
+  ],
+};
+
+function methodNodeModel(handlers?: unknown) {
+  const offset = SERVICE.indexOf("Метод: GET");
+  return buildMetaPanelModel(
+    describeMetaSelection(SERVICE, { offset })!,
+    undefined,
+    METHOD_SCHEMA as never,
+    undefined,
+    handlers as never
+  );
+}
+
+test("buildMetaPanelModel: a BslHandler property gets the handler editor, not a text box", () => {
+  const model = methodNodeModel(MODULE_METHODS);
+  const row = model.sections.flatMap((s) => s.rows).find((r) => r.key === "Обработчик")!;
+  assert.strictEqual(row.editor.control, "handler");
+  // The metadata mode drives xbsl/addModuleMethod - the yaml half is an ordinary property write.
+  assert.strictEqual((row.editor as { mode?: string }).mode, "meta");
+});
+
+test("buildMetaPanelModel: the handler dropdown lists the methods of the paired module", () => {
+  const model = methodNodeModel(MODULE_METHODS);
+  const row = model.sections.flatMap((s) => s.rows).find((r) => r.key === "Обработчик")!;
+  const choices = (row.editor as { choices: { rest: string[]; currentMissing: boolean } }).choices;
+  // No event signature to judge compatibility by - every callable method is offered; an
+  // abstract one has no body and is not a handler.
+  assert.deepStrictEqual(choices.rest, ["ОтдатьПоле", "ОтдатьРесурс"]);
+  assert.strictEqual(choices.currentMissing, false);
+});
+
+test("buildMetaPanelModel: without the module payload the handler row still opens", () => {
+  const model = methodNodeModel(undefined);
+  const row = model.sections.flatMap((s) => s.rows).find((r) => r.key === "Обработчик")!;
+  const choices = (row.editor as { choices: { rest: string[]; currentMissing: boolean } }).choices;
+  // An empty list is the honest answer when the module state is unknown - and creating a
+  // handler still works from there.
+  assert.deepStrictEqual(choices.rest, []);
+  assert.strictEqual(choices.currentMissing, false);
+});
+
 // -----------------------------------------------------------------------------
 
 console.log(`\ntotal: ${passed} ok, ${failed} fail`);

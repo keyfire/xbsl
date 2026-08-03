@@ -253,6 +253,20 @@ def _return_placeholder(return_type: str) -> str:
     return "Неопределено"
 
 
+def _stub_text(
+    method: str, params: list[tuple[str, str | None]], return_type: str | None, nl: str
+) -> str:
+    """The method stub itself: `метод Имя(П: Тип)` plus a TODO body and a placeholder return."""
+    written = [f"{name}: {type_}" if type_ else name for name, type_ in params]
+    returns = return_type and return_type != "ничто"
+    ret = f": {return_type}" if returns else ""
+    lines = [f"метод {method}({', '.join(written)}){ret}", "    // TODO: действия обработчика"]
+    if returns:
+        lines.append(f"    возврат {_return_placeholder(return_type)}")
+    lines.append(";")
+    return nl.join(lines) + nl
+
+
 def _handler_stub(method: str, arg_types: list[str], return_type: str | None, nl: str) -> str:
     """The handler method stub, in the shape of the builtin code templates.
 
@@ -264,14 +278,8 @@ def _handler_stub(method: str, arg_types: list[str], return_type: str | None, nl
     params = []
     for i, t in enumerate(arg_types):
         name = names[i] if i < len(names) else f"Параметр{i + 1}"
-        params.append(f"{name}: {t}" if t else name)
-    returns = return_type and return_type != "ничто"
-    ret = f": {return_type}" if returns else ""
-    lines = [f"метод {method}({', '.join(params)}){ret}", "    // TODO: действия обработчика"]
-    if returns:
-        lines.append(f"    возврат {_return_placeholder(return_type)}")
-    lines.append(";")
-    return nl.join(lines) + nl
+        params.append((name, t or None))
+    return _stub_text(method, params, return_type, nl)
 
 
 def default_handler_name(node: Node, key: str) -> str:
@@ -400,6 +408,91 @@ def add_handler(
         yaml_edits=yaml_edits, new_yaml_text=new_yaml_text,
         module_edits=module_edits, new_module_text=new_module_text,
         cursor_offset=insert_offset + name_rel, notes=notes,
+    )
+
+
+@dataclass
+class MethodPlan:
+    """The computed changes of add_module_method; offsets are relative to the input text."""
+
+    method: str
+    created: bool  # the module FILE is created from scratch (new_module_text is its content)
+    method_added: bool  # a stub was appended (False - the module already had the method)
+    module_edits: list[TextEdit]  # edits of the EXISTING module text (empty when created)
+    new_module_text: str
+    cursor_offset: int  # offset of the method name in new_module_text (the jump target)
+    notes: list[str] = field(default_factory=list)
+
+
+def signature_like(
+    yaml_text: str, key: str, methods: list[dict], exclude: str = ""
+) -> tuple[list[tuple[str, str | None]], str | None, str]:
+    """The signature of a handler ALREADY bound to the same key elsewhere in the yaml.
+
+    A metadata handler is not an event of the ui schema: nothing declares what the platform
+    passes to it. The working code does, though - the other handlers of the same element are
+    written against the same contract, so a new stub is shaped after its neighbours (an HTTP
+    service, for instance, hands every handler its request). Returns the parameters, the
+    return type and the name of the method they were taken from; an empty name means no
+    neighbour was found and the caller gets a parameterless stub.
+    """
+    by_name = {m.get("name"): m for m in methods if m.get("name")}
+    pattern = re.compile(rf"^\s*(?:-\s*)?{re.escape(key)}\s*:\s*(\S+)\s*$", re.MULTILINE)
+    for match in pattern.finditer(yaml_text or ""):
+        name = match.group(1).strip().strip("\"'")
+        if not name or name == exclude or name.startswith("="):
+            continue
+        found = by_name.get(name)
+        if not found:
+            continue
+        params = [(p.get("name") or "", p.get("type")) for p in found.get("params") or []]
+        return params, found.get("returnType"), name
+    return [], None, ""
+
+
+def add_module_method(
+    module_text: str | None,
+    method: str,
+    params: list[tuple[str, str | None]] | None = None,
+    return_type: str | None = None,
+) -> MethodPlan:
+    """Append a method stub to a module (or make it the whole new file).
+
+    The half of add_handler that touches the MODULE, addressed by nothing but the module
+    itself: the metadata panel writes its own yaml property (a metadata handler sits at a
+    yaml offset, not at a component node), and asks the engine for the code alone. A method
+    the module already has is not written twice - the plan then only points at it.
+    """
+    formedits._check_name(method)
+    methods, _errors = module_methods(module_text) if module_text is not None else ([], 0)
+    existing = {m["name"]: m for m in methods}
+    if method in existing:
+        name_span = existing[method].get("nameSpan") or existing[method]["span"]
+        return MethodPlan(
+            method=method, created=False, method_added=False,
+            module_edits=[], new_module_text=module_text or "",
+            cursor_offset=name_span["start"],
+            notes=[f"Метод {method} уже есть в модуле – код не менялся"],
+        )
+    nl = _dominant_nl(module_text) if module_text else "\n"
+    stub = _stub_text(method, list(params or []), return_type, nl)
+    created = module_text is None
+    if created:
+        module_edits: list[TextEdit] = []
+        new_module_text = stub
+        insert_offset = 0
+    else:
+        pos = len(module_text)
+        prefix = "" if not module_text or module_text.endswith(("\n", "\r")) else nl
+        addition = prefix + (nl if module_text else "") + stub
+        module_edits = [TextEdit(pos, pos, addition)]
+        new_module_text = module_text + addition
+        insert_offset = pos + len(prefix) + (len(nl) if module_text else 0)
+    name_rel = stub.index(f"метод {method}") + len("метод ")
+    return MethodPlan(
+        method=method, created=created, method_added=True,
+        module_edits=module_edits, new_module_text=new_module_text,
+        cursor_offset=insert_offset + name_rel,
     )
 
 

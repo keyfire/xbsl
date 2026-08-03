@@ -9,6 +9,20 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Changed
+- **A metadata handler is edited exactly like a form event.** A property the metamodel declares
+  as `BslHandler` - the `Handler` of an HTTP method, of a job, of a log event - was a plain text
+  box: no list of the module's methods, no jump, no way to create the one that does not exist.
+  It now gets the very editor an event row has, and the kinds are covered by the declared type
+  rather than by a list of property names. The two-file reset stays with events: a metadata
+  handler is an ordinary property, so clearing it leaves the module alone.
+- **The localization of an element sits right under it.** The "Localization" group held a single
+  language and cost a click to open; the languages now hang under the element itself. Their icon
+  is the one of localized strings - the globe stays where URLs are, so an HTTP service and a
+  translation no longer read as the same thing in the tree.
+
 ## 0.47.0
 
 - **F12 over a member of the platform opens its documentation instead of saying "no

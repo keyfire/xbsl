@@ -108,6 +108,23 @@ export interface AddHandlerResponse {
   error?: string;
 }
 
+// The answer of xbsl/addModuleMethod - the module-only half used by the metadata mode: the
+// binding there is an ordinary property write of the panel, so no yaml edits come back.
+// methodAdded=false means the module already carried the method and cursor merely points at it;
+// like names the handler whose signature the stub was shaped after.
+export interface ModuleMethodPlan {
+  method?: string;
+  created?: boolean;
+  methodAdded?: boolean;
+  moduleUri: string;
+  moduleEdits?: EngineEditDto[];
+  moduleText?: string;
+  cursor?: { uri?: string; offset?: number } | null;
+  like?: string;
+  notes?: string[];
+  error?: string;
+}
+
 // The answer of xbsl/removeHandler - the mirror of AddHandlerResponse: the yaml always loses
 // the binding, the module loses the method only when the caller asked (methodRemoved says what
 // actually happened, notes say why it did not).
@@ -170,7 +187,12 @@ export type RowEditor =
   // choices - the handler dropdown content computed from the paired module's methods
   // (absent inside chooseEditor; buildPanelModel enriches the row when it has the
   // xbsl/moduleHandlers payload).
-  | { control: "handler"; choices?: HandlerChoices }
+  // mode - which engine operation the row drives. "form" (default): a component event, one
+  // xbsl/addHandler round trip writes both the binding and the stub. "meta": a metadata
+  // handler (Обработчик of an HTTP method, of a job) - it sits at a yaml offset instead of a
+  // component node, so the binding is an ordinary property edit and the code comes from
+  // xbsl/addModuleMethod. The editor itself is the same one in both modes.
+  | { control: "handler"; choices?: HandlerChoices; mode?: "form" | "meta" }
   // An open combobox (typing allowed, the list only suggests) - the Тип rows of the
   // metadata mode; the candidates come from the metadata tree provider (propsModes.ts).
   | { control: "combo"; options: string[] }

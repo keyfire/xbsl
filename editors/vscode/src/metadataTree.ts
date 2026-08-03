@@ -688,23 +688,20 @@ function displayGroupNode(label: string, icon: string, yamlPath: string, fields:
 
 // One language of the Localization section: the label is the language folder as the platform wrote
 // it (En), a click opens that file - the strings of the element translated into this language.
+// The node sits right under the element: a "Localization" group above it would be a level with
+// nothing to choose in it - one language, one child, one extra click.
+// The icon is the one of localized strings (abc) rather than a globe: a translation is text, and
+// the globe belongs where URLs are (HTTP services and their templates), otherwise the two read as
+// the same thing in the tree.
 function translationNode(tr: Translation): XbslNode {
   const node = new XbslNode(tr.lang, vscode.TreeItemCollapsibleState.None);
-  node.iconPath = new vscode.ThemeIcon("globe");
+  node.iconPath = new vscode.ThemeIcon("symbol-string");
+  node.description = vscode.l10n.t("Localization");
   node.yamlPath = tr.yamlPath;
   node.resourceUri = vscode.Uri.file(tr.yamlPath); // git statuses (color/badge), keeping our own icon
   node.contextValue = "member translation yaml";
   node.command = { command: "xbsl.metadata.openYaml", title: "", arguments: [node] };
   node.tooltip = vscode.l10n.t("Localization");
-  return node;
-}
-
-function translationsGroupNode(translations: Translation[]): XbslNode {
-  const node = new XbslNode(vscode.l10n.t("Localization"), vscode.TreeItemCollapsibleState.Collapsed);
-  node.iconPath = new vscode.ThemeIcon("globe");
-  node.description = String(translations.length);
-  node.contextValue = "group";
-  node.children = [...translations].sort((a, b) => a.lang.localeCompare(b.lang)).map(translationNode);
   return node;
 }
 
@@ -767,7 +764,9 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
     groups.push(formsGroupNode(boundForms, canAddForm ? { name: el.name, yamlPath: el.yamlPath } : undefined));
   }
   if (el.translations?.length) {
-    groups.push(translationsGroupNode(el.translations));
+    groups.push(
+      ...[...el.translations].sort((a, b) => a.lang.localeCompare(b.lang)).map(translationNode)
+    );
   }
 
   const node = new XbslNode(

@@ -19,7 +19,14 @@ import {
   findAttrOffset,
   insertItemEdit,
 } from "./metadataCore";
-import { PanelModel, PanelRow, PanelSection, RowEditor } from "./formPropsCore";
+import {
+  ModuleHandlersPayload,
+  PanelModel,
+  PanelRow,
+  PanelSection,
+  RowEditor,
+  handlerChoices,
+} from "./formPropsCore";
 
 // -- mode resolution ---------------------------------------------------------------------------
 
@@ -298,6 +305,14 @@ function schemaRowEditor(
         ? { control: "enum", options: prop.options }
         : { control: "combo", options: typeCandidates ?? [] };
     case "string":
+      // A HANDLER (the Обработчик of an HTTP method, of a job, of a log event) gets the very
+      // editor a form event has: the methods of the paired module in a dropdown, a jump to
+      // the chosen one, and "(create a handler...)" for the one that does not exist yet.
+      // The metamodel names them by their declared type, so every kind is covered at once
+      // rather than by a list of property names.
+      if (prop.type === "BslHandler") {
+        return { control: "handler", mode: "meta" };
+      }
       // An attribute NAME (the Представление of a catalog or a document) is a dropdown of
       // the object's string attributes; with no candidates (an object without string
       // attributes) the free text stays - forbidding the lawful is worse than offering all.
@@ -351,7 +366,8 @@ export function buildMetaPanelModel(
   desc: MetaNodeDescription,
   typeCandidates?: string[],
   schema?: MetaSchema,
-  attrCandidates?: string[]
+  attrCandidates?: string[],
+  handlers?: ModuleHandlersPayload
 ): PanelModel {
   const synthetic = desc.offset < 0;
   const nameRow = desc.rows.find((r) => r.key === "Имя");
@@ -415,6 +431,21 @@ export function buildMetaPanelModel(
   }
   if (readonlyRows.length > 0) {
     sections.push({ id: "readonly" as const, rows: readonlyRows });
+  }
+  // The handler rows get the methods of the paired module - the same content a form event
+  // row shows. Without the payload (no module beside the yaml, the LSP down) the row keeps
+  // the dropdown with nothing but "(no handler)" and "(create a handler...)": an empty list
+  // is the honest answer, and creating still works.
+  for (const section of sections) {
+    for (const row of section.rows) {
+      if ((row.editor as { control: string }).control === "handler") {
+        row.editor = {
+          control: "handler",
+          mode: "meta",
+          choices: handlerChoices(undefined, row.set ? row.value : undefined, handlers),
+        };
+      }
+    }
   }
   return {
     meta: true,

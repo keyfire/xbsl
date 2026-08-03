@@ -28,6 +28,7 @@ import {
   AddHandlerResponse,
   FormNodeAtPayload,
   ModuleHandlersPayload,
+  ModuleMethodPlan,
   PanelModel,
   RemoveHandlerResponse,
   UiComponentDto,
@@ -778,7 +779,10 @@ ${cspMeta(nonce)}
 
   function resetButton(row) {
     const b = el("button", "rbtn", "\\u2715");
-    const handler = row.editor.control === "handler";
+    // The two-file reset belongs to a form EVENT: the engine addresses its binding by the
+    // component node. A metadata handler is an ordinary property - its reset clears the key
+    // and leaves the module alone, so the offer to delete the method is not made.
+    const handler = row.editor.control === "handler" && row.editor.mode !== "meta";
     b.title = handler ? L.resetHandler : L.reset;
     b.addEventListener("click", (e) => {
       e.preventDefault();
@@ -1324,7 +1328,19 @@ async function refreshMetadata(uri: vscode.Uri, sel: MetaSelector): Promise<void
   // string attributes; the schema of a nested node never declares one, so no gating is needed.
   const wantsAttrs = Object.values(schema?.props ?? {}).some((p) => p.type === "AttributeName");
   const attrCandidates = wantsAttrs ? stringAttributeNames(text) : undefined;
-  lastModel = buildMetaPanelModel(desc, candidates, schema, attrCandidates);
+  // A handler property (BslHandler) offers the methods of the paired module, exactly as a
+  // form event does. Asked for only when such a property is in the schema - an element
+  // without handlers must not pay for the request.
+  const wantsHandlers = Object.values(schema?.props ?? {}).some((p) => p.type === "BslHandler");
+  const handlers = wantsHandlers && lspActive()
+    ? await lspRequest<ModuleHandlersPayload>("xbsl/moduleHandlers", { uri: uri.toString() })
+    : undefined;
+  if (seq !== my || !view) {
+    return;
+  }
+  lastModel = buildMetaPanelModel(
+    desc, candidates, schema, attrCandidates, handlers && !handlers.error ? handlers : undefined
+  );
   lastModel.readonly = await isReadonlyDoc(uri); // hook 11
   if (seq !== my || !view) {
     return;
@@ -1601,7 +1617,7 @@ async function openAtOffset(uri: vscode.Uri, offset: number): Promise<void> {
 // "Go to the handler method": jump to the method name in the paired module; a method the
 // module does not have gets a warning with an offer to create exactly that stub.
 async function gotoHandler(key: string, method: string): Promise<void> {
-  if (target?.kind !== "component" || !method) {
+  if (!target || !method) {
     return;
   }
   const handlers = await lspRequest<ModuleHandlersPayload>("xbsl/moduleHandlers", {
@@ -1626,8 +1642,61 @@ async function gotoHandler(key: string, method: string): Promise<void> {
   );
   if (pick === create) {
     const row = lastModel ? findRow(lastModel, key) : undefined;
+    if (target.kind === "metadata") {
+      await addMetaHandler(key, method);
+      return;
+    }
     await runAddHandler(key, method, row?.event);
   }
+}
+
+// The metadata half of "(create a handler...)": the binding is an ordinary property write of
+// the panel, the CODE comes from the engine (xbsl/addModuleMethod shapes the stub after the
+// handlers already bound to the same key). Two steps rather than one round trip, because a
+// metadata handler is addressed by a yaml offset and not by a component node.
+async function addMetaHandler(key: string, method: string): Promise<void> {
+  if (target?.kind !== "metadata" || !method) {
+    return;
+  }
+  const tgt = target; // snapshot: a concurrent refresh may retarget the panel mid-flight
+  if (!lspActive()) {
+    void vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        "The properties panel needs the LSP mode (xbsl.lsp.enabled) and the xbsl engine with the form designer."
+      )
+    );
+    return;
+  }
+  await applyMetaProp(key, method);
+  const plan = await lspRequest<ModuleMethodPlan>("xbsl/addModuleMethod", {
+    uri: tgt.uri.toString(),
+    key,
+    method,
+  });
+  if (!plan || plan.error) {
+    void vscode.window.showWarningMessage(
+      plan?.error ?? vscode.l10n.t("The engine does not answer the form requests – update the xbsl package.")
+    );
+    return;
+  }
+  const moduleUri = vscode.Uri.parse(plan.moduleUri);
+  if (plan.methodAdded) {
+    const edit = new vscode.WorkspaceEdit();
+    if (plan.created) {
+      edit.createFile(moduleUri, { ignoreIfExists: true });
+      edit.insert(moduleUri, new vscode.Position(0, 0), plan.moduleText ?? "");
+    } else {
+      const doc = await vscode.workspace.openTextDocument(moduleUri);
+      for (const e of plan.moduleEdits ?? []) {
+        edit.replace(moduleUri, new vscode.Range(doc.positionAt(e.start), doc.positionAt(e.end)), e.newText);
+      }
+    }
+    if (!(await vscode.workspace.applyEdit(edit))) {
+      void vscode.window.showWarningMessage(vscode.l10n.t("The edit was not applied – the file changed meanwhile."));
+      return;
+    }
+  }
+  await openAtOffset(moduleUri, plan.cursor?.offset ?? 0);
 }
 
 // "(create a handler...)": suggest the engine's default name in an InputBox. Decision
@@ -1635,7 +1704,26 @@ async function gotoHandler(key: string, method: string): Promise<void> {
 // "bind to it" per the engine contract); an EMPTY input sends no method at all - the
 // engine derives <Имя|Тип><Ключ> itself and uniquifies it against the module.
 async function createHandler(key: string): Promise<void> {
-  if (target?.kind !== "component" || !lastModel) {
+  if (!lastModel) {
+    return;
+  }
+  // The metadata mode asks for the same thing, but the engine cannot derive a name there: a
+  // metadata handler has no event key to build one from, so an empty answer is refused.
+  if (target?.kind === "metadata") {
+    const name = await vscode.window.showInputBox({
+      prompt: vscode.l10n.t("Handler method name"),
+      value: defaultHandlerName({ name: lastModel.name, type: lastModel.type }, key),
+      validateInput: (v) =>
+        IDENTIFIER.test(v.trim())
+          ? undefined
+          : vscode.l10n.t("A valid identifier is required (letters, digits, _)."),
+    });
+    if (name?.trim()) {
+      await addMetaHandler(key, name.trim());
+    }
+    return;
+  }
+  if (target?.kind !== "component") {
     return;
   }
   const row = findRow(lastModel, key);
