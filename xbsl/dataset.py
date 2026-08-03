@@ -242,13 +242,13 @@ def _expand_inherited(data: dict) -> dict:
     own_members = data.get("type_members") or {}
     full_members: dict[str, dict[str, list[str]]] = {}
     for name, own in own_members.items():
-        merged = {kind: set(own.get(kind, ())) for kind in MEMBER_KINDS}
+        by_kind = {kind: set(own.get(kind, ())) for kind in MEMBER_KINDS}
         for base in bases.get(name, ()):
             base_own = own_members.get(base, {})
             for kind in MEMBER_KINDS:
-                merged[kind].update(base_own.get(kind, ()))
+                by_kind[kind].update(base_own.get(kind, ()))
         full_members[name] = {
-            kind: sorted(merged[kind]) for kind in MEMBER_KINDS if merged[kind]
+            kind: sorted(by_kind[kind]) for kind in MEMBER_KINDS if by_kind[kind]
         }
     own_returns = data.get("member_types") or {}
     full_returns: dict[str, dict[str, str]] = {}
