@@ -11,6 +11,14 @@
 
 ## Unreleased
 
+### Removed
+- **The second navigation, the one written in TypeScript, is gone** – together with the
+  `xbsl.navigation.enabled` setting. It kept its own parser of the project index and its own
+  definition and completion providers, that is a lagging copy of what the language server does:
+  it knew nothing of the return types of project methods or of the newer hovers, and every fix
+  had to be made twice. Navigation now comes from the engine alone; without the LSP mode there
+  is none, and the CLI mode says so instead of answering worse.
+
 ### Changed
 - **A metadata handler is edited exactly like a form event.** A property the metamodel declares
   as `BslHandler` - the `Handler` of an HTTP method, of a job, of a log event - was a plain text

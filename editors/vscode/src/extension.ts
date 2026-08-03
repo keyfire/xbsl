@@ -10,7 +10,6 @@ import { createFormStructureModel, registerFormStructureCommands } from "./formS
 import { baselineForLint, registerExcludeAction } from "./excludeAction";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
 import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClient";
-import { registerNavigation } from "./navigation";
 import { registerMetadataTree } from "./metadataTree";
 import { registerProjectWizard } from "./projectWizard";
 import { metaKeyAliases } from "./uiSchemaClient";
@@ -598,8 +597,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       { providedCodeActionKinds: PROVIDED_KINDS }
     )
   );
-
-  registerNavigation(context, output, (resource) => readSettings(resource).linter, projectRootFor);
 
   lintOpenDocuments();
   scheduleWorkspaceLintAll();
