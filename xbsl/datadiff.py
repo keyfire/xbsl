@@ -269,7 +269,7 @@ def _diff_expanded_members(old_full: dict, new_full: dict,
                 entry[kind] = delta
         # A member that LEFT one kind and JOINED another did not disappear - the document was
         # rebuilt around it. Reporting the two halves apart is how a whole shelf of events read
-        # as "removed" when 10.0.1 gave them a section of their own; a move says what happened.
+        # as "removed" when the documents gave them a section of their own; a move says what happened.
         moved = _moved_between_kinds(entry)
         if moved:
             moves[name] = moved

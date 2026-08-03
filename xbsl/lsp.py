@@ -1228,12 +1228,37 @@ def _make_server() -> "LanguageServer":
             reader=_buffer_reader,
         )
 
+    @server.feature("xbsl/httpMethods")
+    def _http_methods(_params: object) -> dict:
+        """The HTTP verbs a route may declare, in the platform's order.
+
+        The editor offers them in its pick list; keeping the list here means there is one
+        copy of it, and a client that cannot ask (an older engine) falls back to free text
+        rather than to a stale copy of its own.
+        """
+        return {"methods": list(scaffold.HTTP_METHODS)}
+
     @server.feature("xbsl/metaAddRoute")
     def _meta_add_route(params: object) -> dict:
+        """Flat params {path, routes} or {path, template, methods} - the same operation.
+
+        The second form is for a caller that has the template and the verbs apart (the tree
+        of the editor, where one is the node and the others come from a pick): composing the
+        routes string is the engine's business, not the client's.
+        """
+        routes = str(_param(params, "routes", "") or "")
+        if not routes:
+            methods = _param(params, "methods") or []
+            try:
+                routes = scaffold.routes_for(
+                    str(_param(params, "template", "") or ""), [str(m) for m in methods]
+                )
+            except scaffold.ScaffoldError as exc:
+                return {"error": str(exc)}
         return _meta_op(
             scaffold.op_add_route,
             Path(str(_param(params, "path"))),
-            str(_param(params, "routes")),
+            routes,
             reader=_buffer_reader,
         )
 

@@ -1932,7 +1932,10 @@ def op_add_dependency(
 
 # --- operations: HTTP service and routes --------------------------------------------------
 
-_METHOD_ORDER = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+#: The HTTP verbs a route may declare, in the order the platform lists them. Public: the
+#: editors offer exactly this list, and a second copy of it would drift.
+HTTP_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+_METHOD_ORDER = HTTP_METHODS
 _HANDLER_NAMES: dict[tuple[str, bool], str] = {
     ("GET", False): "ПолучитьСписок",
     ("POST", False): "Создать",
@@ -1964,6 +1967,22 @@ _METHOD_EN = {
 #: Template names the tool invents when the path gives it nothing to name them by.
 _TEMPLATE_WORDS_EN = {"Список": "List", "ЭлементПоИд": "ItemById", "Шаблон": "Template"}
 _PARENT_SUFFIX = ("ПоРодителю", "ByParent")
+
+
+def routes_for(template: str, methods: list[str]) -> str:
+    """The routes string for one template: "GET /orders, POST /orders".
+
+    The format belongs to the engine (parse_routes reads it), so a caller that has the
+    template and the verbs at hand - the editor tree, an agent - does not compose it by
+    hand and cannot get it subtly wrong.
+    """
+    path = (template or "").strip()
+    if not path:
+        raise ScaffoldError("Не указан шаблон URL")
+    verbs = [str(m).strip().upper() for m in methods if str(m).strip()]
+    if not verbs:
+        raise ScaffoldError(f"Не указан ни один HTTP-метод для шаблона {path}")
+    return ", ".join(f"{verb} {path}" for verb in verbs)
 
 
 def parse_routes(routes_str: str) -> list[tuple[str, list[str]]]:

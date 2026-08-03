@@ -21,7 +21,7 @@ from pathlib import Path
 
 from xbsl import i18n, plugins
 
-#: The member kinds a stdlib type declares. Events are a section of their own in the 10.0.1
+#: The member kinds a stdlib type declares. Events have a section of their own in the newer
 #: documents; older ones listed them among the properties, so a dataset without the section is
 #: not "an API without events" - see the extractor.
 MEMBER_KINDS = ("properties", "methods", "events")

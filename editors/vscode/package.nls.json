@@ -134,5 +134,7 @@
   "cmd.formData.addProperty": "Add property",
   "cmd.formData.renameProperty": "Rename property",
   "cmd.formData.retypeProperty": "Change property type",
-  "cmd.formData.removeProperty": "Remove property"
+  "cmd.formData.removeProperty": "Remove property",
+  "cmd.metadata.addRoute": "Add a URL template",
+  "cmd.metadata.addRouteMethod": "Add an HTTP method"
 }

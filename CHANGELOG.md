@@ -15,11 +15,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
-- **The documentation extractor reads the events section.** A type page of 10.0.1 gives events a
-  section of their own ("События" plus "Список унаследованных событий"), while the extractor read
-  the properties and methods sections alone - so `type_members` said a button has no `ПриНажатии`
-  and a data-diff of the two releases reported dozens of members as REMOVED although the API had
-  not changed. Events are now collected as a kind of their own, kept apart from the properties,
+- **Adding a route no longer requires composing its text.** `xbsl/metaAddRoute` and the MCP tool
+  take a template with its methods as they are, next to the free-text form: the routes string is
+  the engine's own format, and a client that has the two apart (an editor tree, an agent) should
+  not be the one to get it subtly wrong. `xbsl/httpMethods` answers with the verbs a route may
+  declare - the pick list of an editor is then the engine's list rather than a copy of it.
+
+### Added
+- **The documentation extractor reads the events section.** A newer type page gives events a
+  section of its own (Events, plus the inherited ones), while the extractor read the properties
+  and methods sections alone - so `type_members` said a Button has no `OnClick` and a data-diff of
+  the two releases reported dozens of members as REMOVED although the API had not changed. Events are now collected as a kind of their own, kept apart from the properties,
   and `data-diff` reports a member that left one kind for another as a MOVE rather than as a
   removal plus an addition. The datasets have to be regenerated for the effect - an existing one
   carries what the extractor of its day collected.

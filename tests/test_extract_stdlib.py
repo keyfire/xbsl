@@ -74,7 +74,7 @@ _EVENT_PAGE = (
 
 
 def test_page_members_reads_the_events_section():
-    """10.0.1 moved events out of the properties section, and reading only two sections made
+    """The newer documents moved events out of the properties section, and reading two sections only made
     the data-diff report dozens of members as REMOVED while the API had not changed."""
     props, methods, events = _MODULE.page_members(_EVENT_PAGE)
     assert props == {"Заголовок"} and methods == {"Активировать"}

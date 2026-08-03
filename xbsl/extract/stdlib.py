@@ -169,7 +169,7 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
     "Свойства" section mostly belongs to interface components and record types.
 
     EVENTS have a section of their own, and reading only the two others cost a false alarm:
-    the diff of 9.2.8+11 against 10.0.1 reported dozens of members as REMOVED (Кнопка without
+    the diff of two data versions reported dozens of members as REMOVED (Кнопка without
     ПриНажатии, КонтейнерHtml without ПослеЗагрузкиСодержимого) because the newer documents
     moved the events out of the properties section - the API had not changed at all.
     """

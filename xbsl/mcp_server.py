@@ -456,11 +456,21 @@ def meta_add_field(
 
 
 @mcp.tool()
-def meta_add_route(yaml_path: str, routes: str) -> dict:
+def meta_add_route(yaml_path: str, routes: str = "", template: str = "", methods: str = "") -> dict:
     """Add routes to an existing HttpСервис: url templates in the yaml plus handler stubs
     in the module. Existing routes are skipped (reported in notes); handler names never
     collide with the ones already declared.
+
+    Two ways to say the same thing: `routes` as text ("GET /orders, POST /orders"), or a
+    single `template` with its `methods` (comma separated) - the second is what "add a
+    method to this template" looks like, and an EXISTING template is extended with the
+    missing verbs only. The verbs: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
     """
+    if not routes:
+        try:
+            routes = scaffold.routes_for(template, [m for m in methods.split(",")])
+        except scaffold.ScaffoldError as exc:
+            return {"ok": False, "error": str(exc)}
     return _meta(scaffold.op_add_route, Path(yaml_path), routes)
 
 

@@ -684,6 +684,49 @@ test("buildMetaPanelModel: without the module payload the handler row still open
   assert.strictEqual(choices.currentMissing, false);
 });
 
+// The template level of the same service: the panel edits its own properties, and the schema
+// of each level is addressed by the path of collections down to it.
+const TEMPLATE_SCHEMA = {
+  kind: "HttpСервис",
+  props: {
+    Имя: { kind: "string", type: "String", priority: 9900 },
+    Шаблон: { kind: "string", type: "String", priority: 9800 },
+    ЛюбойМетод: { kind: "string", type: "BslHandler", priority: 9400 },
+    Методы: { kind: "list", type: "MethodDescriptor", priority: 9000 },
+  },
+  enums: {},
+};
+
+test("metaSchemaPathAt: a method of a URL template is addressed through both collections", () => {
+  const methodOffset = SERVICE.indexOf("Метод: GET");
+  assert.deepStrictEqual(metaSchemaPathAt(SERVICE, metaNodeOffsetAt(SERVICE, methodOffset)!), {
+    sections: ["ШаблоныUrl", "Методы"],
+    names: ["Поле", ""],
+  });
+});
+
+test("buildMetaPanelModel: a URL template is editable in the panel", () => {
+  const offset = SERVICE.indexOf("Имя: Поле");
+  const model = buildMetaPanelModel(
+    describeMetaSelection(SERVICE, { offset })!, undefined, TEMPLATE_SCHEMA as never
+  );
+  const byKey = Object.fromEntries(model.sections.flatMap((s) => s.rows).map((r) => [r.key, r]));
+  assert.strictEqual(byKey["Имя"].editor.control, "text");
+  assert.strictEqual(byKey["Шаблон"].editor.control, "text");
+  // A handler property is a handler row at every level - here it is the template's ЛюбойМетод.
+  assert.strictEqual(byKey["ЛюбойМетод"].editor.control, "handler");
+  // The collection belongs to the tree, not to the panel: visible, not edited here.
+  assert.strictEqual(byKey["Методы"].editor.control, "readonly");
+});
+
+test("buildMetaPanelModel: an HTTP method is editable in the panel", () => {
+  const model = methodNodeModel(MODULE_METHODS);
+  const byKey = Object.fromEntries(model.sections.flatMap((s) => s.rows).map((r) => [r.key, r]));
+  assert.strictEqual(byKey["Метод"].editor.control, "text");
+  assert.strictEqual(byKey["Обработчик"].editor.control, "handler");
+  assert.ok(model.sections[0].rows.every((r) => r.set)); // both are written in the yaml
+});
+
 // -----------------------------------------------------------------------------
 
 console.log(`\ntotal: ${passed} ok, ${failed} fail`);

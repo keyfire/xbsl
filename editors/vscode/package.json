@@ -216,6 +216,18 @@
         "icon": "$(add)"
       },
       {
+        "command": "xbsl.metadata.addRoute",
+        "title": "%cmd.metadata.addRoute%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addRouteMethod",
+        "title": "%cmd.metadata.addRouteMethod%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
         "command": "xbsl.metadata.addObjectForm",
         "title": "%cmd.metadata.addObjectForm%",
         "category": "XBSL",
@@ -987,6 +999,26 @@
           "command": "xbsl.formPalette.openDocs",
           "when": "view == xbslPalette && viewItem =~ /\\bpalettecomponent\\b/",
           "group": "3_docs@1"
+        },
+        {
+          "command": "xbsl.metadata.addRoute",
+          "when": "view == xbslMetadata && viewItem =~ /\baddroute\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addRoute",
+          "when": "view == xbslMetadata && viewItem =~ /\baddroute\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addRouteMethod",
+          "when": "view == xbslMetadata && viewItem =~ /\baddroutemethod\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addRouteMethod",
+          "when": "view == xbslMetadata && viewItem =~ /\baddroutemethod\b/",
+          "group": "1_add@1"
         }
       ]
     },

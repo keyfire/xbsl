@@ -11,6 +11,14 @@
 
 ## Unreleased
 
+### Added
+- **URL templates and HTTP methods are added from the metadata tree.** The routes of an HTTP
+  service were shown but not editable: a new template or another verb on an existing one meant
+  writing the yaml by hand and then the handler stub next to it. The templates group now offers
+  "add a URL template" and every template offers "add an HTTP method"; the engine writes both
+  halves in one operation and extends an existing template with the missing verbs only. The verbs
+  offered come from the engine as well - one list, not a copy in the editor.
+
 ### Fixed
 - **Method names are coloured on purpose now.** The grammar carried no rule for them at all -
   neither for a declaration nor for a call - so a method name took whatever colour fell out of

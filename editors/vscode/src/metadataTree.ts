@@ -429,6 +429,7 @@ class XbslNode extends vscode.TreeItem {
   appModulePath?: string;
   offset?: number; // node offset in the yaml - for navigation
   addKind?: string; // group: the ADD_SPECS key for "add"
+  routeTemplate?: string; // URL template node: its Шаблон - how the engine addresses a route
   newObjectKind?: string; // category: the kind of the object being created
   ownerName?: string; // "Forms" group: the owner object (for adding a form)
   codeKind?: boolean; // code kind (module/HTTP service): click opens the module on the left
@@ -686,6 +687,27 @@ function displayGroupNode(label: string, icon: string, yamlPath: string, fields:
   return node;
 }
 
+// The URL templates of an HTTP service. Unlike the tabular sections next door these ARE
+// addable: the engine writes a route with its handler stub in one operation (xbsl/metaAddRoute),
+// so the group offers "add a URL template" and every template offers "add an HTTP method".
+// The template carries its own path - the engine addresses a route by the path, not by the name.
+function routeGroupNode(yamlPath: string, templates: MetaField[]): XbslNode {
+  const node = new XbslNode(vscode.l10n.t("URL templates"), vscode.TreeItemCollapsibleState.Collapsed);
+  node.iconPath = new vscode.ThemeIcon("globe");
+  node.description = String(templates.length);
+  node.yamlPath = yamlPath;
+  node.contextValue = "group addroute";
+  node.children = templates.map((t) => routeTemplateNode(t, yamlPath));
+  return node;
+}
+
+function routeTemplateNode(template: MetaField, yamlPath: string): XbslNode {
+  const node = fieldNode(template, yamlPath, "globe");
+  node.routeTemplate = template.type ?? "";
+  node.contextValue = "member field props addroutemethod";
+  return node;
+}
+
 // One language of the Localization section: the label is the language folder as the platform wrote
 // it (En), a click opens that file - the strings of the element translated into this language.
 // The node sits right under the element: a "Localization" group above it would be a level with
@@ -755,8 +777,10 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
   if (internals) {
     // Tabular sections of a catalog/document go through KIND_ADD_GROUPS (with adding); here are only
     // groups without adding.
-    if (el.kind === "HttpСервис" && internals.urlTemplates.length) {
-      groups.push(displayGroupNode("URL templates", "globe", el.yamlPath, internals.urlTemplates));
+    if (el.kind === "HttpСервис") {
+      // The group is shown even when empty: a service without routes is exactly where the
+      // "add a URL template" action is needed.
+      groups.push(routeGroupNode(el.yamlPath, internals.urlTemplates));
     }
   }
   const canAddForm = el.kind === "Справочник" || el.kind === "Документ";
@@ -1469,6 +1493,100 @@ async function addTabularAttr(provider: XbslMetadataProvider, node?: XbslNode): 
   );
 }
 
+// The verbs come from the ENGINE (xbsl/httpMethods): it owns the list a route may declare, and
+// a copy here would drift from it. Asked once per session; an engine that does not answer (an
+// older one, the CLI mode) leaves the pick empty and the caller falls back to free text -
+// the value is validated where it is written, not here.
+let httpMethodsCache: string[] | undefined;
+
+async function httpMethods(): Promise<string[]> {
+  if (httpMethodsCache) {
+    return httpMethodsCache;
+  }
+  const answer = lspActive()
+    ? await lspRequest<{ methods?: string[] }>("xbsl/httpMethods", {})
+    : undefined;
+  httpMethodsCache = answer?.methods?.length ? answer.methods : undefined;
+  return httpMethodsCache ?? [];
+}
+
+async function pickHttpMethods(template: string): Promise<string[]> {
+  const known = await httpMethods();
+  if (!known.length) {
+    const typed = await vscode.window.showInputBox({
+      prompt: vscode.l10n.t("HTTP methods of {0} (comma separated)", template),
+      placeHolder: "GET, POST",
+    });
+    return typed?.trim() ? typed.split(",").map((m) => m.trim()).filter(Boolean) : [];
+  }
+  const picked = await vscode.window.showQuickPick(known, {
+    canPickMany: true,
+    title: vscode.l10n.t("HTTP methods of {0}", template),
+    placeHolder: vscode.l10n.t("One or several - the engine writes a handler stub for each"),
+  });
+  return picked ?? [];
+}
+
+// One route addition. The template and the verbs go to the engine AS THEY ARE: it composes the
+// routes string itself (scaffold.routes_for), writes the yaml and the handler stubs, and skips
+// what a template already has - an existing one is extended with the missing verbs only.
+async function runAddRoute(
+  provider: XbslMetadataProvider, yamlPath: string, template: string, methods: string[], reveal: string
+): Promise<void> {
+  if (!(await ensureSavedForCli([yamlPath]))) {
+    return;
+  }
+  const result = await callMeta(
+    "xbsl/metaAddRoute",
+    { path: yamlPath, template, methods },
+    "add-route",
+    [yamlPath, methods.map((m) => `${m} ${template}`).join(", ")]
+  );
+  if (!result) {
+    return;
+  }
+  await applyAndReveal(
+    provider, result, (n) => n.yamlPath === yamlPath && String(n.label) === reveal
+  );
+}
+
+// "Add a URL template" on the group: the path is the developer's decision, the methods come
+// from the pick, the handler names are the engine's business.
+async function addRoute(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  if (!node?.yamlPath) {
+    return;
+  }
+  const template = await vscode.window.showInputBox({
+    prompt: vscode.l10n.t("URL template of the new route"),
+    value: "/",
+    placeHolder: "/orders/{id}",
+    validateInput: (v) =>
+      v.trim().startsWith("/") ? undefined : vscode.l10n.t("A URL template starts with \"/\"."),
+  });
+  const path = template?.trim();
+  if (!path) {
+    return;
+  }
+  const methods = await pickHttpMethods(path);
+  if (!methods.length) {
+    return;
+  }
+  await runAddRoute(provider, node.yamlPath, path, methods, path);
+}
+
+// "Add an HTTP method" on a URL template: the template is known, so only the verbs are asked.
+async function addRouteMethod(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const template = node?.routeTemplate?.trim();
+  if (!node?.yamlPath || !template) {
+    return;
+  }
+  const methods = await pickHttpMethods(template);
+  if (!methods.length) {
+    return;
+  }
+  await runAddRoute(provider, node.yamlPath, template, methods, methods[0]);
+}
+
 interface Placement extends vscode.QuickPickItem {
   dir: string;
 }
@@ -1748,6 +1866,8 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.addStructField", (n?: XbslNode) => addItem(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addTabular", (n?: XbslNode) => addItem(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addTabularAttr", (n?: XbslNode) => addTabularAttr(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.addRoute", (n?: XbslNode) => addRoute(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.addRouteMethod", (n?: XbslNode) => addRouteMethod(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addObjectForm", (n?: XbslNode) => addObjectForm(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.deleteObject", (n?: XbslNode) => deleteObject(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addSubsystem", () => addSubsystem(provider)),

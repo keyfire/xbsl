@@ -134,5 +134,7 @@
   "cmd.formData.addProperty": "Добавить свойство",
   "cmd.formData.renameProperty": "Переименовать свойство",
   "cmd.formData.retypeProperty": "Сменить тип свойства",
-  "cmd.formData.removeProperty": "Удалить свойство"
+  "cmd.formData.removeProperty": "Удалить свойство",
+  "cmd.metadata.addRoute": "Добавить шаблон URL",
+  "cmd.metadata.addRouteMethod": "Добавить HTTP-метод"
 }
