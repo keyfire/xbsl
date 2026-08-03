@@ -74,6 +74,73 @@ def _section_span(text: str, key: str) -> tuple[int, int] | None:
     return m.end(), end.start() if end else len(text)
 
 
+#: A placeholder of a template string: the platform substitutes the call arguments for them.
+_PLACEHOLDER_RE = re.compile(r"\$(\d+)")
+#: A key of a MAPPING section (Строки/Шаблоны of a dictionary) with its value as written.
+_MAPPING_KEY_RE = re.compile(r"(?m)^([ \t]+)([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*)[ \t]*:[ \t]*(.*)$")
+
+
+def _mapping_entries(s: SourceFile, key: str) -> list[tuple[str, int, str]]:
+    """(name, line, value) of the top-level keys of a MAPPING section.
+
+    Строки and Шаблоны of a dictionary are written as `Ключ: значение`, not as a list of
+    items with `Имя`, so _section_item_lines does not see them. Only the keys at the minimal
+    indent of the section count - a deeper one would belong to a nested structure.
+    """
+    span = _section_span(s.text, key)
+    if span is None:
+        return []
+    lo, hi = span
+    found = [m for m in _MAPPING_KEY_RE.finditer(s.text, lo, hi)]
+    if not found:
+        return []
+    level = min(len(m.group(1)) for m in found)
+    lm = linemap(s)
+    out: list[tuple[str, int, str]] = []
+    for m in found:
+        if len(m.group(1)) != level:
+            continue
+        value = m.group(3).strip()
+        # The quotes of a yaml scalar are its form, not its text: a hover shows the string
+        # itself, the way the page shows it.
+        if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        out.append((m.group(2), lm.linecol(m.start(2))[0], value))
+    return out
+
+
+def _dictionary_methods(s: SourceFile, name: str, path: str) -> list[dict]:
+    """The keys of a ЛокализованныеСтроки element as the methods they compile into.
+
+    A dictionary has no module: the platform turns every key of `Строки` into a
+    parameterless method and every key of `Шаблоны` into one taking the substitutions the
+    text names ($0, $1 ...), and the code calls them as `Словарь.Ключ()`. Without this the
+    index knows no such members at all - go to definition answers "not found", completion
+    after the dot offers nothing, and the text itself is nowhere to be seen while writing
+    code. The value becomes the description, so hovering a key shows the string it stands for.
+    """
+    out: list[dict] = []
+    for section, templated in (("Строки", False), ("Шаблоны", True)):
+        for key, line, value in _mapping_entries(s, section):
+            # The arity is the HIGHEST placeholder plus one: a text may repeat $0 or start at
+            # $1, and it is the numbering the platform substitutes by, not the count.
+            slots = [int(g) for g in _PLACEHOLDER_RE.findall(value)] if templated else []
+            arity = max(slots) + 1 if slots else 0
+            out.append({
+                "module": name,
+                "name": key,
+                "path": path,
+                "line": line,
+                "annotations": [],
+                # Types alone: the platform does not publish the parameter names of a
+                # generated method, and inventing them would put a made-up name in the hover.
+                "params": ", ".join(["Строка"] * arity),
+                "returns": "Строка",
+                "doc": value,
+            })
+    return out
+
+
 def _section_item_lines(s: SourceFile, key: str) -> dict[str, deque[int]]:
     """Per item name: lines of item-level `Имя:` keys within a top-level section.
 
@@ -440,6 +507,9 @@ def build_index(root: Path) -> dict:
 
     objects: list[dict] = []
     components: list[dict] = []
+    # Keys of the dictionaries, collected while their yaml is parsed and joined to the module
+    # methods below: for the caller they are members of the same kind (Словарь.Ключ()).
+    dictionary_methods: list[dict] = []
     if _HAVE_YAML:
         for s in yaml_sources:
             data, err = _parsed(s)
@@ -473,8 +543,10 @@ def build_index(root: Path) -> dict:
             objects.append(entry)
             if kind == "КомпонентИнтерфейса":
                 components.extend(_form_components(s, data, name, entry["path"]))
+            elif kind == "ЛокализованныеСтроки":
+                dictionary_methods.extend(_dictionary_methods(s, name, entry["path"]))
 
-    methods: list[dict] = []
+    methods: list[dict] = dictionary_methods
     for s in xbsl_sources:
         module = s.path.name[: -len(".xbsl")]
         module_path = rel(s.path)

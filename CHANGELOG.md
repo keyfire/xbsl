@@ -15,6 +15,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **The keys of a dictionary are indexed as the members they are.** A `LocalizedStrings`
+  element has no module, and the index knew nothing about it: go to definition on
+  `Dictionary.Key()` answered "not found", the dot after the dictionary name offered nothing,
+  and the text behind a key was invisible while writing code - although the platform compiles
+  every key of `Strings` into a parameterless method and every key of `Templates` into one
+  taking the substitutions its text names. The keys now join the module methods: definition,
+  references and completion see them, the string itself becomes the description shown on
+  hover, and the arity of a template follows the HIGHEST placeholder (a text may repeat `$0`
+  or start at `$1`).
 - **A method stub for a handler that is not a form event.** `xbsl/addModuleMethod` writes the
   code half alone: a metadata handler (the `Handler` of an HTTP method, of a job, of a log
   event) sits at a yaml offset rather than at a component node, so the editor writes that

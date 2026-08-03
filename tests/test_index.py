@@ -104,6 +104,22 @@ _USAGE_YAML = "\n".join([
 ])
 
 
+# A dictionary: its keys are the API - the platform compiles each one into a method.
+_DICTIONARY_YAML = "\n".join([
+    "ВидЭлемента: ЛокализованныеСтроки",              # 1
+    "Ид: 7e1f0a1b-2c4d-4e5f-8a9b-0c1d2e3f4a5c",      # 2
+    "Имя: Словарь",                                   # 3
+    "Строки:",                                        # 4
+    "    # подпись под кнопкой",                      # 5
+    "    Отправить: \"Отправить\"",                   # 6
+    "    Отмена: Отмена",                             # 7
+    "Шаблоны:",                                       # 8
+    "    Приветствие: \"Здравствуйте, $0!\"",         # 9
+    "    Диапазон: \"с $1 по $0\"",                   # 10
+    "",
+])
+
+
 @pytest.fixture()
 def project(tmp_path: Path) -> Path:
     sub = tmp_path / "Основное"
@@ -112,6 +128,7 @@ def project(tmp_path: Path) -> Path:
     (sub / "Товары.xbsl").write_text(_CATALOG_XBSL, encoding="utf-8")
     (sub / "ВидТовара.yaml").write_text(_ENUM_YAML, encoding="utf-8")
     (sub / "ФормаТоваров.yaml").write_text(_FORM_YAML, encoding="utf-8")
+    (sub / "Словарь.yaml").write_text(_DICTIONARY_YAML, encoding="utf-8")
     return tmp_path
 
 
@@ -290,7 +307,9 @@ def test_cli_index_flag(project, capsys):
 
     payload = json.loads(capsys.readouterr().out)
     assert code == 0
-    assert {o["name"] for o in payload["objects"]} == {"Товары", "ВидТовара", "ФормаТоваров"}
+    assert {o["name"] for o in payload["objects"]} == {
+        "Товары", "ВидТовара", "ФормаТоваров", "Словарь",
+    }
 
 
 def test_cli_index_needs_single_path(project, capsys):
@@ -298,3 +317,40 @@ def test_cli_index_needs_single_path(project, capsys):
 
     assert code == 2
     assert "--index" in capsys.readouterr().err
+
+
+# --- a dictionary: keys as members --------------------------------------------------------
+
+
+def test_dictionary_keys_are_indexed_as_methods(project):
+    """Without this the editor knows no members of a dictionary at all: F12 on Словарь.Отправить
+    answers "not found" and the dot offers nothing, while the code calls exactly that."""
+    idx = build_index(project)
+    keys = {m["name"]: m for m in idx["methods"] if m["module"] == "Словарь"}
+
+    assert set(keys) == {"Отправить", "Отмена", "Приветствие", "Диапазон"}
+    assert keys["Отправить"]["path"] == "Основное/Словарь.yaml"
+    assert keys["Отправить"]["line"] == 6
+    assert keys["Приветствие"]["line"] == 9
+    # The value is the description: hovering a key shows the string it stands for, and the
+    # quotes of the yaml scalar are its form, not its text.
+    assert keys["Отправить"]["doc"] == "Отправить"
+    assert keys["Приветствие"]["doc"] == "Здравствуйте, $0!"
+
+
+def test_dictionary_arity_follows_the_placeholders(project):
+    """Строки compile parameterless (that is the whole point of the placeholder rule), a
+    template takes the substitutions its text names - numbered, so the HIGHEST one decides."""
+    idx = build_index(project)
+    keys = {m["name"]: m for m in idx["methods"] if m["module"] == "Словарь"}
+
+    assert keys["Отправить"]["params"] == ""
+    assert keys["Приветствие"]["params"] == "Строка"
+    assert keys["Диапазон"]["params"] == "Строка, Строка"  # $1 with $0 - two, not one
+    assert all(k["returns"] == "Строка" for k in keys.values())
+
+
+def test_dictionary_keys_are_referable(project):
+    """They join the ordinary methods, so "find usages" and the reference index see them."""
+    idx = build_index(project)
+    assert {m["name"] for m in idx["methods"]} >= {"Отправить", "Приветствие"}
