@@ -648,6 +648,37 @@ def meta_rename_object(
 
 
 @mcp.tool()
+def meta_delete_object(
+    root: str,
+    name: str | None = None,
+    yaml_path: str | None = None,
+    dry_run: bool = True,
+) -> dict:
+    """Delete a configuration object whole: the yaml/module pair, its forms `<Имя>Форма*`
+    and the card-list row component `СтрокаСписка<Имя>`, with their pairs. A subsystem in
+    1C:Element is the folder the files live in, so the membership goes away with the files.
+    Every REMAINING mention of the name across the project is listed by file and line
+    (string literals and comments included - a router string, seeding, dictionary keys)
+    and deliberately NOT edited: which mention is dead code is the author's call.
+    yaml_path resolves ambiguity between namesakes. Deletion is irreversible, so
+    dry_run defaults to TRUE - the first call returns the plan; repeat with
+    dry_run=false to perform it.
+    """
+    try:
+        result = scaffold.op_delete_object(
+            Path(root), name, yaml_path=Path(yaml_path) if yaml_path else None,
+        )
+    except scaffold.ScaffoldError as exc:
+        return {"error": str(exc)}
+    if dry_run:
+        payload = result.as_dict(content=False)
+        payload["dry-run"] = True
+        return payload
+    scaffold.apply_result(result)
+    return result.as_dict(content=False)
+
+
+@mcp.tool()
 def meta_add_subsystem(
     parent_dir: str,
     name: str,

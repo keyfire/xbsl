@@ -1429,6 +1429,7 @@ class ScaffoldResult:
     changes: list[FileChange] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)  # warnings, manual steps
     renames: list[FileRename] = field(default_factory=list)  # file renames (before edits)
+    deletes: list[Path] = field(default_factory=list)  # files removed from disk (after edits)
 
     def as_dict(self, content: bool = True) -> dict:
         files = []
@@ -1445,6 +1446,7 @@ class ScaffoldResult:
                 {"from": str(r.old_path), "to": str(r.new_path)} for r in self.renames
             ],
             "files": files,
+            "deletes": [str(p) for p in self.deletes],
             "notes": self.notes,
         }
 
@@ -1471,6 +1473,10 @@ def apply_result(result: ScaffoldResult) -> list[str]:
             source = engine.load(change.path)
             change.path.write_bytes(fixer.encode(source, change.content))
         written.append(str(change.path))
+    # Deletions run last: should anything above fail, nothing has been erased yet.
+    # missing_ok - a file already gone is the goal reached, not an error.
+    for path in result.deletes:
+        path.unlink(missing_ok=True)
     return written
 
 
@@ -3978,4 +3984,106 @@ def op_rename_object(
             "\"untracked working tree files would be overwritten by merge\" – там перед "
             "обновлением надо удалить файл со старым именем"
         )
+    return result
+
+
+# --- operation: object deletion ------------------------------------------------------------
+
+
+def op_delete_object(
+    root: Path,
+    name: str | None = None,
+    *,
+    yaml_path: Path | None = None,
+    reader=None,
+) -> ScaffoldResult:
+    """Delete a configuration object whole: its yaml/module pair, its forms and its row
+    component - and NAME every remaining reference instead of editing it.
+
+    Deleted is the object's file family in its directory, the same one op_rename_object
+    renames: `<Имя>.yaml`, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the forms
+    `<Имя>Форма*` and the card-list row component `СтрокаСписка<Имя>` (both suffixes with
+    their pairs). The subsystem membership needs no separate cleanup - in 1C:Element a
+    subsystem is the FOLDER the files live in, so removing the files removes the object
+    from it.
+
+    The remaining references are listed by file and line, string literals and comments
+    INCLUDED on purpose: a router that opens a form by a name in a string, seeding data,
+    dictionary keys - exactly the leftovers that otherwise surface only as a compile or
+    runtime error. The tool does not edit them: which mention is dead code and which must
+    be rewritten differently is the author's call.
+
+    yaml_path resolves the ambiguity when the project has several objects named `name`.
+    """
+    root = Path(root)
+    if not root.is_dir():
+        raise ScaffoldError(f"Корень проекта не найден: {root}")
+
+    if yaml_path is not None:
+        yaml_path = Path(yaml_path)
+        if not yaml_path.is_file():
+            raise ScaffoldError(f"Файл не найден: {yaml_path}")
+        text = (reader or _read)(yaml_path)
+        kind = element_kind(text)
+        if kind is None:
+            raise ScaffoldError(f"В {yaml_path} нет ВидЭлемента – это не объект конфигурации")
+        file_name = element_name(text, yaml_path.stem)
+        if name and file_name != name:
+            raise ScaffoldError(f"В {yaml_path.name} объект называется '{file_name}', а не '{name}'")
+        subsystem, namespace = _namespace_of(yaml_path, root)
+        hit = ObjectHit(kind, file_name, yaml_path, subsystem, namespace, text)
+    else:
+        if not name:
+            raise ScaffoldError("Укажите имя объекта либо путь к его yaml")
+        hit = find_object(root, _check_identifier(name, "объекта"))
+
+    escaped = re.escape(hit.name)
+    family = re.compile(
+        rf"^(?:{escaped}"
+        rf"|{escaped}Форма(?:[А-ЯЁA-Z][{_WORD}]*)?"
+        rf"|СтрокаСписка{escaped})$"
+    )
+    result = ScaffoldResult()
+    for path in sorted(hit.path.parent.iterdir()):
+        if not path.is_file() or path.suffix not in (".yaml", ".xbsl"):
+            continue
+        if family.match(path.name.split(".", 1)[0]):
+            result.deletes.append(path)
+
+    deleted = {p.resolve() for p in result.deletes}
+    ident = re.compile(rf"(?<![{_WORD}.@]){escaped}(?![{_WORD}])")
+
+    def rel(path: Path) -> str:
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except ValueError:
+            return str(path)
+
+    references: list[str] = []
+    for path in engine.find_sources(root, "*.yaml") + engine.find_sources(root, "*.xbsl"):
+        if path.resolve() in deleted:
+            continue
+        text = (reader or _read)(path)
+        if hit.name not in text:
+            continue
+        for number, line in enumerate(text.split("\n"), start=1):
+            if ident.search(line):
+                references.append(f"{rel(path)}:{number}: {line.strip()[:160]}")
+
+    result.notes.append(
+        f"Удаляется файлов: {len(result.deletes)} (объект {hit.kind} '{hit.name}', "
+        f"формы и компонент строки списка)"
+    )
+    shown = references[:200]
+    if references:
+        result.notes.append(
+            f"Оставшихся упоминаний '{hit.name}' по проекту: {len(references)} – "
+            "инструмент их НЕ правит, разберите каждое (мёртвый код, роутер, сидинг, "
+            "локализация):"
+        )
+        result.notes.extend(shown)
+        if len(references) > len(shown):
+            result.notes.append(f"... и ещё {len(references) - len(shown)}")
+    else:
+        result.notes.append(f"Упоминаний '{hit.name}' вне удаляемых файлов не осталось")
     return result

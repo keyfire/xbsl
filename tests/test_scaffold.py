@@ -2104,3 +2104,46 @@ def test_routes_added_to_an_english_service_follow_it(tmp_path):
     assert "method Create(Query: HttpServiceRequest)" in module_text
     # The error helper is already there from the first generation - not added twice.
     assert module_text.count("method HandleError(") == 1
+
+
+# --- object deletion ------------------------------------------------------------------------
+
+
+def test_delete_object_removes_the_family_and_lists_references(tmp_path):
+    subsystem = _make_rename_project(tmp_path)
+    result = scaffold.op_delete_object(tmp_path, "Склады")
+
+    removed = {p.name for p in result.deletes}
+    assert removed == {
+        "Склады.yaml", "Склады.Объект.xbsl",
+        "СкладыФормаОбъекта.yaml", "СкладыФормаСписка.yaml",
+        "СтрокаСпискаСклады.yaml",
+    }
+    # Тёзка с продолжением имени - другой объект, он остаётся.
+    assert "СкладыАрхив.yaml" not in removed
+
+    # Оставшиеся упоминания названы файлом и строкой, ВКЛЮЧАЯ строковый литерал и
+    # комментарий: при живой уборке хвостами оказались именно строки роутера и сидинга.
+    listing = "\n".join(result.notes)
+    assert "Заказы.yaml" in listing and "Заказы.xbsl" in listing
+    assert "Склады не изменились" in listing
+
+    apply_result(result)
+    assert not (subsystem / "Склады.yaml").exists()
+    assert not (subsystem / "СкладыФормаОбъекта.yaml").exists()
+    assert not (subsystem / "СтрокаСпискаСклады.yaml").exists()
+    assert (subsystem / "СкладыАрхив.yaml").is_file()
+    assert (subsystem / "Заказы.yaml").is_file()
+
+
+def test_delete_object_without_leftovers_says_so(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Одинокий"))
+    result = scaffold.op_delete_object(tmp_path, "Одинокий")
+    assert any("не осталось" in note for note in result.notes)
+
+
+def test_delete_object_unknown_name(tmp_path):
+    _make_rename_project(tmp_path)
+    with pytest.raises(ScaffoldError):
+        scaffold.op_delete_object(tmp_path, "Нет")

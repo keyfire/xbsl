@@ -269,7 +269,7 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
-    "add-subsystem", "add-dependency", "rename-object", "set-access",
+    "add-subsystem", "add-dependency", "rename-object", "delete-object", "set-access",
     "object-info", "project-info", "form-tree", "form-edit", "form-handlers",
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
@@ -474,6 +474,12 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--old-presentation", help=i18n.t("cli.help.scaf.rename-old-presentation"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.rename-path"))
 
+    p = sub.add_parser("delete-object", help=i18n.t("cli.help.scaf.delete-object"))
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
+    p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
+    p.add_argument("--apply", action="store_true", help=i18n.t("cli.help.scaf.delete-apply"))
+
     p = sub.add_parser("set-access", help=i18n.t("cli.help.scaf.set-access"))
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
@@ -629,6 +635,20 @@ def _scaffold_main(argv: list[str]) -> int:
                 old_presentation=args.old_presentation,
                 yaml_path=Path(args.path) if args.path else None,
             )
+        elif args.command == "delete-object":
+            result = scaffold.op_delete_object(
+                Path(args.root), args.name,
+                yaml_path=Path(args.path) if args.path else None,
+            )
+            # Deletion is irreversible: the PLAN is the default answer, --apply performs it.
+            if not args.apply or args.dry_run:
+                payload = result.as_dict(content=False)
+                payload["dry-run"] = True
+                print(json.dumps(payload, ensure_ascii=False))
+                return 0
+            scaffold.apply_result(result)
+            print(json.dumps(result.as_dict(content=False), ensure_ascii=False))
+            return 0
         elif args.command == "form-tree":
             from xbsl import formedits, formmodel
 

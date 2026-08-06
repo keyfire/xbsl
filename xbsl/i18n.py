@@ -798,6 +798,17 @@ _CORE_MESSAGES = {
         "ru": "yaml объекта (при нескольких объектах с одним именем)",
         "en": "the object's yaml (when several objects share one name)",
     },
+    "cli.help.scaf.delete-object": {
+        "ru": "удалить объект целиком (пара yaml+xbsl, формы, строка списка) и перечислить "
+              "оставшиеся упоминания; без --apply – только план",
+        "en": "delete an object whole (the yaml+xbsl pair, forms, the list row) and list the "
+              "remaining mentions; without --apply - the plan only",
+    },
+    "cli.help.scaf.delete-apply": {
+        "ru": "выполнить удаление (без флага печатается план: удаление необратимо)",
+        "en": "perform the deletion (without the flag the plan is printed: deletion is "
+              "irreversible)",
+    },
     "cli.help.scaf.set-access": {
         "ru": "задать КонтрольДоступа.Разрешения объекта",
         "en": "set the object's КонтрольДоступа.Разрешения",

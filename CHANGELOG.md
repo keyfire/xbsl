@@ -15,6 +15,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`meta_delete_object` / `xbsl delete-object`: delete a configuration object whole.**
+  Removes the yaml+module pair, the object's forms `<Name>Form*` and the `ListRow<Name>`
+  row component with their pairs (a subsystem is the folder the files live in, so the
+  membership goes with them), and lists every REMAINING mention of the name by file and
+  line - string literals and comments included, since a router opening a form by a name in
+  a string is exactly the leftover that otherwise surfaces as a runtime error. The mentions
+  are deliberately not edited. Deletion is irreversible, so the CLI answers with the plan
+  until `--apply` and the MCP tool defaults to `dry_run=true`.
 - **New rule `conventions/untranslated-visible-literal`** (tier D, project scope, on by
   default): visible text left as a Cyrillic literal where the project already references the
   same property into a localization dictionary. Self-tuning - only the keys the project

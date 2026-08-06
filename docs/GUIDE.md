@@ -240,6 +240,7 @@ xbsl add-method <module>.xbsl <method> --annotations <annotation> --after <exist
 xbsl add-subsystem vendor/App <name>
 xbsl add-dependency . acme CurrencyConverter 2.0       # attach a library to the project
 xbsl rename-object . <old-name> <new-name>             # rename files + update references
+xbsl delete-object . --name <object>                   # the plan; --apply deletes and lists leftovers
 xbsl set-access . --name <object> --default <access-method>
 xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
 xbsl project-info .                                    # projects, subsystems, objects by kind
@@ -302,6 +303,15 @@ fields that merely share the old name are left alone, and so are string literals
 `--new-presentation`/`--old-presentation` update the `Title` / `Presentation` of the
 object and its forms. The object's `Id` is untouched, so the platform keeps the stored
 data.
+
+`delete-object` deletes an object whole: the yaml+module pair, its forms and the generated
+`ListRow<Name>` row component (with their pairs). A subsystem is the folder the files live in,
+so the membership goes away with them. Every remaining mention of the name across the project is
+listed by file and line - string literals and comments included, because a router opening a form
+by a name in a string or seeding data is exactly the leftover that otherwise surfaces as a
+runtime error - and deliberately not edited: which mention is dead code is the author's call.
+Deletion is irreversible, so without `--apply` the command prints the plan (the MCP tool
+`meta_delete_object` defaults to `dry_run=true` the same way).
 
 A rename that only changes letter case (`Goods` into `goods`) is applied in two steps through a
 temporary name: a case-insensitive filesystem (Windows, macOS) addresses the old and the new name

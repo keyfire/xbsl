@@ -457,6 +457,28 @@ usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
 | `--path PATH` | the object's yaml (when several objects share one name) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
+### `xbsl delete-object`
+
+```bash
+usage: xbsl delete-object [-h] [--name NAME] [--path PATH] [--apply] [--dry-run] root
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Проект.yaml (usually .) |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--name NAME` | the object name in the project |
+| `--path PATH` | the object's yaml (instead of `--name`) |
+| `--apply` | perform the deletion (without the flag the plan is printed: deletion is irreversible) |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
 ### `xbsl set-access`
 
 ```bash
