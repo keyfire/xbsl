@@ -142,7 +142,9 @@ def load(path: Path) -> dict:
     if not path.is_file():
         raise BaselineError(i18n.t("baseline.missing", path=path))
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        # utf-8-sig: базлайн, переписанный чужим редактором или PowerShell, несёт BOM -
+        # это не повод объявлять файл негодным.
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
         raise BaselineError(i18n.t("baseline.invalid", path=path)) from exc
     files = data.get("files") if isinstance(data, dict) else None

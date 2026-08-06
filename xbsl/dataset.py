@@ -59,12 +59,30 @@ _MESSAGES = {
         "ru": "Нет файла данных '{name}' для версии {version}: {path}",
         "en": "No data file '{name}' for version {version}: {path}",
     },
+    "dataset.bad-json": {
+        "ru": "Файл данных не разбирается как JSON: {path} ({error})",
+        "en": "The data file does not parse as JSON: {path} ({error})",
+    },
 }
 i18n.register(_MESSAGES)
 
 
 class DatasetError(RuntimeError):
     pass
+
+
+def read_json(path: Path) -> dict:
+    """Read one of our JSON files: tolerate a BOM, name the file when it does not parse.
+
+    PowerShell 5.1 (`Out-File -Encoding utf8`) writes a BOM, and a bare `JSONDecodeError`
+    without a path once cost a run of its own to diagnose - every step reading the index
+    failed with the same message and none of them said on which file. Writing stays
+    BOM-free; only reading is tolerant.
+    """
+    try:
+        return json.loads(path.read_text(encoding="utf-8-sig"))
+    except ValueError as error:
+        raise DatasetError(i18n.t("dataset.bad-json", path=path, error=error)) from error
 
 
 #: Caches derived from the dataset, dropped whenever the root or the version changes. A module
@@ -171,7 +189,7 @@ def _index_cached(root: str) -> dict:
     if not idx.exists():
         raise DatasetError(i18n.t("dataset.no-index", idx=idx, env=_ENV_DATA_DIR))
     _FILE_STAMPS[(root, "", "index.json")] = _stamp(idx)
-    return json.loads(idx.read_text(encoding="utf-8"))
+    return read_json(idx)
 
 
 def available_versions() -> list[str]:
@@ -290,7 +308,7 @@ def _load_cached(root: str, version: str, name: str) -> dict:
     path = Path(root) / version / name
     if not path.exists():
         raise DatasetError(i18n.t("dataset.no-file", name=name, version=version, path=path))
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = read_json(path)
     _FILE_STAMPS[(root, version, name)] = _stamp(path)
     if name == "stdlib.json":
         # English keys first (so the English types then inherit like the Russian ones),

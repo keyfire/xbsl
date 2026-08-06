@@ -95,6 +95,15 @@ def test_baselined_error_does_not_fail_the_run(tmp_path, capsys):
     assert code == 1 and payload["summary"]["errors"] >= 1
 
 
+def test_baseline_with_a_bom_is_read(tmp_path):
+    """Базлайн, переписанный PowerShell (Out-File -Encoding utf8 ставит BOM), годен."""
+    from xbsl import baseline
+
+    bl = tmp_path / "baseline.json"
+    bl.write_bytes(b'\xef\xbb\xbf{"files": {}}')
+    assert baseline.load(bl)["files"] == {}
+
+
 def test_missing_baseline_file_is_an_error(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
     f.write_text(_ХВОСТ, encoding="utf-8")

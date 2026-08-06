@@ -30,6 +30,34 @@ def test_invalid_version_raises():
         dataset.resolve_version("0.0.0-нет-такой")
 
 
+# --- чтение собственных json: терпимость к BOM, имя файла в ошибке -------------------------
+
+
+def test_index_with_a_bom_is_read(tmp_path):
+    """PowerShell 5.1 (Out-File -Encoding utf8) пишет BOM - индекс обязан читаться."""
+    (tmp_path / "index.json").write_bytes(
+        b'\xef\xbb\xbf{"available": ["1.0"], "default": "1.0"}'
+    )
+    dataset.set_data_root(tmp_path)
+    try:
+        assert dataset.available_versions() == ["1.0"]
+        assert dataset.default_version() == "1.0"
+    finally:
+        dataset.set_data_root(None)
+
+
+def test_a_broken_json_names_the_file(tmp_path):
+    """Голый JSONDecodeError валил все шаги одинаково и не называл файл - диагноз стоил
+    отдельного прогона."""
+    (tmp_path / "index.json").write_text("{оборванный", encoding="utf-8")
+    dataset.set_data_root(tmp_path)
+    try:
+        with pytest.raises(dataset.DatasetError, match=r"index\.json"):
+            dataset.default_version()
+    finally:
+        dataset.set_data_root(None)
+
+
 # --- inheritance expansion (dataset._expand_inherited), no distribution data needed --------
 
 def _own_dataset():

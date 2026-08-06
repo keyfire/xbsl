@@ -142,7 +142,7 @@ def _load_json(root: Path, version: str, name: str) -> dict | None:
     path = root / version / name
     if not path.exists():
         return None
-    return json.loads(path.read_text(encoding="utf-8"))
+    return dataset.read_json(path)
 
 
 def _load_doc_pages(root: Path, version: str) -> dict[str, tuple[str, str]] | None:
@@ -712,10 +712,10 @@ def cli_main(argv: list[str] | None = None) -> int:
                          available=", ".join(available) or "-"))
             return 2
         old_version = dataset.resolve_version(old_version)
+        diff = build_diff(old_version, new_version)
     except dataset.DatasetError as error:
         print(i18n.t("cli.data-error", error=error))
         return 2
-    diff = build_diff(old_version, new_version)
     if args.format == "json":
         text = json.dumps(diff, ensure_ascii=False, indent=2) + "\n"
     elif args.format == "md":

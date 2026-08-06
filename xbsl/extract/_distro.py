@@ -100,7 +100,12 @@ def update_index(version: str, make_default: bool = True) -> None:
     idx = root / "index.json"
     data = {"available": [], "default": None}
     if idx.exists():
-        data = json.loads(idx.read_text(encoding="utf-8"))
+        # utf-8-sig: индекс, переписанный PowerShell 5.1, несёт BOM; ошибка разбора обязана
+        # называть файл - без имени она одинаково валила все шаги, читающие индекс.
+        try:
+            data = json.loads(idx.read_text(encoding="utf-8-sig"))
+        except ValueError as error:
+            raise SystemExit(f"Индекс версий не разбирается как JSON: {idx} ({error})") from error
     if version not in data["available"]:
         data["available"].append(version)
         data["available"].sort()

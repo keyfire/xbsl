@@ -15,6 +15,18 @@ def test_previous_version_orders_numerically():
     assert datadiff.previous_version("1.2.0", available) is None
 
 
+def test_previous_version_between_builds_of_the_same_release():
+    """Сборки одной версии (10.0.1+211 / 10.0.1+243) сравниваются как соседи.
+
+    Ровно этот случай до сих пор был проверен только вручную (снимок каталога с номером
+    сборки плюс правка индекса руками): ближайшей младшей к +243 обязана быть +211, а не
+    сама версия и не предыдущий релиз.
+    """
+    available = ["9.2.8", "10.0.1+211", "10.0.1+243"]
+    assert datadiff.previous_version("10.0.1+243", available) == "10.0.1+211"
+    assert datadiff.previous_version("10.0.1+211", available) == "9.2.8"
+
+
 def test_diff_language_keywords_forms_operators():
     old = {"keywords": {"AND": {"forms": ["and", "и"]}, "OLD": {"forms": ["old"]}},
            "operators": ["+", "-"]}
