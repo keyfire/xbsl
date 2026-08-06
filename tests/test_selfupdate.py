@@ -200,23 +200,42 @@ WHEELS = [
 ]
 
 
-def test_native_install_takes_the_wheel_of_this_platform(monkeypatch):
+def test_the_wheel_of_this_platform_is_preferred(monkeypatch):
     """Переносимое колесо поверх нативной установки молча съело бы скорость разбора."""
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
-    assert selfupdate._pick_wheel(WHEELS, native=True) == ("http://pypi/win.whl", selfupdate.NATIVE)
+    assert selfupdate._pick_wheel(WHEELS) == ("http://pypi/win.whl", selfupdate.NATIVE)
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("linux", "x86_64")))
-    assert selfupdate._pick_wheel(WHEELS, native=True)[0] == "http://pypi/linux.whl"
+    assert selfupdate._pick_wheel(WHEELS)[0] == "http://pypi/linux.whl"
 
 
-def test_pure_install_takes_the_portable_wheel(monkeypatch):
+def test_portable_install_is_healed_with_the_native_wheel(fake_site, monkeypatch):
+    """Выбор от вида УСТАНОВКИ делал храповик: одно переносимое обновление – и навсегда.
+
+    Поймано на релизе 0.53.0: установка, ставшая переносимой в эпоху дефекта cache_tag,
+    обновилась переносимым колесом при живом нативном – без единого слова. Колесо
+    выбирается по платформе, а прежний вид установки только определяет, о чём сказать.
+    """
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp314", ("win_amd64",)))
-    assert selfupdate._pick_wheel(WHEELS, native=False) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
+    url, kind = selfupdate._pick_wheel(WHEELS)
+    assert (url, kind) == ("http://pypi/win.whl", selfupdate.NATIVE)
+
+    # Сквозной контроль сообщения: установка в fake_site переносимая (без .pyd), колесо
+    # нативное - об исцелении говорится вслух.
+    monkeypatch.setattr(selfupdate, "_wheel_url",
+                        lambda v: ("http://pypi/xbsl.whl", "9.9.9", selfupdate.NATIVE))
+    monkeypatch.setattr(
+        selfupdate.urllib.request, "urlopen", lambda url, timeout=0: _FakeResp(_fake_wheel("9.9.9"))
+    )
+    messages = []
+    selfupdate.self_update(log=messages.append)
+    from xbsl import i18n
+    assert i18n.t("selfupdate.native-restored") in messages
 
 
 def test_platform_without_a_native_wheel_falls_back(monkeypatch):
     """Отрицательный контроль: чужая платформа – переносимое колесо, и об этом говорят."""
     monkeypatch.setattr(selfupdate, "platform_tags", lambda: ("cp312", ("macosx", "arm64")))
-    assert selfupdate._pick_wheel(WHEELS, native=True) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
+    assert selfupdate._pick_wheel(WHEELS) == ("http://pypi/pure.whl", selfupdate.PORTABLE)
 
 
 def test_native_install_is_recognized_by_compiled_modules(tmp_path):
@@ -415,7 +434,7 @@ def test_wheel_url_reads_the_simple_index(monkeypatch):
         "xbsl-0.51.0.tar.gz",
     ))
 
-    url, version, kind = selfupdate._wheel_url(None, native=True)
+    url, version, kind = selfupdate._wheel_url(None)
 
     assert (version, kind) == ("0.51.0", selfupdate.NATIVE)
     assert url.endswith("cp314-cp314-win_amd64.whl")

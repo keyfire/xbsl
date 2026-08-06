@@ -420,6 +420,12 @@ _CORE_MESSAGES = {
         "en": "note: the installation is native, but there is no wheel for this platform – "
               "the portable one is used and parsing gets noticeably slower",
     },
+    "selfupdate.native-restored": {
+        "ru": "установка была переносимой, а под эту платформу есть нативное колесо – "
+              "ставится оно, разбор исходников ускорится",
+        "en": "the installation was portable, but a native wheel exists for this platform – "
+              "it is used and parsing gets faster",
+    },
     "selfupdate.downloading": {
         "ru": "скачиваю xbsl {version} с PyPI ({kind} колесо)...",
         "en": "downloading xbsl {version} from PyPI ({kind} wheel)...",

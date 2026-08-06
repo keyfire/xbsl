@@ -15,10 +15,13 @@ built so that the same situation ends with a working installation instead:
    and stopping it would end the update midway. The mypyc shared libraries living in the
    site-packages ROOT are renamed aside as well - a rename of a loaded module passes
    where an overwrite fails, and the running command itself keeps them loaded.
-2. **The wheel matches what is installed.** A native install (compiled `lexer`/`parser`)
-   is updated from the wheel built for this interpreter and platform - taking the portable
-   one would silently swap the compiled modules for pure Python and cost several times the
-   speed. Without a native wheel for the platform the portable one is used, out loud.
+2. **The wheel matches the platform, not the current install.** The wheel built for this
+   interpreter and platform is preferred even when the installed copy is portable: deciding
+   by the install would turn one portable update (a release without a native wheel, a bug
+   in wheel picking) into a ratchet - every later update stays portable, silently, and the
+   compiled `lexer`/`parser` never come back. Caught live on the 0.53.0 release. Without a
+   native wheel for the platform the portable one is used - out loud when that demotes a
+   native install.
 3. **A failure rolls back.** The previous installation is kept aside until the new one has
    been PROVEN to import in a separate process (the current one still runs the old code in
    memory and cannot judge). Anything unexpected - the old installation is put back.
@@ -201,25 +204,30 @@ def platform_tags() -> tuple[str, tuple[str, ...]]:
     return interpreter, ("linux", platform.rsplit("_", 1)[-1])
 
 
-def _pick_wheel(entries: list[dict], *, native: bool) -> tuple[str, str]:
-    """URL and kind of the wheel to install: native for this platform, or the portable one."""
+def _pick_wheel(entries: list[dict]) -> tuple[str, str]:
+    """URL and kind of the wheel to install: native for this platform, or the portable one.
+
+    The native wheel is preferred UNCONDITIONALLY - not only when the current install is
+    native. Deciding by the install made a ratchet out of one portable update: `is_native`
+    then answered False forever, and every later self-update kept the portable wheel with
+    no message (the demotion warning only fires on a native install).
+    """
     portable = next(
         (e["url"] for e in entries if e["filename"].endswith("-py3-none-any.whl")), ""
     )
-    if native:
-        interpreter, keywords = platform_tags()
-        for entry in entries:
-            name = entry["filename"].lower()
-            if not name.endswith(".whl") or f"-{interpreter}-" not in name:
-                continue
-            if all(word in name for word in keywords):
-                return entry["url"], NATIVE
+    interpreter, keywords = platform_tags()
+    for entry in entries:
+        name = entry["filename"].lower()
+        if not name.endswith(".whl") or f"-{interpreter}-" not in name:
+            continue
+        if all(word in name for word in keywords):
+            return entry["url"], NATIVE
     if not portable:
         raise SelfUpdateError(i18n.t("selfupdate.no-wheel"))
     return portable, PORTABLE
 
 
-def _wheel_url(version: str | None, *, native: bool = False) -> tuple[str, str, str]:
+def _wheel_url(version: str | None) -> tuple[str, str, str]:
     """URL, exact version and kind of the wheel from PyPI (latest or the given one).
 
     The file list is taken from the SIMPLE index, not from the JSON metadata. Caught live
@@ -238,13 +246,13 @@ def _wheel_url(version: str | None, *, native: bool = False) -> tuple[str, str, 
             if item["version"] == target and item["filename"].lower().endswith(".whl")
         ]
         if target and entries:
-            url, kind = _pick_wheel(entries, native=native)
+            url, kind = _pick_wheel(entries)
             return url, target, kind
         if version:  # the index is readable and simply does not carry this version
             raise SelfUpdateError(i18n.t("selfupdate.no-version"))
     data = _fetch_json(PYPI_VERSION.format(version=version) if version else PYPI_LATEST)
     resolved = data["info"]["version"]
-    url, kind = _pick_wheel(data["urls"], native=native)
+    url, kind = _pick_wheel(data["urls"])
     return url, resolved, kind
 
 
@@ -512,14 +520,16 @@ def self_update(version: str | None = None, log=print, *, stop_busy: bool = Fals
     """Update xbsl in site-packages by unpacking the wheel. Return (old, new)."""
     site = _site_packages()
     _ensure_regular_install(site)
-    native = is_native(site)
+    was_native = is_native(site)
 
-    url, target, kind = _wheel_url(version, native=native)
+    url, target, kind = _wheel_url(version)
     if version is None and target == __version__:
         log(i18n.t("selfupdate.up-to-date", version=__version__))
         return __version__, __version__
-    if native and kind == PORTABLE:
+    if was_native and kind == PORTABLE:
         log(i18n.t("selfupdate.native-missing"))
+    elif not was_native and kind == NATIVE:
+        log(i18n.t("selfupdate.native-restored"))
 
     log(i18n.t("selfupdate.downloading", version=target, kind=i18n.t(f"selfupdate.kind.{kind}")))
     try:
