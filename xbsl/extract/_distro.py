@@ -14,12 +14,16 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 _ENV_DATA_DIR = "XBSL_DATA_DIR"
 _VER_RE = re.compile(r"-(\d+\.\d+\.\d+(?:\+\d+)?)-")
+#: The build number of the server .car ('...-<timestamp>+<build>-...'); the version the
+#: data is filed under does not carry it - see record_build.
+_BUILD_RE = re.compile(r"\+(\d+)")
 _root_override: Path | None = None
 
 
@@ -41,6 +45,18 @@ def detect_version(dist: Path, override: str | None = None) -> str:
             f"Не удалось определить версию из '{car.name}'; задайте --element-version явно"
         )
     return m.group(1)
+
+
+def detect_build(dist: Path) -> str:
+    """The build number from the server .car name ('' when the name carries none).
+
+    detect_version answers the PRODUCT version ('1.2.3'): in the .car name the build
+    number sits after the timestamp ('...-1.2.3-20260731.125205+243-...'), so the
+    version regex never captures it. A version override with a '+' already names a
+    build - the .car is not consulted then.
+    """
+    m = _BUILD_RE.search(find_car(dist).name)
+    return m.group(1) if m else ""
 
 
 def prog_name(command: str) -> str | None:
@@ -89,6 +105,22 @@ def _version_key(version: str) -> tuple[int, ...]:
     return tuple(int(part) for part in re.findall(r"\d+", version))
 
 
+def _read_index(idx: Path) -> dict:
+    # utf-8-sig: индекс, переписанный PowerShell 5.1, несёт BOM; ошибка разбора обязана
+    # называть файл - без имени она одинаково валила все шаги, читающие индекс.
+    data = {"available": [], "default": None}
+    if idx.exists():
+        try:
+            data = json.loads(idx.read_text(encoding="utf-8-sig"))
+        except ValueError as error:
+            raise SystemExit(f"Индекс версий не разбирается как JSON: {idx} ({error})") from error
+    return data
+
+
+def _write_index(idx: Path, data: dict) -> None:
+    idx.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def update_index(version: str, make_default: bool = True) -> None:
     """Add the version to the index (data/element/index.json) and make it the default if needed.
 
@@ -98,18 +130,62 @@ def update_index(version: str, make_default: bool = True) -> None:
     root = data_root()
     root.mkdir(parents=True, exist_ok=True)
     idx = root / "index.json"
-    data = {"available": [], "default": None}
-    if idx.exists():
-        # utf-8-sig: индекс, переписанный PowerShell 5.1, несёт BOM; ошибка разбора обязана
-        # называть файл - без имени она одинаково валила все шаги, читающие индекс.
-        try:
-            data = json.loads(idx.read_text(encoding="utf-8-sig"))
-        except ValueError as error:
-            raise SystemExit(f"Индекс версий не разбирается как JSON: {idx} ({error})") from error
+    data = _read_index(idx)
     if version not in data["available"]:
         data["available"].append(version)
         data["available"].sort()
     current = data.get("default")
     if not current or (make_default and _version_key(version) >= _version_key(current)):
         data["default"] = version
-    idx.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _write_index(idx, data)
+
+
+def record_build(version: str, build: str) -> None:
+    """Remember which BUILD the version directory holds (the index 'builds' map).
+
+    The directory is named by the product version, and the server names its .car
+    '<product>-<timestamp>+<build>' - so two neighbouring builds of one release write
+    into the SAME directory, and without this record nothing can tell them apart or
+    name a snapshot of the previous one.
+    """
+    if not build:
+        return
+    root = data_root()
+    root.mkdir(parents=True, exist_ok=True)
+    idx = root / "index.json"
+    data = _read_index(idx)
+    builds = data.setdefault("builds", {})
+    builds[version] = build
+    _write_index(idx, data)
+
+
+def keep_previous(version: str, build: str) -> str:
+    """Snapshot <root>/<version> as <version>+<previous build> before a regeneration.
+
+    Returns a human line about what happened - the caller prints it. The snapshot is
+    registered in the index 'available', so `xbsl data-diff <version>+<N> <version>`
+    works right away; without a recorded build number there is nothing to name the
+    snapshot by, and that is said instead of guessing.
+    """
+    root = data_root()
+    current = root / version
+    if not current.is_dir():
+        return "прежних данных нет - снимок не нужен"
+    idx = root / "index.json"
+    data = _read_index(idx)
+    previous = str((data.get("builds") or {}).get(version, ""))
+    if not previous:
+        return ("прежний каталог не несёт номера сборки - снимок не назван и не сделан; "
+                "номер записывается начиная с этого прогона")
+    if build and previous == build:
+        return f"в каталоге уже сборка +{previous} - снимок не нужен"
+    snapshot = f"{version}+{previous}"
+    target = root / snapshot
+    if target.exists():
+        return f"снимок {snapshot} уже есть - не перезаписываю"
+    shutil.copytree(current, target)
+    if snapshot not in data["available"]:
+        data["available"].append(snapshot)
+        data["available"].sort()
+    _write_index(idx, data)
+    return f"прежняя сборка сохранена как {snapshot}"

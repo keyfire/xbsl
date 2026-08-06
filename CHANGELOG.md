@@ -15,6 +15,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`xbsl extract --keep-previous` snapshots the previous build's data.** The data directory
+  is named by the product version while neighbouring BUILDS of one release land in the same
+  directory - regenerating silently overwrote the previous build and left nothing to diff
+  against; the workaround was a manual directory copy plus a hand-edit of the index. The
+  extractor now records the build number of every run (the .car name carries it after the
+  timestamp, so the version regex never captured it), and `--keep-previous` copies the
+  existing directory to `<version>+<previous build>` and registers it, so
+  `xbsl data-diff <version>+<N> <version>` works right away. A directory predating the
+  record honestly answers that there is nothing to name the snapshot by.
 - **The environment names itself.** `--version` lists the installed plugin packages with
   their versions, the new MCP tool `version_info` returns the same snapshot as data
   (engine, interpreter, Element data version, plugins), and the LSP writes that line into

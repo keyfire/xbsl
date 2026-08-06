@@ -112,3 +112,57 @@ def test_step_usage_names_a_runnable_command(module, monkeypatch, capsys):
     step_main = importlib.import_module(f"xbsl.extract.{module}").main
     usage = _usage_line(step_main, ["--help"], monkeypatch, capsys)
     assert usage.startswith(f"usage: python -m xbsl.extract.{module} ")
+
+
+# --- снимок прежней сборки (--keep-previous) и запись номера сборки -----------------------
+
+
+@pytest.fixture()
+def data_root(tmp_path):
+    _distro.set_data_root(tmp_path)
+    yield tmp_path
+    _distro.set_data_root(None)
+
+
+def test_detect_build_reads_the_car_name(tmp_path):
+    (tmp_path / "acme-element-server-with-ide-1.2.3-20260731.125205+243-w.car").write_bytes(b"")
+    assert _distro.detect_build(tmp_path) == "243"
+
+
+def test_detect_version_does_not_capture_the_build(tmp_path):
+    """Номер сборки отделён меткой времени - каталог версии его не несёт, отсюда весь пункт."""
+    (tmp_path / "acme-element-server-with-ide-1.2.3-20260731.125205+243-w.car").write_bytes(b"")
+    assert _distro.detect_version(tmp_path) == "1.2.3"
+
+
+def test_keep_previous_snapshots_by_the_recorded_build(data_root):
+    (data_root / "1.2.3").mkdir()
+    (data_root / "1.2.3" / "language.json").write_text('{"прежняя": 1}', encoding="utf-8")
+    _distro.update_index("1.2.3")
+    _distro.record_build("1.2.3", "211")
+
+    message = _distro.keep_previous("1.2.3", "243")
+
+    assert "1.2.3+211" in message
+    assert (data_root / "1.2.3+211" / "language.json").read_text(encoding="utf-8") == '{"прежняя": 1}'
+    idx = _distro._read_index(data_root / "index.json")
+    assert "1.2.3+211" in idx["available"]
+    # умолчание не тронуто: снимок - архив, а не новая версия по умолчанию
+    assert idx["default"] == "1.2.3"
+
+
+def test_keep_previous_without_a_recorded_build_says_so(data_root):
+    """Прежний каталог без номера сборки: снимок не выдумывается, а честно не делается."""
+    (data_root / "1.2.3").mkdir()
+    _distro.update_index("1.2.3")
+    message = _distro.keep_previous("1.2.3", "243")
+    assert "не несёт номера сборки" in message
+    assert not (data_root / "1.2.3+243").exists()
+
+
+def test_keep_previous_skips_the_same_build(data_root):
+    (data_root / "1.2.3").mkdir()
+    _distro.record_build("1.2.3", "243")
+    message = _distro.keep_previous("1.2.3", "243")
+    assert "снимок не нужен" in message
+    assert not (data_root / "1.2.3+243").exists()

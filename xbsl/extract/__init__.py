@@ -57,6 +57,11 @@ def main(argv=None) -> int:
     ap.add_argument("--element-version", help="версия данных (по умолчанию - из дистрибутива)")
     ap.add_argument("--only", default="", help="только эти шаги, через запятую")
     ap.add_argument("--skip", default="", help="пропустить эти шаги, через запятую")
+    ap.add_argument(
+        "--keep-previous",
+        action="store_true",
+        help="сохранить прежний каталог версии снимком <версия>+<номер сборки> перед перезаписью",
+    )
     _distro.add_data_dir_arg(ap)
     args = ap.parse_args(argv)
 
@@ -69,6 +74,21 @@ def main(argv=None) -> int:
         # Pin the version once for every step: `uischema` takes no --dist, and the index
         # default it would fall back to no longer moves backwards on a regeneration.
         version = _distro.detect_version(Path(args.dist))
+
+    # The directory is named by the product version, while neighbouring BUILDS of one
+    # release land in the same directory - the build number tells them apart. It is
+    # recorded on every run with a distribution; --keep-previous snapshots the previous
+    # build's data before the steps overwrite it, so a data diff of two builds is a
+    # regular command instead of a manual directory dance.
+    if args.data_dir:
+        _distro.set_data_root(args.data_dir)
+    build = _distro.detect_build(Path(args.dist)) if args.dist else ""
+    if args.keep_previous:
+        if not version:
+            raise SystemExit("--keep-previous требует --dist либо --element-version")
+        print("снимок прежней сборки: " + _distro.keep_previous(version, build))
+    if version and build:
+        _distro.record_build(version, build)
 
     common = []
     if version:
