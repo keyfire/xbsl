@@ -106,6 +106,31 @@ def test_missing_index_names_the_root(tmp_path, monkeypatch):
         dataset.default_version()
 
 
+# --- Naming the installed plugins ----------------------------------------------------
+
+
+class _StubDist:
+    def __init__(self, name, version):
+        self.metadata = {"Name": name}
+        self.version = version
+
+
+def test_installed_plugins_are_named_once_with_versions(monkeypatch):
+    """Пакет, объявивший несколько групп, называется один раз - именем дистрибутива."""
+    dist = _StubDist("xbsl-plugin", "0.7.0")
+    rules = _StubEP("сайт", plugins.RULES_GROUP, None)
+    data = _StubEP("сайт", plugins.DATA_GROUP, None)
+    rules.dist = data.dist = dist
+    monkeypatch.setattr(plugins, "entry_points", _fake_entry_points(rules, data))
+    assert plugins.installed() == [{"name": "xbsl-plugin", "version": "0.7.0"}]
+
+
+def test_installed_skips_an_entry_point_without_a_distribution(monkeypatch):
+    ep = _StubEP("голый", plugins.RULES_GROUP, None)
+    monkeypatch.setattr(plugins, "entry_points", _fake_entry_points(ep))
+    assert plugins.installed() == []
+
+
 # --- Loading of extension points -----------------------------------------------------
 
 def test_rule_plugin_is_imported(monkeypatch):

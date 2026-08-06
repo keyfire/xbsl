@@ -8,7 +8,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from xbsl import __version__, baseline, dataset, engine, i18n, report
+from xbsl import __version__, baseline, dataset, engine, i18n, plugins, report
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
@@ -217,8 +217,14 @@ def build_parser() -> argparse.ArgumentParser:
         )
     except dataset.DatasetError:
         pass
+    # Надстройки называются с версиями: два окружения с разъехавшимися надстройками
+    # отвечают на одном файле по-разному, и раньше на это ничто не указывало.
+    plugin_note = ""
+    listed = ", ".join(f"{p['name']} {p['version']}" for p in plugins.installed())
+    if listed:
+        plugin_note = "; " + i18n.t("cli.version.plugins", list=listed)
     parser.add_argument("--version", action="version", help=i18n.t("cli.help.version"),
-                        version=f"xbsl {__version__}{data_note}")
+                        version=f"xbsl {__version__}{data_note}{plugin_note}")
     return parser
 
 

@@ -25,7 +25,8 @@ from pathlib import Path
 
 from xbsl import __version__
 from xbsl import (
-    dataset, docs, formedits, formhandlers, formmodel, i18n, metamodel, report, scaffold, uischema,
+    dataset, docs, environment, formedits, formhandlers, formmodel, i18n, metamodel, report,
+    scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, load, load_text, run, run_sources
@@ -95,6 +96,16 @@ def _forbid_unknown_arguments() -> None:
 def list_rules() -> list[dict]:
     """List the available linter rules (id, title, tier, scope, severity)."""
     return [r.as_dict() for r in sorted(RULES, key=lambda x: (x.tier, x.id))]
+
+
+@mcp.tool()
+def version_info() -> dict:
+    """The environment answering: engine version, interpreter, data version, plugins.
+
+    Two environments with diverged plugin versions (the editor's LSP, the agent's MCP)
+    answer differently on the same file - this names which one is talking.
+    """
+    return environment.snapshot()
 
 
 @mcp.tool()

@@ -419,7 +419,9 @@ pip install -e ".[mcp]"
 claude mcp add xbsl -- xbsl-mcp
 ```
 
-Инструменты: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`; поиск по
+Инструменты: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`,
+`version_info()` (движок, интерпретатор, версия данных и пакеты надстроек – различает два
+окружения, отвечающие на одном файле по-разному); поиск по
 документации – `docs_search(query)`, `docs_page(id)`, `docs_symbol(name)` (нужна база `docs.sqlite`,
 см. выше); `type_members(name)` – члены stdlib-типа с корнями типов возвратов его методов одним
 компактным ответом (дешевле страницы доков, когда нужен только список членов);

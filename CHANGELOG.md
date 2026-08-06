@@ -12,6 +12,29 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **The environment names itself.** `--version` lists the installed plugin packages with
+  their versions, the new MCP tool `version_info` returns the same snapshot as data
+  (engine, interpreter, Element data version, plugins), and the LSP writes that line into
+  its start log. Two environments carrying diverged plugin versions answered differently
+  on the same file, and nothing said so - the diagnosis went through site-packages of
+  both.
+
+### Fixed
+- **Our own JSON files tolerate a BOM, and a parse failure names the file.** An `index.json`
+  rewritten by PowerShell 5.1 (`Out-File -Encoding utf8` writes a BOM) failed every extractor
+  step with the same bare `JSONDecodeError` and no path - the diagnosis took a run of its own.
+  The version index, the datasets, the baseline and the diff inputs are now read with
+  `utf-8-sig` (writing stays BOM-free), and a file that does not parse is reported by path.
+- **`self-update` picks the wheel by the platform, not by the current install.** Deciding by
+  the install made a ratchet out of one portable update: `is_native` answered False from then
+  on, and every later update kept the portable wheel with no message - the demotion warning
+  only fires on a native install. Caught live on the 0.53.0 release. The native wheel for
+  this interpreter and platform is now preferred unconditionally, and healing a portable
+  install is said out loud.
+
 ## 2026-08-03 – 0.53.0
 
 ### Added

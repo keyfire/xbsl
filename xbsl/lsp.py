@@ -38,8 +38,9 @@ except ImportError:  # pragma: no cover - the extra is not installed
     LanguageServer = None
 
 from xbsl import (
-    __version__, baseline, bindingcomplete, dataset, docs, engine, formedits, formhandlers,
-    formmodel, formsearch, i18n, indexer, metamodel, scaffold, templates, terms, uischema,
+    __version__, baseline, bindingcomplete, dataset, docs, engine, environment, formedits,
+    formhandlers, formmodel, formsearch, i18n, indexer, metamodel, scaffold, templates,
+    terms, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -471,6 +472,10 @@ def _make_server() -> "LanguageServer":
 
     @server.feature(lsp.INITIALIZED)
     def _initialized(_params: lsp.InitializedParams) -> None:
+        # Окружение называется в журнале сразу: два сервера с разъехавшимися
+        # надстройками отвечают на одном файле по-разному, и без этой строки
+        # расхождение искали раскопками по site-packages обоих окружений.
+        server.show_message_log(f"xbsl-lsp v{__version__}: {environment.note()}")
         folder: Optional[Path] = None
         ws = server.workspace
         if ws is not None:

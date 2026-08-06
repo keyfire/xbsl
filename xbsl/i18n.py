@@ -268,6 +268,10 @@ _CORE_MESSAGES = {
         "ru": "показать версию и выйти",
         "en": "show the version and exit",
     },
+    "cli.version.plugins": {
+        "ru": "надстройки: {list}",
+        "en": "plugins: {list}",
+    },
     "cli.help.commands.header": {
         "ru": "команды:",
         "en": "commands:",

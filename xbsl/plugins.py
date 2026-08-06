@@ -119,6 +119,31 @@ def data_roots() -> list[Path]:
     return roots
 
 
+def installed() -> list[dict]:
+    """The plugged-in distributions, each once: [{"name", "version"}], ordered by name.
+
+    For the --version line, the LSP start log and the MCP diagnostic. Two environments
+    carrying different plugin versions answer differently on the same file, and nothing
+    used to say so - the diagnosis went through site-packages of both. Nothing is loaded
+    here: the names come from the entry-point metadata alone, so the answer is safe even
+    when a plugin is broken. An entry point without a distribution (a test stub) is
+    skipped.
+    """
+    found: dict[str, str] = {}
+    for group in (RULES_GROUP, DATA_GROUP, SEVERITY_GROUP):
+        for ep in _points(group):
+            dist = getattr(ep, "dist", None)
+            if dist is None:
+                continue
+            try:
+                name, version = dist.metadata["Name"], dist.version
+            except Exception:
+                continue
+            if name:
+                found.setdefault(str(name), str(version or ""))
+    return [{"name": name, "version": found[name]} for name in sorted(found)]
+
+
 def severity_overrides() -> dict[str, str]:
     """Severity overrides declared by external packages, merged by entry-point name.
 
