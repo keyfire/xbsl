@@ -187,6 +187,13 @@ def rule(
     """
 
     def deco(fn: Callable) -> Callable:
+        # A re-registration REPLACES the earlier rule instead of duplicating it. The case
+        # is real: a rule migrating from a plugin into the engine exists in both for the
+        # transition (an updated engine next to a not-yet-updated plugin), and two rules
+        # under one id doubled every finding. The later registration wins - plugins load
+        # after the built-in modules, so a plugin's variant of a core rule keeps working
+        # exactly as before the migration.
+        RULES[:] = [known for known in RULES if known.id != rule_id]
         RULES.append(RuleInfo(
             rule_id, title, tier, scope, severity, fn, enabled_by_default, off_reason, mapper,
         ))

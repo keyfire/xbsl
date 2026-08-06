@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+- The `xbsl.groups.conventions` setting: the severity of the new localization-convention
+  rule group of the engine (an untranslated visible literal), same switch as the other
+  groups.
+
 ## 0.48.0
 
 ### Added

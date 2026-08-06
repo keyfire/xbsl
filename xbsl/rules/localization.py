@@ -39,11 +39,29 @@ The check is project-wide because the dictionaries are project elements: which n
 localized cannot be told from one module. The `Представление()` shape is kept in the same rule
 rather than split into a file one - it is the same defect and the same message, and on the
 corpus it is the smaller half by an order of magnitude.
+
+--- conventions/untranslated-visible-literal ---
+
+Visible text left as a literal where the project already localizes it. The rule is
+self-tuning: only the keys the project itself references into a dictionary somewhere are
+judged - a fixed list of "visible" properties would go stale with the first new component,
+while the reference count states the project's intent directly.
+
+The intent is counted PER ELEMENT KIND: same-named properties of different kinds are
+different properties. A localized `Описание` of a component card does not make the
+`Описание` of an event-log element judgeable - that one is operator documentation, and the
+project never stated an intent to localize it.
+
+The language-count gate is mandatory: a single-language project has nothing to localize,
+and without the gate the rule would be noise on every such project. Everything the check
+relies on is platform mechanics - the localization languages of the descriptor, the
+dictionaries, the `$Dictionary.Key` references - which is what makes it an engine rule.
 """
 
 from __future__ import annotations
 
 import re
+from collections import Counter
 from collections.abc import Iterable
 from functools import lru_cache
 
@@ -53,7 +71,7 @@ from xbsl import dataset, i18n, metamodel, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules._syntax import code_tokens
-from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _parsed, object_kind
+from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _mapping_nodes, _parsed, object_kind
 
 MESSAGES = {
     "yaml/placeholder-key-in-strings.title": {
@@ -85,6 +103,20 @@ MESSAGES = {
         "en": "Key '{key}' carries the placeholder {placeholder} but sits in the {n[Строки]} "
               "section, which compiles to a method WITHOUT parameters – a call with an argument "
               "fails the apply with \"Неизвестный метод\". Move the key to {n[Шаблоны]}.",
+    },
+    "conventions/untranslated-visible-literal.title": {
+        "ru": "Непереведённый видимый литерал",
+        "en": "An untranslated visible literal",
+    },
+    "conventions/untranslated-visible-literal.found": {
+        "ru": "Свойство '{key}' здесь – кириллический литерал \"{value}\", а в других "
+              "местах проекта то же свойство вынесено ссылкой на словарь. Языков локализации "
+              "больше одного, значит на остальных текст останется русским. Замените литерал "
+              "на $Словарь.Ключ.",
+        "en": "Property '{key}' is the Cyrillic literal \"{value}\" here, while elsewhere in "
+              "the project the same property is a dictionary reference. The project has more "
+              "than one localization language, so the text stays Russian in the others. "
+              "Replace the literal with $Dictionary.Key.",
     },
 }
 i18n.register(MESSAGES)
@@ -287,3 +319,108 @@ def compare_with_localized(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     "code/compare-with-localized", Severity.WARNING,
                     i18n.t(key, **args),
                 )
+
+
+# --- conventions/untranslated-visible-literal ---------------------------------------------
+
+#: A localization-dictionary reference: $Dictionary.Key or $Key.
+_REFERENCE_RE = re.compile(r"^\$[A-Za-zА-Яа-яЁё_][\w.]*$")
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+#: Identifier-like keys: their value is never shown to a user.
+_TECHNICAL_KEYS = frozenset({
+    "Имя", "Name", "Ид", "Id", "Тип", "Type", "ВидЭлемента", "ElementKind",
+    "Обработчик", "Handler", "Значение", "Value", "Выражение", "Expression",
+})
+_PRESENTATION_KEYS = frozenset({"Представление", "Presentation"})
+_LANGUAGES_KEYS = ("ЯзыкиЛокализации", "LocalizationLanguages")
+
+
+def _scalar_entries(root):
+    """(key, value, value node, whether the mapping is the file root) over every mapping."""
+    for mapping in _mapping_nodes(root):
+        top = mapping is root
+        for key_node, value_node in mapping.value:
+            if (isinstance(key_node, _yaml.ScalarNode)
+                    and isinstance(value_node, _yaml.ScalarNode)
+                    and isinstance(value_node.value, str)):
+                yield key_node.value, value_node.value, value_node, top
+
+
+def _untranslated_mapper(source: SourceFile) -> dict | None:
+    """Map phase: the descriptor answers the localization languages, an object its
+    references and literals.
+
+    The narrowings without which the reconnaissance lied fourfold: a localized-strings
+    dictionary is not judged (its key IS the text), a value starting with "=" is an
+    expression rather than text (it may call the dictionary itself), and a top-level
+    `Представление` of an object is a FIELD NAME, not a caption - that one belongs to
+    yaml/presentation-field.
+    """
+    if not _HAVE_YAML or source.kind != "yaml":
+        return None
+    data, error = _parsed(source)
+    if error is not None or not isinstance(data, dict):
+        return None
+    for key in _LANGUAGES_KEYS:
+        languages = data.get(key)
+        if isinstance(languages, list):
+            return {"k": "languages", "languages": [str(x) for x in languages]}
+    kind = object_kind(data)
+    if not kind or kind == _KIND:
+        return None
+    root = _composed(source)
+    if root is None or not isinstance(root, _yaml.MappingNode):
+        return None
+    refs: list[str] = []
+    literals: list[tuple[str, str, int, int]] = []
+    for key, value, node, top in _scalar_entries(root):
+        if key in _TECHNICAL_KEYS or value.startswith("="):
+            continue
+        if top and key in _PRESENTATION_KEYS:
+            continue
+        if _REFERENCE_RE.match(value):
+            refs.append(key)
+        elif _CYRILLIC_RE.search(value):
+            literals.append((key, value, node.start_mark.line + 1, node.start_mark.column + 1))
+    if not refs and not literals:
+        return None
+    return {"k": "object", "kind": kind, "refs": refs, "literals": literals}
+
+
+@rule(
+    "conventions/untranslated-visible-literal",
+    "conventions/untranslated-visible-literal.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_untranslated_mapper,
+)
+def untranslated_visible_literal(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """Visible text left as a literal where the project already localizes that property.
+
+    Self-tuning: only the keys the project itself references into a dictionary somewhere
+    are judged, and the intent is counted per element kind - see the module docstring.
+    """
+    languages: list[str] = []
+    for fact in facts.values():
+        if fact["k"] == "languages":
+            languages = fact["languages"]
+            break
+    if len(languages) < 2:
+        return
+    reference_keys: Counter = Counter()
+    for fact in facts.values():
+        if fact["k"] == "object":
+            reference_keys.update((fact["kind"], key) for key in fact["refs"])
+    if not reference_keys:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "object":
+            continue
+        for key, value, line, col in fact["literals"]:
+            if (fact["kind"], key) not in reference_keys:
+                continue
+            yield Diagnostic(
+                rel, line, col,
+                "conventions/untranslated-visible-literal", Severity.WARNING,
+                i18n.t("conventions/untranslated-visible-literal.found",
+                       key=key, value=value),
+            )

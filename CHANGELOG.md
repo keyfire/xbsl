@@ -15,6 +15,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **New rule `conventions/untranslated-visible-literal`** (tier D, project scope, on by
+  default): visible text left as a Cyrillic literal where the project already references the
+  same property into a localization dictionary. Self-tuning - only the keys the project
+  itself localizes somewhere are judged, counted per element kind, and a project whose
+  descriptor lists fewer than two localization languages is not judged at all.
+- **A re-registered rule id replaces the earlier rule instead of duplicating it.** A rule
+  migrating between a plugin and the engine exists in both for the transition (an updated
+  engine next to a not-yet-updated plugin), and two rules under one id doubled every
+  finding. The later registration wins; plugins load after the built-in modules, so a
+  plugin's variant of a core rule keeps behaving exactly as before its removal.
 - **`xbsl extract --keep-previous` snapshots the previous build's data.** The data directory
   is named by the product version while neighbouring BUILDS of one release land in the same
   directory - regenerating silently overwrote the previous build and left nothing to diff
