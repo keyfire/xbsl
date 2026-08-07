@@ -9,9 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.50.0
 
 ### Fixed
+- **The English service file names resolve in the metadata tree.** The platform accepts both
+  spellings - `Project.yaml`/`Проект.yaml`, `Subsystem.yaml`/`Подсистема.yaml` - and the tree
+  now captures the path at discovery instead of rebuilding it from the Russian literal: the
+  project root, the subsystem nodes and the application module (`Project.xbsl` next to an
+  English descriptor) all follow the project's spelling. A subsystem created from the tree is
+  named by the engine in the project's spelling too.
 - **English element kinds resolve in the metadata tree**
   ([issue #1](https://github.com/keyfire/xbsl/issues/1)). The tree canonicalized a kind
   through its own table, whose English column held the stdlib TYPE spellings - so
