@@ -417,6 +417,38 @@ def canonical_kind(value: str) -> str:
     return _english_kinds().get(value, value)
 
 
+#: The kind spellings the platform's SERIALIZER writes, read out of a current
+#: distribution (the ProjectElementKindCmptEnum table). The dictionaries below answer with
+#: the stdlib TYPE spelling (`Перечисление` -> `Enum`), while an English project's yaml
+#: says `ElementKind: Enumeration` - live issue #1: such objects fell out of the metadata
+#: tree into "Other". A dataset regenerated with 0.54.1+ carries its own distribution's
+#: table (terms.kinds_table) and wins over this constant.
+_KNOWN_KIND_SPELLINGS: dict[str, str] = {
+    "КлючДоступа": "AccessKey", "Справочник": "Catalog",
+    "ФрагментКомандногоИнтерфейса": "CommandInterfaceFragment", "ОбщийМодуль": "CommonModule",
+    "Документ": "Document", "КонтрактСущности": "EntityContract",
+    "Перечисление": "Enumeration", "ПланОбмена": "ExchangePlan",
+    "ГлобальноеКлиентскоеСобытие": "GlobalClientEvent",
+    "РегистрСведений": "InformationRegister", "НаборКонстант": "ConstantsSet",
+    "ПроцессИнтеграции": "IntegrationProcess", "КомпонентИнтерфейса": "InterfaceComponent",
+    "ЛокализованныеСтроки": "LocalizedStrings", "НавигационнаяКоманда": "NavigationCommand",
+    "ПравоНаДействие": "PrivilegeOnAction", "ПравоНаЭлемент": "PrivilegeOnElement",
+    "КонтрактСервиса": "ServiceContract", "ХранимаяСтруктура": "StorableStructure",
+    "Структура": "Structure", "ПереключаемаяКоманда": "SwitchableCommand",
+    "КонтрактТипа": "TypeContract", "ОбычнаяКоманда": "UsualCommand",
+    "СобытиеЖурналаСобытий": "EventLogEvent", "Отчет": "Report",
+    "ПанельОтчетов": "ReportPanel", "ЦветоваяСхемаОтчета": "ReportColorSchema",
+    "КомандаСКомпонентом": "CommandWithComponent", "Проект": "Project",
+    "ВиртуальнаяТаблица": "VirtualTable", "ХранилищеНастроек": "SettingsStorage",
+    "ПараметрСамостоятельнойРегистрацииПользователя": "UserSelfRegistrationParameter",
+    "РегистрНакопления": "AccumulationRegister", "ЗапланированноеЗадание": "ScheduledJob",
+    "Обработка": "Processing", "ЖурналДанных": "DataJournal",
+    "ПараметрыРаботыКлиента": "ClientWorkParameters",
+    "ИнтегрируемоеПриложение": "IntegrableApplication",
+    "HttpСервис": "HttpService", "SoapСервис": "SoapService",
+}
+
+
 @lru_cache(maxsize=None)
 def _english_kinds() -> dict[str, str]:
     """{English spelling: the element kind} over the kinds the metamodel knows.
@@ -425,13 +457,18 @@ def _english_kinds() -> dict[str, str]:
     (`Type` is the English of both `Тип` and `ТипЭлементаПроекта`), so a plain reverse map would
     answer with whichever pair came last. The two sources complement each other - the compact
     dictionary names Catalog and HttpService, the compiler meta objects InterfaceComponent and
-    CommonModule.
+    CommonModule. On top of both goes the SERIALIZER's own kind table: what an English project
+    actually writes into `ElementKind:` (the distribution's own table when the dataset carries
+    it, the proven constant otherwise) - every spelling stays accepted, the serializer's wins
+    nothing away.
     """
     out: dict[str, str] = {}
     for kind in kinds():
         english = terms.english(kind, "types") or terms.common_english(kind)
         if english:
             out[english] = kind
+    for ru, en in {**_KNOWN_KIND_SPELLINGS, **terms.kinds_table()}.items():
+        out[en] = ru
     return out
 
 

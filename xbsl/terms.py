@@ -66,17 +66,39 @@ def common_russian(name: str) -> str | None:
     return _common_reverse.get(name)
 
 
+_kinds: dict[str, str] | None = None
+
+
+def kinds_table() -> dict[str, str]:
+    """{Russian element kind: the English spelling the platform's SERIALIZER writes}.
+
+    A section of terms.json read from the serializer's own kind enum of the distribution.
+    This is a different vocabulary from the type dictionary: the stdlib TYPE of an
+    enumeration is `Enum`, while `ElementKind:` of an English project says `Enumeration`.
+    Empty for a dataset generated before the section joined the extractor.
+    """
+    global _kinds
+    if _kinds is None:
+        try:
+            data = dataset.load_json("terms.json")
+        except Exception:  # noqa: BLE001 - no data, Russian spelling only
+            data = {}
+        _kinds = dict(data.get("kinds") or {})
+    return _kinds
+
+
 def _reset() -> None:
     """Drop the pairs when the data root or version changes (dataset hook).
 
     Without this the process would keep answering from the previously pinned dataset - a
     pinned root with no terms.json still handed out the English spellings of the old one.
     """
-    global _cache, _reverse, _common, _common_reverse
+    global _cache, _reverse, _common, _common_reverse, _kinds
     _cache = None
     _reverse = None
     _common = None
     _common_reverse = None
+    _kinds = None
 
 
 dataset.register_reset(_reset)

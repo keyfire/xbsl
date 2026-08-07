@@ -104,6 +104,40 @@ def test_metamodel_names_the_english_key():
     assert metamodel.canonical_kind("Справочник") == "Справочник"
 
 
+def test_serializer_kind_spellings_canonicalize():
+    """What the vendor IDE writes into ElementKind, not what the dictionaries suggest.
+
+    Live issue #1: the type dictionary spells Перечисление as `Enum`, while an English
+    project's yaml says `ElementKind: Enumeration` - such objects fell out of every
+    by-kind view into "Other". Both spellings must canonicalize, and the serializer's
+    table must not take the dictionary's spelling away.
+    """
+    for english, russian in (
+        ("Enumeration", "Перечисление"),
+        ("Enum", "Перечисление"),
+        ("HttpService", "HttpСервис"),
+        ("IntegrationProcess", "ПроцессИнтеграции"),
+        ("ReportPanel", "ПанельОтчетов"),
+        ("DataJournal", "ЖурналДанных"),
+        ("IntegrableApplication", "ИнтегрируемоеПриложение"),
+    ):
+        assert metamodel.canonical_kind(english) == russian, english
+
+
+def test_serializer_kind_spellings_survive_without_the_dataset_table(monkeypatch):
+    """A dataset generated before the `kinds` section joined still resolves the vendor
+    spellings - through the constant read out of a current distribution."""
+    from xbsl import terms
+
+    monkeypatch.setattr(terms, "kinds_table", lambda: {})
+    metamodel._english_kinds.cache_clear()
+    try:
+        assert metamodel.canonical_kind("Enumeration") == "Перечисление"
+        assert metamodel.canonical_kind("Enum") == "Перечисление"
+    finally:
+        metamodel._english_kinds.cache_clear()
+
+
 # --- forms ------------------------------------------------------------------------------
 
 EN_FORM = """\

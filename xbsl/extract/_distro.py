@@ -92,7 +92,11 @@ def data_root() -> Path:
     env = os.environ.get(_ENV_DATA_DIR)
     if env:
         return Path(env)
-    return REPO / "xbsl" / "data" / "element"
+    # The package's own bundled root - the directory dataset.BUNDLED_DATA_ROOT names.
+    # REPO above is the PACKAGE directory: the extractors once lived outside it, and an
+    # extra "xbsl" segment survived the move - the default silently wrote to xbsl/xbsl/data
+    # while every real run masked it with --data-dir or the environment variable.
+    return REPO / "data" / "element"
 
 
 def version_dir(version: str) -> Path:

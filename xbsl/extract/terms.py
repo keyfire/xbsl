@@ -168,6 +168,42 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
     return {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())}, common
 
 
+#: The serializer's own element-kind enum: what an English project writes into ElementKind.
+_KIND_ENUM_CLASS = "ProjectElementKindCmptEnum.class"
+#: A kind name is Russian or MIXED (HttpСервис) - at least one Cyrillic letter tells it
+#: from the English neighbour in the constant pool.
+_KIND_RU_RE = re.compile(r"^[A-Za-zА-ЯЁ][0-9A-Za-zА-Яа-яЁё]*$")
+_KIND_EN_RE = re.compile(r"^[A-Z][0-9A-Za-z]*$")
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def _scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
+    """{Russian element kind: English spelling} from the serializer's kind enum, or empty.
+
+    The type dictionary spells the STDLIB TYPE (`Перечисление` -> `Enum`), while the yaml
+    of an English project carries the KIND enum's spelling (`ElementKind: Enumeration`) -
+    mapping kinds through the dictionary lost such objects from every by-kind view. The
+    enum class pairs the spellings the same way the meta objects do: the English constant
+    right before the Russian one.
+    """
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if not inner.endswith("/" + _KIND_ENUM_CLASS):
+                continue
+            strings = _constant_pool(jar.read(inner))
+            return {
+                ru: en for en, ru in zip(strings, strings[1:])
+                if _KIND_EN_RE.match(en) and _KIND_RU_RE.match(ru) and _CYRILLIC_RE.search(ru)
+            }
+    return {}
+
+
 #: The query language is a separate grammar (TreeSQL); its keyword pairs live in one class.
 _QUERY_TERMS_CLASS = "com/e1c/g5/treesql/domain/QueryTerms.class"
 _QUERY_JAR_RE = re.compile(r"treesql\.model")
@@ -251,6 +287,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     with zipfile.ZipFile(car) as z:
         members, common = _scan_meta_objects(z)
         query = _scan_query_terms(z)
+        kind_table = _scan_kind_table(z)
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]
@@ -258,7 +295,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
             target.pop(name, None)
     return {
         "types": types, "facets": facets, "properties": properties, "enums": enums,
-        "members": members, "common": common, "query": query,
+        "members": members, "common": common, "query": query, "kinds": kind_table,
     }, conflicts
 
 
@@ -287,7 +324,8 @@ def main(argv=None) -> None:
     # правила. Полный словарь (тысячи членов) лежит рядом и грузится по требованию:
     # 1 МБ json в каждом параллельном воркере стоил бы четверти времени прогона.
     small = {"meta": meta, **{name: dict(sorted(sections[name].items()))
-                              for name in ("types", "facets", "properties", "enums", "query")}}
+                              for name in ("types", "facets", "properties", "enums", "query",
+                                           "kinds")}}
     full = {"meta": meta, "members": sections["members"], "common": sections["common"]}
 
     version_dir = _distro.version_dir(version)
@@ -304,6 +342,7 @@ def main(argv=None) -> None:
         extra = f", исключено по конфликту: {dropped}" if dropped else ""
         print(f"  {name}: {len(sections[name])}{extra}")
     print(f"  query: {len(sections['query'])} ключевых слов языка запросов")
+    print(f"  kinds: {len(sections['kinds'])} видов элементов (написания сериализатора)")
     print(f"Записано: {out_full}")
     print(f"  members: {len(sections['members'])} типов, common: {len(sections['common'])} имён")
 
