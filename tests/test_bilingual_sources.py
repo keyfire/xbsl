@@ -107,7 +107,7 @@ def test_metamodel_names_the_english_key():
 def test_serializer_kind_spellings_canonicalize():
     """What the vendor IDE writes into ElementKind, not what the dictionaries suggest.
 
-    Live issue #1: the type dictionary spells Перечисление as `Enum`, while an English
+    Live issue #1: the type dictionary spells `Перечисление` as `Enum`, while an English
     project's yaml says `ElementKind: Enumeration` - such objects fell out of every
     by-kind view into "Other". Both spellings must canonicalize, and the serializer's
     table must not take the dictionary's spelling away.

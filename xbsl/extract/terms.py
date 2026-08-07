@@ -170,7 +170,7 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
 
 #: The serializer's own element-kind enum: what an English project writes into ElementKind.
 _KIND_ENUM_CLASS = "ProjectElementKindCmptEnum.class"
-#: A kind name is Russian or MIXED (HttpСервис) - at least one Cyrillic letter tells it
+#: A kind name is Russian or MIXED (`HttpСервис`) - at least one Cyrillic letter tells it
 #: from the English neighbour in the constant pool.
 _KIND_RU_RE = re.compile(r"^[A-Za-zА-ЯЁ][0-9A-Za-zА-Яа-яЁё]*$")
 _KIND_EN_RE = re.compile(r"^[A-Z][0-9A-Za-z]*$")
