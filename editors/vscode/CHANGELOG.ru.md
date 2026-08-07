@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.49.0
 
 ### Добавлено
 - Настройка `xbsl.groups.conventions`: уровень новой группы правил конвенций локализации
