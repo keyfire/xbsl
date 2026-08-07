@@ -12,25 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-07 – 0.54.1
-
-### Fixed
-- **An English project's objects no longer fall out of the by-kind views** (issue #1).
-  Kinds were canonicalized through the type dictionary, which spells the stdlib TYPE
-  (`Enum`), while the platform's serializer writes its own kind enum into `ElementKind:` -
-  `Enumeration`, `IntegrationProcess`, `ReportPanel`, `DataJournal`,
-  `IntegrableApplication` and `Project` did not resolve, and such objects landed under
-  "Other" in the metadata tree. The extractor now reads the serializer's own kind table
-  into the dataset (the `kinds` section of terms.json) and the resolution prefers it; a
-  dataset generated before the section joined falls back to a built-in table read out of
-  a current distribution. Every previously accepted spelling stays accepted.
-- **The extractors' default data directory pointed inside the package twice.** The
-  constant kept the layout the extractors had before they moved into the package, so a
-  run without `--data-dir`/`XBSL_DATA_DIR` silently wrote to `xbsl/xbsl/data`; every
-  documented run masked it with an explicit target. The default is the package's bundled
-  root again.
-
-## 2026-08-07 – 0.54.0
+## 2026-08-07 – 0.54.0, 0.54.1
 
 ### Added
 - **`meta_delete_object` / `xbsl delete-object`: delete a configuration object whole.**
@@ -68,6 +50,21 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   both.
 
 ### Fixed
+- **An English project's objects no longer fall out of the by-kind views**
+  ([issue #1](https://github.com/keyfire/xbsl/issues/1)).
+  Kinds were canonicalized through the type dictionary, which spells the stdlib TYPE
+  (`Enum`), while the platform's serializer writes its own kind enum into `ElementKind:` -
+  `Enumeration`, `IntegrationProcess`, `ReportPanel`, `DataJournal`,
+  `IntegrableApplication` and `Project` did not resolve, and such objects landed under
+  "Other" in the metadata tree. The extractor now reads the serializer's own kind table
+  into the dataset (the `kinds` section of terms.json) and the resolution prefers it; a
+  dataset generated before the section joined falls back to a built-in table read out of
+  a current distribution. Every previously accepted spelling stays accepted.
+- **The extractors' default data directory pointed inside the package twice.** The
+  constant kept the layout the extractors had before they moved into the package, so a
+  run without `--data-dir`/`XBSL_DATA_DIR` silently wrote to `xbsl/xbsl/data`; every
+  documented run masked it with an explicit target. The default is the package's bundled
+  root again.
 - **Our own JSON files tolerate a BOM, and a parse failure names the file.** An `index.json`
   rewritten by PowerShell 5.1 (`Out-File -Encoding utf8` writes a BOM) failed every extractor
   step with the same bare `JSONDecodeError` and no path - the diagnosis took a run of its own.
