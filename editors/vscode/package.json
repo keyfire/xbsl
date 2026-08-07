@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.51.0",
+  "version": "0.52.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -308,6 +308,150 @@
       {
         "command": "xbsl.metadata.addObject.commonform",
         "title": "%cmd.metadata.add.commonform%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.storedstructure",
+        "title": "%cmd.metadata.add.storedstructure%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.constantsset",
+        "title": "%cmd.metadata.add.constantsset%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.virtualtable",
+        "title": "%cmd.metadata.add.virtualtable%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.soapservice",
+        "title": "%cmd.metadata.add.soapservice%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.servicecontract",
+        "title": "%cmd.metadata.add.servicecontract%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.typecontract",
+        "title": "%cmd.metadata.add.typecontract%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.entitycontract",
+        "title": "%cmd.metadata.add.entitycontract%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.logevent",
+        "title": "%cmd.metadata.add.logevent%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.scheduledjob",
+        "title": "%cmd.metadata.add.scheduledjob%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.processing",
+        "title": "%cmd.metadata.add.processing%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.colorscheme",
+        "title": "%cmd.metadata.add.colorscheme%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.usualcommand",
+        "title": "%cmd.metadata.add.usualcommand%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.navcommand",
+        "title": "%cmd.metadata.add.navcommand%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.switchcommand",
+        "title": "%cmd.metadata.add.switchcommand%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.componentcommand",
+        "title": "%cmd.metadata.add.componentcommand%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.exchangeplan",
+        "title": "%cmd.metadata.add.exchangeplan%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.accesskey",
+        "title": "%cmd.metadata.add.accesskey%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.actionright",
+        "title": "%cmd.metadata.add.actionright%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.elementright",
+        "title": "%cmd.metadata.add.elementright%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.settingsstorage",
+        "title": "%cmd.metadata.add.settingsstorage%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.regparam",
+        "title": "%cmd.metadata.add.regparam%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObject.locstrings",
+        "title": "%cmd.metadata.add.locstrings%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addObjectPick",
+        "title": "%cmd.metadata.addObjectPick%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.addLocalization",
+        "title": "%cmd.metadata.addLocalization%",
         "category": "XBSL",
         "icon": "$(add)"
       },
@@ -941,6 +1085,196 @@
           "group": "1_add@1"
         },
         {
+          "command": "xbsl.metadata.addObject.storedstructure",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-storedstructure\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.storedstructure",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-storedstructure\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.constantsset",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-constantsset\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.constantsset",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-constantsset\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.virtualtable",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-virtualtable\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.virtualtable",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-virtualtable\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.soapservice",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-soapservice\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.soapservice",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-soapservice\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.logevent",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-logevent\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.logevent",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-logevent\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.scheduledjob",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-scheduledjob\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.scheduledjob",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-scheduledjob\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.processing",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-processing\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.processing",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-processing\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.colorscheme",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-colorscheme\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.colorscheme",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-colorscheme\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.exchangeplan",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-exchangeplan\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.exchangeplan",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-exchangeplan\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.accesskey",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-accesskey\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.accesskey",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-accesskey\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.settingsstorage",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-settingsstorage\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.settingsstorage",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-settingsstorage\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.regparam",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-regparam\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.regparam",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-regparam\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.locstrings",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-locstrings\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addObject.locstrings",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-locstrings\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObjectPick",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobjpick\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addLocalization",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddloc\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addLocalization",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddloc\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.servicecontract",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-servicecontract\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.typecontract",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-typecontract\\b/",
+          "group": "1_add@2"
+        },
+        {
+          "command": "xbsl.metadata.addObject.entitycontract",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-entitycontract\\b/",
+          "group": "1_add@3"
+        },
+        {
+          "command": "xbsl.metadata.addObject.usualcommand",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-usualcommand\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.navcommand",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-navcommand\\b/",
+          "group": "1_add@2"
+        },
+        {
+          "command": "xbsl.metadata.addObject.switchcommand",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-switchcommand\\b/",
+          "group": "1_add@3"
+        },
+        {
+          "command": "xbsl.metadata.addObject.componentcommand",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-componentcommand\\b/",
+          "group": "1_add@4"
+        },
+        {
+          "command": "xbsl.metadata.addObject.actionright",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-actionright\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addObject.elementright",
+          "when": "view == xbslMetadata && viewItem =~ /\\bnewobj-elementright\\b/",
+          "group": "1_add@2"
+        },
+        {
           "command": "xbsl.metadata.addSubsystem",
           "when": "view == xbslMetadata && viewItem =~ /\\bsubsystems\\b/",
           "group": "inline"
@@ -1002,22 +1336,22 @@
         },
         {
           "command": "xbsl.metadata.addRoute",
-          "when": "view == xbslMetadata && viewItem =~ /\baddroute\b/",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddroute\\b/",
           "group": "inline"
         },
         {
           "command": "xbsl.metadata.addRoute",
-          "when": "view == xbslMetadata && viewItem =~ /\baddroute\b/",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddroute\\b/",
           "group": "1_add@1"
         },
         {
           "command": "xbsl.metadata.addRouteMethod",
-          "when": "view == xbslMetadata && viewItem =~ /\baddroutemethod\b/",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddroutemethod\\b/",
           "group": "inline"
         },
         {
           "command": "xbsl.metadata.addRouteMethod",
-          "when": "view == xbslMetadata && viewItem =~ /\baddroutemethod\b/",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddroutemethod\\b/",
           "group": "1_add@1"
         }
       ]

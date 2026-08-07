@@ -86,6 +86,27 @@ def test_text_presentation_kind_not_judged():
     assert _lint("Представление: Открыть список\n", vid="ОбычнаяКоманда") == []
 
 
+def test_constants_set_carries_a_caption():
+    """A constants set holds Constants, not Attributes - its Presentation is a caption.
+
+    The metamodel types it AttributeName all the same (inherited from a shared base), and
+    the rule used to condemn every constants set in existence: no value can name an
+    attribute the kind cannot have. Settled by the server (elemctl probe, 07.08.2026): a
+    set with `Представление: Настройки пробы` compiles clean, while a catalog with an
+    undeclared `Представление: Наименование` fails with "Field specified as a presentation
+    field is not found" - hence the two tests disagree on purpose.
+    """
+    tail = (
+        "Представление: Настройки сайта\n"
+        "Константы:\n"
+        "    -\n"
+        "        Ид: 22222222-3333-4444-5555-000000000009\n"
+        "        Имя: АдресСлужбы\n"
+        "        Тип: Строка\n"
+    )
+    assert _lint(tail, vid="НаборКонстант") == []
+
+
 def test_missing_value_is_another_rules_business():
     # Requiring the property is naming/presentation's job; this rule judges only a set value.
     assert _lint("Реквизиты:\n" + _attr("Наименование")) == []

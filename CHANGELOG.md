@@ -12,9 +12,56 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0
+## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0, 0.56.0, 0.57.0
 
 ### Added
+- **The properties of a section item are written by the tool, not by hand** (0.57.0). The
+  object and its items were created by the tool, while `DefaultValue`, `Presentation` and
+  `MaxLength` were finished by hand in the yaml: there was nothing to pass them in, and
+  `meta_set_component_property` serves interface components alone. Now `meta_add_field`
+  takes `props` (the properties of the new item) and its twin `meta_set_field_property`
+  edits an item that already exists: a property already there is replaced in place, a new
+  one is appended to the item. Names are checked against the item's metamodel class (both
+  spellings accepted, the project's own is written); a value goes in as a scalar, quoted
+  only where a bare one would lie (`DefaultValue: "https://..."`, but `fresh-site` bare). A
+  property written as a nested block is refused rather than flattened into a scalar. The
+  same in the CLI (`--prop KEY=VALUE`, the `set-field-property` command) and over LSP.
+- **`Presentation` at creation time** (0.57.0): `meta_new_object` takes `presentation`
+  (CLI `--presentation`). The property means different things depending on the kind, and
+  the tool tells them apart: a report and the commands carry a CAPTION there, while a
+  catalog, a document, an exchange plan and a settings storage carry the NAME of a string
+  attribute whose value the platform shows for a record. A caption written into the second
+  kind is rejected by the server ("Field specified as a presentation field is not found"),
+  so such a call is refused with an explanation instead of handing over a file that will
+  not compile.
+- **Localization of a strings element** (0.57.0): `meta_add_localization` creates the
+  translation file (`Localization/<Code>/<Name>.yaml`), repeating the `Strings`/`Templates`
+  sections with the default-language values for the translator to replace in place;
+  `meta_localization_info` answers which languages are declared, which of them is the
+  default, which translations exist already and which languages a translation can still be
+  added for. The language is taken in the project's spelling (`Russian`/`English`) or as
+  the folder code (`Ru`/`En`). CLI - `add-localization` and `localization-info`, LSP -
+  `xbsl/metaAddLocalization` and `xbsl/localizationInfo`.
+- **The data processor form** (0.57.0): `meta_add_form` generates `ProcessingForm` - input
+  fields per attribute and the operation commands through the `Commands` type
+  (`MainCommand: =Commands.GetMain()`, `UsualCommands: =Commands.GetUsual()`), so new
+  operations reach the form by themselves and no form module is needed. It is registered in
+  `Interface.Form`, the way a report's form is.
+- **The metadata schema answers to a descriptor class name too** (0.57.0):
+  `metadata_schema` with `kind: "ConstantsSetConstantDescriptor"` returns the properties of
+  that class. The class name is what the schema's own answers call things, so that is what
+  callers asked with - and got an empty property list with no hint that the same properties
+  live under `sections: ["Константы"]`.
+- **The metadata schema names which attribute TYPE a property belongs to** (0.56.0). The
+  metamodel describes an attribute as ONE class carrying the union of the properties of
+  every type, so a schema consumer saw `IntegerPartLength` offered on a `String` attribute
+  with no way to tell it does not apply. The per-type properties of a typed collection item
+  (an attribute, a dimension, a resource) now carry `applies` - `"string"` (`MaxLength`,
+  `Multiline`, `LengthControl`, `EmptyValue`), `"number"` (`IntegerPartLength`,
+  `FractionalPartLength`, `MaxValue`, `MinValue`, both controls) or `"reference"`
+  (`OnReferencedObjectDeletion`) - exactly as the documentation of every object kind spells
+  the applicability. A property of a class that declares no `Type` of its own is never
+  annotated: a namesake on an unrelated class must not inherit the table.
 - **The English service file names resolve everywhere** (0.55.0). The platform accepts
   `Project.yaml` and `Subsystem.yaml` next to the Russian spellings (its converter checks
   both), while the toolkit knew only the Russian ones - an English-named project was not
@@ -59,6 +106,24 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   both.
 
 ### Fixed
+- **`yaml/presentation-field` no longer judges a constants set** (0.57.0). The metamodel
+  types its `Presentation` as an attribute name (the type is inherited from a shared base),
+  but a constants set has no `Attributes` section at all - the rule demanded the impossible
+  and condemned every constants set carrying a caption. The documentation of the kind calls
+  the property the presentation OF THE SET, and the server accepts such a file (checked by
+  compiling it); the rule now judges only the kinds that do have an attributes section. The
+  negative control stays as it was: on a catalog a caption in that property is still an
+  error, and even `Presentation: Name` is rejected by the server unless the attribute is
+  written out in `Attributes`.
+- **An insertion into a section no longer breaks a CRLF file** (0.57.0). The end of a
+  section body was measured AFTER the `\r`, so the insertion landed between `\r` and `\n`:
+  a lone `\r` was left in the file (a broken line), and git then normalized the newlines of
+  the whole file, blowing the diff up from one edit to the entire file.
+- **English help messages use the English spelling of names** (0.57.0): `Russian/English`
+  instead of Cyrillic in the English help about the translation language, and likewise
+  `LocalizedStrings`, `Localization`, `DefaultValue`, `Presentation` wherever the platform
+  declares such a spelling. Cyrillic stays in English text only for names that have no
+  English pair.
 - **An English project's objects no longer fall out of the by-kind views**
   ([issue #1](https://github.com/keyfire/xbsl/issues/1)).
   Kinds were canonicalized through the type dictionary, which spells the stdlib TYPE

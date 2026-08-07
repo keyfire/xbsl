@@ -260,7 +260,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
-                       [--routes ROUTES] [--report REPORT] [--dry-run]
+                       [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
+                       [--dry-run]
                        directory kind name
 ```
 
@@ -282,12 +283,14 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | способ доступа: у HttpСервис пишется в Разрешения.Вызов, у объектов данных – в Разрешения.ПоУмолчанию (отдельные права ставит set-access) |
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
+| `--presentation PRESENTATION` | Представление – заголовок элемента (без него первый же линт даёт naming/presentation) |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
 ### `xbsl add-field`
 
 ```bash
-usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--dry-run] yaml_path field_kind name
+usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--dry-run]
+                      yaml_path field_kind name
 ```
 
 **Аргументы**
@@ -305,6 +308,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--dry-run] yaml_pa
 | `-h, --help` | показать эту справку и выйти |
 | `--type TYPE` | тип поля (по умолчанию Строка) |
 | `--tabular TABULAR` | имя табличной части (реквизит добавляется в неё) |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | свойство элемента (можно повторять): ЗначениеПоУмолчанию=https://example.com, Представление=Адрес сервиса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
 ### `xbsl add-route`
@@ -377,7 +381,7 @@ usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
 | `-h, --help` | показать эту справку и выйти |
 | `--name NAME` | имя объекта, для которого создать формы |
 | `--path PATH` | yaml объекта (вместо `--name`) |
-| `--forms FORMS` | подмножество object,list,list-cards,report через запятую (list-cards – список карточками, вместо list) |
+| `--forms FORMS` | подмножество object,list,list-cards,report,processing через запятую (list-cards – список карточками, вместо list; processing – форма обработки) |
 | `--card-min-width CARD_MIN_WIDTH` | ширина колонки сетки карточек (по умолчанию 400, с фото – 250) |
 | `--card-placeholder CARD_PLACEHOLDER` | выражение картинки-заглушки, напр. "Ресурс{Аккаунт.svg}.Ссылка" |
 | `--overwrite` | перезаписать формы, если они уже созданы |
@@ -429,6 +433,50 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
 | `--path PATH` | Проект.yaml (при нескольких проектах под корнем) |
+| `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
+
+### `xbsl add-localization`
+
+```bash
+usage: xbsl add-localization [-h] [--dry-run] yaml_path language
+```
+
+**Аргументы**
+
+| Параметр | Описание |
+|---|---|
+| `yaml_path` | yaml элемента ЛокализованныеСтроки |
+| `language` | язык перевода: Русский/Английский или код Ru/En |
+
+**Параметры**
+
+| Параметр | Описание |
+|---|---|
+| `-h, --help` | показать эту справку и выйти |
+| `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
+
+### `xbsl set-field-property`
+
+```bash
+usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular TABULAR] [--dry-run]
+                               yaml_path field_kind name
+```
+
+**Аргументы**
+
+| Параметр | Описание |
+|---|---|
+| `yaml_path` | yaml объекта, в который добавить поле |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа |
+| `name` | имя элемента в секции |
+
+**Параметры**
+
+| Параметр | Описание |
+|---|---|
+| `-h, --help` | показать эту справку и выйти |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | свойство элемента (можно повторять): ЗначениеПоУмолчанию=https://example.com, Представление=Адрес сервиса |
+| `--tabular TABULAR` | имя табличной части (реквизит добавляется в неё) |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
 ### `xbsl rename-object`
@@ -536,6 +584,24 @@ usage: xbsl project-info [-h] root
 | Параметр | Описание |
 |---|---|
 | `root` | корень проекта – каталог с Проект.yaml (обычно .) |
+
+**Параметры**
+
+| Параметр | Описание |
+|---|---|
+| `-h, --help` | показать эту справку и выйти |
+
+### `xbsl localization-info`
+
+```bash
+usage: xbsl localization-info [-h] yaml_path
+```
+
+**Аргументы**
+
+| Параметр | Описание |
+|---|---|
+| `yaml_path` | yaml элемента ЛокализованныеСтроки |
 
 **Параметры**
 

@@ -119,11 +119,19 @@ _TOPKEY_RE = re.compile(r"(?m)^([^\s#:][^:\n]*):")
 @lru_cache(maxsize=1)
 def _attribute_name_kinds() -> frozenset[str]:
     """Element kinds whose Представление is the NAME of an attribute (metamodel type
-    AttributeName) rather than a text: Справочник, Документ, НаборКонстант, ПланОбмена,
-    ХранилищеНастроек in the current data. Computed from the metamodel, not hardcoded."""
+    AttributeName) rather than a text: Catalog, Document, ExchangePlan, SettingsStorage
+    in the current data. Computed from the metamodel, not hardcoded.
+
+    A kind with no Attributes section at all is excluded even when the metamodel types its
+    Presentation as AttributeName - the type is inherited from a shared base and says
+    nothing there. ConstantsSet is such a kind: it holds Constants, its documentation calls
+    the property "Представление набора констант" (a caption), and no value could ever name an
+    attribute it does not have - the check would condemn every constants set in existence.
+    """
     return frozenset(
         vid for vid in metamodel.kinds()
         if (metamodel.properties(vid).get("Представление") or {}).get("type") == "AttributeName"
+        and "Реквизиты" in metamodel.properties(vid)
     )
 
 

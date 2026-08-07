@@ -1128,6 +1128,10 @@ def _make_server() -> "LanguageServer":
             if not cls:
                 return {"available": True, "kind": kind, "props": {}}
             props = metamodel.localized(metamodel.properties_of_class(cls), lang)
+        elif cls is None and metamodel.has_class(kind):
+            # A descriptor CLASS name in place of an element kind - see the MCP twin.
+            cls = kind
+            props = metamodel.localized(metamodel.properties_of_class(cls), lang)
         else:
             props = metamodel.localized(metamodel.properties(kind), lang)
         if not props:
@@ -1203,7 +1207,15 @@ def _make_server() -> "LanguageServer":
             environment=_opt_str(params, "environment"),
             access=_opt_str(params, "access"),
             routes=_opt_str(params, "routes"),
+            presentation=_opt_str(params, "presentation"),
         )
+
+    def _props_param(params: object) -> dict[str, str]:
+        """{property: value} passed as two parallel arrays (nested objects do not survive
+        the pygls deserialization - the same reason metadataSchema takes flat arrays)."""
+        keys = _opt_str_list(params, "propKeys")
+        values = _opt_str_list(params, "propValues")
+        return {k: (values[i] if i < len(values) else "") for i, k in enumerate(keys)}
 
     @server.feature("xbsl/metaAddField")
     def _meta_add_field(params: object) -> dict:
@@ -1213,6 +1225,19 @@ def _make_server() -> "LanguageServer":
             str(_param(params, "fieldKind")),
             str(_param(params, "name")),
             type_=_opt_str(params, "type") or "Строка",
+            tabular=_opt_str(params, "tabular"),
+            props=_props_param(params) or None,
+            reader=_buffer_reader,
+        )
+
+    @server.feature("xbsl/metaSetFieldProperty")
+    def _meta_set_field_property(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_set_field_property,
+            Path(str(_param(params, "path"))),
+            str(_param(params, "fieldKind")),
+            str(_param(params, "name")),
+            _props_param(params),
             tabular=_opt_str(params, "tabular"),
             reader=_buffer_reader,
         )
@@ -1266,6 +1291,30 @@ def _make_server() -> "LanguageServer":
             scaffold.op_add_route,
             Path(str(_param(params, "path"))),
             routes,
+            reader=_buffer_reader,
+        )
+
+    @server.feature("xbsl/localizationInfo")
+    def _localization_info(params: object) -> dict:
+        """The languages a LocalizedStrings element may be translated into.
+
+        The editor asks before offering the pick: the candidates are the declared
+        localization languages minus the default one and the translations already present -
+        that knowledge is the engine's, a client copy of it would drift.
+        """
+        try:
+            return scaffold.localization_info(
+                Path(str(_param(params, "path"))), reader=_buffer_reader
+            )
+        except (scaffold.ScaffoldError, OSError) as exc:
+            return {"error": str(exc)}
+
+    @server.feature("xbsl/metaAddLocalization")
+    def _meta_add_localization(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_add_localization,
+            Path(str(_param(params, "path"))),
+            str(_param(params, "language")),
             reader=_buffer_reader,
         )
 

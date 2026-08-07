@@ -297,6 +297,13 @@ def metadata_schema(
         if not cls:
             return {"available": True, "kind": kind, "props": {}}
         props = metamodel.properties_of_class(cls)
+    elif cls is None and metamodel.has_class(kind):
+        # The name of a descriptor CLASS instead of an element kind
+        # (`ConstantsSetConstantDescriptor`): it is what the answers here call things, so a
+        # caller that read it in a previous answer asks with it - and used to get an empty
+        # result with no hint that the same properties live under sections=["Константы"].
+        cls = kind
+        props = metamodel.properties_of_class(cls)
     else:
         props = metamodel.properties(kind)
     enums = {
@@ -421,6 +428,7 @@ def meta_new_object(
     access: str | None = None,
     routes: str | None = None,
     report_spec: dict | None = None,
+    presentation: str | None = None,
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
@@ -433,13 +441,18 @@ def meta_new_object(
     scope overrides ОбластьВидимости; environment – Окружение (ОбщийМодуль/Структура);
     access – КонтрольДоступа (РазрешеноАутентифицированным etc.); routes – HttpСервис
     routes like "GET /, POST /, GET /{id}" (handlers are stubbed in the module);
-    report_spec – for Отчет: {source, rows: [...], columns: [...], measures: [{expr, title}], title}.
+    report_spec – for Report: {source, rows: [...], columns: [...], measures: [{expr, title}], title};
+    presentation – Presentation of the element. Beware of what the kind means by it: a
+    report or a command carries a CAPTION there, while a catalog, a document, an exchange
+    plan and a settings storage carry the NAME of a string attribute whose value the
+    platform shows for a record (a caption written there fails to compile). Pass it:
+    without one the very first lint of the new file answers naming/presentation.
     """
     return _meta(
         scaffold.op_new_object,
         Path(directory), kind, name,
         scope=scope, environment=environment, access=access,
-        routes=routes, report=report_spec,
+        routes=routes, report=report_spec, presentation=presentation,
     )
 
 
@@ -450,6 +463,7 @@ def meta_add_field(
     name: str,
     type: str = "Строка",
     tabular: str | None = None,
+    props: dict[str, str] | None = None,
 ) -> dict:
     """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
     параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
@@ -460,9 +474,42 @@ def meta_add_field(
     the object's kind are rejected.
 
     tabular – target tabular-section name when adding a реквизит into it.
+
+    props – the item's other properties as {"Property": "value"}: DefaultValue, Presentation,
+    MaxLength and whatever else the item's class declares (ask metadata_schema with
+    sections=["<section>"] for the list). Names are checked against that class in either
+    language; Name/Type/Id belong to the parameters above, not here.
+    Values are written as yaml scalars (quoted where a bare one would be ambiguous); a
+    nested block is not a scalar - such a value is refused rather than mangled. To change
+    the properties of an item that already exists use meta_set_field_property.
     """
     return _meta(
-        scaffold.op_add_field, Path(yaml_path), field_kind, name, type_=type, tabular=tabular
+        scaffold.op_add_field, Path(yaml_path), field_kind, name, type_=type, tabular=tabular,
+        props=props,
+    )
+
+
+@mcp.tool()
+def meta_set_field_property(
+    yaml_path: str,
+    field_kind: str,
+    name: str,
+    props: dict[str, str],
+    tabular: str | None = None,
+) -> dict:
+    """Set properties on a section item that already exists (a constant, an attribute, a
+    dimension, an enumeration value...): an existing property is replaced in place, a new
+    one is appended to the item.
+
+    The metadata counterpart of meta_set_component_property, which serves interface
+    components only. Names are checked against the item's metamodel class (both languages
+    accepted, written in the project's own); Name is refused - renaming is meta_rename_object,
+    which updates the references too. A property written as a nested block is refused rather
+    than flattened into a scalar.
+    """
+    return _meta(
+        scaffold.op_set_field_property,
+        Path(yaml_path), field_kind, name, props, tabular=tabular,
     )
 
 
@@ -483,6 +530,31 @@ def meta_add_route(yaml_path: str, routes: str = "", template: str = "", methods
         except scaffold.ScaffoldError as exc:
             return {"ok": False, "error": str(exc)}
     return _meta(scaffold.op_add_route, Path(yaml_path), routes)
+
+
+@mcp.tool()
+def meta_add_localization(yaml_path: str, language: str) -> dict:
+    """Add a translation file (the Localization section) to a LocalizedStrings element:
+    Localization/<Code>/<Name>.yaml next to the element. The file repeats the
+    Strings/Templates sections with the default-language values for the translator to
+    replace in place.
+
+    language – Russian/English (either project spelling) or the folder code Ru/En. The
+    language must be declared in LocalizationLanguages of the project descriptor and must
+    differ from DefaultLanguage. Candidates come from meta_localization_info.
+    """
+    return _meta(scaffold.op_add_localization, Path(yaml_path), language)
+
+
+@mcp.tool()
+def meta_localization_info(yaml_path: str) -> dict:
+    """The localization picture of a LocalizedStrings element: the declared languages, the
+    default one, the translations already present and the candidate languages a translation
+    can be added for (folder codes Ru/En with their display names)."""
+    try:
+        return scaffold.localization_info(Path(yaml_path))
+    except (scaffold.ScaffoldError, OSError) as exc:
+        return {"error": str(exc)}
 
 
 @mcp.tool()
@@ -527,9 +599,11 @@ def meta_add_form(
 ) -> dict:
     """Generate interface forms for an object and register them in its Интерфейс section.
 
-    forms – subset of ["object", "list", "list-cards", "report"]; default: object+list for
-    data objects, report for Отчет. The generated forms carry real content: input fields per
-    attribute, dynamic-list columns, tabular-section tables, hierarchy support.
+    forms – subset of ["object", "list", "list-cards", "report", "processing"]; default:
+    object+list for data objects, report for Report, processing for Processing. The generated
+    forms carry real content: input fields per attribute, dynamic-list columns,
+    tabular-section tables, hierarchy support; the processing form wires the operation
+    commands (MainCommand/UsualCommands from the Commands type).
 
     "list-cards" builds the list form as a card grid (ПроизвольныйСписок with a matrix
     КонтейнерСтрок) instead of a table, and adds the row component СтрокаСписка<Имя>: the

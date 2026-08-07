@@ -2181,3 +2181,369 @@ def test_english_service_file_names_resolve(tmp_path):
 
     result = scaffold.op_add_subsystem(project_dir, "Extra")
     assert [c.path for c in result.changes] == [project_dir / "Extra" / "Subsystem.yaml"]
+
+
+# --- localization section -----------------------------------------------------------------
+
+
+def _loc_element(tmp_path, name="ПробаЛокализация"):
+    apply_result(scaffold.op_new_object(tmp_path, "ЛокализованныеСтроки", name))
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "Строки:\n    Привет: Привет\n    Пока: Пока\n"
+        + 'Шаблоны:\n    Время: "Время: %0"\n',
+        encoding="utf-8",
+    )
+    return path
+
+
+def _loc_descriptor(tmp_path, languages=("Русский", "Английский"), default="Русский"):
+    lines = [
+        "Ид: 6f0b6a44-0000-4000-8000-0000000000b1",
+        "Имя: Проба", "Поставщик: e1c", "Версия: 1.0.0",
+        f"ЯзыкПоУмолчанию: {default}", "ЯзыкиЛокализации:",
+        *[f"    - {lang}" for lang in languages],
+    ]
+    (tmp_path / "Проект.yaml").write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def test_add_localization_copies_the_string_sections(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    result = scaffold.op_add_localization(path, "Английский")
+    written = apply_result(result)
+    target = tmp_path / "Локализация" / "En" / "ПробаЛокализация.yaml"
+    assert written == [str(target)]
+    text = target.read_text(encoding="utf-8")
+    # The translation repeats the string sections alone: the keys with the default-language
+    # values to replace, no element header (the documentation allows only these sections).
+    assert "ВидЭлемента" not in text
+    assert "Привет: Привет" in text
+    assert 'Время: "Время: %0"' in text
+    assert any("переведите" in note for note in result.notes)
+
+
+def test_add_localization_accepts_the_folder_code(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    apply_result(scaffold.op_add_localization(path, "en"))
+    assert (tmp_path / "Локализация" / "En" / "ПробаЛокализация.yaml").is_file()
+
+
+def test_add_localization_reuses_the_existing_section_dir(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    (tmp_path / "Localization").mkdir()
+    apply_result(scaffold.op_add_localization(path, "Английский"))
+    assert (tmp_path / "Localization" / "En" / "ПробаЛокализация.yaml").is_file()
+
+
+def test_add_localization_rejections(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Товары"))
+    with pytest.raises(ScaffoldError, match="не ЛокализованныеСтроки"):
+        scaffold.op_add_localization(tmp_path / "Товары.yaml", "Английский")
+    with pytest.raises(ScaffoldError, match="Неизвестный язык"):
+        scaffold.op_add_localization(path, "Французский")
+    with pytest.raises(ScaffoldError, match="язык по умолчанию"):
+        scaffold.op_add_localization(path, "Русский")
+    apply_result(scaffold.op_add_localization(path, "Английский"))
+    with pytest.raises(ScaffoldError, match="уже существует"):
+        scaffold.op_add_localization(path, "Английский")
+
+
+def test_add_localization_requires_a_declared_language(tmp_path):
+    _loc_descriptor(tmp_path, languages=("Русский",))
+    path = _loc_element(tmp_path)
+    with pytest.raises(ScaffoldError, match="не указан в ЯзыкиЛокализации"):
+        scaffold.op_add_localization(path, "Английский")
+
+
+def test_add_localization_without_sections_writes_an_empty_one(tmp_path):
+    _loc_descriptor(tmp_path)
+    apply_result(scaffold.op_new_object(tmp_path, "ЛокализованныеСтроки", "Пустая"))
+    result = scaffold.op_add_localization(tmp_path / "Пустая.yaml", "Английский")
+    apply_result(result)
+    text = (tmp_path / "Локализация" / "En" / "Пустая.yaml").read_text(encoding="utf-8")
+    assert text == "Строки:\n"
+
+
+def test_localization_info_candidates(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    info = scaffold.localization_info(path)
+    assert info["languages"] == ["Ru", "En"]
+    assert info["default"] == "Ru"
+    assert info["existing"] == []
+    assert info["candidates"] == ["En"]
+    assert info["names"] == {"En": "Английский"}
+    apply_result(scaffold.op_add_localization(path, "Английский"))
+    info = scaffold.localization_info(path)
+    assert info["existing"] == ["En"]
+    assert info["candidates"] == []
+
+
+def test_localization_info_without_a_descriptor(tmp_path):
+    path = _loc_element(tmp_path)
+    info = scaffold.localization_info(path)
+    # No declared languages: every supported language is offered, with the note that the
+    # descriptor must declare them for localization to work at all.
+    assert info["languages"] == []
+    assert info["candidates"] == ["Ru", "En"]
+    assert info["notes"]
+
+
+def test_localization_info_reads_an_inline_language_list(tmp_path):
+    # The real site descriptor writes the list inline - the form the block parser missed.
+    (tmp_path / "Проект.yaml").write_text(
+        "Ид: 6f0b6a44-0000-4000-8000-0000000000b2\n"
+        "Имя: Проба\nПоставщик: e1c\nВерсия: 1.0.0\n"
+        "ЯзыкиЛокализации: [Русский, Английский]\n"
+        "ЯзыкПоУмолчанию: Русский\n",
+        encoding="utf-8",
+    )
+    info = scaffold.localization_info(_loc_element(tmp_path))
+    assert info["languages"] == ["Ru", "En"]
+    assert info["candidates"] == ["En"]
+
+
+# --- processing form ----------------------------------------------------------------------
+
+
+def test_add_form_processing(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "Расчет"))
+    path = tmp_path / "Расчет.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + "Реквизиты:\n    -\n        Имя: Вес\n        Тип: Число\n"
+        + "Операции:\n    -\n        Имя: Рассчитать\n        Основная: Истина\n",
+        encoding="utf-8",
+    )
+    result = scaffold.op_add_form(tmp_path, yaml_path=path)
+    apply_result(result)
+    form = (tmp_path / "РасчетФормаОбработки.yaml").read_text(encoding="utf-8")
+    _valid_yaml(form)
+    assert "Тип: ФормаОбработки<Расчет.Объект>" in form
+    # The commands come from the Commands type: new operations reach the form by themselves.
+    assert "ОсновнаяКоманда: =Команды.ПолучитьОсновную()" in form
+    assert "ОбычныеКоманды: =Команды.ПолучитьОбычные()" in form
+    assert "Значение: =Объект.Вес" in form
+    assert "Форма: РасчетФормаОбработки" in path.read_text(encoding="utf-8")
+
+
+def test_add_form_processing_is_the_only_choice_for_a_processor(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "Расчет"))
+    with pytest.raises(ScaffoldError, match="только форма обработки"):
+        scaffold.op_add_form(tmp_path, yaml_path=tmp_path / "Расчет.yaml", forms=["object"])
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Товары"))
+    with pytest.raises(ScaffoldError, match="неприменима"):
+        scaffold.op_add_form(
+            tmp_path, yaml_path=tmp_path / "Товары.yaml", forms=["processing"]
+        )
+
+
+def test_add_form_processing_registers_into_an_existing_interface(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "Расчет"))
+    path = tmp_path / "Расчет.yaml"
+    path.write_text(
+        path.read_text(encoding="utf-8") + "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n",
+        encoding="utf-8",
+    )
+    apply_result(scaffold.op_add_form(tmp_path, yaml_path=path))
+    owner = path.read_text(encoding="utf-8")
+    assert "    ВключатьВАвтоИнтерфейс: Ложь\n    Форма: РасчетФормаОбработки" in owner
+
+
+def test_section_insertions_keep_crlf_files_crlf(tmp_path):
+    # A CRLF yaml stays CRLF after an insertion: body_end must not sit between \r and \n,
+    # or the edit leaves a lone \r (a broken line, and git normalizes the whole file).
+    path = tmp_path / "Товары.yaml"
+    path.write_bytes(
+        (
+            "ВидЭлемента: Справочник\r\nИд: 6f0b6a44-0000-4000-8000-0000000000c3\r\n"
+            "Имя: Товары\r\nОбластьВидимости: ВПодсистеме\r\n"
+            "Реквизиты:\r\n    -\r\n        Имя: Цена\r\n        Тип: Число\r\n"
+        ).encode("utf-8")
+    )
+    apply_result(scaffold.op_add_field(path, "реквизит", "Вес", type_="Число"))
+    raw = path.read_bytes().decode("utf-8")
+    assert "Имя: Вес" in raw
+    assert "\r\r" not in raw
+    assert raw.count("\n") == raw.count("\r\n")
+
+
+# --- properties of metadata items ---------------------------------------------------------
+
+
+def _constants_set(tmp_path, name="НастройкиСайта"):
+    apply_result(scaffold.op_new_object(tmp_path, "НаборКонстант", name))
+    return tmp_path / f"{name}.yaml"
+
+
+def test_add_field_writes_item_properties(tmp_path):
+    path = _constants_set(tmp_path)
+    apply_result(scaffold.op_add_field(
+        path, "константа", "АдресExtApi", type_="Строка",
+        props={"ЗначениеПоУмолчанию": "https://example.com/a/adm/hs/ext_api",
+               "Представление": "Адрес ExtAPI"},
+    ))
+    text = path.read_text(encoding="utf-8")
+    parsed = _valid_yaml(text)
+    constant = parsed["Константы"][0]
+    assert constant["Имя"] == "АдресExtApi"
+    assert constant["ЗначениеПоУмолчанию"] == "https://example.com/a/adm/hs/ext_api"
+    assert constant["Представление"] == "Адрес ExtAPI"
+    # An address carries a colon - a bare scalar would lie about the value; a plain word does not.
+    assert 'ЗначениеПоУмолчанию: "https://example.com/a/adm/hs/ext_api"' in text
+
+
+@pytest.mark.needs_data
+def test_add_field_property_names_are_checked(tmp_path):
+    path = _constants_set(tmp_path)
+    with pytest.raises(ScaffoldError, match="нет свойства"):
+        scaffold.op_add_field(path, "константа", "К1", props={"ЗначениеПоУмолчнию": "1"})
+    # What the operation writes itself is not a property to pass here.
+    with pytest.raises(ScaffoldError, match="отдельным параметром"):
+        scaffold.op_add_field(path, "константа", "К2", props={"Тип": "Число"})
+    with pytest.raises(ScaffoldError, match="многострочное"):
+        scaffold.op_add_field(path, "константа", "К3", props={"Представление": "две\nстроки"})
+
+
+@pytest.mark.needs_data
+def test_add_field_accepts_the_english_spelling_of_a_property(tmp_path):
+    path = _constants_set(tmp_path)
+    apply_result(scaffold.op_add_field(
+        path, "константа", "Порог", type_="Число", props={"MaxValue": "100"},
+    ))
+    # The project is Russian - the key is written the Russian way whichever spelling came in.
+    assert "МаксимальноеЗначение: 100" in path.read_text(encoding="utf-8")
+
+
+def test_set_field_property_replaces_and_appends(tmp_path):
+    path = _constants_set(tmp_path)
+    apply_result(scaffold.op_add_field(
+        path, "константа", "АдресСайта", type_="Строка", props={"ЗначениеПоУмолчанию": "старый"},
+    ))
+    apply_result(scaffold.op_set_field_property(
+        path, "константа", "АдресСайта",
+        {"ЗначениеПоУмолчанию": "https://example.com/site", "Представление": "Адрес сайта"},
+    ))
+    parsed = _valid_yaml(path.read_text(encoding="utf-8"))
+    constant = parsed["Константы"][0]
+    assert constant["ЗначениеПоУмолчанию"] == "https://example.com/site"  # replaced in place
+    assert constant["Представление"] == "Адрес сайта"  # appended to the item
+    assert len(parsed["Константы"]) == 1
+
+
+def test_set_field_property_edits_the_named_item_only(tmp_path):
+    path = _constants_set(tmp_path)
+    for name in ("Первая", "Вторая", "Третья"):
+        apply_result(scaffold.op_add_field(path, "константа", name, type_="Строка"))
+    apply_result(scaffold.op_set_field_property(
+        path, "константа", "Вторая", {"Представление": "Вторая константа"},
+    ))
+    constants = _valid_yaml(path.read_text(encoding="utf-8"))["Константы"]
+    assert [c.get("Представление") for c in constants] == [None, "Вторая константа", None]
+
+
+@pytest.mark.needs_data
+def test_set_field_property_rejections(tmp_path):
+    path = _constants_set(tmp_path)
+    apply_result(scaffold.op_add_field(path, "константа", "Ключ", type_="Строка"))
+    with pytest.raises(ScaffoldError, match="не найден"):
+        scaffold.op_set_field_property(path, "константа", "Нет", {"Представление": "х"})
+    with pytest.raises(ScaffoldError, match="нет свойства"):
+        scaffold.op_set_field_property(path, "константа", "Ключ", {"Выдуманное": "х"})
+    # Renaming updates references - that is meta_rename_object's job, not a property edit.
+    with pytest.raises(ScaffoldError, match="отдельным параметром"):
+        scaffold.op_set_field_property(path, "константа", "Ключ", {"Имя": "Другое"})
+    with pytest.raises(ScaffoldError, match="Не заданы свойства"):
+        scaffold.op_set_field_property(path, "константа", "Ключ", {})
+
+
+def test_set_field_property_refuses_a_block_value(tmp_path):
+    path = _constants_set(tmp_path)
+    apply_result(scaffold.op_add_field(path, "константа", "Ключ", type_="Строка"))
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace(
+            "        Тип: Строка",
+            "        Тип: Строка\n        ОграниченияЭлементов:\n            МаксимальнаяДлина: 10",
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ScaffoldError, match="блоком"):
+        scaffold.op_set_field_property(
+            path, "константа", "Ключ", {"ОграниченияЭлементов": "нет"},
+        )
+
+
+def test_set_field_property_on_a_tabular_attribute(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Заказы"))
+    path = tmp_path / "Заказы.yaml"
+    apply_result(scaffold.op_add_field(path, "табличная-часть", "Строки"))
+    apply_result(scaffold.op_add_field(path, "реквизит", "Реквизит1", type_="Строка"))
+    apply_result(scaffold.op_set_field_property(
+        path, "реквизит", "Реквизит1", {"МаксимальнаяДлина": "50"}, tabular="Строки",
+    ))
+    parsed = _valid_yaml(path.read_text(encoding="utf-8"))
+    tabular_attr = parsed["ТабличныеЧасти"][0]["Реквизиты"][0]
+    assert tabular_attr["МаксимальнаяДлина"] == 50
+    # The object attribute of the same name is untouched: the tabular one was asked for.
+    assert "МаксимальнаяДлина" not in parsed["Реквизиты"][0]
+
+
+def test_new_object_presentation(tmp_path):
+    apply_result(scaffold.op_new_object(
+        tmp_path, "НаборКонстант", "НастройкиСайта", presentation="Настройки сайта",
+    ))
+    text = (tmp_path / "НастройкиСайта.yaml").read_text(encoding="utf-8")
+    assert _valid_yaml(text)["Представление"] == "Настройки сайта"
+    # Right after Name, the order the platform serializes the header in.
+    assert "Имя: НастройкиСайта\nПредставление: Настройки сайта\nОбластьВидимости:" in text
+
+
+def test_new_object_presentation_for_a_generated_kind(tmp_path):
+    # A report builds its yaml in a generator of its own - the caption still lands, right
+    # after Name, because it is written into the finished text rather than by each generator.
+    apply_result(scaffold.op_new_object(
+        tmp_path, "Отчет", "Остатки", presentation="Остатки товаров",
+        report={"source": "Заказы", "rows": ["Товар"], "measures": ["Сумма"]},
+    ))
+    text = (tmp_path / "Остатки.yaml").read_text(encoding="utf-8")
+    assert _valid_yaml(text)["Представление"] == "Остатки товаров"
+    # The generator writes a caption of its own (the name) - it is replaced, not doubled.
+    assert text.count("Представление:") == 1
+
+
+@pytest.mark.needs_data
+def test_new_object_presentation_only_where_the_kind_has_one(tmp_path):
+    # The metamodel is the judge: an HTTP service has no Presentation, and writing one
+    # would produce a file the compiler rejects.
+    with pytest.raises(ScaffoldError, match="нет свойства Представление"):
+        scaffold.op_new_object(
+            tmp_path, "HttpСервис", "СайтHttpСервис", presentation="Сервис сайта",
+        )
+
+
+@pytest.mark.needs_data
+def test_new_object_presentation_is_a_caption_or_an_attribute_name(tmp_path):
+    """Presentation means two different things, and the tool refuses the wrong one.
+
+    A catalog shows the value of a string ATTRIBUTE (metamodel type AttributeName); a
+    caption written there compiles into "Field specified as a presentation field is not
+    found" (checked on the server 07.08.2026). A constants set has no attributes at all -
+    there the value is a caption, and the server takes it.
+    """
+    with pytest.raises(ScaffoldError, match="ИМЯ строкового реквизита"):
+        scaffold.op_new_object(tmp_path, "Справочник", "Товары", presentation="Товары склада")
+    apply_result(scaffold.op_new_object(
+        tmp_path, "Справочник", "Товары", presentation="Название",
+    ))
+    assert "Представление: Название" in (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
+    apply_result(scaffold.op_new_object(
+        tmp_path, "НаборКонстант", "Настройки", presentation="Настройки сайта",
+    ))
+    assert "Представление: Настройки сайта" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")

@@ -406,7 +406,10 @@ def _section_bounds(text: str, section: str, top_level: bool = False) -> tuple[i
         return None
     header_indent = len(header.group(1))
     header_line_end = _line_end(text, header.start())
-    body_end = header_line_end
+    # Both here and below, the recorded end steps back over `\r`: an insertion at body_end
+    # must not land between `\r` and `\n` of a CRLF file (a lone `\r` breaks the line and
+    # git then normalizes the whole file).
+    body_end = header_line_end - (1 if text[header_line_end - 1 : header_line_end] == "\r" else 0)
     pos = header_line_end
     while pos < len(text):
         line_start = pos + 1
@@ -417,7 +420,7 @@ def _section_bounds(text: str, section: str, top_level: bool = False) -> tuple[i
         if not blank and indent <= header_indent:
             break
         if not blank:
-            body_end = line_end
+            body_end = line_end - (1 if text[line_end - 1 : line_end] == "\r" else 0)
         pos = line_end
     return header_indent, header_line_end, body_end
 
@@ -662,10 +665,16 @@ def _spelled(name: str, lang: str, section: str = "") -> str:
 
 def new_object_yaml(
     kind: str, uid: str, name: str, scope: str, extra_lines: list[str], lang: str = "ru",
+    presentation: str | None = None,
 ) -> str:
     keys = [spelled_key(k, lang) for k in _HEADER_KEYS]
     values = [_spelled(kind, lang, "types"), uid, name, _spelled(scope, lang, "enums")]
     lines = [f"{k}: {v}" for k, v in zip(keys, values)]
+    if presentation:
+        # After Name and before VisibilityScope - the order the platform itself serializes
+        # the header in (the metamodel priorities: Name 9998, Presentation 9900,
+        # VisibilityScope 9800).
+        lines.insert(3, f"{spelled_key('Представление', lang)}: {_yaml_scalar(presentation)}")
     return "\n".join(lines + spelled_lines(list(extra_lines), lang)) + "\n"
 
 
@@ -1564,6 +1573,64 @@ def resolve_kind(kind: str) -> str:
     return _kind_by_english().get(kind.casefold(), kind)
 
 
+def _check_presentation(kind: str, value: str) -> None:
+    """The Presentation of the kind accepts this value - or a refusal saying what it holds.
+
+    The property means two different things depending on the kind, and the metamodel says
+    which: a TEXT caption (a report, a command - type String/Localizable), or the NAME of a
+    string attribute whose value the platform shows for a record (a catalog, a document -
+    type AttributeName). Writing a caption into the second kind compiles into
+    "Field specified as a presentation field is not found: <текст>" - checked on the server,
+    so the tool refuses it here rather than handing over a file that will not deploy.
+    """
+    if not metamodel.available():
+        return
+    prop = metamodel.properties(kind).get("Представление")
+    if prop is None:
+        raise ScaffoldError(f"У вида {kind} нет свойства Представление")
+    # A kind with no Attributes at all (ConstantsSet) carries a caption whatever the
+    # metamodel type says - see the yaml/presentation-field rule.
+    if prop.get("type") != "AttributeName" or "Реквизиты" not in metamodel.properties(kind):
+        return
+    if value.startswith(("$", "=")):
+        return  # a localized-string reference / a binding, not a name
+    if not _IDENTIFIER.match(value.strip()):
+        raise ScaffoldError(
+            f"У вида {kind} Представление – это ИМЯ строкового реквизита, значение которого "
+            f"платформа показывает вместо записи, а не заголовок: '{value}' именем быть не "
+            "может. Укажите имя реквизита (он должен быть объявлен в Реквизиты – даже "
+            "стандартное Наименование сервер не находит, пока оно не написано)"
+        )
+
+
+def _presented(result: ScaffoldResult, yaml_path: Path, presentation: str | None) -> ScaffoldResult:
+    """Write Представление into a yaml a dedicated generator produced (right after Имя)."""
+    if not presentation:
+        return result
+    for change in result.changes:
+        if change.path != yaml_path:
+            continue
+        nl = _dominant_nl(change.content)
+        lang = yaml_language(change.content, yaml_path.parent)
+        line = f"{spelled_key('Представление', lang)}: {_yaml_scalar(presentation)}"
+        # A generator may already write a caption of its own (a report defaults it to the
+        # name): the caller's value REPLACES it - a second key would be a duplicate, and
+        # of two the reader takes whichever it likes.
+        spellings = "|".join(re.escape(form) for form in key_forms("Представление"))
+        own = re.search(rf"^(?:{spellings}):[ \t]*.*?(?=\r?$)", change.content, re.M)
+        if own is not None:
+            change.content = change.content[:own.start()] + line + change.content[own.end():]
+            continue
+        m = re.search(r"^(?:Имя|Name):.*$", change.content, re.M)
+        if m is None:  # no name line to anchor to - the caption still belongs in the file
+            change.content = change.content + line + nl
+            continue
+        at = _line_end(change.content, m.start())
+        at -= 1 if change.content[at - 1: at] == "\r" else 0
+        change.content = change.content[:at] + nl + line + change.content[at:]
+    return result
+
+
 def op_new_object(
     directory: Path,
     kind: str,
@@ -1574,13 +1641,16 @@ def op_new_object(
     access: str | None = None,
     routes: str | None = None,
     report: dict | None = None,
+    presentation: str | None = None,
 ) -> ScaffoldResult:
     """Create a configuration object: Имя.yaml (+ Имя.xbsl for kinds with a module).
 
     environment - Окружение for ОбщийМодуль/Структура; access - the access control method
     (for HttpСервис written to Разрешения.Вызов, for data objects to
     Разрешения.ПоУмолчанию; individual rights are set by op_set_access); routes -
-    HttpСервис routes ("GET /, POST /, GET /{id}"); report - the report source and layout.
+    the service's routes ("GET /, POST /, GET /{id}"); report - the report source and layout;
+    presentation - Presentation, the element's caption where the kind means a caption by
+    it, and the NAME of a string attribute where it means one (see _check_presentation).
     """
     kind = resolve_kind(kind)
     spec = KIND_SPECS.get(kind)
@@ -1604,6 +1674,9 @@ def op_new_object(
             f"Недопустимый способ контроля доступа '{access}'; доступны: " + ", ".join(ACCESS_METHODS)
         )
 
+    if presentation:
+        _check_presentation(kind, presentation)
+
     result = ScaffoldResult()
     if access in ("РазрешенияВычисляются", _PER_OBJECT):
         result.notes.append(
@@ -1613,12 +1686,21 @@ def op_new_object(
                 if access == _PER_OBJECT else ""
             ) + " в модуле объекта"
         )
+    # The kinds with a generator of their own build the yaml themselves - the caption is
+    # written into the finished text, so all kinds get it in one place.
     if kind == "HttpСервис":
-        return _new_http_service(yaml_path, name, access, routes or "GET /", result, scope)
+        return _presented(
+            _new_http_service(yaml_path, name, access, routes or "GET /", result, scope),
+            yaml_path, presentation,
+        )
     if kind == "SoapСервис":
-        return _new_soap_service(yaml_path, name, access, result, scope)
+        return _presented(
+            _new_soap_service(yaml_path, name, access, result, scope), yaml_path, presentation
+        )
     if kind == "Отчет":
-        return _new_report(yaml_path, name, report or {}, result, scope)
+        return _presented(
+            _new_report(yaml_path, name, report or {}, result, scope), yaml_path, presentation
+        )
 
     extra = _expand_extra(spec.extra, name)
     if environment:
@@ -1632,6 +1714,7 @@ def op_new_object(
                   f"        {ACCESS_DEFAULT_RIGHT}: {access}"]
     content = new_object_yaml(
         kind, new_uuid(), name, scope or spec.scope, extra, project_language(directory),
+        presentation=presentation,
     )
     result.changes.append(FileChange(yaml_path, content, created=True))
     if spec.module:
@@ -1651,11 +1734,16 @@ def op_add_field(
     *,
     type_: str = "Строка",
     tabular: str | None = None,
+    props: dict[str, str] | None = None,
     reader=None,
 ) -> ScaffoldResult:
     """Add a section item to an object: an attribute, dimension, resource, enumeration
     value, parameter, structure field or tabular part; tabular - the tabular part name
     when adding an attribute into it.
+
+    props - the item's other properties (DefaultValue, Presentation,
+    MaxLength...), checked against the metamodel class of the section item; the
+    keys the operation writes itself (Name, Type, Id) are refused there.
     """
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
@@ -1671,8 +1759,11 @@ def op_add_field(
         offset = find_section_item_offset(text, "ТабличныеЧасти", tabular)
         if offset is None:
             raise ScaffoldError(f"Табличная часть '{tabular}' не найдена в {yaml_path.name}")
+        extra = _checked_props(
+            props, kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)), ("Ид", "Имя", "Тип"),
+        )
         lines = spelled_lines(
-            [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"], lang
+            [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"] + _prop_lines(extra), lang
         )
         edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl, lang)
         new_text = apply_edit(text, edit)
@@ -1704,10 +1795,13 @@ def op_add_field(
     if name in existing:
         raise ScaffoldError(f"'{name}' уже есть в секции {spec['section']} файла {yaml_path.name}")
     template = _KIND_SECTION_LINES.get((kind, field_kind), spec["lines"])
+    extra = _checked_props(
+        props, kind, ((spec["section"], None),), ("Ид", "Имя", "Тип"),
+    )
     lines = spelled_lines([
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=type_)
         for line in template
-    ], lang)
+    ] + _prop_lines(extra), lang)
     edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
@@ -1720,6 +1814,219 @@ def op_add_field(
             "реквизиты, по которым нужен индекс"
         )
     return result
+
+
+# --- properties of a metadata item --------------------------------------------------------
+#
+# A field is more than a name and a type: a constant carries `ЗначениеПоУмолчанию`, an attribute
+# Presentation and MaxLength. Until these could be passed, the tool wrote the item and
+# the author finished it by hand in the yaml - which is exactly what the meta_* tools exist to
+# avoid. The names are checked against the metamodel class of the section item (the same source
+# metadata_schema answers from), so a typo is refused rather than written into the file.
+
+#: Characters that make a bare yaml scalar ambiguous.
+_AMBIGUOUS_SCALAR = re.compile(r"""[:#\[\]{}&*!|>'"%@`]""")
+
+
+def _yaml_scalar(value: str) -> str:
+    """A property value as it goes into yaml: quoted only where a bare scalar would lie.
+
+    The measure is the sources themselves - an address is written quoted
+    (`ЗначениеПоУмолчанию: "https://..."`), a plain word bare (`fresh-site`). A value the
+    caller already quoted is left as it is: quoting it twice would store the quotes.
+    """
+    if len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]:
+        return value
+    if value == "" or value != value.strip() or value[0] in "-?" or _AMBIGUOUS_SCALAR.search(value):
+        return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return value
+
+
+def item_property_forms(kind: str, path: tuple[tuple[str, str | None], ...]) -> dict[str, str]:
+    """{any accepted spelling of an item property: its Russian name}, empty - class unknown.
+
+    Both spellings are accepted because a project may be written in either language, and the
+    answer is Russian: the writing side spells the keys back into the project's language
+    (spelled_lines), so everything in between speaks one vocabulary.
+    """
+    cls = metamodel.item_class(kind, path) if metamodel.available() else None
+    if not cls:
+        return {}
+    forms: dict[str, str] = {}
+    for name, record in metamodel.properties_of_class(cls).items():
+        forms[name] = name
+        english = record.get("en")
+        if english:
+            forms.setdefault(english, name)
+    return forms
+
+
+def _checked_props(
+    props: dict[str, str] | None,
+    kind: str,
+    path: tuple[tuple[str, str | None], ...],
+    written: tuple[str, ...],
+) -> dict[str, str]:
+    """Properties canonicalized to Russian names and checked against the metamodel.
+
+    `written` are the keys the operation writes itself (Name, Type, Id): passing one of them
+    would silently lose either the parameter or the property, so it is refused. Without the
+    metamodel data nothing is checked - the tool writes what it was given, as it always did.
+    """
+    if not props:
+        return {}
+    forms = item_property_forms(kind, path)
+    written_forms = {form for name in written for form in key_forms(name)}
+    out: dict[str, str] = {}
+    for key, value in props.items():
+        key = str(key).strip()
+        if key in written_forms:
+            raise ScaffoldError(
+                f"Свойство '{key}' задаётся отдельным параметром операции, "
+                "а не в списке свойств"
+            )
+        if forms and key not in forms:
+            raise ScaffoldError(
+                f"У элемента секции нет свойства '{key}'; доступны: "
+                + ", ".join(sorted(set(forms.values())))
+            )
+        text = "" if value is None else str(value)
+        if "\n" in text or "\r" in text:
+            raise ScaffoldError(
+                f"Значение свойства '{key}' многострочное – такие блоки "
+                "(напр. вложенные структуры) пишутся в yaml вручную"
+            )
+        out[forms.get(key, key)] = text
+    return out
+
+
+def _prop_lines(props: dict[str, str]) -> list[str]:
+    return [f"{key}: {_yaml_scalar(value)}" for key, value in props.items()]
+
+
+def _item_block_span(text: str, offset: int) -> tuple[int, int]:
+    """(end of the item block, indent of its fields) for a block starting at offset.
+
+    The block ends at the end of its last non-blank line, stepping back over `\\r` - an
+    insertion at that point must not land between `\\r` and `\\n` of a CRLF file.
+    """
+    line_start = text.rfind("\n", 0, offset - 1) + 1
+    field_indent = offset - line_start
+    end = _line_end(text, offset)
+    pos = end
+    while pos < len(text):
+        ls = pos + 1
+        le = _line_end(text, ls)
+        line = text[ls:le]
+        if line.strip() == "":
+            pos = le
+            continue
+        if len(_LINE_INDENT.match(line).group(0)) < field_indent:
+            break
+        end = le
+        pos = le
+    return end - (1 if text[end - 1: end] == "\r" else 0), field_indent
+
+
+def op_set_field_property(
+    yaml_path: Path,
+    field_kind: str,
+    name: str,
+    props: dict[str, str],
+    *,
+    tabular: str | None = None,
+    reader=None,
+) -> ScaffoldResult:
+    """Set properties on an item that already sits in a section (a constant, an attribute...).
+
+    The twin of op_add_field for what comes after creation: an existing property is replaced
+    in place, a new one is appended at the end of the item block. This is the metadata
+    counterpart of the form tools - meta_set_component_property serves interface components
+    and refuses everything else, so until now the properties of a metadata item could only
+    be written by hand.
+    """
+    yaml_path = Path(yaml_path)
+    if not props:
+        raise ScaffoldError("Не заданы свойства для установки")
+    text, nl = _load_for_edit(yaml_path, reader)
+    kind = element_kind(text) or "?"
+    lang = yaml_language(text, yaml_path.parent)
+
+    if tabular and field_kind != "реквизит":
+        raise ScaffoldError("В табличной части правятся только реквизиты")
+    if field_kind in _MAPPING_SPECS:
+        raise ScaffoldError(
+            f"'{field_kind}' – пара ключ-значение, у неё нет свойств: значение правится "
+            "прямо в yaml или пересозданием записи"
+        )
+    spec = _SECTION_SPECS.get(field_kind)
+    if spec is None:
+        raise ScaffoldError(
+            f"Неизвестный вид элемента '{field_kind}'; доступны: {', '.join(FIELD_KINDS)}"
+        )
+    allowed = KIND_SECTIONS.get(kind)
+    if allowed is None or field_kind not in allowed:
+        avail = ", ".join(allowed) if allowed else "нет"
+        raise ScaffoldError(f"У вида {kind} нет секции для '{field_kind}'; доступны: {avail}")
+
+    if tabular:
+        path = (("ТабличныеЧасти", tabular), ("Реквизиты", None))
+        tabular_offset = find_section_item_offset(text, "ТабличныеЧасти", tabular)
+        if tabular_offset is None:
+            raise ScaffoldError(f"Табличная часть '{tabular}' не найдена в {yaml_path.name}")
+        block_end, _ = _item_block_span(text, tabular_offset)
+        # The attribute is looked up INSIDE the tabular part block: two tabular parts may
+        # both have an attribute of that name, and the one to edit is the caller's.
+        slice_start = tabular_offset
+        inner = find_section_item_offset(text[slice_start:block_end], "Реквизиты", name, top_level=False)
+        offset = None if inner is None else slice_start + inner
+        location = f"табличной части '{tabular}'"
+    else:
+        path = ((spec["section"], None),)
+        offset = find_section_item_offset(text, spec["section"], name)
+        location = f"секции {spec['section']}"
+    if offset is None:
+        raise ScaffoldError(f"'{name}' не найден в {location} файла {yaml_path.name}")
+
+    # Name is refused like in op_add_field: renaming is op_rename_object's business (it
+    # updates the references), and a silent rename here would leave them dangling.
+    checked = _checked_props(props, kind, path, ("Имя",))
+    end, field_indent = _item_block_span(text, offset)
+    block = text[offset:end]
+    indent = " " * field_indent
+
+    edits: list[TextEdit] = []
+    appended: list[str] = []
+    for key, value in checked.items():
+        line = spelled_lines([f"{key}: {_yaml_scalar(value)}"], lang)[0]
+        spellings = "|".join(re.escape(form) for form in key_forms(key))
+        m = re.search(rf"^{indent}(?:{spellings}):[ \t]*(.*?)[ \t]*\r?$", block, re.M)
+        if m is None:
+            appended.append(line)
+            continue
+        # Only the key's OWN line is replaced: a block value (a nested structure under the
+        # key) is not a scalar and must not be flattened into one.
+        if m.group(1) == "":
+            raise ScaffoldError(
+                f"Свойство '{key}' задано блоком (вложенной структурой) – "
+                "такое значение правится в yaml вручную"
+            )
+        edits.append(TextEdit(offset + m.start(), offset + m.end(), indent + line))
+
+    new_text = text
+    for edit in sorted(edits, key=lambda e: e.start, reverse=True):
+        new_text = apply_edit(new_text, edit)
+    if appended:
+        # The appended lines go after the block, whose end shifted by the replacements above
+        # (they all sit before it, so the shift is the sum of their length deltas).
+        shift = sum(len(e.new_text) - (e.end - e.start) for e in edits)
+        at = end + shift
+        new_text = new_text[:at] + "".join(f"{nl}{indent}{line}" for line in appended) + new_text[at:]
+
+    if new_text == text:
+        return ScaffoldResult(notes=["Свойства уже имеют заданные значения – файл не изменён"])
+    cursor = _cursor_at(new_text, offset)
+    return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
 
 
 def _add_mapping_entry(
@@ -2582,21 +2889,190 @@ def op_add_route(yaml_path: Path, routes: str, *, reader=None) -> ScaffoldResult
 
 
 def _block_at(text: str, offset: int | None) -> str:
+    """The text of the section item block whose first key sits at offset."""
     if offset is None:
         return ""
-    line_start = text.rfind("\n", 0, offset - 1) + 1
-    field_indent = offset - line_start
-    end = len(text)
-    pos = _line_end(text, offset)
-    while pos < len(text):
-        ls = pos + 1
-        le = _line_end(text, ls)
-        line = text[ls:le]
-        if line.strip() != "" and len(_LINE_INDENT.match(line).group(0)) < field_indent:
-            end = ls
-            break
-        pos = le
+    end, _field_indent = _item_block_span(text, offset)
     return text[offset:end]
+
+
+# --- operations: localization -------------------------------------------------------------
+
+
+# The localization section of a project: <where the element lies>/Localization/<Code>/<Name>.yaml,
+# one file per language of LocalizationLanguages (the "Локализация" documentation). The platform
+# supports exactly two languages; a language folder is named by the capitalized language code
+# (Localization/En). A caller may name the language any way it reasonably holds it - the
+# descriptor value in either project language or the folder code itself.
+_LOCALIZATION_DIR_RU = "Локализация"
+_LOCALIZATION_DIR_EN = "Localization"
+_LANGUAGE_FOLDERS = {
+    "русский": "Ru", "russian": "Ru", "ru": "Ru",
+    "английский": "En", "english": "En", "en": "En",
+}
+#: The language name (as a Russian descriptor spells it) by its folder code.
+_LANGUAGE_BY_FOLDER = {"Ru": "Русский", "En": "Английский"}
+_LOCALIZED_STRINGS_KIND = "ЛокализованныеСтроки"
+
+
+def _language_folder(language: str) -> str:
+    folder = _LANGUAGE_FOLDERS.get(language.strip().casefold())
+    if folder is None:
+        known = ", ".join(f"{name} ({code})" for code, name in _LANGUAGE_BY_FOLDER.items())
+        raise ScaffoldError(f"Неизвестный язык '{language}'; поддерживаются: {known}")
+    return folder
+
+
+def _localized_strings_source(yaml_path: Path, reader=None) -> tuple[str, str]:
+    """The text of a ЛокализованныеСтроки element, or a ScaffoldError naming what it is."""
+    text, nl = _load_for_edit(yaml_path, reader)
+    kind = element_kind(text)
+    if kind != _LOCALIZED_STRINGS_KIND:
+        raise ScaffoldError(
+            f"{yaml_path.name} – не {_LOCALIZED_STRINGS_KIND} (вид: {kind or 'не элемент'}); "
+            "локализация добавляется к элементу локализованных строк"
+        )
+    return text, nl
+
+
+def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
+    """(localization languages, default language) of the project around the element.
+
+    Folder codes (Ru/En) on both sides. An absent descriptor, or one without languages,
+    yields an empty list - such a project does not localize at all.
+    """
+    project = None
+    for candidate in (yaml_path.parent, *yaml_path.parent.parents):
+        project = project_file_in(candidate)
+        if project is not None:
+            break
+    if project is None:
+        return [], None
+    text = _read(project)
+    # The list comes in either yaml form: inline `[Русский, Английский]` (the site project
+    # writes it so) or a block of `- Русский` lines.
+    flow = None
+    for spelling in key_forms("ЯзыкиЛокализации"):
+        flow = re.search(rf"^{re.escape(spelling)}:[ \t]*\[([^\]]*)\]", text, re.M)
+        if flow is not None:
+            break
+    if flow is not None:
+        values = [v.strip().strip("'\"") for v in flow.group(1).split(",")]
+    else:
+        values = []
+        bounds = _section_bounds(text, "ЯзыкиЛокализации", top_level=True)
+        if bounds is not None:
+            _, body_start, body_end = bounds
+            values = [
+                line.strip().lstrip("-").strip()
+                for line in text[body_start:body_end].splitlines()
+            ]
+    languages: list[str] = []
+    for value in values:
+        folder = _LANGUAGE_FOLDERS.get(value.casefold()) if value else None
+        if folder and folder not in languages:
+            languages.append(folder)
+    m = _key_re("ЯзыкПоУмолчанию").search(text)
+    default = _LANGUAGE_FOLDERS.get(m.group(1).casefold()) if m else None
+    return languages, default
+
+
+def _localization_dirs(element_dir: Path) -> list[Path]:
+    return [
+        d for name in (_LOCALIZATION_DIR_RU, _LOCALIZATION_DIR_EN)
+        if (d := element_dir / name).is_dir()
+    ]
+
+
+def localization_info(yaml_path: Path, *, reader=None) -> dict:
+    """The translations a LocalizedStrings element has and the languages it may get.
+
+    candidates - folder codes a translation can be added for: the declared localization
+    languages minus the default one (its values live in the element itself) minus the
+    translations already present; with no languages declared - every supported language,
+    with a note that the descriptor must declare them for localization to work.
+    """
+    yaml_path = Path(yaml_path)
+    text, _nl = _localized_strings_source(yaml_path, reader)
+    name = element_name(text, yaml_path.stem)
+    existing = sorted({
+        lang_dir.name
+        for base in _localization_dirs(yaml_path.parent)
+        for lang_dir in base.iterdir()
+        if lang_dir.is_dir() and (lang_dir / f"{name}.yaml").is_file()
+    })
+    languages, default = _descriptor_languages(yaml_path)
+    candidates = [
+        code for code in (languages or list(_LANGUAGE_BY_FOLDER))
+        if code != default and code not in existing
+    ]
+    notes = []
+    if not languages:
+        notes.append(
+            "В описании проекта не заданы ЯзыкиЛокализации – задайте их (включая язык "
+            "по умолчанию), иначе локализация не работает"
+        )
+    return {
+        "languages": languages,
+        "default": default,
+        "existing": existing,
+        "candidates": candidates,
+        "names": {code: _LANGUAGE_BY_FOLDER[code] for code in candidates},
+        "notes": notes,
+    }
+
+
+def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> ScaffoldResult:
+    """The localization section for a LocalizedStrings element: Localization/<Code>/<Name>.yaml.
+
+    The file repeats the Rows/Templates sections of the element as they are - the keys with
+    their default-language values, for the translator to replace in place (the documentation
+    allows only these sections in a translation, and its name must match the element).
+    """
+    yaml_path = Path(yaml_path)
+    text, nl = _localized_strings_source(yaml_path, reader)
+    folder = _language_folder(language)
+    languages, default = _descriptor_languages(yaml_path)
+    if folder == default:
+        raise ScaffoldError(
+            f"{_LANGUAGE_BY_FOLDER[folder]} – язык по умолчанию: его значения лежат в самом "
+            "элементе, отдельный файл перевода для него не нужен"
+        )
+    if languages and folder not in languages:
+        raise ScaffoldError(
+            f"Язык {_LANGUAGE_BY_FOLDER[folder]} не указан в ЯзыкиЛокализации описания "
+            "проекта – сначала добавьте его туда"
+        )
+    name = element_name(text, yaml_path.stem)
+    dirs = _localization_dirs(yaml_path.parent)
+    lang = yaml_language(text, yaml_path.parent)
+    section_dir = dirs[0] if dirs else yaml_path.parent / (
+        _LOCALIZATION_DIR_EN if lang == "en" else _LOCALIZATION_DIR_RU
+    )
+    target = section_dir / folder / f"{name}.yaml"
+    if target.exists():
+        raise ScaffoldError(f"Файл уже существует: {target}")
+
+    pieces = []
+    for section in ("Строки", "Шаблоны"):
+        span = top_level_key_span(text, section)
+        if span is not None:
+            pieces.append(text[span[0]:span[1]].rstrip("\r\n"))
+    content = (nl.join(pieces) if pieces else spelled_key("Строки", lang) + ":") + nl
+
+    result = ScaffoldResult()
+    result.changes.append(FileChange(target, content, created=True))
+    if pieces:
+        result.notes.append(
+            "Значения скопированы на языке по умолчанию – переведите их "
+            f"({_LANGUAGE_BY_FOLDER[folder]})"
+        )
+    if not languages:
+        result.notes.append(
+            "В описании проекта не заданы ЯзыкиЛокализации – добавьте языки (включая язык "
+            "по умолчанию), иначе перевод не подхватится"
+        )
+    return result
 
 
 # --- operations: report -------------------------------------------------------------------
@@ -2843,6 +3319,41 @@ def object_form_yaml(info: dict, uid: str) -> str:
             ] + [" " * 28 + "-"] + _tabular_table_lines(
                 obj, tc_name, " " * 32, panels=False, fields=tc["fields"]
             )
+    return "\n".join(lines) + "\n"
+
+
+def processing_form_yaml(info: dict, uid: str) -> str:
+    """The ProcessingForm from the object summary: input fields per attribute, the
+    operation buttons composed by the platform itself.
+
+    The shape is the generated-form canon of the "Обработка" documentation: the commands
+    come from the Commands type (GetMain/GetUsual), so new operations reach
+    the form without editing it, and no form module is needed.
+    """
+    obj = info["name"]
+    fields = info["fields"]
+    lines = [
+        "ВидЭлемента: КомпонентИнтерфейса",
+        f"Ид: {uid}",
+        f"Имя: {obj}ФормаОбработки",
+        "ОбластьВидимости: ВПодсистеме",
+        "Наследует:",
+        f"    Тип: ФормаОбработки<{obj}.Объект>",
+        "    ВключатьВАвтоИнтерфейс: Ложь",
+        f"    Заголовок: {obj}",
+        "    ОбычныеКоманды: =Команды.ПолучитьОбычные()",
+        "    ОсновнаяКоманда: =Команды.ПолучитьОсновную()",
+        "    Содержимое:",
+        "        Тип: ПроизвольныйШаблонФормы",
+        "        ШиринаВКолонках: Одинарная",
+        "        Содержимое:",
+        "            Тип: Группа",
+        "            Компоновка: Вертикальная",
+    ]
+    if fields:
+        lines.append("            Содержимое:")
+        for f in fields:
+            lines += _form_field_component(f["name"], f["type"], "                ")
     return "\n".join(lines) + "\n"
 
 
@@ -3254,10 +3765,16 @@ def report_form_yaml(info: dict, uid: str) -> str:
     return "\n".join(lines) + "\n"
 
 
+# Kinds whose single form is registered by the direct Interface.Form key.
+_DIRECT_FORM_SUFFIX = {"Отчет": "ФормаОтчета", "Обработка": "ФормаОбработки"}
+
+
 def _interface_block(kind: str, obj: str, forms: list[str]) -> list[str]:
     lines = ["Интерфейс:", "    ВключатьВАвтоИнтерфейс: Истина"]
-    if kind == "Отчет":
-        return lines + [f"    Форма: {obj}ФормаОтчета"]
+    if kind in _DIRECT_FORM_SUFFIX:
+        # A report and a data processor register their single form by the direct
+        # Interface.Form key - they have no Object/List subsections.
+        return lines + [f"    Форма: {obj}{_DIRECT_FORM_SUFFIX[kind]}"]
     if kind == "Справочник":
         lines.append("    ИспользоватьСозданиеПриВводе: Истина")
     if "object" in forms:
@@ -3284,10 +3801,11 @@ def _register_forms(text: str, nl: str, kind: str, obj: str, forms: list[str], r
         return text[:anchor] + f"{nl}{rendered}" + text[anchor:]
 
     # The section exists - append the missing registrations at its end, leave existing ones.
-    if kind == "Отчет":
-        # A report form is registered by the single Интерфейс.Форма key (it has no
-        # Объект/Список subsections), so the generic loop below does not serve it.
-        form_name = f"{obj}ФормаОтчета"
+    if kind in _DIRECT_FORM_SUFFIX:
+        # A report and a data processor register their form by the single Interface.Form
+        # key (they have no Object/List subsections), so the generic loop below does not
+        # serve them.
+        form_name = f"{obj}{_DIRECT_FORM_SUFFIX[kind]}"
         span = top_level_key_span(text, "Интерфейс")
         if re.search(rf"Форма:\s*{form_name}\b", text):
             result.notes.append(f"{form_name} уже зарегистрирована в Интерфейс")
@@ -3316,7 +3834,7 @@ def _register_forms(text: str, nl: str, kind: str, obj: str, forms: list[str], r
     return text
 
 
-FORM_KINDS = ("object", "list", "list-cards", "report")
+FORM_KINDS = ("object", "list", "list-cards", "report", "processing")
 
 
 def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = None,
@@ -3341,6 +3859,8 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     if forms is None:
         if kind == "Отчет":
             forms = ["report"]
+        elif kind == "Обработка":
+            forms = ["processing"]
         elif kind in OBJECT_FORM_KINDS:
             forms = ["object", "list"]
         elif kind in LIST_FORM_KINDS:
@@ -3348,7 +3868,8 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         else:
             raise ScaffoldError(
                 f"У вида {kind} нет форм объекта и списка; они есть у: "
-                + ", ".join(LIST_FORM_KINDS) + " (и форма отчёта у Отчет)"
+                + ", ".join(LIST_FORM_KINDS)
+                + " (форма отчёта у Отчет, форма обработки у Обработка)"
             )
     unknown = [f for f in forms if f not in FORM_KINDS]
     if unknown:
@@ -3363,6 +3884,12 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         raise ScaffoldError("Для отчёта доступна только форма отчёта: forms=[\"report\"]")
     if kind != "Отчет" and "report" in forms:
         raise ScaffoldError(f"Форма отчёта неприменима к виду {kind}")
+    if kind == "Обработка" and forms != ["processing"]:
+        raise ScaffoldError(
+            "Для обработки доступна только форма обработки: forms=[\"processing\"]"
+        )
+    if kind != "Обработка" and "processing" in forms:
+        raise ScaffoldError(f"Форма обработки неприменима к виду {kind}")
     # Only reference entities produce the ФормаОбъекта<X.Объект> type; a register has none.
     if "object" in forms and kind not in OBJECT_FORM_KINDS:
         raise ScaffoldError(
@@ -3380,6 +3907,7 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         "list": ("ФормаСписка", list_form_yaml),
         "list-cards": ("ФормаСписка", lambda i, uid: cards_list_form_yaml(i, uid, min_width=card_min_width)),
         "report": ("ФормаОтчета", report_form_yaml),
+        "processing": ("ФормаОбработки", processing_form_yaml),
     }
     # The form is written in the language of the object it belongs to: a Russian form in an
     # English project would be exactly the island the bilingual reading was fixed to avoid.

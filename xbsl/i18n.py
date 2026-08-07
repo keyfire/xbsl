@@ -704,6 +704,43 @@ _CORE_MESSAGES = {
         "ru": "добавить маршруты в существующий HttpСервис",
         "en": "add routes to an existing HttpСервис",
     },
+    "cli.help.scaf.field-prop": {
+        "ru": "свойство элемента (можно повторять): ЗначениеПоУмолчанию=https://example.com, "
+              "Представление=Адрес сервиса",
+        "en": "an item property (repeatable): DefaultValue=https://example.com, "
+              "Presentation=Service address",
+    },
+    "cli.help.scaf.set-field-property": {
+        "ru": "задать свойства существующего элемента секции (константы, реквизита ...)",
+        "en": "set properties of an existing section item (a constant, an attribute ...)",
+    },
+    "cli.help.scaf.sfp-name": {
+        "ru": "имя элемента в секции",
+        "en": "the name of the item in the section",
+    },
+    "cli.help.scaf.no-presentation": {
+        "ru": "Представление – заголовок элемента (без него первый же линт даёт "
+              "naming/presentation)",
+        "en": "Presentation – the element caption (without it the very first lint answers "
+              "naming/presentation)",
+    },
+    "cli.help.scaf.add-localization": {
+        "ru": "добавить файл перевода (раздел Локализация) к элементу ЛокализованныеСтроки",
+        "en": "add a translation file (the Localization section) to a LocalizedStrings element",
+    },
+    "cli.help.scaf.al-yaml": {
+        "ru": "yaml элемента ЛокализованныеСтроки",
+        "en": "the yaml of the LocalizedStrings element",
+    },
+    "cli.help.scaf.al-language": {
+        "ru": "язык перевода: Русский/Английский или код Ru/En",
+        "en": "the translation language: Russian/English or the Ru/En code",
+    },
+    "cli.help.scaf.localization-info": {
+        "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization)",
+        "en": "the languages and translations of a LocalizedStrings element "
+              "(candidates for add-localization)",
+    },
     "cli.help.scaf.add-method": {
         "ru": "добавить метод в модуль .xbsl, не разрывая аннотации",
         "en": "add a method to an .xbsl module without breaking annotations",
@@ -741,10 +778,10 @@ _CORE_MESSAGES = {
         "en": "the object's yaml (instead of --name)",
     },
     "cli.help.scaf.add-form-forms": {
-        "ru": "подмножество object,list,list-cards,report через запятую "
-              "(list-cards – список карточками, вместо list)",
-        "en": "a subset object,list,list-cards,report comma-separated "
-              "(list-cards – a card list, instead of list)",
+        "ru": "подмножество object,list,list-cards,report,processing через запятую "
+              "(list-cards – список карточками, вместо list; processing – форма обработки)",
+        "en": "a subset object,list,list-cards,report,processing comma-separated "
+              "(list-cards – a card list, instead of list; processing – a data processor form)",
     },
     "cli.help.scaf.add-form-card-min-width": {
         "ru": "ширина колонки сетки карточек (по умолчанию 400, с фото – 250)",

@@ -9,6 +9,45 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.52.0
+
+### Added
+- **The metadata tree creates every kind the engine can create.** The menu used to offer a
+  dozen kinds while the engine could create three times as many from a name alone. Added:
+  the stored structure, the constants set, the virtual table, the SOAP service, the
+  contracts (service, type, entity), the event-log event, the scheduled job, the data
+  processor, the report color scheme, the exchange plan, the access key, the privileges (on
+  an action and on an element), the settings storage, the self-registration parameter, the
+  localized strings and the four kinds of commands. A category collecting several kinds
+  (Contracts, Rights, Commands) offers them as separate context-menu entries, and its
+  inline "+" asks which kind. Still not creatable: the report (it needs a data source and a
+  layout) and the report panel (drawn in the designer).
+- **"Add localization (translation)"** on a localized-strings element: the languages come
+  from the engine (the declared localization languages minus the default one minus the
+  translations already present), and the new translation node is revealed in the tree
+  afterwards. The language name in the pick follows the language of the editor.
+- **Forms are added to every owner the engine generates them for**, not just to a catalog
+  and a document: a processing form for a data processor, a report form for a report, a
+  list form for the registers and the constants set, object and list forms for an exchange
+  plan and a settings storage. The choice of forms follows the owner's kind - no question
+  is asked where there is nothing to choose.
+- **Subordinate forms nest under their owner** by every naming convention (including
+  `ProcessingForm` and the English spellings), and the card-list row component
+  (`ListRow<Object>`) no longer settles in "Common forms".
+
+### Fixed
+- **The URL-template menu was not shown at all.** In the `when` clauses of four entries
+  ("Add a URL template", "Add an HTTP method") the word boundary was written as `\b`
+  instead of `\\b`: inside a JSON string that is the backspace control character, not a
+  regular expression, so the clause never matched - neither the "+" buttons nor the
+  context-menu entries appeared, though the commands were in place.
+- **The Russian localization caught up with the interface:** 21 strings were shown in
+  English under a Russian editor (the URL template and HTTP method prompts, the structural
+  form search, the update check, the palette, the properties panel). The sweep of source
+  strings against the bundle is now clean.
+- English command titles spell the service file names in English
+  (`Open object module (.Object.xbsl)`, `Open application module (Project.xbsl)`).
+
 ## 0.51.0
 
 ### Fixed

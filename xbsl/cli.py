@@ -272,8 +272,9 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
-    "add-subsystem", "add-dependency", "rename-object", "delete-object", "set-access",
-    "object-info", "project-info", "form-tree", "form-edit", "form-handlers",
+    "add-subsystem", "add-dependency", "add-localization", "set-field-property",
+    "rename-object", "delete-object", "set-access", "object-info", "project-info",
+    "localization-info", "form-tree", "form-edit", "form-handlers",
 )
 _SERVER_COMMANDS = ("lsp", "mcp", "web")
 
@@ -422,6 +423,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--access", help=i18n.t("cli.help.scaf.no-access"))
     p.add_argument("--routes", help=i18n.t("cli.help.scaf.new-object-routes"))
     p.add_argument("--report", help=i18n.t("cli.help.scaf.new-object-report"))
+    p.add_argument("--presentation", help=i18n.t("cli.help.scaf.no-presentation"))
 
     p = sub.add_parser("add-field", help=i18n.t("cli.help.scaf.add-field"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
@@ -431,10 +433,28 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
     p.add_argument("--type", default="Строка", help=i18n.t("cli.help.scaf.af-type"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
+    p.add_argument("--prop", action="append", metavar="КЛЮЧ=ЗНАЧЕНИЕ",
+                   help=i18n.t("cli.help.scaf.field-prop"))
+
+    p = sub.add_parser("set-field-property", help=i18n.t("cli.help.scaf.set-field-property"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
+    p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
+                                                 "параметр", "поле", "константа")))
+    p.add_argument("name", help=i18n.t("cli.help.scaf.sfp-name"))
+    p.add_argument("--prop", action="append", required=True, metavar="КЛЮЧ=ЗНАЧЕНИЕ",
+                   help=i18n.t("cli.help.scaf.field-prop"))
+    p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
 
     p = sub.add_parser("add-route", help=i18n.t("cli.help.scaf.add-route"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.ar-yaml"))
     p.add_argument("routes", help=i18n.t("cli.help.scaf.ar-routes"))
+
+    p = sub.add_parser("add-localization", help=i18n.t("cli.help.scaf.add-localization"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
+    p.add_argument("language", help=i18n.t("cli.help.scaf.al-language"))
+
+    p = sub.add_parser("localization-info", help=i18n.t("cli.help.scaf.localization-info"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
 
     p = sub.add_parser("add-method", help=i18n.t("cli.help.scaf.add-method"))
     p.add_argument("module_path", help=i18n.t("cli.help.scaf.am-module"))
@@ -564,6 +584,19 @@ def _scaffold_lint(paths: list[str]) -> dict | None:
         return None
 
 
+def _props(pairs: list[str] | None) -> dict[str, str] | None:
+    """--prop КЛЮЧ=ЗНАЧЕНИЕ ... as a dict; the value may contain "=" (only the first splits)."""
+    if not pairs:
+        return None
+    props: dict[str, str] = {}
+    for item in pairs:
+        key, sep, value = item.partition("=")
+        if not sep or not key.strip():
+            raise ValueError(f"Ожидается КЛЮЧ=ЗНАЧЕНИЕ, получено: '{item}'")
+        props[key.strip()] = value
+    return props
+
+
 def _scaffold_main(argv: list[str]) -> int:
     from xbsl import scaffold
 
@@ -580,16 +613,28 @@ def _scaffold_main(argv: list[str]) -> int:
             result = scaffold.op_new_object(
                 Path(args.directory), args.kind, args.name,
                 scope=args.scope, environment=args.environment, access=args.access,
-                routes=args.routes,
+                routes=args.routes, presentation=args.presentation,
                 report=json.loads(args.report) if args.report else None,
             )
         elif args.command == "add-field":
             result = scaffold.op_add_field(
                 Path(args.yaml_path), args.field_kind, args.name,
-                type_=args.type, tabular=args.tabular,
+                type_=args.type, tabular=args.tabular, props=_props(args.prop),
+            )
+        elif args.command == "set-field-property":
+            result = scaffold.op_set_field_property(
+                Path(args.yaml_path), args.field_kind, args.name, _props(args.prop),
+                tabular=args.tabular,
             )
         elif args.command == "add-route":
             result = scaffold.op_add_route(Path(args.yaml_path), args.routes)
+        elif args.command == "add-localization":
+            result = scaffold.op_add_localization(Path(args.yaml_path), args.language)
+        elif args.command == "localization-info":
+            print(json.dumps(
+                scaffold.localization_info(Path(args.yaml_path)), ensure_ascii=False,
+            ))
+            return 0
         elif args.command == "add-method":
             result = scaffold.op_add_method(
                 Path(args.module_path), args.name,

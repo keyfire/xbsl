@@ -260,7 +260,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
-                       [--routes ROUTES] [--report REPORT] [--dry-run]
+                       [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
+                       [--dry-run]
                        directory kind name
 ```
 
@@ -282,12 +283,14 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--access ACCESS` | the access method: for HttpСервис it goes to Разрешения.Вызов, for data objects to Разрешения.ПоУмолчанию (individual rights are set by set-access) |
 | `--routes ROUTES` | HttpСервис routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
+| `--presentation PRESENTATION` | Presentation – the element caption (without it the very first lint answers naming/presentation) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-field`
 
 ```bash
-usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--dry-run] yaml_path field_kind name
+usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--dry-run]
+                      yaml_path field_kind name
 ```
 
 **Arguments**
@@ -305,6 +308,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--dry-run] yaml_pa
 | `-h, --help` | show this help message and exit |
 | `--type TYPE` | the field type (default Строка) |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-route`
@@ -377,7 +381,7 @@ usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
 | `-h, --help` | show this help message and exit |
 | `--name NAME` | the object to create the forms for |
 | `--path PATH` | the object's yaml (instead of `--name`) |
-| `--forms FORMS` | a subset object,list,list-cards,report comma-separated (list-cards – a card list, instead of list) |
+| `--forms FORMS` | a subset object,list,list-cards,report,processing comma-separated (list-cards – a card list, instead of list; processing – a data processor form) |
 | `--card-min-width CARD_MIN_WIDTH` | card grid column width (default 400, 250 with a photo) |
 | `--card-placeholder CARD_PLACEHOLDER` | placeholder image expression, e.g. "Ресурс{Аккаунт.svg}.Ссылка" |
 | `--overwrite` | overwrite the forms if they already exist |
@@ -429,6 +433,50 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--path PATH` | Проект.yaml (when there are several projects under the root) |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
+### `xbsl add-localization`
+
+```bash
+usage: xbsl add-localization [-h] [--dry-run] yaml_path language
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `yaml_path` | the yaml of the LocalizedStrings element |
+| `language` | the translation language: Russian/English or the Ru/En code |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
+### `xbsl set-field-property`
+
+```bash
+usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular TABULAR] [--dry-run]
+                               yaml_path field_kind name
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `yaml_path` | the yaml of the object to add the field to |
+| `field_kind` | реквизит, измерение, ресурс, значение, параметр, поле, константа |
+| `name` | the name of the item in the section |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address |
+| `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl rename-object`
@@ -536,6 +584,24 @@ usage: xbsl project-info [-h] root
 | Option | Description |
 |---|---|
 | `root` | the project root – the folder with Проект.yaml (usually .) |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+
+### `xbsl localization-info`
+
+```bash
+usage: xbsl localization-info [-h] yaml_path
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `yaml_path` | the yaml of the LocalizedStrings element |
 
 **Options**
 

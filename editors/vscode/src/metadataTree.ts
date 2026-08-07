@@ -115,6 +115,9 @@ const ALL_CATEGORY_GROUPS: ReadonlyArray<{ group: string; icon: string; order: n
 
 const FORM_KIND = "КомпонентИнтерфейса";
 const LOCALIZED_STRINGS_KIND = "ЛокализованныеСтроки";
+// Localization languages by their folder code - English l10n keys (see KIND_ROWS): the pick
+// shows them through l10n.t, in the language of the editor.
+const LANGUAGE_NAMES: Record<string, string> = { Ru: "Russian", En: "English" };
 // English label keys (see the comment at KIND_ROWS): displayed via l10n.t.
 const OTHER_GROUP = "Other";
 const COMMON_FORMS_GROUP = "Common forms";
@@ -184,13 +187,35 @@ const NEW_OBJECT_KINDS = [
   "Документ",
   "Перечисление",
   "Структура",
+  "ХранимаяСтруктура",
+  "НаборКонстант",
   "РегистрСведений",
   "РегистрНакопления",
+  "ВиртуальнаяТаблица",
   "ПараметрыРаботыКлиента",
   "ОбщийМодуль",
   "HttpСервис",
+  "SoapСервис",
+  "КонтрактСервиса",
+  "КонтрактТипа",
+  "КонтрактСущности",
   "ГлобальноеКлиентскоеСобытие",
+  "СобытиеЖурналаСобытий",
+  "ЗапланированноеЗадание",
+  "Обработка",
+  "ЦветоваяСхемаОтчета",
   "ФрагментКомандногоИнтерфейса",
+  "ОбычнаяКоманда",
+  "НавигационнаяКоманда",
+  "ПереключаемаяКоманда",
+  "КомандаСКомпонентом",
+  "ПланОбмена",
+  "КлючДоступа",
+  "ПравоНаДействие",
+  "ПравоНаЭлемент",
+  "ХранилищеНастроек",
+  "ПараметрСамостоятельнойРегистрацииПользователя",
+  "ЛокализованныеСтроки",
   FORM_KIND, // common form (without an owner)
 ];
 const CREATABLE_KINDS = NEW_OBJECT_KINDS.filter((k) => k !== FORM_KIND);
@@ -201,13 +226,35 @@ const CREATABLE_SLUG: Record<string, string> = {
   Документ: "document",
   Перечисление: "enumeration",
   Структура: "structure",
+  ХранимаяСтруктура: "storedstructure",
+  НаборКонстант: "constantsset",
   РегистрСведений: "inforegister",
   РегистрНакопления: "accumregister",
+  ВиртуальнаяТаблица: "virtualtable",
   ПараметрыРаботыКлиента: "clientparams",
   ОбщийМодуль: "commonmodule",
   HttpСервис: "httpservice",
+  SoapСервис: "soapservice",
+  КонтрактСервиса: "servicecontract",
+  КонтрактТипа: "typecontract",
+  КонтрактСущности: "entitycontract",
   ГлобальноеКлиентскоеСобытие: "clientevent",
+  СобытиеЖурналаСобытий: "logevent",
+  ЗапланированноеЗадание: "scheduledjob",
+  Обработка: "processing",
+  ЦветоваяСхемаОтчета: "colorscheme",
   ФрагментКомандногоИнтерфейса: "cmdfragment",
+  ОбычнаяКоманда: "usualcommand",
+  НавигационнаяКоманда: "navcommand",
+  ПереключаемаяКоманда: "switchcommand",
+  КомандаСКомпонентом: "componentcommand",
+  ПланОбмена: "exchangeplan",
+  КлючДоступа: "accesskey",
+  ПравоНаДействие: "actionright",
+  ПравоНаЭлемент: "elementright",
+  ХранилищеНастроек: "settingsstorage",
+  ПараметрСамостоятельнойРегистрацииПользователя: "regparam",
+  ЛокализованныеСтроки: "locstrings",
   КомпонентИнтерфейса: "commonform",
 };
 
@@ -215,8 +262,23 @@ const CREATABLE_SLUG: Record<string, string> = {
 const NEW_OBJECT_DEFAULT: Record<string, string> = {
   КомпонентИнтерфейса: "НоваяФорма",
   Структура: "НоваяСтруктура",
+  ХранимаяСтруктура: "НоваяХранимаяСтруктура",
   ГлобальноеКлиентскоеСобытие: "НовоеСобытие",
+  СобытиеЖурналаСобытий: "НовоеСобытиеЖурнала",
   ФрагментКомандногоИнтерфейса: "НовыйФрагмент",
+  ВиртуальнаяТаблица: "НоваяВиртуальнаяТаблица",
+  Обработка: "НоваяОбработка",
+  ЗапланированноеЗадание: "НовоеЗадание",
+  ЦветоваяСхемаОтчета: "НоваяЦветоваяСхема",
+  ОбычнаяКоманда: "НоваяКоманда",
+  НавигационнаяКоманда: "НоваяНавигационнаяКоманда",
+  ПереключаемаяКоманда: "НоваяПереключаемаяКоманда",
+  КомандаСКомпонентом: "НоваяКомандаСКомпонентом",
+  ПравоНаДействие: "НовоеПравоНаДействие",
+  ПравоНаЭлемент: "НовоеПравоНаЭлемент",
+  ХранилищеНастроек: "НовоеХранилищеНастроек",
+  ПараметрСамостоятельнойРегистрацииПользователя: "НовыйПараметрРегистрации",
+  ЛокализованныеСтроки: "НовыеСтроки",
 };
 
 // The same, for a project that writes its metadata in English: the name goes INTO the sources, so
@@ -225,7 +287,13 @@ const NEW_OBJECT_DEFAULT_EN: Record<string, string> = {
   КомпонентИнтерфейса: "NewForm",
   Структура: "NewStructure",
   ГлобальноеКлиентскоеСобытие: "NewEvent",
+  СобытиеЖурналаСобытий: "NewLogEvent",
   ФрагментКомандногоИнтерфейса: "NewFragment",
+  ЗапланированноеЗадание: "NewJob",
+  ЦветоваяСхемаОтчета: "NewColorSchema",
+  ОбычнаяКоманда: "NewCommand",
+  ПараметрСамостоятельнойРегистрацииПользователя: "NewRegistrationParameter",
+  ЛокализованныеСтроки: "NewStrings",
 };
 
 // The English name a kind is offered under in an English project - the serializer's spelling
@@ -452,8 +520,9 @@ class XbslNode extends vscode.TreeItem {
   offset?: number; // node offset in the yaml - for navigation
   addKind?: string; // group: the ADD_SPECS key for "add"
   routeTemplate?: string; // URL template node: its Template - how the engine addresses a route
-  newObjectKind?: string; // category: the kind of the object being created
+  newObjectKinds?: string[]; // category: the kinds an object can be created as
   ownerName?: string; // "Forms" group: the owner object (for adding a form)
+  ownerKind?: string; // "Forms" group: the owner's element kind (decides the form choices)
   codeKind?: boolean; // code kind (module/HTTP service): click opens the module on the left
   stdKind?: string; // standard attribute: the object kind (Справочник/Документ)
   stdName?: string; // standard attribute: the name (Наименование/Код/Номер/Дата)
@@ -612,7 +681,7 @@ function projectNode(project: Project, children: XbslNode[], filterNames: string
   return node;
 }
 
-function categoryNode(group: string, icon: string, children: XbslNode[], createKind?: string): XbslNode {
+function categoryNode(group: string, icon: string, children: XbslNode[], createKinds?: string[]): XbslNode {
   // group is an English key (also the grouping key); we display the translation, the key stays.
   const node = new XbslNode(
     vscode.l10n.t(group),
@@ -620,11 +689,17 @@ function categoryNode(group: string, icon: string, children: XbslNode[], createK
   );
   node.iconPath = neutralIcon(icon);
   node.description = String(children.length);
-  node.newObjectKind = createKind;
+  node.newObjectKinds = createKinds;
   node.docsKind = GROUP_PRIMARY_KIND.get(group); // the tooltip resolves its docs page lazily
 
-  // The newobj-<slug> token enables the right per-kind "Add <class>" command.
-  node.contextValue = ["xbslCategory", createKind ? `newobj-${CREATABLE_SLUG[createKind]}` : ""]
+  // The newobj-<slug> tokens enable the per-kind "Add <class>" commands in the context menu.
+  // A category of several kinds (Contracts, Rights, Commands) additionally gets the newobjpick
+  // token: its single inline "+" asks which kind, the per-kind inline buttons are not declared.
+  node.contextValue = [
+    "xbslCategory",
+    ...(createKinds ?? []).map((k) => `newobj-${CREATABLE_SLUG[k]}`),
+    (createKinds?.length ?? 0) > 1 ? "newobjpick" : "",
+  ]
     .filter(Boolean)
     .join(" ");
   node.children = children;
@@ -761,9 +836,22 @@ function formNode(el: Element): XbslNode {
   return node;
 }
 
-// The "Forms" group. For a catalog/document an object form can be added (canAddForm) - then the
-// group is always shown and carries the owner.
-function formsGroupNode(forms: Element[], owner?: { name: string; yamlPath: string }): XbslNode {
+// Owners the engine can generate forms for (op_add_form): object+list owners, list-only
+// owners (registers and a constant set have no object form), plus the single-form kinds -
+// Report (report) and Processing (processing). The engine is the source of the abilities;
+// these sets only word the menu.
+const OBJECT_FORM_OWNER_KINDS = new Set(["Справочник", "Документ", "ПланОбмена", "ХранилищеНастроек"]);
+const LIST_ONLY_FORM_OWNER_KINDS = new Set(["РегистрСведений", "РегистрНакопления", "НаборКонстант"]);
+const FORM_OWNER_KINDS = new Set([
+  ...OBJECT_FORM_OWNER_KINDS,
+  ...LIST_ONLY_FORM_OWNER_KINDS,
+  "Отчет",
+  "Обработка",
+]);
+
+// The "Forms" group. For a form-capable owner (FORM_OWNER_KINDS) a form can be added - then
+// the group is always shown and carries the owner.
+function formsGroupNode(forms: Element[], owner?: { name: string; yamlPath: string; kind: string }): XbslNode {
   const node = new XbslNode(
     vscode.l10n.t("Forms"),
     forms.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
@@ -773,6 +861,7 @@ function formsGroupNode(forms: Element[], owner?: { name: string; yamlPath: stri
   node.children = [...forms].sort(byName).map(formNode);
   if (owner) {
     node.ownerName = owner.name;
+    node.ownerKind = owner.kind;
     node.yamlPath = owner.yamlPath;
     node.contextValue = "group addform";
   } else {
@@ -805,9 +894,14 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
       groups.push(routeGroupNode(el.yamlPath, internals.urlTemplates));
     }
   }
-  const canAddForm = el.kind === "Справочник" || el.kind === "Документ";
+  const canAddForm = FORM_OWNER_KINDS.has(el.kind);
   if (boundForms.length || canAddForm) {
-    groups.push(formsGroupNode(boundForms, canAddForm ? { name: el.name, yamlPath: el.yamlPath } : undefined));
+    groups.push(
+      formsGroupNode(
+        boundForms,
+        canAddForm ? { name: el.name, yamlPath: el.yamlPath, kind: el.kind } : undefined
+      )
+    );
   }
   if (el.translations?.length) {
     groups.push(
@@ -826,7 +920,13 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
   node.objectModulePath = el.objectModulePath;
   node.offset = internals?.rootOffset; // the object root - for the properties panel
   node.children = groups;
-  node.contextValue = ["element", "yaml", "props", "deletable", el.modulePath ? "xbsl" : "", el.objectModulePath ? "objmod" : ""]
+  node.contextValue = [
+    "element", "yaml", "props", "deletable",
+    el.modulePath ? "xbsl" : "",
+    el.objectModulePath ? "objmod" : "",
+    // Localized strings get translations right on the element - the "+" mirrors the cloud IDE.
+    el.kind === LOCALIZED_STRINGS_KIND ? "addloc" : "",
+  ]
     .filter(Boolean)
     .join(" ");
   node.codeKind = CODE_KINDS.has(el.kind);
@@ -862,10 +962,25 @@ function formOwnerResolver(objects: Element[]): (form: Element) => string | unde
     if (declared) {
       return declared;
     }
-    for (const suffix of ["ФормаОбъекта", "ФормаСписка", "ФормаОтчета", "ObjectForm"]) {
+    const conventions = [
+      "ФормаОбъекта", "ФормаСписка", "ФормаОтчета", "ФормаОбработки",
+      "ObjectForm", "ListForm", "ReportForm", "ProcessingForm",
+    ];
+    for (const suffix of conventions) {
       if (form.name.endsWith(suffix)) {
         const owner = form.name.slice(0, -suffix.length);
         if (elementNames.has(owner)) {
+          return owner;
+        }
+      }
+    }
+    // The card-list row component (ListRow<Object> from the list-cards generator): its
+    // generic references the list form's row type rather than the object, so only the name
+    // convention ties it to the owner.
+    for (const prefix of ["СтрокаСписка", "ListRow"]) {
+      if (form.name.startsWith(prefix)) {
+        const owner = form.name.slice(prefix.length);
+        if (owner && elementNames.has(owner)) {
           return owner;
         }
       }
@@ -899,7 +1014,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
     icon: string;
     order: number;
     elements: XbslNode[];
-    createKind?: string;
+    createKinds?: string[];
   }
   const cats = new Map<string, Cat>();
   for (const obj of [...objects].sort(byName)) {
@@ -921,7 +1036,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
     }
   }
   // Creatable kinds carry the "add object" action on their category (empty ones only when empties
-  // are shown).
+  // are shown). A category may collect several kinds (Contracts, Rights, Commands).
   for (const kind of CREATABLE_KINDS) {
     const meta = metaFor(kind);
     const existing = cats.get(meta.group);
@@ -929,7 +1044,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
       continue;
     }
     const cat = existing ?? { icon: meta.icon, order: meta.order, elements: [] };
-    cat.createKind = kind;
+    cat.createKinds = [...(cat.createKinds ?? []), kind];
     cats.set(meta.group, cat);
   }
   // Nothing to show at all (a fresh empty project with empties hidden): show the whole tree so the
@@ -941,14 +1056,14 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
     for (const kind of CREATABLE_KINDS) {
       const meta = metaFor(kind);
       const cat = cats.get(meta.group) ?? { icon: meta.icon, order: meta.order, elements: [] };
-      cat.createKind = kind;
+      cat.createKinds = [...(cat.createKinds ?? []), kind];
       cats.set(meta.group, cat);
     }
   }
 
   const roots = [...cats.entries()].map(([group, cat]) => ({
     order: cat.order,
-    node: categoryNode(group, cat.icon, cat.elements, cat.createKind),
+    node: categoryNode(group, cat.icon, cat.elements, cat.createKinds),
   }));
 
   // Common forms are a pseudo-category; "add" creates a form without an owner. Shown when it has
@@ -957,7 +1072,7 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
   if (commonFormNodes.length || showEmpties) {
     roots.push({
       order: COMMON_FORMS_ORDER,
-      node: categoryNode(COMMON_FORMS_GROUP, "window", commonFormNodes, FORM_KIND),
+      node: categoryNode(COMMON_FORMS_GROUP, "window", commonFormNodes, [FORM_KIND]),
     });
   }
 
@@ -1613,8 +1728,7 @@ interface Placement extends vscode.QuickPickItem {
   dir: string;
 }
 
-async function addObject(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
-  const kind = node?.newObjectKind;
+async function addObject(provider: XbslMetadataProvider, kind?: string): Promise<void> {
   if (!kind) {
     return;
   }
@@ -1667,23 +1781,134 @@ async function addObject(provider: XbslMetadataProvider, node?: XbslNode): Promi
   );
 }
 
-// Add forms to a catalog/document: the engine generates a form populated from the attributes
-// and registers it in the owner's Интерфейс by itself.
+// "Add localization" on a LocalizedStrings element: the language candidates come from the
+// ENGINE (xbsl/localizationInfo) - the declared localization languages minus the default one
+// and minus the translations already present. Without the LSP the pick falls back to the
+// supported folder codes minus the translations the tree itself shows; the engine validates
+// on write either way.
+async function addLocalization(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const yamlPath = node?.yamlPath;
+  if (!yamlPath) {
+    return;
+  }
+  interface LocInfo {
+    candidates?: string[];
+    names?: Record<string, string>;
+    error?: string;
+  }
+  const info = lspActive()
+    ? await lspRequest<LocInfo>("xbsl/localizationInfo", { path: yamlPath })
+    : undefined;
+  if (info?.error) {
+    void vscode.window.showWarningMessage(info.error);
+    return;
+  }
+  let candidates = info?.candidates;
+  if (!candidates) {
+    const existing = new Set(
+      (node.children ?? [])
+        .filter((c) => /\btranslation\b/.test(c.contextValue ?? ""))
+        .map((c) => String(c.label))
+    );
+    candidates = ["Ru", "En"].filter((c) => !existing.has(c));
+  }
+  if (!candidates.length) {
+    void vscode.window.showInformationMessage(
+      vscode.l10n.t("Every declared localization language already has its translation.")
+    );
+    return;
+  }
+  const pick = await vscode.window.showQuickPick(
+    candidates.map((code) => ({
+      // The language name is UI text: shown in the language of the EDITOR, not of the
+      // project (unlike a name that goes into the sources). The engine's own name is the
+      // fallback for a code the editor knows nothing about.
+      label: LANGUAGE_NAMES[code] ? vscode.l10n.t(LANGUAGE_NAMES[code]) : info?.names?.[code] ?? code,
+      description: code,
+      code,
+    })),
+    { placeHolder: vscode.l10n.t("Language of the translation") }
+  );
+  if (!pick) {
+    return;
+  }
+  const result = await callMeta(
+    "xbsl/metaAddLocalization",
+    { path: yamlPath, language: pick.code },
+    "add-localization",
+    [yamlPath, pick.code]
+  );
+  if (!result) {
+    return;
+  }
+  const fileName = path.basename(yamlPath);
+  await applyAndReveal(
+    provider,
+    result,
+    (n) =>
+      /\btranslation\b/.test(n.contextValue ?? "") &&
+      String(n.label) === pick.code &&
+      !!n.yamlPath &&
+      path.basename(n.yamlPath) === fileName
+  );
+}
+
+// The inline "+" of a category with several creatable kinds (Contracts, Rights, Commands):
+// asks which kind, then goes the usual way. The name shown follows the language the project
+// writes its names in, like the "Name of the new object" prompt does.
+async function addObjectPick(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const kinds = node?.newObjectKinds ?? [];
+  if (kinds.length < 2) {
+    return addObject(provider, kinds[0]);
+  }
+  const english = provider.writesEnglishNames();
+  const pick = await vscode.window.showQuickPick(
+    kinds.map((k) => ({ label: (english && englishKindName(k)) || k, objectKind: k })),
+    { placeHolder: vscode.l10n.t("Kind of the new object") }
+  );
+  if (pick) {
+    await addObject(provider, pick.objectKind);
+  }
+}
+
+// The file suffix of a generated form, both project languages (the engine spells the file by
+// the project language - the reveal must find it either way).
+const FORM_FILE_SUFFIXES: Record<string, [string, string]> = {
+  object: ["ФормаОбъекта", "ObjectForm"],
+  list: ["ФормаСписка", "ListForm"],
+  report: ["ФормаОтчета", "ReportForm"],
+  processing: ["ФормаОбработки", "ProcessingForm"],
+};
+
+// Add forms to a form-capable owner: the engine generates a form populated from the
+// attributes and registers it in the owner's Interface by itself. The choices follow the
+// owner's kind: object/object+list for data objects, list alone for registers and a constant
+// set, the report form for Report, the processing form for Processing.
 async function addObjectForm(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
   const owner = node?.ownerName;
   const ownerYaml = node?.yamlPath;
   if (!owner || !ownerYaml) {
     return;
   }
-  const objectForm = vscode.l10n.t("Object form (record editing)");
-  const bothForms = vscode.l10n.t("Object form + list form");
-  const pick = await vscode.window.showQuickPick([objectForm, bothForms], {
-    placeHolder: vscode.l10n.t("Which forms to create for {0}", owner),
-  });
-  if (!pick) {
-    return;
+  const kind = node?.ownerKind ?? "";
+  let forms: string[];
+  if (kind === "Отчет") {
+    forms = ["report"];
+  } else if (kind === "Обработка") {
+    forms = ["processing"];
+  } else if (LIST_ONLY_FORM_OWNER_KINDS.has(kind)) {
+    forms = ["list"];
+  } else {
+    const objectForm = vscode.l10n.t("Object form (record editing)");
+    const bothForms = vscode.l10n.t("Object form + list form");
+    const pick = await vscode.window.showQuickPick([objectForm, bothForms], {
+      placeHolder: vscode.l10n.t("Which forms to create for {0}", owner),
+    });
+    if (!pick) {
+      return;
+    }
+    forms = pick === bothForms ? ["object", "list"] : ["object"];
   }
-  const forms = pick === bothForms ? ["object", "list"] : ["object"];
   if (!(await ensureSavedForCli([ownerYaml]))) {
     return;
   }
@@ -1697,11 +1922,13 @@ async function addObjectForm(provider: XbslMetadataProvider, node?: XbslNode): P
   if (!result) {
     return;
   }
-  const formPath = path.join(path.dirname(ownerYaml), `${owner}ФормаОбъекта.yaml`);
+  const targets = new Set(
+    (FORM_FILE_SUFFIXES[forms[0]] ?? []).map((s) => path.join(path.dirname(ownerYaml), `${owner}${s}.yaml`))
+  );
   await applyAndReveal(
     provider,
     result,
-    (n) => n.yamlPath === formPath && /\bform\b/.test(n.contextValue ?? "")
+    (n) => !!n.yamlPath && targets.has(n.yamlPath) && /\bform\b/.test(n.contextValue ?? "")
   );
 }
 
@@ -1903,15 +2130,24 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.showEmptyCategories", () => setEmptyHidden(provider, context, false))
   );
 
-  // Per-kind "Add <class>" commands (label = the kind; creates via addObject by the node's
-  // newObjectKind). Including the common form (its category is "Common forms", not via CREATABLE_KINDS).
+  // Per-kind "Add <class>" commands (label = the kind; the command carries its kind, so one
+  // category may offer several). Including the common form (its category is "Common forms",
+  // not via CREATABLE_KINDS). The pick command serves the inline "+" of multi-kind categories.
   for (const kind of NEW_OBJECT_KINDS) {
     context.subscriptions.push(
-      vscode.commands.registerCommand(`xbsl.metadata.addObject.${CREATABLE_SLUG[kind]}`, (n?: XbslNode) =>
-        addObject(provider, n)
+      vscode.commands.registerCommand(`xbsl.metadata.addObject.${CREATABLE_SLUG[kind]}`, () =>
+        addObject(provider, kind)
       )
     );
   }
+  context.subscriptions.push(
+    vscode.commands.registerCommand("xbsl.metadata.addObjectPick", (n?: XbslNode) =>
+      addObjectPick(provider, n)
+    ),
+    vscode.commands.registerCommand("xbsl.metadata.addLocalization", (n?: XbslNode) =>
+      addLocalization(provider, n)
+    )
+  );
 
   // The properties panel takes the Тип combo box candidates from here; the component palette
   // takes the project's interface components; the form designer's data panel resolves a
