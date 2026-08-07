@@ -276,13 +276,15 @@ interface Project {
   name: string;
   vendor?: string; // Поставщик
   dir: string;
-  appModulePath?: string; // Проект.xbsl
+  yamlPath: string; // Проект.yaml or Project.yaml - the platform accepts both spellings
+  appModulePath?: string; // Проект.xbsl / Project.xbsl, spelled like the descriptor
 }
 
 // Subsystem = a folder with Подсистема.yaml (name = the folder name; element membership is by folder).
 interface Subsystem {
   name: string;
   dir: string;
+  yamlPath: string; // Подсистема.yaml or Subsystem.yaml - captured at discovery
 }
 
 // --- source parsing ---------------------------------------------------------------------
@@ -339,10 +341,11 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
       return;
     }
     seen.add(key);
-    // Подсистема.yaml - a subsystem folder (the name is not parsed, it = the folder name).
-    if (path.basename(yamlPath) === "Подсистема.yaml") {
+    // Подсистема.yaml / Subsystem.yaml - a subsystem folder (the name is not parsed,
+    // it = the folder name); the platform accepts both spellings of the file name.
+    if (["Подсистема.yaml", "Subsystem.yaml"].includes(path.basename(yamlPath))) {
       const dir = path.dirname(yamlPath);
-      subsystems.push({ name: path.basename(dir), dir });
+      subsystems.push({ name: path.basename(dir), dir, yamlPath });
       return;
     }
     let text: string;
@@ -352,14 +355,19 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     } catch {
       return;
     }
-    // Проект.yaml - has no ВидЭлемента: a separate tree root.
-    if (path.basename(yamlPath) === "Проект.yaml") {
+    // Проект.yaml / Project.yaml - has no ВидЭлемента: a separate tree root. The
+    // application module follows the descriptor's spelling (Проект.xbsl / Project.xbsl).
+    const descriptorBase = path.basename(yamlPath);
+    if (["Проект.yaml", "Project.yaml"].includes(descriptorBase)) {
       const dir = path.dirname(yamlPath);
-      const appModule = path.join(dir, "Проект.xbsl");
+      const appModule = path.join(
+        dir, descriptorBase === "Project.yaml" ? "Project.xbsl" : "Проект.xbsl"
+      );
       projects.push({
         name: RE_NAME.exec(text)?.[1] ?? path.basename(dir),
         vendor: RE_VENDOR.exec(text)?.[1],
         dir,
+        yamlPath,
         appModulePath: xbslSet.has(appModule.toLowerCase()) ? appModule : undefined,
       });
       return;
@@ -481,7 +489,7 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 function subsystemNode(sub: Subsystem): XbslNode {
   const node = new XbslNode(sub.name, vscode.TreeItemCollapsibleState.None);
   node.iconPath = new vscode.ThemeIcon("symbol-namespace");
-  node.yamlPath = path.join(sub.dir, "Подсистема.yaml");
+  node.yamlPath = sub.yamlPath;
   node.resourceUri = vscode.Uri.file(node.yamlPath); // for git statuses (color/badge), keeping our own icon
   node.contextValue = "subsystem yaml";
   node.command = { command: "xbsl.metadata.openYaml", title: "", arguments: [node] };
@@ -508,7 +516,7 @@ function subsystemGroupNode(sub: Subsystem, children: XbslNode[]): XbslNode {
     children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
   node.iconPath = new vscode.ThemeIcon("symbol-namespace");
-  node.yamlPath = path.join(sub.dir, "Подсистема.yaml");
+  node.yamlPath = sub.yamlPath;
   node.resourceUri = vscode.Uri.file(node.yamlPath); // git statuses
   node.contextValue = "subsystem yaml addsub";
   node.children = children;
@@ -575,7 +583,7 @@ function subsystemModeChildren(subsystems: Subsystem[], elements: Element[]): Xb
 function projectNode(project: Project, children: XbslNode[], filterNames: string[]): XbslNode {
   const node = new XbslNode(project.name, vscode.TreeItemCollapsibleState.Expanded);
   node.iconPath = new vscode.ThemeIcon("project");
-  node.resourceUri = vscode.Uri.file(path.join(project.dir, "Проект.yaml")); // git statuses
+  node.resourceUri = vscode.Uri.file(project.yamlPath); // git statuses
   // Grayed out next to the name - Поставщик\Имя from Проект.yaml; a filter appends its list.
   const base = project.vendor ? `${project.vendor}\\${project.name}` : "";
   node.description = filterNames.length
@@ -1744,11 +1752,14 @@ async function addSubsystem(provider: XbslMetadataProvider): Promise<void> {
   if (!result) {
     return;
   }
-  const yamlPath = path.join(parent, name, "Подсистема.yaml");
+  // The engine names the file by the project's spelling (Подсистема.yaml or
+  // Subsystem.yaml) - match the created node by its directory instead.
+  const createdDir = path.join(parent, name);
   await applyAndReveal(
     provider,
     result,
-    (n) => n.yamlPath === yamlPath && /\bsubsystem\b/.test(n.contextValue ?? "")
+    (n) => !!n.yamlPath && path.dirname(n.yamlPath) === createdDir
+      && /\bsubsystem\b/.test(n.contextValue ?? "")
   );
 }
 

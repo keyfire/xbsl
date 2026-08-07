@@ -31,8 +31,41 @@ from pathlib import Path
 
 from xbsl import dataset, engine, fixer, metamodel, terms
 
+#: The platform accepts BOTH spellings of the service file names - its converter checks the
+#: pairs itself (Проект/Project, Подсистема/Subsystem). The Russian name stays canonical for
+#: creation; a project whose descriptor already carries the English name gets English twins.
 PROJECT_FILE = "Проект.yaml"
+PROJECT_FILE_EN = "Project.yaml"
+PROJECT_FILES = (PROJECT_FILE, PROJECT_FILE_EN)
 SUBSYSTEM_FILE = "Подсистема.yaml"
+SUBSYSTEM_FILE_EN = "Subsystem.yaml"
+SUBSYSTEM_FILES = (SUBSYSTEM_FILE, SUBSYSTEM_FILE_EN)
+
+
+def project_file_in(directory: Path) -> Path | None:
+    """The project descriptor inside the directory, either spelling, or None."""
+    for name in PROJECT_FILES:
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def subsystem_file_in(directory: Path) -> Path | None:
+    """The subsystem descriptor inside the directory, either spelling, or None."""
+    for name in SUBSYSTEM_FILES:
+        candidate = directory / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _rglob_names(root: Path, names: tuple[str, ...]) -> list[Path]:
+    """Files under the root carrying any of the given names, sorted once."""
+    found: list[Path] = []
+    for name in names:
+        found.extend(root.rglob(name))
+    return sorted(found)
 
 _WORD = "A-Za-zА-Яа-яЁё0-9_"  # identifier character class (for regex word boundaries)
 _IDENTIFIER = re.compile(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$")
@@ -592,7 +625,7 @@ def project_language(directory: Path) -> str:
     """
     root = directory
     for candidate in (directory, *directory.parents):
-        if (candidate / PROJECT_FILE).exists():
+        if project_file_in(candidate) is not None:
             root = candidate
             break
     russian = english = 0
@@ -996,7 +1029,7 @@ class ObjectHit:
 def find_projects(root: Path) -> list[dict]:
     """Projects under the root: [{vendor, name, dir, subsystems: [names]}], hidden directories skipped."""
     out = []
-    for project_yaml in sorted(root.rglob(PROJECT_FILE)):
+    for project_yaml in _rglob_names(root, PROJECT_FILES):
         rel = project_yaml.relative_to(root)
         if any(part.startswith(".") for part in rel.parts):
             continue
@@ -1005,7 +1038,7 @@ def find_projects(root: Path) -> list[dict]:
         vendor = _vendor_of(text, project_dir.parent.name)
         name = element_name(text, project_dir.name)
         subsystems = sorted(
-            p.parent.name for p in project_dir.rglob(SUBSYSTEM_FILE)
+            p.parent.name for p in _rglob_names(project_dir, SUBSYSTEM_FILES)
             if not any(part.startswith(".") for part in p.relative_to(project_dir).parts)
         )
         out.append({
@@ -1023,7 +1056,7 @@ def _vendor_of(text: str, default: str) -> str:
 
 def _iter_objects(root: Path):
     for yaml_path in engine.find_sources(root, "*.yaml"):
-        if yaml_path.name in (PROJECT_FILE, SUBSYSTEM_FILE):
+        if yaml_path.name in PROJECT_FILES or yaml_path.name in SUBSYSTEM_FILES:
             continue
         text = _read(yaml_path)
         kind = element_kind(text)
@@ -1034,17 +1067,17 @@ def _iter_objects(root: Path):
 
 def _namespace_of(yaml_path: Path, root: Path) -> tuple[str | None, str]:
     """(subsystem name, vendor::project::subsystem) for an object file."""
-    subsystem = yaml_path.parent.name if (yaml_path.parent / SUBSYSTEM_FILE).is_file() else None
+    subsystem = yaml_path.parent.name if subsystem_file_in(yaml_path.parent) else None
     project_dir = yaml_path.parent
     while project_dir != project_dir.parent:
-        if (project_dir / PROJECT_FILE).is_file():
+        if project_file_in(project_dir) is not None:
             break
         if project_dir == root:
             break
         project_dir = project_dir.parent
     vendor = project = ""
-    project_yaml = project_dir / PROJECT_FILE
-    if project_yaml.is_file():
+    project_yaml = project_file_in(project_dir)
+    if project_yaml is not None:
         text = _read(project_yaml)
         vendor = _vendor_of(text, project_dir.parent.name)
         project = element_name(text, project_dir.name)
@@ -1749,12 +1782,25 @@ def op_add_subsystem(
     auto_interface: bool = True,
     uses: list[str] | None = None,
 ) -> ScaffoldResult:
-    """Create a subsystem: a folder + Подсистема.yaml (blocks assembled from the parameters)."""
+    """Create a subsystem: a folder + Подсистема.yaml (blocks assembled from the parameters).
+
+    The file name follows the spelling of the enclosing project's descriptor: next to a
+    `Project.yaml` the subsystem is created as `Subsystem.yaml` - a project keeps one
+    spelling throughout.
+    """
     name = _check_identifier(name, "подсистемы")
     parent_dir = Path(parent_dir)
-    yaml_path = parent_dir / name / SUBSYSTEM_FILE
-    if yaml_path.exists():
-        raise ScaffoldError(f"Файл уже существует: {yaml_path}")
+    file_name = SUBSYSTEM_FILE
+    for candidate in (parent_dir, *parent_dir.parents):
+        descriptor = project_file_in(candidate)
+        if descriptor is not None:
+            if descriptor.name == PROJECT_FILE_EN:
+                file_name = SUBSYSTEM_FILE_EN
+            break
+    yaml_path = parent_dir / name / file_name
+    other = subsystem_file_in(parent_dir / name)
+    if yaml_path.exists() or other is not None:
+        raise ScaffoldError(f"Файл уже существует: {other or yaml_path}")
     lang = project_language(parent_dir)
     lines: list[str] = []
     if uses:
@@ -1802,8 +1848,9 @@ def op_new_project(
     name = _check_identifier(name, "проекта")
     subsystem = _check_identifier(subsystem, "подсистемы")
     project_dir = Path(root) / vendor / name
-    if (project_dir / PROJECT_FILE).exists():
-        raise ScaffoldError(f"Проект уже существует: {project_dir / PROJECT_FILE}")
+    existing = project_file_in(project_dir)
+    if existing is not None:
+        raise ScaffoldError(f"Проект уже существует: {existing}")
     lines = [f"Ид: {new_uuid()}"]
     if library:
         lines.append("ВидПроекта: Библиотека")
@@ -1858,7 +1905,8 @@ def _find_project_yaml(root: Path) -> Path:
         raise ScaffoldError(
             f"Под корнем {root} несколько проектов ({listed}) – укажите project_yaml"
         )
-    return projects[0]["dir"] / PROJECT_FILE
+    found = project_file_in(projects[0]["dir"])
+    return found if found is not None else projects[0]["dir"] / PROJECT_FILE
 
 
 def op_add_dependency(

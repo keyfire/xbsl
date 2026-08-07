@@ -200,7 +200,9 @@ def _project_language(root: Optional[str]) -> str:
     """
     if not root:
         return "ru"
-    for candidate in sorted(Path(root).rglob("Проект.yaml"))[:1]:
+    descriptors = [p for name in ("Проект.yaml", "Project.yaml")
+                   for p in Path(root).rglob(name)]
+    for candidate in sorted(descriptors)[:1]:
         match = _DEV_LANGUAGE_RE.search(candidate.read_text(encoding="utf-8", errors="replace"))
         if match:
             return "ru" if _CYRILLIC.search(match.group(1)) else "en"

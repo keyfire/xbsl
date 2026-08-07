@@ -8,11 +8,11 @@ honest about it: the rules must judge it exactly as they judge the Russian twin,
 em dash, an ellipsis, an unknown type).
 
 The descriptors are English inside too - `Id`, `Vendor`, `Version`, `CompatibilityMode`,
-`Interface`, `IncludeInAutoInterface`. Exactly such a project compiles. The platform accepts
-the English FILE NAMES as well (`Project.yaml`, `Subsystem.yaml` - its converter checks both
-spellings); this demo keeps the Russian ones because the toolkit itself still resolves the
-descriptor and the subsystem by the Russian name only - the demo will switch the day the
-toolkit learns both.
+`Interface`, `IncludeInAutoInterface` - and so are the SERVICE FILE NAMES: `Project.yaml`
+and `Subsystem.yaml`, which the platform accepts next to the Russian spellings (its
+converter checks both). The toolkit resolves both spellings too, and what it creates
+follows the project around it: a subsystem added here lands as `Subsystem.yaml`.
+Exactly such a project compiles.
 Note that `elemctl` does not read those keys yet and refuses to build this project - the
 descriptors are here for the linter, not for a deploy.
 

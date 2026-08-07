@@ -2147,3 +2147,37 @@ def test_delete_object_unknown_name(tmp_path):
     _make_rename_project(tmp_path)
     with pytest.raises(ScaffoldError):
         scaffold.op_delete_object(tmp_path, "Нет")
+
+
+# --- English service file names -------------------------------------------------------------
+
+
+@pytest.mark.needs_data
+def test_english_service_file_names_resolve(tmp_path):
+    """Проект и подсистема с английскими именами файлов: платформа принимает оба написания.
+
+    Обнаружение проектов, принадлежность объекта подсистеме и создание новой подсистемы
+    обязаны работать как с русскими именами; новая подсистема в таком проекте создаётся
+    под английским именем - проект держит одно написание.
+    """
+    project_dir = tmp_path / "Acme" / "Shop"
+    subsystem = project_dir / "Core"
+    subsystem.mkdir(parents=True)
+    (project_dir / "Project.yaml").write_text(
+        "Id: 019f0000-0000-7000-8000-000000000001\nVendor: Acme\nName: Shop\n"
+        "Version: 1.0.0\n", encoding="utf-8")
+    (subsystem / "Subsystem.yaml").write_text(
+        "Interface:\n    IncludeInAutoInterface: True\n", encoding="utf-8")
+    (subsystem / "Goods.yaml").write_text(
+        "ElementKind: Catalog\nId: 019f0000-0000-7000-8000-000000000002\nName: Goods\n",
+        encoding="utf-8")
+
+    projects = scaffold.find_projects(tmp_path)
+    assert [p["name"] for p in projects] == ["Shop"]
+    assert projects[0]["subsystems"] == ["Core"]
+
+    hit = scaffold.find_object(tmp_path, "Goods")
+    assert hit.subsystem == "Core"
+
+    result = scaffold.op_add_subsystem(project_dir, "Extra")
+    assert [c.path for c in result.changes] == [project_dir / "Extra" / "Subsystem.yaml"]

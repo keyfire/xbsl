@@ -164,7 +164,7 @@ def _platform_images() -> frozenset[str]:
 def _unknown_resource_mapper(source: SourceFile) -> dict | None:
     """The map phase: a Проект.yaml contributes its folder, a module its resource refs."""
     if source.kind == "yaml":
-        if source.path.name == "Проект.yaml":
+        if source.path.name in ("Проект.yaml", "Project.yaml"):
             return {"root": str(source.path.parent)}
         return None
     if source.kind != "xbsl" or "Ресурс{" not in source.text:

@@ -35,9 +35,12 @@ def discover(paths: list[str]) -> list[Path]:
 
 
 def _project_root(start: Path) -> Path | None:
-    """The nearest directory - start itself, then upwards - holding Проект.yaml."""
+    """The nearest directory - start itself, then upwards - holding a project descriptor.
+
+    The platform accepts either spelling of the file name, so both are looked for.
+    """
     for candidate in (start, *start.parents):
-        if (candidate / "Проект.yaml").is_file():
+        if any((candidate / name).is_file() for name in ("Проект.yaml", "Project.yaml")):
             return candidate
     return None
 

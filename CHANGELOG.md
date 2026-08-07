@@ -12,6 +12,19 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **The English service file names resolve everywhere.** The platform accepts
+  `Project.yaml` and `Subsystem.yaml` next to the Russian spellings (its converter checks
+  both), while the toolkit knew only the Russian ones - an English-named project was not
+  discovered at all. Project and subsystem discovery, the object's namespace, the rules
+  reading the descriptor and the subsystem layout, the metadata tree and the project-root
+  lookup of the CLI now take either spelling; what the scaffolding creates follows the
+  project around it - a subsystem added next to a `Project.yaml` lands as
+  `Subsystem.yaml`, and the demo of English spellings (`demo-en/`) carries the English
+  file names itself now.
+
 ## 2026-08-07 – 0.54.0, 0.54.1
 
 ### Added

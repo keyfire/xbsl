@@ -75,7 +75,8 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-_SUBSYSTEM_FILE = "Подсистема.yaml"
+#: Both spellings: the platform accepts the English service file names too.
+_SUBSYSTEM_FILES = ("Подсистема.yaml", "Subsystem.yaml")
 _PUBLIC_SCOPES = frozenset({"ВПроекте", "Глобально"})
 
 # Yaml keys that name another element. A navigation target is as much a reference as a type
@@ -88,7 +89,7 @@ def _subsystem_roots(sources: list[SourceFile]) -> dict[Path, str]:
     """Directories that are subsystem roots, mapped to the subsystem name."""
     roots: dict[Path, str] = {}
     for s in sources:
-        if s.kind != "yaml" or s.path.name != _SUBSYSTEM_FILE:
+        if s.kind != "yaml" or s.path.name not in _SUBSYSTEM_FILES:
             continue
         data, err = _parsed(s)
         name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
@@ -120,7 +121,7 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
         return {"k": "x", "local_types": sorted(local)}
     if source.kind != "yaml":
         return None
-    if source.path.name == _SUBSYSTEM_FILE:
+    if source.path.name in _SUBSYSTEM_FILES:
         data, err = _parsed(source)
         name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
         return {
@@ -245,7 +246,7 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
         return {"k": "x", "local_types": sorted(local)}
     if source.kind != "yaml":
         return None
-    if source.path.name == _SUBSYSTEM_FILE:
+    if source.path.name in _SUBSYSTEM_FILES:
         data, err = _parsed(source)
         name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
         return {
