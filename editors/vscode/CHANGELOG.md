@@ -9,6 +9,19 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **English element kinds resolve in the metadata tree**
+  ([issue #1](https://github.com/keyfire/xbsl/issues/1)). The tree canonicalized a kind
+  through its own table, whose English column held the stdlib TYPE spellings - so
+  `ElementKind: Enumeration` (the SERIALIZER's spelling; the type name is `Enum`),
+  `HttpService`, `SoapService`, `SoapServiceClient` and `InterfaceComponent` fell into
+  "Other". The serializer's own kind table (41 pairs, the same one the engine carries) now
+  overlays the column: every spelling stays accepted, and the tree groups an English project
+  exactly as a Russian one. The name a new object is offered under in an English project
+  also comes from the serializer's spelling.
+
 ## 0.49.0
 
 ### Added

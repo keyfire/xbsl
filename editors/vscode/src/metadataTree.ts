@@ -19,6 +19,7 @@ import {
   MetaField,
   MetaInternals,
   parseInternals,
+  SERIALIZER_KIND_SPELLINGS,
   standardAttrNames,
   translationRef,
 } from "./metadataCore";
@@ -227,8 +228,17 @@ const NEW_OBJECT_DEFAULT_EN: Record<string, string> = {
   ФрагментКомандногоИнтерфейса: "NewFragment",
 };
 
+// The English name a kind is offered under in an English project - the serializer's spelling
+// (what `ElementKind:` will actually say), with the KIND_ROWS column as the fallback.
+const ENGLISH_BY_KIND = new Map<string, string>();
+SERIALIZER_KIND_SPELLINGS.forEach((kind, english) => {
+  if (!ENGLISH_BY_KIND.has(kind)) {
+    ENGLISH_BY_KIND.set(kind, english);
+  }
+});
+
 function englishKindName(kind: string): string | undefined {
-  return KIND_ROWS.find((r) => r[0] === kind)?.[3];
+  return ENGLISH_BY_KIND.get(kind) ?? KIND_ROWS.find((r) => r[0] === kind)?.[3];
 }
 
 function newObjectDefault(kind: string, english: boolean): string {
@@ -298,11 +308,15 @@ const RE_VENDOR = /^(?:Поставщик|Provider):\s*(\S+)/m;
 const RE_OWNER_TYPE = /(?:^|\n)\s*(?:Тип|Type):\s*(?:Форма|Form)\w*<([^>]+)>/;
 const RE_DECLARED_FORM = /^\s*(?:Форма|Form):\s*(\S+)/gm;
 
-// English spelling of a kind -> the spelling the tree works in. The pairs come from the platform's
-// own dictionary (the fourth column of KIND_ROWS), never from a translation.
-const KIND_BY_ENGLISH = new Map(
-  KIND_ROWS.filter((r) => r[3]).map((r) => [r[3] as string, r[0]]),
-);
+// English spelling of a kind -> the spelling the tree works in. Two sources, never a
+// translation: the stdlib TYPE spellings of the fourth KIND_ROWS column, and on top of them
+// the SERIALIZER's own kind table - what an English project actually writes into
+// `ElementKind:` (`Enumeration`, not the type name `Enum`). Every spelling stays accepted,
+// the serializer's wins nothing away.
+const KIND_BY_ENGLISH = new Map([
+  ...KIND_ROWS.filter((r) => r[3]).map((r) => [r[3] as string, r[0]] as const),
+  ...SERIALIZER_KIND_SPELLINGS,
+]);
 
 export function canonicalKind(kind: string): string {
   return KIND_BY_ENGLISH.get(kind) ?? kind;

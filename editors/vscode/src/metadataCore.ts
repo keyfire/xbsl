@@ -12,6 +12,56 @@
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
 import type { Node, YAMLMap } from "yaml";
 
+// The kind spellings the platform's SERIALIZER writes into `ElementKind:` of an English
+// project, read out of the distribution's own kind table (kept in sync with the engine's
+// `xbsl/metamodel.py` constant). This is a different vocabulary from the stdlib TYPE names:
+// the type of an enumeration is `Enum`, while `ElementKind:` says `Enumeration` - objects
+// spelled that way used to fall out of the metadata tree into "Other"
+// ([issue #1](https://github.com/keyfire/xbsl/issues/1)).
+export const SERIALIZER_KIND_SPELLINGS: ReadonlyMap<string, string> = new Map([
+  ["AccessKey", "КлючДоступа"],
+  ["AccumulationRegister", "РегистрНакопления"],
+  ["Catalog", "Справочник"],
+  ["ClientWorkParameters", "ПараметрыРаботыКлиента"],
+  ["CommandInterfaceFragment", "ФрагментКомандногоИнтерфейса"],
+  ["CommandWithComponent", "КомандаСКомпонентом"],
+  ["CommonModule", "ОбщийМодуль"],
+  ["ConstantsSet", "НаборКонстант"],
+  ["DataJournal", "ЖурналДанных"],
+  ["Document", "Документ"],
+  ["EntityContract", "КонтрактСущности"],
+  ["Enumeration", "Перечисление"],
+  ["EventLogEvent", "СобытиеЖурналаСобытий"],
+  ["ExchangePlan", "ПланОбмена"],
+  ["GlobalClientEvent", "ГлобальноеКлиентскоеСобытие"],
+  ["HttpService", "HttpСервис"],
+  ["InformationRegister", "РегистрСведений"],
+  ["IntegrableApplication", "ИнтегрируемоеПриложение"],
+  ["IntegrationProcess", "ПроцессИнтеграции"],
+  ["InterfaceComponent", "КомпонентИнтерфейса"],
+  ["LocalizedStrings", "ЛокализованныеСтроки"],
+  ["NavigationCommand", "НавигационнаяКоманда"],
+  ["PrivilegeOnAction", "ПравоНаДействие"],
+  ["PrivilegeOnElement", "ПравоНаЭлемент"],
+  ["Processing", "Обработка"],
+  ["Project", "Проект"],
+  ["Report", "Отчет"],
+  ["ReportColorSchema", "ЦветоваяСхемаОтчета"],
+  ["ReportPanel", "ПанельОтчетов"],
+  ["ScheduledJob", "ЗапланированноеЗадание"],
+  ["ServiceContract", "КонтрактСервиса"],
+  ["SettingsStorage", "ХранилищеНастроек"],
+  ["SoapService", "SoapСервис"],
+  ["SoapServiceClient", "КлиентSoapСервиса"],
+  ["StorableStructure", "ХранимаяСтруктура"],
+  ["Structure", "Структура"],
+  ["SwitchableCommand", "ПереключаемаяКоманда"],
+  ["TypeContract", "КонтрактТипа"],
+  ["UserSelfRegistrationParameter", "ПараметрСамостоятельнойРегистрацииПользователя"],
+  ["UsualCommand", "ОбычнаяКоманда"],
+  ["VirtualTable", "ВиртуальнаяТаблица"],
+]);
+
 export interface MetaField {
   name: string;
   type?: string; // Тип / Шаблон / Обработчик - shown as the field caption

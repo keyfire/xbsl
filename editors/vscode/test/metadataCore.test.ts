@@ -9,6 +9,7 @@ import {
   hintName,
   insertItemEdit,
   parseInternals,
+  SERIALIZER_KIND_SPELLINGS,
   setMetaKeyAliases,
   stringAttributeNames,
   translationRef,
@@ -413,6 +414,23 @@ test("translationRef: a path without the section is not a translation", () => {
   assert.strictEqual(translationRef("/p/Основное/ОсновноеЛокализация.yaml"), undefined);
   // A folder named Локализация with the file right in it: no language folder - no translation.
   assert.strictEqual(translationRef("/p/Локализация/Строки.yaml"), undefined);
+});
+
+test("serializer kind spellings: the kinds of issue #1 resolve to the tree's spelling", () => {
+  // The serializer writes `Enumeration` while the stdlib TYPE is `Enum` - exactly the class of
+  // objects that used to fall into "Other". The five names come from the issue report.
+  assert.strictEqual(SERIALIZER_KIND_SPELLINGS.get("Enumeration"), "Перечисление");
+  assert.strictEqual(SERIALIZER_KIND_SPELLINGS.get("HttpService"), "HttpСервис");
+  assert.strictEqual(SERIALIZER_KIND_SPELLINGS.get("SoapService"), "SoapСервис");
+  assert.strictEqual(SERIALIZER_KIND_SPELLINGS.get("SoapServiceClient"), "КлиентSoapСервиса");
+  assert.strictEqual(SERIALIZER_KIND_SPELLINGS.get("InterfaceComponent"), "КомпонентИнтерфейса");
+});
+
+test("serializer kind spellings: one Russian kind per English name and back", () => {
+  // The table must be invertible: englishKindName() builds the reverse map from it, and a
+  // duplicate Russian kind would silently pick whichever pair came first.
+  const russians = [...SERIALIZER_KIND_SPELLINGS.values()];
+  assert.strictEqual(new Set(russians).size, russians.length);
 });
 
 console.log(`\nитого: ${passed} ok, ${failed} fail`);
