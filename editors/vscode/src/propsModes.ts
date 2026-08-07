@@ -243,6 +243,10 @@ export interface MetaSchemaProp {
   alias?: string[];
   types?: string;
   options?: string[]; // a closed data-type constraint (@PossibleTypes), resolved by the engine
+  // Which attribute TYPE the property belongs to ("string" | "number" | "reference") - the
+  // documentation's "Только у реквизитов, имеющих тип ...", annotated by the engine on typed
+  // collection items. An unannotated property is universal.
+  applies?: string;
 }
 
 export interface MetaSchema {
@@ -362,6 +366,27 @@ const KIND_KEYS = new Set(["ВидЭлемента", "ElementKind"]);
 // rows, split the same way. A synthetic standard attribute (offset -1, no record in yaml)
 // shows the schema's property set with everything unset - its handwritten spec rows are only
 // the no-schema fallback; editing materializes the record (metaPropertyEdits below).
+// The type family of an attribute's `Тип` value - the domain the per-type properties of the
+// schema apply to. "" means the node sets no Тип: there is nothing to judge by, and the panel
+// then filters nothing - an honest "cannot judge" beats hiding a property the platform would
+// accept. A nullable type ("Строка?") belongs to the family of its base type.
+export function attributeTypeFamily(typeValue: string | undefined): string {
+  const bare = (typeValue ?? "").trim().replace(/\?$/, "");
+  if (!bare) {
+    return "";
+  }
+  if (bare === "Строка" || bare === "String") {
+    return "string";
+  }
+  if (bare === "Число" || bare === "Number") {
+    return "number";
+  }
+  if (/\.(Ссылка|Reference)$/.test(bare)) {
+    return "reference";
+  }
+  return "other";
+}
+
 export function buildMetaPanelModel(
   desc: MetaNodeDescription,
   typeCandidates?: string[],
@@ -396,12 +421,21 @@ export function buildMetaPanelModel(
   const readonlyRows: PanelRow[] = visible.filter((r) => r.readonly).map(toRow);
   const sections: PanelSection[] = [{ id: "set", rows }];
   if (schema) {
+    // The per-type properties of an attribute (the schema marks them with `applies`) are
+    // offered only to attributes of that type: ДлинаЦелойЧасти has no business on a Строка.
+    // A property already SET in the yaml is never hidden - data in the file beats the filter -
+    // and without a Тип to judge by everything stays offered.
+    const typeRow = desc.rows.find((r) => r.key === "Тип" || r.key === "Type");
+    const family = attributeTypeFamily(typeRow?.value);
     const all: PanelRow[] = [];
     for (const [key, prop] of Object.entries(schema.props)) {
       if (prop.deprecated || KIND_KEYS.has(key)) {
         continue;
       }
       const set = byKey.get(key);
+      if (prop.applies && family && prop.applies !== family && !set) {
+        continue;
+      }
       if (set?.readonly) {
         continue; // already in the readonly section - never twice
       }

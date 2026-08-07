@@ -6,6 +6,7 @@ import * as assert from "assert";
 import { parseDocument } from "yaml";
 import { parseInternals } from "../src/metadataCore";
 import {
+  attributeTypeFamily,
   buildMetaPanelModel,
   classifyEditor,
   describeMetaSelection,
@@ -263,6 +264,105 @@ test("buildMetaPanelModel: a synthetic standard attribute renders every row as n
   assert.strictEqual(model.type, "Код");
   assert.strictEqual(model.name, "");
   assert.ok(model.sections[0].rows.every((r) => !r.set));
+});
+
+// --- the per-type applicability of attribute properties -------------------------------------
+
+test("attributeTypeFamily: both spellings, nullability and references", () => {
+  assert.strictEqual(attributeTypeFamily("Строка"), "string");
+  assert.strictEqual(attributeTypeFamily("Строка?"), "string");
+  assert.strictEqual(attributeTypeFamily("String"), "string");
+  assert.strictEqual(attributeTypeFamily("Число"), "number");
+  assert.strictEqual(attributeTypeFamily("Number"), "number");
+  assert.strictEqual(attributeTypeFamily("Сотрудники.Ссылка?"), "reference");
+  assert.strictEqual(attributeTypeFamily("Tasks.Reference"), "reference");
+  assert.strictEqual(attributeTypeFamily("ПриоритетЗадачи"), "other");
+  assert.strictEqual(attributeTypeFamily(undefined), "");
+});
+
+// The attribute-item schema, trimmed: the engine annotates the per-type properties with
+// `applies` (the documentation's "Только у реквизитов, имеющих тип ...").
+const ATTRIBUTE_SCHEMA = {
+  kind: "Справочник",
+  props: {
+    Имя: { kind: "string" },
+    Тип: { kind: "type" },
+    МаксимальнаяДлина: { kind: "number", applies: "string" },
+    Многострочная: { kind: "boolean", applies: "string" },
+    ДлинаЦелойЧасти: { kind: "number", default: "10", applies: "number" },
+    ПриУдаленииОбъектаПоСсылке: { kind: "enum", enum: "Del", applies: "reference" },
+    ИспользоватьВПолнотекстовомПоиске: { kind: "boolean", default: "true" },
+  },
+  enums: { Del: ["Очищать", "НетДействия"] },
+};
+
+test("buildMetaPanelModel: per-type properties follow the attribute's Тип", () => {
+  const internals = parseInternals(CATALOG)!;
+  // Описание is a Строка: the number and reference properties are not offered...
+  const s = buildMetaPanelModel(
+    describeMetaSelection(CATALOG, { offset: internals.attributes[0].offset })!,
+    undefined,
+    ATTRIBUTE_SCHEMA
+  );
+  const sAll = s.sections.find((x) => x.id === "all")!.rows.map((r) => r.key);
+  assert.ok(sAll.includes("МаксимальнаяДлина"));
+  assert.ok(!sAll.includes("ДлинаЦелойЧасти"));
+  assert.ok(!sAll.includes("ПриУдаленииОбъектаПоСсылке"));
+  assert.ok(sAll.includes("ИспользоватьВПолнотекстовомПоиске")); // a universal one stays
+  // ...and Цена is a Число: the string properties go, the number ones stay.
+  const n = buildMetaPanelModel(
+    describeMetaSelection(CATALOG, { offset: internals.attributes[1].offset })!,
+    undefined,
+    ATTRIBUTE_SCHEMA
+  );
+  const nAll = n.sections.find((x) => x.id === "all")!.rows.map((r) => r.key);
+  assert.ok(nAll.includes("ДлинаЦелойЧасти"));
+  assert.ok(!nAll.includes("МаксимальнаяДлина"));
+  assert.ok(!nAll.includes("Многострочная"));
+});
+
+test("buildMetaPanelModel: a set property survives the type filter", () => {
+  // МаксимальнаяДлина is string-only but IS written in the yaml of a Число attribute: data
+  // in the file beats the filter - hiding it would conceal an existing key from the panel.
+  // (Многострочная is the deliberate exception with a policy of its own: describeMetaNode
+  // hides it and a type change removes it from the yaml - covered by its own tests.)
+  const text = `ВидЭлемента: Справочник
+Ид: aaa
+Имя: Товары
+Реквизиты:
+    -
+        Ид: bbb
+        Имя: Цена
+        Тип: Число
+        МаксимальнаяДлина: 50
+`;
+  const internals = parseInternals(text)!;
+  const model = buildMetaPanelModel(
+    describeMetaSelection(text, { offset: internals.attributes[0].offset })!,
+    undefined,
+    ATTRIBUTE_SCHEMA
+  );
+  const keys = model.sections.flatMap((s) => s.rows).map((r) => r.key);
+  assert.ok(keys.includes("МаксимальнаяДлина"));
+});
+
+test("buildMetaPanelModel: without a Тип nothing is filtered", () => {
+  const text = `ВидЭлемента: Справочник
+Ид: aaa
+Имя: Товары
+Реквизиты:
+    -
+        Ид: bbb
+        Имя: Черновик
+`;
+  const internals = parseInternals(text)!;
+  const model = buildMetaPanelModel(
+    describeMetaSelection(text, { offset: internals.attributes[0].offset })!,
+    undefined,
+    ATTRIBUTE_SCHEMA
+  );
+  const all = model.sections.find((x) => x.id === "all")!.rows.map((r) => r.key);
+  assert.ok(all.includes("МаксимальнаяДлина") && all.includes("ДлинаЦелойЧасти"));
 });
 
 // --- the metadata schema of a kind (xbsl/metadataSchema) -----------------------------------

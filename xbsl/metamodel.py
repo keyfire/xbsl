@@ -69,6 +69,45 @@ def _with_type_options(props: dict[str, dict]) -> dict[str, dict]:
     return out
 
 
+#: Which attribute TYPE a per-type property belongs to, the way the documentation of
+#: every object kind spells it ("Только у реквизитов, имеющих тип Число/Строка",
+#: "Только у ссылочных типов" - topics/catalog-properties and its twins for the other
+#: kinds). The metamodel itself does not record this: an attribute is ONE class with
+#: the union of the properties of every type, and the platform's designer decides the
+#: visibility in its own UI - so a schema consumer needs the table to filter honestly.
+#: The tokens are language-neutral; a name a class does not declare is simply skipped.
+_PROPERTY_TYPE_APPLIES: dict[str, str] = {
+    "МаксимальнаяДлина": "string",
+    "Многострочная": "string",
+    "КонтрольДлины": "string",
+    "НезаполненноеЗначение": "string",
+    "ДлинаЦелойЧасти": "number",
+    "ДлинаДробнойЧасти": "number",
+    "МаксимальноеЗначение": "number",
+    "МинимальноеЗначение": "number",
+    "КонтрольПредельныхЗначений": "number",
+    "КонтрольДробнойЧасти": "number",
+    "ПриУдаленииОбъектаПоСсылке": "reference",
+}
+
+
+def _with_type_applicability(props: dict[str, dict]) -> dict[str, dict]:
+    """Annotate the per-type properties of a TYPED item with `applies`.
+
+    Only a class that itself declares a `Тип` (an attribute, a dimension, a resource)
+    gets the annotation: the applicability notion "by the attribute's type" makes no
+    sense anywhere else, and a same-named property of an unrelated class must not
+    inherit it.
+    """
+    if (props.get("Тип") or {}).get("kind") != "type":
+        return props
+    return {
+        key: ({**record, "applies": _PROPERTY_TYPE_APPLIES[key]}
+              if key in _PROPERTY_TYPE_APPLIES else record)
+        for key, record in props.items()
+    }
+
+
 @lru_cache(maxsize=1)
 def _data() -> dict | None:
     try:
@@ -241,11 +280,12 @@ def properties_of_class(name: str) -> dict[str, dict]:
 
     The counterpart of `properties` for something that is not an element of its own: an item of a
     collection (an attribute, a dimension, a value of an enumeration). The envelope keys are NOT
-    added here - a collection item carries no `ВидЭлемента` and no `ОбластьВидимости`.
+    added here - a collection item carries no `ВидЭлемента` and no `ОбластьВидимости`. A typed
+    item's per-type properties carry `applies` - see _PROPERTY_TYPE_APPLIES.
     """
     props = dict(_class_properties(name))
     order = sorted(props.items(), key=lambda kv: (-int(kv[1].get("priority") or 0), kv[0]))
-    return _with_type_options(dict(order))
+    return _with_type_applicability(_with_type_options(dict(order)))
 
 
 @lru_cache(maxsize=None)

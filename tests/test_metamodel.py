@@ -33,7 +33,8 @@ _MM = {
         # built-in `Код` has a class of its own (the platform marks it with a presentation).
         "IAcmeAttribute": {"props": {"Имя": {"kind": "string"}}, "ext": []},
         "AcmeRegularAttributeDescriptor": {
-            "props": {"Тип": {"kind": "type"}, "ЗначениеПоУмолчанию": {"kind": "string"}},
+            "props": {"Тип": {"kind": "type"}, "ЗначениеПоУмолчанию": {"kind": "string"},
+                      "МаксимальнаяДлина": {"kind": "number"}},
             "ext": ["IAcmeAttribute"],
             "implName": "AcmeRegularAttribute",
         },
@@ -56,6 +57,7 @@ _MM = {
         "AcmeTabularDescriptor": {
             "props": {
                 "Имя": {"kind": "string"},
+                "МаксимальнаяДлина": {"kind": "number"},
                 "Реквизиты": {"kind": "list", "item": "AcmeRegularAttributeDescriptor"},
             },
             "ext": [],
@@ -172,6 +174,31 @@ def test_closed_type_constraint_resolves_into_options(mm_root):
     assert "options" not in props["ЧужойТип"]
     reg = metamodel.properties_of_class("AcmeRegularAttributeDescriptor")
     assert "options" not in reg["Тип"]
+
+
+def test_per_type_properties_carry_applicability(mm_root):
+    # МаксимальнаяДлина belongs to the Строка attributes only - the documentation of every
+    # object kind spells the applicability, and the properties panel filters by this field
+    props = metamodel.properties_of_class("AcmeRegularAttributeDescriptor")
+    assert props["МаксимальнаяДлина"]["applies"] == "string"
+    assert "applies" not in props["ЗначениеПоУмолчанию"]  # a universal property stays universal
+
+
+def test_applicability_needs_a_typed_item(mm_root):
+    # a namesake property of a class WITHOUT a Тип must not inherit the annotation
+    props = metamodel.properties_of_class("AcmeTabularDescriptor")
+    assert "applies" not in props["МаксимальнаяДлина"]
+
+
+@pytest.mark.needs_data
+def test_live_attribute_properties_carry_applicability():
+    # the guard over the generated data: the real attribute class is annotated
+    dataset.set_data_root(None)
+    props = metamodel.properties_of_class("CatalogRegularAttributeDescriptor")
+    assert props["МаксимальнаяДлина"]["applies"] == "string"
+    assert props["ДлинаЦелойЧасти"]["applies"] == "number"
+    assert props["ПриУдаленииОбъектаПоСсылке"]["applies"] == "reference"
+    assert "applies" not in props["Тип"]
 
 
 @pytest.mark.needs_data
