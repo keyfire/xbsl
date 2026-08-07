@@ -2154,11 +2154,11 @@ def test_delete_object_unknown_name(tmp_path):
 
 @pytest.mark.needs_data
 def test_english_service_file_names_resolve(tmp_path):
-    """Проект и подсистема с английскими именами файлов: платформа принимает оба написания.
+    """An English-named project and subsystem: the platform accepts both spellings.
 
-    Обнаружение проектов, принадлежность объекта подсистеме и создание новой подсистемы
-    обязаны работать как с русскими именами; новая подсистема в таком проекте создаётся
-    под английским именем - проект держит одно написание.
+    Project discovery, an object's subsystem membership and the creation of a new
+    subsystem must work exactly as with the Russian names; a subsystem created in such
+    a project lands under the English name - a project keeps one spelling throughout.
     """
     project_dir = tmp_path / "Acme" / "Shop"
     subsystem = project_dir / "Core"

@@ -32,8 +32,9 @@ from pathlib import Path
 from xbsl import dataset, engine, fixer, metamodel, terms
 
 #: The platform accepts BOTH spellings of the service file names - its converter checks the
-#: pairs itself (Проект/Project, Подсистема/Subsystem). The Russian name stays canonical for
-#: creation; a project whose descriptor already carries the English name gets English twins.
+#: pairs itself (`Проект`/`Project`, `Подсистема`/`Subsystem`). The Russian name stays
+#: canonical for creation; a project whose descriptor carries the English name gets English
+#: twins.
 PROJECT_FILE = "Проект.yaml"
 PROJECT_FILE_EN = "Project.yaml"
 PROJECT_FILES = (PROJECT_FILE, PROJECT_FILE_EN)
