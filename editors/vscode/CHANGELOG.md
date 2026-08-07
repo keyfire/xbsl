@@ -9,6 +9,20 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.51.0
+
+### Fixed
+- **The properties panel no longer offers an attribute the properties of a foreign type.**
+  A `String` attribute was shown `IntegerPartLength` (with the metamodel default of 10),
+  `FractionalPartLength`, `MinValue`/`MaxValue` and both numeric controls: the metamodel
+  describes an attribute as one class with the union of the properties of every type, and
+  the panel rendered the schema as is. The engine (0.56.0+) now annotates the per-type
+  properties with their type family, and the panel filters by the attribute's `Type`:
+  a `String` keeps `MaxLength` and `Multiline`, a `Number` keeps the numeric set, the
+  reference-only `OnReferencedObjectDeletion` shows up for references alone. A property
+  already written in the yaml is never hidden, and without a `Type` to judge by the panel
+  filters nothing. With an engine older than 0.56.0 the behaviour stays as before.
+
 ## 0.50.0
 
 ### Fixed
