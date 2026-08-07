@@ -12,9 +12,8 @@ The descriptors are English inside too - `Id`, `Vendor`, `Version`, `Compatibili
 and `Subsystem.yaml`, which the platform accepts next to the Russian spellings (its
 converter checks both). The toolkit resolves both spellings too, and what it creates
 follows the project around it: a subsystem added here lands as `Subsystem.yaml`.
-Exactly such a project compiles.
-Note that `elemctl` does not read those keys yet and refuses to build this project - the
-descriptors are here for the linter, not for a deploy.
+Exactly such a project compiles, and `elemctl` (0.27.0+) builds it - both spellings of the
+service file names are resolved there too.
 
 Enumeration values are English here as well (`Banner`, `Single`, `Double`, `Main`) - the
 compiler accepts them. The generated data does not carry those pairs yet (they live
