@@ -12,10 +12,10 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0
 
 ### Added
-- **The English service file names resolve everywhere.** The platform accepts
+- **The English service file names resolve everywhere** (0.55.0). The platform accepts
   `Project.yaml` and `Subsystem.yaml` next to the Russian spellings (its converter checks
   both), while the toolkit knew only the Russian ones - an English-named project was not
   discovered at all. Project and subsystem discovery, the object's namespace, the rules
@@ -24,10 +24,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   project around it - a subsystem added next to a `Project.yaml` lands as
   `Subsystem.yaml`, and the demo of English spellings (`demo-en/`) carries the English
   file names itself now.
-
-## 2026-08-07 – 0.54.0, 0.54.1
-
-### Added
 - **`meta_delete_object` / `xbsl delete-object`: delete a configuration object whole.**
   Removes the yaml+module pair, the object's forms `<Name>Form*` and the `ListRow<Name>`
   row component with their pairs (a subsystem is the folder the files live in, so the
