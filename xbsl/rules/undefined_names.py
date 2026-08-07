@@ -37,7 +37,7 @@ import difflib
 import re
 from collections.abc import Iterable
 
-from xbsl import dataset, i18n, parser as P
+from xbsl import dataset, i18n, parser as P, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.rules.yaml_schema import object_kind, value_of
 from xbsl.engine import SourceFile, rule
@@ -82,10 +82,18 @@ _IMPLICIT = frozenset({
 # Members that exist on the platform but are absent from the distribution docs.
 # Kept deliberately tiny.
 _UNDOCUMENTED = frozenset({
-    "ВыполнитьЗаписать", "ВыполнитьЗаписатьИЗакрыть",  # ФормаОбъекта commands
-    "СобственнаяМодифицированность",                   # a form-component property
-    "Message",                                          # the English form of Сообщить
+    "СобственнаяМодифицированность",  # a form-component property
+    "Message",                        # the English spelling of the message-reporting global
 })
+# `ВыполнитьЗаписать` and `ВыполнитьЗаписатьИЗакрыть` used to sit here as "commands of
+# ObjectForm". They are nothing of the sort: the compiler answers `Unknown method` to
+# both (checked by compiling them), and no type of any shipped dataset declares such a
+# member. A
+# form's built-in command is a PROPERTY of the form (WriteAndClose of type Command),
+# and running it is `WriteAndClose.Execute()`. What carried those names was the
+# author's own handler method, declared in the form module - so the rule sees it declared
+# and needs no exception. Whitelisting them silenced this very rule on code that cannot
+# compile, which is how the demo project kept two such calls unnoticed.
 
 _ENTITY_COMMON = frozenset({
     "Наименование", "Код", "Номер", "Дата", "Ссылка",
@@ -133,11 +141,31 @@ def _section_names(data: dict) -> set[str]:
 
 
 def _base_type_root(data: dict) -> str | None:
-    inherits = data.get("Наследует")
+    # Both keys are read through value_of: an English project spells the section `Inherits`,
+    # and a raw `data["Наследует"]` simply found nothing there - the base type went
+    # unresolved, its members never reached the module scope, and every bare member name in
+    # an English form module was reported as undefined.
+    inherits = value_of(data, "Наследует")
     base = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
     if not isinstance(base, str):
         return None
     return base.split("<", 1)[0].strip()
+
+
+def _both_spellings(names: set[str]) -> set[str]:
+    """The names plus their English spellings where the platform declares one.
+
+    The member catalogue is extracted from the documentation, and the documentation is
+    Russian only - so a form's WriteAndClose arrives Russian even though an English
+    project spells the very same property `WriteAndClose` and the compiler accepts it. The
+    pairs come from the compiler dictionary; a member it does not pair stays as it is.
+    """
+    out = set(names)
+    for name in names:
+        english = terms.common_english(name)
+        if english:
+            out.add(english)
+    return out
 
 
 def _component_scope_facts(
@@ -155,7 +183,9 @@ def _component_scope_facts(
     seen.add(root)
     members = type_members.get(root)
     if members:
-        names |= set(members.get("properties", ())) | set(members.get("methods", ()))
+        names |= _both_spellings(
+            set(members.get("properties", ())) | set(members.get("methods", ()))
+        )
     parent = by_name.get(root)
     if parent is not None:
         names |= _component_scope_facts(parent, by_name, type_members, seen)

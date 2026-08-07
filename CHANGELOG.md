@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0, 0.56.0, 0.57.0
+## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0, 0.56.0, 0.57.0, 0.57.1
 
 ### Added
 - **The properties of a section item are written by the tool, not by hand** (0.57.0). The
@@ -106,6 +106,23 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   both.
 
 ### Fixed
+- **A form module of an English project no longer drowns in false errors** (0.57.1). The
+  `code/undefined-name` rule looked the component's base type up under the Russian key
+  `Наследует`, while an English project spells the section `Inherits` - the base never
+  resolved, the members of the base type never reached the module scope, and EVERY use of
+  one was reported as an undefined name (an error-severity rule). The members now enter the
+  scope under both spellings as well: the member catalogue is extracted from the
+  documentation, and the documentation is Russian only, while an English project writes
+  `WriteAndClose` and the compiler accepts it.
+- **The rule stopped keeping quiet about commands that do not exist** (0.57.1). Its
+  whitelist of "members the documentation does not carry" held `ВыполнитьЗаписать` and
+  `ВыполнитьЗаписатьИЗакрыть`. They are not members of the platform: the compiler answers
+  `Unknown method` to both, and no type of the shipped data declares such a member. A form's
+  built-in command is a PROPERTY (`WriteAndClose` of type `Command`) and running it is
+  `WriteAndClose.Execute()`; the whitelisted names belonged to handler methods of the
+  author's own, declared in the form module - which the rule sees declared anyway. The
+  exception kept two such calls alive in the demo project unnoticed for a long time; the
+  demo now follows the shape of working sources.
 - **`yaml/presentation-field` no longer judges a constants set** (0.57.0). The metamodel
   types its `Presentation` as an attribute name (the type is inherited from a shared base),
   but a constants set has no `Attributes` section at all - the rule demanded the impossible

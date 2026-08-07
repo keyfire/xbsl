@@ -1,14 +1,12 @@
-@Handler
-method SaveAndClose()
-    ВыполнитьЗаписатьИЗакрыть()
+method SaveAndClose(Command: UsualCommand)
+    WriteAndClose.Execute()
 ;
 
-@Handler
-method MarkDone()
+method MarkDone(Source: Button, Event: OnClickEvent)
     var PreviousTitle = Object.Name   
     // Mark the task done — writing is all that is left…
     var StepCount: Number2 = Object.Steps.Size()
     Object.Importance = StepCount
     Object.Done = True
-    ВыполнитьЗаписать()
+    Write.Execute()
 ;
