@@ -201,3 +201,92 @@ def test_hover_of_a_global_type(tmp_path):
 def test_an_unknown_member_is_not_answered_as_a_global(tmp_path):
     """Negative control: a word AFTER a dot is a member, whatever the global catalogue holds."""
     assert _hover_text(tmp_path, GLOBALS_CODE, 4, 26) is None
+
+
+# --- navigation before the first background pass ----------------------------------------
+
+EVENT_YAML = "\n".join([
+    "ВидЭлемента: ГлобальноеКлиентскоеСобытие",
+    "Имя: ЗадачаЗакрыта",
+    "ОбластьВидимости: ВПроекте",
+    "",
+])
+
+EVENT_USE = "\n".join([
+    "@НаКлиенте",
+    "метод Проба()",
+    "    ЗадачаЗакрыта.Оповестить()",
+    ";",
+    "",
+])
+
+
+def _project_with_event(tmp_path):
+    (tmp_path / "ЗадачаЗакрыта.yaml").write_text(EVENT_YAML, encoding="utf-8")
+    (tmp_path / "КарточкаЗадачи.xbsl").write_text(EVENT_USE, encoding="utf-8")
+    return tmp_path / "ЗадачаЗакрыта.yaml"
+
+
+def _server_on(tmp_path):
+    """A server whose workspace is tmp_path and whose index has NOT been built yet."""
+    pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    server = lsp._make_server()
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    return getattr(fm, "features", fm)
+
+
+@pytest.mark.needs_data  # the index keeps an object only when its element kind is known
+def test_references_are_answered_before_the_first_project_pass(tmp_path):
+    """A find-usages right after startup must not answer "nothing found".
+
+    The index used to be built at the END of the project lint, so until that pass finished
+    navigation answered None - the editor shows that exactly like "there are no usages", and
+    the feature reads as missing (the report was about a global client event).
+    """
+    from types import SimpleNamespace
+
+    from pygls import uris
+
+    target = _project_with_event(tmp_path)
+    features = _server_on(tmp_path)
+    root, lookup = lsp.STATE.root, lsp.STATE.lookup
+    lsp.STATE.root, lsp.STATE.lookup = tmp_path, None  # the background pass has not run yet
+    try:
+        params = SimpleNamespace(
+            text_document=SimpleNamespace(uri=uris.from_fs_path(str(target))),
+            position=SimpleNamespace(line=1, character=8),  # the name on the `Имя:` line
+            context=SimpleNamespace(include_declaration=False),
+        )
+        got = features[lsp.lsp.TEXT_DOCUMENT_REFERENCES](params)
+        assert got is not None, "no usages, though the index can be built on demand"
+        assert [u.uri for u in got] == [uris.from_fs_path(str(tmp_path / "КарточкаЗадачи.xbsl"))]
+        assert got[0].range.start.line == 2
+    finally:
+        lsp.STATE.root, lsp.STATE.lookup = root, lookup
+
+
+@pytest.mark.needs_data
+def test_definition_is_answered_before_the_first_project_pass(tmp_path):
+    """The same for go-to-definition: the usage in the module points at the yaml."""
+    from types import SimpleNamespace
+
+    from pygls import uris
+
+    _project_with_event(tmp_path)
+    features = _server_on(tmp_path)
+    root, lookup = lsp.STATE.root, lsp.STATE.lookup
+    lsp.STATE.root, lsp.STATE.lookup = tmp_path, None
+    try:
+        params = SimpleNamespace(
+            text_document=SimpleNamespace(uri=uris.from_fs_path(str(tmp_path / "КарточкаЗадачи.xbsl"))),
+            position=SimpleNamespace(line=2, character=8),
+        )
+        got = features[lsp.lsp.TEXT_DOCUMENT_DEFINITION](params)
+        assert got is not None
+        assert got.uri == uris.from_fs_path(str(tmp_path / "ЗадачаЗакрыта.yaml"))
+    finally:
+        lsp.STATE.root, lsp.STATE.lookup = root, lookup

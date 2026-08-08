@@ -248,6 +248,9 @@ class _State:
         self.file_timers: dict[str, threading.Timer] = {}
         self.project_timer: Optional[threading.Timer] = None
         self.project_lock = threading.Lock()
+        # The index has a lock of its own: a navigation request builds it right away when
+        # the background pass has not got there yet, and must not wait for the project lint.
+        self.index_lock = threading.Lock()
 
 
 STATE = _State()
@@ -405,6 +408,30 @@ def _make_server() -> "LanguageServer":
         STATE.file_timers[uri] = timer
         timer.start()
 
+    def build_project_index() -> None:
+        """Rebuild the navigation index of the project (see indexer.build_index).
+
+        It is built apart from the project lint and BEFORE it: the lint of a whole project
+        is an order of magnitude more expensive than the index, and until the index exists
+        "find usages" and "go to definition" answer with nothing - which the editor shows
+        exactly like "there are no usages", and the feature reads as missing.
+        """
+        root = STATE.root
+        if root is None:
+            return
+        with STATE.index_lock:
+            try:
+                STATE.lookup = IndexLookup(indexer.build_index(root))
+            except Exception as e:  # noqa: BLE001 - the index must not break diagnostics
+                server.show_message_log(f"xbsl-lsp: индекс не построен: {e}")
+
+    def ensure_lookup() -> Optional[IndexLookup]:
+        """The index for a navigation request, built here if the background pass has not
+        got there yet: an answer that is late beats an answer that is falsely empty."""
+        if STATE.lookup is None:
+            build_project_index()
+        return STATE.lookup
+
     def project_lint() -> None:
         root = STATE.root
         if root is None:
@@ -412,6 +439,7 @@ def _make_server() -> "LanguageServer":
         if not STATE.project_lock.acquire(blocking=False):
             schedule_project_lint()  # a run is already in progress - retry afterwards
             return
+        build_project_index()  # navigation comes alive before the lint of the whole project
         try:
             files = engine.find_sources(root, "*.xbsl") + engine.find_sources(root, "*.yaml")
             sources = [engine.load(p) for p in files]
@@ -452,11 +480,6 @@ def _make_server() -> "LanguageServer":
                 )
             kept = {k: u for k, u in STATE.published.items() if k in open_dirty}
             STATE.published = {k: STATE.published.get(k) or uri_of[k] for k in by_key} | kept
-            # the index is rebuilt in the same background pass
-            try:
-                STATE.lookup = IndexLookup(indexer.build_index(root))
-            except Exception as e:  # noqa: BLE001 - the index must not break diagnostics
-                server.show_message_log(f"xbsl-lsp: индекс не построен: {e}")
         finally:
             STATE.project_lock.release()
 
@@ -498,7 +521,7 @@ def _make_server() -> "LanguageServer":
             STATE.baseline = b if b.is_absolute() else (folder / b if folder else b)
         STATE.templates_path = _resolve_templates_path(STATE.templates_arg, folder)
         load_templates()
-        schedule_project_lint()
+        schedule_project_lint()  # the pass starts with the index, so navigation comes alive first
 
     def load_templates() -> None:
         """The builtin set plus the user's file, if it has one.
@@ -546,8 +569,6 @@ def _make_server() -> "LanguageServer":
     # --- navigation --------------------------------------------------------------------
 
     def nav_query(uri: str, position: lsp.Position) -> Optional[dict]:
-        if STATE.lookup is None:
-            return None
         path = uri_to_path(uri)
         if path is None:
             return None
@@ -566,9 +587,10 @@ def _make_server() -> "LanguageServer":
     @server.feature(lsp.TEXT_DOCUMENT_DEFINITION)
     def _definition(params: lsp.DefinitionParams) -> Optional[lsp.Location]:
         q = nav_query(params.text_document.uri, params.position)
-        if q is None or STATE.lookup is None or STATE.root is None:
+        lookup = ensure_lookup()
+        if q is None or lookup is None or STATE.root is None:
             return None
-        target = resolve_definition(STATE.lookup, **q)
+        target = resolve_definition(lookup, **q)
         if not target:
             return None
         rel, line = target
@@ -578,11 +600,12 @@ def _make_server() -> "LanguageServer":
     @server.feature(lsp.TEXT_DOCUMENT_REFERENCES)
     def _references(params: lsp.ReferenceParams) -> Optional[list[lsp.Location]]:
         q = nav_query(params.text_document.uri, params.position)
-        if q is None or STATE.lookup is None or STATE.root is None:
+        lookup = ensure_lookup()
+        if q is None or lookup is None or STATE.root is None:
             return None
         ctx = getattr(params, "context", None)
         include_declaration = bool(getattr(ctx, "include_declaration", False)) if ctx else False
-        locs = resolve_references(STATE.lookup, include_declaration=include_declaration, **q)
+        locs = resolve_references(lookup, include_declaration=include_declaration, **q)
         result = [
             lsp.Location(
                 uri=path_to_uri(STATE.root / rel),
@@ -868,10 +891,11 @@ def _make_server() -> "LanguageServer":
     @server.feature(lsp.TEXT_DOCUMENT_HOVER)
     def _hover(params: lsp.HoverParams) -> Optional[lsp.Hover]:
         q = nav_query(params.text_document.uri, params.position)
-        if q is None or STATE.lookup is None:
+        lookup = ensure_lookup()
+        if q is None or lookup is None:
             return None
         text = (
-            resolve_hover(STATE.lookup, **q)
+            resolve_hover(lookup, **q)
             or _variable_hover(params)
             or _member_hover(params)
             or _global_hover(params)

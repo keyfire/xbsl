@@ -12,6 +12,18 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-08 – 0.57.2
+
+### Fixed
+- **LSP navigation no longer waits out the lint of the whole project.** The project index was
+  built at the very end of the background pass – after a lint an order of magnitude more
+  expensive than the index itself – and until that pass finished, "find usages" and "go to
+  definition" answered with nothing. The editor shows such an answer exactly like "no usages
+  found", so a supported feature reads as missing. The background pass now starts with the
+  index, and a navigation request that arrives earlier builds the index itself instead of
+  answering empty. On a medium project navigation comes alive in 1.9 s instead of 7.2 s; on a
+  tree holding several working copies, in 7.9 s instead of 37.0 s.
+
 ## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0, 0.56.0, 0.57.0, 0.57.1
 
 ### Added
