@@ -363,8 +363,8 @@ def test_template_kinds_derived_from_the_serializer_table(tmp_path, monkeypatch)
 
 
 def test_template_kinds_sees_a_kind_that_has_no_page_of_its_own(tmp_path, monkeypatch):
-    """EntityContract in 9.2.8+11 has only the pages of the types it generates. Collecting the
-    own pages alone dropped the kind - and with it the members it used to have."""
+    """In an older build EntityContract has only the pages of the types it generates. Collecting
+    the own pages alone dropped the kind - and with it the members it used to have."""
     monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
     with _template_car(
         tmp_path, "EntityContractName.Object_ru", "EntityContractName.Reference_ru",

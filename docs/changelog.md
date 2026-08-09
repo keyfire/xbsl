@@ -44,7 +44,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   a type opening with a placeholder (`{ConstantsSetName}.Record`) matches no identifier, so the
   members that matter most were the ones left untyped. The placeholder is swapped out while the
   page is parsed and stored as `{}`; the new `manager_member_types` section covers 25 kinds of 31
-  in 10.0.1, and substituting the object's name types the whole chain - not only `Get()` of a
+  in the newer data version, and substituting the object's name types the whole chain - not only `Get()` of a
   constants set, but `FindByCode()`, `GetReference()`, `GetSliceLast()` as well. The engine's
   built-in row stays as the fallback for data generated earlier.
 - **A kind manager's properties and methods are told apart.** `manager_members` kept them in one

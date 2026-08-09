@@ -101,7 +101,7 @@ _FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁ
 # Computable/GrantableAccessKey - the two flavours of AccessKey, which is one kind in yaml
 # (ElementKind: AccessKey, the flavour is a property), so their generated types are its own;
 # NonPeriodicConstantsSet - likewise a flavour of ConstantsSet (the periodicity property),
-# documented apart in 9.2.8+11 and merged into the constants set page in 10.0.1;
+# documented apart in an older build and merged into the constants set page in a newer one;
 # Form/ObjectForm/PopupComponent - bases of an interface component (`Inherits: Type: Form`),
 # not kinds: an element of such a page is an InterfaceComponent, and the members of the base
 # are component properties, extracted from the component pages instead.
@@ -135,7 +135,7 @@ def _template_kinds(car: zipfile.ZipFile) -> tuple[dict[str, str], list[str]]:
     base = TEMPLATE_BASE
     # The template name is the head of the directory: both its own page (`CatalogName_ru`) and
     # the page of a type it generates (`CatalogName.Reference_ru`) belong to the same template,
-    # and a kind may have no own page at all (EntityContract in 9.2.8+11) - collecting the own
+    # and a kind may have no own page at all (EntityContract in an older build) - collecting the own
     # pages only would drop such a kind silently.
     names = sorted({
         entry[len(base):].split("/")[0].split(".")[0].removesuffix("_ru")
