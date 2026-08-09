@@ -92,6 +92,10 @@ _CORE_MESSAGES = {
         "ru": "Путь '{path}' не существует.",
         "en": "Path '{path}' does not exist.",
     },
+    "cli.baseline-found": {
+        "ru": "Найден базлайн проекта: {path} (отключить – ключом --no-baseline)",
+        "en": "Project baseline found: {path} (disable it with --no-baseline)",
+    },
     "cli.baseline-stale-entry": {
         "ru": "устаревшая запись базлайна: {path} [{rule}] x{count} – {message}",
         "en": "stale baseline entry: {path} [{rule}] x{count} - {message}",
@@ -166,6 +170,12 @@ _CORE_MESSAGES = {
               "новые находки выводятся как обычно",
         "en": "suppress findings frozen in a baseline file (created by --write-baseline); "
               "new findings are reported as usual",
+    },
+    "cli.help.no-baseline": {
+        "ru": "не искать файл базлайна рядом с исходниками (по умолчанию найденный "
+              ".xbsllint-baseline применяется сам)",
+        "en": "do not look for a baseline file next to the sources (by default a discovered "
+              ".xbsllint-baseline is applied on its own)",
     },
     "cli.help.stale-baseline": {
         "ru": "перечислить записи базлайна, которые больше ничего не гасят "

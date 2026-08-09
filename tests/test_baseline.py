@@ -297,3 +297,55 @@ def test_json_payload_names_stale_entries(tmp_path, capsys):
     # one entry, two suppressions behind it - the two counters are not the same number
     assert summary["baseline_stale"] == 1 and summary["baseline_unused"] == 2
     assert summary["baseline_stale_entries"][0]["path"] == "Ушедший.xbsl"
+
+
+def test_project_baseline_is_found_without_the_flag(tmp_path, capsys):
+    """A committed baseline applies on its own: a local run must not contradict CI.
+
+    CI passes --baseline explicitly, so a linter that ignored the file locally reported
+    everything the project had deliberately frozen - and that reads as a broken linter.
+    """
+    project = tmp_path / "acme" / "Проба"
+    project.mkdir(parents=True)
+    f = project / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+
+    code = cli.main([*_NO_PAIR, str(f)])
+    err = capsys.readouterr().err
+    assert code == 0 and "Найден базлайн проекта" in err
+    assert "Погашено базлайном: 1" in err
+
+
+def test_discovery_is_switched_off_by_the_flag(tmp_path, capsys):
+    project = tmp_path / "acme" / "Проба"
+    project.mkdir(parents=True)
+    f = project / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+
+    cli.main(["--no-baseline", *_NO_PAIR, str(f)])
+    out, err = capsys.readouterr()
+    assert "Найден базлайн" not in err and "Погашено базлайном" not in err
+    assert "whitespace/trailing" in out
+
+
+def test_explicit_baseline_wins_over_discovery(tmp_path, capsys):
+    project = tmp_path / "acme" / "Проба"
+    project.mkdir(parents=True)
+    f = project / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    discovered = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(discovered), *_NO_PAIR, str(f)])
+    named = tmp_path / "другой.json"
+    named.write_text('{"meta": {"format": 1}, "files": {}}', encoding="utf-8")
+    capsys.readouterr()
+
+    cli.main(["--baseline", str(named), *_NO_PAIR, str(f)])
+    out, err = capsys.readouterr()
+    # the named (empty) baseline suppresses nothing, and the discovery message never appears
+    assert "Найден базлайн" not in err and "whitespace/trailing" in out

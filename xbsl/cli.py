@@ -34,6 +34,32 @@ def discover(paths: list[str]) -> list[Path]:
     return uniq
 
 
+#: The baseline file a project keeps next to its sources - the same name the VS Code
+#: extension writes exclusions into and CI passes explicitly.
+DEFAULT_BASELINE = ".xbsllint-baseline"
+
+
+def _discover_baseline(files: list[Path]) -> Path | None:
+    """The project's own baseline file, when it has one and the run did not name it.
+
+    Without this the linter reported everything the committed baseline suppresses: CI passes
+    `--baseline` explicitly, so the divergence showed up only in a local run and read as
+    "the linter has lost its mind". The search goes upwards from the checked files - the
+    baseline lives at the repository root, next to (or above) the project descriptor.
+    """
+    seen: set[Path] = set()
+    for f in files[:1] or []:
+        start = f.resolve().parent
+        for candidate in (start, *start.parents):
+            if candidate in seen:
+                break
+            seen.add(candidate)
+            path = candidate / DEFAULT_BASELINE
+            if path.is_file():
+                return path
+    return None
+
+
 def _project_root(start: Path) -> Path | None:
     """The nearest directory - start itself, then upwards - holding a project descriptor.
 
@@ -155,6 +181,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--write-baseline",
         metavar=baseline_file,
         help=i18n.t("cli.help.write-baseline"),
+    )
+    parser.add_argument(
+        "--no-baseline",
+        action="store_true",
+        help=i18n.t("cli.help.no-baseline"),
     )
     parser.add_argument(
         "--stale-baseline",
@@ -1011,6 +1042,12 @@ def main(argv: list[str] | None = None) -> int:
 
     suppressed = unused = None
     stale: list[dict] = []
+    if not args.baseline and not args.no_baseline:
+        found = _discover_baseline(files)
+        if found is not None:
+            args.baseline = str(found)
+            if args.format == "text":
+                print(i18n.t("cli.baseline-found", path=found), file=sys.stderr)
     if args.baseline:
         try:
             data = baseline.load(Path(args.baseline))
