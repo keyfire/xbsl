@@ -46,6 +46,7 @@ import zipfile
 from pathlib import Path
 
 from xbsl.extract import _distro
+from xbsl.extract.terms import scan_kind_table
 
 # jar plugins that carry .xcore
 _JAR_RE = re.compile(r"designtime|\.model|mdd|dmf|metamodel", re.I)
@@ -72,48 +73,46 @@ _STRING_TYPES = {
 }
 _TYPE_TYPES = {"Type", "TypeSet"}
 
-# Mapping ВидЭлемента (yaml) -> the root class of the metamodel. Derived by rule - the English
-# name of the kind (the term dictionary) plus a Descriptor suffix, e.g. Catalog ->
-# CatalogNativeDescriptor - and verified on sources: every top-level key seen for a kind
-# resolves through its class. The five kinds the rule misses (no English name
-# or a differently named class) are spelled out.
-VID2CLASS = {
-    "HttpСервис": "HttpServiceDescriptor",
-    "SoapСервис": "SoapServiceDescriptor",
+# The root class of a kind follows from its English spelling plus a Descriptor suffix
+# (Catalog -> CatalogNativeDescriptor), and the spellings come from the serializer's own kind
+# enum - the same source the term dictionary reads, so the list of kinds is the platform's
+# rather than ours. The kinds whose class the rule cannot name are spelled out here.
+#
+# The mapping used to be hand-written in full, and that is exactly how three kinds of 10.0
+# went missing (DataJournal, ReportPanel, IntegrationProcess): their classes were extracted
+# with all their properties, but nothing named them, so `metadata_schema` answered
+# {"props": {}, "class": null} - indistinguishable from "the platform has no such kind".
+_KIND_CLASS_EXCEPTIONS = {
     "ВиртуальнаяТаблица": "VirtualTableDescriptorBase",
-    "ГлобальноеКлиентскоеСобытие": "GlobalClientEventDescriptor",
-    "Документ": "DocumentNativeDescriptor",
-    "ЗапланированноеЗадание": "ScheduledJobDescriptor",
     "КлючДоступа": "AccessKeysClassDescriptor",
-    "КомандаСКомпонентом": "CommandWithComponentDescriptor",
     "КомпонентИнтерфейса": "ComponentModel",
-    "КонтрактСервиса": "ServiceContractDescriptor",
-    "КонтрактСущности": "EntityContractDescriptor",
-    "КонтрактТипа": "TypeContractDescriptor",
-    "ЛокализованныеСтроки": "LocalizedStringsDescriptor",
-    "НаборКонстант": "ConstantsSetNativeDescriptor",
-    "НавигационнаяКоманда": "NavigationCommandDescriptor",
-    "Обработка": "ProcessingNativeDescriptor",
-    "ОбщийМодуль": "CommonModuleDescriptor",
-    "ОбычнаяКоманда": "UsualCommandDescriptor",
-    "Отчет": "ReportNativeDescriptor",
-    "ПараметрСамостоятельнойРегистрацииПользователя": "UserSelfRegistrationParameterDescriptor",
-    "ПараметрыРаботыКлиента": "ClientWorkParametersDescriptor",
-    "ПереключаемаяКоманда": "SwitchableCommandDescriptor",
-    "Перечисление": "EnumerationDescriptor",
-    "ПланОбмена": "ExchangePlanNativeDescriptor",
     "ПравоНаДействие": "AccessPrivilegeClassDescriptor",
-    "ПравоНаЭлемент": "PrivilegeOnElementDescriptor",
-    "РегистрНакопления": "AccumulationRegisterNativeDescriptor",
-    "РегистрСведений": "InformationRegisterNativeDescriptor",
     "СобытиеЖурналаСобытий": "EventLogEvent",
-    "Справочник": "CatalogNativeDescriptor",
-    "Структура": "StructureDescriptor",
-    "ФрагментКомандногоИнтерфейса": "CommandInterfaceFragmentDescriptor",
-    "ХранилищеНастроек": "SettingsStorageNativeDescriptor",
-    "ХранимаяСтруктура": "StorableStructureDescriptor",
-    "ЦветоваяСхемаОтчета": "ReportColorSchemaNativeDescriptor",
 }
+
+
+def build_vid2class(classes: dict, kinds: dict[str, str]) -> tuple[dict[str, str], list[str]]:
+    """({ElementKind: root class}, kinds left unresolved) for the kinds of the distribution.
+
+    An unresolved kind is reported rather than dropped silently: it means the platform has
+    added a kind whose class the suffix rule does not name, and the exceptions above need a
+    new line. An empty kind table (a distribution without the serializer's enum) yields an
+    empty mapping - the caller decides whether that is fatal.
+    """
+    out: dict[str, str] = {}
+    unresolved: list[str] = []
+    for russian, english in kinds.items():
+        cls = _KIND_CLASS_EXCEPTIONS.get(russian)
+        if cls is None:
+            cls = next(
+                (c for c in (english + "NativeDescriptor", english + "Descriptor") if c in classes),
+                None,
+            )
+        if cls is None:
+            unresolved.append(russian)
+        else:
+            out[russian] = cls
+    return dict(sorted(out.items())), sorted(unresolved)
 # The kinds `yaml/unknown-property` may judge: an incomplete class here turns into a false
 # diagnostic on valid sources, so a kind joins the list only once its class is known to be
 # complete (the generated stub of a kind proves the mapping, not the completeness of the
@@ -436,8 +435,14 @@ def _fill_members(classes: dict, enums: dict, wrappers: set[str]) -> None:
                         node["inline"].append(d.group("type"))
 
 
-def extract(dist: Path) -> tuple[dict, dict]:
-    """Collect the classes and the enumerations from every .xcore of the main .car."""
+def extract(dist: Path) -> tuple[dict, dict, dict]:
+    """The classes, the enumerations and the kind table of the main .car.
+
+    The kind table (Russian kind -> its English spelling) is read from the serializer's own
+    enum by the term extractor; it is taken here rather than from terms.json because this
+    step runs BEFORE the terms one, and a mapping built from a stale dictionary would quietly
+    lose the kinds a new build brings.
+    """
     car = _distro.find_car(dist)
     classes: dict = {}
     enums: dict = {}
@@ -453,8 +458,9 @@ def extract(dist: Path) -> tuple[dict, dict]:
             for m in jz.namelist():
                 if m.endswith(".xcore"):
                     _parse_xcore(jz.read(m).decode("utf-8", "replace"), classes, enums, wrappers)
+        kinds = scan_kind_table(z)
     _fill_members(classes, enums, wrappers)
-    return classes, enums
+    return classes, enums, kinds
 
 
 def main(argv=None) -> int:
@@ -475,11 +481,14 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    classes, enums = extract(dist)
-    # sanity check: all vid2class root classes are present
-    missing = sorted(c for c in VID2CLASS.values() if c not in classes)
-    if missing:
-        print(f"ПРЕДУПРЕЖДЕНИЕ: не найдены корневые классы: {missing}", file=sys.stderr)
+    classes, enums, kinds = extract(dist)
+    vid2class, unresolved = build_vid2class(classes, kinds)
+    if not kinds:
+        print("ПРЕДУПРЕЖДЕНИЕ: в дистрибутиве не найдено перечисление видов элементов – "
+              "vid2class остался пустым", file=sys.stderr)
+    if unresolved:
+        print(f"ПРЕДУПРЕЖДЕНИЕ: не найден корневой класс для видов: {unresolved} – "
+              "допишите их в _KIND_CLASS_EXCEPTIONS", file=sys.stderr)
 
     data = {
         "meta": {
@@ -503,7 +512,7 @@ def main(argv=None) -> int:
             for k, v in sorted(classes.items())
         },
         "enums": dict(sorted(enums.items())),
-        "vid2class": dict(sorted(VID2CLASS.items())),
+        "vid2class": vid2class,
         "vetted": sorted(VETTED),
         "common": COMMON,
     }
@@ -514,7 +523,7 @@ def main(argv=None) -> int:
     if not args.out:
         _distro.update_index(version, make_default=not args.no_default)
     print(f"Записано: {out} (версия {version})")
-    print(f"  классов: {len(classes)}; перечислений: {len(enums)}; видов в vid2class: {len(VID2CLASS)}")
+    print(f"  классов: {len(classes)}; перечислений: {len(enums)}; видов в vid2class: {len(vid2class)}")
     return 0
 
 

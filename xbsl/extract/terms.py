@@ -177,7 +177,7 @@ _KIND_EN_RE = re.compile(r"^[A-Z][0-9A-Za-z]*$")
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
 
-def _scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
+def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
     """{Russian element kind: English spelling} from the serializer's kind enum, or empty.
 
     The type dictionary spells the STDLIB TYPE (`Перечисление` -> `Enum`), while the yaml
@@ -287,7 +287,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     with zipfile.ZipFile(car) as z:
         members, common = _scan_meta_objects(z)
         query = _scan_query_terms(z)
-        kind_table = _scan_kind_table(z)
+        kind_table = scan_kind_table(z)
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]
