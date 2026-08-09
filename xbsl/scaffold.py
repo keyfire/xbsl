@@ -191,6 +191,22 @@ def spelled_property(name: str, lang: str) -> str:
 _LINE_KEY_RE = re.compile(rf"^([ \t]*(?:-[ \t]*)?)([{_WORD}]+):(.*)$")
 
 
+def object_module_path(yaml_path: Path, lang: str = "ru") -> Path:
+    """The object module next to an element yaml: `<Имя>.Объект.xbsl` / `<Name>.Object.xbsl`.
+
+    An existing file wins over the spelling rule: a project may carry either name whatever
+    the language of its keys, and creating a second module beside the one already there
+    would leave the platform with two halves of the same context.
+    """
+    russian = yaml_path.with_suffix(".Объект.xbsl")
+    english = yaml_path.with_suffix(".Object.xbsl")
+    if russian.is_file():
+        return russian
+    if english.is_file():
+        return english
+    return english if lang == "en" else russian
+
+
 def spelled_lines(lines: list[str], lang: str) -> list[str]:
     """Template lines with their KEYS in the given language; values are left as they are.
 
@@ -698,6 +714,9 @@ class KindSpec:
     module: bool = False  # create a paired module file
     module_suffix: str = ".xbsl"  # for ВиртуальнаяТаблица the paired file is a .xbql query
     module_stub: str = ""  # module template ({name}); empty - a comment with the name
+    # The OBJECT module (`<Name>.Object.xbsl`) when the kind has one: a Processing keeps its
+    # attributes and its @Handler operations there, not in the element module.
+    object_module_stub: str = ""
     extra: tuple[str, ...] = ()  # extra template lines (may contain {name})
     # The kind requires data from the caller (Отчет - source and layout): there is nothing
     # to offer for it in the "create" menu, so it is excluded from the parameterless
@@ -831,12 +850,24 @@ KIND_SPECS: dict[str, KindSpec] = {
         note="Запрос виртуальной таблицы обязателен: заполните парный .xbql "
              "(пустой файл – невалидный элемент) и объявите в Параметры все параметры запроса",
     ),
+    # Two modules, and mixing them up costs a deploy: `<Name>.xbsl` is the module of the
+    # PROJECT ELEMENT (the singleton type, CreateForm), while the attributes, OnFill and the
+    # @Handler operations live in the OBJECT module - the documentation puts the algorithm and
+    # the description of the operations there (topics/processing-project-element). A handler
+    # written into the element module answers with "the variable <attribute> is not defined"
+    # plus "handler not found".
     "Обработка": KindSpec(
         module=True,
-        module_stub="// На каждую операцию из секции Операции нужен метод-обработчик с "
-                    "тем же именем:\n// @Обработчик\n// метод РассчитатьВсе()\n// ;\n",
+        module_stub="// Модуль элемента проекта: работа с обработкой целиком "
+                    "(например, СоздатьФорму).\n"
+                    "// Реквизиты и обработчики операций – в модуле объекта, "
+                    "{name}.Объект.xbsl\n",
+        object_module_stub="// Модуль объекта: реквизиты, ПриЗаполнении и метод-обработчик на "
+                           "каждую операцию\n// из секции Операции:\n"
+                           "// @Обработчик\n// метод РассчитатьВсе()\n// ;\n",
         note="Обработка без операций бесполезна: добавьте Операции и одноимённые "
-             "@Обработчик-методы в модуль (иначе ошибка \"Обязательный обработчик не определен\")",
+             "@Обработчик-методы в модуль ОБЪЕКТА (иначе ошибка \"Обязательный обработчик "
+             "не определен\")",
     ),
     "ЗапланированноеЗадание": KindSpec(
         module=True, module_stub=_STUB_JOB,
@@ -1722,6 +1753,11 @@ def op_new_object(
         result.changes.append(
             FileChange(yaml_path.with_suffix(spec.module_suffix), stub, created=True)
         )
+    if spec.object_module_stub:
+        result.changes.append(FileChange(
+            object_module_path(yaml_path, project_language(directory)),
+            spec.object_module_stub.format(name=name), created=True,
+        ))
     if spec.note:
         result.notes.append(spec.note)
     return result
@@ -1763,7 +1799,10 @@ def op_add_field(
             props, kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)), ("Ид", "Имя", "Тип"),
         )
         lines = spelled_lines(
-            [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"] + _prop_lines(extra), lang
+            _without_unknown_id(
+                [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"],
+                kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)),
+            ) + _prop_lines(extra), lang
         )
         edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl, lang)
         new_text = apply_edit(text, edit)
@@ -1798,16 +1837,16 @@ def op_add_field(
     extra = _checked_props(
         props, kind, ((spec["section"], None),), ("Ид", "Имя", "Тип"),
     )
-    lines = spelled_lines([
+    lines = spelled_lines(_without_unknown_id([
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=type_)
         for line in template
-    ] + _prop_lines(extra), lang)
+    ], kind, ((spec["section"], None),)) + _prop_lines(extra), lang)
     edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
     result = ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
     if field_kind == "операция":
-        _add_operation_handler(yaml_path, name, result, reader)
+        _add_operation_handler(yaml_path, name, result, reader, lang)
     if field_kind == "индекс":
         result.notes.append(
             f"Индекс {name} создан с полем-заглушкой Реквизит1 – замените Поля на реальные "
@@ -1859,6 +1898,26 @@ def item_property_forms(kind: str, path: tuple[tuple[str, str | None], ...]) -> 
         if english:
             forms.setdefault(english, name)
     return forms
+
+
+def _without_unknown_id(
+    lines: list[str], kind: str, path: tuple[tuple[str, str | None], ...]
+) -> list[str]:
+    """Drop the top-level `Id` line when the item's class does not declare that property.
+
+    Not every section item is identified: an attribute of a Catalog carries `Id`, an
+    attribute of a Processing has no such property at all, and the compiler rejects the whole
+    file with "unknown property Id" - a failure that only surfaces on deploy. The metamodel
+    knows the difference, so the templates no longer have to: a kind whose class is unknown
+    (no data, an unmapped kind) keeps whatever the template says.
+
+    Only the item's OWN key is dropped - a nested starter item (the attribute inside a new
+    tabular part) is judged by its own class, not by this one.
+    """
+    forms = item_property_forms(kind, path)
+    if not forms or "Ид" in forms:
+        return lines
+    return [line for line in lines if not line.startswith("Ид:")]
 
 
 def _checked_props(
@@ -2062,14 +2121,18 @@ def _add_mapping_entry(
     return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
 
 
-def _add_operation_handler(yaml_path: Path, operation: str, result: ScaffoldResult, reader) -> None:
-    """Append the operation's @Обработчик method to the processor module (unless present).
+def _add_operation_handler(
+    yaml_path: Path, operation: str, result: ScaffoldResult, reader, lang: str = "ru"
+) -> None:
+    """Append the operation's @Handler method to the OBJECT module (unless present).
 
-    Every operation must have a same-named method annotated with @Обработчик, otherwise
-    the platform raises "Обязательный обработчик <Имя> не определен" (the "Обработка"
-    documentation).
+    Every operation must have a same-named method annotated with @Handler, otherwise the
+    platform reports the mandatory handler as undefined (the Processing documentation). The
+    method belongs to the object module: the documentation puts the description of the
+    operations there, and the attributes it works with exist in that context alone - in the
+    element module the same method compiles into "the variable is not defined".
     """
-    module_path = yaml_path.with_suffix(".xbsl")
+    module_path = object_module_path(yaml_path, lang)
     module_text = (reader or _read)(module_path) if module_path.exists() else ""
     if re.search(rf"^метод\s+{re.escape(operation)}\b", module_text, re.M):
         return
@@ -2079,7 +2142,9 @@ def _add_operation_handler(yaml_path: Path, operation: str, result: ScaffoldResu
         module_text += nl
     new_text = (module_text + nl if module_text else "") + handler
     result.changes.append(FileChange(module_path, new_text, created=not module_path.exists()))
-    result.notes.append(f"В модуль дописан @Обработчик-метод операции {operation}")
+    result.notes.append(
+        f"В модуль объекта ({module_path.name}) дописан @Обработчик-метод операции {operation}"
+    )
 
 
 def op_add_subsystem(

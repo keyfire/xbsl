@@ -290,24 +290,57 @@ def test_new_soap_service(tmp_path):
     assert "метод Операция1()" in module
 
 
+def test_processing_gets_both_modules(tmp_path):
+    # A processor has two modules, and the element one is not where the algorithm goes
+    # (topics/processing-project-element): the stub of each says what belongs there.
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "РасчетДоставки"))
+    element = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
+    obj = (tmp_path / "РасчетДоставки.Объект.xbsl").read_text(encoding="utf-8")
+    assert "РасчетДоставки.Объект.xbsl" in element
+    assert "@Обработчик" in obj
+
+
+def test_processing_attribute_has_no_id(tmp_path):
+    # The attribute class of a processor declares no Id at all; writing it fails the deploy
+    # with an unknown-property error.
+    apply_result(scaffold.op_new_object(tmp_path, "Обработка", "РасчетДоставки"))
+    yaml_path = tmp_path / "РасчетДоставки.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Вес", type_="Число"))
+    parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    attribute = parsed["Реквизиты"][0]
+    assert attribute["Имя"] == "Вес" and "Ид" not in attribute
+
+
+def test_catalog_attribute_keeps_id(tmp_path):
+    # the negative control of the test above: an identified item still gets its Id
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Товары"))
+    yaml_path = tmp_path / "Товары.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Артикул"))
+    parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    assert parsed["Реквизиты"][0]["Ид"]
+
+
 def test_processing_operation_writes_handler(tmp_path):
     apply_result(scaffold.op_new_object(tmp_path, "Обработка", "РасчетДоставки"))
     yaml_path = tmp_path / "РасчетДоставки.yaml"
     result = scaffold.op_add_field(yaml_path, "операция", "Рассчитать")
     apply_result(result)
-    # The operation landed in the yaml, and the same-named @Обработчик method - in the module.
+    # The operation landed in the yaml, and the same-named @Handler method - in the OBJECT
+    # module: in the element module the attributes of the processor are out of context.
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
     assert [o["Имя"] for o in parsed["Операции"]] == ["Рассчитать"]
-    module = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
-    assert "@Обработчик\nметод Рассчитать()" in module.replace("\r\n", "\n")
+    object_module = (tmp_path / "РасчетДоставки.Объект.xbsl").read_text(encoding="utf-8")
+    assert "@Обработчик\nметод Рассчитать()" in object_module.replace("\r\n", "\n")
+    element_module = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
+    assert "метод Рассчитать()" not in element_module
     assert any("Рассчитать" in n for n in result.notes)
 
     # Adding the same method again does not duplicate it in the module.
     apply_result(scaffold.op_add_field(yaml_path, "операция", "РассчитатьПочтой"))
     again = scaffold.op_add_field(yaml_path, "операция", "Ещё")
     apply_result(again)
-    module = (tmp_path / "РасчетДоставки.xbsl").read_text(encoding="utf-8")
-    assert module.count("метод Рассчитать()") == 1
+    object_module = (tmp_path / "РасчетДоставки.Объект.xbsl").read_text(encoding="utf-8")
+    assert object_module.count("метод Рассчитать()") == 1
 
 
 def test_http_root_url_drops_kind_suffix(tmp_path):
