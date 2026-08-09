@@ -89,6 +89,7 @@
   "config.linter.lang.enum.1": "Russian",
   "config.linter.lang.enum.2": "English",
   "config.linter.select": "Check only these rules (comma-separated: id, group or tier letter A/B/C/D). Empty – the default set.",
+  "config.linter.enable": "Turn ON rules that are off by default (comma-separated: id, group or a tier letter A/B/C/D). Unlike Select, the default set stays in place - these are added to it. This is the only way to enable such a rule: xbsl.rules is an overlay over the findings the server already produced, and a rule that never ran produces none.",
   "config.linter.ignore": "Exclude these rules (comma-separated: id, group or tier letter).",
   "config.linter.debounce": "Delay in milliseconds before linting as you type (the onType mode).",
   "config.workspaceLint": "On every save of a .xbsl/.yaml file run the full linter pass over the workspace folder and lay the findings over all files. Brings the cross-file rules (code/unknown-type, yaml/unknown-type and others) that a single-buffer check cannot see.",

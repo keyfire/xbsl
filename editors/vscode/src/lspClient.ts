@@ -87,6 +87,9 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   args.push("--lang", resolveMessageLanguage(cfg.get<string>("linter.lang") || "", vscode.env.language));
   for (const [flag, key] of [
     ["--select", "linter.select"],
+    // Rules off by default are turned on here and only here: xbsl.rules is an overlay over
+    // what the server already sent, and a rule that never ran sends nothing to overlay.
+    ["--enable", "linter.enable"],
     ["--data-dir", "linter.dataDir"],
     // A custom templates file: the server resolves a relative path from the workspace
     // folder. An empty setting is not passed - the server then defaults to

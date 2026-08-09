@@ -9,6 +9,18 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.53.0
+
+### Added
+- **An "Enable" setting: rules that are off by default can be turned on from the editor.**
+  Until now there was no way at all: `xbsl.rules` is an overlay over the findings the server
+  already sent, and a rule that never ran sends none; `xbsl.groups.*` behaves the same, and
+  the only remaining lever, `Select`, REPLACES the default set instead of extending it - turn
+  one rule on and you lose the rest. The engine has had the `--enable` flag from the start,
+  the extension simply never passed it, which is why checks like `code/unused-method` lived
+  in the pipeline and stayed silent in the editor. A list of rules, groups or tier letters
+  now goes into `xbsl.linter.enable` and is added to the default set.
+
 ## 0.52.0
 
 ### Added
