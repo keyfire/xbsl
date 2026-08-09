@@ -7,7 +7,7 @@ sidebar:
 ---
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 137 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 138 rules.
 
 ## Boundary: the linter complements the compiler, it does not replace it
 
@@ -223,6 +223,7 @@ the execution model (client/server), form handlers, properties and queries.
 | 135 | `style/shadow-project-name` | warning | on | project | A variable, parameter or method named like a project element (a `Subscribers` variable next to the `Subscribers` catalog) - the declaration shadows the element for that scope; platform handler parameter names never collide with project names | [docs](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 | 136 | `code/unclosed-resource` | warning | on | file | A closeable resource (`val Selection = Query{...}.Execute()`) abandoned by an early exit from the loop over it: the platform closes a full pass by itself, while a `return` or a `break` in the middle leaves the resource open and the platform logs an unclosed-resource event; declaring the variable with `use` closes it on every exit path. A resource that arrived as a parameter, one the method closes by hand and one it returns to its caller are left to the author | [docs](https://1cmycloud.com/docs/help/topics/closeable-type/) |
 | 137 | `conventions/untranslated-visible-literal` | warning | on | project | Visible text left as a Cyrillic literal where the project already references the same property into a localization dictionary - the intent is counted per element kind, so a same-named property of another kind is not judged; silent on a project whose descriptor lists fewer than two localization languages | – |
+| 138 | `conventions/untranslated-code-literal` | warning | off | project | Visible text left as a Cyrillic literal in a MODULE - judged by the SINK it reaches (an argument of the platform message call, a property of an event-log event, or either of them one step away through a method that forwards its parameter); markup, pure interpolation and single words are skipped, and the rule is silent on a project whose descriptor lists fewer than two localization languages | – |
 
 ## Group details
 

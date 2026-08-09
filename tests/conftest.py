@@ -57,6 +57,7 @@ _DATA_DEPENDENT = {
     "test_rule_event_importance",  # the rule needs the metamodel (property default) and terms
     "test_rule_access_control",  # the rules read the platform names from terms
     "test_rule_localization",  # the rule reads the section names from the metamodel
+    "test_rule_code_literal",  # the rule reads the platform message name from terms
     "test_rule_property_since",  # the rule needs the ui schema
     "test_rule_form_scope",  # the rule needs the member catalogue and the term pairs
     "test_parser",  # the parser sits on the lexer, which sits on language.json

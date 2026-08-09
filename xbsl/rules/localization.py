@@ -1,6 +1,6 @@
 """Tier D: what the localization mechanism silently lets through.
 
-Two checks over the dictionary of localized strings and its use.
+Four checks over the dictionary of localized strings and its use.
 
 --- yaml/placeholder-key-in-strings ---
 
@@ -56,6 +56,36 @@ The language-count gate is mandatory: a single-language project has nothing to l
 and without the gate the rule would be noise on every such project. Everything the check
 relies on is platform mechanics - the localization languages of the descriptor, the
 dictionaries, the `$Dictionary.Key` references - which is what makes it an engine rule.
+
+--- conventions/untranslated-code-literal ---
+
+The same defect one layer down: visible text written as a literal in a MODULE, where no
+yaml property carries it and the check above cannot see it.
+
+What is judged is not the literal but the SINK it reaches. A Cyrillic phrase is a finding
+when it lands in something the platform shows to a person:
+
+* an argument of the platform's `Message` call - a message box;
+* a property of an event-log event constructor - the event's `ШаблонПредставления` prints
+  those properties, and unlike the template itself a property value is never localized;
+* ONE-STEP FORWARDING of either: a parameter that goes whole into one of the sinks above
+  makes every call of that method with a literal a finding too.
+
+Forwarding is not a refinement but the point of the rule. On the corpus that prompted it,
+seven of the nine findings reached the journal through a wrapper method, and a rule without
+forwarding would have found none of them.
+
+Everything else is deliberately NOT judged, and reconnaissance is why:
+
+* a single-language project is skipped by the same language gate as above (without it one
+  corpus answered 35 findings, all of them noise);
+* a phrase with no sink is skipped - most of them are seeding data, layout constants and
+  interpolation templates;
+* markup, styles and pure interpolation are skipped by shape;
+* a literal that merely REPEATS a dictionary value is not a finding on its own. Seeding
+  code passes a Russian text next to its English twin into a catalog, which no dictionary
+  call replaces; the match only enriches the message of a sink finding with the key whose
+  translation already exists.
 """
 
 from __future__ import annotations
@@ -70,7 +100,7 @@ import yaml as _yaml
 from xbsl import dataset, i18n, metamodel, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.rules._syntax import code_tokens
+from xbsl.rules._syntax import code_tokens, in_query, signatures
 from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _mapping_nodes, _parsed, object_kind
 
 MESSAGES = {
@@ -107,6 +137,49 @@ MESSAGES = {
     "conventions/untranslated-visible-literal.title": {
         "ru": "Непереведённый видимый литерал",
         "en": "An untranslated visible literal",
+    },
+    "conventions/untranslated-code-literal.title": {
+        "ru": "Непереведённый литерал в коде",
+        "en": "An untranslated literal in code",
+    },
+    "conventions/untranslated-code-literal.off": {
+        "ru": "видимый текст отличается от технической строки СТОКОМ, куда он попадает, а "
+              "проект вправе собирать прозу в коде – начальные данные, константы макета. "
+              "Включайте там, где всякая читаемая человеком строка обязана приходить из "
+              "словаря",
+        "en": "visible text is told from a technical string by the SINK it reaches, and a "
+              "project may legitimately build prose in code - seeding data, layout "
+              "constants. Enable it where every string a person reads must come from a "
+              "dictionary",
+    },
+    "conventions/untranslated-code-literal.found": {
+        "ru": "Кириллический текст \"{value}\" попадает в {sink} – это видит человек, а "
+              "литерал не переводится. Языков локализации больше одного, значит на "
+              "остальных текст останется русским. Вынесите его в словарь и зовите "
+              "Словарь.Ключ().",
+        "en": "The Cyrillic text \"{value}\" reaches {sink}, where a person reads it, and a "
+              "literal is never translated. The project has more than one localization "
+              "language, so the text stays Russian in the others. Move it to a dictionary "
+              "and call Dictionary.Key().",
+    },
+    "conventions/untranslated-code-literal.known": {
+        "ru": "Кириллический текст \"{value}\" попадает в {sink} – это видит человек, а "
+              "литерал не переводится. Перевод для него уже написан: зовите {key}().",
+        "en": "The Cyrillic text \"{value}\" reaches {sink}, where a person reads it, and a "
+              "literal is never translated. Its translation is already written: call "
+              "{key}().",
+    },
+    "conventions/untranslated-code-literal.message-sink": {
+        "ru": "сообщение пользователю ({call})",
+        "en": "a message box ({call})",
+    },
+    "conventions/untranslated-code-literal.event-sink": {
+        "ru": "свойство {property} события журнала {event}",
+        "en": "property {property} of the event-log event {event}",
+    },
+    "conventions/untranslated-code-literal.forwarded-sink": {
+        "ru": "{sink} через {method}()",
+        "en": "{sink} through {method}()",
     },
     "conventions/untranslated-visible-literal.found": {
         "ru": "Свойство '{key}' здесь – кириллический литерал \"{value}\", а в других "
@@ -423,4 +496,279 @@ def untranslated_visible_literal(facts: dict[str, dict]) -> Iterable[Diagnostic]
                 "conventions/untranslated-visible-literal", Severity.WARNING,
                 i18n.t("conventions/untranslated-visible-literal.found",
                        key=key, value=value),
+            )
+
+
+# --- conventions/untranslated-code-literal -------------------------------------------------
+
+_EVENT_KIND = "СобытиеЖурналаСобытий"
+_MESSAGE_CALL = "Сообщить"
+_PROPERTY_KEYS = ("Свойства", "Properties")
+_NAME_KEYS = ("Имя", "Name")
+
+#: How far back a call opener is looked for from an argument: a call longer than this is
+#: neither a message nor an event constructor.
+_CALL_SPAN = 120
+
+
+@lru_cache(maxsize=1)
+def _message_names() -> frozenset[str]:
+    """Both spellings of the platform's message call."""
+    return frozenset({_MESSAGE_CALL, terms.common_english(_MESSAGE_CALL)} - {None})
+
+
+dataset.register_reset(_message_names.cache_clear)
+
+
+def _has_cyrillic(text: str) -> bool:
+    return bool(_CYRILLIC_RE.search(text))
+
+
+def _literal_text(value: str) -> str:
+    """The text of a STRING token without its quotes."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+        return value[1:-1]
+    return value
+
+
+def _is_technical(text: str) -> bool:
+    """Shapes that carry no prose: markup, styles, pure interpolation, a single word.
+
+    A single Cyrillic word is not judged on purpose: those are field names, codes and keys,
+    and reconnaissance found them to outnumber real phrases.
+    """
+    stripped = text.strip()
+    if not stripped or "<" in stripped:
+        return True
+    if "{" in stripped and "}" in stripped and ";" in stripped:
+        return True
+    without_holes = stripped
+    for opener in ("%{", "${"):
+        while opener in without_holes:
+            start = without_holes.index(opener)
+            end = without_holes.find("}", start)
+            if end < 0:
+                break
+            without_holes = f"{without_holes[:start]} {without_holes[end + 1:]}"
+    words = [w for w in without_holes.replace(",", " ").split() if _has_cyrillic(w)]
+    return len(words) < 2
+
+
+def _enclosing_call(toks: list, at: int) -> int | None:
+    """Index of the '(' whose argument list holds the token at `at`, else None."""
+    depth = 0
+    for back in range(at - 1, max(-1, at - _CALL_SPAN), -1):
+        token = toks[back]
+        if token.kind != "OP":
+            continue
+        if token.value in ")]}":
+            depth += 1
+        elif token.value in "([{":
+            if depth == 0:
+                return back if token.value == "(" else None
+            depth -= 1
+    return None
+
+
+def _argument_position(toks: list, opener: int, at: int) -> int | None:
+    """Zero-based position of the argument that holds the token at `at`."""
+    position, depth = 0, 0
+    for j in range(opener + 1, len(toks)):
+        if j == at:
+            return position
+        token = toks[j]
+        if token.kind != "OP":
+            continue
+        if token.value in "([{":
+            depth += 1
+        elif token.value in ")]}":
+            if depth == 0:
+                return None
+            depth -= 1
+        elif token.value == "," and depth == 0:
+            position += 1
+    return None
+
+
+def _sink_at(toks: list, at: int) -> dict | None:
+    """The sink an expression at index `at` lands in, as far as one module can tell.
+
+    An event sink is reported as a CANDIDATE: whether the holder is an event-log event is
+    known only after every yaml of the project is read, so the reduce decides.
+    """
+    opener = _enclosing_call(toks, at)
+    if not opener:
+        return None
+    callee = toks[opener - 1]
+    if callee.kind != "IDENT":
+        return None
+    if callee.value in _message_names():
+        return {"kind": "message", "call": callee.value}
+    if (at >= 2 and toks[at - 1].kind == "OP" and toks[at - 1].value == "="
+            and toks[at - 2].kind == "IDENT"):
+        return {"kind": "event", "holder": callee.value, "property": toks[at - 2].value}
+    position = _argument_position(toks, opener, at)
+    if position is None:
+        return None
+    qualifier = None
+    if (opener >= 3 and toks[opener - 2].kind == "OP" and toks[opener - 2].value == "."
+            and toks[opener - 3].kind == "IDENT"):
+        qualifier = toks[opener - 3].value
+    return {"kind": "call", "callee": callee.value, "qualifier": qualifier,
+            "position": position}
+
+
+def _forwarded_parameters(toks: list) -> list[dict]:
+    """Methods whose parameter goes WHOLE into a sink: one record per (method, position)."""
+    out: list[dict] = []
+    sigs = signatures(toks)
+    seen: set[tuple[str, int]] = set()
+    for number, sig in enumerate(sigs):
+        end = sigs[number + 1].name.line if number + 1 < len(sigs) else 1 << 30
+        names = [p.name.value for p in sig.params]
+        if not names:
+            continue
+        for i, token in enumerate(toks):
+            if token.kind != "IDENT" or token.value not in names:
+                continue
+            if not sig.name.line <= token.line < end:
+                continue
+            sink = _sink_at(toks, i)
+            if sink is None or sink["kind"] == "call":
+                continue
+            key = (sig.name.value, names.index(token.value))
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"method": key[0], "position": key[1], "sink": sink})
+    return out
+
+
+def _code_literal_mapper(source: SourceFile) -> dict | None:
+    """Map phase: a yaml answers languages, events and dictionary values; a module its
+    literals with the sink each one reaches and the parameters it forwards."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data, error = _parsed(source)
+        if error is not None or not isinstance(data, dict):
+            return None
+        for key in _LANGUAGES_KEYS:
+            languages = data.get(key)
+            if isinstance(languages, list):
+                return {"k": "languages", "languages": [str(x) for x in languages]}
+        kind = object_kind(data)
+        name = next((data[k] for k in _NAME_KEYS if isinstance(data.get(k), str)), None)
+        if kind == _EVENT_KIND and name:
+            properties: list[str] = []
+            for section in _PROPERTY_KEYS:
+                for item in data.get(section) or []:
+                    if isinstance(item, dict):
+                        properties += [
+                            item[k] for k in _NAME_KEYS if isinstance(item.get(k), str)
+                        ]
+            return {"k": "event", "name": name, "properties": properties}
+        if kind == _KIND and name:
+            values: dict[str, str] = {}
+            for section in (*_section_names(), _TEMPLATES):
+                entries = data.get(section)
+                if not isinstance(entries, dict):
+                    continue
+                for key, value in entries.items():
+                    if (isinstance(value, str) and _has_cyrillic(value)
+                            and len(value.split()) > 1):
+                        values.setdefault(value.strip(), f"{name}.{key}")
+            return {"k": "dictionary", "values": values} if values else None
+        return None
+    if source.kind != "xbsl":
+        return None
+    toks = code_tokens(source)
+    literals = []
+    for i, token in enumerate(toks):
+        if token.kind != "STRING" or in_query(source, token.start):
+            continue
+        text = _literal_text(token.value)
+        if not _has_cyrillic(text) or _is_technical(text):
+            continue
+        sink = _sink_at(toks, i)
+        if sink is not None:
+            literals.append(
+                {"line": token.line, "col": token.col, "text": text, "sink": sink}
+            )
+    forwards = _forwarded_parameters(toks)
+    if not literals and not forwards:
+        return None
+    stem = source.rel.replace("\\", "/").rsplit("/", 1)[-1]
+    return {"k": "module", "module": stem.split(".")[0],
+            "literals": literals, "forwards": forwards}
+
+
+def _sink_phrase(sink: dict, events: dict[str, frozenset[str]]) -> str | None:
+    """The human half of the message: which sink the literal reaches, None if none does."""
+    if sink["kind"] == "message":
+        return i18n.t("conventions/untranslated-code-literal.message-sink", call=sink["call"])
+    if sink["kind"] == "event":
+        holder, prop = sink["holder"], sink["property"]
+        if prop in events.get(holder, frozenset()):
+            return i18n.t("conventions/untranslated-code-literal.event-sink",
+                          event=holder, property=prop)
+    return None
+
+
+@rule(
+    "conventions/untranslated-code-literal",
+    "conventions/untranslated-code-literal.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_code_literal_mapper,
+    enabled_by_default=False, off_reason="conventions/untranslated-code-literal.off",
+)
+def untranslated_code_literal(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """Visible text left as a literal in a module - see the module docstring."""
+    languages: list[str] = []
+    events: dict[str, frozenset[str]] = {}
+    dictionary: dict[str, str] = {}
+    for fact in facts.values():
+        if fact["k"] == "languages":
+            languages = fact["languages"]
+        elif fact["k"] == "event":
+            events[fact["name"]] = frozenset(fact["properties"])
+        elif fact["k"] == "dictionary":
+            dictionary.update(fact["values"])
+    if len(languages) < 2:
+        return
+    # A method is a conduit when the sink its parameter reaches is a real one. The owning
+    # module is part of the key, so a namesake in another module does not answer for it.
+    conduits: dict[tuple[str, str], dict[int, str]] = {}
+    for fact in facts.values():
+        if fact["k"] != "module":
+            continue
+        for forward in fact["forwards"]:
+            phrase = _sink_phrase(forward["sink"], events)
+            if phrase is None:
+                continue
+            key = (fact["module"], forward["method"])
+            conduits.setdefault(key, {})[forward["position"]] = phrase
+    for rel, fact in facts.items():
+        if fact["k"] != "module":
+            continue
+        for literal in fact["literals"]:
+            sink = literal["sink"]
+            phrase = _sink_phrase(sink, events)
+            if phrase is None and sink["kind"] == "call":
+                owner = sink["qualifier"] or fact["module"]
+                forwarded = conduits.get((owner, sink["callee"]), {}).get(sink["position"])
+                if forwarded is not None:
+                    phrase = i18n.t("conventions/untranslated-code-literal.forwarded-sink",
+                                    sink=forwarded, method=sink["callee"])
+            if phrase is None:
+                continue
+            known = dictionary.get(literal["text"].strip())
+            message_key = ("conventions/untranslated-code-literal.known" if known
+                           else "conventions/untranslated-code-literal.found")
+            arguments = {"value": literal["text"][:60], "sink": phrase}
+            if known:
+                arguments["key"] = known
+            yield Diagnostic(
+                rel, literal["line"], literal["col"],
+                "conventions/untranslated-code-literal", Severity.WARNING,
+                i18n.t(message_key, **arguments),
             )
