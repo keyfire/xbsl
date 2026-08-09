@@ -9,6 +9,11 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.56.1
+
+- **The changelog was rewritten: shorter and to the point.** Every entry says what changed for the
+  reader, without the account of how it was done inside. Nothing changed in the extension itself.
+
 ## 0.56.0
 
 ### Added
