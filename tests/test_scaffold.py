@@ -300,6 +300,7 @@ def test_processing_gets_both_modules(tmp_path):
     assert "@Обработчик" in obj
 
 
+@pytest.mark.needs_data
 def test_processing_attribute_has_no_id(tmp_path):
     # The attribute class of a processor declares no Id at all; writing it fails the deploy
     # with an unknown-property error.
