@@ -132,6 +132,16 @@ VETTED = [
     "Справочник",
     "Структура",
     "ФрагментКомандногоИнтерфейса",
+    # Joined 09.08.2026 on the same measure - live sources, not a generated stub. Across four
+    # real projects these kinds are written with 6 to 11 top-level keys each, and every one of
+    # those keys is declared by the class: nothing to report falsely. The kinds left out are
+    # not in doubt - they are simply written with the four mandatory keys alone wherever they
+    # occur, and four keys prove nothing about a class.
+    "ЗапланированноеЗадание",     # 11 keys across 2 objects
+    "СобытиеЖурналаСобытий",      # 10 keys across 4 objects
+    "НаборКонстант",              # 8 keys
+    "ЛокализованныеСтроки",       # 6 keys across 3 objects
+    "Обработка",                  # 6 keys
 ]
 # Universal keys of the project element envelope (shared by all kinds).
 COMMON = ["ВидЭлемента", "Ид", "Имя", "ОбластьВидимости", "Импорт"]

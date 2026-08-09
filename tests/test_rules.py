@@ -789,6 +789,31 @@ def test_known_property_not_flagged():
     assert not _has(d, "yaml/unknown-property")
 
 
+def test_vetted_kind_beyond_the_first_wave_is_judged():
+    # ScheduledJob joined the vetted list once live sources showed its class covers every key
+    # they write; the rule has to judge it like the older kinds
+    content = (
+        "ВидЭлемента: ЗапланированноеЗадание\n"
+        "Ид: 11111111-1111-1111-1111-111111111111\n"
+        "Имя: Задание\n"
+        "ВыдуманныйКлюч: 1\n"
+    )
+    d = _lint("Задание.yaml", content, select={"yaml/unknown-property"})
+    assert any(x.rule_id == "yaml/unknown-property" and "ВыдуманныйКлюч" in x.message for x in d)
+
+
+def test_vetted_kind_beyond_the_first_wave_keeps_its_own_keys():
+    content = (
+        "ВидЭлемента: СобытиеЖурналаСобытий\n"
+        "Ид: 11111111-1111-1111-1111-111111111111\n"
+        "Имя: Событие\n"
+        "ВидСобытия: Информация\n"
+        "ШаблонПредставления: Событие\n"
+    )
+    d = _lint("Событие.yaml", content, select={"yaml/unknown-property"})
+    assert not _has(d, "yaml/unknown-property")
+
+
 def test_unverified_vid_not_flagged():
     # the kind is not in the metamodel vid2class - the object is unchecked (0 false positives there)
     content = (
