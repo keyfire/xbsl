@@ -92,6 +92,14 @@ _CORE_MESSAGES = {
         "ru": "Путь '{path}' не существует.",
         "en": "Path '{path}' does not exist.",
     },
+    "cli.baseline-stale-entry": {
+        "ru": "устаревшая запись базлайна: {path} [{rule}] x{count} – {message}",
+        "en": "stale baseline entry: {path} [{rule}] x{count} - {message}",
+    },
+    "cli.baseline-pruned": {
+        "ru": "Базлайн очищен: {path} (удалено записей: {removed})",
+        "en": "Baseline pruned: {path} ({removed} entries removed)",
+    },
     "cli.baseline-summary": {
         "ru": "Погашено базлайном: {suppressed}; устаревших записей базлайна: {unused}",
         "en": "Suppressed by the baseline: {suppressed}; stale baseline entries: {unused}",
@@ -158,6 +166,18 @@ _CORE_MESSAGES = {
               "новые находки выводятся как обычно",
         "en": "suppress findings frozen in a baseline file (created by --write-baseline); "
               "new findings are reported as usual",
+    },
+    "cli.help.stale-baseline": {
+        "ru": "перечислить записи базлайна, которые больше ничего не гасят "
+              "(вместе с --baseline)",
+        "en": "list the baseline entries that no longer suppress anything "
+              "(together with --baseline)",
+    },
+    "cli.help.prune-baseline": {
+        "ru": "перечислить устаревшие записи базлайна и удалить их из файла "
+              "(вместе с --baseline; счётчики живых записей не трогаются)",
+        "en": "list the stale baseline entries and remove them from the file "
+              "(together with --baseline; the counts of live entries are left alone)",
     },
     "cli.help.write-baseline": {
         "ru": "вместо отчёта записать все текущие находки в файл базлайна "

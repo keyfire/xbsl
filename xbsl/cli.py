@@ -157,6 +157,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=i18n.t("cli.help.write-baseline"),
     )
     parser.add_argument(
+        "--stale-baseline",
+        action="store_true",
+        help=i18n.t("cli.help.stale-baseline"),
+    )
+    parser.add_argument(
+        "--prune-baseline",
+        action="store_true",
+        help=i18n.t("cli.help.prune-baseline"),
+    )
+    parser.add_argument(
         "--fix",
         action="store_true",
         help=i18n.t("cli.help.fix"),
@@ -1000,22 +1010,41 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     suppressed = unused = None
+    stale: list[dict] = []
     if args.baseline:
         try:
             data = baseline.load(Path(args.baseline))
         except baseline.BaselineError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        diagnostics, suppressed, unused = baseline.apply(
+        diagnostics, suppressed, unused, stale = baseline.apply(
             diagnostics, data, Path(args.baseline).parent,
         )
+        # The stale entries are named, not just counted: without the list the only way to
+        # find them was to rewrite the whole baseline and diff it.
+        if (args.stale_baseline or args.prune_baseline) and args.format == "text":
+            for entry in stale:
+                print(i18n.t(
+                    "cli.baseline-stale-entry", path=entry["path"], rule=entry["rule"],
+                    count=entry["count"], message=entry["message"],
+                ), file=sys.stderr)
+        if args.prune_baseline:
+            target = Path(args.baseline)
+            if stale:
+                baseline.save(target, baseline.without_entries(data, stale))
+            print(i18n.t("cli.baseline-pruned", path=target, removed=len(stale)),
+                  file=sys.stderr)
 
     if args.format == "json":
         # Machine-readable: the whole payload on stdout, nothing on stderr.
         payload = report.report(diagnostics, len(files))
         if suppressed is not None:
             payload["summary"]["baselined"] = suppressed
+            # Two different units, both useful: `unused` counts the suppressions nobody
+            # spent, `stale` the entries they belong to (one entry may allow several).
             payload["summary"]["baseline_unused"] = unused
+            payload["summary"]["baseline_stale"] = len(stale)
+            payload["summary"]["baseline_stale_entries"] = stale
         print(json.dumps(payload, ensure_ascii=False))
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
@@ -1033,8 +1062,10 @@ def main(argv: list[str] | None = None) -> int:
             file=sys.stderr,
         )
         if suppressed is not None:
+            # The count names ENTRIES, as the text promises; `unused` counts the individual
+            # suppressions behind them and lives in the json payload.
             print(
-                i18n.t("cli.baseline-summary", suppressed=suppressed, unused=unused),
+                i18n.t("cli.baseline-summary", suppressed=suppressed, unused=len(stale)),
                 file=sys.stderr,
             )
 

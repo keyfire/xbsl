@@ -8,23 +8,23 @@ import json
 
 from xbsl import cli
 
-_ХВОСТ = "метод Ф(): Число\n    возврат 1  \n;\n"  # trailing whitespace on line 2
+_TRAILING = "метод Ф(): Число\n    возврат 1  \n;\n"  # trailing whitespace on line 2
 
 # temporary files have no paired yaml - that is not what this module is about
-_БЕЗ_ПАРЫ = ["--ignore", "structure/xbsl-pair"]
+_NO_PAIR = ["--ignore", "structure/xbsl-pair"]
 
 
 def _run_json(argv, capsys):
-    code = cli.main(["--format", "json", *_БЕЗ_ПАРЫ, *argv])
+    code = cli.main(["--format", "json", *_NO_PAIR, *argv])
     return code, json.loads(capsys.readouterr().out)
 
 
 def test_write_then_check_suppresses_all(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
 
-    code = cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    code = cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     err = capsys.readouterr().err
     assert code == 0 and bl.is_file()
     assert "Базлайн записан" in err
@@ -38,9 +38,9 @@ def test_write_then_check_suppresses_all(tmp_path, capsys):
 
 def test_new_same_kind_finding_surfaces(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
     # a second violation of the same rule with the same message: the budget is 1 - the first
@@ -54,12 +54,12 @@ def test_new_same_kind_finding_surfaces(tmp_path, capsys):
 
 def test_line_shift_keeps_finding_suppressed(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
-    f.write_text("// комментарий сверху\n" + _ХВОСТ, encoding="utf-8")  # the finding shifted down
+    f.write_text("// комментарий сверху\n" + _TRAILING, encoding="utf-8")  # the finding shifted down
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
     assert payload["diagnostics"] == []
     assert payload["summary"]["baselined"] == 1
@@ -68,9 +68,9 @@ def test_line_shift_keeps_finding_suppressed(tmp_path, capsys):
 
 def test_fixed_finding_counts_as_unused(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
     f.write_text("метод Ф(): Число\n    возврат 1\n;\n", encoding="utf-8")  # the debt is fixed
@@ -84,7 +84,7 @@ def test_baselined_error_does_not_fail_the_run(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
     f.write_text("метод Ф()\n    пер Икс = (1 + 2\n;\n", encoding="utf-8")  # parenthesis error
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
@@ -106,20 +106,20 @@ def test_baseline_with_a_bom_is_read(tmp_path):
 
 def test_missing_baseline_file_is_an_error(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
-    code = cli.main(["--baseline", str(tmp_path / "нет.json"), *_БЕЗ_ПАРЫ, str(f)])
+    f.write_text(_TRAILING, encoding="utf-8")
+    code = cli.main(["--baseline", str(tmp_path / "нет.json"), *_NO_PAIR, str(f)])
     assert code == 2
     assert "не найден" in capsys.readouterr().err
 
 
 def test_text_summary_reports_baseline(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
-    cli.main(["--baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--baseline", str(bl), *_NO_PAIR, str(f)])
     err = capsys.readouterr().err
     assert "Погашено базлайном: 1" in err
 
@@ -161,9 +161,9 @@ def test_enable_respects_ignore(tmp_path, capsys):
 def test_reason_entry_suppresses(tmp_path, capsys):
     """An entry of the form {"count": N, "reason": ...} suppresses a finding just like a bare number."""
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
     data = json.loads(bl.read_text(encoding="utf-8"))
@@ -183,9 +183,9 @@ def test_rewrite_keeps_reasons(tmp_path, capsys):
     from xbsl import baseline
 
     f = tmp_path / "Ч.xbsl"
-    f.write_text(_ХВОСТ, encoding="utf-8")
+    f.write_text(_TRAILING, encoding="utf-8")
     bl = tmp_path / "baseline.json"
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
 
     data = json.loads(bl.read_text(encoding="utf-8"))
@@ -194,14 +194,14 @@ def test_rewrite_keeps_reasons(tmp_path, capsys):
     per_message[message] = {"count": per_message[message], "reason": "так надо"}
     bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
     rewritten = baseline.load(bl)
     entry = rewritten["files"]["Ч.xbsl"]["whitespace/trailing"][message]
     assert entry == {"count": 1, "reason": "так надо"}
     # reasons of vanished findings are not carried over: a clean file - an empty baseline
     f.write_text("метод Ф(): Число\n    возврат 1\n;\n", encoding="utf-8")
-    cli.main(["--write-baseline", str(bl), *_БЕЗ_ПАРЫ, str(f)])
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
     assert baseline.load(bl)["files"] == {}
 
@@ -227,3 +227,73 @@ def test_lsp_apply_baseline_file(tmp_path):
     baseline.write(bl, [d])
     kept, problem = apply_baseline_file([d], bl)
     assert kept == [] and problem is None
+
+
+def _seed_stale(bl, extra_path="Ушедший.xbsl"):
+    """Add an entry nothing can spend: its file is not even in the run."""
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    data["files"][extra_path] = {"whitespace/trailing": {"Хвостовые пробелы.": 2}}
+    bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def test_stale_entries_are_listed(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(f)])
+    err = capsys.readouterr().err
+    # the entry is named - path, rule and how many suppressions it still holds
+    assert "Ушедший.xbsl" in err and "whitespace/trailing" in err and "x2" in err
+    # the live entry is not called stale
+    assert err.count("устаревшая запись") == 1
+
+
+def test_prune_removes_only_stale_entries(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    code = cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(f)])
+    err = capsys.readouterr().err
+    assert code == 0 and "удалено записей: 1" in err
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    assert "Ушедший.xbsl" not in data["files"]
+    # the finding that still occurs keeps its entry, and stays suppressed afterwards
+    assert data["files"]["Ч.xbsl"]["whitespace/trailing"]
+    code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
+    assert payload["summary"]["baselined"] == 1 and payload["summary"]["baseline_stale"] == 0
+
+
+def test_prune_without_stale_entries_leaves_the_file(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    before = bl.read_text(encoding="utf-8")
+
+    cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(f)])
+    assert "удалено записей: 0" in capsys.readouterr().err
+    assert bl.read_text(encoding="utf-8") == before
+
+
+def test_json_payload_names_stale_entries(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    _, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
+    summary = payload["summary"]
+    # one entry, two suppressions behind it - the two counters are not the same number
+    assert summary["baseline_stale"] == 1 and summary["baseline_unused"] == 2
+    assert summary["baseline_stale_entries"][0]["path"] == "Ушедший.xbsl"

@@ -282,7 +282,7 @@ def apply_baseline_file(diags: list[Diagnostic], path: Optional[Path]) -> tuple[
         data = baseline.load(path)
     except baseline.BaselineError as exc:
         return diags, str(exc)
-    kept, _suppressed, _unused = baseline.apply(diags, data, path.parent)
+    kept, _suppressed, _unused, _stale = baseline.apply(diags, data, path.parent)
     return kept, None
 
 

@@ -39,6 +39,8 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--enable ID/GROUP/TIER` | add rules disabled by default ON TOP of the standard set (`--select` replaces the set); the value forms are the same |
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
 | `--write-baseline FILE` | instead of a report, write all current findings to a baseline file (freeze the debt; paths in the file are relative to its directory) |
+| `--stale-baseline` | list the baseline entries that no longer suppress anything (together with `--baseline`) |
+| `--prune-baseline` | list the stale baseline entries and remove them from the file (together with `--baseline`; the counts of live entries are left alone) |
 | `--fix` | fix mechanical findings in place (trailing spaces, typographic characters, line endings) and report the rest; only unambiguous fixes |
 | `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
 | `--list-rules` | print the list of rules and exit |

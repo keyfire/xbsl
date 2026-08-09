@@ -134,8 +134,13 @@ def write(path: Path, diags: list[Diagnostic]) -> dict:
         except BaselineError:
             pass
     data = build(diags, path.parent, reasons)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    save(path, data)
     return data
+
+
+def save(path: Path, data: dict) -> None:
+    """Write a baseline payload in the file's canonical shape (one place, one format)."""
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
 def load(path: Path) -> dict:
@@ -153,14 +158,67 @@ def load(path: Path) -> dict:
     return data
 
 
+def stale_entries(data: dict, used: dict[tuple[str, str, str], int]) -> list[dict]:
+    """The baseline entries this run did not spend, as records ready to print.
+
+    `used` counts how many occurrences of each identity the run actually suppressed. An
+    entry nobody spent means the finding is gone (the code was fixed, the rule changed, the
+    file moved) - the count is what the baseline still allows for it.
+    """
+    out: list[dict] = []
+    for path, per_rule in sorted(data.get("files", {}).items()):
+        if not isinstance(per_rule, dict):
+            continue
+        for rule_id, per_message in sorted(per_rule.items()):
+            if not isinstance(per_message, dict):
+                continue
+            for message, value in sorted(per_message.items()):
+                count = _entry_count(value)
+                left = count - used.get((path, rule_id, message), 0)
+                if count > 0 and left > 0:
+                    out.append({
+                        "path": path, "rule": rule_id, "message": message,
+                        "count": left, "reason": _entry_reason(value),
+                    })
+    return out
+
+
+def without_entries(data: dict, entries: list[dict]) -> dict:
+    """A copy of the baseline without the given identities (and without the emptied nests).
+
+    Only whole identities are removed, never a part of a count: an entry is either spent by
+    the run or gone. Emptied rule and file nests go with them, so a pruned baseline of a
+    clean project is an empty `files` rather than a tree of husks.
+    """
+    drop = {(e["path"], e["rule"], e["message"]) for e in entries}
+    files: dict = {}
+    for path, per_rule in data.get("files", {}).items():
+        if not isinstance(per_rule, dict):
+            continue
+        kept_rules: dict = {}
+        for rule_id, per_message in per_rule.items():
+            if not isinstance(per_message, dict):
+                continue
+            kept = {
+                message: value for message, value in per_message.items()
+                if (path, rule_id, message) not in drop
+            }
+            if kept:
+                kept_rules[rule_id] = kept
+        if kept_rules:
+            files[path] = kept_rules
+    return {**data, "files": files}
+
+
 def apply(
     diags: list[Diagnostic], data: dict, base_dir: Path,
-) -> tuple[list[Diagnostic], int, int]:
+) -> tuple[list[Diagnostic], int, int, list[dict]]:
     """Filter the findings through the baseline.
 
-    Returns (kept findings, suppressed count, unused entry count). Per identity the first
-    N occurrences in line order are suppressed; the extras are kept. Unused entries are
-    frozen findings that no longer occur – a hint that the baseline is due a rewrite.
+    Returns (kept findings, suppressed count, unused entry count, stale entries). Per
+    identity the first N occurrences in line order are suppressed; the extras are kept.
+    Stale entries are frozen findings that no longer occur - they are both counted and
+    listed, so a rewrite can name them instead of announcing a number.
     """
     budgets: dict[tuple[str, str, str], int] = {}
     for path, per_rule in data.get("files", {}).items():
@@ -175,13 +233,15 @@ def apply(
                     budgets[(path, rule_id, message)] = count
     total_budget = sum(budgets.values())
     kept: list[Diagnostic] = []
+    used: dict[tuple[str, str, str], int] = {}
     suppressed = 0
     for d in sorted(diags, key=lambda x: x.sort_key()):
         key = (_identity_path(d.path, base_dir), d.rule_id, d.message)
         left = budgets.get(key, 0)
         if left > 0:
             budgets[key] = left - 1
+            used[key] = used.get(key, 0) + 1
             suppressed += 1
         else:
             kept.append(d)
-    return kept, suppressed, total_budget - suppressed
+    return kept, suppressed, total_budget - suppressed, stale_entries(data, used)
