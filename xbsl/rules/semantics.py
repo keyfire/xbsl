@@ -211,18 +211,58 @@ def _object_members() -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in raw.items() if isinstance(v, list)}
 
 
-@lru_cache(maxsize=1)
-def _manager_members() -> dict[str, frozenset[str]]:
-    """Per-kind methods of the kind's SINGLETON type from the versioned catalog ({} when absent).
+#: The bucket an entry of manager_members generated BEFORE the properties/methods split lands
+#: in: neither of the two, because such data does not say which a name is.
+UNSPLIT_MEMBERS = "members"
 
-    `Программы.НайтиПоКоду(...)`, `НастройкиСайта.Получить()`, `СобытиеСайта.Оповестить(...)` -
+
+@lru_cache(maxsize=1)
+def _manager_members() -> dict[str, dict[str, tuple[str, ...]]]:
+    """Per-kind members of the kind's SINGLETON type from the versioned catalog ({} when absent).
+
+    `FindByCode` of a catalog, `Get` of a constants set, `Notify` of a global client event -
     what may follow the dot after the name of a project object, next to the types it generates.
+    Properties and methods apart, so that a completion list inserts the parentheses of a method
+    and not of a property; data generated before the split arrives as a plain list of names and
+    goes to UNSPLIT_MEMBERS, where a consumer says neither of the two.
     """
     try:
         raw = dataset.load_json("stdlib.json").get("manager_members") or {}
     except (dataset.DatasetError, KeyError, ValueError):
         return {}
-    return {k: frozenset(v) for k, v in raw.items() if isinstance(v, list)}
+    out: dict[str, dict[str, tuple[str, ...]]] = {}
+    for kind, entry in raw.items():
+        if isinstance(entry, dict):
+            buckets = {
+                key: tuple(sorted(str(x) for x in entry.get(key) or ()))
+                for key in ("properties", "methods")
+            }
+        elif isinstance(entry, list):
+            buckets = {UNSPLIT_MEMBERS: tuple(sorted(str(x) for x in entry))}
+        else:
+            continue
+        filled = {key: value for key, value in buckets.items() if value}
+        if filled:
+            out[kind] = filled
+    return out
+
+
+@lru_cache(maxsize=1)
+def _manager_member_types() -> dict[str, dict[str, str]]:
+    """Per-kind result types of the singleton type's members, the object's own name as `{}`.
+
+    A constants set answers `Get` with `{}.Record`, a catalog answers `FindByCode` with
+    `{}.Reference?`. The catalogue of member types is keyed by TYPE name and knows nothing about
+    a project object, so a chain over such a call has nothing else to be typed from.
+    """
+    try:
+        raw = dataset.load_json("stdlib.json").get("manager_member_types") or {}
+    except (dataset.DatasetError, KeyError, ValueError):
+        return {}
+    return {
+        kind: {str(m): str(t) for m, t in table.items()}
+        for kind, table in raw.items() if isinstance(table, dict)
+    }
 
 
 def _checked_kinds() -> frozenset[str]:
@@ -248,9 +288,10 @@ def _offered_member_family(kind: str) -> frozenset[str]:
     Judging and offering pull in opposite directions. A member check errs on the generous side,
     so it unions in the safety net above; a completion list reads as a statement about the type,
     and the net is a union across ALL kinds - offered after an object whose kind the catalogue
-    does not know, it named АвтоматическаяФормаЗаписи, КлючЗаписи, НаборЗаписей for a common
-    module, and the method actually being typed was in none of them. An empty list is the honest
-    answer there: the editor falls back to its own word completion instead of inventing names.
+    does not know, it named AutomaticRecordForm, RecordKey and RecordSet for a common module,
+    which generates no types at all, and the method actually being typed was in none of them.
+    An empty list is the honest answer there: the editor falls back to its own word completion
+    instead of inventing names.
     """
     return _object_members().get(kind, frozenset())
 

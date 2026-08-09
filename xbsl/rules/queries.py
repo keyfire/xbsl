@@ -484,7 +484,7 @@ def deletion_mark_immediate(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
     Such an object has no mark at all - the query fails on apply with `Поле не найдено`,
     which costs a deploy cycle. The mode is declared in the object's own yaml, so the check
-    is purely static; the table comes from the block alias (`ИЗ Абоненты КАК А`), and an
+    is purely static; the table comes from the block alias (`ИЗ Склады КАК С`), and an
     alias the block redefines resolves to nothing and is skipped.
     """
     immediate = {

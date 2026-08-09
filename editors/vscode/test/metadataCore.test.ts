@@ -411,7 +411,7 @@ test("translationRef: the section spelled in English, and the package nesting ke
 });
 
 test("translationRef: a path without the section is not a translation", () => {
-  assert.strictEqual(translationRef("/p/Основное/ОсновноеЛокализация.yaml"), undefined);
+  assert.strictEqual(translationRef("/p/Основное/ОбменЛокализация.yaml"), undefined);
   // A folder named Локализация with the file right in it: no language folder - no translation.
   assert.strictEqual(translationRef("/p/Локализация/Строки.yaml"), undefined);
 });

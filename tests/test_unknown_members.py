@@ -433,7 +433,7 @@ def test_constructor_of_a_project_type_is_silent():
     # a project type is not in the stdlib catalog - its members are not ours to judge
     diags = _lint(
         "метод Б(): Число\n"
-        "    знч Карточка = новый КарточкаПриложения()\n"
+        "    знч Карточка = новый КарточкаЗаказа()\n"
         "    возврат Карточка.ЧтоУгодно()\n"
         ";\n"
     )

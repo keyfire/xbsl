@@ -41,7 +41,7 @@ def _module_suffixes() -> frozenset[str]:
 
 def _owner_yaml(source: SourceFile):
     """The descriptor file that owns the module: for `Имя.Объект.xbsl` it is `Имя.yaml`."""
-    stem = source.path.stem  # 'Полезное.Объект' or 'Полезное'
+    stem = source.path.stem  # 'Заметки.Объект' or 'Заметки'
     base, _, suffix = stem.rpartition(".")
     if base and suffix in _module_suffixes():
         return source.path.with_name(base + ".yaml")

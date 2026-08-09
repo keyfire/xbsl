@@ -30,8 +30,8 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   Controlled by `xbsl.workspaceLint` (on by default).
 - **Whole-project check** – the command *XBSL: check the whole project* runs the same
   workspace-wide check on demand.
-- **Go to definition, find all references and completion across the project** – powered by a project
-  index built by the linter (`xbsl --index`). See [Navigation and completion](#navigation-and-completion).
+- **Go to definition, find all references and completion across the project** – answered by the
+  language server over its project index. See [Navigation and completion](#navigation-and-completion).
 - **Quick Fix for mechanical findings** – a lightbulb on a fixable diagnostic (trailing
   whitespace, typography characters) applies the exact edit the linter reports; a *fix all*
   source action (`source.fixAll.xbsl`) fixes the whole file and can run on save via
@@ -104,11 +104,11 @@ component type sit on different lines.
 
 ## Navigation and completion
 
-The extension asks the linter for a project index once on activation and rebuilds it (debounced,
-one process at a time) whenever a `.xbsl`/`.yaml` file is saved. The index command is probed as
-`xbsl index <root>` first, then `xbsl --index <root>` as a fallback. If the installed
-linter does not support the index yet, navigation silently stays off – details go to the *XBSL*
-output channel, no popups.
+Navigation comes from the engine: the language server keeps the project index and answers
+definition, references, completion and hover. The extension adds no second implementation of its
+own – whatever the engine knows (the return types of project methods, the members of platform
+types) navigation knows with it. Without the LSP mode there is no navigation: the CLI has no
+process to ask.
 
 **Go to definition** (F12 / Ctrl+Click), in `.xbsl` and `.yaml`:
 
@@ -212,7 +212,6 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
-| `xbsl.navigation.enabled` | `true` | Index-based go-to-definition and completion. |
 | `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, project, naming, style, typography, whitespace, encoding, structure, form, query, security): the rules' own levels, one level for the whole group, or `off`. The **naming** group covers the names of project elements per the platform standard (needs `xbsl` >= 0.11.0). See [Rules](#rules-levels-and-disabling). |
 | `xbsl.deploy.*` | – | The deploy command settings – documented in the [XBSL Debug README](https://github.com/keyfire/elemctl/tree/main/editors/vscode#deploy-from-vs-code) of the elemctl project. |
 
@@ -253,9 +252,9 @@ or wherever `xbsl.baseline` points. The reason stays next to the frozen finding,
 `xbsl --write-baseline` keeps it on a rewrite:
 
 ```json
-"app/Useful.yaml": {
+"app/Notes.yaml": {
  "naming/number": {
-  "The name 'Useful' is singular – ...": { "count": 1, "reason": "a historical name" }
+  "The name 'Notes' is singular – ...": { "count": 1, "reason": "a historical name" }
  }
 }
 ```
@@ -415,7 +414,8 @@ forms** section.
 **Object subtrees.** A catalog/document expands into **Attributes**, **Tabular sections**, **Forms**;
 a register into **Dimensions**, **Resources**, **Attributes**; an enumeration into **Values**; a
 structure into **Fields**; client-work parameters into **Parameters**; an HTTP service into **URL
-templates** with their methods.
+templates** with their methods; localized strings into **Localization** - a node per language of
+the section (`Localization/<language>/<Name>.yaml`), a click opens the translated text.
 
 **Clicks.** An object or a field opens the **properties panel** on the right (a field's `Type` is a
 combo of primitives, reference types (`<Object>.Reference?`) and the project enumerations, and still
@@ -534,6 +534,11 @@ a **Documentation** link; in the form designer the *Open documentation* action s
 item (a short description also rides in its tooltip). Both open the page in this same panel –
 reading up on an unfamiliar component costs no trip out of the editor.
 
+**F12 falls back to the page.** Go to Definition is answered from the project index, so a member of
+the platform has no source to jump to – there the key opens the documentation page instead of
+reporting a miss. A real definition always wins, and when there is neither, VS Code reports it as
+usual.
+
 The data comes from the linter's LSP server, so it needs [LSP mode](#lsp-mode-default) and the
 documentation database built from your distribution (`xbsl` ≥ 0.12.0, see
 [the linter README](https://github.com/keyfire/xbsl#documentation-searching-the-element-reference)).
@@ -614,7 +619,7 @@ VS Code also offers *Report Issue* on the extension's page (from the manifest's 
 npm install
 npm run compile          # esbuild bundle -> dist/extension.js
 npm run check            # tsc type-check
-npm test                 # unit tests for the navigation core (plain Node, no runner)
+npm test                 # unit tests of the pure cores (plain Node, no runner)
 npm run package          # build the .vsix (via @vscode/vsce)
 ```
 

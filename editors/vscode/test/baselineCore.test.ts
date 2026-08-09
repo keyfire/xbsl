@@ -20,12 +20,12 @@ function test(name: string, fn: () => void): void {
 }
 
 const RULE = "naming/number";
-const MSG = "Имя 'Полезное' в единственном числе.";
+const MSG = "Имя 'Заметки' в единственном числе.";
 
 test("exclusion into a missing file creates the engine-shaped payload", () => {
-  const text = addExclusion(undefined, "acme/site/Полезное.yaml", RULE, MSG, "историческое имя");
+  const text = addExclusion(undefined, "acme/site/Заметки.yaml", RULE, MSG, "историческое имя");
   const data = JSON.parse(text);
-  assert.deepStrictEqual(data.files["acme/site/Полезное.yaml"][RULE][MSG], {
+  assert.deepStrictEqual(data.files["acme/site/Заметки.yaml"][RULE][MSG], {
     count: 1,
     reason: "историческое имя",
   });
@@ -75,8 +75,8 @@ test("parseBaseline of empty text gives a fresh payload", () => {
 });
 
 test("toPosix flips Windows separators only", () => {
-  assert.strictEqual(toPosix("acme\\site\\Полезное.yaml"), "acme/site/Полезное.yaml");
-  assert.strictEqual(toPosix("acme/site/Полезное.yaml"), "acme/site/Полезное.yaml");
+  assert.strictEqual(toPosix("acme\\site\\Заметки.yaml"), "acme/site/Заметки.yaml");
+  assert.strictEqual(toPosix("acme/site/Заметки.yaml"), "acme/site/Заметки.yaml");
 });
 
 console.log(`${passed} passed, ${failed} failed`);

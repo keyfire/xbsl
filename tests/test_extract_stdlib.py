@@ -151,7 +151,7 @@ _GENERICS_PAGE = (
     # The real page markup: type names wrapped in links, generic brackets as entities.
     '<pre class="highlight"><code>ПолучитьМножество(): '
     '<a href="/ReadableSet_ru/">ЧитаемоеМножество</a>&lt;'
-    '<a href="/Settings_ru/">НастройкиСервиса</a>&gt;</code></pre>'
+    '<a href="/Settings_ru/">Настройки</a>&gt;</code></pre>'
     "<h3>Значение​</h3>"
     '<pre class="highlight"><code>Значение(): <a href="/String_ru/">Строка</a>?</code></pre>'
     "<h3>Общий​</h3>"
@@ -169,7 +169,7 @@ _GENERICS_PAGE = (
 def test_page_member_types_keeps_the_generic_parameter():
     got = _MODULE.page_member_types(_GENERICS_PAGE)
     # The full docs spelling survives (entities unescaped, link tags stripped)...
-    assert got["ПолучитьМножество"] == "ЧитаемоеМножество<НастройкиСервиса>"
+    assert got["ПолучитьМножество"] == "ЧитаемоеМножество<Настройки>"
     assert got["Значение"] == "Строка?"
     # ...overloads that agree on the head alone degrade to the head...
     assert got["Общий"] == "Массив"

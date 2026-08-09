@@ -396,8 +396,8 @@ def _shadow_mapper(source: SourceFile) -> dict | None:
 def shadow_project_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """1.2: a variable (or a method) named like a project element hides that element.
 
-    The conflict is real, not stylistic: after `знч Абоненты = ...` the module
-    `Абоненты` cannot be called from the same scope - the bare name resolves to the
+    The conflict is real, not stylistic: after `знч Склады = ...` the module
+    `Склады` cannot be called from the same scope - the bare name resolves to the
     variable. Platform handler parameter names (Событие, Команда) never collide with
     project element names, so every hit here is actionable.
     """

@@ -126,14 +126,14 @@ def test_abbreviation_clean_name_silent():
 
 def test_abbreviation_leaves_latin_terms_to_its_rule():
     # АПИ is an English term: naming/latin-term owns it, no double diagnostic here.
-    assert _lint(_ABBREV, "ОбщийМодуль", "АПИСервиса") == []
+    assert _lint(_ABBREV, "ОбщийМодуль", "АПИОбмена") == []
 
 
 # --- 1.4 an English term in its original spelling -------------------------------------------------
 
 @pytest.mark.parametrize(("name", "word", "suggestion"), [
-    ("АпиСервиса", "Апи", "ApiСервиса"),
-    ("АПИСервиса", "АПИ", "ApiСервиса"),  # the same term written in capitals
+    ("АпиОбмена", "Апи", "ApiОбмена"),
+    ("АПИОбмена", "АПИ", "ApiОбмена"),  # the same term written in capitals
     ("РазборУрл", "Урл", "РазборUrl"),
 ])
 def test_latin_term(name, word, suggestion):
@@ -157,8 +157,8 @@ def test_latin_term_original_spelling_silent():
 # --- 1.5 an enumeration is named with the word "Вид" --------------------------------------------
 
 @pytest.mark.parametrize(("name", "suggestion"), [
-    ("ТипыСтатей", "ВидыСтатей"),
-    ("ТипСтатьи", "ВидСтатьи"),
+    ("ТипыОплат", "ВидыОплат"),
+    ("ТипОплаты", "ВидОплаты"),
 ])
 def test_enum_vid_bad_prefix(name, suggestion):
     d = _lint(_ENUM_VID, "Перечисление", name)
@@ -168,7 +168,7 @@ def test_enum_vid_bad_prefix(name, suggestion):
 
 
 def test_enum_vid_correct_name_silent():
-    assert _lint(_ENUM_VID, "Перечисление", "ВидыСтатей") == []
+    assert _lint(_ENUM_VID, "Перечисление", "ВидыОплат") == []
 
 
 def test_enum_vid_word_beginning_with_tip_silent():
@@ -177,7 +177,7 @@ def test_enum_vid_word_beginning_with_tip_silent():
 
 
 def test_enum_vid_only_for_enumerations():
-    assert _lint(_ENUM_VID, "Справочник", "ТипыСтатей") == []
+    assert _lint(_ENUM_VID, "Справочник", "ТипыОплат") == []
 
 
 # --- 1.8 the element kind in the name -----------------------------------------------------------
@@ -268,7 +268,7 @@ def test_number_catalog_must_be_plural(morph):
 
 
 def test_number_catalog_plural_silent(morph):
-    assert _lint(_NUMBER, "Справочник", "Акции") == []
+    assert _lint(_NUMBER, "Справочник", "Партии") == []
 
 
 def test_number_exempt_heads_silent(morph):
@@ -282,13 +282,13 @@ def test_number_exempt_heads_silent(morph):
 
 
 def test_number_enumeration_must_be_singular(morph):
-    d = _lint(_NUMBER, "Перечисление", "ВидыСтатей")
+    d = _lint(_NUMBER, "Перечисление", "ВидыОплат")
     assert len(d) == 1
     assert "перечисление" in d[0].message
 
 
 def test_number_enumeration_singular_silent(morph):
-    assert _lint(_NUMBER, "Перечисление", "ВидСтатьи") == []
+    assert _lint(_NUMBER, "Перечисление", "ВидОплаты") == []
 
 
 def test_number_tabular_section_must_be_plural(morph):
@@ -339,7 +339,7 @@ def test_boolean_only_boolean_attributes(morph):
 
 @pytest.mark.needs_data
 def test_presentation_missing():
-    d = _lint(_PRESENTATION, "Справочник", "Акции")
+    d = _lint(_PRESENTATION, "Справочник", "Партии")
     assert len(d) == 1
     assert d[0].rule_id == _PRESENTATION
     assert "Представление" in d[0].message
@@ -347,7 +347,7 @@ def test_presentation_missing():
 
 @pytest.mark.needs_data
 def test_presentation_filled_silent():
-    assert _lint(_PRESENTATION, "Справочник", "Акции", "Представление: Акции\n") == []
+    assert _lint(_PRESENTATION, "Справочник", "Партии", "Представление: Партии\n") == []
 
 
 @pytest.mark.needs_data
@@ -369,7 +369,7 @@ def test_presentation_deprecated_skips_attribute_name_kinds():
     # A catalog's Представление is an attribute NAME (metamodel type AttributeName): no
     # "(не используется)" prefix can be written into it - the branch must stay silent.
     tail = "Представление: Наименование\n" + _section("Реквизиты", ("Наименование", ""))
-    assert _lint(_PRESENTATION, "Справочник", "УстарелоАкции", tail) == []
+    assert _lint(_PRESENTATION, "Справочник", "УстарелоПартии", tail) == []
 
 
 @pytest.mark.needs_data
@@ -402,13 +402,13 @@ def test_prefix_by_kind_present_silent():
 
 
 def test_suffix_by_kind_missing_suffix():
-    d = _lint(_PREFIX, "ЛокализованныеСтроки", "Сайт")
+    d = _lint(_PREFIX, "ЛокализованныеСтроки", "Обмен")
     assert len(d) == 1
     assert "Локализация" in d[0].message
 
 
 def test_suffix_by_kind_present_silent():
-    assert _lint(_PREFIX, "ЛокализованныеСтроки", "СайтЛокализация") == []
+    assert _lint(_PREFIX, "ЛокализованныеСтроки", "ОбменЛокализация") == []
 
 
 # --- a trailing comment and quotes on the Имя line ----------------------------------------
@@ -430,9 +430,9 @@ def test_trailing_comment_in_section_name():
 
 def test_trailing_comment_number(morph):
     # A repro of the original false negative: a register name in the singular + a comment.
-    d = _lint(_NUMBER, "РегистрСведений", "КешТокенов # закэшированные токены")
+    d = _lint(_NUMBER, "РегистрСведений", "КешЗапросов # закэшированные токены")
     assert len(d) == 1
-    assert "КешТокенов" in d[0].message
+    assert "КешЗапросов" in d[0].message
 
 
 def test_quoted_name_with_comment():
@@ -456,18 +456,18 @@ def test_comment_only_value_is_no_name():
 
 def test_structural_yaml_skipped():
     # A file without ВидЭлемента (Проект, Подсистема) does not describe an element - its names
-    # are not checked, though "Управление_Сайтом" would violate both naming/underscore and
+    # are not checked, though "Управление_Складом" would violate both naming/underscore and
     # naming/filler-word.
-    source = engine.load_text("Подсистема.yaml", "Имя: Управление_Сайтом\nСодержимое:\n    - Акции\n")
+    source = engine.load_text("Подсистема.yaml", "Имя: Управление_Складом\nСодержимое:\n    - Партии\n")
     assert engine.run_sources([source], select={"naming"}) == []
 
 
 @pytest.mark.needs_data
 def test_correct_object_passes_whole_group(morph):
     tail = (
-        "Представление: Акции\n"
+        "Представление: Партии\n"
         + _section("Реквизиты", ("ЭтоАрхивная", "Булево"), ("Заголовок", "Строка"))
         + _section("ТабличныеЧасти", ("Условия", ""))
     )
-    source = engine.load_text("Акции.yaml", _yaml("Справочник", "Акции", tail))
+    source = engine.load_text("Партии.yaml", _yaml("Справочник", "Партии", tail))
     assert engine.run_sources([source], select={"naming"}) == []

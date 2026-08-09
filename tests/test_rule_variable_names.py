@@ -168,13 +168,13 @@ def test_numeral_substring_not_matched():
 
 # --- style/shadow-project-name ---------------------------------------------------------
 
-_OBJECT_YAML = "ВидЭлемента: Модуль\nИд: 11111111-1111-1111-1111-111111111111\nИмя: Программы\n"
+_OBJECT_YAML = "ВидЭлемента: Модуль\nИд: 11111111-1111-1111-1111-111111111111\nИмя: Задачи\n"
 
 
 def _project(module_source):
     return engine.run_sources(
         [
-            engine.load_text("Программы.yaml", _OBJECT_YAML),
+            engine.load_text("Задачи.yaml", _OBJECT_YAML),
             engine.load_text("Меню.xbsl", module_source),
         ],
         select={"style/shadow-project-name"},
@@ -182,18 +182,18 @@ def _project(module_source):
 
 
 def test_shadow_project_name_variable_flagged():
-    d = _project("метод Ф()\n    знч Программы = 1\n;\n")
-    assert len(d) == 1 and d[0].line == 2 and "Программы" in d[0].message
+    d = _project("метод Ф()\n    знч Задачи = 1\n;\n")
+    assert len(d) == 1 and d[0].line == 2 and "Задачи" in d[0].message
     assert str(d[0].path).endswith("Меню.xbsl")
 
 
 def test_shadow_project_name_parameter_flagged():
-    d = _project("метод Ф(Программы: Число)\n;\n")
+    d = _project("метод Ф(Задачи: Число)\n;\n")
     assert len(d) == 1
 
 
 def test_shadow_project_name_method_flagged():
-    d = _project("метод Программы()\n;\n")
+    d = _project("метод Задачи()\n;\n")
     assert len(d) == 1
 
 
@@ -204,7 +204,7 @@ def test_other_names_do_not_shadow():
 
 def test_no_objects_no_shadow():
     d = engine.run_sources(
-        [engine.load_text("Меню.xbsl", "метод Ф()\n    знч Программы = 1\n;\n")],
+        [engine.load_text("Меню.xbsl", "метод Ф()\n    знч Задачи = 1\n;\n")],
         select={"style/shadow-project-name"},
     )
     assert d == []

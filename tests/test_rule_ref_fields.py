@@ -39,8 +39,8 @@ def test_ref_field_without_req_flagged():
 
 
 def test_val_ref_field_flagged():
-    d = _lint("структура Шапка\n    знч Владелец: Абоненты.Ссылка\n;\n")
-    assert len(d) == 1 and "обз знч Владелец: Абоненты.Ссылка" in d[0].message
+    d = _lint("структура Шапка\n    знч Владелец: Склады.Ссылка\n;\n")
+    assert len(d) == 1 and "обз знч Владелец: Склады.Ссылка" in d[0].message
 
 
 def test_ns_qualified_ref_flagged():

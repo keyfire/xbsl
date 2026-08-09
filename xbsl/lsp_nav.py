@@ -96,19 +96,20 @@ class IndexLookup:
 
     def struct_by_name(self, name: str) -> Optional[dict]:
         """Members of a project type by its name: a module-declared structure/exception/
-        enumeration, or a type described in metadata (a structure's Поля, the constants of
-        a set under `<Имя>.Запись` / `<Имя>.Данные`)."""
+        enumeration, or a type described in metadata (a structure's Fields, the constants of
+        a set under `<Name>.Record` / `<Name>.Data`)."""
         return (self.index.get("struct_members") or {}).get(name)
 
     def method_returns(self) -> dict[str, dict[str, str]]:
         """{name: {method: result type}} - the return types the inference needs of a PROJECT
-        name, in the shape it expects of the stdlib catalogue, so that `знч X = Модуль.Метод()`
-        is typed the way a platform call is.
+        name, in the shape it expects of the stdlib catalogue, so that a variable initialized by
+        a call of a module method is typed the way a platform call is.
 
         Two sources: the methods a module DECLARES with a return type, and the methods the
-        platform GENERATES on an object of a kind (`generated_returns` of the index -
-        `НастройкиСайта.Получить(): НастройкиСайта.Запись`). A declaration outranks a generated
-        method of the same name: written code beats an assumption about the kind."""
+        platform GENERATES on an object of a kind (`generated_returns` of the index - a
+        constants set `Rates` answers `Rates.Get()` with a `Rates.Record`). A declaration
+        outranks a generated method of the same name: written code beats an assumption about
+        the kind."""
         cached = getattr(self, "_method_returns", None)
         if cached is None:
             cached = {
@@ -352,6 +353,30 @@ def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[
     return entries or None
 
 
+#: Buckets of the `manager` field of an index object, with what a completion item says about
+#: each: the label detail, and whether the item inserts a call's parentheses.
+_MANAGER_BUCKETS = (
+    ("methods", "метод вида", True),
+    ("properties", "свойство вида", False),
+    # data generated before properties and methods were told apart
+    ("members", "член вида", False),
+)
+
+
+def _manager_entries(manager) -> list[dict]:
+    """Completion items for the members of the kind's singleton type."""
+    if not isinstance(manager, dict):
+        return []
+    entries: list[dict] = []
+    for bucket, detail, is_call in _MANAGER_BUCKETS:
+        for name in manager.get(bucket) or ():
+            item = {"label": str(name), "kind": "method", "detail": detail}
+            if is_call:
+                item["snippet"] = f"{name}($0)"
+            entries.append(item)
+    return entries
+
+
 def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict]]:
     obj = lookup.object_by_name(name)
     methods = lookup.methods_by_module(name)
@@ -366,12 +391,10 @@ def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict
             for f in obj.get("family", []):
                 entries.append({"label": str(f), "kind": "family", "detail": "тип"})
             # Members of the kind's singleton type: what the code writes on the object name
-            # itself (`НастройкиСайта.Получить()`), next to the types the object generates.
-            # No parentheses snippet: the catalogue keeps a manager's properties and methods in
-            # one list (`Видимость` of a command sits next to `Выполнить`), and a snippet would
-            # have to guess which of the two a name is.
-            for m in obj.get("manager", []):
-                entries.append({"label": str(m), "kind": "method", "detail": "член вида"})
+            # itself, next to the types the object generates. A method takes the parentheses
+            # snippet, a property does not; data generated before the two were told apart
+            # arrives in one bucket and gets neither the snippet nor a claim about which it is.
+            entries.extend(_manager_entries(obj.get("manager")))
             for t in obj.get("tabular", []):
                 entries.append({"label": t.get("name", ""), "kind": "tabular", "detail": "табличная часть"})
             for t in obj.get("local_types", []):

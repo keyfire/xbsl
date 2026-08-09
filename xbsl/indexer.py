@@ -10,8 +10,8 @@ The index shape is frozen (fields may be added but not renamed):
     meta       - {root: absolute path in POSIX form, version: linter version};
     objects    - yaml elements with ВидЭлемента: name/kind/path/line, tabular sections,
                  local types of the object's modules (`<Имя>.xbsl`, `<Имя>.<Часть>.xbsl`),
-                 the member family and the singleton-type methods (`manager`) for dot
-                 completion, enumeration values (Перечисление only);
+                 the member family and the singleton-type members (`manager`) for dot
+                 completion, enumeration values (`Перечисление` only);
     methods    - method and constructor declarations of all modules, annotations without `@`,
                  the parameter list as written, the return type head and the description
                  comment above the declaration;
@@ -21,12 +21,12 @@ The index shape is frozen (fields may be added but not renamed):
                  (resolving a concrete target against this list is up to the navigation core);
     struct_members    - members of a project TYPE by its name: the structures, exceptions and
                  enumerations declared in modules, plus the types described in metadata
-                 (a structure's Поля, a constants set's Константы under `<Имя>.Запись`
-                 and `<Имя>.Данные`) - {properties, methods, values, kind};
+                 (a structure's Fields, a constants set's Constants under `<Name>.Record`
+                 and `<Name>.Data`) - {properties, methods, values, kind};
     generated_returns - {type name: {method: result type}} for the methods the PLATFORM
-                 generates on a project object (`НастройкиСайта.Получить(): НастройкиСайта.Запись`):
-                 the stdlib catalogue knows nothing about a project object, so without them
-                 a chain over such a call stays untyped.
+                 generates on a project object (a constants set `Rates` answers `Rates.Get()`
+                 with a `Rates.Record`): the stdlib catalogue knows nothing about a project
+                 object, so without them a chain over such a call stays untyped.
 
 Paths are written in POSIX form relative to meta.root; lines are numbered from one (the
 object's `Имя` key in yaml, a method or structure declaration, an enumeration item, a
@@ -43,12 +43,14 @@ from pathlib import Path
 
 from xbsl import __version__
 from xbsl import parser as P
+from xbsl.dataset import PLACEHOLDER
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules._syntax import _skip_balanced, _type_head, code_tokens, signatures
 from xbsl.rules.semantics import (
     _file_local_type_decls,
+    _manager_member_types,
     _manager_members,
     _offered_member_family,
     _row_type_names,
@@ -422,36 +424,47 @@ def _handler_references(s: SourceFile, module: str, path: str) -> list[dict]:
 #: and the names the platform gives that type (`{}` stands for the name of the element).
 #:
 #: A structure and a storable structure name the type after themselves and list its members in
-#: `Поля` (docs topics/structure-properties, topics/storable-structure-properties). A constants
+#: Fields (docs topics/structure-properties, topics/storable-structure-properties). A constants
 #: set generates two types carrying the constants as properties (docs topics/constants-set-types):
-#: `<Имя>.Запись` - "содержит данные одной записи набора констант", the value of `Получить()`;
-#: `<Имя>.Данные` - "имена и типы свойств соответствуют именам и типам констант", the value a
-#: write handler receives. The set's own name is a singleton type with methods, not with the
-#: constants, and stays out of here.
+#: `<Name>.Record` - "the data of one record of the constants set", the value of `Get()`;
+#: `<Name>.Data` - "the names and types of the properties match those of the constants", the
+#: value a write handler receives. The set's own name is a singleton type with methods, not with
+#: the constants, and stays out of here.
 _METADATA_MEMBER_SECTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
-    "Структура": ("Поля", ("{}",)),
-    "ХранимаяСтруктура": ("Поля", ("{}",)),
-    "НаборКонстант": ("Константы", ("{}.Запись", "{}.Данные")),
+    "Структура": ("Поля", (PLACEHOLDER,)),
+    "ХранимаяСтруктура": ("Поля", (PLACEHOLDER,)),
+    "НаборКонстант": ("Константы", (PLACEHOLDER + ".Запись", PLACEHOLDER + ".Данные")),
 }
 
-#: Methods the PLATFORM generates on a project object, with the type they return (`{}` stands
-#: for the name of the element). The catalogue of stdlib member types is keyed by type name and
-#: knows nothing about a project object, so without this `знч Запись = НастройкиСайта.Получить()`
-#: stays untyped and the dot after `Запись` offers nothing.
+#: The fallback for `generated_returns` when the data carries no manager_member_types section:
+#: methods the PLATFORM generates on a project object, with the type they return (`{}` stands for
+#: the name of the element). The catalogue of stdlib member types is keyed by type name and knows
+#: nothing about a project object, so without this a variable initialized by `Rates.Get()` stays
+#: untyped and the dot after it offers nothing.
 #:
-#: `Получить(): <Имя>.Запись` of a constants set - docs topics/constants-set-properties
-#: (`знч Запись = НастройкиПриложения.Получить()` ... `Запись.Записать()`) and
-#: topics/constants-set-types (`.Запись` holds one record of the set).
+#: `Get(): <Name>.Record` of a constants set - docs topics/constants-set-properties (the example
+#: reads one record of a set and writes it back) and topics/constants-set-types (Record holds one
+#: record of the set). Data generated by the current extractor answers for every kind and takes
+#: precedence over this row.
 _GENERATED_RETURNS: dict[str, dict[str, str]] = {
     "НаборКонстант": {"Получить": "{}.Запись"},
 }
 
 
+def _with_object_name(spelling: str, name: str) -> str:
+    """A result type spelled for a template, with the object's own name put in.
+
+    Replaced textually rather than through `str.format`: the spelling comes from a
+    documentation page and may carry braces of its own.
+    """
+    return spelling.replace(PLACEHOLDER, name)
+
+
 def _metadata_member_names(data: dict, kind: str) -> list[str]:
-    """Names listed by the member section of a metadata element (Поля, Константы).
+    """Names listed by the member section of a metadata element (Fields, Constants).
 
     The section key is read in either spelling (the sources are bilingual, and the pair comes
-    from the metamodel record of the kind); an item names itself with `Имя` or `Name`.
+    from the metamodel record of the kind); an item names itself with Name in either spelling.
     """
     section = _METADATA_MEMBER_SECTIONS[kind][0]
     items = value_of(data, section, kind)
@@ -609,16 +622,19 @@ def build_index(root: Path) -> dict:
                 # the row type a dynamic list names for itself (ИмяТипаДанныхСтроки)
                 | _row_type_names(data)
             )
-            # Members of the kind's singleton type: `Получить` of a constants set, `Оповестить`
-            # of a global client event, `НайтиПоКоду` of a catalog. The catalogue keeps a
-            # manager's properties and methods in one list, so the index does the same.
-            entry["manager"] = sorted(_manager_members().get(kind, ()))
+            # Members of the kind's singleton type: `Get` of a constants set, `Notify` of a
+            # global client event, `FindByCode` of a catalog - properties and methods apart,
+            # so a completion list knows which of them takes parentheses.
+            entry["manager"] = {
+                bucket: list(names)
+                for bucket, names in _manager_members().get(kind, {}).items()
+            }
             if kind == "Перечисление":
                 entry["values"] = _named_items(s, data, "Элементы")
             if kind in _METADATA_MEMBER_SECTIONS:
                 members = _metadata_member_names(data, kind)
                 for pattern in _METADATA_MEMBER_SECTIONS[kind][1]:
-                    metadata_types[pattern.format(name)] = (kind, members)
+                    metadata_types[_with_object_name(pattern, name)] = (kind, members)
             objects.append(entry)
             if kind == "КомпонентИнтерфейса":
                 components.extend(_form_components(s, data, name, entry["path"]))
@@ -642,12 +658,12 @@ def build_index(root: Path) -> dict:
             })
 
     # The types described in METADATA join the module-declared ones in struct_members: that is
-    # the single place navigation and completion read the members of a project type from, and
-    # it used to hold only what a module DECLARES (`структура X`) - so `новый
-    # ИтогОбновленияКэша()` (a ХранимаяСтруктура written in yaml) offered nothing after the dot.
-    # The methods are those of the module extending the type: a structure is extended by
-    # `<Имя>.xbsl`, the record of a constants set by `<Имя>.Запись.xbsl` - in both cases the
-    # module name of the index equals the name of the type.
+    # the single place navigation and completion read the members of a project type from, and it
+    # used to hold only what a module DECLARES (a structure written in code) - so a constructor
+    # call of a StorableStructure written in yaml offered nothing after the dot. The methods are
+    # those of the module extending the type: a structure is extended by `<Name>.xbsl`, the
+    # record of a constants set by `<Name>.Record.xbsl` - in both cases the module name of the
+    # index equals the name of the type.
     module_method_names: dict[str, set[str]] = defaultdict(set)
     for m in methods:
         module_method_names[m["module"]].add(m["name"])
@@ -667,13 +683,16 @@ def build_index(root: Path) -> dict:
             if record.get(key):
                 known[key] = sorted(set(known.get(key, ())) | set(record[key]))
 
-    # The methods the platform generates on a project object, with the type they return.
+    # The methods the platform generates on a project object, with the type they return: from
+    # the data when it has them (every kind), from the built-in row when it does not.
+    from_data = _manager_member_types()
     generated_returns: dict[str, dict[str, str]] = {}
     for o in objects:
-        table = _GENERATED_RETURNS.get(o["kind"])
+        table = from_data.get(o["kind"]) or _GENERATED_RETURNS.get(o["kind"])
         if table:
             generated_returns[o["name"]] = {
-                method: result.format(o["name"]) for method, result in table.items()
+                member: _with_object_name(result, o["name"])
+                for member, result in table.items()
             }
 
     # Usages (for "find usages"): names of objects, components and methods encountered as a

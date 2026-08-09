@@ -2411,7 +2411,7 @@ def test_section_insertions_keep_crlf_files_crlf(tmp_path):
 # --- properties of metadata items ---------------------------------------------------------
 
 
-def _constants_set(tmp_path, name="НастройкиСайта"):
+def _constants_set(tmp_path, name="НастройкиПриложения"):
     apply_result(scaffold.op_new_object(tmp_path, "НаборКонстант", name))
     return tmp_path / f"{name}.yaml"
 
@@ -2531,12 +2531,12 @@ def test_set_field_property_on_a_tabular_attribute(tmp_path):
 
 def test_new_object_presentation(tmp_path):
     apply_result(scaffold.op_new_object(
-        tmp_path, "НаборКонстант", "НастройкиСайта", presentation="Настройки сайта",
+        tmp_path, "НаборКонстант", "НастройкиПриложения", presentation="Настройки приложения",
     ))
-    text = (tmp_path / "НастройкиСайта.yaml").read_text(encoding="utf-8")
-    assert _valid_yaml(text)["Представление"] == "Настройки сайта"
+    text = (tmp_path / "НастройкиПриложения.yaml").read_text(encoding="utf-8")
+    assert _valid_yaml(text)["Представление"] == "Настройки приложения"
     # Right after Name, the order the platform serializes the header in.
-    assert "Имя: НастройкиСайта\nПредставление: Настройки сайта\nОбластьВидимости:" in text
+    assert "Имя: НастройкиПриложения\nПредставление: Настройки приложения\nОбластьВидимости:" in text
 
 
 def test_new_object_presentation_for_a_generated_kind(tmp_path):
@@ -2558,7 +2558,7 @@ def test_new_object_presentation_only_where_the_kind_has_one(tmp_path):
     # would produce a file the compiler rejects.
     with pytest.raises(ScaffoldError, match="нет свойства Представление"):
         scaffold.op_new_object(
-            tmp_path, "HttpСервис", "СайтHttpСервис", presentation="Сервис сайта",
+            tmp_path, "HttpСервис", "ОбменHttpСервис", presentation="Сервис обмена",
         )
 
 
@@ -2578,6 +2578,6 @@ def test_new_object_presentation_is_a_caption_or_an_attribute_name(tmp_path):
     ))
     assert "Представление: Название" in (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
     apply_result(scaffold.op_new_object(
-        tmp_path, "НаборКонстант", "Настройки", presentation="Настройки сайта",
+        tmp_path, "НаборКонстант", "Настройки", presentation="Настройки приложения",
     ))
-    assert "Представление: Настройки сайта" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")
+    assert "Представление: Настройки приложения" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")

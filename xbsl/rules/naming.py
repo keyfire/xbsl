@@ -22,7 +22,7 @@ What is checked (clauses of the standard):
 The number of the name (catalogs in the plural, enumerations in the singular) is determined by
 morphology: pymorphy3 is required (the [morph] extra). Without it the naming/number rule stays
 silent - guessing by endings is not an option: a singular "Номенклатура" does not violate the
-standard, while "Программы" and "Акции" without case analysis read as genitive singular.
+standard, while "Задачи" and "Партии" without case analysis read as genitive singular.
 """
 
 from __future__ import annotations
@@ -251,9 +251,9 @@ def _morph():
 def _head_number(name: str) -> str | None:
     """The number of the name's head word: 'sing', 'plur' or None (no morphology / not parsed).
 
-    The head word is the first noun of the name: in "АрхивныеКопии" it is "Копии", in
+    The head word is the first noun of the name: in "ОптовыеЗаказы" it is "Заказы", in
     "БанковскиеСчетаОрганизаций" - "Счета" ("Организаций" only qualifies it). The number is
-    taken from the nominative case: without it "Программы" and "Акции" read as genitive
+    taken from the nominative case: without it "Задачи" and "Партии" read as genitive
     singular.
     """
     morph = _morph()

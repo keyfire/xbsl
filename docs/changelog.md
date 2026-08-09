@@ -19,9 +19,490 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-07-27 – 0.46.0
+## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1
+
+### Added
+- **The members of the kinds' singleton types reached the data: 12 kinds of 41 became 31.** The
+  map from a documentation template directory to an element kind was a HAND-WRITTEN table of 13
+  rows while the docs carry 36 template directories: kinds outside the table had no members at
+  all, and after the dot the editor answered with a generic safety net that did not contain the
+  method being typed (`Get` of a constants set, `Notify` of a global client event). The kind is
+  now derived by the
+  rule "English kind name plus `Name`", and the pairs come from the serializer's own kind enum
+  (`ProjectElementKindCmptEnum`) - the way the metamodel's kind dictionary does it, and from the
+  distribution rather than from a ready `terms.json`: the stdlib step runs before the terms step.
+  Six directories stay hand-written because the rule names no kind for them (`ComponentName` -
+  the kind is spelled `InterfaceComponent`; the access-key and non-periodic-constants-set
+  flavours - one kind with a property; `FormName`, `ObjectFormName`, `PopupComponentName` -
+  bases of an interface component, not kinds); a template left without a kind is printed as a
+  warning instead of vanishing. In the data: kinds with manager members 31 (was 12), kinds with
+  generated types 18 (was 12); every other section of both versions matched byte for byte. On
+  four corpora (the site, both demos, `1c-plus-frontend`) the findings did not change: 5/5/5
+  and 319.
+- **A call of a kind's method is typed from the documentation, not from a built-in row.** The
+  template pages print whole signatures, but the ordinary result-type parser lost exactly these:
+  a type opening with a placeholder (`{ConstantsSetName}.Record`) matches no identifier, so the
+  members that matter most were the ones left untyped. The placeholder is swapped out while the
+  page is parsed and stored as `{}`; the new `manager_member_types` section covers 25 kinds of 31
+  in 10.0.1, and substituting the object's name types the whole chain - not only `Get()` of a
+  constants set, but `FindByCode()`, `GetReference()`, `GetSliceLast()` as well. The engine's
+  built-in row stays as the fallback for data generated earlier.
+- **A kind manager's properties and methods are told apart.** `manager_members` kept them in one
+  list, so a completion list could neither insert the parentheses of a method nor withhold them
+  from a property: `Visibility` of a command sat next to `Execute`. The section now has the shape
+  of `type_members`; completion inserts parentheses for a method and not for a property. Data
+  generated before the split reads as before - its members are offered without parentheses and
+  without a claim about which of the two they are.
+- **`code/unknown-structure-field` - a field of a project structure is checked against its
+  declaration.** The compiler knows the shape of every structure declared in the project; the linter
+  did not, because the member rules judge the stdlib catalogue and skip project types. A renamed
+  field left its reader in ANOTHER module untouched, the whole-project run stayed clean, and the
+  failure arrived with the server apply. The type comes from the variable's declaration, from a
+  constructor call and - above all - from the element type of a for-each loop over a list, which is
+  the shape the failure happened in. Silent on any doubt: a name declared with anything else in the
+  method, a namesake of a stdlib type, the second hop of a chain, Latin member spellings. 139 rules
+  now.
+- **Stale baseline entries can be seen and pruned.** `--stale-baseline` lists the entries that no
+  longer suppress anything (path, rule, how many suppressions each still holds, message);
+  `--prune-baseline` removes them from the file, leaving the live ones and their reasons alone. The
+  json report gained `baseline_stale` and `baseline_stale_entries`.
+- **The linter finds the project's baseline by itself.** A run with no flag looks for
+  `.xbsllint-baseline` upwards from the checked files, names the path it found and applies it;
+  `--no-baseline` switches the search off, an explicit `--baseline` still wins. Before this a local
+  run reported everything the project had deliberately frozen, which reads as a broken linter.
+- **Tool answers name the data they speak for.** The environment snapshot (`--version`, the MCP
+  `version_info`, the LSP startup line) carries the data root and where it came from; an empty
+  `metadata_schema` answer adds that snapshot and the kinds the data does know - "the platform has
+  no such kind" and "this data does not know it yet" became distinguishable.
+- **`conventions/untranslated-code-literal` – visible text left as a literal in a MODULE.** The
+  existing `conventions/untranslated-visible-literal` judges yaml alone, so prose written in code
+  was checked by nobody: a message box built from a Russian string, or an event-log property that
+  carries a ready phrase, stays Russian in every other language of the project. The new rule judges
+  not the literal but the SINK it reaches - an argument of the platform's message call, a property
+  of an event-log event constructor, or either of them one step away through a method that forwards
+  its parameter whole. Forwarding is the point rather than a refinement: on the corpus that prompted
+  the rule, seven of the nine findings reached the journal through a wrapper. When the text repeats
+  a dictionary value, the message names the key whose translation is already written. Off by
+  default (a project may legitimately build prose in code - seeding data, layout constants) and
+  silent on a project whose descriptor lists fewer than two localization languages.
+
+### Changed
+- **The dot completion offers what the catalogue knows, not the safety net.** The members a kind
+  generates came from the catalogue UNIONED with a 16-name safety net (AutomaticRecordForm,
+  RecordKey, RecordSet...). The rules need it - there a name too many is a tolerated miss and a
+  name too few is a false positive - but a completion list reads as a statement about the type:
+  after a common module, which generates no types at all, the same borrowed list was offered.
+  Judging and offering are now separate: the rules still judge by the union
+  (`_member_family`), the index offers only what the catalogue knows about that kind
+  (`_offered_member_family`), and for a kind it does not know the list is empty - the editor
+  falls back to its own word completion instead of inventing names. One name left the catalog
+  hint, `FillParameters`: no documentation page names it as a generated type.
+- **`code/unused-method` judges the public API of common modules.** The rule silenced a method with
+  ANY annotation, and a public method of a common module always carries one - so the check was
+  silent exactly where dead code piles up. Now only the annotations that name a caller OUTSIDE the
+  project code silence it: the platform, a contract, compatibility, and any annotation the
+  dictionary does not know. Visibility and environment annotations leave the caller inside the
+  project, so the method is judged.
+- **The element-kind mapping is derived from the distribution instead of being hand-written.** The
+  list of kinds comes from the serializer's own enum and the class from the suffix rule; five kinds
+  whose class the rule cannot name are spelled out. 41 kinds instead of 35 - the data journal, the
+  report panel and the integration process no longer look unknown to the platform, and a kind left
+  without a class is reported rather than dropped.
+- **`yaml/unknown-property` judges 18 kinds instead of 13.** The measure of a complete class is
+  unchanged - live sources rather than a generated stub: the five kinds added are written with 6 to
+  11 top-level keys in real projects, every one of them declared by the class.
+- **The resource rules know both spellings of the folder.** The platform accepts `Resources` as
+  readily as the Russian name (proved by compiling: a file in the English folder resolves, a missing
+  one fails, the same file in a folder of any other name fails too). An English project used to look
+  as if it had no resources at all.
+- **Data-processor scaffolding.** An attribute no longer gets an `Id` - the line is written only
+  when the class of the section item declares that property (a processor's attribute has none, and
+  the apply failed on it); the PAIR of modules is created, and the operation's handler method is
+  appended to the object module, where the attributes live.
+- **English messages speak English.** Platform names and keywords in rule messages moved into the
+  name substitution (a Russian project reads them in Russian, an English one in English), and the
+  English CLI help now uses English spellings. Verbatim quotes of platform errors are left as they
+  are.
+- **The name whitelists were cleaned by the compiler.** Of 25 claims 12 turned out to be false: the
+  standard attributes are available by bare name only when the yaml declares them (and then reach
+  the module through the paired yaml anyway), four object names do not exist at all, and the fields
+  of a register record belong to its data type. The entity-name table shrank from 15 entries to 4
+  confirmed ones, so `code/undefined-name` no longer stays silent on code that cannot compile.
 
 ### Fixed
+- **Types described IN METADATA offered nothing after the dot.** Navigation and completion read
+  the members of a project type from one place of the index (`struct_members`), and only
+  declarations IN CODE (`structure X` in a module) ever filled it: metadata objects reached the
+  index with empty field lists, because the indexer read `TabularSections` and `Attributes` and
+  never read `Fields` (Structure, StorableStructure) or `Constants` (ConstantsSet). Hence the
+  empty hint after a constructor of a storable structure written in yaml and after a `Get()` of
+  a constants set. The fields of those
+  sections are now indexed: a structure under its own name, a constants set under the names the
+  platform generates - `<Name>.Record` and `<Name>.Data` (docs "Types generated by a project
+  element of the ConstantsSet kind"); the section is read in either spelling. The methods of the
+  module extending the type (`<Name>.xbsl`, `<Name>.Record.xbsl`) join them. A `Get()` call on a
+  constants set is typed through the new index key `generated_returns` - the stdlib member
+  catalogue knows nothing about a project object, and without it the chain from such a call broke
+  off. On the site corpus the index gained 10 types, and all four shapes (constructor, call,
+  variable, declared parameter) answer.
+- **`code/unknown-structure-field` crashed in the RELEASED wheel** (0.59.0): the tree walk read
+  node fields through `vars()`, and in the native build the parser classes are compiled by
+  mypyc and carry no instance dictionary at all - the rule took itself down on every module of
+  a project. A pure-Python run cannot see this, so the local suites were green; the end-to-end
+  check of the published package on a live project caught it. The fields now come from the
+  dataclass declaration, as in the sibling rule where the same trap is documented from the
+  previous time. A guard was added: a rule that reads a node through `vars()` fails the tests.
+- The baseline summary line promises ENTRIES but printed the number of unspent suppressions - one
+  entry may hold several. The former number stays in the json as `baseline_unused`.
+
+## 2026-08-08 – 0.57.2
+
+### Fixed
+- **LSP navigation no longer waits out the lint of the whole project.** The project index was
+  built at the very end of the background pass – after a lint an order of magnitude more
+  expensive than the index itself – and until that pass finished, "find usages" and "go to
+  definition" answered with nothing. The editor shows such an answer exactly like "no usages
+  found", so a supported feature reads as missing. The background pass now starts with the
+  index, and a navigation request that arrives earlier builds the index itself instead of
+  answering empty. On a medium project navigation comes alive in 1.9 s instead of 7.2 s; on a
+  tree holding several working copies, in 7.9 s instead of 37.0 s.
+
+## 2026-08-07 – 0.54.0, 0.54.1, 0.55.0, 0.56.0, 0.57.0, 0.57.1
+
+### Added
+- **The properties of a section item are written by the tool, not by hand** (0.57.0). The
+  object and its items were created by the tool, while `DefaultValue`, `Presentation` and
+  `MaxLength` were finished by hand in the yaml: there was nothing to pass them in, and
+  `meta_set_component_property` serves interface components alone. Now `meta_add_field`
+  takes `props` (the properties of the new item) and its twin `meta_set_field_property`
+  edits an item that already exists: a property already there is replaced in place, a new
+  one is appended to the item. Names are checked against the item's metamodel class (both
+  spellings accepted, the project's own is written); a value goes in as a scalar, quoted
+  only where a bare one would lie (`DefaultValue: "https://..."`, but `client-code` bare). A
+  property written as a nested block is refused rather than flattened into a scalar. The
+  same in the CLI (`--prop KEY=VALUE`, the `set-field-property` command) and over LSP.
+- **`Presentation` at creation time** (0.57.0): `meta_new_object` takes `presentation`
+  (CLI `--presentation`). The property means different things depending on the kind, and
+  the tool tells them apart: a report and the commands carry a CAPTION there, while a
+  catalog, a document, an exchange plan and a settings storage carry the NAME of a string
+  attribute whose value the platform shows for a record. A caption written into the second
+  kind is rejected by the server ("Field specified as a presentation field is not found"),
+  so such a call is refused with an explanation instead of handing over a file that will
+  not compile.
+- **Localization of a strings element** (0.57.0): `meta_add_localization` creates the
+  translation file (`Localization/<Code>/<Name>.yaml`), repeating the `Strings`/`Templates`
+  sections with the default-language values for the translator to replace in place;
+  `meta_localization_info` answers which languages are declared, which of them is the
+  default, which translations exist already and which languages a translation can still be
+  added for. The language is taken in the project's spelling (`Russian`/`English`) or as
+  the folder code (`Ru`/`En`). CLI - `add-localization` and `localization-info`, LSP -
+  `xbsl/metaAddLocalization` and `xbsl/localizationInfo`.
+- **The data processor form** (0.57.0): `meta_add_form` generates `ProcessingForm` - input
+  fields per attribute and the operation commands through the `Commands` type
+  (`MainCommand: =Commands.GetMain()`, `UsualCommands: =Commands.GetUsual()`), so new
+  operations reach the form by themselves and no form module is needed. It is registered in
+  `Interface.Form`, the way a report's form is.
+- **The metadata schema answers to a descriptor class name too** (0.57.0):
+  `metadata_schema` with `kind: "ConstantsSetConstantDescriptor"` returns the properties of
+  that class. The class name is what the schema's own answers call things, so that is what
+  callers asked with - and got an empty property list with no hint that the same properties
+  live under `sections: ["Константы"]`.
+- **The metadata schema names which attribute TYPE a property belongs to** (0.56.0). The
+  metamodel describes an attribute as ONE class carrying the union of the properties of
+  every type, so a schema consumer saw `IntegerPartLength` offered on a `String` attribute
+  with no way to tell it does not apply. The per-type properties of a typed collection item
+  (an attribute, a dimension, a resource) now carry `applies` - `"string"` (`MaxLength`,
+  `Multiline`, `LengthControl`, `EmptyValue`), `"number"` (`IntegerPartLength`,
+  `FractionalPartLength`, `MaxValue`, `MinValue`, both controls) or `"reference"`
+  (`OnReferencedObjectDeletion`) - exactly as the documentation of every object kind spells
+  the applicability. A property of a class that declares no `Type` of its own is never
+  annotated: a namesake on an unrelated class must not inherit the table.
+- **The English service file names resolve everywhere** (0.55.0). The platform accepts
+  `Project.yaml` and `Subsystem.yaml` next to the Russian spellings (its converter checks
+  both), while the toolkit knew only the Russian ones - an English-named project was not
+  discovered at all. Project and subsystem discovery, the object's namespace, the rules
+  reading the descriptor and the subsystem layout, the metadata tree and the project-root
+  lookup of the CLI now take either spelling; what the scaffolding creates follows the
+  project around it - a subsystem added next to a `Project.yaml` lands as
+  `Subsystem.yaml`, and the demo of English spellings (`demo-en/`) carries the English
+  file names itself now.
+- **`meta_delete_object` / `xbsl delete-object`: delete a configuration object whole.**
+  Removes the yaml+module pair, the object's forms `<Name>Form*` and the `ListRow<Name>`
+  row component with their pairs (a subsystem is the folder the files live in, so the
+  membership goes with them), and lists every REMAINING mention of the name by file and
+  line - string literals and comments included, since a router opening a form by a name in
+  a string is exactly the leftover that otherwise surfaces as a runtime error. The mentions
+  are deliberately not edited. Deletion is irreversible, so the CLI answers with the plan
+  until `--apply` and the MCP tool defaults to `dry_run=true`.
+- **New rule `conventions/untranslated-visible-literal`** (tier D, project scope, on by
+  default): visible text left as a Cyrillic literal where the project already references the
+  same property into a localization dictionary. Self-tuning - only the keys the project
+  itself localizes somewhere are judged, counted per element kind, and a project whose
+  descriptor lists fewer than two localization languages is not judged at all.
+- **A re-registered rule id replaces the earlier rule instead of duplicating it.** A rule
+  migrating between a plugin and the engine exists in both for the transition (an updated
+  engine next to a not-yet-updated plugin), and two rules under one id doubled every
+  finding. The later registration wins; plugins load after the built-in modules, so a
+  plugin's variant of a core rule keeps behaving exactly as before its removal.
+- **`xbsl extract --keep-previous` snapshots the previous build's data.** The data directory
+  is named by the product version while neighbouring BUILDS of one release land in the same
+  directory - regenerating silently overwrote the previous build and left nothing to diff
+  against; the workaround was a manual directory copy plus a hand-edit of the index. The
+  extractor now records the build number of every run (the .car name carries it after the
+  timestamp, so the version regex never captured it), and `--keep-previous` copies the
+  existing directory to `<version>+<previous build>` and registers it, so
+  `xbsl data-diff <version>+<N> <version>` works right away. A directory predating the
+  record honestly answers that there is nothing to name the snapshot by.
+- **The environment names itself.** `--version` lists the installed plugin packages with
+  their versions, the new MCP tool `version_info` returns the same snapshot as data
+  (engine, interpreter, Element data version, plugins), and the LSP writes that line into
+  its start log. Two environments carrying diverged plugin versions answered differently
+  on the same file, and nothing said so - the diagnosis went through site-packages of
+  both.
+
+### Fixed
+- **A form module of an English project no longer drowns in false errors** (0.57.1). The
+  `code/undefined-name` rule looked the component's base type up under the Russian key
+  `Наследует`, while an English project spells the section `Inherits` - the base never
+  resolved, the members of the base type never reached the module scope, and EVERY use of
+  one was reported as an undefined name (an error-severity rule). The members now enter the
+  scope under both spellings as well: the member catalogue is extracted from the
+  documentation, and the documentation is Russian only, while an English project writes
+  `WriteAndClose` and the compiler accepts it.
+- **The rule stopped keeping quiet about commands that do not exist** (0.57.1). Its
+  whitelist of "members the documentation does not carry" held `ВыполнитьЗаписать` and
+  `ВыполнитьЗаписатьИЗакрыть`. They are not members of the platform: the compiler answers
+  `Unknown method` to both, and no type of the shipped data declares such a member. A form's
+  built-in command is a PROPERTY (`WriteAndClose` of type `Command`) and running it is
+  `WriteAndClose.Execute()`; the whitelisted names belonged to handler methods of the
+  author's own, declared in the form module - which the rule sees declared anyway. The
+  exception kept two such calls alive in the demo project unnoticed for a long time; the
+  demo now follows the shape of working sources.
+- **`yaml/presentation-field` no longer judges a constants set** (0.57.0). The metamodel
+  types its `Presentation` as an attribute name (the type is inherited from a shared base),
+  but a constants set has no `Attributes` section at all - the rule demanded the impossible
+  and condemned every constants set carrying a caption. The documentation of the kind calls
+  the property the presentation OF THE SET, and the server accepts such a file (checked by
+  compiling it); the rule now judges only the kinds that do have an attributes section. The
+  negative control stays as it was: on a catalog a caption in that property is still an
+  error, and even `Presentation: Name` is rejected by the server unless the attribute is
+  written out in `Attributes`.
+- **An insertion into a section no longer breaks a CRLF file** (0.57.0). The end of a
+  section body was measured AFTER the `\r`, so the insertion landed between `\r` and `\n`:
+  a lone `\r` was left in the file (a broken line), and git then normalized the newlines of
+  the whole file, blowing the diff up from one edit to the entire file.
+- **English help messages use the English spelling of names** (0.57.0): `Russian/English`
+  instead of Cyrillic in the English help about the translation language, and likewise
+  `LocalizedStrings`, `Localization`, `DefaultValue`, `Presentation` wherever the platform
+  declares such a spelling. Cyrillic stays in English text only for names that have no
+  English pair.
+- **An English project's objects no longer fall out of the by-kind views**
+  ([issue #1](https://github.com/keyfire/xbsl/issues/1)).
+  Kinds were canonicalized through the type dictionary, which spells the stdlib TYPE
+  (`Enum`), while the platform's serializer writes its own kind enum into `ElementKind:` -
+  `Enumeration`, `IntegrationProcess`, `ReportPanel`, `DataJournal`,
+  `IntegrableApplication` and `Project` did not resolve, and such objects landed under
+  "Other" in the metadata tree. The extractor now reads the serializer's own kind table
+  into the dataset (the `kinds` section of terms.json) and the resolution prefers it; a
+  dataset generated before the section joined falls back to a built-in table read out of
+  a current distribution. Every previously accepted spelling stays accepted.
+- **The extractors' default data directory pointed inside the package twice.** The
+  constant kept the layout the extractors had before they moved into the package, so a
+  run without `--data-dir`/`XBSL_DATA_DIR` silently wrote to `xbsl/xbsl/data`; every
+  documented run masked it with an explicit target. The default is the package's bundled
+  root again.
+- **Our own JSON files tolerate a BOM, and a parse failure names the file.** An `index.json`
+  rewritten by PowerShell 5.1 (`Out-File -Encoding utf8` writes a BOM) failed every extractor
+  step with the same bare `JSONDecodeError` and no path - the diagnosis took a run of its own.
+  The version index, the datasets, the baseline and the diff inputs are now read with
+  `utf-8-sig` (writing stays BOM-free), and a file that does not parse is reported by path.
+- **`self-update` picks the wheel by the platform, not by the current install.** Deciding by
+  the install made a ratchet out of one portable update: `is_native` answered False from then
+  on, and every later update kept the portable wheel with no message - the demotion warning
+  only fires on a native install. Caught live on the 0.53.0 release. The native wheel for
+  this interpreter and platform is now preferred unconditionally, and healing a portable
+  install is said out loud.
+
+## 2026-08-03 – 0.53.0
+
+### Added
+- **Dictionary keys are indexed as the members they are.** A `LocalizedStrings` element has no
+  module, so definition, references and completion knew nothing of `Dictionary.Key()`. The keys
+  now sit with the module methods, the string itself becomes the hover description, and a
+  template's arity follows its highest placeholder.
+- **The documentation extractor reads the events section.** Newer type pages give events a
+  section of their own; reading properties and methods alone made `type_members` claim a Button
+  has no `OnClick` and turned a version diff into dozens of phantom removals. Events are a kind
+  of their own now, `data-diff` calls a change of kind a MOVE, and a name the page also lists as
+  a property is not taken for an event - some pages state inherited properties under the events
+  heading. The datasets have to be regenerated for the effect.
+- **A method stub for a handler that is not a form event.** `xbsl/addModuleMethod` writes the
+  code half alone: a metadata handler sits at a yaml offset, so the editor writes the property
+  itself. Nothing declares such a handler's signature, so the stub is shaped after a handler
+  already bound to the same key nearby; with no neighbour it is parameterless and says so.
+- **A route is added without composing its text.** `xbsl/metaAddRoute` and the MCP tool take a
+  template with its methods next to the free-text form, and `xbsl/httpMethods` answers with the
+  verbs a route may declare - an editor offers the engine's list instead of a copy.
+
+### Changed
+- **The language guard judges quoted names too.** A Russian name in a comment is a finding even
+  in backticks when the compiler dictionary can spell it in English; the citation exception is
+  left to what the dictionary does not know, to quotes of documentation and to code fragments.
+## 2026-07-31 – 0.49.0, 0.50.0, 0.51.0, 0.52.0
+
+### Added
+
+- **The card of a platform method shows its parameters.** The dataset carried the result type
+  alone, so a method read as `Name()`. The signatures the documentation prints are extracted
+  next to the members (`member_signatures`, one string per overload), and inherited methods get
+  the signature of the type that declares them. The data has to be regenerated for it.
+- **The hover answers over the platform and over the global catalogue, not only over the
+  project.** A member of a platform type had no card at all, and globals (`Message`, `Max`,
+  `Execute`) never reached the member branch. The owner is now whatever the chain to the left of
+  the dot evaluates to; a global's card names its kind and the environment it exists in.
+- **A project method's card carries its signature and its description**, and a value it returns
+  gets a type - `val P = Module.Method(...)` completes on the members of what it returns.
+- **Rule `code/unclosed-resource`** (136 rules, tier D, `warning`, on by default): a query result
+  bound to an ordinary variable is a `Closeable` descendant, and a `return` or `break` in the
+  middle of the loop leaves it open - the log records it, nothing fails at that moment. The cure
+  is the `use` modifier. False positives are bought off by narrowing: the type comes from the
+  catalog by inheritance, the loop is joined to the nearest preceding declaration in the same
+  method, a resource that arrived as a parameter or is returned to the caller is left alone.
+
+### Fixed
+
+- **`self-update` right after a release no longer claims there is no wheel.** The file list came
+  from the JSON metadata of PyPI, a cache that lags an upload by minutes; it now comes from the
+  SIMPLE index (PEP 691) with numeric ranking, and the JSON stays as the fallback.
+- **The doc link of a member no longer lands on a random article.** A method is a section of its
+  type's page, and the lookup by bare name matched any page carrying that qualifier - hovering
+  `Add` offered an article about breakpoints. The page is resolved through the receiver now; the
+  extraction no longer stores a quoted `Std::...` as a topic's own qualified name.
+
+### Changed
+
+- **The language of the sources is guarded, not remembered.** `tools/langguard.py` reads the
+  lines a change ADDS and reports Cyrillic in comments, docstrings and Python identifiers; CI
+  runs it on every push. The tree's legacy stays out of scope by design - a guard that can never
+  be green teaches nothing.
+- **Both English changelogs are guarded**, by the dictionary rule (a Russian name whose English
+  twin is missing) and by a dictionary-free one (Russian prose outside citations), so a public
+  checkout without the term dictionary is guarded too.
+- **The MCP server runs on both majors of `mcp`, and the pin is gone** (`mcp>=1.2,<3`). `mcp 2.0`
+  moved the ergonomic server class without leaving an alias, so a fresh install did not start at
+  all; the import tries the new home first and falls back to the old one. Proven by talking
+  JSON-RPC to a real server process on both: the same 30 tools, the same schemas.
+## 2026-07-29 – 0.48.0
+
+### Added
+
+- **The "Variable and constant names" development standard as rules** (135 rules total). Six
+  new `style/` rules cover the token-provable part of the standard: `style/abstract-name`
+  (names like `Data`, `Item`, `Object` - exact or with a digit tail - say nothing about the
+  variable; structure fields as a serialization contract are exempt), `style/single-letter-name`
+  (one-letter names belong only to short lambda parameters - the standard's own exception, and
+  lambdas declare nothing, so the rule never sees them), `style/negated-boolean-name`
+  (`NotConnected` wants to be `Connected`; judged only where the boolean type is proven),
+  `style/type-in-name` (a container type has no business inside a variable name),
+  `style/numeral-in-const-name` (`TIMEOUT_ONE_MINUTE` spells its value - the wider half of the
+  "abstract constant names" clause cannot be told from a legitimate enumeration-member constant
+  and is left to review), and the project-scope `style/shadow-project-name` (a variable named
+  like a project element hides that element for its scope; stdlib shadowing is deliberately NOT
+  judged - platform handler signatures collide with type names en masse, a corpus run gave over
+  900 forced hits). All six default to `warning`, matching the owner's decision that a documented
+  standard is enforced.
+
+### Changed
+
+- **`style/abbreviation-case` reads Cyrillic abbreviations too.** The standard spells the
+  accepted short words as one word each (`Ндс`, `Фио`, `Мчд`), so an all-caps Cyrillic run in a
+  declared name is now reported with a suggestion, same as Latin ones. The abbreviation core
+  logic is shared with the yaml naming rule: the trailing capital belongs to the next word, and
+  a single-letter remainder is a glued conjunction, not an abbreviation - so compound names with
+  one-letter unions stay clean, and constants stay out (ALL_CAPS is their law).
+
+### Fixed
+
+- **`self-update` of a native install can finally update itself.** Two defects, both met on
+  a live update and both previously ending in a rollback (the insurance worked, the update
+  did not happen). First, `--stop-holders` offered the command's OWN process tree for
+  stopping - started via the installed shim, the command runs as a python child of an
+  `xbsl.exe` launcher that looks exactly like a holder by name; stopping it cut the update
+  short. Holders now exclude the command's ancestors and descendants; other live xbsl
+  processes are still named and stopped. Second, the mypyc shared libraries that live in
+  the site-packages ROOT (next to the package, not inside it) were overwritten in place by
+  the extraction - and that fails with `Errno 13` while the running self-update itself
+  keeps them loaded. They are now renamed aside like the package directory: a rename of a
+  loaded module passes where an overwrite does not. The list of root files is read from
+  the installed RECORD, not globbed - another mypyc-built distribution keeps its own
+  library in the same root and must not be touched. A file backup the finished process
+  still held is swept by the next run.
+
+## 2026-07-28 – 0.47.0, 0.47.1, 0.47.2
+
+### Changed
+
+- **The texts of the two new rules speak in the demo project's vocabulary.** Docstrings,
+  tests and the changelog entries of `code/unknown-tabular-member` and
+  `code/global-unavailable` now take their examples from the demo project
+  (`Задачи`/`Шаги`), like the rest of the documentation.
+
+### Fixed
+
+- **The `mcp` extra is pinned below 2.** `mcp 2.0.0` (released the same day) dropped
+  `mcp.server.fastmcp`, which the MCP server imports: a fresh `pip install "xbsl[mcp]"`
+  picked the new major and the server refused to start. The pin keeps 1.x until the
+  server moves to the new API.
+
+### Added
+
+- **`code/unknown-tabular-member` - a member access on a tabular section's rows must exist
+  on the array type.** The receiver is typed by the PROJECT's metadata, not by a declaration,
+  so neither unknown-member rule saw the shape: `Object.Sections.Count()` in an object form
+  module passed the linter and failed the live apply (the array member is called `Size`).
+  The rule joins the form's base type (`ObjectForm<Entity.Object>`) or the entity's own
+  modules to the declared tabular sections and judges the member against the array catalog,
+  with the habitual `Count -> Size` hint difflib cannot bridge. A module named after a
+  section shadows the bare name - real projects keep such modules - and an attribute is never
+  judged.
+- **`code/global-unavailable` - a global context name called outside its environment.** The
+  docs print availability per member of the global context packages, and the stdlib extractor
+  now stores it (`global_availability`): `Message` exists on the client only, the dynamic
+  evaluation globals on the server only. A method executes in its module's environment - the
+  standard one of the element kind (a catalog or register module and an HTTP service are
+  server code) - unless `@OnServer` or `@OnClient` pins the side. `Message(...)` in a catalog
+  module is the shape that passed the linter and failed the live apply with "the method is
+  unavailable in the current environment"; the mirrored direction (a server-only global in a
+  client method) names the fix - `@OnServer`.
+- **`code/collection-field-needs-req` - a structure field whose generic type cannot be built
+  empty.** `var texts: ReadableArray<String>` is refused by the apply ("cannot be initialized
+  with a default value and is not marked as required for the constructor"): the type's only
+  constructor is the copying one, so there is no default value to fall back on. `Array<String>`,
+  `Set<String>` and `Map<String, Number>` are the opposite case and are left alone - each has an
+  argument-less constructor, the platform documentation itself declares a variable that way, and
+  on real code such fields are commonplace. Which is which is now a FACT IN THE CATALOG: the stdlib
+  extractor reads the "Constructors" section of every type page and stores `type_ctors` -
+  `empty` (callable with no arguments), `args` (all of them demand arguments) or `none` (none
+  documented). The rule judges only a type written WITH a type argument: for a bare name the
+  constructor alone would mislead, since `String` and `Boolean` take arguments and still have a
+  default value of their own. File scope, so the editor reports it on every keystroke.
+
+- **`code/var-needs-init` - a variable declared by a type that has neither a constructor nor a
+  default value.** `var Response: HttpResponse` (declare first, assign inside the try) does not
+  compile - the type is only ever handed out by the platform, and the compiler answers exactly
+  that: no constructor and no default value. The rule flags a declaration whose type the catalog
+  reports as `none`; a type with an argument-taking constructor is left alone, because a bare
+  name may still be a primitive with a default of its own, and so are the hierarchies where a
+  default is plausible - an enumeration, an annotation, a singleton. It is project-scope for one
+  reason: a bare name may belong to a PROJECT type of the same name - real projects do declare a
+  structure or an object named after a platform type with no constructor - and only the whole
+  project can tell. The fix is `Type?` plus a check, or reading what is needed inside the try
+  into plain variables.
+
+## 2026-07-27 – 0.41.0, 0.42.0, 0.42.1, 0.43.0, 0.44.0, 0.45.0, 0.46.0
+
+### Fixed
+
 - **What the scaffolding WRITES now follows the language of the project.** Reading English
   sources was only half the job: a form generated into an English project arrived with Russian
   keys, Russian type names and a file name carrying the Russian form suffix, and a new service
@@ -38,7 +519,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   generated English form keeps `WidthInColumns: Одинарная` - and the report names those values
   instead of inventing an English word for them.
 
-### Fixed
 - **The project-scope localization rule no longer ships whole source files between
   processes.** `code/compare-with-localized` needs the project's dictionary names before it
   can judge a module, and used to defer everything: the map phase put the source file into
@@ -48,7 +528,60 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   nothing at all. What travels between processes stops growing with the project, and the
   parallel run gets the time back.
 
+- **`style/boolean-compare` no longer fires where the comparison is mandatory.** The rule stood on
+  tokens alone and reported every `== True`, so on a real project all of its findings were false:
+  the short form does not compile ("Boolean expression is expected") as soon as the value is
+  nullable or composite - a component property is `Auto|Boolean`, `HtmlContainer.GetVariable`
+  returns `Boolean|JsObject|Number|String|?`, `Form.OpenInModalWindow` returns `ResultType?`. The
+  operand is now typed: by the catalog for a member access or a call, by the annotation for a
+  parameter or a local, and by the initializer's last link for a variable. A comparison stays a
+  violation only when the type is exactly `Boolean`; what the file cannot type at all is still
+  reported, because an unknown name is the usual violation the rule exists for.
+
+- **Scaffolding reads a project written with English metadata keys.** Only writing was bilingual:
+  every yaml READER in the scaffolding matched Russian spellings, so `rename-object`, `object-info`,
+  `add-field`, `set-access`, `add-form` and `add-route` answered "no such object" on an
+  English-spelled project - and three operations were worse than that, answering successfully with
+  the wrong result: `project-info` reported an empty object list, `add-dependency` appended a second
+  library entry instead of updating the version in place, and `add-subsystem` wrote a Russian
+  descriptor into an English project. `object-info` also invented a standard `Наименование`
+  alongside the declared `Name`, which would have reached a generated form as a column. Readers now
+  accept both spellings and write in the language of the file. The pairs come from the platform's
+  own metamodel (`english_name`), never from a hand-written table: `terms` is the source for VALUES
+  (kinds, enumerations) and the metamodel for KEYS, and they genuinely differ. A name the platform
+  spells ambiguously across classes (`Элементы` is `Items` on an enumeration and `Elements`
+  elsewhere) stays Russian on purpose - guessing costs more than staying silent. Without the
+  platform data everything degrades to the previous Russian-only behaviour.
+
+- **A parallel run of the released wheel no longer dies as `BrokenProcessPool`.** With `--jobs`
+  left at its default the engine goes parallel on its own once a run has at least 120 files and the
+  machine has at least 4 cores, so `xbsl lint` over a real project failed outright – no flag
+  needed. The pool broke while the PARENT unpickled a worker's result: a fact carried a whole
+  `SourceFile`, and with it the file's cache holding a `lexer._LineMap`. In the native build that
+  class is a C extension: it pickles, but unpickling calls `cls.__new__(cls)` with no arguments and
+  its generated constructor refuses. The exception surfaced only as a broken pool, and only in the
+  wheel – a pure-Python run was never affected, which is why neither CI nor development saw it.
+  Sources now leave their cache out of the pickle (derived, process-local data, rebuilt on demand),
+  which closes the whole class rather than the one entry that tripped it, and shrinks a worker's
+  result from 1.96 MB to 0.58 MB. Guarded by new tests that do not depend on the build.
+
+- **An object rename that only changes letter case is no longer refused.** `xbsl rename-object` /
+  `meta_rename_object` answered "Файл уже существует" to a rename of `Goods` into `goods`: a
+  case-insensitive filesystem (Windows, macOS) addresses the old and the new name as one file, and
+  the occupied-name check read it as a foreign one. Such a rename is now recognised (the names
+  match case-insensitively AND it is the same file) and applied in two steps through a temporary
+  name; a failure of the second step undoes the first, and no temporary name is left on disk. A
+  name held by ANOTHER file is still refused. On a case-sensitive filesystem nothing changed -
+  there the name is free, the rename runs in a single step and no intermediate name appears in the
+  report.
+- **A case-only rename warns about the version control system.** The tool renames the files
+  itself, but git on a case-insensitive filesystem folds ASCII letters only: a Latin rename goes
+  unnoticed (`git mv` is needed), while a Cyrillic one is recorded as a delete plus an add - and
+  then every other clone on such a filesystem stops at "untracked working tree files would be
+  overwritten by merge". A new note in the tool's answer says so.
+
 ### Changed
+
 - **`self-update` no longer trades a working installation for an empty directory.** The
   command now renames the installed package aside FIRST – a rename fails while a file inside
   is open, and at that moment nothing has been removed – then names the holding processes by
@@ -67,31 +600,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **Everything the command prints goes through the message catalog** – `--lang en` answers in
   English, as the rest of the toolkit does.
 
-## 2026-07-27 – 0.45.0
-
-### Added
-- **`code/bound-property-assign` – a property COMPUTED by an expression must not be assigned from
-  code.** The platform refuses `Component.Property = value` when the markup computes that property
-  (`Height: =Common.IsMobile()?820:528`) and answers "Cannot set the value of property ... specified
-  by expression"; inside the usual `try/catch` cascade the refusal is invisible and the symptom is a
-  layout that quietly ignores the code. A DATA BINDING is left alone: `Value: =Record.Value` is a
-  bare path, the documentation calls such a link two-way for an editable component, and writing to
-  it is how an editor gives the value back - so the rule judges the SHAPE of the expression, a path
-  against anything computed. The paired yaml is read from the disk neighbour, so the rule stays
-  file-scope and the editor reports it on every keystroke.
-
-### Fixed
-- **`style/boolean-compare` no longer fires where the comparison is mandatory.** The rule stood on
-  tokens alone and reported every `== True`, so on a real project all of its findings were false:
-  the short form does not compile ("Boolean expression is expected") as soon as the value is
-  nullable or composite - a component property is `Auto|Boolean`, `HtmlContainer.GetVariable`
-  returns `Boolean|JsObject|Number|String|?`, `Form.OpenInModalWindow` returns `ResultType?`. The
-  operand is now typed: by the catalog for a member access or a call, by the annotation for a
-  parameter or a local, and by the initializer's last link for a variable. A comparison stays a
-  violation only when the type is exactly `Boolean`; what the file cannot type at all is still
-  reported, because an unknown name is the usual violation the rule exists for.
-
-### Changed
 - **The type catalog keeps the full spelling of a union result type.** The extractor cut a member's
   type at the head (`Auto` instead of `Auto|Boolean`, `Boolean` instead of
   `Boolean|JsObject|Number|String|?`), so the data could not tell "a boolean" from "a value that
@@ -100,9 +608,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   work in nominal heads are unaffected: `dataset.member_type_head` cuts the union the same way it
   always did.
 
-## 2026-07-27 – 0.44.0
-
-### Changed
 - **What the platform documents as a code-writing convention is now a standard: seven `style/`
   rules run by default and report at `warning`** – line length, comparing a boolean with
   `True`/`False`, UpperCamelCase, collection literals, string interpolation, a redundant
@@ -118,66 +623,22 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   translated like everything else; a guard requires it from every disabled rule.
 
 ### Added
+
+- **`code/bound-property-assign` – a property COMPUTED by an expression must not be assigned from
+  code.** The platform refuses `Component.Property = value` when the markup computes that property
+  (`Height: =Common.IsMobile()?820:528`) and answers "Cannot set the value of property ... specified
+  by expression"; inside the usual `try/catch` cascade the refusal is invisible and the symptom is a
+  layout that quietly ignores the code. A DATA BINDING is left alone: `Value: =Record.Value` is a
+  bare path, the documentation calls such a link two-way for an editable component, and writing to
+  it is how an editor gives the value back - so the rule judges the SHAPE of the expression, a path
+  against anything computed. The paired yaml is read from the disk neighbour, so the rule stays
+  file-scope and the editor reports it on every keystroke.
+
 - `style/redundant-type` now sees the typed empty literal: `var Articles: Array<Number> =
   <Number>[]` states the type twice, and the platform's "Idioms" article documents the short
   form (`val Articles = <Number>[]`). Only the array spelling is recognised – the empty set and
   map forms are not in the documentation, and guessing at them would risk a false positive.
 
-## 2026-07-27 – 0.43.0
-
-### Fixed
-- **Scaffolding reads a project written with English metadata keys.** Only writing was bilingual:
-  every yaml READER in the scaffolding matched Russian spellings, so `rename-object`, `object-info`,
-  `add-field`, `set-access`, `add-form` and `add-route` answered "no such object" on an
-  English-spelled project - and three operations were worse than that, answering successfully with
-  the wrong result: `project-info` reported an empty object list, `add-dependency` appended a second
-  library entry instead of updating the version in place, and `add-subsystem` wrote a Russian
-  descriptor into an English project. `object-info` also invented a standard `Наименование`
-  alongside the declared `Name`, which would have reached a generated form as a column. Readers now
-  accept both spellings and write in the language of the file. The pairs come from the platform's
-  own metamodel (`english_name`), never from a hand-written table: `terms` is the source for VALUES
-  (kinds, enumerations) and the metamodel for KEYS, and they genuinely differ. A name the platform
-  spells ambiguously across classes (`Элементы` is `Items` on an enumeration and `Elements`
-  elsewhere) stays Russian on purpose - guessing costs more than staying silent. Without the
-  platform data everything degrades to the previous Russian-only behaviour.
-
-## 2026-07-27 – 0.42.1
-
-### Fixed
-- **A parallel run of the released wheel no longer dies as `BrokenProcessPool`.** With `--jobs`
-  left at its default the engine goes parallel on its own once a run has at least 120 files and the
-  machine has at least 4 cores, so `xbsl lint` over a real project failed outright – no flag
-  needed. The pool broke while the PARENT unpickled a worker's result: a fact carried a whole
-  `SourceFile`, and with it the file's cache holding a `lexer._LineMap`. In the native build that
-  class is a C extension: it pickles, but unpickling calls `cls.__new__(cls)` with no arguments and
-  its generated constructor refuses. The exception surfaced only as a broken pool, and only in the
-  wheel – a pure-Python run was never affected, which is why neither CI nor development saw it.
-  Sources now leave their cache out of the pickle (derived, process-local data, rebuilt on demand),
-  which closes the whole class rather than the one entry that tripped it, and shrinks a worker's
-  result from 1.96 MB to 0.58 MB. Guarded by new tests that do not depend on the build.
-
-## 2026-07-27 – 0.42.0
-
-### Fixed
-- **An object rename that only changes letter case is no longer refused.** `xbsl rename-object` /
-  `meta_rename_object` answered "Файл уже существует" to a rename of `Goods` into `goods`: a
-  case-insensitive filesystem (Windows, macOS) addresses the old and the new name as one file, and
-  the occupied-name check read it as a foreign one. Such a rename is now recognised (the names
-  match case-insensitively AND it is the same file) and applied in two steps through a temporary
-  name; a failure of the second step undoes the first, and no temporary name is left on disk. A
-  name held by ANOTHER file is still refused. On a case-sensitive filesystem nothing changed -
-  there the name is free, the rename runs in a single step and no intermediate name appears in the
-  report.
-- **A case-only rename warns about the version control system.** The tool renames the files
-  itself, but git on a case-insensitive filesystem folds ASCII letters only: a Latin rename goes
-  unnoticed (`git mv` is needed), while a Cyrillic one is recorded as a delete plus an add - and
-  then every other clone on such a filesystem stops at "untracked working tree files would be
-  overwritten by merge". A new note in the tool's answer says so.
-
-
-## 2026-07-27 – 0.41.0
-
-### Added
 - **`xbsl/metaKeys` – the element key pairs for surfaces outside python** (`Attributes` ->
   `Реквизиты`), the metadata counterpart of `xbsl/formKeys`. The metadata tree of the editor
   parses the yaml itself, so an English object used to show empty branches: the sections were
@@ -185,9 +646,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the `en` of the metamodel classes - the whole model, not one kind, because a section item is a
   class of its own and the tree descends into it. Without the data the request answers
   `{"available": false}` and the reader keeps working on Russian keys.
+
 ## 2026-07-26 – 0.36.1, 0.37.0, 0.37.1, 0.37.2, 0.37.3, 0.38.0, 0.39.0, 0.40.0
 
 ### Changed
+
 - **A guard over the English documents.** Russian spellings of platform names in the English
   documents (`Группа` for `Group`, `Ид` for `Id`) drifted in with every wave of rules and were
   caught by eye alone. A test refuses them now, knowing the three legitimate cases: a file name the
@@ -204,6 +667,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   declares; only the example in the module docstring dropped the number.
 
 ### Added
+
 - **0.40.0: four rules - per-object permissions and localization** (122 rules now).
   - `code/per-object-permissions-need-common` (warning): an object asks for its permissions to be
     decided per record while its module declares no common `ComputeAccessPermissions` handler. It
@@ -271,6 +735,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
     directories of the repository's demo projects are renamed to match their descriptors.
 
 ### Fixed
+
 - **The sync guard looked at four places out of eight** - which is why the rule counters on the
   documentation pages had drifted unnoticed to 97 and 87. It now checks all eight (26 checks) and
   the counters are corrected; the messages of the new rules go through the `{n[...]}` name map like
@@ -295,6 +760,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-25 – 0.35.0, 0.36.0
 
 ### Added
+
 - **Two rules about a static method** (`code/this-in-static-method`, `code/instance-call-from-static`).
   The documentation states both bans in one breath: a static method is common to the whole type,
   so it has no object context - `этот` in its body and a bare call of an instance method of the
@@ -304,7 +770,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   name declared BOTH static and instance - the docs allow that pair when the signatures do not
   overlap.
 
+- Rule **`code/local-method-cross-module`** (tier D, error, project-scoped; 101 rules now):
+  `Module.Method(...)` must target a method that carries a visibility annotation. @Local is
+  the DEFAULT visibility of a language construct, so a method with no annotation is reachable
+  from its own module alone and the compiler rejects the call on build. The sibling
+  `code/local-method-cross-component` covers the same invariant reached through a component
+  INSTANCE (`Components.X.Method(...)`, a runtime failure); this one goes through the module
+  name and resolves it by the file stem, the resolution of `code/call-arity-cross`.
+
 ### Fixed
+
 - **The public CI had been red since the previous release** - and the imitation of a data-less
   clone, not GitHub, is what surfaced it. Three bilingual tests expect the English spellings from
   `terms.json`, which a checkout without the Element data does not have; they are marked
@@ -352,16 +827,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   `data/docs/help/ru/` and nothing else), so hovers and the docs panel stay Russian in an English
   editor.
 
-### Added
-- Rule **`code/local-method-cross-module`** (tier D, error, project-scoped; 101 rules now):
-  `Module.Method(...)` must target a method that carries a visibility annotation. @Local is
-  the DEFAULT visibility of a language construct, so a method with no annotation is reachable
-  from its own module alone and the compiler rejects the call on build. The sibling
-  `code/local-method-cross-component` covers the same invariant reached through a component
-  INSTANCE (`Components.X.Method(...)`, a runtime failure); this one goes through the module
-  name and resolves it by the file stem, the resolution of `code/call-arity-cross`.
+- An MCP tool called with a **misspelled argument name now fails** instead of silently running
+  with its defaults: pydantic ignores unknown keys, so `lint_paths(rules=...)` (the filter is
+  `select`) looked like a broken parameter rather than a wrong one. Every tool model is switched
+  to `extra="forbid"` after registration.
 
 ### Changed
+
 - `code/unknown-static-member` types a variable whose value comes from ANOTHER module: every
   module now publishes the return types of its own methods, and the project phase joins
   `Module.Method(...)` to them by the file stem. This closes the line the rule was written for -
@@ -377,15 +849,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   with a single type keep the mapping spelling; an owner the schema cannot name (a page item
   carries no `Type`) keeps it too.
 
-### Fixed
-- An MCP tool called with a **misspelled argument name now fails** instead of silently running
-  with its defaults: pydantic ignores unknown keys, so `lint_paths(rules=...)` (the filter is
-  `select`) looked like a broken parameter rather than a wrong one. Every tool model is switched
-  to `extra="forbid"` after registration.
-
 ## 2026-07-24 – 0.32.0, 0.33.0, 0.34.0
 
 ### Added
+
 - Rule **`yaml/unexpected-type-argument`** (tier D, error, file-scoped; 100 rules now): a type
   argument on a property the ui schema declares WITHOUT one is another type, and applying the
   build rejects it. The case it comes from: a form's `AdditionalCommands` takes
@@ -437,6 +904,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   and `Number`, not every type of the project.
 
 ### Fixed
+
 - `code/unknown-member` judges a variable of a GENERIC type by its head: the arguments type
   the members and do not name them, so `ReadOnlyArray<Subscriber>` has the member set of
   `ReadOnlyArray`. A parameterized type used to be skipped whole, and `Count()` - a habit from
@@ -469,11 +937,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-23 – 0.31.0, 0.31.1
 
 ### Changed
+
 - The generated stdlib type catalog records fuller member types and curates extra type surfaces
   from the platform's topic pages, so the linter's member checks and completion match what the
   platform actually exposes (0.31.0).
 
 ### Fixed
+
 - `code/resource-bare-name` no longer treats an `inbase/...` reference as a folder path: a resource
   uploaded into the application base is a lookup key, not a disk path, so the rule leaves it alone
   (the compiler verifies its existence at apply) (0.31.0).
@@ -484,6 +954,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-22 – 0.28.0, 0.29.0, 0.30.0, 0.30.1
 
 ### Added
+
 - The documentation site ([docs.keyfire.ru/xbsl](https://docs.keyfire.ru/xbsl/)), a full command
   reference and CLI help – complete in English and Russian (0.29.0).
 - The platform metamodel resolves the schema of a collection item – an enumeration value, an
@@ -495,6 +966,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   (0.28.0).
 
 ### Changed
+
 - Faster on large projects: caches for the data-binding layer, YAML parsed through libyaml
   (`compose`), and worker pools sized to the workload (0.30.0).
 - A type's hover carries its description from the platform documentation above the page link, not
@@ -503,6 +975,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the stdlib closure instead of looping (0.30.1).
 
 ### Fixed
+
 - `yaml/bare-object-value` accepts a `$`-reference to a localized string as a valid value where a
   literal is expected, instead of flagging it as a bare word (0.30.1).
 - Regenerated language data is picked up without a restart – the freshness stamp drops the
@@ -513,6 +986,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-07-21 – 0.25.0, 0.26.0, 0.26.1, 0.27.0
 
 ### Added
+
 - Four linter rules: `yaml/bare-object-value` (a bare word where a quoted literal or an `=`
   binding is expected), `code/resource-bare-name` and `code/unknown-resource` (a resource by a
   bare file name that must exist in the project or the platform's image library), and
@@ -526,6 +1000,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   but the yaml leaves unset (0.27.0).
 
 ### Changed
+
 - Scaffolding accepts the element kind spelled in any platform language (0.26.0).
 - Language data comes from the compiler, not from constants: the terms dictionary covers every
   stdlib type's members, and the query-language keywords come from the parser's own dictionary

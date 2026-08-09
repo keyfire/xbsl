@@ -49,7 +49,7 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# The base type of an object form carries the entity: `ФормаОбъекта<Программы.Объект>`.
+# The base type of an object form carries the entity: `ФормаОбъекта<Задачи.Объект>`.
 # Both spellings of the type name and of the Объект facet come from the platform's terms.
 _FORM_BASE_RE = re.compile(
     r"^\s*(?P<base>[А-Яа-яЁёA-Za-z]+)\s*<\s*(?P<entity>[А-Яа-яЁёA-Za-z0-9_]+)\s*\.\s*"

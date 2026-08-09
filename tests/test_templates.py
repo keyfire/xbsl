@@ -136,9 +136,9 @@ def test_unknown_variable_becomes_an_edit_point_named_after_itself():
 def test_object_name_uses_the_resolver_variants():
     out = tpl.expand(
         "Справочник.${ИмяОбъектаМетаданного(Справочник)}",
-        resolver=lambda name, kind: ["Абоненты", "Программы"],
+        resolver=lambda name, kind: ["Склады", "Задачи"],
     )
-    assert out == "Справочник.${1|Абоненты,Программы|}"
+    assert out == "Справочник.${1|Склады,Задачи|}"
 
 
 def test_object_name_without_resolver_prompts_for_the_kind():

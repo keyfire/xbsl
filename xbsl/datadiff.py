@@ -109,6 +109,8 @@ MESSAGES = {
     "datadiff.group.pages": {"ru": "страницы", "en": "pages"},
     "datadiff.group.methods": {"ru": "методы", "en": "methods"},
     "datadiff.group.properties": {"ru": "свойства", "en": "properties"},
+    # data that does not say whether a name is a property or a method (see _as_member_lists)
+    "datadiff.group.any-members": {"ru": "члены без разделения", "en": "members, undivided"},
     "datadiff.term.types": {"ru": "типы", "en": "types"},
     "datadiff.term.facets": {"ru": "фасеты", "en": "facets"},
     "datadiff.term.properties": {"ru": "свойства", "en": "properties"},
@@ -179,16 +181,30 @@ def _prune(value):
 
 
 def _diff_member_lists(old: dict, new: dict) -> dict:
-    """Per-name diff of {"Имя": {"methods": [...], "properties": [...]}} sections."""
+    """Per-name diff of {name: {"methods": [...], "properties": [...]}} sections."""
     out = {}
     for name in sorted(set(old) & set(new)):
         entry = {}
-        for key in ("methods", "properties"):
+        for key in ("methods", "properties", "members"):
             delta = _added_removed(old[name].get(key), new[name].get(key))
             if delta:
                 entry[key] = delta
         if entry:
             out[name] = entry
+    return out
+
+
+def _as_member_lists(section) -> dict:
+    """A section of member lists brought to one shape, whichever vintage the data is.
+
+    manager_members keeps properties and methods apart; data generated before the split is a
+    plain list of names per kind, and comparing the two shapes head-on would report every kind
+    as changed. Such a list is put under a bucket of its own, so an old-to-new comparison says
+    what it honestly is: the names moved from an undivided list into the divided one.
+    """
+    out: dict = {}
+    for name, entry in (section or {}).items():
+        out[name] = entry if isinstance(entry, dict) else {"members": list(entry or ())}
     return out
 
 
@@ -354,8 +370,10 @@ def diff_stdlib(old: dict, new: dict) -> dict:
         "globals": _added_removed(old.get("globals"), new.get("globals")),
         "object_members": _diff_name_sets(
             old.get("object_members") or {}, new.get("object_members") or {}),
-        "manager_members": _diff_name_sets(
-            old.get("manager_members") or {}, new.get("manager_members") or {}),
+        "manager_members": _diff_member_lists(
+            _as_member_lists(old.get("manager_members")),
+            _as_member_lists(new.get("manager_members")),
+        ),
         "facets": _added_removed(old_fm, new_fm),
         "facet_members": _diff_member_lists(old_fm, new_fm),
     })
@@ -548,7 +566,11 @@ def _emit_delta(out: list, depth: int, title: str, delta: dict, limit: int | Non
 
 def _members_line(entry: dict, limit: int | None) -> str:
     parts = []
-    for key in ("methods", "properties"):
+    for key, label in (
+        ("methods", "datadiff.group.methods"),
+        ("properties", "datadiff.group.properties"),
+        ("members", "datadiff.group.any-members"),
+    ):
         delta = entry.get(key)
         if not delta:
             continue
@@ -557,7 +579,7 @@ def _members_line(entry: dict, limit: int | None) -> str:
             bits.append("+" + _join(delta["added"], limit))
         if delta.get("removed"):
             bits.append("-" + _join(delta["removed"], limit))
-        parts.append(i18n.t(f"datadiff.group.{key}") + " " + "; ".join(bits))
+        parts.append(i18n.t(label) + " " + "; ".join(bits))
     return "; ".join(parts)
 
 
@@ -638,9 +660,9 @@ def _section_lines(section: str, body: dict, limit: int | None) -> list:
         return out
     for key, payload in body.items():
         title = _group_title(key)
-        if key in ("members", "facet_members"):
+        if key in ("members", "facet_members", "manager_members"):
             _emit_named(out, 0, title, payload, lambda e: _members_line(e, limit), limit)
-        elif key in ("props", "forms", "enum_values", "object_members", "manager_members"):
+        elif key in ("props", "forms", "enum_values", "object_members"):
             _emit_named(out, 0, title, payload, lambda e: _props_line(e, limit), limit)
         elif key == "member_types":
             _emit_named(out, 0, title, payload, _pair_line, limit)

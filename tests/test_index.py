@@ -120,7 +120,7 @@ _DICTIONARY_YAML = "\n".join([
 ])
 
 
-# A type DESCRIBED IN METADATA: the members live in the Поля section, not in a module.
+# A type DESCRIBED IN METADATA: the members live in the Fields section, not in a module.
 _STRUCTURE_YAML = "\n".join([
     "ВидЭлемента: ХранимаяСтруктура",                # 1
     "Ид: 9b7d4e5f-6a8b-4c9d-8e0f-4a5b6c7d8e9f",      # 2
@@ -142,26 +142,26 @@ _STRUCTURE_XBSL = "\n".join([
     "",
 ])
 
-# A constants set: the constants are the members of the GENERATED types `<Имя>.Запись`
-# and `<Имя>.Данные`, and `Получить()` is the way the code reaches the record.
+# A constants set: the constants are the members of the GENERATED types `<Name>.Record`
+# and `<Name>.Data`, and `Get()` is the way the code reaches the record.
 _CONSTANTS_YAML = "\n".join([
     "ВидЭлемента: НаборКонстант",                    # 1
     "Ид: 0c8e5f6a-7b9c-4d0e-9f1a-5b6c7d8e9f0a",      # 2
     "Имя: НастройкиПриложения",                      # 3
     "Константы:",                                    # 4
     "    -",                                         # 5
-    "        Имя: АдресСайта",                       # 6
+    "        Имя: АдресСервиса",                     # 6
     "        Тип: Строка",                           # 7
     "    -",                                         # 8
-    "        Имя: РежимРазработчика",                # 9
+    "        Имя: ОтладкаВключена",                  # 9
     "        Тип: Булево",                           # 10
     "",
 ])
 
-# The record module of the constants set: it extends `НастройкиПриложения.Запись`.
+# The record module of the constants set: it extends the Record type of the set.
 _CONSTANTS_RECORD_XBSL = "\n".join([
     "метод Настроен(): Булево",                      # 1
-    "    возврат АдресСайта != \"\"",                # 2
+    "    возврат АдресСервиса != \"\"",              # 2
     ";",                                             # 3
     "",
 ])
@@ -433,37 +433,42 @@ def test_constants_are_indexed_under_the_generated_type_names(project):
     members = idx["struct_members"]
 
     assert members["НастройкиПриложения.Запись"]["properties"] == [
-        "АдресСайта", "РежимРазработчика",
+        "АдресСервиса", "ОтладкаВключена",
     ]
     assert members["НастройкиПриложения.Данные"]["properties"] == [
-        "АдресСайта", "РежимРазработчика",
+        "АдресСервиса", "ОтладкаВключена",
     ]
     assert members["НастройкиПриложения.Запись"]["kind"] == "НаборКонстант"
-    # the record module (`<Имя>.Запись.xbsl`) extends exactly that type
+    # the record module (`<Name>.Record.xbsl`) extends exactly that type
     assert members["НастройкиПриложения.Запись"]["methods"] == ["Настроен"]
     assert "methods" not in members["НастройкиПриложения.Данные"]
     assert "НастройкиПриложения" not in members
 
 
 def test_generated_returns_type_the_constants_set_call(project):
-    """`знч Запись = НастройкиПриложения.Получить()` has to be typed for the dot after
-    `Запись` to offer anything: the stdlib catalogue knows no project object."""
+    """A variable initialized by a `Get()` of a constants set has to be typed for the dot
+    after it to offer anything: the stdlib catalogue knows no project object."""
     idx = build_index(project)
 
-    assert idx["generated_returns"] == {
-        "НастройкиПриложения": {"Получить": "НастройкиПриложения.Запись"},
-    }
+    # The result types come from the data (the manager pages of every kind carry them);
+    # the built-in row answers only for data generated before that section existed.
+    assert idx["generated_returns"]["НастройкиПриложения"]["Получить"] == (
+        "НастройкиПриложения.Запись"
+    )
+    assert idx["generated_returns"]["Товары"]["НайтиПоКоду"] == "Товары.Ссылка?"
 
 
 def test_manager_members_of_the_kind_are_indexed(project):
-    """`НастройкиПриложения.Получить()` is written on the object NAME: without the members of
+    """A `Get()` of a constants set is written on the object NAME: without the members of
     the kind's singleton type the dot after it offered types only, never the method."""
     idx = build_index(project)
     constants = next(o for o in idx["objects"] if o["name"] == "НастройкиПриложения")
     catalog = next(o for o in idx["objects"] if o["name"] == "Товары")
 
-    assert "Получить" in constants["manager"]
-    assert "НайтиПоКоду" in catalog["manager"]
+    # properties and methods apart, so a completion list knows which takes parentheses
+    assert "Получить" in constants["manager"]["methods"]
+    assert "НайтиПоКоду" in catalog["manager"]["methods"]
+    assert "members" not in constants["manager"]
 
 
 def test_family_offers_the_catalogue_not_the_safety_net(project):
@@ -474,17 +479,17 @@ def test_family_offers_the_catalogue_not_the_safety_net(project):
     dictionary = next(o for o in idx["objects"] if o["name"] == "Словарь")
 
     assert "Ссылка" in catalog["family"]           # the catalogue knows the kind
-    assert "ПараметрыЗаполнения" not in catalog["family"]  # net-only, no page names it
+    assert "ПараметрыЗаполнения" not in catalog["family"]  # net only, no page names it
     # A kind that generates no types at all: an empty list, not somebody else's names.
     assert dictionary["family"] == []
-    assert dictionary["manager"] == []
+    assert dictionary["manager"] == {}
 
 
 def test_metadata_sections_are_read_in_both_spellings(tmp_path):
     """The sources are bilingual: a structure whose section is written `Fields` describes the
-    same type as one written `Поля`, and a field may name itself `Name`.
+    same type as one written in Russian, and a field may name itself `Name`.
 
-    The object's own `Имя` is still read in Russian only - a gap of the indexer as a whole
+    The object's own name is still read in Russian only - a gap of the indexer as a whole
     (the sections of a catalog are Russian-only there too), not of this section reader.
     """
     (tmp_path / "Данные.yaml").write_text("\n".join([

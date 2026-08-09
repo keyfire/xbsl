@@ -51,8 +51,8 @@ Which types are literal cannot be derived from the data – checked in all three
 schema describes components only, `stdlib.json` keeps a flat name list, and the metamodel has no
 such flag (it does hold `AbsoluteFontModel`, but nothing marking it literal). So the set is an
 explicit list of types proven by the compiler, extended as new ones are proven. Judging by "not
-a component" instead would be wrong: `ОбычнаяКоманда`, `ЗаголовокСекции` and project components
-are not in the schema either, and bindings inside them are legal and common. Inside the two
+a component" instead would be wrong: `UsualCommand` and the project's own components are not in
+the schema either, and bindings inside them are legal and common. Inside the two
 listed types a binding does not occur – the rule guards a convention the code already follows.
 
 The yaml/bare-object-value rule. A property whose type union includes `Объект` (`Значение` of a

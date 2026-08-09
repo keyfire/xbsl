@@ -434,7 +434,7 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 # a data-kind manager module / common module: the yaml fields plus the manager members
                 extras = set(pair["sections"])
                 extras |= set(object_members.get(kind, ()))
-                extras |= set(manager_members.get(kind, ()))
+                extras |= set(dataset.manager_member_names(manager_members.get(kind)))
         for line, col, name, sign in fact["cands"]:
             if name in project_names or name in extras:
                 continue

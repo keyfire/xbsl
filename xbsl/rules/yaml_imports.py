@@ -80,8 +80,8 @@ _SUBSYSTEM_FILES = ("Подсистема.yaml", "Subsystem.yaml")
 _PUBLIC_SCOPES = frozenset({"ВПроекте", "Глобально"})
 
 # Yaml keys that name another element. A navigation target is as much a reference as a type
-# position, so both rules below read both keys: `ТипФормы: ПрограммыФормаСписка` reaches into
-# another subsystem exactly the way `Тип: Программы.Ссылка` does.
+# position, so both rules below read both keys: `ТипФормы: ЗадачиФормаСписка` reaches into
+# another subsystem exactly the way `Тип: Задачи.Ссылка` does.
 _REFERENCE_KEYS = ("Тип", "ТипФормы")
 
 

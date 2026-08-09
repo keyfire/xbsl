@@ -2,10 +2,10 @@
 
 The yaml/enum-needs-nullable rule: a `Тип` value naming a project enumeration without the
 nullable marker – an object attribute, a tabular-section attribute, a component property or
-a parameter `Тип: ВидПолезного`, or an input field `Тип: ПолеВвода<ВидПолезного>` – does not
+a parameter `Тип: ВидОплаты`, or an input field `Тип: ПолеВвода<ВидОплаты>` – does not
 compile on the server: an enumeration has no implicit default value, so the platform demands
-one ('...cannot be initialized with a default value'; the fix is `ВидПолезного?` /
-`ПолеВвода<ВидПолезного?>`).
+one ('...cannot be initialized with a default value'; the fix is `ВидОплаты?` /
+`ПолеВвода<ВидОплаты?>`).
 
 Legal non-nullable forms (per the platform docs) are skipped:
 - an enumeration where one of `Элементы` carries `ПоУмолчанию: Истина` has a default value
@@ -17,14 +17,14 @@ Legal non-nullable forms (per the platform docs) are skipped:
   positive);
 - a TYPED VALUE - a `Значение` node holding `Тип` plus its own `Значение` - names the type of
   a literal, not an attribute declaration, and the compiler rejects a nullable spelling there
-  ('Недопустимый синтаксис типа СтатусПриложения?'). The shape is the platform's own: filter
+  ('Недопустимый синтаксис типа СтатусЗаказа?'). The shape is the platform's own: filter
   element values, dynamic-list parameters and table arguments are all written as
   `Значение: {Тип: Число, Значение: 110}` (topics/dynamic-list), and `ЭлементФильтра.Значение`
   is typed `Объект?` in the ui schema.
 
 Narrowing (deliberate, to keep the zero-false-positive bar): only the two exact shapes are
 flagged – a value that is the bare enumeration name, and `ПолеВвода<Имя>` with the bare name
-as the only argument. Unions (`ВидПолезного|Строка`), other generics (`Массив<ВидПолезного>`)
+as the only argument. Unions (`ВидОплаты|Строка`), other generics (`Массив<ВидОплаты>`)
 and qualified names are left alone – whether the compiler demands a default there is not
 certain. Only yaml files with `ВидЭлемента` are checked; the values are taken from the parsed
 yaml tree, so a `Тип: ...` line inside a literal block scalar cannot false-match. The rule is

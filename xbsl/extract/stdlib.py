@@ -49,7 +49,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from xbsl.dataset import MEMBER_KINDS
+from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER
 from xbsl.extract import _distro
 from xbsl.extract.terms import scan_kind_table
 
@@ -98,13 +98,12 @@ _FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁ
 # Hand-written because the rule below cannot derive them; every entry says what it is.
 #
 # ComponentName - the kind is spelled InterfaceComponent in the enum, so the rule misses it;
-# Computable/GrantableAccessKey - the two flavours of КлючДоступа, which is one kind in yaml
-# (ВидЭлемента: КлючДоступа, the flavour is a property), so their generated types are its own;
-# NonPeriodicConstantsSet - likewise a flavour of НаборКонстант (the `Периодичность` property),
-# documented apart in 9.2.8+11 ("{ИмяНеПериодическогоНабораКонстант}.ОткрытьОбъект") and merged
-# into the constants set page in 10.0.1;
-# Form/ObjectForm/PopupComponent - bases of an interface component (`Наследует: Тип: Форма`),
-# not kinds: an element of such a page is a КомпонентИнтерфейса, and the members of the base
+# Computable/GrantableAccessKey - the two flavours of AccessKey, which is one kind in yaml
+# (ElementKind: AccessKey, the flavour is a property), so their generated types are its own;
+# NonPeriodicConstantsSet - likewise a flavour of ConstantsSet (the periodicity property),
+# documented apart in 9.2.8+11 and merged into the constants set page in 10.0.1;
+# Form/ObjectForm/PopupComponent - bases of an interface component (`Inherits: Type: Form`),
+# not kinds: an element of such a page is an InterfaceComponent, and the members of the base
 # are component properties, extracted from the component pages instead.
 _TEMPLATE_KIND_EXCEPTIONS = {
     "ComponentName": "КомпонентИнтерфейса",
@@ -120,14 +119,14 @@ _TEMPLATE_KIND_EXCEPTIONS = {
 def _template_kinds(car: zipfile.ZipFile) -> tuple[dict[str, str], list[str]]:
     """({English template name: Russian kind}, template names that name no kind).
 
-    The template directory of a kind is its ENGLISH name plus `Name`
-    (`ConstantsSetName` -> ConstantsSet -> НаборКонстант), and the kind pairs come from the
-    serializer's own kind enum - the same source the term dictionary reads, so a kind added by
-    a new build is picked up instead of waiting for someone to notice. The map used to be
-    hand-written and covered 13 of the 36 template directories: the members of the remaining
-    kinds (НаборКонстант with `Получить`, ГлобальноеКлиентскоеСобытие with `Оповестить`,
-    ХранилищеНастроек) were absent from the data altogether, and the editor answered a dot after
-    such an object with a generic safety net that did not contain the method being typed.
+    The template directory of a kind is its ENGLISH name plus `Name` (`ConstantsSetName` ->
+    ConstantsSet), and the kind pairs come from the serializer's own kind enum - the same source
+    the term dictionary reads, so a kind added by a new build is picked up instead of waiting for
+    someone to notice. The map used to be hand-written and covered 13 of the 36 template
+    directories: the members of the remaining kinds (ConstantsSet with `Get`, GlobalClientEvent
+    with `Notify`, SettingsStorage) were absent from the data altogether, and the editor answered
+    a dot after such an object with a generic safety net that did not contain the method being
+    typed.
 
     The kind table is read from the distribution rather than from terms.json: the stdlib step
     runs BEFORE the terms step, so the ready file is not there to read.
@@ -427,6 +426,33 @@ def page_member_types(raw: str) -> dict[str, str]:
     return out
 
 
+#: The placeholder a template page writes where the object's own name goes - the page prints it
+#: inside braces, as in `{ConstantsSetName}.Record` or `ObjectForm<{CatalogName}.Object, unknown>`.
+_TEMPLATE_PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
+#: What the placeholder is replaced with while the ordinary signature parser reads the page, and
+#: what is replaced back with `{}` afterwards. Underscores are the point: no platform type name
+#: carries them, so the stand-in cannot be mistaken for a real name of the same signature.
+_PLACEHOLDER_STANDIN = "Project_Element_Name"
+
+
+def manager_member_types(raw: str) -> dict[str, str]:
+    """Manager member -> its result type, with the object's own name left as `{}`.
+
+    The result type of a manager method is what types a chain over a project object: `Get()` of
+    a constants set answers a `{ConstantsSetName}.Record`, `FindByCode(...)` of a catalog a
+    `{CatalogName}.Reference?`. The ordinary parser (page_member_types) drops exactly these: a
+    return type opening with `{` matches no identifier, so the members that matter most for a
+    project object were the ones it could not read. The placeholder is swapped for an
+    identifier-shaped stand-in before parsing and put back as `{}` after, so the tested parser
+    is reused as it is.
+    """
+    stand_in = _TEMPLATE_PLACEHOLDER_RE.sub(_PLACEHOLDER_STANDIN, raw)
+    return {
+        member: spelling.replace(_PLACEHOLDER_STANDIN, PLACEHOLDER)
+        for member, spelling in page_member_types(stand_in).items()
+    }
+
+
 #: A comma of a parameter list that the documentation prints without a space after it.
 _TIGHT_COMMA_RE = re.compile(r",(?=\S)")
 
@@ -574,7 +600,8 @@ def extract(dist: Path) -> tuple:
     globals_: set[str] = set()
     global_env: dict[str, str] = {}
     conflicted_env: set[str] = set()
-    managers: dict[str, set[str]] = {}
+    managers: dict[str, dict[str, set[str]]] = {}
+    manager_returns: dict[str, dict[str, str]] = {}
     facets: dict[str, dict[str, set[str]]] = {}
     returns: dict[str, dict[str, str]] = {}
     signatures: dict[str, dict[str, list[str]]] = {}
@@ -672,7 +699,12 @@ def extract(dist: Path) -> tuple:
                 if props or methods:
                     # A manager has no events; nothing is dropped silently - the pages of the
                     # kinds carry none, and an event there would show up in the diff.
-                    managers.setdefault(kind, set()).update(props | methods)
+                    slot = managers.setdefault(kind, _empty_member_slot())
+                    slot["properties"] |= props
+                    slot["methods"] |= methods
+                rets = manager_member_types(raw)
+                if rets:
+                    manager_returns.setdefault(kind, {}).update(rets)
                 continue
             raw = z.read(n).decode("utf-8", "replace")
             mt = _TITLE_RE.search(raw)
@@ -685,8 +717,8 @@ def extract(dist: Path) -> tuple:
     names |= TOPIC_ONLY_TYPES
     for member in conflicted_env:
         global_env.pop(member, None)
-    return (names, members, components, types, globals_, global_env, managers, facets,
-            returns, signatures, bases, ctors)
+    return (names, members, components, types, globals_, global_env, managers, manager_returns,
+            facets, returns, signatures, bases, ctors)
 
 
 def _empty_member_slot() -> dict[str, set[str]]:
@@ -759,8 +791,8 @@ def main(argv=None) -> int:
         raise SystemExit(f"Каталог дистрибутива не найден: {dist}")
 
     version = _distro.detect_version(dist, args.element_version)
-    (names, members, components, types, globals_, global_env, managers, facets, returns,
-     signatures, bases, ctors) = extract(dist)
+    (names, members, components, types, globals_, global_env, managers, manager_returns,
+     facets, returns, signatures, bases, ctors) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -796,8 +828,17 @@ def main(argv=None) -> int:
         # its package page): Клиент / Сервер / КлиентИСервер. A name whose availability the
         # docs do not print, or print differently in two packages, is absent here.
         "global_availability": dict(sorted(global_env.items())),
-        # Kind manager methods (the <Kind>Name_ru template page): bare names in the manager module.
-        "manager_members": {k: sorted(v) for k, v in sorted(managers.items())},
+        # Members of the kind's singleton type (the <Kind>Name_ru template page): bare names in
+        # the manager module, and what may follow the dot after a project object of that kind.
+        # Properties and methods apart, like type_members - a completion list inserts the
+        # parentheses of a method and must not invent them for a property.
+        "manager_members": {k: _members_json(v) for k, v in sorted(managers.items())},
+        # Result types of those members, with the object's own name left as `{}`: the catalogue
+        # of member types is keyed by TYPE name and can say nothing about a project object, so
+        # without this a variable initialized by a `Get()` of a constants set stays untyped.
+        "manager_member_types": {
+            k: dict(sorted(v.items())) for k, v in sorted(manager_returns.items()) if v
+        },
         # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record and
         # reference members that do not land on the type's own page.
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
@@ -830,7 +871,8 @@ def main(argv=None) -> int:
     print(f"  компонентов интерфейса со свойствами: {len(components)}")
     print(f"  глобальных имён контекста: {len(globals_)}"
           f" (с доступностью: {len(global_env)})")
-    print(f"  видов с членами менеджера: {len(managers)}")
+    print(f"  видов с членами менеджера: {len(managers)}"
+          f" (с типами результата: {sum(1 for v in manager_returns.values() if v)})")
     print(f"  типов с членами: {len(types)}"
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
           f" с методами {sum(1 for v in types.values() if v['methods'])})")
