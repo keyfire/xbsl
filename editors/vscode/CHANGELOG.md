@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.54.0
+
+### Changed
+- **The rule counter in the "Code" group description caught up with the registry:** engine
+  0.59.0 brought `code/unknown-structure-field` (a field of a project structure checked
+  against its declaration), so the group now holds 29 rules at error rather than 28. The
+  setting and the behaviour are unchanged - only the description the user reads had drifted.
+
 ## 0.53.0
 
 ### Added
