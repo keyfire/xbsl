@@ -211,6 +211,20 @@ def _object_members() -> dict[str, frozenset[str]]:
     return {k: frozenset(v) for k, v in raw.items() if isinstance(v, list)}
 
 
+@lru_cache(maxsize=1)
+def _manager_members() -> dict[str, frozenset[str]]:
+    """Per-kind methods of the kind's SINGLETON type from the versioned catalog ({} when absent).
+
+    `Программы.НайтиПоКоду(...)`, `НастройкиСайта.Получить()`, `СобытиеСайта.Оповестить(...)` -
+    what may follow the dot after the name of a project object, next to the types it generates.
+    """
+    try:
+        raw = dataset.load_json("stdlib.json").get("manager_members") or {}
+    except (dataset.DatasetError, KeyError, ValueError):
+        return {}
+    return {k: frozenset(v) for k, v in raw.items() if isinstance(v, list)}
+
+
 def _checked_kinds() -> frozenset[str]:
     return _BASE_CHECKED_KINDS | frozenset(_object_members())
 
@@ -220,8 +234,25 @@ def _member_family(kind: str) -> frozenset[str]:
 
     Both the Russian names (catalog + _MEMBER_TYPE_TAILS) and their English aliases
     (_MEMBER_TYPE_TAILS_EN) count as known - platform identifiers are bilingual.
+
+    This is what the rules JUDGE by, where a name too many is a tolerated false negative and a
+    name too few is a false positive. What an editor OFFERS is a different question - see
+    _offered_member_family.
     """
     return _object_members().get(kind, frozenset()) | _MEMBER_TYPE_TAILS | _MEMBER_TYPE_TAILS_EN
+
+
+def _offered_member_family(kind: str) -> frozenset[str]:
+    """Generated types of the kind as an editor may OFFER them: the catalogue alone.
+
+    Judging and offering pull in opposite directions. A member check errs on the generous side,
+    so it unions in the safety net above; a completion list reads as a statement about the type,
+    and the net is a union across ALL kinds - offered after an object whose kind the catalogue
+    does not know, it named АвтоматическаяФормаЗаписи, КлючЗаписи, НаборЗаписей for a common
+    module, and the method actually being typed was in none of them. An empty list is the honest
+    answer there: the editor falls back to its own word completion instead of inventing names.
+    """
+    return _object_members().get(kind, frozenset())
 
 
 def _row_type_names(node) -> set[str]:

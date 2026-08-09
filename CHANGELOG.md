@@ -15,6 +15,22 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1
 
 ### Added
+- **The members of the kinds' singleton types reached the data: 12 kinds of 41 became 31.** The
+  map from a documentation template directory to an element kind was a HAND-WRITTEN table of 13
+  rows while the docs carry 36 template directories: kinds outside the table had no members at
+  all, and after the dot the editor answered with a generic safety net that did not contain the
+  method being typed (`SiteSettings.Get`, `SiteEvent.Notify`). The kind is now derived by the
+  rule "English kind name plus `Name`", and the pairs come from the serializer's own kind enum
+  (`ProjectElementKindCmptEnum`) - the way the metamodel's kind dictionary does it, and from the
+  distribution rather than from a ready `terms.json`: the stdlib step runs before the terms step.
+  Six directories stay hand-written because the rule names no kind for them (`ComponentName` -
+  the kind is spelled `InterfaceComponent`; the access-key and non-periodic-constants-set
+  flavours - one kind with a property; `FormName`, `ObjectFormName`, `PopupComponentName` -
+  bases of an interface component, not kinds); a template left without a kind is printed as a
+  warning instead of vanishing. In the data: kinds with manager members 31 (was 12), kinds with
+  generated types 18 (was 12); every other section of both versions matched byte for byte. On
+  four corpora (the site, both demos, `1c-plus-frontend`) the findings did not change: 5/5/5
+  and 319.
 - **`code/unknown-structure-field` - a field of a project structure is checked against its
   declaration.** The compiler knows the shape of every structure declared in the project; the linter
   did not, because the member rules judge the stdlib catalogue and skip project types. A renamed
@@ -49,6 +65,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   silent on a project whose descriptor lists fewer than two localization languages.
 
 ### Changed
+- **The dot completion offers what the catalogue knows, not the safety net.** The members a kind
+  generates came from the catalogue UNIONED with a 16-name safety net (AutomaticRecordForm,
+  RecordKey, RecordSet...). The rules need it - there a name too many is a tolerated miss and a
+  name too few is a false positive - but a completion list reads as a statement about the type:
+  after a common module, which generates no types at all, the same borrowed list was offered.
+  Judging and offering are now separate: the rules still judge by the union
+  (`_member_family`), the index offers only what the catalogue knows about that kind
+  (`_offered_member_family`), and for a kind it does not know the list is empty - the editor
+  falls back to its own word completion instead of inventing names. One name left the catalog
+  hint, `FillParameters`: no documentation page names it as a generated type.
 - **`code/unused-method` judges the public API of common modules.** The rule silenced a method with
   ANY annotation, and a public method of a common module always carries one - so the check was
   silent exactly where dead code piles up. Now only the annotations that name a caller OUTSIDE the

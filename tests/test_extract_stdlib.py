@@ -328,3 +328,70 @@ def test_own_members_strips_inherited_signatures():
     )
     assert own_sigs["Наследник"] == {"Свой": ["Свой(Имя: Строка)"]}
     assert own_sigs["База"] == {"Общий": ["Общий(): Строка"]}
+
+
+# --- template directories -> element kinds (_template_kinds) --------------------------------
+
+_KIND_TABLE = {
+    "Справочник": "Catalog",
+    "НаборКонстант": "ConstantsSet",
+    "КонтрактСущности": "EntityContract",
+    "КомпонентИнтерфейса": "InterfaceComponent",
+}
+
+
+def _template_car(tmp_path, *dirs: str):
+    """A car carrying the given template directories (one index.html each)."""
+    import zipfile
+
+    car = tmp_path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        for d in dirs:
+            z.writestr(_MODULE.TEMPLATE_BASE + d + "/index.html", "<html></html>")
+    return zipfile.ZipFile(car)
+
+
+def test_template_kinds_derived_from_the_serializer_table(tmp_path, monkeypatch):
+    """The template directory of a kind is its ENGLISH name plus `Name` - so a kind the docs
+    describe is picked up without anyone adding a line to a hand-written map."""
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    with _template_car(tmp_path, "CatalogName_ru", "ConstantsSetName_ru") as car:
+        kinds, unmapped = _MODULE._template_kinds(car)
+
+    assert kinds == {"CatalogName": "Справочник", "ConstantsSetName": "НаборКонстант"}
+    assert unmapped == []
+
+
+def test_template_kinds_sees_a_kind_that_has_no_page_of_its_own(tmp_path, monkeypatch):
+    """EntityContract in 9.2.8+11 has only the pages of the types it generates. Collecting the
+    own pages alone dropped the kind - and with it the members it used to have."""
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    with _template_car(
+        tmp_path, "EntityContractName.Object_ru", "EntityContractName.Reference_ru",
+    ) as car:
+        kinds, unmapped = _MODULE._template_kinds(car)
+
+    assert kinds == {"EntityContractName": "КонтрактСущности"}
+    assert unmapped == []
+
+
+def test_template_kinds_names_a_template_it_cannot_map(tmp_path, monkeypatch):
+    """A template that names no kind is REPORTED, not swallowed: it is either a kind of a new
+    build or a page describing no kind, and only a human tells the two apart."""
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    with _template_car(tmp_path, "CatalogName_ru", "SomethingNewName_ru") as car:
+        kinds, unmapped = _MODULE._template_kinds(car)
+
+    assert "SomethingNewName" not in kinds
+    assert unmapped == ["SomethingNewName"]
+
+
+def test_template_kinds_exceptions_win_over_the_rule(tmp_path, monkeypatch):
+    """The hand-written exceptions: a kind the rule spells differently, and pages that name
+    no kind at all (a base of an interface component) - neither is reported as unmapped."""
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    with _template_car(tmp_path, "ComponentName_ru", "FormName_ru") as car:
+        kinds, unmapped = _MODULE._template_kinds(car)
+
+    assert kinds == {"ComponentName": "КомпонентИнтерфейса"}
+    assert unmapped == []

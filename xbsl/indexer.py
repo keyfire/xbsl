@@ -10,8 +10,8 @@ The index shape is frozen (fields may be added but not renamed):
     meta       - {root: absolute path in POSIX form, version: linter version};
     objects    - yaml elements with ВидЭлемента: name/kind/path/line, tabular sections,
                  local types of the object's modules (`<Имя>.xbsl`, `<Имя>.<Часть>.xbsl`),
-                 the member family for dot completion, enumeration values
-                 (Перечисление only);
+                 the member family and the singleton-type methods (`manager`) for dot
+                 completion, enumeration values (Перечисление only);
     methods    - method and constructor declarations of all modules, annotations without `@`,
                  the parameter list as written, the return type head and the description
                  comment above the declaration;
@@ -47,7 +47,12 @@ from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules._syntax import _skip_balanced, _type_head, code_tokens, signatures
-from xbsl.rules.semantics import _file_local_type_decls, _member_family, _row_type_names
+from xbsl.rules.semantics import (
+    _file_local_type_decls,
+    _manager_members,
+    _offered_member_family,
+    _row_type_names,
+)
 from xbsl.rules.yaml_schema import _HAVE_YAML, _NAME_LINE_RE, _parsed, object_kind, value_of
 
 
@@ -594,13 +599,20 @@ def build_index(root: Path) -> dict:
                 "resources": _named_items(s, data, "Ресурсы"),
                 "local_types": local_types.get(name, []),
             }
+            # What an editor OFFERS after the object name: the types the kind generates as the
+            # catalogue knows them - not the safety net the member rules judge by. See
+            # semantics._offered_member_family for why the two lists differ.
             entry["family"] = sorted(
-                set(_member_family(kind))
+                set(_offered_member_family(kind))
                 | {t["name"] for t in entry["tabular"]}
                 | {t["name"] for t in entry["local_types"]}
                 # the row type a dynamic list names for itself (ИмяТипаДанныхСтроки)
                 | _row_type_names(data)
             )
+            # Members of the kind's singleton type: `Получить` of a constants set, `Оповестить`
+            # of a global client event, `НайтиПоКоду` of a catalog. The catalogue keeps a
+            # manager's properties and methods in one list, so the index does the same.
+            entry["manager"] = sorted(_manager_members().get(kind, ()))
             if kind == "Перечисление":
                 entry["values"] = _named_items(s, data, "Элементы")
             if kind in _METADATA_MEMBER_SECTIONS:

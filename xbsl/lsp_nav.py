@@ -365,6 +365,13 @@ def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict
         else:
             for f in obj.get("family", []):
                 entries.append({"label": str(f), "kind": "family", "detail": "тип"})
+            # Members of the kind's singleton type: what the code writes on the object name
+            # itself (`НастройкиСайта.Получить()`), next to the types the object generates.
+            # No parentheses snippet: the catalogue keeps a manager's properties and methods in
+            # one list (`Видимость` of a command sits next to `Выполнить`), and a snippet would
+            # have to guess which of the two a name is.
+            for m in obj.get("manager", []):
+                entries.append({"label": str(m), "kind": "method", "detail": "член вида"})
             for t in obj.get("tabular", []):
                 entries.append({"label": t.get("name", ""), "kind": "tabular", "detail": "табличная часть"})
             for t in obj.get("local_types", []):

@@ -776,6 +776,29 @@ def test_completion_yaml_struct_fields():
     assert [e["label"] for e in entries] == ["Идентификатор"]
 
 
+def test_completion_offers_manager_members_of_the_object():
+    # after the object name: the types it generates AND the members of the kind's singleton
+    idx = dict(INDEX)
+    idx["objects"] = list(INDEX["objects"]) + [{
+        "name": "НастройкиСайта", "kind": "НаборКонстант",
+        "path": "Основное/НастройкиСайта.yaml", "line": 3,
+        "tabular": [], "local_types": [], "family": ["Данные", "Запись"],
+        "manager": ["Заблокировать", "Получить"],
+    }]
+    lookup = IndexLookup(idx)
+    entries = resolve_completions(
+        lookup, language_id="xbsl", line_prefix="    знч Н = НастройкиСайта.",
+        file_stem="Модуль",
+    )
+
+    assert [(e["label"], e["detail"]) for e in entries] == [
+        ("Данные", "тип"), ("Запись", "тип"),
+        ("Заблокировать", "член вида"), ("Получить", "член вида"),
+    ]
+    # No parentheses snippet: the catalogue keeps a manager's properties and methods together.
+    assert all("snippet" not in e for e in entries)
+
+
 def test_completion_constants_set_record():
     # `знч Запись = НастройкиСайта.Получить()` - the generated method types the chain, and
     # the constants of the set are its members

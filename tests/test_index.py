@@ -455,6 +455,31 @@ def test_generated_returns_type_the_constants_set_call(project):
     }
 
 
+def test_manager_members_of_the_kind_are_indexed(project):
+    """`НастройкиПриложения.Получить()` is written on the object NAME: without the members of
+    the kind's singleton type the dot after it offered types only, never the method."""
+    idx = build_index(project)
+    constants = next(o for o in idx["objects"] if o["name"] == "НастройкиПриложения")
+    catalog = next(o for o in idx["objects"] if o["name"] == "Товары")
+
+    assert "Получить" in constants["manager"]
+    assert "НайтиПоКоду" in catalog["manager"]
+
+
+def test_family_offers_the_catalogue_not_the_safety_net(project):
+    """What is OFFERED is the catalogue alone. The safety net the member rules judge by is a
+    union across all kinds - offered, it names types the kind does not generate."""
+    idx = build_index(project)
+    catalog = next(o for o in idx["objects"] if o["name"] == "Товары")
+    dictionary = next(o for o in idx["objects"] if o["name"] == "Словарь")
+
+    assert "Ссылка" in catalog["family"]           # the catalogue knows the kind
+    assert "ПараметрыЗаполнения" not in catalog["family"]  # net-only, no page names it
+    # A kind that generates no types at all: an empty list, not somebody else's names.
+    assert dictionary["family"] == []
+    assert dictionary["manager"] == []
+
+
 def test_metadata_sections_are_read_in_both_spellings(tmp_path):
     """The sources are bilingual: a structure whose section is written `Fields` describes the
     same type as one written `Поля`, and a field may name itself `Name`.
