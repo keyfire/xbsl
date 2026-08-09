@@ -33,6 +33,7 @@ and the reduce joins them.
 
 from __future__ import annotations
 
+import dataclasses
 import difflib
 import re
 from collections.abc import Iterable
@@ -120,11 +121,17 @@ def _declared_types(nodes: Iterable, module_level: bool = False) -> tuple[dict, 
 
 
 def _walk(node, out: list) -> None:
-    """Every node of a subtree (the rules need the shape, not a typed visitor)."""
+    """Every node of a subtree (the rules need the shape, not a typed visitor).
+
+    The children are taken through `dataclasses.fields`, NOT through `vars()`: in the native
+    build the AST classes are compiled by mypyc and carry no `__dict__` at all, so `vars()`
+    raises TypeError - the rule then crashes on every module, and only in the released wheel.
+    The field list lives on the class and survives compilation.
+    """
     if isinstance(node, P.Node):
         out.append(node)
-        for value in vars(node).values():
-            _walk(value, out)
+        for field in dataclasses.fields(node):
+            _walk(getattr(node, field.name), out)
     elif isinstance(node, list):
         for item in node:
             _walk(item, out)

@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-09 – 0.58.0, 0.59.0
+## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1
 
 ### Added
 - **`code/unknown-structure-field` - a field of a project structure is checked against its
@@ -82,6 +82,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   confirmed ones, so `code/undefined-name` no longer stays silent on code that cannot compile.
 
 ### Fixed
+- **`code/unknown-structure-field` crashed in the RELEASED wheel** (0.59.0): the tree walk read
+  node fields through `vars()`, and in the native build the parser classes are compiled by
+  mypyc and carry no instance dictionary at all - the rule took itself down on every module of
+  a project. A pure-Python run cannot see this, so the local suites were green; the end-to-end
+  check of the published package on a live project caught it. The fields now come from the
+  dataclass declaration, as in the sibling rule where the same trap is documented from the
+  previous time. A guard was added: a rule that reads a node through `vars()` fails the tests.
 - The baseline summary line promises ENTRIES but printed the number of unspent suppressions - one
   entry may hold several. The former number stays in the json as `baseline_unused`.
 
