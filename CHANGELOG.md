@@ -15,36 +15,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
 
 ### Added
-- **A `.xbql` query file became a language: highlighting and completion.** The paired file of a
-  virtual table is a query from end to end, and the editor showed it as plain text: the
-  extension declared no language for that extension, there was no grammar of the query language
-  at all (a `Query{...}` block inside a module went unhighlighted too), and the LSP client
-  subscribed to `xbsl` and yaml only. The grammar is now built from the platform's own
-  vocabulary - 154 spellings from the compiler's keyword table and from the documentation page
-  "Query text syntax", which complete each other: the table knows the multi-word forms
-  (`GROUP BY`), the page knows the literals (`TRUE`, `FALSE`, `UNDEFINED`), the two English
-  words with no Russian pair (`NULL`, `TEMP`) and the right spelling of `FOR` (where the table
-  answers with the name of an internal constant). The same vocabulary highlights a `Query{...}`
-  block in a module; the nested braces are balanced, so a typed literal like `Uuid{}` no longer
-  cuts the block short. On the engine side the WHOLE file counts as the query: completion after
-  a table alias answers with its fields exactly as it does inside a block. No rule is run over
-  such a file - its diagnostics are empty, or the module rules would paint a query red from end
-  to end.
-- **The variable of a `for X in Collection` loop is typed.** An everyday shape, and X used to
-  stay untyped: the collection is usually a field of a project structure, and the index kept
-  the NAMES of the fields only. A structure - declared in a module or described in metadata -
-  now carries the type of every field AS WRITTEN, the generic parameter included (the nominal
-  head has already lost the element), those field types join the same member-type catalogue as
-  method returns, and the element is taken out of a single-argument generic. A collection with
-  two arguments names no element type, and there completion stays silent, as before.
-
-### Fixed
-- **Completion at the very start of a session knew no project objects.** The completion handler
-  took the index only if the background pass had already built it, and until then answered with
-  the code templates alone - the same hole 0.57.2 closed for navigation. A request that arrives
-  earlier now builds the index itself.
-
-### Added
 - **The members of the kinds' singleton types reached the data: 12 kinds of 41 became 31.** The
   map from a documentation template directory to an element kind was a HAND-WRITTEN table of 13
   rows while the docs carry 36 template directories: kinds outside the table had no members at
@@ -60,8 +30,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   bases of an interface component, not kinds); a template left without a kind is printed as a
   warning instead of vanishing. In the data: kinds with manager members 31 (was 12), kinds with
   generated types 18 (was 12); every other section of both versions matched byte for byte. On
-  four corpora (the site, both demos, `1c-plus-frontend`) the findings did not change: 5/5/5
-  and 319.
+  four corpora the findings did not change.
 - **A call of a kind's method is typed from the documentation, not from a built-in row.** The
   template pages print whole signatures, but the ordinary result-type parser lost exactly these:
   a type opening with a placeholder (`{ConstantsSetName}.Record`) matches no identifier, so the
@@ -108,6 +77,28 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   a dictionary value, the message names the key whose translation is already written. Off by
   default (a project may legitimately build prose in code - seeding data, layout constants) and
   silent on a project whose descriptor lists fewer than two localization languages.
+- **A `.xbql` query file became a language: highlighting and completion.** The paired file of a
+  virtual table is a query from end to end, and the editor showed it as plain text: the
+  extension declared no language for that extension, there was no grammar of the query language
+  at all (a `Query{...}` block inside a module went unhighlighted too), and the LSP client
+  subscribed to `xbsl` and yaml only. The grammar is now built from the platform's own
+  vocabulary - 154 spellings from the compiler's keyword table and from the documentation page
+  "Query text syntax", which complete each other: the table knows the multi-word forms
+  (`GROUP BY`), the page knows the literals (`TRUE`, `FALSE`, `UNDEFINED`), the two English
+  words with no Russian pair (`NULL`, `TEMP`) and the right spelling of `FOR` (where the table
+  answers with the name of an internal constant). The same vocabulary highlights a `Query{...}`
+  block in a module; the nested braces are balanced, so a typed literal like `Uuid{}` no longer
+  cuts the block short. On the engine side the WHOLE file counts as the query: completion after
+  a table alias answers with its fields exactly as it does inside a block. No rule is run over
+  such a file - its diagnostics are empty, or the module rules would paint a query red from end
+  to end.
+- **The variable of a `for X in Collection` loop is typed.** An everyday shape, and X used to
+  stay untyped: the collection is usually a field of a project structure, and the index kept
+  the NAMES of the fields only. A structure - declared in a module or described in metadata -
+  now carries the type of every field AS WRITTEN, the generic parameter included (the nominal
+  head has already lost the element), those field types join the same member-type catalogue as
+  method returns, and the element is taken out of a single-argument generic. A collection with
+  two arguments names no element type, and there completion stays silent, as before.
 
 ### Changed
 - **The dot completion offers what the catalogue knows, not the safety net.** The members a kind
@@ -177,6 +168,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   previous time. A guard was added: a rule that reads a node through `vars()` fails the tests.
 - The baseline summary line promises ENTRIES but printed the number of unspent suppressions - one
   entry may hold several. The former number stays in the json as `baseline_unused`.
+- **Completion at the very start of a session knew no project objects.** The completion handler
+  took the index only if the background pass had already built it, and until then answered with
+  the code templates alone - the same hole 0.57.2 closed for navigation. A request that arrives
+  earlier now builds the index itself.
 
 ## 2026-08-08 – 0.57.2
 
