@@ -20,6 +20,7 @@
   "view.docs": "Документация",
   "cmd.metadata.refresh": "XBSL: обновить дерево метаданных",
   "cmd.metadata.openYaml": "Открыть описание (yaml)",
+  "cmd.metadata.openQuery": "Открыть запрос (xbql)",
   "cmd.metadata.openModule": "Открыть модуль (xbsl)",
   "cmd.metadata.openObjectModule": "Открыть модуль объекта (.Объект.xbsl)",
   "cmd.metadata.previewForm": "Открыть в конструкторе",

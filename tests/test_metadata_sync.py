@@ -404,3 +404,35 @@ def test_extension_kind_table_matches_the_platform_dictionary():
         if (terms.english(kind, "types") or terms.common_english(kind)) != english
     }
     assert not wrong, f"английские написания видов разошлись со словарём платформы: {wrong}"
+
+
+def test_every_tree_menu_command_is_registered_and_titled():
+    """A context-menu command of the metadata tree must exist on all three sides.
+
+    The menu entry lives in package.json and the caption in both package.nls files. Miss one and
+    the user sees either a menu item that no command backs or a raw `%cmd...%` key instead of a
+    caption. The handler is NOT checked here: the per-kind "Add ..." commands are registered in a
+    loop, so a name-by-name search would only produce noise.
+    """
+    import json
+
+    ext = ROOT / "editors" / "vscode"
+    manifest = json.loads((ext / "package.json").read_text(encoding="utf-8"))
+    titles = {
+        lang: json.loads((ext / name).read_text(encoding="utf-8"))
+        for lang, name in (("en", "package.nls.json"), ("ru", "package.nls.ru.json"))
+    }
+    declared = {c["command"]: c["title"] for c in manifest["contributes"]["commands"]}
+    problems = []
+    for entry in manifest["contributes"]["menus"].get("view/item/context", []):
+        command = entry["command"]
+        if not command.startswith("xbsl.metadata."):
+            continue
+        if command not in declared:
+            problems.append(f"{command}: нет в contributes.commands")
+            continue
+        key = declared[command].strip("%")
+        for lang, table in titles.items():
+            if key not in table:
+                problems.append(f"{command}: нет подписи [{lang}] для ключа {key}")
+    assert not problems, "команды меню дерева рассогласованы: " + "; ".join(problems)

@@ -339,6 +339,7 @@ interface Element {
   yamlPath: string;
   modulePath?: string;
   objectModulePath?: string;
+  queryPath?: string; // VirtualTable: the paired `.xbql` query
   ownerType?: string;
   text: string;
   translations?: Translation[]; // LocalizedStrings: the files of the Localization section
@@ -405,13 +406,21 @@ interface Model {
 async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => string): Promise<Model> {
   const yamlPaths: string[] = [];
   const xbslPaths: string[] = [];
+  // A VirtualTable has no module: its paired file is a `.xbql` query, and the platform requires
+  // that file to exist and to hold a query. Collected next to the modules so that the tree can
+  // open it the same way.
+  const xbqlPaths: string[] = [];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const root = projectRootFor(folder);
-    const [y, x] = await Promise.all([collectFiles(root, "yaml"), collectFiles(root, "xbsl")]);
+    const [y, x, q] = await Promise.all([
+      collectFiles(root, "yaml"), collectFiles(root, "xbsl"), collectFiles(root, "xbql"),
+    ]);
     yamlPaths.push(...y);
     xbslPaths.push(...x);
+    xbqlPaths.push(...q);
   }
   const xbslSet = new Set(xbslPaths.map((p) => p.toLowerCase()));
+  const xbqlSet = new Set(xbqlPaths.map((p) => p.toLowerCase()));
   const seen = new Set<string>();
   const elements: Element[] = [];
   const projects: Project[] = [];
@@ -466,6 +475,7 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     const base = yamlPath.slice(0, -".yaml".length);
     const modulePath = base + ".xbsl";
     const objectModulePath = base + ".Объект.xbsl";
+    const queryPath = base + ".xbql";
     elements.push({
       kind,
       englishKind,
@@ -473,6 +483,7 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
       yamlPath,
       modulePath: xbslSet.has(modulePath.toLowerCase()) ? modulePath : undefined,
       objectModulePath: xbslSet.has(objectModulePath.toLowerCase()) ? objectModulePath : undefined,
+      queryPath: xbqlSet.has(queryPath.toLowerCase()) ? queryPath : undefined,
       ownerType: kind === FORM_KIND ? RE_OWNER_TYPE.exec(text)?.[1]?.split(".")[0] : undefined,
       text,
     });
@@ -516,6 +527,7 @@ class XbslNode extends vscode.TreeItem {
   yamlPath?: string;
   modulePath?: string;
   objectModulePath?: string;
+  queryPath?: string;
   appModulePath?: string;
   offset?: number; // node offset in the yaml - for navigation
   addKind?: string; // group: the ADD_SPECS key for "add"
@@ -918,12 +930,14 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
   node.resourceUri = vscode.Uri.file(el.yamlPath); // git statuses (color/badge), keeping our own icon
   node.modulePath = el.modulePath;
   node.objectModulePath = el.objectModulePath;
+  node.queryPath = el.queryPath;
   node.offset = internals?.rootOffset; // the object root - for the properties panel
   node.children = groups;
   node.contextValue = [
     "element", "yaml", "props", "deletable",
     el.modulePath ? "xbsl" : "",
     el.objectModulePath ? "objmod" : "",
+    el.queryPath ? "xbql" : "",
     // Localized strings get translations right on the element - the "+" mirrors the cloud IDE.
     el.kind === LOCALIZED_STRINGS_KIND ? "addloc" : "",
   ]
@@ -1522,6 +1536,10 @@ async function openWithProps(node?: XbslNode): Promise<void> {
   }
   if (node.codeKind && node.modulePath) {
     await openFile(node.modulePath); // the module on the left
+  } else if (node.queryPath) {
+    // A VirtualTable keeps its substance in the paired `.xbql`: the yaml holds the parameters,
+    // the query is the element itself, so a click opens the query.
+    await openFile(node.queryPath);
   } else if (node.yamlPath) {
     await reveal(node); // the description on the left + cursor on the node (offset)
   }
@@ -2105,6 +2123,7 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.refresh", () => provider.refresh()),
     vscode.commands.registerCommand("xbsl.metadata.openYaml", (n?: XbslNode) => openFile(n?.yamlPath)),
     vscode.commands.registerCommand("xbsl.metadata.openModule", (n?: XbslNode) => openFile(n?.modulePath)),
+    vscode.commands.registerCommand("xbsl.metadata.openQuery", (n?: XbslNode) => openFile(n?.queryPath)),
     vscode.commands.registerCommand("xbsl.metadata.openObjectModule", (n?: XbslNode) => openFile(n?.objectModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.openAppModule", (n?: XbslNode) => openFile(n?.appModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.reveal", (n?: XbslNode) => reveal(n)),

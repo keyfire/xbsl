@@ -139,6 +139,11 @@
         "icon": "$(symbol-property)"
       },
       {
+        "command": "xbsl.metadata.openQuery",
+        "title": "%cmd.metadata.openQuery%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.openModule",
         "title": "%cmd.metadata.openModule%",
         "category": "XBSL",
@@ -858,6 +863,11 @@
           "command": "xbsl.metadata.openObjectModule",
           "when": "view == xbslMetadata && viewItem =~ /\\bobjmod\\b/",
           "group": "1_open@3"
+        },
+        {
+          "command": "xbsl.metadata.openQuery",
+          "when": "view == xbslMetadata && viewItem =~ /\\bxbql\\b/",
+          "group": "1_open@4"
         },
         {
           "command": "xbsl.metadata.previewForm",
