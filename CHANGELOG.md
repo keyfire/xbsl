@@ -12,6 +12,21 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-09 – 0.58.0
+
+### Added
+- **`conventions/untranslated-code-literal` – visible text left as a literal in a MODULE.** The
+  existing `conventions/untranslated-visible-literal` judges yaml alone, so prose written in code
+  was checked by nobody: a message box built from a Russian string, or an event-log property that
+  carries a ready phrase, stays Russian in every other language of the project. The new rule judges
+  not the literal but the SINK it reaches - an argument of the platform's message call, a property
+  of an event-log event constructor, or either of them one step away through a method that forwards
+  its parameter whole. Forwarding is the point rather than a refinement: on the corpus that prompted
+  the rule, seven of the nine findings reached the journal through a wrapper. When the text repeats
+  a dictionary value, the message names the key whose translation is already written. Off by
+  default (a project may legitimately build prose in code - seeding data, layout constants) and
+  silent on a project whose descriptor lists fewer than two localization languages.
+
 ## 2026-08-08 – 0.57.2
 
 ### Fixed
