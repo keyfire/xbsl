@@ -25,20 +25,20 @@ def library(monkeypatch):
     monkeypatch.setattr(resources, "_platform_images", lambda: frozenset({"Настройки.svg"}))
 
 
-def _project(tmp_path, module_text, resource_names=("Своя.svg",)):
+def _project(tmp_path, module_text, resource_names=("Своя.svg",), folder="Ресурсы"):
     root = tmp_path / "acme" / "Проба"
-    (root / "Основное" / "Ресурсы").mkdir(parents=True)
+    (root / "Основное" / folder).mkdir(parents=True)
     (root / "Проект.yaml").write_text(_PROJECT_YAML, encoding="utf-8")
     for name in resource_names:
-        path = root / "Основное" / "Ресурсы" / name  # a name may carry a subfolder
+        path = root / "Основное" / folder / name  # a name may carry a subfolder
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("<svg/>", encoding="utf-8")
     (root / "Основное" / "М.xbsl").write_text(module_text, encoding="utf-8")
     return tmp_path
 
 
-def _run(tmp_path, module_text, select, resource_names=("Своя.svg",)):
-    _project(tmp_path, module_text, resource_names)
+def _run(tmp_path, module_text, select, resource_names=("Своя.svg",), folder="Ресурсы"):
+    _project(tmp_path, module_text, resource_names, folder)
     return engine.run(discover([str(tmp_path)]), select={select})
 
 
@@ -207,3 +207,33 @@ def test_real_image_library_is_read():
     library = resources._platform_images()
     assert len(library) > 100
     assert {"Настройки.svg", "ГалочкаВКруге.svg", "Грузовик.svg"} <= library
+
+
+# --- both spellings of the resources folder ----------------------------------------------
+
+def test_english_resources_folder_resolves(tmp_path, library):
+    """A file under `Resources` is a resource: the platform accepts that name too.
+
+    Probed on the local server with one and the same form: the reference resolves when the
+    file lies in `Resources` (the build succeeds), fails with "Неизвестный ресурс" when the
+    file is missing, and fails the same way when the very same file sits in a folder named
+    anything else - so the name matters and the English one is legal.
+    """
+    d = _run(tmp_path, _method("Ресурс{Своя.svg}.Ссылка"), "code/unknown-resource",
+             folder="Resources")
+    assert not [x for x in d if x.rule_id == "code/unknown-resource"]
+
+
+def test_english_folder_spelled_out_in_the_key_is_reported(tmp_path):
+    # the key is relative to the resources folder, whatever its spelling
+    d = _run(tmp_path, _method("Ресурс{Resources/Своя.svg}.Ссылка"), "code/resource-bare-name",
+             folder="Resources")
+    hits = [x for x in d if x.rule_id == "code/resource-bare-name"]
+    assert len(hits) == 1 and "Своя.svg" in hits[0].message
+
+
+def test_folder_of_another_name_is_not_a_resource_folder(tmp_path, library):
+    # the negative control of the probe: any other name holds no resources
+    d = _run(tmp_path, _method("Ресурс{Своя.svg}.Ссылка"), "code/unknown-resource",
+             folder="Картинки")
+    assert [x for x in d if x.rule_id == "code/unknown-resource"]

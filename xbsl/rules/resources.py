@@ -98,8 +98,13 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-#: The folder name holding the resource files of a subsystem.
-_RESOURCE_DIR = "Ресурсы"
+#: The folder holding the resource files of a subsystem - BOTH spellings. The platform
+#: accepts the English name as readily as the Russian one: probed on the local server with
+#: the same form three times - a file under `Resources` resolves (`ok`), the same reference
+#: with the file missing fails with "Неизвестный ресурс", and the same file moved into a
+#: folder of any other name fails the same way. So the name matters and English is legal;
+#: knowing only the Russian one made an English project look as if it had no resources.
+_RESOURCE_DIRS = ("Ресурсы", "Resources")
 
 #: The prefix of a resource uploaded into the application base (see the module docstring).
 _UPLOADED_PREFIX = "inbase/"
@@ -138,7 +143,7 @@ def resource_bare_name(source: SourceFile) -> Iterable[Diagnostic]:
         # docstring); the one provably broken spelling is the Ресурсы root itself
         # as the first segment - the path from the subsystem root.
         first, _sep, rest = name.replace("\\", "/").partition("/")
-        if first != _RESOURCE_DIR or not rest:
+        if first not in _RESOURCE_DIRS or not rest:
             continue
         yield Diagnostic(
             source.rel, line, col, "code/resource-bare-name", Severity.ERROR,
@@ -174,14 +179,14 @@ def _unknown_resource_mapper(source: SourceFile) -> dict | None:
 
 
 def _project_resources(roots: Iterable[str]) -> set[str]:
-    """Relative POSIX keys of every file under a `Ресурсы` folder of the given roots.
+    """Relative POSIX keys of every file under a resources folder of the given roots.
 
     The key of a resource is its path relative to the subsystem's Ресурсы folder
     (subfolders included); a top-level file's key is its bare name.
     """
     keys: set[str] = set()
     for root in roots:
-        for res_dir in Path(root).rglob(_RESOURCE_DIR):
+        for res_dir in [d for name in _RESOURCE_DIRS for d in Path(root).rglob(name)]:
             if not res_dir.is_dir():
                 continue
             for path in res_dir.rglob("*"):
@@ -209,7 +214,7 @@ def unknown_resource(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             if "\\" in name:
                 continue  # a backslash spelling is unproven - skipped, not judged
             key = name.rsplit("::", 1)[-1].strip()  # Стд::Грузовик.svg -> Грузовик.svg
-            if key.partition("/")[0] == _RESOURCE_DIR:
+            if key.partition("/")[0] in _RESOURCE_DIRS:
                 continue  # the Ресурсы-prefixed spelling - resource-bare-name reports it
             if key in known:
                 continue
