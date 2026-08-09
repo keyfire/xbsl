@@ -310,13 +310,21 @@ def metadata_schema(
         name: list(metamodel.enum_values(name))
         for name in {p.get("enum") for p in props.values() if p.get("enum")}
     }
-    return {
+    answer = {
         "available": True,
         "kind": kind,
         "class": cls,
         "props": props,
         "enums": enums,
     }
+    if not props:
+        # An empty answer has two very different causes - the platform has no such kind, or
+        # THESE data files do not know it yet (a server started before the data was
+        # regenerated answers from its own copy). The reader cannot tell them apart, so the
+        # empty answer names the data it speaks for and the kinds it does know.
+        answer["data"] = environment.snapshot()["data"]
+        answer["known_kinds"] = list(metamodel.kinds())
+    return answer
 
 
 # --- scaffolding (metadata) ------------------------------------------------------------

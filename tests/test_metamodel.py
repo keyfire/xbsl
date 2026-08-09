@@ -310,6 +310,21 @@ def test_mcp_metadata_schema_of_a_collection_item(mcp_module, mm_root):
     assert nowhere["props"] == {}
 
 
+def test_mcp_empty_answer_names_the_data_it_speaks_for(mcp_module, mm_root):
+    """An unknown kind gets the data root and the known kinds, not a bare emptiness.
+
+    The failure this prevents: a server started before the data was regenerated answers from
+    its own copy, and `{"props": {}, "class": null}` reads as "the platform has no such
+    kind" - which is how three kinds of a new build looked for a whole session.
+    """
+    answer = mcp_module.metadata_schema("ЖурналДанных")
+    assert answer["class"] is None and answer["props"] == {}
+    assert str(mm_root) in answer["data"]["root"]
+    assert answer["known_kinds"] == ["Документ", "Справочник"]
+    # a kind the data DOES know says nothing of the sort
+    assert "known_kinds" not in mcp_module.metadata_schema("Справочник")
+
+
 def test_mcp_metadata_schema_degrades_without_data(mcp_module, no_data):
     assert mcp_module.metadata_schema() == {"available": False}
 

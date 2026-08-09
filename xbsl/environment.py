@@ -19,6 +19,12 @@ def snapshot() -> dict:
         data = {
             "default": dataset.default_version(),
             "available": dataset.available_versions(),
+            # WHERE the data is read from, not just which version it claims to be: a server
+            # started from an installed copy answers from that copy's data files, and a
+            # regenerated checkout does not reach it. Without the path the divergence looks
+            # like the platform not knowing a kind at all.
+            "root": str(dataset.data_root()),
+            "root_source": dataset.data_root_source(),
         }
     except dataset.DatasetError:
         data = None
@@ -37,6 +43,7 @@ def note() -> str:
     listed = ", ".join(f"{p['name']} {p['version']}" for p in info["plugins"]) or "нет"
     return (
         f"python {info['python']}; "
-        f"данные Элемента: {data['default'] if data else 'нет'}; "
-        f"надстройки: {listed}"
+        f"данные Элемента: {data['default'] if data else 'нет'}"
+        + (f" из {data['root']}" if data else "")
+        + f"; надстройки: {listed}"
     )
