@@ -436,3 +436,54 @@ def test_every_tree_menu_command_is_registered_and_titled():
             if key not in table:
                 problems.append(f"{command}: нет подписи [{lang}] для ключа {key}")
     assert not problems, "команды меню дерева рассогласованы: " + "; ".join(problems)
+
+
+# --- the day sections of the toolkit changelog ---------------------------------------------
+
+#: The section kinds a day may carry, in the order Keep a Changelog prescribes.
+_SECTION_ORDER = {
+    "Добавлено": 0, "Added": 0,
+    "Изменено": 1, "Changed": 1,
+    "Устарело": 2, "Deprecated": 2,
+    "Удалено": 3, "Removed": 3,
+    "Исправлено": 4, "Fixed": 4,
+    "Безопасность": 5, "Security": 5,
+}
+
+
+def _day_sections(name: str) -> list[tuple[str, list[str]]]:
+    """(day heading, its section kinds in order) for every day of the changelog."""
+    days: list[tuple[str, list[str]]] = []
+    for line in (ROOT / name).read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            days.append((line[3:].strip(), []))
+        elif line.startswith("### ") and days:
+            days[-1][1].append(line[4:].strip())
+    return days
+
+
+@pytest.mark.parametrize("name", ["CHANGELOG.ru.md", "CHANGELOG.md"])
+def test_a_day_carries_each_section_once(name: str):
+    """One day, one section of each kind. Several releases of a day share the day's sections,
+    so a second `### Added` under the same heading is an append that lost its way - it splits
+    what a reader expects to see in one place (the owner caught exactly that)."""
+    problems = [
+        f"{day}: {kind} встречается {kinds.count(kind)} раза"
+        for day, kinds in _day_sections(name)
+        for kind in sorted(set(kinds))
+        if kinds.count(kind) > 1
+    ]
+    assert not problems, f"{name}: разделы дня задвоены – " + "; ".join(problems)
+
+
+@pytest.mark.parametrize("name", ["CHANGELOG.ru.md", "CHANGELOG.md"])
+def test_day_sections_are_named_by_the_standard(name: str):
+    """A section kind outside the standard set is a typo or an invention - both are caught
+    here rather than by a reader."""
+    unknown = [
+        f"{day}: {kind}"
+        for day, kinds in _day_sections(name)
+        for kind in kinds
+        if kind not in _SECTION_ORDER
+    ]
+    assert not unknown, f"{name}: неизвестные разделы – " + "; ".join(unknown)
