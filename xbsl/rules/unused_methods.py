@@ -10,14 +10,27 @@ use – deliberately conservative: better silence than a false positive.
 
 Guards (such methods are never reported):
 
-- a method with ANY annotation (@Обработчик, @ДоступноСКлиента, @НаСервере, ...) – these
-  are called by the platform or from outside the module;
+- a method with an annotation that means a call from OUTSIDE the project code: the
+  platform calls it itself (@Handler, @Subscription, @ProjectUpdate, @ApplicationSetup),
+  a contract calls it through the base type (@Implementation, @Override), or the method is
+  deliberately kept for compatibility (@Deprecated). An annotation the dictionary does not
+  know is treated the same way – a project may declare its own, and doubt silences the
+  finding;
 - names of the platform's own events (ПередЗаписью, ПослеСоздания, ...) – called by the
   platform even when the annotation was forgotten;
 - object modules (`X.Объект.xbsl`) – object event handlers live there;
 - modules paired with an `HttpСервис` yaml – their methods are wired to endpoints;
 - a qualified use `Модуль.Метод` of a static manager method is an ordinary mention and is
   covered by the name search.
+
+The annotations of VISIBILITY (@InProject, @InSubsystem, @InType, @Global, @Local) and of the
+ENVIRONMENT (@OnServer, @OnClient, @AvailableFromClient, @Contextual) do NOT silence the
+rule, and this is the whole point of the guard being a list rather than "any annotation".
+Both say WHO may call the method and WHERE it runs, not that anybody outside the project
+does: the caller is the project's own code, so a mention has to be somewhere among its
+files. Silencing them left the public API of the common modules – exactly where dead code
+piles up – unjudged: on a 400-file corpus the rule saw 1540 declarations and reported none,
+while a manual count of the callers found seven declarations with no caller at all.
 
 The rule is cross-file (scope=project): a single module cannot tell a dead method from one
 called elsewhere. It is sound only when the linter sees the WHOLE project: on a subset of
@@ -31,11 +44,12 @@ from __future__ import annotations
 import re
 from collections import Counter
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.rules._syntax import code_tokens
+from xbsl.rules._syntax import annotations_before, code_tokens
 
 MESSAGES = {
     "code/unused-method.title": {
@@ -54,8 +68,29 @@ i18n.register(MESSAGES)
 _WORD_RE = re.compile(r"[^\W\d]\w*", re.UNICODE)
 _HTTP_SERVICE_RE = re.compile(r"(?m)^ВидЭлемента:[ \t]*HttpСервис[ \t]*(?:#.*)?\r?$")
 
-# Modifiers that may stand between the annotations and the `метод` keyword.
-_MODIFIERS = ("STATIC", "ABSTRACT", "GLOBAL_EN", "GLOBAL_RU")
+
+@lru_cache(maxsize=1)
+def _internal_annotations() -> frozenset[str]:
+    """Both spellings of the annotations that leave the caller INSIDE the project.
+
+    Everything else – the platform's own (@Handler, @Subscription, @ProjectUpdate,
+    @ApplicationSetup), a contract's (@Implementation, @Override), compatibility
+    (@Deprecated) and any annotation the dictionary does not know (a project may declare
+    its own) – means a caller the mention search cannot see, and silences the method.
+    Without the data file only the Russian spellings are known, so an English project
+    degrades into silence rather than into false findings.
+    """
+    return frozenset(terms.key_forms(
+        # Std::Annotations::VisibilityScopes – WHO may call the method
+        "Локально", "ВПодсистеме", "ВПроекте", "ВТипе", "Глобально",
+        # Std::Annotations::Environments and Contextual – WHERE the method runs
+        "НаКлиенте", "НаСервере", "ДоступноСКлиента", "Контекстный",
+        # the call form and a compiler check – neither says anything about the caller
+        "ИменованныеПараметры", "ПроверятьИспользованиеЗначения",
+    ))
+
+
+dataset.register_reset(_internal_annotations.cache_clear)
 
 # Platform events: the platform calls these by name, a project-wide mention is not required.
 # Collected from the 9.2 docs (catalog-types/document-types/exchange-plan-types,
@@ -76,38 +111,9 @@ _PLATFORM_EVENTS = frozenset({
 })
 
 
-def _is_annotated(toks: list, i: int) -> bool:
-    """Any annotation (`@Имя`, possibly with arguments) before the method keyword at i.
-
-    Walks back over modifiers (стат/абстрактный/глобальный) and annotation clusters;
-    `toks` must be comment-free (code_tokens)."""
-    j = i - 1
-    while j >= 0:
-        t = toks[j]
-        if t.kind == "OP" and t.value == "@":
-            return True
-        if t.kind == "OP" and t.value == ")":
-            # annotation arguments: skip the balanced parentheses back
-            depth = 0
-            while j >= 0:
-                tk = toks[j]
-                if tk.kind == "OP" and tk.value == ")":
-                    depth += 1
-                elif tk.kind == "OP" and tk.value == "(":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                j -= 1
-            j -= 1
-            continue
-        if t.kind in ("IDENT", "KEYWORD"):
-            if t.kind == "KEYWORD" and t.canonical in _MODIFIERS:
-                j -= 1
-                continue
-            # a possible annotation name: annotated when an `@` stands right before it
-            return j > 0 and toks[j - 1].kind == "OP" and toks[j - 1].value == "@"
-        return False
-    return False
+def _silenced_by_annotation(toks: list, i: int) -> bool:
+    """An annotation above the method at i names a caller outside the project code."""
+    return any(name not in _internal_annotations() for name in annotations_before(toks, i))
 
 
 def _pair_stem(rel: str) -> str:
@@ -140,7 +146,7 @@ def _unused_mapper(source: SourceFile) -> dict | None:
         name_tok = toks[i + 1]
         if name_tok.value in _PLATFORM_EVENTS:
             continue
-        if _is_annotated(toks, i):
+        if _silenced_by_annotation(toks, i):
             continue
         decls.append((name_tok.value, name_tok.line, name_tok.col))
     if decls:

@@ -98,14 +98,24 @@ def test_mention_in_comment_not_flagged(tmp_path):
 
 # --- Guard: annotations -----------------------------------------------------------------
 
-def test_any_annotation_not_flagged(tmp_path):
+def test_platform_annotation_not_flagged(tmp_path):
+    # the platform and the contracts call these themselves - no project mention is required
     d = _lint_dir(
         tmp_path,
         М__xbsl=(
-            "@НаСервере @ВПроекте\nметод Серверный()\n;\n\n"
-            "@ДоступноСКлиента\nметод Клиентский()\n;\n"
+            "@Обработчик\nметод ПриСобытии()\n;\n\n"
+            "@Подписка\nстатический метод НаЗапись()\n;\n\n"
+            "@Реализация\nметод Выполнить()\n;\n\n"
+            "@Переопределение\nметод Заголовок()\n;\n\n"
+            "@Устарело\nметод Старый()\n;\n"
         ),
     )
+    assert not _hits(d)
+
+
+def test_unknown_annotation_not_flagged(tmp_path):
+    # a project may declare its own annotation; an unknown name silences the finding
+    d = _lint_dir(tmp_path, М__xbsl="@МояАннотация\nметод Помеченный()\n;\n")
     assert not _hits(d)
 
 
@@ -113,6 +123,51 @@ def test_annotation_with_arguments_not_flagged(tmp_path):
     d = _lint_dir(
         tmp_path,
         М__xbsl='@ОбновлениеПроекта(Ид = "Конвертация", Номер = 1)\nметод Конвертация()\n;\n',
+    )
+    assert not _hits(d)
+
+
+# --- The signal: visibility and environment annotations do NOT silence -------------------
+
+def test_public_method_without_callers_flagged(tmp_path):
+    # the public API of a common module is exactly where dead code piles up
+    d = _lint_dir(
+        tmp_path,
+        М__xbsl="@НаСервере @ВПроекте\nметод Осиротевший()\n;\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1 and "Осиротевший" in hits[0].message
+
+
+def test_public_method_with_caller_not_flagged(tmp_path):
+    # the negative control of the test above: one caller elsewhere silences the rule
+    d = _lint_dir(
+        tmp_path,
+        М__xbsl="@НаСервере @ВПроекте\nметод Осиротевший()\n;\n",
+        П__xbsl="@НаСервере\nметод Главный()\n    М.Осиротевший()\n;\n",
+        П__yaml="Обработчик: Главный\n",
+    )
+    assert not _hits(d)
+
+
+def test_environment_annotation_still_judged(tmp_path):
+    d = _lint_dir(tmp_path, М__xbsl="@ДоступноСКлиента\nметод Клиентский()\n;\n")
+    hits = _hits(d)
+    assert len(hits) == 1 and "Клиентский" in hits[0].message
+
+
+def test_english_visibility_annotation_still_judged(tmp_path):
+    # the project is bilingual: the English spelling of the annotation is the same guard
+    d = _lint_dir(tmp_path, M__xbsl="@OnServer @InProject\nmethod Orphan()\n;\n")
+    hits = _hits(d)
+    assert len(hits) == 1 and "Orphan" in hits[0].message
+
+
+def test_comment_between_annotation_and_method(tmp_path):
+    # the annotation block is read through a comment line, so the guard still applies
+    d = _lint_dir(
+        tmp_path,
+        М__xbsl="@Обработчик\n// платформа зовёт его сама\nметод ПриСобытии()\n;\n",
     )
     assert not _hits(d)
 
@@ -129,8 +184,16 @@ def test_annotation_of_next_method_not_inherited(tmp_path):
 
 
 def test_static_between_annotation_and_method(tmp_path):
-    d = _lint_dir(tmp_path, М__xbsl="@НаСервере\nстатический метод Утилита()\n;\n")
+    # the modifier does not hide the annotation: the platform one still silences the method
+    d = _lint_dir(tmp_path, М__xbsl="@Обработчик\nстатический метод Утилита()\n;\n")
     assert not _hits(d)
+
+
+def test_static_public_method_flagged(tmp_path):
+    # the same walk, the other verdict: a visibility annotation leaves the method judged
+    d = _lint_dir(tmp_path, М__xbsl="@ВПроекте\nстатический метод Утилита()\n;\n")
+    hits = _hits(d)
+    assert len(hits) == 1 and "Утилита" in hits[0].message
 
 
 # --- Guard: platform events -------------------------------------------------------------

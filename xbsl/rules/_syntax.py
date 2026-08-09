@@ -329,6 +329,59 @@ def _skip_comments(toks: list[Token], k: int) -> int:
     return k
 
 
+# Modifiers allowed between the annotation block and the declaration keyword.
+_DECL_MODIFIERS = ("STATIC", "ABSTRACT", "GLOBAL_EN", "GLOBAL_RU")
+
+
+def annotations_before(toks: list[Token], i: int) -> tuple[str, ...]:
+    """Names of the annotations above the declaration keyword at index i, in text order.
+
+    The walk goes backwards over `@Имя` and `@Имя(...)` pairs (argument parentheses are
+    balanced, comments between the annotations are skipped) and over the modifiers a
+    declaration may carry (`статический метод`); the first other token stops the walk.
+    The `@` is not part of the returned names.
+
+    Comments are skipped so that the helper works on the raw `tokens()` as well as on
+    `code_tokens`, and modifiers so that an annotation is still seen above a static
+    method - each copy of this walk used to miss one of the two.
+    """
+    names: list[str] = []
+    k = i - 1
+    while k >= 0 and toks[k].kind == "COMMENT":
+        k -= 1
+    while k >= 0 and toks[k].kind == "KEYWORD" and toks[k].canonical in _DECL_MODIFIERS:
+        k -= 1
+        while k >= 0 and toks[k].kind == "COMMENT":
+            k -= 1
+    while k >= 0:
+        if toks[k].kind == "OP" and toks[k].value == ")":
+            depth = 1
+            k -= 1
+            while k >= 0 and depth:
+                if toks[k].kind == "OP":
+                    if toks[k].value == ")":
+                        depth += 1
+                    elif toks[k].value == "(":
+                        depth -= 1
+                k -= 1
+            while k >= 0 and toks[k].kind == "COMMENT":
+                k -= 1
+        if (
+            k >= 1
+            and toks[k].kind in WORD_KINDS
+            and toks[k - 1].kind == "OP"
+            and toks[k - 1].value == "@"
+        ):
+            names.append(toks[k].value)
+            k -= 2
+            while k >= 0 and toks[k].kind == "COMMENT":
+                k -= 1
+            continue
+        break
+    names.reverse()
+    return tuple(names)
+
+
 # --- Source lines -----------------------------------------------------------------------
 
 def lines(source: SourceFile) -> list[str]:

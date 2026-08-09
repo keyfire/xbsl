@@ -57,7 +57,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
-from xbsl.rules._syntax import code_tokens
+from xbsl.rules._syntax import annotations_before, code_tokens
 # The AST walkers of the sibling cross-module rule: the same "every call, every locally
 # bound name" collection, kept in one place rather than written twice.
 from xbsl.rules.call_arity import _walk_body, _walk_expr
@@ -90,39 +90,6 @@ _WIDE = _VISIBILITY - {"Локально"}
 _DECL_KW = ("VAL", "VAR", "CONST", "REQ", "CATCH", "FOR")
 
 
-def _annotations_before(toks: list, i: int) -> set[str]:
-    """Names of the annotations directly above the method keyword at index i.
-
-    Walks backwards over `@Имя` pairs (annotation arguments in parentheses are skipped
-    by bracket balance) and over the `статический` keyword; any other token ends the
-    annotation block.
-    """
-    names: set[str] = set()
-    j = i - 1
-    if j >= 0 and toks[j].kind == "KEYWORD" and toks[j].canonical == "STATIC":
-        j -= 1
-    while j >= 0:
-        t = toks[j]
-        if t.kind == "OP" and t.value == ")":
-            depth = 0
-            while j >= 0:
-                if toks[j].kind == "OP" and toks[j].value == ")":
-                    depth += 1
-                elif toks[j].kind == "OP" and toks[j].value == "(":
-                    depth -= 1
-                    if depth == 0:
-                        break
-                j -= 1
-            j -= 1
-            continue
-        if t.kind == "IDENT" and j >= 1 and toks[j - 1].kind == "OP" and toks[j - 1].value == "@":
-            names.add(t.value)
-            j -= 2
-            continue
-        break
-    return names
-
-
 def _method_visibility(module: SourceFile) -> dict[str, set[str]]:
     """Module method name -> the annotation names above its declaration (cached on the file)."""
     cached = module.cache.get("local_visibility_methods")
@@ -135,7 +102,7 @@ def _method_visibility(module: SourceFile) -> dict[str, set[str]]:
         if t.kind != "KEYWORD" or t.canonical != "METHOD" or not t.value[:1].islower():
             continue
         if i + 1 < n and toks[i + 1].kind == "IDENT":
-            result[toks[i + 1].value] = _annotations_before(toks, i)
+            result[toks[i + 1].value] = set(annotations_before(toks, i))
     module.cache["local_visibility_methods"] = result
     return result
 
