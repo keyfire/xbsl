@@ -57,10 +57,10 @@ MESSAGES = {
         "en": "A size without disabling the stretch",
     },
     "yaml/size-needs-no-stretch.missing": {
-        "ru": "У компонента {type} задан размер {size_key}: {value}, но нет {stretch_key}: Ложь – "
+        "ru": "У компонента {type} задан размер {size_key}: {value}, но нет {stretch_key}: {n[Ложь]} – "
               "при 'Авто' платформа может растянуть компонент на остаток родителя, "
               "и заданный размер будет перебит.",
-        "en": "The {type} component has a fixed {size_key}: {value} but no {stretch_key}: Ложь – "
+        "en": "The {type} component has a fixed {size_key}: {value} but no {stretch_key}: {n[Ложь]} – "
               "at '{n[Авто]}' the platform may stretch the component over the parent's leftover space, "
               "overriding the size.",
     },

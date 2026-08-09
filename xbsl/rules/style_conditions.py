@@ -17,8 +17,8 @@ from xbsl.rules._syntax import _skip_balanced, code_tokens, declarations, signat
 
 MESSAGES = {
     "style/boolean-compare.title": {
-        "ru": "Сравнение булева значения с Истина/Ложь",
-        "en": "Comparing a boolean value with Истина/Ложь",
+        "ru": "Сравнение булева значения с {n[Истина]}/{n[Ложь]}",
+        "en": "Comparing a boolean value with {n[Истина]}/{n[Ложь]}",
     },
     "style/boolean-compare.msg": {
         "ru": "Сравнение с '{keyword}' – булево значение "
@@ -31,12 +31,12 @@ MESSAGES = {
               "the comparison is mandatory: state the type outright and the rule goes quiet.",
     },
     "style/undefined-is.title": {
-        "ru": "Проверка Неопределено оператором 'это'",
-        "en": "Checking Неопределено with the 'это' operator",
+        "ru": "Проверка {n[Неопределено]} оператором '{n[это]}'",
+        "en": "Checking {n[Неопределено]} with the '{n[это]}' operator",
     },
     "style/undefined-is.msg": {
-        "ru": "'Неопределено' проверяется сравнением – использовать '{op} Неопределено'.",
-        "en": "'Неопределено' is checked with a comparison – use '{op} Неопределено'.",
+        "ru": "'{n[Неопределено]}' проверяется сравнением – использовать '{op} {n[Неопределено]}'.",
+        "en": "'{n[Неопределено]}' is checked with a comparison – use '{op} {n[Неопределено]}'.",
     },
     "style/negated-is.title": {
         "ru": "Отрицание оператора 'это' снаружи",

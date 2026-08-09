@@ -51,7 +51,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--format {text,json,codeclimate}` | output format: text (default), json (machine-readable: diagnostics + summary) or codeclimate (a GitLab Code Quality report – the merge request widget) |
 | `--stdin` | check a single buffer from stdin (for editor integration); `--filename` sets the file kind and the reported path |
 | `--index` | instead of checking, print a JSON project index (objects, methods, form components) for editor navigation; the path is the project root |
-| `--filename NAME` | name of the buffer checked with `--stdin` (e.g. Форма.xbsl); the extension sets the file kind |
+| `--filename NAME` | name of the buffer checked with `--stdin` (e.g. Form.xbsl); the extension sets the file kind |
 | `--version` | show the version and exit |
 
 **Commands**
@@ -254,8 +254,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 | `--representation REPRESENTATION` | the project presentation in the interface (defaults to the name) |
 | `--version VERSION` | the project version, three numbers (default 1.0.0) |
 | `--compatibility COMPATIBILITY` | the platform version the project is compatible with (default 9.0) |
-| `--subsystem SUBSYSTEM` | the name of the first subsystem (default Основное) |
-| `--library` | create a library (ВидПроекта: Библиотека) rather than an application |
+| `--subsystem SUBSYSTEM` | the name of the first subsystem (default Main) |
+| `--library` | create a library (ProjectKind: Library) rather than an application |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl new-object`
@@ -272,7 +272,7 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | Option | Description |
 |---|---|
 | `directory` | the subsystem folder to create the object in |
-| `kind` | the object kind in the project language: Справочник, Документ, ВиртуальнаяТаблица, ...; an unknown kind lists what is available |
+| `kind` | the object kind in the project language: Catalog, Document, VirtualTable, ...; an unknown kind lists what is available |
 | `name` | the object name |
 
 **Options**
@@ -280,10 +280,10 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--scope SCOPE` | the visibility scope; the platform default is ВПодсистеме |
-| `--environment ENVIRONMENT` | the environment – for ОбщийМодуль and Структура |
-| `--access ACCESS` | the access method: for HttpСервис it goes to Разрешения.Вызов, for data objects to Разрешения.ПоУмолчанию (individual rights are set by set-access) |
-| `--routes ROUTES` | HttpСервис routes: "GET /, POST /, GET /{id}" |
+| `--scope SCOPE` | the visibility scope; the platform default is InSubsystem |
+| `--environment ENVIRONMENT` | the environment – for CommonModule and Structure |
+| `--access ACCESS` | the access method: for HttpService it goes to Разрешения.Call, for data objects to Разрешения.Default (individual rights are set by set-access) |
+| `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
 | `--presentation PRESENTATION` | Presentation – the element caption (without it the very first lint answers naming/presentation) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
@@ -308,7 +308,7 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--type TYPE` | the field type (default Строка) |
+| `--type TYPE` | the field type (default String) |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address |
 | `--dry-run` | show the changes (with file texts) without writing anything |
@@ -323,7 +323,7 @@ usage: xbsl add-route [-h] [--dry-run] yaml_path routes
 
 | Option | Description |
 |---|---|
-| `yaml_path` | the yaml of the HttpСервис to add the routes to |
+| `yaml_path` | the yaml of the HttpService to add the routes to |
 | `routes` | the routes, comma-separated: "DELETE /{id}, GET /health" |
 
 **Options**
@@ -355,7 +355,7 @@ usage: xbsl add-method [-h] [--params PARAMS] [--returns RETURNS] [--annotations
 | `-h, --help` | show this help message and exit |
 | `--params PARAMS` | parameter list as in the signature |
 | `--returns RETURNS` | return value type |
-| `--annotations ANNOTATIONS` | annotations separated by spaces, e.g. 'НаСервере ВПроекте' |
+| `--annotations ANNOTATIONS` | annotations separated by spaces, e.g. 'OnServer InProject' |
 | `--after AFTER` | insert after this method |
 | `--before BEFORE` | insert before this method |
 | `--body BODY` | a one-line body instead of the // TODO stub |
@@ -374,7 +374,7 @@ usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 
 **Options**
 
@@ -385,7 +385,7 @@ usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
 | `--path PATH` | the object's yaml (instead of `--name`) |
 | `--forms FORMS` | a subset object,list,list-cards,report,processing comma-separated (list-cards – a card list, instead of list; processing – a data processor form) |
 | `--card-min-width CARD_MIN_WIDTH` | card grid column width (default 400, 250 with a photo) |
-| `--card-placeholder CARD_PLACEHOLDER` | placeholder image expression, e.g. "Ресурс{Аккаунт.svg}.Ссылка" |
+| `--card-placeholder CARD_PLACEHOLDER` | placeholder image expression, e.g. "Resource{Аккаунт.svg}.Link" |
 | `--overwrite` | overwrite the forms if they already exist |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
@@ -424,7 +424,7 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 | `vendor` | library vendor |
 | `name` | library name |
 | `version` | library release version, e.g. 2.0 |
@@ -434,7 +434,7 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--path PATH` | Проект.yaml (when there are several projects under the root) |
+| `--path PATH` | Project.yaml (when there are several projects under the root) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-localization`
@@ -493,7 +493,7 @@ usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 | `old_name` | the object's current name |
 | `new_name` | the new name – both the files and the project-wide references are renamed |
 
@@ -502,8 +502,8 @@ usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--new-presentation NEW_PRESENTATION` | new Представление/Заголовок (default: the new name) |
-| `--old-presentation OLD_PRESENTATION` | the old presentation (to replace in Заголовок/Представление) |
+| `--new-presentation NEW_PRESENTATION` | new Presentation/Title (default: the new name) |
+| `--old-presentation OLD_PRESENTATION` | the old presentation (to replace in Title/Presentation) |
 | `--path PATH` | the object's yaml (when several objects share one name) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
@@ -517,7 +517,7 @@ usage: xbsl delete-object [-h] [--name NAME] [--path PATH] [--apply] [--dry-run]
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 
 **Options**
 
@@ -541,7 +541,7 @@ usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 
 **Options**
 
@@ -550,9 +550,9 @@ usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
 | `-h, --help` | show this help message and exit |
 | `--name NAME` | the object name in the project |
 | `--path PATH` | the object's yaml (instead of `--name`) |
-| `--default DEFAULT` | the method for the ПоУмолчанию right |
-| `--permission RIGHT=METHOD` | the method for a single right (repeatable), e.g. Чтение=РазрешеноВсем |
-| `--calc-by CALC_BY` | РасчетРазрешенийПо fields, comma-separated (required for РазрешенияВычисляютсяДляКаждогоОбъекта) |
+| `--default DEFAULT` | the method for the Default right |
+| `--permission RIGHT=METHOD` | the method for a single right (repeatable), e.g. Чтение=PermitEveryone |
+| `--calc-by CALC_BY` | ComputePermissionsBy fields, comma-separated (required for PermissionsComputedForEachObject) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl object-info`
@@ -565,7 +565,7 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 
 **Options**
 
@@ -585,7 +585,7 @@ usage: xbsl project-info [-h] root
 
 | Option | Description |
 |---|---|
-| `root` | the project root – the folder with Проект.yaml (usually .) |
+| `root` | the project root – the folder with Project.yaml (usually .) |
 
 **Options**
 
@@ -655,14 +655,14 @@ usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--parent PARENT` | container node id (insert/insert-fragment) |
-| `--slot SLOT` | children slot: Содержимое, Страницы, Колонки, ... (insert/move) |
-| `--type TYPE` | Тип of the new component (insert) or property (property-add) |
-| `--name NAME` | Имя of the new component (insert), the wrapper (wrap) or a Свойства-section property (property-*) |
+| `--slot SLOT` | children slot: Content, Pages, Columns, ... (insert/move) |
+| `--type TYPE` | Type of the new component (insert) or property (property-add) |
+| `--name NAME` | Name of the new component (insert), the wrapper (wrap) or a Properties-section property (property-*) |
 | `--node NODE` | operation node id (move/remove/wrap/unwrap/duplicate/rename/set-property/reset-property) |
 | `--nodes ID[,ID...]` | node ids of a batch operation (move-nodes/remove-nodes): comma-separated or by repeating the flag; order does not matter |
 | `--new-parent NEW_PARENT` | new container id (move/move-nodes) |
-| `--container CONTAINER` | Тип of the wrapper container (wrap) |
-| `--new-name NEW_NAME` | the node's new Имя (rename) or property's (property-rename); for rename without the flag, Имя is removed |
+| `--container CONTAINER` | Type of the wrapper container (wrap) |
+| `--new-name NEW_NAME` | the node's new Name (rename) or property's (property-rename); for rename without the flag, Name is removed |
 | `--before BEFORE` | sibling id: insert/move BEFORE it |
 | `--after AFTER` | sibling id: insert/move AFTER it |
 | `--key KEY` | node property name (set-property/reset-property) |
@@ -670,7 +670,7 @@ usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name
 | `--value-yaml VALUE_YAML` | a composite value as a ready yaml fragment (set-property) |
 | `--fragment FRAGMENT` | a yaml block of one component or several – a "-" list or blocks in a row (insert-fragment) |
 | `--fragment-file FILE` | a file with a component's yaml block (insert-fragment, instead of `--fragment`) |
-| `--new-type NEW_TYPE` | the property's new Тип (property-retype) |
+| `--new-type NEW_TYPE` | the property's new Type (property-retype) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl form-handlers`
@@ -693,8 +693,8 @@ usage: xbsl form-handlers [-h] [--node NODE] [--key KEY] [--method METHOD] [--si
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--node NODE` | node id (handler creation; without `--node`/`--key` – the module's method list) |
-| `--key KEY` | node event key: ПриНажатии, ПослеСоздания, ... |
-| `--method METHOD` | handler method name (default &lt;Имя узла&gt;&lt;Ключ&gt;; an existing method – only the binding in yaml) |
-| `--signature SIGNATURE` | event signature from the ui schema, e.g. "(Кнопка, СобытиеПриНажатии)-&gt;ничто" (without the flag it is looked up in the local data) |
+| `--key KEY` | node event key: OnClick, AfterCreate, ... |
+| `--method METHOD` | handler method name (default &lt;Name узла&gt;&lt;Key&gt;; an existing method – only the binding in yaml) |
+| `--signature SIGNATURE` | event signature from the ui schema, e.g. "(Button, OnClickEvent)-&gt;ничто" (without the flag it is looked up in the local data) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 

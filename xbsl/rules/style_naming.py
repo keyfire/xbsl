@@ -46,14 +46,14 @@ MESSAGES = {
         "en": "Constant name '{name}' – constants are written in ALL_CAPS_WITH_UNDERSCORES.",
     },
     "style/exception-prefix.title": {
-        "ru": "Имя исключения без префикса \"Исключение\"",
-        "en": "Exception name without the \"Исключение\" prefix",
+        "ru": "Имя исключения без префикса \"{n[Исключение]}\"",
+        "en": "Exception name without the \"{n[Исключение]}\" prefix",
     },
     "style/exception-prefix.missing": {
         "ru": "Имя исключения '{name}' – типы исключений пишутся с префиксом "
-              "'Исключение': 'Исключение{name}'.",
+              "'{n[Исключение]}': '{n[Исключение]}{name}'.",
         "en": "Exception name '{name}' – exception types are written with the "
-              "'Исключение' prefix: 'Исключение{name}'.",
+              "'{n[Исключение]}' prefix: '{n[Исключение]}{name}'.",
     },
     "style/abbreviation-case.title": {
         "ru": "Аббревиатура заглавными буквами в имени",
@@ -66,15 +66,15 @@ MESSAGES = {
               "only the first letter stays capital: '{suggestion}'.",
     },
     "style/enum-name-vid.title": {
-        "ru": "Имя перечисления начинается с \"Тип\"",
+        "ru": "Имя перечисления начинается с \"{n[Тип]}\"",
         # Both spellings are matched (_ENUM_BAD_PREFIXES), so the title names both.
-        "en": "Enumeration name starts with \"Тип\"/\"Type\"",
+        "en": "Enumeration name starts with \"{n[Тип]}\"",
     },
     "style/enum-name-vid.bad-prefix": {
         "ru": "Имя перечисления '{name}' начинается с '{prefix}' – "
-              "в именах перечислений используется 'Вид': 'Вид{rest}'.",
+              "в именах перечислений используется '{n[Вид]}': '{n[Вид]}{rest}'.",
         "en": "Enumeration name '{name}' starts with '{prefix}' – "
-              "enumeration names use 'Вид': 'Вид{rest}'.",
+              "enumeration names use '{n[Вид]}': '{n[Вид]}{rest}'.",
     },
 }
 i18n.register(MESSAGES)

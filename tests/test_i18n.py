@@ -4,6 +4,7 @@ The catalog is assembled from the rule modules on import, so these checks cover 
 that registered itself – including the ones an external package contributes.
 """
 
+import re
 import string
 
 import pytest
@@ -12,6 +13,10 @@ from xbsl import i18n
 from xbsl.engine import RULES
 
 _FORMATTER = string.Formatter()
+
+#: A word of Cyrillic letters, and the `{n[...]}` substitution that legitimately holds one.
+_CYRILLIC = re.compile(r"[А-Яа-яЁё][А-Яа-яЁё0-9_]*")
+_SUBSTITUTION = re.compile(r"\{n\[[^\]]*\]\}")
 
 
 def _fields(template: str) -> list[str]:
@@ -301,3 +306,43 @@ def test_english_messages_carry_no_untranslated_metadata_names():
             if word not in _QUOTED_IN_ENGLISH:
                 leftovers.append(f"{key}: {word}")
     assert not leftovers, "имена метаданных остались русскими: " + ", ".join(sorted(set(leftovers)))
+
+
+#: The quotes an English message may legitimately keep in Cyrillic: the VERBATIM text of a
+#: platform error. Translating those would send the reader looking for a message the platform
+#: never prints. Everything else with an English spelling has to use it (or `{n[...]}`, which
+#: follows the reader's language).
+_VERBATIM_QUOTES = {
+    "code/row-field-null.assign",          # '.ЗаменитьNull(...)' - the member has no English pair
+    "query/deletion-mark-immediate.absent",  # 'Поле не найдено' - the compiler's own wording
+    "yaml/bare-object-value.bare",           # 'Ожидалось Неопределено...' - the same
+    "yaml/ref-needs-nullable.input",         # 'Parameter "ТипДанных" ... must' - the same
+}
+
+
+def test_english_messages_use_english_spellings():
+    """An English message must not carry a Russian name the platform spells in English too.
+
+    The rule of the repository: Cyrillic is legal in English text only for names the platform
+    writes in Russian alone. The catalog had drifted - a sweep once counted 111 offending
+    messages, though two thirds of that count was the `{n[...]}` substitution being mistaken
+    for debt. What was left is fixed; this test keeps it from creeping back.
+    """
+    from xbsl import dataset, terms
+
+    if not dataset.available_versions():
+        pytest.skip("нет данных Элемента")
+    offenders = []
+    for key in i18n.registered_keys():
+        if key in _VERBATIM_QUOTES:
+            continue
+        text = _SUBSTITUTION.sub(" ", i18n.translations(key)["en"])
+        for word in dict.fromkeys(_CYRILLIC.findall(text)):
+            english = (terms.common_english(word) or terms.english(word, "types")
+                       or terms.english(word, "properties") or terms.english(word, "enums"))
+            if english:
+                offenders.append(f"{key}: {word} -> {english}")
+    assert not offenders, (
+        "кириллица в английских сообщениях там, где у имени есть английское написание: "
+        + ", ".join(offenders)
+    )

@@ -638,8 +638,8 @@ MESSAGES_QUERY = {
     "code/query-needs-server.found": {
         "ru": "Блок Запрос{{}} в методе '{name}' без @НаСервере: модуль исполняется на "
               "клиенте ({env}), тип Запрос там недоступен – компилятор откажет.",
-        "en": "A Запрос{{}} block in method '{name}' without @{n[НаСервере]}: the module runs "
-              "on the client ({env}), where the type Запрос does not exist - the compiler "
+        "en": "A {n[Запрос]}{{}} block in method '{name}' without @{n[НаСервере]}: the module runs "
+              "on the client ({env}), where the type {n[Запрос]} does not exist - the compiler "
               "will reject it.",
     },
 }

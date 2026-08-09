@@ -70,14 +70,14 @@ MESSAGES = {
         "en": "'{word}' in the name '{name}' – an English term is written as the original: '{suggestion}'.",
     },
     "naming/enum-vid.title": {
-        "ru": "Имя перечисления со словом \"Тип\"",
-        "en": "Enumeration name with the word \"Тип\"",
+        "ru": "Имя перечисления со словом \"{n[Тип]}\"",
+        "en": "Enumeration name with the word \"{n[Тип]}\"",
     },
     "naming/enum-vid.bad-prefix": {
         "ru": "Имя перечисления '{name}' начинается с '{prefix}' – при равнозначном выборе "
-              "используется 'Вид': '{suggestion}'.",
+              "используется '{n[Вид]}': '{suggestion}'.",
         "en": "Enumeration name '{name}' starts with '{prefix}' – when the choice is equal, "
-              "'Вид' is used: '{suggestion}'.",
+              "'{n[Вид]}' is used: '{suggestion}'.",
     },
     "naming/kind-in-name.title": {"ru": "Вид элемента в его имени", "en": "Element kind inside its name"},
     "naming/kind-in-name.found": {
@@ -121,8 +121,8 @@ MESSAGES = {
     },
     "naming/boolean-name.noun": {
         "ru": "Имя булева реквизита '{name}' – существительное: начните его со слов Это, Есть или "
-              "Содержит ('Это{name}'), иначе имя читается как ссылка или строка.",
-        "en": "The boolean attribute name '{name}' is a noun: start it with Это, Есть or Содержит "
+              "{n[Содержит]} ('Это{name}'), иначе имя читается как ссылка или строка.",
+        "en": "The boolean attribute name '{name}' is a noun: start it with Это, Есть or {n[Содержит]} "
               "('Это{name}'), otherwise the name reads as a reference or a string.",
     },
     "naming/presentation.title": {"ru": "Представление элемента", "en": "Element presentation"},
@@ -133,9 +133,9 @@ MESSAGES = {
               "and sets the title in the interface.",
     },
     "naming/presentation.deprecated": {
-        "ru": "Имя '{name}' начинается с 'Устарело', а представление не начинается с "
+        "ru": "Имя '{name}' начинается с '{n[Устарело]}', а представление не начинается с "
               "'(не используется)' – у устаревших элементов представление помечают именно так.",
-        "en": "The name '{name}' starts with 'Устарело', but the presentation does not start with "
+        "en": "The name '{name}' starts with '{n[Устарело]}', but the presentation does not start with "
               "'(не используется)' – that is how deprecated elements are marked.",
     },
     "naming/prefix-by-kind.title": {

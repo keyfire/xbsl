@@ -88,12 +88,12 @@ MESSAGES = {
               "ресурс'.",
     },
     "code/resource-bare-name.path": {
-        "ru": "Ключ ресурса задаётся ОТНОСИТЕЛЬНО каталога Ресурсы: '{name}' начинается с "
-              "самого каталога, платформа ищет такой путь внутри Ресурсы и применение сборки "
-              "падает 'Неизвестный ресурс'. Правильно: 'Ресурс{{{base}}}'.",
+        "ru": "Ключ ресурса задаётся ОТНОСИТЕЛЬНО каталога {n[Ресурсы]}: '{name}' начинается с "
+              "самого каталога, платформа ищет такой путь внутри {n[Ресурсы]} и применение сборки "
+              "падает 'Неизвестный ресурс'. Правильно: '{n[Ресурс]}{{{base}}}'.",
         "en": "A resource key is a path RELATIVE to the {n[Ресурсы]} folder: '{name}' starts with "
               "that folder itself, the platform looks the path up inside {n[Ресурсы]} and applying "
-              "the build fails with 'Неизвестный ресурс'. Correct: 'Ресурс{{{base}}}'.",
+              "the build fails with 'Неизвестный ресурс'. Correct: '{n[Ресурс]}{{{base}}}'.",
     },
 }
 i18n.register(MESSAGES)

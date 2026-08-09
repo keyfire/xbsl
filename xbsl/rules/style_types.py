@@ -45,12 +45,12 @@ MESSAGES = {
         "en": "Spaces around '|' in a union type – write it joined: '{n[Строка]}|{n[Число]}'.",
     },
     "style/nullable-shorthand.title": {
-        "ru": "Неопределено в типе без сокращения '?'",
-        "en": "Неопределено in a type without the '?' shorthand",
+        "ru": "{n[Неопределено]} в типе без сокращения '?'",
+        "en": "{n[Неопределено]} in a type without the '?' shorthand",
     },
     "style/nullable-shorthand.undefined-word": {
-        "ru": "'Неопределено' в составном типе – записывается сокращением '?'.",
-        "en": "'Неопределено' in a union type – write it with the '?' shorthand.",
+        "ru": "'{n[Неопределено]}' в составном типе – записывается сокращением '?'.",
+        "en": "'{n[Неопределено]}' in a union type – write it with the '?' shorthand.",
     },
     "style/nullable-shorthand.two-types": {
         "ru": "Два типа – '?' пишется слитно: '{type}?', не '...|?'.",
