@@ -290,3 +290,54 @@ def test_definition_is_answered_before_the_first_project_pass(tmp_path):
         assert got.uri == uris.from_fs_path(str(tmp_path / "ЗадачаЗакрыта.yaml"))
     finally:
         lsp.STATE.root, lsp.STATE.lookup = root, lookup
+
+
+# --- a standalone query file over the wire ---------------------------------------------------
+
+_QUERY_CATALOG = """\
+ВидЭлемента: Справочник
+Ид: 3f1c9a80-5b26-4d7e-9a13-6c2b8e4d0f57
+Имя: Задачи
+Реквизиты:
+    -
+        Ид: 8a2d6b41-0c93-47e5-bf18-25d7c3a90e64
+        Имя: Срок
+        Тип: Дата
+"""
+
+_QUERY_FILE = """\
+ВЫБРАТЬ
+    З.Ссылка КАК Ссылка,
+    З.Срок КАК Срок
+ИЗ
+    Задачи КАК З
+"""
+
+
+@pytest.mark.needs_data
+def test_completion_in_a_query_file_over_the_wire(tmp_path):
+    """The paired file of a virtual table is all query: the dot after a table alias must
+    answer with the fields of that table, and the file must get NO diagnostics of its own -
+    the module rules would paint a query red from end to end."""
+    from types import SimpleNamespace
+
+    from pygls import uris
+
+    (tmp_path / "Задачи.yaml").write_text(_QUERY_CATALOG, encoding="utf-8")
+    target = tmp_path / "ЗадачиТаблица.xbql"
+    target.write_text(_QUERY_FILE, encoding="utf-8")
+    features = _server_on(tmp_path)
+    root, lookup = lsp.STATE.root, lsp.STATE.lookup
+    lsp.STATE.root, lsp.STATE.lookup = tmp_path, None
+    try:
+        uri = uris.from_fs_path(str(target))
+        params = SimpleNamespace(
+            text_document=SimpleNamespace(uri=uri),
+            position=SimpleNamespace(line=2, character=6),  # right after `З.` of `З.Срок`
+        )
+        got = features[lsp.lsp.TEXT_DOCUMENT_COMPLETION](params)
+        labels = [i.label for i in (got.items if got else [])]
+        assert "Срок" in labels, "the attribute of the table the alias names"
+        assert "Наименование" in labels, "a standard field of the kind"
+    finally:
+        lsp.STATE.root, lsp.STATE.lookup = root, lookup

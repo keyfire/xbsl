@@ -367,6 +367,8 @@ def _make_server() -> "LanguageServer":
         return _doc_key(uri_to_path(uri), uri)
 
     def language_of(path: Path) -> str:
+        if engine.is_query_file(path):
+            return "xbql"
         return "xbsl" if path.suffix.lower() == ".xbsl" else "yaml"
 
     def rel_posix(path: Path) -> Optional[str]:
@@ -383,6 +385,13 @@ def _make_server() -> "LanguageServer":
         doc = server.workspace.get_text_document(uri)
         path = uri_to_path(uri)
         if path is None:
+            return
+        if engine.is_query_file(path):
+            # A standalone query is not judged by any rule yet, and running the module rules
+            # over it would paint the whole file with syntax errors. The document is served
+            # for completion only; publishing an empty list keeps a stale set from lingering.
+            server.publish_diagnostics(uri, [])
+            STATE.published[uri_key(uri)] = uri
             return
         # Full path, not just the name: findings are matched against baseline entries
         # by it, and structure/xbsl-pair sees the module's real neighbor.
@@ -648,9 +657,12 @@ def _make_server() -> "LanguageServer":
         lsp.CompletionOptions(trigger_characters=[".", ":"]),
     )
     def _completion(params: lsp.CompletionParams) -> Optional[lsp.CompletionList]:
-        # Templates need no index - they must work in a file opened outside a project too,
-        # so an absent index degrades to an empty one rather than silencing completion.
-        lookup = STATE.lookup if STATE.lookup is not None else IndexLookup({})
+        # Everything project-specific - the objects, their fields, the tables of a query -
+        # comes from the index, so a request arriving before the background pass builds it
+        # here rather than answering with the templates alone (the same reasoning as
+        # ensure_lookup for navigation). Outside a project there is nothing to build: an
+        # absent index degrades to an empty one, and the templates still answer.
+        lookup = ensure_lookup() or IndexLookup({})
         uri = params.text_document.uri
         path = uri_to_path(uri)
         if path is None:

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "XBQL",
+  "scopeName": "source.xbql",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#parameters"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#operator-words"
+    },
+    {
+      "include": "#keywords"
+    },
+    {
+      "include": "#type-literal"
+    },
+    {
+      "include": "#function-call"
+    },
+    {
+      "include": "#operators"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.block.xbql",
+          "begin": "/\\*",
+          "end": "\\*/"
+        },
+        {
+          "name": "comment.line.double-slash.xbql",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "strings": {
+      "name": "string.quoted.double.xbql",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xbql",
+          "match": "\\\\."
+        }
+      ]
+    },
+    "numbers": {
+      "name": "constant.numeric.xbql",
+      "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
+    },
+    "parameters": {
+      "name": "variable.parameter.xbql",
+      "match": "&[A-Za-zА-Яа-яЁё_][A-Za-z0-9А-Яа-яЁё_]*"
+    },
+    "constants": {
+      "name": "constant.language.xbql",
+      "match": "(?i)\\b(?:НЕОПРЕДЕЛЕНО|UNDEFINED|ИСТИНА|FALSE|NULL|TRUE|ЛОЖЬ)\\b"
+    },
+    "operator-words": {
+      "name": "keyword.operator.word.xbql",
+      "match": "(?i)\\b(?:СООТВЕТСТВУЕТ|BETWEEN|MATCHES|ПОДОБНО|ССЫЛКА|МЕЖДУ|LIKE|REFS|ЕСТЬ|AND|NOT|ИЛИ|IN|IS|OR|НЕ|В|И)\\b"
+    },
+    "keywords": {
+      "name": "keyword.control.xbql",
+      "match": "(?i)\\b(?:СОЗДАТЬ\\s+ВРЕМЕННУЮ\\s+ТАБЛИЦУ|CREATE\\s+TEMPORARY\\s+TABLE|ВСТАВИТЬ\\s+ИГНОРИРУЯ\\s+В|INSERT\\s+UNIQUE\\s+INTO|ДОПОЛНИТЕЛЬНО\\s+ПО|ИНДЕКСИРОВАТЬ\\s+ПО|СГРУППИРОВАТЬ\\s+ПО|ADDITIONALLY\\s+BY|ВЫЧИСЛЯЕТСЯ\\s+КАК|СОЗДАТЬ\\s+ИНДЕКС|УПОРЯДОЧИТЬ\\s+ПО|OTLICHAYETSYA|ДЛЯ\\s+ИЗМЕНЕНИЯ|ИНДЕКСИРОВАТЬ|CREATE\\s+INDEX|ПО\\s+УМОЛЧАНИЮ|СО\\s+СМЕЩЕНИЕМ|COMPUTED\\s+AS|РАЗРЕШЕННЫЕ|FOR\\s+UPDATE|ВНУТРЕННЕЕ|КОЛИЧЕСТВО|ОБЪЕДИНИТЬ|СОЕДИНЕНИЕ|СПЕЦСИМВОЛ|СУЩЕСТВУЕТ|УНИЧТОЖИТЬ|УСТАНОВИТЬ|HIERARCHY|TEMPORARY|ВРЕМЕННУЮ|ЗАПОЛНИТЬ|ИСПОЛЬЗУЯ|ПОЛНОСТЬЮ|ПОМЕСТИТЬ|РАЗЛИЧНЫЕ|COMPLETE|DISTINCT|GROUP\\s+BY|INDEX\\s+BY|ORDER\\s+BY|TRUNCATE|ВСТАВИТЬ|ВЫРАЗИТЬ|ЗНАЧЕНИЯ|ИЕРАРХИИ|ИЗМЕНИТЬ|МАКСИМУМ|ОБРЕЗАТЬ|ПОЛУЧИТЬ|ПОРОДИТЬ|ALLOWED|AVERAGE|DEFAULT|LATERAL|MAXIMUM|MINIMUM|PRODUCE|БОКОВОЙ|ВЫБРАТЬ|ИМЕЮЩИЕ|МИНИМУМ|СОЗДАТЬ|СРЕДНЕЕ|ТАБЛИЦУ|УДАЛИТЬ|CREATE|DELETE|ESCAPE|EXISTS|HAVING|INSERT|OFFSET|SELECT|UPDATE|VALUES|ПЕРВЫЕ|ПОЛНОЕ|ПРАВОЕ|COUNT|FETCH|INDEX|INNER|RIGHT|TABLE|UNION|USING|WHERE|ВЫБОР|ИНАЧЕ|КОГДА|КОНЕЦ|ЛЕВОЕ|СУММА|ТОГДА|CASE|CAST|DESC|DROP|ELSE|FILL|FROM|FULL|INTO|JOIN|LEFT|TEMP|THEN|WHEN|ВОЗР|УБЫВ|ALL|ASC|END|FOR|SET|SUM|TOP|ВСЕ|ГДЕ|ДЛЯ|КАК|AS|ON|ИЗ|ОТ|ПО|T|Т)\\b"
+    },
+    "type-literal": {
+      "match": "\\b([A-Za-zА-ЯЁ][A-Za-z0-9А-Яа-яЁё_]*)\\s*(?=\\{)",
+      "captures": {
+        "1": {
+          "name": "support.type.xbql"
+        }
+      }
+    },
+    "function-call": {
+      "match": "\\b([A-Za-zА-Яа-яЁё_][A-Za-z0-9А-Яа-яЁё_]*)\\s*(?=\\()",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.xbql"
+        }
+      }
+    },
+    "operators": {
+      "name": "keyword.operator.xbql",
+      "match": "!=|<=|>=|==|[-+*/%<>=&|,.]"
+    }
+  }
+}

@@ -97,8 +97,15 @@ class IndexLookup:
     def struct_by_name(self, name: str) -> Optional[dict]:
         """Members of a project type by its name: a module-declared structure/exception/
         enumeration, or a type described in metadata (a structure's Fields, the constants of
-        a set under `<Name>.Record` / `<Name>.Data`)."""
-        return (self.index.get("struct_members") or {}).get(name)
+        a set under `<Name>.Record` / `<Name>.Data`).
+
+        A structure declared in a module is indexed under its BARE name, while code names it
+        with its module (`Каталог.Карточка`) - so a qualified name falls back to its tail."""
+        members = self.index.get("struct_members") or {}
+        found = members.get(name)
+        if found is None and "." in name:
+            found = members.get(name.rpartition(".")[2])
+        return found
 
     def method_returns(self) -> dict[str, dict[str, str]]:
         """{name: {method: result type}} - the return types the inference needs of a PROJECT
@@ -117,6 +124,20 @@ class IndexLookup:
                 for name, by_name in (self.index.get("generated_returns") or {}).items()
                 if isinstance(by_name, dict)
             }
+            # The fields of a project TYPE belong here too: the catalogue is keyed by the name
+            # of what carries the member, and for a field the carrier is the structure. Without
+            # them a chain stops at the first field (`Данные.Строки` answers nothing), and a
+            # for-each over that field has no element type to take.
+            for name, record in (self.index.get("struct_members") or {}).items():
+                types = record.get("property_types") if isinstance(record, dict) else None
+                if not (isinstance(types, dict) and types):
+                    continue
+                # Under both spellings: the record is kept under the bare name, and code in
+                # another module writes the qualified one (`Каталог.Карточка`).
+                owner = record.get("module")
+                keys = [str(name)] + ([f"{owner}.{name}"] if owner else [])
+                for key in keys:
+                    cached[key] = {**cached.get(key, {}), **types}
             for module, methods in self._module_methods.items():
                 by_name = {m["name"]: m["returns"] for m in methods if m.get("returns")}
                 if by_name:

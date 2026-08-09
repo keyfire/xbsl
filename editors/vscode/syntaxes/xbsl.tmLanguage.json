@@ -3,20 +3,51 @@
   "name": "XBSL",
   "scopeName": "source.xbsl",
   "patterns": [
-    { "include": "#comments" },
-    { "include": "#strings" },
-    { "include": "#numbers" },
-    { "include": "#decorators" },
-    { "include": "#function-declaration" },
-    { "include": "#keywords-control" },
-    { "include": "#storage" },
-    { "include": "#modifiers" },
-    { "include": "#operator-words" },
-    { "include": "#constants" },
-    { "include": "#language-variables" },
-    { "include": "#generic-type" },
-    { "include": "#function-call" },
-    { "include": "#operators" }
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#query-block"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "include": "#numbers"
+    },
+    {
+      "include": "#decorators"
+    },
+    {
+      "include": "#function-declaration"
+    },
+    {
+      "include": "#keywords-control"
+    },
+    {
+      "include": "#storage"
+    },
+    {
+      "include": "#modifiers"
+    },
+    {
+      "include": "#operator-words"
+    },
+    {
+      "include": "#constants"
+    },
+    {
+      "include": "#language-variables"
+    },
+    {
+      "include": "#generic-type"
+    },
+    {
+      "include": "#function-call"
+    },
+    {
+      "include": "#operators"
+    }
   ],
   "repository": {
     "comments": {
@@ -50,7 +81,9 @@
           "name": "meta.interpolation.braced.xbsl",
           "match": "(?<!\\\\)[%$]\\{[^}]*\\}",
           "captures": {
-            "0": { "name": "variable.other.interpolation.xbsl" }
+            "0": {
+              "name": "variable.other.interpolation.xbsl"
+            }
           }
         },
         {
@@ -71,8 +104,12 @@
       "comment": "The declared name of a method: the keyword keeps its own scope, the name becomes a function name. The rule stands BEFORE #storage - both match at the keyword, and a tie at the same position is broken by the order of the patterns, not by the match length.",
       "match": "(?i)\\b(метод|method|конструктор|constructor)([ \\t]+)([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*)",
       "captures": {
-        "1": { "name": "storage.type.xbsl" },
-        "3": { "name": "entity.name.function.xbsl" }
+        "1": {
+          "name": "storage.type.xbsl"
+        },
+        "3": {
+          "name": "entity.name.function.xbsl"
+        }
       }
     },
     "function-call": {
@@ -111,6 +148,44 @@
     "operators": {
       "name": "keyword.operator.xbsl",
       "match": "!=|\\*\\*|\\*=|\\+=|-=|->|/=|::|<=|==|>=|\\?\\.|\\?\\?|[-+*/%<>=!&|?]"
+    },
+    "query-block": {
+      "name": "meta.embedded.block.xbql",
+      "begin": "(?i)\\b(Запрос|Query)\\s*(\\{)",
+      "beginCaptures": {
+        "1": {
+          "name": "keyword.control.xbsl"
+        },
+        "2": {
+          "name": "punctuation.section.embedded.begin.xbsl"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.section.embedded.end.xbsl"
+        }
+      },
+      "patterns": [
+        {
+          "include": "#query-braces"
+        },
+        {
+          "include": "source.xbql"
+        }
+      ]
+    },
+    "query-braces": {
+      "begin": "\\{",
+      "end": "\\}",
+      "patterns": [
+        {
+          "include": "#query-braces"
+        },
+        {
+          "include": "source.xbql"
+        }
+      ]
     }
   }
 }

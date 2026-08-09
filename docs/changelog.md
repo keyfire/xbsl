@@ -19,7 +19,37 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0
+## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
+
+### Added
+- **A `.xbql` query file became a language: highlighting and completion.** The paired file of a
+  virtual table is a query from end to end, and the editor showed it as plain text: the
+  extension declared no language for that extension, there was no grammar of the query language
+  at all (a `Query{...}` block inside a module went unhighlighted too), and the LSP client
+  subscribed to `xbsl` and yaml only. The grammar is now built from the platform's own
+  vocabulary - 154 spellings from the compiler's keyword table and from the documentation page
+  "Query text syntax", which complete each other: the table knows the multi-word forms
+  (`GROUP BY`), the page knows the literals (`TRUE`, `FALSE`, `UNDEFINED`), the two English
+  words with no Russian pair (`NULL`, `TEMP`) and the right spelling of `FOR` (where the table
+  answers with the name of an internal constant). The same vocabulary highlights a `Query{...}`
+  block in a module; the nested braces are balanced, so a typed literal like `Uuid{}` no longer
+  cuts the block short. On the engine side the WHOLE file counts as the query: completion after
+  a table alias answers with its fields exactly as it does inside a block. No rule is run over
+  such a file - its diagnostics are empty, or the module rules would paint a query red from end
+  to end.
+- **The variable of a `for X in Collection` loop is typed.** An everyday shape, and X used to
+  stay untyped: the collection is usually a field of a project structure, and the index kept
+  the NAMES of the fields only. A structure - declared in a module or described in metadata -
+  now carries the type of every field AS WRITTEN, the generic parameter included (the nominal
+  head has already lost the element), those field types join the same member-type catalogue as
+  method returns, and the element is taken out of a single-argument generic. A collection with
+  two arguments names no element type, and there completion stays silent, as before.
+
+### Fixed
+- **Completion at the very start of a session knew no project objects.** The completion handler
+  took the index only if the background pass had already built it, and until then answered with
+  the code templates alone - the same hole 0.57.2 closed for navigation. A request that arrives
+  earlier now builds the index itself.
 
 ### Added
 - **The members of the kinds' singleton types reached the data: 12 kinds of 41 became 31.** The

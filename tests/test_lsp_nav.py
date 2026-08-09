@@ -26,6 +26,7 @@ from xbsl.rules._syntax import (
     local_var_names,
     local_var_types,
     query_aliases,
+    query_ranges,
     query_row_columns,
 )
 
@@ -1101,3 +1102,108 @@ def test_binding_complete_request_registered():
     assert features["xbsl/bindingComplete"](
         {"uri": "file:///нет.yaml", "prefix": "=Компоненты."}
     ) == {"completions": []}
+
+
+# --- a standalone query file (.xbql): the whole file is the query ---------------------------
+
+QUERY_FILE = """\
+ВЫБРАТЬ
+    Т.Ссылка КАК Ссылка,
+    Т.Цена КАК Цена
+ИЗ
+    Товар КАК Т
+        ЛЕВОЕ СОЕДИНЕНИЕ ВидТовара КАК В
+            ПО В.Ссылка == Т.Вид
+ГДЕ
+    НЕ Т.ПометкаУдаления
+"""
+
+
+@pytest.mark.needs_data
+def test_query_file_is_a_query_from_end_to_end():
+    """The paired file of a virtual table has no `Запрос{ ... }` block to look for - without
+    the whole file counting as one, the editor never sees the cursor as being in a query."""
+    src = engine.load_text("ЗадачиТаблица.xbql", QUERY_FILE)
+    spans = query_ranges(src)
+
+    assert spans == [(0, len(QUERY_FILE))]
+    # the aliases of both tables resolve anywhere in the file, the first line included
+    assert query_aliases(src, 0) == {"Т": "Товар", "В": "ВидТовара"}
+    assert query_aliases(src, QUERY_FILE.index("НЕ Т.")) == {"Т": "Товар", "В": "ВидТовара"}
+
+
+@pytest.mark.needs_data
+def test_query_file_completes_the_fields_of_the_aliased_table():
+    """`Т.` in a query file offers the fields of the table the alias names - the same answer
+    the editor gives inside a `Запрос{ ... }` block, now for a file that is all query."""
+    src = engine.load_text("ТоварТаблица.xbql", QUERY_FILE)
+    offset = QUERY_FILE.index("Т.Цена") + 2
+    in_query = any(a <= offset < b for a, b in query_ranges(src))
+    entries = resolve_completions(
+        LOOKUP, language_id="xbql", line_prefix="    Т.", file_stem="ТоварТаблица",
+        in_query=in_query, query_tables=query_aliases(src, offset),
+    )
+
+    assert in_query
+    labels = [e["label"] for e in entries or []]
+    assert "Цена" in labels and "Артикул" in labels     # the object's own attributes
+    assert "Код" in labels and "Наименование" in labels  # standard fields of the kind
+    assert "Цены" in labels                              # its tabular section
+
+
+# --- a for-each variable takes the element type of the collection ----------------------------
+
+LOOP_MODULE = """\
+метод Построить(Данные: Каталог.СтраницаДанные)
+    для Строка из Данные.Строки
+        знч Х = Строка.Заголовок
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_loop_variable_takes_the_element_type_of_a_structure_field():
+    """`для X из Данные.Строки` is the everyday shape, and X used to stay untyped: the
+    collection is a FIELD of a project structure, so its written type has to come from the
+    index (the nominal head the rest of the inference works in has lost the element)."""
+    idx = dict(INDEX)
+    idx["struct_members"] = {
+        "СтраницаДанные": {
+            "properties": ["Строки"],
+            "property_types": {"Строки": "Массив<Каталог.СтрокаДанные>"},
+            "module": "Каталог",
+        },
+        "СтрокаДанные": {"properties": ["Заголовок", "Порядок"], "module": "Каталог"},
+    }
+    lookup = IndexLookup(idx)
+    src = engine.load_text("Каталог.xbsl", LOOP_MODULE)
+    offset = LOOP_MODULE.index("Строка.Заголовок") + len("Строка.")
+    types = local_var_types(src, offset, returns=lookup.method_returns(), static_roots=set())
+
+    assert types["Данные"] == "Каталог.СтраницаДанные"
+    assert types["Строка"] == "Каталог.СтрокаДанные"
+    entries = resolve_completions(
+        lookup, language_id="xbsl", line_prefix="        знч Х = Строка.",
+        file_stem="Каталог", local_vars=types,
+    )
+    assert [e["label"] for e in entries or []] == ["Заголовок", "Порядок"]
+
+
+@pytest.mark.needs_data
+def test_loop_variable_stays_untyped_when_the_collection_names_no_single_element():
+    """Silence beats a guess: a collection type with two arguments names no element type."""
+    idx = dict(INDEX)
+    idx["struct_members"] = {
+        "СтраницаДанные": {
+            "properties": ["Строки"],
+            "property_types": {"Строки": "Соответствие<Строка, Число>"},
+            "module": "Каталог",
+        },
+    }
+    lookup = IndexLookup(idx)
+    src = engine.load_text("Каталог.xbsl", LOOP_MODULE)
+    offset = LOOP_MODULE.index("Строка.Заголовок") + len("Строка.")
+    types = local_var_types(src, offset, returns=lookup.method_returns(), static_roots=set())
+
+    assert "Строка" not in types

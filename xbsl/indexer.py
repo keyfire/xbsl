@@ -460,24 +460,49 @@ def _with_object_name(spelling: str, name: str) -> str:
     return spelling.replace(PLACEHOLDER, name)
 
 
-def _metadata_member_names(data: dict, kind: str) -> list[str]:
-    """Names listed by the member section of a metadata element (Fields, Constants).
+def _field_types(members) -> dict[str, str]:
+    """{field: the type it declares, as written} of a structure declared in a module.
+
+    The written form matters, not the nominal head: `Array<Catalog.Card>` is what tells a
+    for-each loop what its variable is, and the head (`Array`) has already thrown that away.
+    A field without a declared type is left out - a guess would be worse than silence.
+    """
+    out: dict[str, str] = {}
+    for f in members:
+        if not isinstance(f, P.ObjectField):
+            continue
+        type_ref = getattr(f, "type", None)
+        text = getattr(type_ref, "text", None)
+        if isinstance(text, str) and text.strip():
+            out[f.name] = text.strip()
+    return out
+
+
+def _metadata_members(data: dict, kind: str) -> tuple[list[str], dict[str, str]]:
+    """(names, {name: declared type}) of the member section of a metadata element.
 
     The section key is read in either spelling (the sources are bilingual, and the pair comes
-    from the metamodel record of the kind); an item names itself with Name in either spelling.
+    from the metamodel record of the kind); an item names itself with Name in either spelling
+    and types itself with Type. The type is kept as written, generic parameter included - see
+    _field_types for why the nominal head is not enough.
     """
     section = _METADATA_MEMBER_SECTIONS[kind][0]
     items = value_of(data, section, kind)
     if not isinstance(items, list):
-        return []
+        return [], {}
     names: set[str] = set()
+    types: dict[str, str] = {}
     for item in items:
         if not isinstance(item, dict):
             continue
         name = item.get("Имя") or item.get("Name")
-        if isinstance(name, str) and name:
-            names.add(name)
-    return sorted(names)
+        if not (isinstance(name, str) and name):
+            continue
+        names.add(name)
+        written = item.get("Тип") or item.get("Type")
+        if isinstance(written, str) and written.strip():
+            types[name] = written.strip()
+    return sorted(names), types
 
 
 # --- form components ------------------------------------------------------------------------
@@ -558,6 +583,10 @@ def build_index(root: Path) -> dict:
         module, errors = parse(s)
         if errors:
             continue
+        # The module that DECLARES the type: another module names it qualified
+        # (`Каталог.Карточка`), and the type inference has to find the same record by either
+        # spelling. The record is kept under the bare name; the qualified one is derived.
+        owner = s.path.name[: -len(".xbsl")].split(".", 1)[0]
         for m in module.members:
             if isinstance(m, P.Structure):
                 rec = {
@@ -567,6 +596,11 @@ def build_index(root: Path) -> dict:
                     "methods": sorted(
                         f.name for f in m.members if isinstance(f, P.Method)
                     ),
+                    # The type of a field AS WRITTEN, the generic parameter included: what
+                    # types `для X из Данные.Строки` is the ELEMENT of the collection, and the
+                    # nominal head the rest of the inference works in has already lost it.
+                    "property_types": _field_types(m.members),
+                    "module": owner,
                 }
             elif isinstance(m, P.Enum):
                 rec = {
@@ -580,7 +614,13 @@ def build_index(root: Path) -> dict:
                 struct_members[m.name] = rec
             else:
                 for k, v in rec.items():
-                    known[k] = sorted(set(known.get(k, ())) | set(v))
+                    if k == "module":
+                        continue  # two namesakes have two modules; the first one keeps the key
+                    if isinstance(v, dict):
+                        # namesakes: a field known to one of them is known to the pair
+                        known.setdefault(k, {}).update(v)
+                    else:
+                        known[k] = sorted(set(known.get(k, ())) | set(v))
 
     objects: list[dict] = []
     components: list[dict] = []
@@ -632,9 +672,11 @@ def build_index(root: Path) -> dict:
             if kind == "Перечисление":
                 entry["values"] = _named_items(s, data, "Элементы")
             if kind in _METADATA_MEMBER_SECTIONS:
-                members = _metadata_member_names(data, kind)
+                members, member_types = _metadata_members(data, kind)
                 for pattern in _METADATA_MEMBER_SECTIONS[kind][1]:
-                    metadata_types[_with_object_name(pattern, name)] = (kind, members)
+                    metadata_types[_with_object_name(pattern, name)] = (
+                        kind, members, member_types,
+                    )
             objects.append(entry)
             if kind == "КомпонентИнтерфейса":
                 components.extend(_form_components(s, data, name, entry["path"]))
@@ -667,8 +709,10 @@ def build_index(root: Path) -> dict:
     module_method_names: dict[str, set[str]] = defaultdict(set)
     for m in methods:
         module_method_names[m["module"]].add(m["name"])
-    for type_name, (kind, member_names) in metadata_types.items():
+    for type_name, (kind, member_names, member_types) in metadata_types.items():
         record: dict = {"properties": member_names, "kind": kind}
+        if member_types:
+            record["property_types"] = member_types
         own_methods = module_method_names.get(type_name)
         if own_methods:
             record["methods"] = sorted(own_methods)
@@ -682,6 +726,8 @@ def build_index(root: Path) -> dict:
         for key in ("properties", "methods"):
             if record.get(key):
                 known[key] = sorted(set(known.get(key, ())) | set(record[key]))
+        if member_types:
+            known.setdefault("property_types", {}).update(member_types)
 
     # The methods the platform generates on a project object, with the type they return: from
     # the data when it has them (every kind), from the built-in row when it does not.

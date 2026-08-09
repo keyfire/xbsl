@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.56.0
+
+### Added
+- **The `.xbql` language and query highlighting.** The query file of a virtual table is no
+  longer plain text: the extension declares the language, plugs in the grammar of the query
+  language (built from the platform's own vocabulary) and subscribes the LSP server to such a
+  file - the dot after a table alias now offers its fields. The same grammar highlights a
+  `Query{...}` block inside a module.
+
 ## 0.55.0
 
 ### Added

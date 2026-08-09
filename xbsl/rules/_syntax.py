@@ -27,7 +27,7 @@ from pathlib import Path
 from functools import lru_cache
 
 from xbsl import dataset
-from xbsl.engine import SourceFile
+from xbsl.engine import SourceFile, is_query_file
 from xbsl.lexer import Token, tokens
 
 # Keywords that introduce a declaration with a type annotation: `знч/пер/конст/поймать/обз Имя: Тип`.
@@ -95,10 +95,20 @@ _CLOSE_CH = ")]}"
 # --- Запрос{ ... } blocks --------------------------------------------------------------
 
 def query_ranges(source: SourceFile) -> list[tuple[int, int]]:
-    """[start, end) offsets of `Запрос{ ... }` blocks, including the braces themselves."""
+    """[start, end) offsets of `Запрос{ ... }` blocks, including the braces themselves.
+
+    A standalone query file (the paired file of a virtual table) has no block to look for: the
+    file IS the query, so the whole text is one range. Everything downstream - the aliases of
+    the tables, the columns of the result, the "cursor sits in a query" test of the editor -
+    then works on such a file exactly as it works inside a block.
+    """
     cached = source.cache.get("query_ranges")
     if cached is not None:
         return cached
+    if is_query_file(source.path):
+        ranges = [(0, len(source.text))]
+        source.cache["query_ranges"] = ranges
+        return ranges
 
     toks = tokens(source)
     ranges: list[tuple[int, int]] = []
@@ -728,6 +738,7 @@ def chain_type(
     resolve_root,
     returns: dict | None,
     stop_offset: int | None = None,
+    written: bool = False,
 ) -> str | None:
     """The type of a call chain `Корень.Метод(...).Метод2(...)` starting at `start`.
 
@@ -737,6 +748,10 @@ def chain_type(
     are not in the catalog, an unresolved link ends the inference. Links starting at or
     past `stop_offset` are not consumed (completion looks at an unfinished chain whose
     tail is already typed to the right of the cursor).
+
+    With `written` the answer is the last link's type AS THE CATALOGUE SPELLS IT, generic
+    parameter included (`Массив<Каталог.Карточка>`) instead of the nominal head - that is what
+    a for-each takes its element type from, and the head has already thrown it away.
     """
     i = _skip_comments(toks, start)
     n = len(toks)
@@ -744,6 +759,7 @@ def chain_type(
         return None
     t = toks[i]
     current: str | None = None
+    last_written: str | None = None
     if t.kind == "KEYWORD" and t.canonical == "QUERY":
         # A query literal constructs a typed query (docs topics/query-literal).
         current = "ТипизированныйЗапрос"
@@ -783,12 +799,13 @@ def chain_type(
         current = dataset.member_type_head(raw) if raw else None
         if current is None:
             return None
+        last_written = raw
         k = _skip_comments(toks, j + 1)
         if k < n and toks[k].kind == "OP" and toks[k].value == "(":
             i = _skip_balanced(toks, k, "(", ")")
         else:
             i = k
-    return current
+    return (last_written or current) if written else current
 
 
 def _constructed_type(
@@ -954,4 +971,43 @@ def local_var_types(
             continue
         for tok in d.names:
             out[tok.value] = name
+    _add_loop_var_types(toks, start, offset, out, resolve_root, returns)
     return out
+
+
+#: `Массив<Каталог.Карточка>` - a collection over ONE element type; several arguments name no
+#: single element, so such a type answers nothing.
+_ELEMENT_RE = re.compile(r"^[\w.]+<(.+)>$")
+
+
+def element_type(written: str | None) -> str | None:
+    """The element type of a collection type as written, or None when it names more than one."""
+    if not written:
+        return None
+    match = _ELEMENT_RE.match(written.strip().rstrip("?").strip())
+    if not match or "," in match.group(1):
+        return None
+    element = match.group(1).strip().rstrip("?").strip()
+    return element or None
+
+
+def _add_loop_var_types(
+    toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
+) -> None:
+    """Type the variable of a `для X из <коллекция>` loop by the element type of the collection.
+
+    Everyday shape, and until now the variable stayed untyped: the collection is usually a
+    field of a project structure (`для Материал из ДанныеСтраницы.Материалы`), so the chain
+    has to be resolved to its WRITTEN type and the element taken out of the generic.
+    """
+    n = len(toks)
+    for i, t in enumerate(toks[: n - 2]):
+        if not (t.kind == "KEYWORD" and t.canonical == "FOR" and start <= t.start < offset):
+            continue
+        name, after = toks[i + 1], toks[i + 2]
+        if name.kind != "IDENT" or not (after.kind == "KEYWORD" and after.canonical == "IN"):
+            continue
+        collection = chain_type(toks, i + 3, resolve_root, returns, written=True)
+        element = element_type(collection)
+        if element:
+            out[name.value] = element

@@ -121,7 +121,13 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   // yaml is limited to the sources root so unrelated repository yamls are not linted.
   const yamlPattern = projectRoot ? `**/${projectRoot}/**/*.yaml` : "**/*.yaml";
   const clientOptions: LanguageClientOptions = {
-    documentSelector: [{ language: "xbsl" }, { language: "yaml", pattern: yamlPattern }],
+    // xbql is the standalone query of a virtual table: the server serves it for completion
+    // (the whole file is one query) and publishes no diagnostics for it.
+    documentSelector: [
+      { language: "xbsl" },
+      { language: "xbql" },
+      { language: "yaml", pattern: yamlPattern },
+    ],
     outputChannel: output,
     diagnosticCollectionName: "xbsl-lsp",
     middleware: {

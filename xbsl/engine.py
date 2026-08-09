@@ -66,9 +66,21 @@ def _detect_newline(data: bytes) -> str:
     return kinds[0]
 
 
+#: The paired file of a virtual table is not a module but a QUERY: the whole file is one query
+#: expression, where a module carries it inside a `Запрос{ ... }` block. It lexes as code (the
+#: query language is lexed by the same lexer), so it is loaded with kind `xbsl`; what tells the
+#: two apart is `is_query_file`, and the linter does not collect such files at all.
+QUERY_SUFFIX = ".xbql"
+
+
+def is_query_file(path: Path) -> bool:
+    """Whether the file is a standalone query (the paired file of a virtual table)."""
+    return path.suffix.lower() == QUERY_SUFFIX
+
+
 def make_source(path: Path, data: bytes) -> SourceFile:
     """Build a SourceFile from a path and bytes (shared by the disk and memory paths)."""
-    kind = "xbsl" if path.suffix == ".xbsl" else "yaml"
+    kind = "xbsl" if path.suffix == ".xbsl" or is_query_file(path) else "yaml"
     had_bom = data.startswith(UTF8_BOM)
     decode_error: str | None = None
     try:
