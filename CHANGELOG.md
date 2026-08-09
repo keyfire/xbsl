@@ -12,9 +12,30 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-09 – 0.58.0
+## 2026-08-09 – 0.58.0, 0.59.0
 
 ### Added
+- **`code/unknown-structure-field` - a field of a project structure is checked against its
+  declaration.** The compiler knows the shape of every structure declared in the project; the linter
+  did not, because the member rules judge the stdlib catalogue and skip project types. A renamed
+  field left its reader in ANOTHER module untouched, the whole-project run stayed clean, and the
+  failure arrived with the server apply. The type comes from the variable's declaration, from a
+  constructor call and - above all - from the element type of a for-each loop over a list, which is
+  the shape the failure happened in. Silent on any doubt: a name declared with anything else in the
+  method, a namesake of a stdlib type, the second hop of a chain, Latin member spellings. 139 rules
+  now.
+- **Stale baseline entries can be seen and pruned.** `--stale-baseline` lists the entries that no
+  longer suppress anything (path, rule, how many suppressions each still holds, message);
+  `--prune-baseline` removes them from the file, leaving the live ones and their reasons alone. The
+  json report gained `baseline_stale` and `baseline_stale_entries`.
+- **The linter finds the project's baseline by itself.** A run with no flag looks for
+  `.xbsllint-baseline` upwards from the checked files, names the path it found and applies it;
+  `--no-baseline` switches the search off, an explicit `--baseline` still wins. Before this a local
+  run reported everything the project had deliberately frozen, which reads as a broken linter.
+- **Tool answers name the data they speak for.** The environment snapshot (`--version`, the MCP
+  `version_info`, the LSP startup line) carries the data root and where it came from; an empty
+  `metadata_schema` answer adds that snapshot and the kinds the data does know - "the platform has
+  no such kind" and "this data does not know it yet" became distinguishable.
 - **`conventions/untranslated-code-literal` – visible text left as a literal in a MODULE.** The
   existing `conventions/untranslated-visible-literal` judges yaml alone, so prose written in code
   was checked by nobody: a message box built from a Russian string, or an event-log property that
@@ -26,6 +47,43 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   a dictionary value, the message names the key whose translation is already written. Off by
   default (a project may legitimately build prose in code - seeding data, layout constants) and
   silent on a project whose descriptor lists fewer than two localization languages.
+
+### Changed
+- **`code/unused-method` judges the public API of common modules.** The rule silenced a method with
+  ANY annotation, and a public method of a common module always carries one - so the check was
+  silent exactly where dead code piles up. Now only the annotations that name a caller OUTSIDE the
+  project code silence it: the platform, a contract, compatibility, and any annotation the
+  dictionary does not know. Visibility and environment annotations leave the caller inside the
+  project, so the method is judged.
+- **The element-kind mapping is derived from the distribution instead of being hand-written.** The
+  list of kinds comes from the serializer's own enum and the class from the suffix rule; five kinds
+  whose class the rule cannot name are spelled out. 41 kinds instead of 35 - the data journal, the
+  report panel and the integration process no longer look unknown to the platform, and a kind left
+  without a class is reported rather than dropped.
+- **`yaml/unknown-property` judges 18 kinds instead of 13.** The measure of a complete class is
+  unchanged - live sources rather than a generated stub: the five kinds added are written with 6 to
+  11 top-level keys in real projects, every one of them declared by the class.
+- **The resource rules know both spellings of the folder.** The platform accepts `Resources` as
+  readily as the Russian name (proved by compiling: a file in the English folder resolves, a missing
+  one fails, the same file in a folder of any other name fails too). An English project used to look
+  as if it had no resources at all.
+- **Data-processor scaffolding.** An attribute no longer gets an `Id` - the line is written only
+  when the class of the section item declares that property (a processor's attribute has none, and
+  the apply failed on it); the PAIR of modules is created, and the operation's handler method is
+  appended to the object module, where the attributes live.
+- **English messages speak English.** Platform names and keywords in rule messages moved into the
+  name substitution (a Russian project reads them in Russian, an English one in English), and the
+  English CLI help now uses English spellings. Verbatim quotes of platform errors are left as they
+  are.
+- **The name whitelists were cleaned by the compiler.** Of 25 claims 12 turned out to be false: the
+  standard attributes are available by bare name only when the yaml declares them (and then reach
+  the module through the paired yaml anyway), four object names do not exist at all, and the fields
+  of a register record belong to its data type. The entity-name table shrank from 15 entries to 4
+  confirmed ones, so `code/undefined-name` no longer stays silent on code that cannot compile.
+
+### Fixed
+- The baseline summary line promises ENTRIES but printed the number of unspent suppressions - one
+  entry may hold several. The former number stays in the json as `baseline_unused`.
 
 ## 2026-08-08 – 0.57.2
 
