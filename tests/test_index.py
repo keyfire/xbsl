@@ -120,6 +120,53 @@ _DICTIONARY_YAML = "\n".join([
 ])
 
 
+# A type DESCRIBED IN METADATA: the members live in the Поля section, not in a module.
+_STRUCTURE_YAML = "\n".join([
+    "ВидЭлемента: ХранимаяСтруктура",                # 1
+    "Ид: 9b7d4e5f-6a8b-4c9d-8e0f-4a5b6c7d8e9f",      # 2
+    "Имя: ИтогОбработки",                            # 3
+    "Поля:",                                         # 4
+    "    -",                                         # 5
+    "        Имя: Обработано",                       # 6
+    "        Тип: Число",                            # 7
+    "    -",                                         # 8
+    "        Имя: Сообщение",                        # 9
+    "        Тип: Строка",                           # 10
+    "",
+])
+
+_STRUCTURE_XBSL = "\n".join([
+    "метод Пусто(): Булево",                         # 1
+    "    возврат Обработано == 0",                   # 2
+    ";",                                             # 3
+    "",
+])
+
+# A constants set: the constants are the members of the GENERATED types `<Имя>.Запись`
+# and `<Имя>.Данные`, and `Получить()` is the way the code reaches the record.
+_CONSTANTS_YAML = "\n".join([
+    "ВидЭлемента: НаборКонстант",                    # 1
+    "Ид: 0c8e5f6a-7b9c-4d0e-9f1a-5b6c7d8e9f0a",      # 2
+    "Имя: НастройкиПриложения",                      # 3
+    "Константы:",                                    # 4
+    "    -",                                         # 5
+    "        Имя: АдресСайта",                       # 6
+    "        Тип: Строка",                           # 7
+    "    -",                                         # 8
+    "        Имя: РежимРазработчика",                # 9
+    "        Тип: Булево",                           # 10
+    "",
+])
+
+# The record module of the constants set: it extends `НастройкиПриложения.Запись`.
+_CONSTANTS_RECORD_XBSL = "\n".join([
+    "метод Настроен(): Булево",                      # 1
+    "    возврат АдресСайта != \"\"",                # 2
+    ";",                                             # 3
+    "",
+])
+
+
 @pytest.fixture()
 def project(tmp_path: Path) -> Path:
     sub = tmp_path / "Основное"
@@ -129,6 +176,12 @@ def project(tmp_path: Path) -> Path:
     (sub / "ВидТовара.yaml").write_text(_ENUM_YAML, encoding="utf-8")
     (sub / "ФормаТоваров.yaml").write_text(_FORM_YAML, encoding="utf-8")
     (sub / "Словарь.yaml").write_text(_DICTIONARY_YAML, encoding="utf-8")
+    (sub / "ИтогОбработки.yaml").write_text(_STRUCTURE_YAML, encoding="utf-8")
+    (sub / "ИтогОбработки.xbsl").write_text(_STRUCTURE_XBSL, encoding="utf-8")
+    (sub / "НастройкиПриложения.yaml").write_text(_CONSTANTS_YAML, encoding="utf-8")
+    (sub / "НастройкиПриложения.Запись.xbsl").write_text(
+        _CONSTANTS_RECORD_XBSL, encoding="utf-8",
+    )
     return tmp_path
 
 
@@ -309,6 +362,7 @@ def test_cli_index_flag(project, capsys):
     assert code == 0
     assert {o["name"] for o in payload["objects"]} == {
         "Товары", "ВидТовара", "ФормаТоваров", "Словарь",
+        "ИтогОбработки", "НастройкиПриложения",
     }
 
 
@@ -355,3 +409,70 @@ def test_dictionary_keys_are_referable(project):
     """They join the ordinary methods, so "find usages" and the reference index see them."""
     idx = build_index(project)
     assert {m["name"] for m in idx["methods"]} >= {"Отправить", "Приветствие"}
+
+
+# --- types described in metadata ----------------------------------------------------------
+
+
+def test_structure_fields_are_indexed_as_members(project):
+    """Without this the editor knows no members of a yaml structure at all: the dot after
+    `новый ИтогОбработки()` offers nothing, while the type has fields and a module."""
+    idx = build_index(project)
+    record = idx["struct_members"]["ИтогОбработки"]
+
+    assert record["properties"] == ["Обработано", "Сообщение"]
+    assert record["kind"] == "ХранимаяСтруктура"
+    # the module extending the type contributes its methods
+    assert record["methods"] == ["Пусто"]
+
+
+def test_constants_are_indexed_under_the_generated_type_names(project):
+    """The constants belong to the types the platform generates from the set (docs
+    topics/constants-set-types), not to the set's own name - the singleton type has methods."""
+    idx = build_index(project)
+    members = idx["struct_members"]
+
+    assert members["НастройкиПриложения.Запись"]["properties"] == [
+        "АдресСайта", "РежимРазработчика",
+    ]
+    assert members["НастройкиПриложения.Данные"]["properties"] == [
+        "АдресСайта", "РежимРазработчика",
+    ]
+    assert members["НастройкиПриложения.Запись"]["kind"] == "НаборКонстант"
+    # the record module (`<Имя>.Запись.xbsl`) extends exactly that type
+    assert members["НастройкиПриложения.Запись"]["methods"] == ["Настроен"]
+    assert "methods" not in members["НастройкиПриложения.Данные"]
+    assert "НастройкиПриложения" not in members
+
+
+def test_generated_returns_type_the_constants_set_call(project):
+    """`знч Запись = НастройкиПриложения.Получить()` has to be typed for the dot after
+    `Запись` to offer anything: the stdlib catalogue knows no project object."""
+    idx = build_index(project)
+
+    assert idx["generated_returns"] == {
+        "НастройкиПриложения": {"Получить": "НастройкиПриложения.Запись"},
+    }
+
+
+def test_metadata_sections_are_read_in_both_spellings(tmp_path):
+    """The sources are bilingual: a structure whose section is written `Fields` describes the
+    same type as one written `Поля`, and a field may name itself `Name`.
+
+    The object's own `Имя` is still read in Russian only - a gap of the indexer as a whole
+    (the sections of a catalog are Russian-only there too), not of this section reader.
+    """
+    (tmp_path / "Данные.yaml").write_text("\n".join([
+        "ElementKind: StorableStructure",
+        "Id: 1d9f6a7b-8c0d-4e1f-a02b-6c7d8e9f0a1b",
+        "Имя: Данные",
+        "Fields:",
+        "    -",
+        "        Name: Идентификатор",
+        "        Type: Строка",
+        "",
+    ]), encoding="utf-8")
+
+    idx = build_index(tmp_path)
+
+    assert idx["struct_members"]["Данные"]["properties"] == ["Идентификатор"]

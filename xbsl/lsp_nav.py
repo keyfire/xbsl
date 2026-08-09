@@ -95,20 +95,31 @@ class IndexLookup:
         return self._refs_by_name.get(name, [])
 
     def struct_by_name(self, name: str) -> Optional[dict]:
-        """Members of a module-declared type (structure/exception/enumeration)."""
+        """Members of a project type by its name: a module-declared structure/exception/
+        enumeration, or a type described in metadata (a structure's Поля, the constants of
+        a set under `<Имя>.Запись` / `<Имя>.Данные`)."""
         return (self.index.get("struct_members") or {}).get(name)
 
     def method_returns(self) -> dict[str, dict[str, str]]:
-        """{module: {method: return type head}} - project methods in the shape the type
-        inference expects of the stdlib catalogue, so that `val X = Module.Method(...)` is
-        typed the same way a platform call is. Only methods that declare a return type."""
+        """{name: {method: result type}} - the return types the inference needs of a PROJECT
+        name, in the shape it expects of the stdlib catalogue, so that `знч X = Модуль.Метод()`
+        is typed the way a platform call is.
+
+        Two sources: the methods a module DECLARES with a return type, and the methods the
+        platform GENERATES on an object of a kind (`generated_returns` of the index -
+        `НастройкиСайта.Получить(): НастройкиСайта.Запись`). A declaration outranks a generated
+        method of the same name: written code beats an assumption about the kind."""
         cached = getattr(self, "_method_returns", None)
         if cached is None:
-            cached = {}
+            cached = {
+                str(name): dict(by_name)
+                for name, by_name in (self.index.get("generated_returns") or {}).items()
+                if isinstance(by_name, dict)
+            }
             for module, methods in self._module_methods.items():
                 by_name = {m["name"]: m["returns"] for m in methods if m.get("returns")}
                 if by_name:
-                    cached[module] = by_name
+                    cached[module] = {**cached.get(module, {}), **by_name}
             self._method_returns = cached
         return cached
 
@@ -318,31 +329,27 @@ def _method_entry(m: dict) -> dict:
 
 
 def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[dict]]:
-    """Members of a variable of a PROJECT type: a module-declared structure/exception/
-    enumeration (fields, enum values, methods) or a yaml structure object (attributes)."""
+    """Members of a variable of a PROJECT type: a structure/exception/enumeration declared in
+    a module or a type described in metadata (the fields of a structure, the constants of a
+    set) - fields, enumeration values and the methods of the module extending the type."""
     struct = lookup.struct_by_name(type_name)
-    if struct:
-        entries = [
-            {"label": str(x), "kind": "field", "detail": "поле"}
-            for x in struct.get("properties") or []
-        ]
-        entries += [
-            {"label": str(x), "kind": "enumMember", "detail": "значение перечисления"}
-            for x in struct.get("values") or []
-        ]
-        entries += [
-            {"label": str(x), "kind": "method", "detail": "метод", "snippet": f"{x}($0)"}
-            for x in struct.get("methods") or []
-        ]
-        return entries or None
-    obj = lookup.object_by_name(type_name)
-    if obj and obj.get("kind") in ("Структура", "ХранимаяСтруктура"):
-        entries = [
-            {"label": a.get("name", ""), "kind": "field", "detail": "реквизит"}
-            for a in obj.get("attributes") or []
-        ]
-        return entries or None
-    return None
+    if not struct:
+        return None
+    # A constant is not a field: the hint says what the author writes in the yaml of the set.
+    field_detail = "константа" if struct.get("kind") == "НаборКонстант" else "поле"
+    entries = [
+        {"label": str(x), "kind": "field", "detail": field_detail}
+        for x in struct.get("properties") or []
+    ]
+    entries += [
+        {"label": str(x), "kind": "enumMember", "detail": "значение перечисления"}
+        for x in struct.get("values") or []
+    ]
+    entries += [
+        {"label": str(x), "kind": "method", "detail": "метод", "snippet": f"{x}($0)"}
+        for x in struct.get("methods") or []
+    ]
+    return entries or None
 
 
 def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict]]:
@@ -385,11 +392,18 @@ def _yaml_type_entries(lookup: IndexLookup, stdlib_names: Optional[Any]) -> list
     for o in lookup.objects():
         kind = o.get("kind", "")
         add(o.get("name", ""), "enum" if kind == "Перечисление" else "object", kind)
-    for s_name in lookup.index.get("struct_members") or {}:
-        add(str(s_name), "localType", "тип модуля")
+    for s_name, record in (lookup.index.get("struct_members") or {}).items():
+        add(str(s_name), "localType", _struct_detail(record))
     for name in _stdlib_type_names(stdlib_names):
         add(name, "object", "тип платформы")
     return entries
+
+
+def _struct_detail(record: Any) -> str:
+    """What a struct_members entry is: a type described in metadata names its element kind
+    (a constants set is also there under `<Имя>.Запись`), the rest is declared in a module."""
+    kind = record.get("kind") if isinstance(record, dict) else None
+    return str(kind) if kind else "тип модуля"
 
 
 def _stdlib_type_names(stdlib_names: Optional[Any]) -> list[str]:
@@ -615,8 +629,8 @@ def resolve_completions(
         for o in lookup.objects():
             kind = o.get("kind", "")
             add(o.get("name", ""), "enum" if kind == "Перечисление" else "object", kind)
-        for s_name in (lookup.index.get("struct_members") or {}):
-            add(s_name, "localType", "тип модуля")
+        for s_name, record in (lookup.index.get("struct_members") or {}).items():
+            add(s_name, "localType", _struct_detail(record))
         for g in stdlib_globals or ():
             add(str(g), "method", "глобальный контекст", f"{g}($0)")
         for t_name in _stdlib_type_names(stdlib_names or stdlib_members):

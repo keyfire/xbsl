@@ -756,21 +756,47 @@ def test_completion_project_struct_members():
     }
 
 
-def test_completion_yaml_struct_attributes():
-    # a yaml-structure-typed variable: attributes of a Структура/ХранимаяСтруктура object
+def test_completion_yaml_struct_fields():
+    # a variable of a type described in METADATA: the fields of a ХранимаяСтруктура come
+    # from struct_members, the way the indexer collects them from the Поля section
     idx = dict(INDEX)
     idx["objects"] = list(INDEX["objects"]) + [{
         "name": "ДанныеРасширения", "kind": "ХранимаяСтруктура",
         "path": "Плюс/ДанныеРасширения.yaml", "line": 1,
         "tabular": [], "local_types": [], "family": [],
-        "attributes": [{"name": "Идентификатор", "line": 5}],
     }]
+    idx["struct_members"] = {
+        "ДанныеРасширения": {"properties": ["Идентификатор"], "kind": "ХранимаяСтруктура"},
+    }
     lookup = IndexLookup(idx)
     entries = resolve_completions(
         lookup, language_id="xbsl", line_prefix="    знч Ид = Данные.",
         file_stem="Модуль", local_vars={"Данные": "ДанныеРасширения"},
     )
     assert [e["label"] for e in entries] == ["Идентификатор"]
+
+
+def test_completion_constants_set_record():
+    # `знч Запись = НастройкиСайта.Получить()` - the generated method types the chain, and
+    # the constants of the set are its members
+    idx = dict(INDEX)
+    idx["objects"] = list(INDEX["objects"]) + [{
+        "name": "НастройкиСайта", "kind": "НаборКонстант",
+        "path": "Основное/НастройкиСайта.yaml", "line": 3,
+        "tabular": [], "local_types": [], "family": [],
+    }]
+    idx["struct_members"] = {
+        "НастройкиСайта.Запись": {"properties": ["АдресСайта"], "kind": "НаборКонстант"},
+    }
+    idx["generated_returns"] = {"НастройкиСайта": {"Получить": "НастройкиСайта.Запись"}}
+    lookup = IndexLookup(idx)
+
+    assert lookup.method_returns()["НастройкиСайта"] == {"Получить": "НастройкиСайта.Запись"}
+    entries = resolve_completions(
+        lookup, language_id="xbsl", line_prefix="    Запись.",
+        file_stem="Модуль", local_vars={"Запись": "НастройкиСайта.Запись"},
+    )
+    assert [(e["label"], e["detail"]) for e in entries] == [("АдресСайта", "константа")]
 
 
 def test_completion_bare_name_top_level():
