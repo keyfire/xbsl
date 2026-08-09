@@ -58,6 +58,7 @@ from . import (  # noqa: F401
     row_fields,
     semantics,
     size_stretch,
+    structure_fields,
     tabular_members,
     type_defaults,
     unknown_members,
