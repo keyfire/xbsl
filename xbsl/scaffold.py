@@ -1832,7 +1832,7 @@ def _yaml_scalar(value: str) -> str:
     """A property value as it goes into yaml: quoted only where a bare scalar would lie.
 
     The measure is the sources themselves - an address is written quoted
-    (`ЗначениеПоУмолчанию: "https://..."`), a plain word bare (`fresh-site`). A value the
+    (`ЗначениеПоУмолчанию: "https://..."`), a plain word bare (`client-code`). A value the
     caller already quoted is left as it is: quoting it twice would store the quotes.
     """
     if len(value) > 1 and value[0] in "\"'" and value[-1] == value[0]:

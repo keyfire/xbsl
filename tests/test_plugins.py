@@ -117,12 +117,12 @@ class _StubDist:
 
 def test_installed_plugins_are_named_once_with_versions(monkeypatch):
     """Пакет, объявивший несколько групп, называется один раз - именем дистрибутива."""
-    dist = _StubDist("xbsl-plugin", "0.7.0")
+    dist = _StubDist("demo-plugin", "0.7.0")
     rules = _StubEP("сайт", plugins.RULES_GROUP, None)
     data = _StubEP("сайт", plugins.DATA_GROUP, None)
     rules.dist = data.dist = dist
     monkeypatch.setattr(plugins, "entry_points", _fake_entry_points(rules, data))
-    assert plugins.installed() == [{"name": "xbsl-plugin", "version": "0.7.0"}]
+    assert plugins.installed() == [{"name": "demo-plugin", "version": "0.7.0"}]
 
 
 def test_installed_skips_an_entry_point_without_a_distribution(monkeypatch):

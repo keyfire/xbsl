@@ -35,7 +35,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   edits an item that already exists: a property already there is replaced in place, a new
   one is appended to the item. Names are checked against the item's metamodel class (both
   spellings accepted, the project's own is written); a value goes in as a scalar, quoted
-  only where a bare one would lie (`DefaultValue: "https://..."`, but `fresh-site` bare). A
+  only where a bare one would lie (`DefaultValue: "https://..."`, but `client-code` bare). A
   property written as a nested block is refused rather than flattened into a scalar. The
   same in the CLI (`--prop KEY=VALUE`, the `set-field-property` command) and over LSP.
 - **`Presentation` at creation time** (0.57.0): `meta_new_object` takes `presentation`
