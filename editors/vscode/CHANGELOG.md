@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.55.0
+
+### Added
+- **The metadata tree opens a virtual table's query.** A virtual table has no module: its paired
+  file is an `.xbql` query, and the platform requires the file to exist and to carry a query. The
+  tree knew nothing about it - the context menu offered properties, description and deletion only,
+  and clicking the node opened the yaml, with no way to reach the query itself. The `.xbql` file is
+  now collected next to the modules, the node carries its path, the menu gained an entry for
+  opening the query, and clicking a virtual table node leads to the query.
+
 ## 0.54.0
 
 ### Changed

@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1
+## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0
 
 ### Added
 - **The members of the kinds' singleton types reached the data: 12 kinds of 41 became 31.** The
