@@ -85,7 +85,6 @@ RECIPES: dict[tuple[str, str], tuple[str, str]] = {
     # _IMPLICIT: roots the module kind itself provides.
     ("_IMPLICIT", "Компоненты"): ("form", _READ),
     ("_IMPLICIT", "Components"): ("form", _READ),
-    ("_IMPLICIT", "Это"): ("object", _READ),
     ("_IMPLICIT", "До"): ("object", _READ),
     # The rights namespace lives in the permission handler, and that one sits in the plain
     # module of an entity rather than in its object module (the shape of working sources).
@@ -93,24 +92,14 @@ RECIPES: dict[tuple[str, str], tuple[str, str]] = {
     # _UNDOCUMENTED: members the documentation does not carry.
     ("_UNDOCUMENTED", "СобственнаяМодифицированность"): ("form", _READ),
     ("_UNDOCUMENTED", "Message"): ("common", "    {name}(\"проба\")"),
-    # _ENTITY_COMMON: names an entity module is said to get without a yaml declaration.
-    ("_ENTITY_COMMON", "Наименование"): ("object", _READ),
-    ("_ENTITY_COMMON", "Код"): ("object", _READ),
+    # _ENTITY_COMMON: the names an entity module gets with nothing declared for them. The
+    # standard attributes (Name/Code of a catalog, Number/Date of a document) are NOT here:
+    # the probe showed they work only when the yaml declares them, so they come to the module
+    # through the paired yaml and the table has nothing to claim.
     ("_ENTITY_COMMON", "Ссылка"): ("object", _READ),
-    ("_ENTITY_COMMON", "ЭтоНовый"): ("object", _READ),
     ("_ENTITY_COMMON", "ПометкаУдаления"): ("object", _READ),
-    ("_ENTITY_COMMON", "РежимЗагрузкиДанных"): ("object", _READ),
     ("_ENTITY_COMMON", "Записать"): ("object", _CALL),
     ("_ENTITY_COMMON", "Удалить"): ("object", _CALL),
-    ("_ENTITY_COMMON", "ПометитьНаУдаление"): ("object", _CALL),
-    ("_ENTITY_COMMON", "СнятьПометкуУдаления"): ("object", _CALL),
-    # Register record names: a catalog module has none of them by construction, and a
-    # register's module carries no `.Объект` in its name (the shape of working sources).
-    ("_ENTITY_COMMON", "Период"): ("record", _READ),
-    ("_ENTITY_COMMON", "Регистратор"): ("record", _READ),
-    ("_ENTITY_COMMON", "ВидЗаписи"): ("record", _READ),
-    ("_ENTITY_COMMON", "Номер"): ("document", _READ),
-    ("_ENTITY_COMMON", "Дата"): ("document", _READ),
     # _COMMON_MEMBERS: the object protocol - a member of any receiver.
     ("_COMMON_MEMBERS", "ПолучитьТип"): ("object", "    знч Тип{n} = Ссылка.{name}()"),
     ("_COMMON_MEMBERS", "ВСтроку"): ("object", "    знч Текст{n} = Ссылка.{name}()"),

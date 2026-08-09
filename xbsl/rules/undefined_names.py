@@ -71,14 +71,13 @@ i18n.register(MESSAGES)
 # documentation of the module kinds.
 _IMPLICIT = frozenset({
     "Компоненты", "Components",   # an interface-component module: access to the named form components
-    "Это", "До",    # an object module: the record after/before the change in ПередЗаписью/ПослеЗаписи
+    # The record BEFORE the change, in the BeforeWrite handler of an object module. Its twin
+    # (the record AFTER) was an assumption: the compiler refused that name outright, and the
+    # control line of the same module errored too - so the module did compile.
+    "До",
     "Сущность",     # the rights namespace in permission handlers (Сущность.Право.Чтение)
 })
 
-# Standard attributes available by bare name in an entity module (X.Объект.xbsl): the
-# platform provides them without a yaml declaration (Наименование/Код of a catalog,
-# Номер/Дата of a document, Период/Регистратор/ВидЗаписи of register records) plus
-# Ссылка and the write methods.
 # Members that exist on the platform but are absent from the distribution docs.
 # Kept deliberately tiny.
 _UNDOCUMENTED = frozenset({
@@ -95,11 +94,25 @@ _UNDOCUMENTED = frozenset({
 # and needs no exception. Whitelisting them silenced this very rule on code that cannot
 # compile, which is how the demo project kept two such calls unnoticed.
 
+# Only what the COMPILER confirmed on a probe stand (tools/verify_claims.py): these four are
+# available by bare name in an entity module with nothing declared for them.
+#
+# The table used to be four times longer, and the extra names were an assumption nobody had
+# checked. The probe settled every one of them:
+#
+# - the standard attributes (Name and Code of a catalog, Number and Date of a document) work
+#   ONLY when the yaml declares them - a standard attribute is an entry of the attributes
+#   section with a name and no type. Declared, they reach the module through the paired yaml
+#   like any other attribute, which the rule reads itself, so the table has nothing to add;
+# - IsNew, DataLoadingMode, MarkForDeletion and ClearDeletionMark do not exist at all -
+#   neither bare, nor on `this`, nor on the reference;
+# - Period of a register record is a property of its DATA type (the before-record parameter),
+#   not a name of the module; RecordKind and Recorder are not there either.
+#
+# Every one of those spellings compiled into an error, and the control line of each module
+# errored too - so the answers were not the silence of an uncompiled module.
 _ENTITY_COMMON = frozenset({
-    "Наименование", "Код", "Номер", "Дата", "Ссылка",
-    "Период", "Регистратор", "ВидЗаписи",
-    "Записать", "Удалить", "ПометитьНаУдаление", "СнятьПометкуУдаления",
-    "ЭтоНовый", "ПометкаУдаления", "РежимЗагрузкиДанных",
+    "Ссылка", "ПометкаУдаления", "Записать", "Удалить",
 })
 
 # The yaml sections whose items become bare names in the object modules.
