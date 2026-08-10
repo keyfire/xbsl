@@ -105,8 +105,9 @@ _COUNTS = {
     "README.md": re.compile(r"\*\*Rules\.\*\*\s*(\d+)\s+rules"),
     "docs/index.ru.md": re.compile(r"(\d+)\s+правил в четырёх тирах"),
     "docs/index.md": re.compile(r"(\d+)\s+rules in four tiers"),
-    "docs/GUIDE.ru.md": re.compile(r"Полный перечень всех\s+(\d+)\s+правил"),
-    "docs/GUIDE.md": re.compile(r"The full list of all\s+(\d+)\s+rules"),
+    # "Rules in depth" moved out of the guide when it was split by task.
+    "docs/linting.ru.md": re.compile(r"Полный перечень всех\s+(\d+)\s+правил"),
+    "docs/linting.md": re.compile(r"The full list of all\s+(\d+)\s+rules"),
 }
 
 # Locale-specific spellings of the "Default" and "Scope" columns.

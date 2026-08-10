@@ -36,7 +36,7 @@ const pages = [
     description:
       "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation – all on the xbsl engine.",
     sidebarLabel: "VS Code extension",
-    order: 5,
+    order: 7,
     note: enNote,
   },
   {
@@ -47,7 +47,7 @@ const pages = [
     description:
       "Расширение VS Code для 1С:Элемент: подсветка синтаксиса, линтинг на лету с Quick Fix, визуальный конструктор форм, обозреватель метаданных и навигация по проекту – всё на движке xbsl.",
     sidebarLabel: "Расширение VS Code",
-    order: 5,
+    order: 7,
     note: ruNote,
   },
   {
@@ -58,7 +58,7 @@ const pages = [
     description:
       "What changed in the xbsl toolkit from release to release, grouped by day.",
     sidebarLabel: "Changelog",
-    order: 8,
+    order: 13,
     note: enNote,
   },
   {
@@ -69,7 +69,7 @@ const pages = [
     description:
       "Что менялось в инструментарии xbsl от версии к версии, с разбивкой по дням.",
     sidebarLabel: "История изменений",
-    order: 8,
+    order: 13,
     note: ruNote,
   },
 ];

@@ -30,13 +30,23 @@ ships as a Python engine and a VS Code extension built on top of it.
 
 ## Where to go next
 
-- **[Guide](/GUIDE)** – installation, CLI flags, CI setup, the baseline mechanism, metadata
-  scaffolding, extending the linter with your own rules, and the LSP and MCP servers.
+- **[Quick start](/start)** – install the package, generate the language data from your
+  distribution, run the first check.
+- **[Checking sources](/linting)** – the flags of a run, what the deeper rules rely on, the
+  baseline for a legacy codebase, CI.
 - **[Rules](/RULES)** – the full list of linter checks, with severities and scope.
+- **[Metadata scaffolding](/scaffolding)** – objects, attributes, routes and forms through the
+  engine instead of hand-written yaml; the code templates.
+- **[Servers and plugins](/servers)** – the LSP server, the MCP server, the web panel, and
+  rules, data and severities of your own.
+- **[Platform data](/platform-data)** – the generated datasets, the documentation index, the
+  diff between two platform versions.
+- **[Commands](/CLI)** – every command and flag, generated from the tool itself.
 - **[Visual designer](/DESIGNER)** – the form panel, the palette, the properties panel and
   following the cursor.
 - **[Documentation panel](/DOCS_PANEL)** – the platform help inside the editor: contents,
   search, the page for a symbol.
+- **[Guide](/GUIDE)** – the map of all of the above.
 - **[README on GitHub](https://github.com/keyfire/xbsl/blob/main/README.md)** – the short
   project tour and quick-start commands.
 - **[Contributing](https://github.com/keyfire/xbsl/blob/main/CONTRIBUTING.md)** – how to add a
@@ -56,7 +66,7 @@ neighbouring platform.
 
 Language data (keywords, the stdlib type catalog, the configuration metamodel) is generated
 from your own 1C:Element distribution and is not bundled with the project – see
-[Language data](/GUIDE#language-data) in the guide.
+[Language data](/start#language-data) in the guide.
 
 Not affiliated with 1C. "1C:Element", "1C:Fresh" and related names are trademarks of their
 respective owners – see [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).

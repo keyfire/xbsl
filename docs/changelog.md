@@ -3,7 +3,7 @@ title: "Changelog"
 description: "What changed in the xbsl toolkit from release to release, grouped by day."
 sidebar:
   label: "Changelog"
-  order: 8
+  order: 13
 ---
 
 <!-- Generated from CHANGELOG.md; do not edit by hand.

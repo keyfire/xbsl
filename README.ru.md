@@ -54,7 +54,7 @@ xbsl extract --dist "<каталог дистрибутива 1С:Элемент
 подмножество шагов – `--only`), сама определяет версию платформы и кладёт данные в
 `xbsl/data/element/` (каталог в `.gitignore`). Подробности – размещение данных, закрытые
 пакеты с данными – в
-[руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#данные-о-языке).
+[руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/start.ru.md#данные-о-языке).
 
 **Шаг 3 – запуск.**
 
@@ -67,7 +67,7 @@ xbsl self-update              # обновление до последней в�
 Главные флаги: `--list-rules`, `--fix`, `--select`/`--enable`/`--ignore`,
 `--baseline`/`--write-baseline`, `--format text|json|codeclimate`, `--lang ru|en`. Полный
 справочник флагов, редакторские режимы `--stdin`/`--index`, нативные колёса mypyc и механика
-`self-update` – в [руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#флаги-cli).
+`self-update` – в [руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/linting.ru.md#флаги-cli).
 
 ## Что умеет
 
@@ -78,14 +78,14 @@ xbsl self-update              # обновление до последней в�
 подключённых библиотек `.xlib`. Полный перечень с уровнями и ссылками на документацию –
 [docs/RULES.ru.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.ru.md); в рантайме –
 `xbsl --list-rules`; что именно проверяет тир D – в
-[руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#правила-подробно).
+[руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/linting.ru.md#правила-подробно).
 
 **Автофиксы.** `--fix` чинит механические находки прямо в файлах – хвостовые пробелы, символы
 типографики, смешанные переводы строк – и только их: всё, что требует суждения, не трогается.
 
 **Базлайн.** Включить правило на легаси-коде и не утонуть: текущие находки замораживаются один
 раз, спрос – только с нового кода; тот же файл хранит точечные исключения с причинами.
-[Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#базлайн-легаси-долг-и-исключения-с-причиной).
+[Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/linting.ru.md#базлайн-легаси-долг-и-исключения-с-причиной).
 
 **Скаффолдинг метаданных.** Создание объектов, реквизитов, маршрутов и форм без ручного yaml:
 33 вида элементов, формы с реальным наполнением, контекстное переименование `rename-object`,
@@ -104,45 +104,45 @@ xbsl rename-object . Товары Номенклатура # файлы + ссы
 `xbsl new-object --help`.
 
 Все подкоманды с ключами – в
-[руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#скаффолдинг-метаданных).
+[руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.ru.md#скаффолдинг-метаданных).
 
 **Редакторы.** [Расширение VS Code](https://github.com/keyfire/xbsl/blob/main/editors/vscode/README.ru.md)
 ([Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl),
 [Open VSX](https://open-vsx.org/extension/keyfire/xbsl)): подсветка синтаксиса, живая и
 проектная диагностика, переходы к определению и автодополнение, конструктор форм, дерево
 метаданных и кнопка деплоя. Под капотом – `xbsl-lsp`, Language Server для любого редактора с
-LSP ([подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#lsp-сервер)).
+LSP ([подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/servers.ru.md#lsp-сервер)).
 
 **Шаблоны кода.** Набираете `есл`, жмёте Ctrl+Space – получаете конструкцию целиком с точками
 ввода. 51 встроенный шаблон (каждый разобран парсером самого линтера – вставить
 некомпилируемый код нельзя), свои – в `.xbsl-templates.json`, панель управления в VS Code;
 механизм и формат файла повторяют 1С:EDT.
-[Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#шаблоны-кода).
+[Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.ru.md#шаблоны-кода).
 
 **Поиск по документации.** `tools/extract_docs.py` превращает справку Элемента из дистрибутива
 в локальную полнотекстовую базу `docs.sqlite`; по ней ищут API `xbsl.docs` и инструменты MCP.
-[Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#поиск-по-документации).
+[Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/platform-data.ru.md#поиск-по-документации).
 
 **MCP-сервер.** `claude mcp add xbsl -- xbsl-mcp`: линт, поиск по документации, `type_members`
 и все операции скаффолдинга как инструменты `meta_*` – агент создаёт объект и в том же ответе
 получает линт записанных файлов.
-[Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#mcp-сервер).
+[Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/servers.ru.md#mcp-сервер).
 
 **Веб-интерфейс.** `xbsl-web` – локальная страница над тем же движком: настройки правил,
-фильтры, темы. [Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#веб-интерфейс).
+фильтры, темы. [Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/servers.ru.md#веб-интерфейс).
 
 **CI.** Ненулевой код возврата – только при находках уровня error, поэтому `xbsl` гейтит
 пайплайн как есть; `--format codeclimate` питает виджет GitLab Code Quality. Готовые джобы
 GitHub Actions и GitLab CI – в
-[руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#использование-в-ci).
+[руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/linting.ru.md#использование-в-ci).
 
 **Расширение движка.** Entry points позволяют закрытому пакету добавить правила, поставлять
 языковые данные и переопределять уровни, не форкая линтер; `XBSL_NO_PLUGINS=1` отключает все
 плагины.
-[Подробнее](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#расширение-свои-правила-данные-и-уровни).
+[Подробнее]((https://github.com/keyfire/xbsl/blob/main/docs/servers.ru.md#расширение-свои-правила-данные-и-уровни).
 
 Язык вывода (RU/EN), версии данных Элемента и порядок поиска корня данных – тоже в
-[руководстве](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.ru.md#язык-вывода).
+[руководстве]((https://github.com/keyfire/xbsl/blob/main/docs/start.ru.md#язык-вывода).
 
 ## Тесты
 

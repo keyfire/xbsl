@@ -3,7 +3,7 @@ title: "Commands"
 description: "Reference of xbsl commands and options: checking sources, the LSP and MCP servers, the web panel, code templates."
 sidebar:
   label: Commands
-  order: 3
+  order: 12
 ---
 
 <!-- Собрано из вывода `xbsl --help` скриптом scripts/gen-cli-docs.py. Не редактировать вручную. -->

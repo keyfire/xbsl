@@ -3,7 +3,7 @@ title: "Visual form designer"
 description: "The in-editor visual designer for 1C:Element interface components - a form panel with structure, data and the form frame, plus the palette and properties panels over the .yaml source."
 sidebar:
   label: Visual designer
-  order: 5
+  order: 8
 ---
 
 The extension includes a visual designer for 1C:Element interface components
@@ -27,7 +27,7 @@ Two things to keep in mind:
 - The **panels and text edits work anywhere.** Selecting nodes, moving and wrapping
   components, copy/paste and the wireframe all rely only on the yaml.
 - The **palette and the typed property editors need the language dataset** (the ui schema,
-  generated from your own 1C:Element distribution – see [Language data](/GUIDE#language-data))
+  generated from your own 1C:Element distribution – see [Language data](/start#language-data))
   and the **LSP server** (`pip install "xbsl[lsp]"`). Without them the structure tree and edits
   still work; the palette and typed editors degrade to a hint instead of failing.
 
@@ -248,7 +248,7 @@ Short scenarios - from the task to the action. Each of them writes a minimal edi
 The same operations are available outside the UI: the CLI (`xbsl form-tree`, `xbsl form-edit`),
 the MCP tools (`meta_component_tree`, `meta_add_component`, `meta_move_component`, ...) and the
 LSP requests (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). See the
-[Guide](/GUIDE#metadata-scaffolding).
+[Guide](/scaffolding#metadata-scaffolding).
 
 ## Provenance
 

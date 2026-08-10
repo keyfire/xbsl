@@ -53,7 +53,7 @@ xbsl extract --dist "<path to the 1C:Element distribution>"
 The command runs every extractor in one go (`python tools/extract.py` from a clone is the same
 entry point; `--only` picks a subset), auto-detects the platform version and places the data
 under `xbsl/data/element/` (gitignored). Details – data location, private data packages –
-in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#language-data).
+in the [guide]((https://github.com/keyfire/xbsl/blob/main/docs/start.md#language-data).
 
 **Step 3 – run.**
 
@@ -66,7 +66,7 @@ xbsl self-update            # upgrade to the latest PyPI version, safe with busy
 The main flags: `--list-rules`, `--fix`, `--select`/`--enable`/`--ignore`,
 `--baseline`/`--write-baseline`, `--format text|json|codeclimate`, `--lang ru|en`. The full
 flag reference, the `--stdin`/`--index` editor modes, native mypyc wheels and the `self-update`
-mechanics – in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#cli-flags).
+mechanics – in the [guide]((https://github.com/keyfire/xbsl/blob/main/docs/linting.md#cli-flags).
 
 ## What it does
 
@@ -77,7 +77,7 @@ type position in code and yaml, enumeration values, `Query{...}` block tables, c
 consistency, the types of attached `.xlib` libraries. The full list with severities and
 documentation links – [docs/RULES.md](https://github.com/keyfire/xbsl/blob/main/docs/RULES.md);
 at runtime – `xbsl --list-rules`; what tier D verifies in depth –
-[the guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#rules-in-depth).
+[the guide]((https://github.com/keyfire/xbsl/blob/main/docs/linting.md#rules-in-depth).
 
 **Autofixes.** `--fix` repairs the mechanical findings in place – trailing whitespace,
 typography characters, mixed newlines – and only them: anything needing judgment is never
@@ -85,7 +85,7 @@ touched.
 
 **Baseline.** Adopt a rule on a legacy codebase without drowning: freeze the current findings
 once, hold only new code to the rule; the same file records point exclusions with reasons.
-[Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#baseline-adopt-a-rule-on-a-legacy-codebase).
+[Details]((https://github.com/keyfire/xbsl/blob/main/docs/linting.md#baseline-adopt-a-rule-on-a-legacy-codebase).
 
 **Metadata scaffolding.** Creating objects, attributes, routes and forms without hand-writing
 yaml: 33 element kinds, forms generated with real content, context-aware `rename-object`,
@@ -104,45 +104,45 @@ extracted from your distribution). Section names of `add-field` still go in the 
 language; `xbsl new-object --help` lists the kinds it can create.
 
 All subcommands with their options –
-[the guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#metadata-scaffolding).
+[the guide]((https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.md#metadata-scaffolding).
 
 **Editors.** The [VS Code extension](https://github.com/keyfire/xbsl/blob/main/editors/vscode/README.md)
 ([Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl),
 [Open VSX](https://open-vsx.org/extension/keyfire/xbsl)): syntax highlighting, live and
 project-wide diagnostics, go-to-definition and completion, the form designer, a metadata tree and
 a deploy button. Under the hood is `xbsl-lsp` – a Language Server any LSP-capable editor can
-spawn ([details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#lsp-server)).
+spawn ([details]((https://github.com/keyfire/xbsl/blob/main/docs/servers.md#lsp-server)).
 
 **Code templates.** Type the first letters of a construct, press Ctrl+Space – get the whole
 construct with edit points.
 51 builtin templates (each one parsed by the linter's own parser, so it cannot insert broken
 code), your own in `.xbsl-templates.json`, a management panel in VS Code; the mechanism and
 file format mirror 1C:EDT.
-[Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#code-templates).
+[Details]((https://github.com/keyfire/xbsl/blob/main/docs/scaffolding.md#code-templates).
 
 **Documentation search.** `tools/extract_docs.py` turns the distribution's Element reference
 into a local full-text `docs.sqlite`; the `xbsl.docs` API and the MCP tools search it.
-[Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#documentation-search).
+[Details]((https://github.com/keyfire/xbsl/blob/main/docs/platform-data.md#documentation-search).
 
 **MCP server.** `claude mcp add xbsl -- xbsl-mcp`: linting, documentation search,
 `type_members` and every scaffolding operation as `meta_*` tools – an agent creates an object
 and gets the lint of the written files in one round trip.
-[Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#mcp-server).
+[Details]((https://github.com/keyfire/xbsl/blob/main/docs/servers.md#mcp-server).
 
 **Web interface.** `xbsl-web` – a local page over the same engine: rule toggles, filters,
-themes. [Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#web-interface).
+themes. [Details]((https://github.com/keyfire/xbsl/blob/main/docs/servers.md#web-interface).
 
 **CI.** The exit code is non-zero only on error-severity findings, so `xbsl` gates a pipeline
 as-is; `--format codeclimate` feeds the GitLab Code Quality widget. Ready-made GitHub
 Actions and GitLab CI jobs –
-[the guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#use-in-ci).
+[the guide]((https://github.com/keyfire/xbsl/blob/main/docs/linting.md#use-in-ci).
 
 **Extending.** Entry points let a private package add rules, ship language data and override
 severities without forking; `XBSL_NO_PLUGINS=1` turns every plugin off.
-[Details](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#extending-your-own-rules-data-and-severities).
+[Details]((https://github.com/keyfire/xbsl/blob/main/docs/servers.md#extending-your-own-rules-data-and-severities).
 
 Output language (RU/EN), Element data versions and the data root resolution order are also
-covered in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/GUIDE.md#output-language).
+covered in the [guide]((https://github.com/keyfire/xbsl/blob/main/docs/start.md#output-language).
 
 ## Tests
 

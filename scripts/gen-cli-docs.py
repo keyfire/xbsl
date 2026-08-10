@@ -270,7 +270,7 @@ def page(lang: str) -> str:
     out = io.StringIO()
     out.write(
         f'---\ntitle: "{t["title"]}"\ndescription: "{t["desc"]}"\n'
-        f'sidebar:\n  label: {t["label"]}\n  order: 3\n---\n\n'
+        f'sidebar:\n  label: {t["label"]}\n  order: 12\n---\n\n'
     )
     out.write("<!-- Собрано из вывода `xbsl --help` скриптом scripts/gen-cli-docs.py. "
               "Не редактировать вручную. -->\n\n")

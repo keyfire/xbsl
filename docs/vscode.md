@@ -3,7 +3,7 @@ title: "XBSL for VS Code"
 description: "The VS Code extension for 1C:Element: syntax highlighting, live linting with Quick Fix, the visual form designer, the metadata explorer, and project-wide navigation – all on the xbsl engine."
 sidebar:
   label: "VS Code extension"
-  order: 5
+  order: 7
 ---
 
 <!-- Generated from editors/vscode/README.md; do not edit by hand.

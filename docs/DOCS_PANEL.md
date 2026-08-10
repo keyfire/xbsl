@@ -3,7 +3,7 @@ title: "Documentation panel"
 description: "The 1C:Element help inside the editor: the contents tree, full-text search, the page for the symbol under the cursor and the jumps from the designer - all built from your own platform distribution."
 sidebar:
   label: Documentation panel
-  order: 7
+  order: 9
 ---
 
 The extension shows the platform help **inside the editor** - as its own
@@ -45,7 +45,7 @@ For an ambiguous name the candidates are **ranked by the receiver before the dot
 - **LSP mode** (`pip install "xbsl[lsp]"`): the server holds the documentation database, the
   extension only asks and displays.
 - **The documentation dataset** built from your 1C:Element distribution - see
-  [Language data](/GUIDE#language-data).
+  [Language data](/start#language-data).
 
 Without the data the panel does not fail - it reports that the documentation is unavailable, and
 the rest of the extension keeps working.

@@ -45,7 +45,11 @@ DOCS = ROOT / "docs"
 VSCODE = ROOT / "editors" / "vscode"
 
 #: Pages that describe the toolkit. BACKLOG is a local note, the changelog is history.
-DESCRIPTIVE_PAGES = ("index", "GUIDE", "RULES", "CLI", "DESIGNER", "DOCS_PANEL", "vscode")
+#: A new page belongs here - otherwise what it describes reads as undocumented.
+DESCRIPTIVE_PAGES = (
+    "index", "GUIDE", "start", "linting", "RULES", "scaffolding", "servers",
+    "platform-data", "CLI", "DESIGNER", "DOCS_PANEL", "vscode",
+)
 
 
 def _page(name: str) -> str:
@@ -192,7 +196,7 @@ def check_extension(problems: list[str]) -> None:
         for locale in ("en", "ru"):
             where = readme[locale] + extra[locale]
             title = _resolve(command.get("title"), nls[locale])
-            title = re.sub(r"^XBSL:\s*", "", title).strip().rstrip(".…")
+            title = re.sub(r"^XBSL:\s*", "", title).strip().rstrip(".")
             if command_id in where or (title and title.lower() in where.lower()):
                 break
         else:
