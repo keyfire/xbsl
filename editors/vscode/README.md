@@ -211,6 +211,10 @@ newlines) are left to `xbsl --fix` on the command line.
 
 ## Rules: levels and disabling
 
+The old settings (`xbsl.groups.*`, `linter.select` / `.enable` / `.ignore`) are still read by the
+code but no longer shown in the forms; the **XBSL: move the rule settings into one table** command
+moves them into the table in one go.
+
 The table does not have to be edited by hand: the **XBSL: rules** command opens a panel - every
 rule of the engine listed by group, each with its own level or "by default", a search by name, a
 "changed only" filter and a reset button. The scope is chosen explicitly (the user or the
@@ -395,6 +399,10 @@ one, then a value; empty clears it. Handy for aligning widths, toggling visibili
 group of fields in one step.
 
 ## Metadata explorer
+
+The collapse button in the tree title (**Collapse to the metadata kinds**) stops at the first
+level: the list of kinds stays visible while the expanded categories fold. The rest - new project,
+grouping, refresh, hiding empty categories - lives in the `...` menu of the same title bar.
 
 ![Metadata explorer: the tree, the properties panel, grouping by subsystem](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/metadata-tree.gif)
 

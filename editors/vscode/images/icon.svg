@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Источник icon.png (рендерится из этого файла). Геометрия снята с прежнего логотипа:
+       плитки 163 px, повороты -7.1 / +8.1 / +17.5 / -8.1 градуса, центральная без наклона.
+       Композиция та же - четыре плитки складываются в "X" вокруг скобок; изменены только два
+       символа: вместо "//" стрелка выката, вместо ";" точка останова. Символ каждой плитки
+       лежит ВНУТРИ её повёрнутой группы, поэтому наклоняется вместе с ней. -->
+  <defs>
+    <linearGradient id="gpink" x1="0.25" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#ff598b"/><stop offset="1" stop-color="#e9175d"/>
+    </linearGradient>
+    <linearGradient id="gblue" x1="0.25" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#5690ff"/><stop offset="1" stop-color="#1459e9"/>
+    </linearGradient>
+    <linearGradient id="gorange" x1="0.25" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#ff8f47"/><stop offset="1" stop-color="#ff5003"/>
+    </linearGradient>
+    <linearGradient id="ggreen" x1="0.25" y1="0" x2="0.45" y2="1">
+      <stop offset="0" stop-color="#35dc82"/><stop offset="1" stop-color="#0fb65d"/>
+    </linearGradient>
+    <linearGradient id="gyellow" x1="0.15" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#fff77c"/><stop offset="0.5" stop-color="#ffdf44"/>
+      <stop offset="1" stop-color="#ffbb03"/>
+    </linearGradient>
+    <linearGradient id="shade" x1="0.15" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#000000" stop-opacity="0"/>
+      <stop offset="0.55" stop-color="#000000" stop-opacity="0.05"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0.18"/>
+    </linearGradient>
+    <linearGradient id="gloss" x1="0" y1="0" x2="0.62" y2="0.78">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.42"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="tileShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="7" stdDeviation="9" flood-color="#6b5a48" flood-opacity="0.34"/>
+    </filter>
+    <filter id="centerShadow" x="-40%" y="-40%" width="180%" height="190%">
+      <feDropShadow dx="0" dy="14" stdDeviation="13" flood-color="#7a6242" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- четыре угловые плитки со своими символами -->
+  <g filter="url(#tileShadow)">
+    <!-- аннотации -->
+    <g transform="translate(98 97) rotate(-7.1)">
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gpink)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gloss)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#shade)"/>
+      <g fill="none" stroke="#ffffff" stroke-width="13" stroke-linecap="round" transform="translate(0 -7)">
+        <circle cx="0" cy="5" r="19"/>
+        <path d="M19 -13v22c0 8 5 13 12 13 9 0 15-8 15-21 0-25-19-42-45-42-27 0-46 20-46 47
+                 0 27 19 46 46 46 10 0 19-2 26-6"/>
+      </g>
+    </g>
+
+    <!-- деплой: стрелка выката, наклонена вместе с плиткой -->
+    <g transform="translate(412 100) rotate(8.1)">
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gblue)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gloss)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#shade)"/>
+      <g fill="#ffffff">
+        <path d="M0 -56 34 -14H-34z"/>
+        <rect x="-12" y="-18" width="24" height="42" rx="6"/>
+        <rect x="-32" y="36" width="64" height="15" rx="7"/>
+      </g>
+    </g>
+
+    <!-- отладка: точка останова -->
+    <g transform="translate(100 422) rotate(7)">
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gorange)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gloss)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#shade)"/>
+      <circle cx="0" cy="0" r="35" fill="#ffffff"/>
+    </g>
+
+    <!-- проверка -->
+    <g transform="translate(410 415) rotate(-8.1)">
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#ggreen)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#gloss)"/>
+      <rect x="-81.5" y="-81.5" width="163" height="163" rx="45" fill="url(#shade)"/>
+      <path d="M-38 2 -12 30 40 -30" fill="none" stroke="#ffffff" stroke-width="22"
+            stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+
+  <!-- центральная плитка: код -->
+  <g filter="url(#centerShadow)" transform="translate(256 253)">
+    <rect x="-137.5" y="-137.5" width="275" height="275" rx="62" fill="url(#gyellow)"/>
+    <rect x="-137.5" y="-137.5" width="275" height="275" rx="62" fill="url(#gloss)"/>
+    <rect x="-137.5" y="-137.5" width="275" height="275" rx="62" fill="url(#shade)"/>
+    <!-- скобки: та форма, что была изначально, только крупнее и чуть толще -->
+    <g fill="none" stroke="#241f16" stroke-width="14" stroke-linecap="round" transform="scale(1.25)">
+      <path d="M-20 -60c-16 0-20 8-20 20v22c0 12-7 18-15 18 8 0 15 6 15 18v22c0 12 4 20 20 20"/>
+      <path d="M20 -60c16 0 20 8 20 20v22c0 12 7 18 15 18-8 0-15 6-15 18v22c0 12-4 20-20 20"/>
+    </g>
+  </g>
+</svg>

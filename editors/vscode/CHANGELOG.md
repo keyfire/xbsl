@@ -12,6 +12,11 @@
 ## Unreleased
 
 ### Added
+- **The logo says what the extension does:** the "//" tile became a deploy arrow and the ";" one
+  a breakpoint; the "@" (annotations) and the check mark (linting) stayed. An `images/icon.svg`
+  source now sits next to it - the logo used to exist as a picture only, so every touch-up meant
+  pixel work. The geometry in the source is measured off the previous file: the tile sides, their
+  rotations and the gradient colours.
 - **The rules panel and the migration messages are translated.** The strings went through
   `vscode.l10n.t` but had no keys in the Russian bundle, so VS Code silently fell back to the
   English source and a Russian editor opened the panel in English. A guard now refuses a
