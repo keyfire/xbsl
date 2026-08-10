@@ -1,31 +1,83 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560">
+  <!-- The colours live in variables so the picture follows the reader's theme: the light
+       palette is the default, the dark one comes from the media query. It works even when the
+       file is embedded as <img> - the SVG document gets the system preference of its own.
+       The PNG next to it is rendered from this file with the dark palette forced, because a
+       README cannot carry an SVG (vsce refuses to package one). -->
   <style>
+    :root {
+      --card: #ffffff;
+      --card-edge: #d0d7e2;
+      --zone: #f4f6fa;
+      --zone-edge: #d7dde8;
+      --box: #ffffff;
+      --box-edge: #ccd4e0;
+      --title: #1c2029;
+      --muted: #5c6577;
+      --body: #414a5c;
+      --code: #2b3346;
+      --code-dim: #67707f;
+      --edge-text: #3c4557;
+      --edge: #8a94a6;
+      --accent-blue: #0969da;
+      --accent-orange: #bc4c00;
+      --accent-yellow: #bf8700;
+      --accent-green: #1a7f37;
+      --accent-purple: #8250df;
+      --accent-teal: #0b7285;
+      --accent-pink: #bf3989;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --card: #14171e;
+        --card-edge: #262c38;
+        --zone: #181c26;
+        --zone-edge: #2c3345;
+        --box: #232a38;
+        --box-edge: #3b445c;
+        --title: #eef1f8;
+        --muted: #7f8aa3;
+        --body: #aab3c7;
+        --code: #c9d4ea;
+        --code-dim: #8b95ab;
+        --edge-text: #c6cddd;
+        --edge: #6d7891;
+        --accent-blue: #3794ff;
+        --accent-orange: #f0883e;
+        --accent-yellow: #ffd23f;
+        --accent-green: #56d364;
+        --accent-purple: #a78bfa;
+        --accent-teal: #39c5cf;
+        --accent-pink: #f778ba;
+      }
+    }
     text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
     .mono { font-family: Consolas, 'Cascadia Mono', Menlo, monospace; }
-    .zone-label { font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; fill: #7f8aa3; }
-    .box-title { font-size: 15px; font-weight: 600; fill: #eef1f8; }
-    .box-sub { font-size: 12px; fill: #7f8aa3; }
-    .box-body { font-size: 12.5px; fill: #aab3c7; }
-    .code { font-size: 11.5px; fill: #c9d4ea; }
-    .code-dim { font-size: 11.5px; fill: #8b95ab; }
-    .edge-label { font-size: 12.5px; font-weight: 600; fill: #c6cddd; }
-    .edge-sub { font-size: 11.5px; font-style: italic; fill: #8b95ab; }
-    .box { fill: #232a38; stroke: #3b445c; }
-    .edge { stroke: #6d7891; stroke-width: 1.5; fill: none; }
+    .zone-label { font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; fill: var(--muted); }
+    .box-title { font-size: 15px; font-weight: 600; fill: var(--title); }
+    .box-sub { font-size: 12px; fill: var(--muted); }
+    .box-body { font-size: 12.5px; fill: var(--body); }
+    .code { font-size: 11.5px; fill: var(--code); }
+    .code-dim { font-size: 11.5px; fill: var(--code-dim); }
+    .edge-label { font-size: 12.5px; font-weight: 600; fill: var(--edge-text); }
+    .edge-sub { font-size: 11.5px; font-style: italic; fill: var(--code-dim); }
+    .box { fill: var(--box); stroke: var(--box-edge); }
+    .edge { stroke: var(--edge); stroke-width: 1.5; fill: none; }
+    .arrow { fill: var(--edge); }
   </style>
   <defs>
     <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-      <path d="M0,0 L8,4 L0,8 Z" fill="#6d7891"/>
+      <path d="M0,0 L8,4 L0,8 Z" class="arrow"/>
     </marker>
   </defs>
 
   <!-- card -->
-  <rect x="0.5" y="0.5" width="819" height="559" rx="12" fill="#14171e" stroke="#262c38"/>
+  <rect x="0.5" y="0.5" width="819" height="559" rx="12" fill="var(--card)" stroke="var(--card-edge)"/>
 
   <!-- zones -->
-  <rect x="14" y="30" width="206" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
-  <rect x="236" y="30" width="300" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
-  <rect x="552" y="30" width="254" height="516" rx="10" fill="#181c26" stroke="#2c3345" stroke-dasharray="5 4"/>
+  <rect x="14" y="30" width="206" height="516" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="236" y="30" width="300" height="516" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="552" y="30" width="254" height="516" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
   <text x="30" y="54" class="zone-label">PROJECT SOURCES</text>
   <text x="252" y="54" class="zone-label">XBSL ENGINE</text>
   <text x="520" y="54" text-anchor="end" class="mono code-dim">pip install xbsl</text>
@@ -45,7 +97,7 @@
 
   <!-- Sources -->
   <rect x="30" y="110" width="174" height="118" rx="8" class="box"/>
-  <rect x="30" y="118" width="3" height="102" rx="1.5" fill="#56d364"/>
+  <rect x="30" y="118" width="3" height="102" rx="1.5" fill="var(--accent-green)"/>
   <text x="44" y="134" class="box-title">Sources</text>
   <text x="44" y="160" class="mono code">Имя.yaml · Имя.xbsl</text>
   <text x="44" y="184" class="box-body">element description</text>
@@ -53,7 +105,7 @@
 
   <!-- Baseline -->
   <rect x="30" y="360" width="174" height="112" rx="8" class="box"/>
-  <rect x="30" y="368" width="3" height="96" rx="1.5" fill="#7f8aa3"/>
+  <rect x="30" y="368" width="3" height="96" rx="1.5" fill="var(--muted)"/>
   <text x="44" y="384" class="box-title">Baseline</text>
   <text x="44" y="408" class="mono code">.xbsllint-baseline</text>
   <text x="44" y="430" class="box-body">frozen legacy findings,</text>
@@ -61,7 +113,7 @@
 
   <!-- Engine core -->
   <rect x="252" y="68" width="268" height="230" rx="8" class="box"/>
-  <rect x="252" y="76" width="3" height="214" rx="1.5" fill="#f0883e"/>
+  <rect x="252" y="76" width="3" height="214" rx="1.5" fill="var(--accent-orange)"/>
   <text x="266" y="92" class="box-title">Engine core</text>
   <text x="266" y="118" class="box-body">linter: tiers A–D, style rules,</text>
   <text x="266" y="136" class="box-body">typography, unknown types</text>
@@ -73,42 +125,42 @@
 
   <!-- Metadata scaffolding -->
   <rect x="252" y="318" width="268" height="96" rx="8" class="box"/>
-  <rect x="252" y="326" width="3" height="80" rx="1.5" fill="#f778ba"/>
+  <rect x="252" y="326" width="3" height="80" rx="1.5" fill="var(--accent-pink)"/>
   <text x="266" y="342" class="box-title">Metadata scaffolding</text>
   <text x="266" y="366" class="box-body">objects · fields · routes · forms</text>
   <text x="266" y="388" class="mono code">uuid + precise yaml edits</text>
 
   <!-- Plugin -->
-  <rect x="252" y="442" width="268" height="84" rx="8" fill="#232a38" stroke="#3b445c" stroke-dasharray="5 4"/>
-  <rect x="252" y="450" width="3" height="68" rx="1.5" fill="#ffd23f"/>
+  <rect x="252" y="442" width="268" height="84" rx="8" fill="var(--box)" stroke="var(--box-edge)" stroke-dasharray="5 4"/>
+  <rect x="252" y="450" width="3" height="68" rx="1.5" fill="var(--accent-yellow)"/>
   <text x="266" y="466" class="box-title">Your plugin</text>
   <text x="266" y="488" class="box-body">Element language data,</text>
   <text x="266" y="506" class="box-body">private rules (entry points)</text>
 
   <!-- CLI -->
   <rect x="568" y="68" width="222" height="96" rx="8" class="box"/>
-  <rect x="568" y="76" width="3" height="80" rx="1.5" fill="#39c5cf"/>
+  <rect x="568" y="76" width="3" height="80" rx="1.5" fill="var(--accent-teal)"/>
   <text x="582" y="92" class="box-title">CLI</text>
   <text x="582" y="116" class="mono code">xbsl &lt;path&gt; · xbsl new-object</text>
   <text x="582" y="140" class="box-body">terminal and CI gates</text>
 
   <!-- LSP -->
   <rect x="568" y="188" width="222" height="96" rx="8" class="box"/>
-  <rect x="568" y="196" width="3" height="80" rx="1.5" fill="#3794ff"/>
+  <rect x="568" y="196" width="3" height="80" rx="1.5" fill="var(--accent-blue)"/>
   <text x="582" y="212" class="box-title">LSP server</text>
   <text x="582" y="236" class="mono code">xbsl-lsp</text>
   <text x="582" y="260" class="box-body">VS Code extension keyfire.xbsl</text>
 
   <!-- MCP -->
   <rect x="568" y="308" width="222" height="96" rx="8" class="box"/>
-  <rect x="568" y="316" width="3" height="80" rx="1.5" fill="#a78bfa"/>
+  <rect x="568" y="316" width="3" height="80" rx="1.5" fill="var(--accent-purple)"/>
   <text x="582" y="332" class="box-title">MCP server</text>
   <text x="582" y="356" class="mono code">xbsl-mcp</text>
   <text x="582" y="380" class="box-body">AI agents: lint, docs, meta_*</text>
 
   <!-- Web -->
   <rect x="568" y="428" width="222" height="96" rx="8" class="box"/>
-  <rect x="568" y="436" width="3" height="80" rx="1.5" fill="#56d364"/>
+  <rect x="568" y="436" width="3" height="80" rx="1.5" fill="var(--accent-green)"/>
   <text x="582" y="452" class="box-title">Web UI</text>
   <text x="582" y="476" class="mono code">xbsl-web</text>
   <text x="582" y="500" class="box-body">local report · 127.0.0.1 only</text>

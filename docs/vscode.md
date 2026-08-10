@@ -588,6 +588,8 @@ platform's debug server.
 > elemctl, and asking for those twice was the only thing the split achieved. Settings made
 > for the old extension (`xbslDebug.*`) are still read, so an existing setup keeps working.
 
+![VS Code with the extension, the Java debug adapter and elemctl on the developer machine; the platform debug server and the Console API in the 1C:Element cloud; the browser with the debugged application joins the debug server by the same sessionId](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/debug-how-it-works.svg)
+
 **Getting started.** Run **XBSL: Set up 1C:Element debugging** (`xbsl.debug.setup`) from the
 Command Palette – the wizard checks Java, the adapter directory and elemctl, fixes what it
 can on the spot and offers to create `launch.json`. Then open the folder with the sources,
@@ -807,7 +809,7 @@ default [LSP mode](#lsp-mode-default) every feature – diagnostics, navigation,
 and the metadata scaffolding – talks to one long-living `xbsl-lsp` server; without the server
 the same checks and scaffolding run through the CLI:
 
-![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.png)
+![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.svg)
 
 In the CLI mode two producers feed one diagnostic collection, and the split is by buffer state:
 

@@ -23,7 +23,7 @@ kind cannot live without, and a note for whatever the generator must not invent 
 whose content is drawn in the designer (`ReportPanel`, `IntegrationProcess`) are
 deliberately absent.
 
-![The VS Code tree, AI agents and the terminal call the same scaffolding core; it writes created and point-edited yaml/xbsl files, the linter checks what was written, and the response carries files, notes and the lint report; the LSP surface returns full texts for the editor to apply](https://raw.githubusercontent.com/keyfire/xbsl/main/images/scaffolding.png)
+![The VS Code tree, AI agents and the terminal call the same scaffolding core; it writes created and point-edited yaml/xbsl files, the linter checks what was written, and the response carries files, notes and the lint report; the LSP surface returns full texts for the editor to apply](https://raw.githubusercontent.com/keyfire/xbsl/main/images/scaffolding.svg)
 
 ```sh
 xbsl new-project . vendor App                          # descriptor + module + a subsystem

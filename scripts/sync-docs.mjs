@@ -13,7 +13,7 @@
 // Run: `npm run sync:docs` (also runs automatically before `npm run build` and `npm run dev`,
 // and in CI as its own step before `npx blume build`). After editing a source file regenerate
 // its page with this script and commit it.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -90,6 +90,18 @@ const absolutizeLinks = (md, dir) =>
     .replace(/!\[([^\]]*)\]\((?!https?:|\/|#)([^)]+)\)/g, `![$1](${RAW}${dir}$2)`)
     .replace(/(?<!!)\[([^\]]*)\]\((?!https?:|\/|#|mailto:)([^)]+)\)/g, `[$1](${BLOB}${dir}$2)`);
 
+// A README shows PNG: vsce refuses to package a README with an SVG picture, so the marketplaces
+// only ever get the raster. The site has no such limit, and an SVG there follows the reader's
+// theme (the diagrams carry a `prefers-color-scheme` palette). So the mirrored page swaps a PNG
+// for its SVG - but only where that SVG actually exists: screenshots and gifs have none.
+const preferSvg = (md) =>
+  md.replace(/!\[([^\]]*)\]\((\S+?)\.png\)/g, (whole, alt, base) => {
+    const name = base.split("/").pop();
+    return existsSync(join(root, "editors", "vscode", "images", `${name}.svg`))
+      ? `![${alt}](${base}.svg)`
+      : whole;
+  });
+
 for (const page of pages) {
   const raw = readFileSync(join(root, page.src), "utf8");
   const lines = raw.split("\n");
@@ -98,7 +110,9 @@ for (const page of pages) {
   if (lines[i]?.startsWith("# ")) i++; // the leading H1 becomes the frontmatter title
   // Drop blank lines and the language-switcher line right under the heading.
   while (i < lines.length && (lines[i].trim() === "" || isSwitcherLine(lines[i]))) i++;
-  const body = absolutizeLinks(lines.slice(i).join("\n").replace(/^\n+/, "").trimEnd(), page.dir);
+  const body = preferSvg(
+    absolutizeLinks(lines.slice(i).join("\n").replace(/^\n+/, "").trimEnd(), page.dir)
+  );
 
   const frontmatter =
     "---\n" +
