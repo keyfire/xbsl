@@ -66,8 +66,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+      # With the extras: without them `xbsl lsp --help` answers "needs the [lsp] extra" instead
+      # of the flags, and the generated command page comes out short.
       - name: Install
-        run: pip install -e .
+        run: pip install -e ".[lsp,mcp]"
       - name: Docs guard (every surface is described)
         run: python tools/docsguard.py
       # The generated pages are committed, so a stale one means the generator was not run.

@@ -105,7 +105,17 @@ def run(args: list[str], lang: str) -> str:
         )
     except subprocess.TimeoutExpired:
         return ""          # справки нет – раздел такой команды просто не появится
-    return (out.stdout or out.stderr).rstrip()
+    text = (out.stdout or out.stderr).rstrip()
+    # An environment without the extra answers "needs the [lsp] extra" INSTEAD of the flags,
+    # and the page would silently come out short - the generated file then differs from the
+    # committed one on every machine that has the extras. Better to stop than to write that.
+    if re.search(r"\[(lsp|mcp|morph)\]", text) and "usage:" not in text:
+        raise SystemExit(
+            f"xbsl {' '.join(args)} --help: {text.strip()}\n"
+            "Установите пакет с extras – pip install -e \".[lsp,mcp]\" – и повторите: без них "
+            "страница команд соберётся неполной."
+        )
+    return text
 
 
 def parse(help_text: str) -> dict:
