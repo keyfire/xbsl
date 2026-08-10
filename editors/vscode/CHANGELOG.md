@@ -9,6 +9,24 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **Debugging did not see the "Env File" setting and went to the wrong stand.** `xbsl.deploy.envFile`
+  applied to the deploy only: debugging took the .env from `launch.json` and nowhere else, so a
+  filled-in setting was silently ignored and elemctl asked for the token on the stand named by the
+  neighbouring `.env` - answering "application not found" whenever that stand calls the application
+  something else. Debugging now resolves it the way it already resolved the application id: a launch
+  configuration wins over the setting. A relative path is resolved against the workspace folder, as
+  in the deploy: elemctl runs with the sources root as its working directory, and with a project
+  subfolder open those two are not the same place.
+
+### Changed
+- **The "Deploy" settings section is now "Deploy and debugging"**, and the descriptions of the .env
+  and of the application spell out how they relate: the .env picks the stand and the default
+  application, App ID overrides the application ON THAT stand and can stay empty when
+  `ELEMENT_APP_ID` already names it.
+
 ## 0.58.1
 
 ### Fixed

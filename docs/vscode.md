@@ -571,7 +571,7 @@ elemctl is offered for installation right from the error message.
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `xbsl.deploy.elemctlPath` | `elemctl` | The elemctl executable – used by the deploy command **and by debugging**. |
-| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute); handy in a git worktree whose `.env` lives in the main checkout. |
+| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute); handy in a git worktree whose `.env` lives in the main checkout. Used **by debugging too** - it takes the stand from here unless the launch configuration sets `envFile`. |
 | `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. When it is not set anywhere, the deploy offers the applications `elemctl apps list` can see – pick one by name, the id is what gets saved. |
 | `xbsl.deploy.extraArgs` | – | Extra `elemctl deploy` arguments, space-separated. |
 

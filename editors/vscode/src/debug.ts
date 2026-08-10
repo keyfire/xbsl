@@ -467,14 +467,29 @@ class XbslConfigurationProvider implements vscode.DebugConfigurationProvider {
 
     try {
       const globalArgs: string[] = [];
-      if (typeof config.envFile === "string" && config.envFile) {
-        globalArgs.push("--env-file", config.envFile);
+      // The stand to debug is the one the deploy button targets: launch.json wins, and when it
+      // says nothing the xbsl.deploy.envFile setting decides - exactly as app-id below already
+      // worked. Without this fallback a filled-in setting shows up in the deploy and is silently
+      // ignored by debugging, which sends the session to a different stand.
+      // A relative path is resolved against the WORKSPACE FOLDER, the way the deploy does it:
+      // elemctl runs with the sources root as its working directory, and with a project subfolder
+      // open those two are not the same place.
+      const configuredEnvFile =
+        typeof config.envFile === "string" && config.envFile
+          ? String(config.envFile)
+          : textSetting("deploy.envFile", "envFile");
+      const envFile =
+        configuredEnvFile && !path.isAbsolute(configuredEnvFile) && folderPath
+          ? path.join(folderPath, configuredEnvFile)
+          : configuredEnvFile;
+      if (envFile) {
+        globalArgs.push("--env-file", envFile);
       }
       // app-id: launch.json > the setting > .env or the environment (elemctl reads those itself).
       // Without any of them elemctl would fail with a bare "no app-id" - we ask up front and
       // remember the answer in the setting so the next run does not ask again.
       let appId = config.appId ? String(config.appId) : textSetting("deploy.appId", "appId");
-      if (!appId && !envProvidesAppId(root, typeof config.envFile === "string" ? config.envFile : undefined)) {
+      if (!appId && !envProvidesAppId(root, envFile || undefined)) {
         // The same picker the deploy uses: the applications elemctl sees, by name.
         const workspaceFolder = folder ?? vscode.workspace.workspaceFolders?.[0];
         const entered = workspaceFolder

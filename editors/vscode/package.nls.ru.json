@@ -104,8 +104,8 @@
   "config.workspaceLintTimeout": "Сколько миллисекунд может идти прогон по всему проекту, прежде чем его прервут. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#настройки)",
   "config.rules": "Выключить правило или целую группу либо сообщать о ней другим уровнем. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#правила-уровни-и-отключение)",
   "config.deploy.elemctlPath": "Исполняемый файл elemctl - для команды деплоя и для отладки. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
-  "config.deploy.envFile": "`.env` с подключением и целевым приложением, отличный от лежащего в папке воркспейса. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
-  "config.deploy.appId": "Приложение, куда деплоим: идентификатор или точное имя (это не адрес). [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
+  "config.deploy.envFile": "`.env`, выбирающий стенд: подключение и приложение по умолчанию. Действует и на деплой, и на отладку (конфигурация запуска старше). Относительный путь считается от папки воркспейса. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
+  "config.deploy.appId": "Приложение НА ЭТОМ стенде: идентификатор или точное имя (это не адрес). Переопределяет `ELEMENT_APP_ID` из env-файла - если тот приложение называет, настройку можно оставить пустой. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
   "config.deploy.extraArgs": "Дополнительные аргументы `elemctl deploy` через пробел. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#деплой-на-стенд)",
   "config.section.groups": "Группы правил",
   "config.groups.enum.default": "Собственные уровни правил (группа включена)",
@@ -181,7 +181,7 @@
   "config.section.linting": "Проверка",
   "config.section.lsp": "Языковой сервер",
   "config.section.templates": "Шаблоны кода",
-  "config.section.deploy": "Деплой",
+  "config.section.deploy": "Деплой и отладка",
   "config.section.debug": "Отладка",
   "config.debug.applicationUrl": "По какому адресу открывать отлаживаемое приложение, если оно отвечает на своём домене. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)"
 }
