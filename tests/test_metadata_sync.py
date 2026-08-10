@@ -223,6 +223,23 @@ def _manifest() -> dict:
     return json.loads((VSCODE / "package.json").read_text(encoding="utf-8"))
 
 
+def test_every_runtime_string_has_a_russian_translation():
+    """A string shown at runtime goes through vscode.l10n.t and needs a key in the ru bundle.
+
+    Without the key VS Code silently falls back to the English source, and a Russian editor gets
+    an English panel - which is exactly what shipped with the rules panel until this guard.
+    """
+    bundle = json.loads((VSCODE / "l10n" / "bundle.l10n.ru.json").read_text(encoding="utf-8"))
+    literal = re.compile(r'l10n\.t\(\s*"((?:[^"\\]|\\.)*)"')
+    missing = []
+    for path in sorted((VSCODE / "src").glob("*.ts")):
+        for match in literal.finditer(path.read_text(encoding="utf-8")):
+            text = json.loads('"' + match.group(1) + '"')
+            if text not in bundle:
+                missing.append(f"{path.name}: {text}")
+    assert not missing, "нет перевода в bundle.l10n.ru.json:\n" + "\n".join(missing)
+
+
 def test_settings_do_not_offer_the_retired_rule_keys():
     """The forms must not offer what the one table replaced.
 

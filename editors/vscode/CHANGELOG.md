@@ -12,6 +12,10 @@
 ## Unreleased
 
 ### Added
+- **The rules panel and the migration messages are translated.** The strings went through
+  `vscode.l10n.t` but had no keys in the Russian bundle, so VS Code silently fell back to the
+  English source and a Russian editor opened the panel in English. A guard now refuses a
+  `l10n.t` string without a translation.
 - **The rules panel: the "XBSL: rules" command.** Every rule of the engine listed by group - the
   tier, the id, the title and the current state: its own level, one inherited from a group or a
   tier, or the default. A dropdown changes the level, and "by default" removes the key from the

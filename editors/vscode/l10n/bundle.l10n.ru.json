@@ -469,5 +469,22 @@
   "Application for the deploy": "Приложение для деплоя",
   "The identifier (APP_ID) or the exact name of the application - elemctl accepts either. It will be saved to the xbsl.deploy.appId setting.": "Идентификатор (APP_ID) либо точное имя приложения - elemctl принимает и то, и другое. Значение сохранится в настройку xbsl.deploy.appId.",
   "The application must not be empty.": "Приложение не может быть пустым.",
-  "Which application to debug": "Какое приложение отлаживаем"
+  "Which application to debug": "Какое приложение отлаживаем",
+  "elemctl: {0}": "elemctl: {0}",
+  "XBSL: the rule settings now live in one table (xbsl.rules), {0} scope(s) moved.": "XBSL: настройки правил перенесены в одну таблицу (xbsl.rules), областей перенесено: {0}.",
+  "XBSL: nothing to move - the rules are already set in one table.": "XBSL: переносить нечего – правила уже заданы одной таблицей.",
+  "XBSL: rules": "XBSL: правила",
+  "XBSL: the rules table could not be saved: {0}": "XBSL: не удалось сохранить таблицу правил: {0}",
+  "Rules": "Правила",
+  "One table, xbsl.rules: a level on a rule also switches it on when it is off by default; on a group or a tier it only recolours what already runs.": "Одна таблица, xbsl.rules: уровень у имени правила ещё и включает его, если по умолчанию оно выключено; у группы и тира – только меняет уровень тому, что и так работает.",
+  "Search by name or id": "Поиск по названию или идентификатору",
+  "changed only": "только изменённые",
+  "user settings": "настройки пользователя",
+  "workspace settings": "настройки рабочей области",
+  "Reset the table": "Сбросить таблицу",
+  "by default": "по умолчанию",
+  "off by default": "по умолчанию выключено",
+  "the whole group": "всей группе",
+  "The rule catalogue is empty - the engine did not answer `xbsl --list-rules`.": "Каталог правил пуст – движок не ответил на `xbsl --list-rules`.",
+  "inherited from": "наследует от"
 }
