@@ -1560,7 +1560,6 @@
           "xbsl.debug.adapterPath": {
             "type": "string",
             "default": "",
-            "markdownDescription": "%config.adapterPath%",
             "scope": "machine-overridable",
             "description": "%config.debug.adapterPath%"
           },
