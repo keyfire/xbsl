@@ -146,9 +146,10 @@ lint:
 
 ## Rules in depth
 
-**The full list of all 139 rules** (severity, default state, scope, links to platform
-documentation sections) is in [RULES.md](/RULES);
-at runtime – `xbsl --list-rules`. The tier overview is in the README; below is what the deeper
+**The full list of all 139 rules of the base set** (severity, default state, scope, links to
+platform documentation sections) is in [RULES.md](/RULES);
+at runtime – `xbsl --list-rules`, which also counts in the rules and severity overrides of the
+installed plugins. The tier overview is in the README; below is what the deeper
 tiers actually verify.
 
 The type rules of tier D cover every type position in code (`new`, `as` casts, annotations,
@@ -368,6 +369,25 @@ and quick-fix code actions – without paying the interpreter start-up cost per 
 `--enable`, `--data-dir`, `--baseline`, `--templates`. Any LSP-capable editor (VS Code, Neovim,
 JetBrains) can spawn it.
 
+Everything an editor needs for code is standard LSP, so a plain client works with no extra
+wiring. On top of that the server answers private `xbsl/*` requests – this is what the VS Code
+panels are built on, and what another editor would use to reproduce them:
+
+| Group | Requests |
+|---|---|
+| Diagnostics and hints | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
+| Platform documentation | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
+| Schemas and vocabularies | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
+| Metadata scaffolding | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
+| Forms | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
+| Event handlers | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
+
+A scaffolding request returns a plan – the full text of every file it would write – and the
+editor applies it as one undoable edit; the server writes nothing itself (the CLI and the MCP
+server, on the same code, do write). `xbsl/metaCapabilities` answers with the server version and
+the kinds it can create – of objects, of section items, of forms – so a client can build its
+menus from the running engine instead of hardcoding them.
+
 ## Code templates
 
 A template is a short trigger plus a construct: type the first letters of `if`, press Ctrl+Space,
@@ -440,20 +460,74 @@ pip install -e ".[mcp]"
 claude mcp add xbsl -- xbsl-mcp
 ```
 
-Tools: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`, `version_info()`
-(engine, interpreter, data version and plugin packages – tells apart two environments that
-answer differently on the same file); documentation search –
-`docs_search(query)`, `docs_page(id)`, `docs_symbol(name)` (needs the `docs.sqlite` database, see
-above); `type_members(name)` – the members of a stdlib type with the return-type roots of its
-methods in one compact answer (cheaper than a docs page when only the member list matters);
-metadata scaffolding – `meta_new_project`, `meta_new_object`, `meta_add_field`,
-`meta_add_route`, `meta_add_method`, `meta_add_form`, `meta_add_subsystem`,
-`meta_add_dependency`,
-`meta_rename_object` (with a `dry_run` plan mode), `meta_set_access`, `meta_object_info`,
-`meta_project_info`.
 Every writing `meta_*` tool applies the changes and returns the lint of the written files in the
 same response – creation and validation in one round trip. The core and the CLI do not require
 `mcp` – it lives only in the `[mcp]` extra.
+
+**Checking and the environment**
+
+| Tool | What it does |
+|---|---|
+| `lint_paths(paths, select, ignore)` | check files and directories on disk |
+| `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
+| `list_rules()` | the rules available here: id, title, tier, scope, severity |
+| `version_info()` | the environment answering: engine, interpreter, data version, plugins – tells apart two environments that answer differently on the same file |
+
+**Platform reference and schemas**
+
+| Tool | What it does |
+|---|---|
+| `docs_search(query, limit)` | full-text search over the 1C:Element documentation |
+| `docs_page(id)` | a documentation page by the id returned by the two other tools |
+| `docs_symbol(name)` | the page for a symbol by name (a type or a member) |
+| `type_members(name)` | the members of a stdlib type in one compact answer – what can follow the dot; cheaper than a page when only the member list matters |
+| `ui_schema(component, brief, property)` | the ui schema of an interface component: the designer's palette and its typed properties |
+| `metadata_schema(kind, sections, names)` | the properties an element of a given `ElementKind` may declare |
+
+The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](#documentation-search)); the two schema tools read the generated language data.
+
+**The project and its objects**
+
+| Tool | What it does |
+|---|---|
+| `meta_project_info(root)` | map the sources under a root: projects, subsystems, objects by kind |
+| `meta_object_info(root, name, yaml_path)` | describe one object: everything needed to write its forms and code |
+| `meta_new_project(...)` | scaffold a project: `Проект.yaml`, `Проект.xbsl` and the first subsystem |
+| `meta_new_object(directory, kind, name, ...)` | create an object: `<Name>.yaml` plus `<Name>.xbsl` for kinds with a module |
+| `meta_rename_object(..., dry_run)` | rename an object and update every reference across the sources |
+| `meta_delete_object(..., dry_run)` | delete an object whole: the yaml/module pair and its forms |
+| `meta_add_subsystem(parent_dir, name, ...)` | create a subsystem folder with its `Подсистема.yaml` |
+| `meta_add_dependency(root, vendor, name, version, ...)` | attach a library – the `Libraries` section of `Проект.yaml` |
+| `meta_set_access(root, ..., default, permissions, calc_by)` | set `AccessControl.Permissions` on an object |
+
+**Fields, routes, methods, forms, localization**
+
+| Tool | What it does |
+|---|---|
+| `meta_add_field(yaml_path, field_kind, name, type, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, tabular section |
+| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists |
+| `meta_add_route(yaml_path, routes, template, methods)` | add url templates to an `HttpService` plus the handler stubs |
+| `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |
+| `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | generate forms for an object and register them in its `Interface` |
+| `meta_add_localization(yaml_path, language)` | add a translation file to a localized-strings element |
+| `meta_localization_info(yaml_path)` | the localization picture: declared languages and what is still untranslated |
+
+**Form components – the designer, scripted**
+
+| Tool | What it does |
+|---|---|
+| `meta_component_tree(yaml_path)` | the node tree of an interface component |
+| `meta_add_component(yaml_path, parent_id, slot, ...)` | insert a new component into a slot of the parent node |
+| `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | paste a ready yaml block of one component (a copied subtree) into a slot |
+| `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | move a node into another (or the same) slot; the comments above it travel along |
+| `meta_move_components(yaml_path, node_ids, ...)` | move several nodes in one operation, keeping their document order |
+| `meta_remove_component(yaml_path, node_id)` | remove a node with its attached comments |
+| `meta_remove_components(yaml_path, node_ids)` | remove several nodes in one operation |
+| `meta_set_component_property(yaml_path, node_id, key, value, value_yaml)` | set, replace or remove a property of a node |
+| `meta_add_handler(yaml_path, node_id, key, method, signature)` | bind an event property to a handler method of the paired module |
+
+The same operations are available through the CLI ([Commands](/CLI)) and, for an editor, through
+the `xbsl/meta*` LSP requests.
 
 ## Web interface
 

@@ -15,7 +15,7 @@ ships as a Python engine and a VS Code extension built on top of it.
 
 - **Linter with autofixes** – 139 rules in four tiers: yaml structure, text and typography
   conventions, code structure, and semantics checked against the platform data and the project
-  itself.
+  itself (a plugin can add rules of its own on top).
 - **LSP server** – live diagnostics, go-to-definition and completion for any LSP-capable editor.
 - **Metadata scaffolding** – creating objects, attributes, routes and forms without hand-writing
   yaml.

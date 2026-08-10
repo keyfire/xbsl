@@ -146,10 +146,11 @@ lint:
 
 ## Правила подробно
 
-**Полный перечень всех 139 правил** (severity, включённость по умолчанию, область, ссылки на
-разделы документации платформы) – в
+**Полный перечень всех 139 правил базового набора** (severity, включённость по умолчанию,
+область, ссылки на разделы документации платформы) – в
 [RULES.ru.md](/ru/RULES); в рантайме –
-`xbsl --list-rules`. Обзор по тирам – в README; ниже – что именно проверяют глубокие тиры.
+`xbsl --list-rules`, который учитывает ещё и правила и переопределения уровней установленных
+плагинов. Обзор по тирам – в README; ниже – что именно проверяют глубокие тиры.
 
 Типовые правила тира D покрывают каждую типовую позицию в коде (`новый`, приведение `как`,
 аннотации, сигнатуры) и каждое значение `Тип:` в yaml (объединения `А|Б|?`, дженерики,
@@ -360,6 +361,25 @@ Language Server по stdio: живые пофайловые диагностик
 относительно папки воркспейса), `--select`/`--ignore`/`--enable`, `--data-dir`, `--baseline`,
 `--templates`. Подойдёт любому редактору с LSP (VS Code, Neovim, JetBrains).
 
+Всё, что редактору нужно для кода, – стандартный LSP, так что обычный клиент работает без
+дополнительной обвязки. Сверх этого сервер отвечает на приватные запросы `xbsl/*` – на них
+построены панели расширения VS Code, и по ним же панели можно повторить в другом редакторе:
+
+| Группа | Запросы |
+|---|---|
+| Диагностики и подсказки | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
+| Документация платформы | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
+| Схемы и словари | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
+| Скаффолдинг метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
+| Формы | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
+| Обработчики событий | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
+
+Запрос скаффолдинга возвращает план – полный текст каждого файла, который был бы записан, – а
+редактор применяет его одной отменяемой правкой; сам сервер не пишет ничего (CLI и MCP-сервер на
+том же коде – пишут). `xbsl/metaCapabilities` отвечает версией сервера и наборами видов, которые
+он умеет создавать: объектов, элементов разделов, форм – по ним клиент строит меню от живого
+движка, а не от жёстко зашитого списка.
+
 ## Шаблоны кода
 
 Шаблон – это аббревиатура и конструкция за ней: набираете `есл`, жмёте Ctrl+Space, выбираете
@@ -429,20 +449,73 @@ pip install -e ".[mcp]"
 claude mcp add xbsl -- xbsl-mcp
 ```
 
-Инструменты: `lint_paths(paths)`, `lint_source(filename, content)`, `list_rules()`,
-`version_info()` (движок, интерпретатор, версия данных и пакеты надстроек – различает два
-окружения, отвечающие на одном файле по-разному); поиск по
-документации – `docs_search(query)`, `docs_page(id)`, `docs_symbol(name)` (нужна база `docs.sqlite`,
-см. выше); `type_members(name)` – члены stdlib-типа с корнями типов возвратов его методов одним
-компактным ответом (дешевле страницы доков, когда нужен только список членов);
-скаффолдинг метаданных – `meta_new_project`, `meta_new_object`, `meta_add_field`,
-`meta_add_route`, `meta_add_method`, `meta_add_form`, `meta_add_subsystem`,
-`meta_add_dependency`,
-`meta_rename_object` (с режимом плана `dry_run`), `meta_set_access`, `meta_object_info`,
-`meta_project_info`.
 Каждый пишущий `meta_*` применяет изменения и в том же ответе возвращает линт записанных
 файлов – создание и проверка за один вызов. Ядро и CLI зависимости `mcp` не требуют – она
 только в extra `[mcp]`.
+
+**Проверка и окружение**
+
+| Инструмент | Что делает |
+|---|---|
+| `lint_paths(paths, select, ignore)` | проверить файлы и каталоги на диске |
+| `lint_source(filename, content, select, ignore)` | проверить содержимое в памяти, до записи файла |
+| `list_rules()` | доступные здесь правила: id, заголовок, тир, область, severity |
+| `version_info()` | чем отвечает окружение: движок, интерпретатор, версия данных, надстройки – различает два окружения, отвечающие на одном файле по-разному |
+
+**Документация платформы и схемы**
+
+| Инструмент | Что делает |
+|---|---|
+| `docs_search(query, limit)` | полнотекстовый поиск по документации 1С:Элемент |
+| `docs_page(id)` | страница документации по идентификатору из двух других инструментов |
+| `docs_symbol(name)` | страница символа по имени (тип или член) |
+| `type_members(name)` | члены stdlib-типа одним компактным ответом – что может стоять после точки; дешевле страницы, когда нужен только список членов |
+| `ui_schema(component, brief, property)` | ui-схема компонента интерфейса: палитра конструктора и типизированные свойства |
+| `metadata_schema(kind, sections, names)` | какие свойства вправе объявить элемент заданного `ВидЭлемента` |
+
+Трём `docs_*` нужна база `docs.sqlite` (см. [Поиск по документации](#поиск-по-документации)), двум схемным – сгенерированные данные о языке.
+
+**Проект и его объекты**
+
+| Инструмент | Что делает |
+|---|---|
+| `meta_project_info(root)` | карта исходников под корнем: проекты, подсистемы, объекты по видам |
+| `meta_object_info(root, name, yaml_path)` | описание одного объекта: всё, что нужно, чтобы писать его формы и код |
+| `meta_new_project(...)` | создать проект: `Проект.yaml`, `Проект.xbsl` и первую подсистему |
+| `meta_new_object(directory, kind, name, ...)` | создать объект: `<Имя>.yaml` и `<Имя>.xbsl` у видов с модулем |
+| `meta_rename_object(..., dry_run)` | переименовать объект и обновить все ссылки в исходниках |
+| `meta_delete_object(..., dry_run)` | удалить объект целиком: пару yaml/модуль и его формы |
+| `meta_add_subsystem(parent_dir, name, ...)` | создать подсистему – папку с `Подсистема.yaml` |
+| `meta_add_dependency(root, vendor, name, version, ...)` | подключить библиотеку – раздел `Библиотеки` в `Проект.yaml` |
+| `meta_set_access(root, ..., default, permissions, calc_by)` | задать `КонтрольДоступа.Разрешения` у объекта |
+
+**Поля, маршруты, методы, формы, локализация**
+
+| Инструмент | Что делает |
+|---|---|
+| `meta_add_field(yaml_path, field_kind, name, type, ...)` | добавить элемент раздела: реквизит, измерение, ресурс, значение перечисления, параметр, поле, табличную часть |
+| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | задать свойства уже существующему элементу раздела |
+| `meta_add_route(yaml_path, routes, template, methods)` | добавить `HttpСервис` шаблоны url и заготовки обработчиков |
+| `meta_add_method(module_path, name, params, returns, ...)` | вставить метод в модуль `.xbsl`, не разрывая блоки аннотаций |
+| `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | сгенерировать формы объекта и зарегистрировать их в `Интерфейс` |
+| `meta_add_localization(yaml_path, language)` | добавить файл перевода элементу локализованных строк |
+| `meta_localization_info(yaml_path)` | картина локализации: объявленные языки и что ещё не переведено |
+
+**Компоненты формы – конструктор из скрипта**
+
+| Инструмент | Что делает |
+|---|---|
+| `meta_component_tree(yaml_path)` | дерево узлов компонента интерфейса |
+| `meta_add_component(yaml_path, parent_id, slot, ...)` | вставить новый компонент в слот родительского узла |
+| `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | вставить в слот готовый блок yaml одного компонента (скопированное поддерево) |
+| `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | перенести узел в другой (или тот же) слот; комментарии над ним едут следом |
+| `meta_move_components(yaml_path, node_ids, ...)` | перенести несколько узлов одной операцией, сохранив их порядок в документе |
+| `meta_remove_component(yaml_path, node_id)` | удалить узел вместе с его комментариями |
+| `meta_remove_components(yaml_path, node_ids)` | удалить несколько узлов одной операцией |
+| `meta_set_component_property(yaml_path, node_id, key, value, value_yaml)` | задать, заменить или удалить свойство узла |
+| `meta_add_handler(yaml_path, node_id, key, method, signature)` | привязать событие узла к методу-обработчику парного модуля |
+
+Те же операции доступны из CLI ([Команды](/ru/CLI)) и, для редактора, через LSP-запросы `xbsl/meta*`.
 
 ## Веб-интерфейс
 

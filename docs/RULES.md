@@ -9,6 +9,11 @@ sidebar:
 The full list of linter checks. This file is extended as rules are added; the live list at
 runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 139 rules.
 
+The table describes the toolkit as it ships. An installed plugin may add rules of its own and
+override severities and default states (see [Extending](/GUIDE#extending-your-own-rules-data-and-severities)),
+so the runtime list can differ from this one – `xbsl --list-rules` shows what your environment
+actually runs, and `XBSL_NO_PLUGINS=1` shows the set below.
+
 ## Boundary: the linter complements the compiler, it does not replace it
 
 The linter works over text, the AST and the project model. Its rules know types at the first

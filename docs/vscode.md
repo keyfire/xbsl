@@ -206,13 +206,15 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.linter.lang` | auto | Diagnostic language: ` ` (auto) / `ru` / `en`. |
 | `xbsl.linter.select` | – | Only these rules (ids, groups, or tier letters `A`–`D`). |
 | `xbsl.linter.ignore` | – | Exclude these rules. |
+| `xbsl.linter.enable` | – | Turn ON rules that are off by default (ids, groups, or tier letters `A`–`D`). Unlike `select` the default set stays in place – these are added to it. This is the only way to enable such a rule: `xbsl.rules` is an overlay over the findings the server already produced, and a rule that never ran produces none. |
 | `xbsl.rules` | `{}` | Per-rule levels and disabling: `{"style": "off", "code/brackets": "error"}`. See [Rules](#rules-levels-and-disabling). |
 | `xbsl.linter.debounce` | `300` | Delay (ms) before linting while typing. |
 | `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (`Id` uniqueness etc.) cross-fire between directories. |
 | `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
-| `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, project, naming, style, typography, whitespace, encoding, structure, form, query, security): the rules' own levels, one level for the whole group, or `off`. The **naming** group covers the names of project elements per the platform standard (needs `xbsl` >= 0.11.0). See [Rules](#rules-levels-and-disabling). |
+| `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, project, naming, style, typography, whitespace, encoding, structure, form, query, security, conventions): the rules' own levels, one level for the whole group, or `off`. The **naming** group covers the names of project elements per the platform standard (needs `xbsl` >= 0.11.0). See [Rules](#rules-levels-and-disabling). |
+| `xbsl.checkForUpdates` | `true` | Ask Open VSX once a day whether a newer extension is published: the extension is installed from a vsix while the editor asks the Marketplace, so nothing else notices a version left behind. The check only lights up the status bar; the **Check for a newer extension** command works regardless of it. |
 | `xbsl.deploy.*` | – | The deploy command settings – documented in the [XBSL Debug README](https://github.com/keyfire/elemctl/tree/main/editors/vscode#deploy-from-vs-code) of the elemctl project. |
 
 ## Rules: levels and disabling
@@ -437,15 +439,22 @@ own, so their property sets differ too.
 Composite (nested) properties – `ContentHorizontalAlign { ... }`, say – are shown but not
 editable: edit those in the yaml.
 
-**Creating objects.** A category root has an **Add &lt;class&gt;** action (Add catalog, Add document,
-Add enumeration, Add information/accumulation register, Add common module, Add HTTP service, Add
-structure, Add client event, Add command-interface fragment, Add client-work parameters, Add common
-form): it asks a name and a subsystem (folder), writes a minimal valid yaml (a fresh `Id`; a paired
-`.xbsl` for module kinds) and opens it. Classes are shown even when the project has none of them yet.
-In the subtree groups a **"+"** adds an attribute / dimension / resource / value / parameter / field /
-tabular section; a catalog/document has **Add object form**: the engine generates a form populated
-from the object's `Attributes` (optionally a list form with columns too) and registers it in the
-owner's `Interface`.
+**Creating objects.** A category root has an **Add &lt;class&gt;** action: it asks a name and a
+subsystem (folder), writes a minimal valid yaml (a fresh `Id`; a paired `.xbsl` for module kinds)
+and opens it. Classes are shown even when the project has none of them yet. Every class the engine
+can scaffold is there:
+
+| | Classes |
+| --- | --- |
+| **Data** | catalog, document, enumeration, information register, accumulation register, virtual table, constant set, structure, stored structure, exchange plan |
+| **Code and services** | common module, HTTP service, SOAP service, service contract, type contract, entity contract, data processor, scheduled job, event-log event |
+| **Interface** | common form, command-interface fragment, usual command, navigation command, switchable command, command with a component, client event, client-work parameters, report color scheme |
+| **Rights and settings** | access key, privilege on an action, privilege on an element, settings storage, self-registration parameter, localized strings |
+
+In the subtree groups a **"+"** adds an attribute / dimension / resource / value / parameter /
+field / tabular section (and an attribute of a tabular section); a catalog/document has **Add object
+form**: the engine generates a form populated from the object's `Attributes` (optionally a list form
+with columns too) and registers it in the owner's `Interface`.
 
 The templates and yaml edits are computed by the engine (`xbsl` 0.16+): the same operations are
 available to agents through its `meta_*` MCP tools and to any editor through the `xbsl/meta*` LSP
@@ -572,6 +581,156 @@ of the [elemctl](https://github.com/keyfire/elemctl) project
 - **XBSL: form designer** (`xbsl.previewForm`) – the panel of the active form yaml (see above).
 - **XBSL: search the documentation** (`xbsl.docs.search`) and **documentation for the symbol**
   (`xbsl.docs.showForSymbol`) – the Documentation view (see above).
+
+<details>
+<summary>The full list</summary>
+
+<!-- commands:start -->
+
+Every command of the extension. Generated from `package.json` – do not edit by hand.
+
+**Project-wide**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| XBSL: check the whole project | `xbsl.lintProject` | Command Palette |
+| XBSL: new 1C:Element project | `xbsl.project.new` | Command Palette |
+| XBSL: search forms by structure | `xbsl.forms.search` | Command Palette |
+| XBSL: restart the linter | `xbsl.restartLinter` | Command Palette |
+| XBSL: code palette | `xbsl.choosePalette` | Command Palette |
+| XBSL: deploy the project (elemctl) | `xbsl.deploy` | Command Palette |
+| Check for a newer extension | `xbsl.checkForUpdate` | Command Palette |
+| XBSL: form designer | `xbsl.previewForm` | Command Palette |
+| XBSL: go to definition, or to its documentation | `xbsl.goToDefinition` | Command Palette |
+
+**Code templates**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| XBSL: code templates | `xbsl.templates.manage` | Command Palette |
+| XBSL: import code templates | `xbsl.templates.import` | Command Palette |
+| XBSL: export code templates | `xbsl.templates.export` | Command Palette |
+
+**Metadata tree: creating objects**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| Add catalog | `xbsl.metadata.addObject.catalog` | Command Palette |
+| Add document | `xbsl.metadata.addObject.document` | Command Palette |
+| Add enumeration | `xbsl.metadata.addObject.enumeration` | Command Palette |
+| Add information register | `xbsl.metadata.addObject.inforegister` | Command Palette |
+| Add accumulation register | `xbsl.metadata.addObject.accumregister` | Command Palette |
+| Add common module | `xbsl.metadata.addObject.commonmodule` | Command Palette |
+| Add HTTP service | `xbsl.metadata.addObject.httpservice` | Command Palette |
+| Add client-work parameters | `xbsl.metadata.addObject.clientparams` | Command Palette |
+| Add structure | `xbsl.metadata.addObject.structure` | Command Palette |
+| Add client event | `xbsl.metadata.addObject.clientevent` | Command Palette |
+| Add command-interface fragment | `xbsl.metadata.addObject.cmdfragment` | Command Palette |
+| Add common form | `xbsl.metadata.addObject.commonform` | Command Palette |
+| Add stored structure | `xbsl.metadata.addObject.storedstructure` | Command Palette |
+| Add constant set | `xbsl.metadata.addObject.constantsset` | Command Palette |
+| Add virtual table | `xbsl.metadata.addObject.virtualtable` | Command Palette |
+| Add SOAP service | `xbsl.metadata.addObject.soapservice` | Command Palette |
+| Add service contract | `xbsl.metadata.addObject.servicecontract` | Command Palette |
+| Add type contract | `xbsl.metadata.addObject.typecontract` | Command Palette |
+| Add entity contract | `xbsl.metadata.addObject.entitycontract` | Command Palette |
+| Add event-log event | `xbsl.metadata.addObject.logevent` | Command Palette |
+| Add scheduled job | `xbsl.metadata.addObject.scheduledjob` | Command Palette |
+| Add data processor | `xbsl.metadata.addObject.processing` | Command Palette |
+| Add report color scheme | `xbsl.metadata.addObject.colorscheme` | Command Palette |
+| Add usual command | `xbsl.metadata.addObject.usualcommand` | Command Palette |
+| Add navigation command | `xbsl.metadata.addObject.navcommand` | Command Palette |
+| Add switchable command | `xbsl.metadata.addObject.switchcommand` | Command Palette |
+| Add command with a component | `xbsl.metadata.addObject.componentcommand` | Command Palette |
+| Add exchange plan | `xbsl.metadata.addObject.exchangeplan` | Command Palette |
+| Add access key | `xbsl.metadata.addObject.accesskey` | Command Palette |
+| Add privilege on an action | `xbsl.metadata.addObject.actionright` | Command Palette |
+| Add privilege on an element | `xbsl.metadata.addObject.elementright` | Command Palette |
+| Add settings storage | `xbsl.metadata.addObject.settingsstorage` | Command Palette |
+| Add self-registration parameter | `xbsl.metadata.addObject.regparam` | Command Palette |
+| Add localized strings | `xbsl.metadata.addObject.locstrings` | Command Palette |
+
+**Metadata tree: the rest**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| XBSL: refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
+| Open description (yaml) | `xbsl.metadata.openYaml` | Command Palette |
+| Open query (xbql) | `xbsl.metadata.openQuery` | Command Palette |
+| Open module (xbsl) | `xbsl.metadata.openModule` | Command Palette |
+| Open object module (.Object.xbsl) | `xbsl.metadata.openObjectModule` | Command Palette |
+| Open in the form designer | `xbsl.metadata.previewForm` | Command Palette |
+| Open application module (Project.xbsl) | `xbsl.metadata.openAppModule` | Command Palette |
+| Properties | `xbsl.metadata.props` | Command Palette |
+| Add attribute | `xbsl.metadata.addAttribute` | Command Palette |
+| Add dimension | `xbsl.metadata.addDimension` | Command Palette |
+| Add resource | `xbsl.metadata.addResource` | Command Palette |
+| Add value | `xbsl.metadata.addEnumValue` | Command Palette |
+| Add parameter | `xbsl.metadata.addClientParam` | Command Palette |
+| Add field | `xbsl.metadata.addStructField` | Command Palette |
+| Add tabular section | `xbsl.metadata.addTabular` | Command Palette |
+| Add attribute to tabular section | `xbsl.metadata.addTabularAttr` | Command Palette |
+| Add a URL template | `xbsl.metadata.addRoute` | Command Palette |
+| Add an HTTP method | `xbsl.metadata.addRouteMethod` | Command Palette |
+| Add form | `xbsl.metadata.addObjectForm` | Command Palette |
+| Delete object | `xbsl.metadata.deleteObject` | Command Palette |
+| Add object... | `xbsl.metadata.addObjectPick` | Command Palette |
+| Add localization (translation) | `xbsl.metadata.addLocalization` | Command Palette |
+| Add subsystem | `xbsl.metadata.addSubsystem` | Command Palette |
+| Filter by subsystem | `xbsl.metadata.filterBySubsystem` | Command Palette |
+| Clear subsystem filter | `xbsl.metadata.clearFilter` | Command Palette |
+| XBSL: tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
+| Hide empty categories | `xbsl.metadata.hideEmptyCategories` | Command Palette |
+| Show empty categories | `xbsl.metadata.showEmptyCategories` | Command Palette |
+
+**Form designer**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| XBSL: refresh the form structure | `xbsl.formStructure.refresh` | Command Palette |
+| Go to yaml | `xbsl.formStructure.openInEditor` | Command Palette |
+| Move up | `xbsl.formStructure.moveUp` | Command Palette |
+| Move down | `xbsl.formStructure.moveDown` | Command Palette |
+| Delete component | `xbsl.formStructure.delete` | Command Palette |
+| Rename component | `xbsl.formStructure.rename` | Command Palette |
+| Duplicate | `xbsl.formStructure.duplicate` | Command Palette |
+| Wrap in a container | `xbsl.formStructure.wrap` | Command Palette |
+| Unwrap container | `xbsl.formStructure.unwrap` | Command Palette |
+| Copy yaml fragment | `xbsl.formStructure.copyYaml` | Command Palette |
+| Focus on this subtree | `xbsl.formStructure.focusSubtree` | Command Palette |
+| Show the whole form | `xbsl.formStructure.resetFocus` | Command Palette |
+| Show only named components | `xbsl.formStructure.filterNamed` | Command Palette |
+| Show all components | `xbsl.formStructure.filterAll` | Command Palette |
+| XBSL: refresh the component palette | `xbsl.formPalette.refresh` | Command Palette |
+| Activate the palette component | `xbsl.formPalette.activate` | panel / context menu |
+| Insert into the form | `xbsl.formPalette.insert` | Command Palette |
+| Add to favorites | `xbsl.formPalette.addFavorite` | Command Palette |
+| Remove from favorites | `xbsl.formPalette.removeFavorite` | Command Palette |
+| Open documentation | `xbsl.formPalette.openDocs` | Command Palette |
+| Paste yaml from the clipboard | `xbsl.formStructure.pasteYaml` | Command Palette |
+| Save as block preset | `xbsl.formStructure.savePreset` | Command Palette |
+| Insert block preset... | `xbsl.formStructure.insertPreset` | Command Palette |
+| Manage block presets... | `xbsl.formStructure.managePresets` | Command Palette |
+| Edit selected together... | `xbsl.formStructure.editSelected` | Command Palette |
+| XBSL: refresh the data panel | `xbsl.formData.refresh` | Command Palette |
+| Insert into the form | `xbsl.formData.insert` | Command Palette |
+| Add property | `xbsl.formData.addProperty` | Command Palette |
+| Rename property | `xbsl.formData.renameProperty` | Command Palette |
+| Change property type | `xbsl.formData.retypeProperty` | Command Palette |
+| Remove property | `xbsl.formData.removeProperty` | Command Palette |
+
+**Documentation**
+
+| Command | Id | Invoked from |
+| --- | --- | --- |
+| XBSL: search the documentation | `xbsl.docs.search` | Command Palette |
+| XBSL: documentation for the symbol | `xbsl.docs.showForSymbol` | Command Palette |
+| XBSL: refresh the documentation tree | `xbsl.docs.refresh` | Command Palette |
+| XBSL: open a documentation page | `xbsl.docs.open` | panel / context menu |
+
+<!-- commands:end -->
+
+</details>
 
 ## How it works
 

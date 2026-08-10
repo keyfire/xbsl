@@ -54,3 +54,26 @@ jobs:
           esac
           echo "base: $base"
           python tools/langguard.py --base "$base"
+
+  # The reference pages name rules, tools, commands and settings by hand, and a hand-written
+  # list drifts the moment a surface grows: a review of the site found eleven MCP tools
+  # described nowhere and a list of creatable object classes naming eleven of thirty-four.
+  # The guard needs no language data - it reads the rule registry, not `--list-rules`.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: pip install -e .
+      - name: Docs guard (every surface is described)
+        run: python tools/docsguard.py
+      # The generated pages are committed, so a stale one means the generator was not run.
+      - name: Generated pages are up to date
+        run: |
+          python scripts/gen-cli-docs.py
+          python scripts/gen-commands-docs.py
+          git diff --exit-code -- docs/CLI.md docs/CLI.ru.md \
+            editors/vscode/README.md editors/vscode/README.ru.md
