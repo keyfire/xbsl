@@ -208,7 +208,8 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
 | `xbsl.groups.*` | `default` | A dropdown per rule group (code, yaml, project, naming, style, typography, whitespace, encoding, structure, form, query, security, conventions): the rules' own levels, one level for the whole group, or `off`. The **naming** group covers the names of project elements per the platform standard (needs `xbsl` >= 0.11.0). See [Rules](#rules-levels-and-disabling). |
 | `xbsl.checkForUpdates` | `true` | Ask Open VSX once a day whether a newer extension is published: the extension is installed from a vsix while the editor asks the Marketplace, so nothing else notices a version left behind. The check only lights up the status bar; the **Check for a newer extension** command works regardless of it. |
-| `xbsl.deploy.*` | – | The deploy command settings – documented in the [XBSL Debug README](https://github.com/keyfire/elemctl/tree/main/editors/vscode#deploy-from-vs-code) of the elemctl project. |
+| `xbsl.deploy.*` | – | The deploy settings – the elemctl binary, the `.env`, the target application. See [Deploy](#deploy); the elemctl path and the application id are shared with debugging. |
+| `xbsl.debug.*` | – | Debugging: the platform adapter directory, the Java launcher, opening the debuggee on start. See [Debugging](#debugging). |
 
 ## Rules: levels and disabling
 

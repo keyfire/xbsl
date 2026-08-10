@@ -30,7 +30,7 @@ function runInstallElemctl(): void {
     { type: "shell", task: name },
     vscode.TaskScope.Workspace,
     name,
-    "xbsl-debug",
+    "xbsl",
     new vscode.ShellExecution('pip install --upgrade elemctl')
   );
   void vscode.tasks.executeTask(task);
