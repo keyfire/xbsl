@@ -39,6 +39,12 @@
   the stand behind them is shared. The descriptions of the .env and of the application also spell
   out how they relate: the .env picks the stand and the default application, App ID overrides the
   application ON THAT stand and can stay empty when `ELEMENT_APP_ID` already names it.
+- **The metadata tree's title bar keeps two buttons** - deploy and collapse; new project, grouping,
+  refresh and hiding empty categories moved into the "..." menu. Six icons in a row read as a row
+  with nothing leading.
+- **Collapsing stops at the first level:** the list of metadata kinds stays visible. The built-in
+  button collapsed the project root as well, leaving one line in the tree and two clicks back to
+  the kinds.
 - **The paths to the tools are collected in "General"** - the xbsl engine, elemctl and the Python
   interpreter lived in three different sections while answering one question: where things are
   installed.

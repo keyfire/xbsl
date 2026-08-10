@@ -128,6 +128,12 @@
     },
     "commands": [
       {
+        "command": "xbsl.metadata.collapse",
+        "title": "%cmd.metadata.collapse%",
+        "category": "XBSL",
+        "icon": "$(collapse-all)"
+      },
+      {
         "command": "xbsl.migrateRuleSettings",
         "title": "%cmd.migrateRules%",
         "category": "XBSL"
@@ -813,32 +819,37 @@
         {
           "command": "xbsl.project.new",
           "when": "view == xbslMetadata",
-          "group": "navigation@0"
+          "group": "9_xbsl@1"
         },
         {
           "command": "xbsl.metadata.groupMode",
           "when": "view == xbslMetadata",
-          "group": "navigation@1"
+          "group": "9_xbsl@2"
         },
         {
           "command": "xbsl.metadata.refresh",
           "when": "view == xbslMetadata",
-          "group": "navigation@2"
+          "group": "9_xbsl@3"
         },
         {
           "command": "xbsl.metadata.hideEmptyCategories",
           "when": "view == xbslMetadata && !xbsl.metadata.emptyHidden",
-          "group": "navigation@3"
+          "group": "9_xbsl@4"
         },
         {
           "command": "xbsl.metadata.showEmptyCategories",
           "when": "view == xbslMetadata && xbsl.metadata.emptyHidden",
-          "group": "navigation@3"
+          "group": "9_xbsl@4"
         },
         {
           "command": "xbsl.deploy",
           "when": "view == xbslMetadata",
           "group": "navigation@4"
+        },
+        {
+          "command": "xbsl.metadata.collapse",
+          "when": "view == xbslMetadata",
+          "group": "navigation@9"
         },
         {
           "command": "xbsl.docs.search",

@@ -1302,6 +1302,17 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     return this.roots;
   }
 
+  // Expand the root nodes one level down - the metadata kinds live right under them.
+  async expandRoots(): Promise<void> {
+    if (!this.treeView) {
+      return;
+    }
+    const roots = this.roots ?? (await this.getChildren());
+    for (const root of roots) {
+      await this.treeView.reveal(root, { expand: 1, select: false, focus: false });
+    }
+  }
+
   async getChildren(node?: XbslNode): Promise<XbslNode[]> {
     if (node) {
       return node.children ?? [];
@@ -2082,9 +2093,19 @@ export function registerMetadataTree(
   sessionProvider = provider; // the panels ask the project language through it
   const view = vscode.window.createTreeView("xbslMetadata", {
     treeDataProvider: provider,
-    showCollapseAll: true,
+    // A button of our own instead of the built-in one: that collapses the project root too,
+    // leaving a single line in the tree and two clicks back to the metadata kinds.
+    showCollapseAll: false,
   });
   provider.attachView(view); // reveal requires access to the tree view
+  // Collapse everything but keep the root open: the list of metadata kinds is what the tree is
+  // opened for, and hiding it buys nothing.
+  context.subscriptions.push(
+    vscode.commands.registerCommand("xbsl.metadata.collapse", async () => {
+      await vscode.commands.executeCommand("list.collapseAll");
+      await provider.expandRoots();
+    })
+  );
   const savedMode = context.globalState.get<GroupMode>(GROUP_MODE_KEY);
   if (savedMode === "kind" || savedMode === "subsystem") {
     provider.setGroupMode(savedMode);
