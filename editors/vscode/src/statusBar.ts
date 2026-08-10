@@ -41,12 +41,12 @@ function builtAgo(builtAt: number): string {
   return hours < 24 ? vscode.l10n.t("{0} h ago", hours) : vscode.l10n.t("{0} d ago", Math.floor(hours / 24));
 }
 
-function linterVersion(cfg: LinterConfig): Promise<string | undefined> {
+// The version of a companion tool, from `<binary> --version`; undefined when it does not run.
+function toolVersion(command: string, args: string[]): Promise<string | undefined> {
   return new Promise((resolve) => {
-    const args = [...(cfg.usePython ? ["-m", "xbsl"] : []), "--version"];
     let child;
     try {
-      child = spawn(cfg.command, args);
+      child = spawn(command, args);
     } catch {
       resolve(undefined);
       return;
@@ -66,6 +66,18 @@ function linterVersion(cfg: LinterConfig): Promise<string | undefined> {
   });
 }
 
+function linterVersion(cfg: LinterConfig): Promise<string | undefined> {
+  return toolVersion(cfg.command, [...(cfg.usePython ? ["-m", "xbsl"] : []), "--version"]);
+}
+
+// elemctl is what deploy and debugging both run, and neither works without it - so the status
+// bar answers "is it there and which one" in the same place it answers that about the engine.
+function elemctlVersion(): Promise<string | undefined> {
+  const configured = (vscode.workspace.getConfiguration("xbsl").get<string>("deploy.elemctlPath")
+    || "").trim();
+  return toolVersion(configured || "elemctl", ["--version"]);
+}
+
 export function registerStatusBar(
   context: vscode.ExtensionContext,
   getLinter: (resource?: vscode.Uri) => LinterConfig
@@ -76,6 +88,8 @@ export function registerStatusBar(
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = SHOW_INFO;
   let linter = "…";
+  // undefined - not asked yet; "" - asked and not found (deploy and debugging will not work).
+  let elemctl: string | undefined;
   // The ACTUAL mode is shown, not the configured one: the server may have failed to start
   // (no [lsp] extra), and then completion works the old way, via the CLI index. It is set
   // by extension.ts after startup.
@@ -83,6 +97,17 @@ export function registerStatusBar(
   // The version published to Open VSX, when it is newer than the installed one. The
   // extension is side-loaded from a vsix, so nothing else in the editor would ever say it.
   let update: string | undefined;
+
+  // Appended to the tooltip rather than woven into its sentence: the sentence already has a
+  // translation, and adding a placeholder to it would drop that translation on every language.
+  const elemctlPart = (): string => {
+    if (elemctl === undefined) {
+      return "";
+    }
+    return " · " + (elemctl
+      ? vscode.l10n.t("elemctl {0}", elemctl)
+      : vscode.l10n.t("elemctl: not found"));
+  };
 
   const line = (): string => {
     const base = vscode.l10n.t(
@@ -92,7 +117,7 @@ export function registerStatusBar(
       lspOn ? vscode.l10n.t("LSP") : vscode.l10n.t("CLI index"),
       hash,
       build ? builtAgo(build.builtAt) : "?"
-    );
+    ) + elemctlPart();
     return update
       ? `${base}
 ` + vscode.l10n.t("A newer extension is published: {0}", update)
@@ -112,6 +137,8 @@ export function registerStatusBar(
     render();
     linter = (await linterVersion(getLinter())) ?? "?";
     render();
+    elemctl = (await elemctlVersion()) ?? "";
+    render();
   };
 
   // Otherwise the freshness in the tooltip would freeze at whatever it was at window startup.
@@ -122,7 +149,8 @@ export function registerStatusBar(
     { dispose: () => clearInterval(ageTimer) },
     vscode.commands.registerCommand(SHOW_INFO, () => void vscode.window.showInformationMessage(line())),
     vscode.workspace.onDidChangeConfiguration((e) => {
-      if (e.affectsConfiguration("xbsl.linter") || e.affectsConfiguration("xbsl.lsp")) {
+      if (e.affectsConfiguration("xbsl.linter") || e.affectsConfiguration("xbsl.lsp")
+          || e.affectsConfiguration("xbsl.deploy.elemctlPath")) {
         void refresh();
       }
     })

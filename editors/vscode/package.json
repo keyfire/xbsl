@@ -761,6 +761,11 @@
         "command": "xbsl.formData.removeProperty",
         "title": "%cmd.formData.removeProperty%",
         "category": "XBSL"
+      },
+      {
+        "command": "xbsl.debug.setup",
+        "title": "%cmd.debug.setup%",
+        "category": "XBSL"
       }
     ],
     "keybindings": [
@@ -1551,6 +1556,24 @@
             "default": "",
             "scope": "resource",
             "description": "%config.deploy.extraArgs%"
+          },
+          "xbsl.debug.adapterPath": {
+            "type": "string",
+            "default": "",
+            "markdownDescription": "%config.adapterPath%",
+            "scope": "machine-overridable",
+            "description": "%config.debug.adapterPath%"
+          },
+          "xbsl.debug.javaPath": {
+            "type": "string",
+            "default": "java",
+            "description": "%config.debug.javaPath%",
+            "scope": "machine-overridable"
+          },
+          "xbsl.debug.openApplicationOnStart": {
+            "type": "boolean",
+            "default": true,
+            "description": "%config.debug.openApplicationOnStart%"
           }
         }
       },
@@ -1857,6 +1880,69 @@
             "description": "%config.groups.conventions%"
           }
         }
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "xbsl",
+        "label": "%debugger.label%",
+        "languages": [
+          "xbsl"
+        ],
+        "configurationAttributes": {
+          "attach": {
+            "properties": {
+              "appId": {
+                "type": "string",
+                "description": "%attach.appId%"
+              },
+              "authMode": {
+                "type": "string",
+                "enum": [
+                  "anonymous",
+                  "another_user"
+                ],
+                "description": "%attach.authMode%"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "%attach.stopOnEntry%",
+                "default": false
+              },
+              "workspace": {
+                "type": "string",
+                "description": "%attach.workspace%"
+              },
+              "envFile": {
+                "type": "string",
+                "description": "%attach.envFile%"
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "xbsl",
+            "request": "attach",
+            "name": "%initial.attach.name%"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "%snippet.attach.label%",
+            "description": "%snippet.attach.description%",
+            "body": {
+              "type": "xbsl",
+              "request": "attach",
+              "name": "%initial.attach.name%"
+            }
+          }
+        ]
+      }
+    ],
+    "breakpoints": [
+      {
+        "language": "xbsl"
       }
     ]
   },

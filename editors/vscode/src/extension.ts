@@ -3,6 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
+import { registerDebug } from "./debug";
 import { createFormDataModel, registerFormDataCommands } from "./formData";
 import { registerFormPalette } from "./formPalette";
 import { registerFormDesigner } from "./formDesigner";
@@ -417,6 +418,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     resetAndRelint();
   });
   registerDeploy(context, projectRootFor);
+  // Debugging shares the deploy settings (the elemctl binary, the application id): the same
+  // application is deployed and then debugged, so the two used to ask for the same values twice
+  // while they lived in separate extensions.
+  registerDebug(context);
   // Getting-started wizard: scaffold a new 1C:Element project through the engine (native prompts,
   // no webview). Available in both modes, so it is registered before the LSP early return.
   registerProjectWizard(context);

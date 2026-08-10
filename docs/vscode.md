@@ -559,11 +559,78 @@ The command **XBSL: deploy the project (elemctl)** (`xbsl.deploy`, also a cloud 
 title bar of the metadata tree – a deploy takes the whole project, not the open file) runs
 `elemctl deploy` – build, upload, apply and verification
 that the apply actually took effect – as a terminal task, after a confirmation dialog with
-the exact command line. The `xbsl.deploy.*` settings, the deploy cycle and the `ELEMENT_*`
-configuration are documented in the
-[XBSL Debug README](https://github.com/keyfire/elemctl/tree/main/editors/vscode#deploy-from-vs-code)
-of the [elemctl](https://github.com/keyfire/elemctl) project
-([Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl-debug)).
+the exact command line. On a failed apply the platform silently rolls the application back
+while still reporting `Running`; elemctl does not trust that status and exits non-zero.
+
+The working directory is the workspace folder: elemctl reads the connection and the target
+from its `.env` (`ELEMENT_BASE_URL`, `ELEMENT_CLIENT_ID`/`SECRET`, `ELEMENT_APP_ID`,
+`ELEMENT_PROJECT_ID`). A set `xbsl.projectRoot` is passed as `--project-dir`; a missing
+elemctl is offered for installation right from the error message.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `xbsl.deploy.elemctlPath` | `elemctl` | The elemctl executable – used by the deploy command **and by debugging**. |
+| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute); handy in a git worktree whose `.env` lives in the main checkout. |
+| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. |
+| `xbsl.deploy.extraArgs` | – | Extra `elemctl deploy` arguments, space-separated. |
+
+## Debugging
+
+Debug **1C:Element** applications in regular VS Code: breakpoints, a call stack that chains
+client and server frames, variable values, stepping – without the Theia-based web IDE. The
+extension is thin here too: it starts the **platform's own debug adapter** (Java, the DAP
+protocol) and gets the session coordinates through `elemctl` (Console API `/actions/debug`).
+A session id generated on the client ties the adapter and the debuggee together through the
+platform's debug server.
+
+> Until version 0.57 this was a separate extension, *XBSL Debug* (`keyfire.xbsl-debug`). It
+> is now part of this one: deploy and debugging address the same application with the same
+> elemctl, and asking for those twice was the only thing the split achieved. Settings made
+> for the old extension (`xbslDebug.*`) are still read, so an existing setup keeps working.
+
+**Getting started.** Run **XBSL: Set up 1C:Element debugging** (`xbsl.debug.setup`) from the
+Command Palette – the wizard checks Java, the adapter directory and elemctl, fixes what it
+can on the spot and offers to create `launch.json`. Then open the folder with the sources,
+put a breakpoint in an `.xbsl` file and press **F5**: the application opens in the browser
+with the debug parameters and execution stops on your breakpoint.
+
+**What is needed:**
+
+1. **JDK 17+** (21 works too) – `java -version`.
+2. **elemctl >= 0.5** (the `apps debug` and `debug-adapter` commands) with a configured
+   `.env` in the sources root. Missing elemctl is offered for installation from the error
+   message and from the wizard.
+3. **The platform debug adapter.** Take it from your own 1C:Element distribution
+   (`.../@1c-appengine-plugin/bin/debugger` – a directory with a `repo` subfolder full of the
+   adapter's jars) and set `xbsl.debug.adapterPath`. The adapter is proprietary 1C code and
+   **is not bundled** here.
+4. **Debugging enabled on the application server** – cloud stands usually have it already.
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `xbsl.debug.adapterPath` | – | The platform debug adapter directory from your distribution – a folder with a `repo` subfolder holding the jars. |
+| `xbsl.debug.javaPath` | `java` | The Java 17+ launcher. |
+| `xbsl.debug.openApplicationOnStart` | `true` | Open the debuggee in the browser when the session starts, with the debug parameters. |
+
+The elemctl binary and the application id are **shared with deploy** (`xbsl.deploy.elemctlPath`,
+`xbsl.deploy.appId`), and the Console API credentials live in the `.env` of the sources root,
+not in a setting – elemctl reads them itself. `launch.json` is optional; its attributes are
+`appId`, `envFile`, `authMode` and `workspace`.
+
+**How breakpoints bind.** The debug server identifies a module by its path **relative to the
+sources root**, shaped `<Vendor>/<Name>/<path inside the project>.xbsl` with forward slashes.
+The sources must therefore lie in a `<Vendor>/<Name>/` directory matching `Проект.yaml`, and
+the workspace must point at the directory containing it – the extension detects that root
+from the open folder itself, so opening the repository root or a subfolder both work.
+
+**A platform bug worked around here.** Expanding a structure in the Variables tree on a client
+frame used to hang the debuggee and drop the session: a DAP `variables` request WITHOUT the
+`filter` field – exactly what the VS Code Variables view sends for small values – crashes the
+application's JS runtime, while a filtered request works fine. The extension rewrites every
+filterless request into filtered ones (`named` + `indexed`, counts taken from the parent's
+answer) and merges the results, so the value tree expands normally on both client and server
+frames. This is unconditional and has no setting: switching it off buys nothing but a broken
+session.
 
 ## Commands
 
