@@ -31,6 +31,7 @@ export interface LinterConfig {
   dataDir?: string;
   lang?: string; // "ru" | "en"
   select?: string;
+  enable?: string; // rules off by default that the settings table switched on
   ignore?: string;
   baseline?: string; // an EXISTING baseline file: excluded findings are suppressed
 }
@@ -76,6 +77,9 @@ export function buildArgs(filename: string, cfg: LinterConfig): string[] {
   if (cfg.select) {
     args.push("--select", cfg.select);
   }
+  if (cfg.enable) {
+    args.push("--enable", cfg.enable);
+  }
   if (cfg.ignore) {
     args.push("--ignore", cfg.ignore);
   }
@@ -97,6 +101,9 @@ export function buildPathArgs(target: string, cfg: LinterConfig): string[] {
   }
   if (cfg.select) {
     args.push("--select", cfg.select);
+  }
+  if (cfg.enable) {
+    args.push("--enable", cfg.enable);
   }
   if (cfg.ignore) {
     args.push("--ignore", cfg.ignore);

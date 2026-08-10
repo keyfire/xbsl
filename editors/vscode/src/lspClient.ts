@@ -12,7 +12,7 @@ import {
 } from "vscode-languageclient/node";
 import { baselineForLint } from "./excludeAction";
 import { pipInstallCommand, runInstallTask } from "./installer";
-import { applyOverride, mergeOffRules } from "./ruleConfig";
+import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
 import { resolveMessageLanguage } from "./workspaceCore";
 
@@ -85,11 +85,15 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   // Empty setting -> the VS Code display language (see resolveMessageLanguage): otherwise the
   // engine falls back to the OS locale and an English editor shows Russian diagnostics.
   args.push("--lang", resolveMessageLanguage(cfg.get<string>("linter.lang") || "", vscode.env.language));
+  // Which rules run at all: the one table (xbsl.rules) plus the legacy strings. Rules off by
+  // default are turned on here and only here - xbsl.rules is an overlay over what the server
+  // already sent, and a rule that never ran sends nothing to overlay.
+  for (const [flag, value] of Object.entries(engineRuleArgs()) as [string, string | undefined][]) {
+    if (value) {
+      args.push(`--${flag}`, value);
+    }
+  }
   for (const [flag, key] of [
-    ["--select", "linter.select"],
-    // Rules off by default are turned on here and only here: xbsl.rules is an overlay over
-    // what the server already sent, and a rule that never ran sends nothing to overlay.
-    ["--enable", "linter.enable"],
     ["--data-dir", "linter.dataDir"],
     // A custom templates file: the server resolves a relative path from the workspace
     // folder. An empty setting is not passed - the server then defaults to
@@ -101,11 +105,7 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
       args.push(flag, value);
     }
   }
-  // Rules and groups disabled in the settings extend --ignore: the server does not run them.
-  const ignore = mergeOffRules((cfg.get<string>("linter.ignore") || "").trim() || undefined);
-  if (ignore) {
-    args.push("--ignore", ignore);
-  }
+
   // An existing baseline file: excluded findings are muted by the server. A missing one is
   // not passed - on an older server (< 0.15) an unknown key would break the startup.
   baselineArg = folder ? baselineForLint(folder.uri) : undefined;

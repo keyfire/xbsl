@@ -11,6 +11,17 @@
 
 ## Unreleased
 
+### Added
+- **Rules are configured by one table, `xbsl.rules`.** The key is a rule, a group, a tier letter or
+  `*`; the value is `off` or a level; priority runs from the specific to the general:
+  rule → group → tier → `*`. A key with a level TURNS THE RULE ON even when it is off by default,
+  and `{"*": "off"}` reads as "only the ones listed here" - so the table does everything that used
+  to be split between `linter.select`, `linter.enable`, `linter.ignore` and thirteen `groups.*`
+  dropdowns. The old settings keep working (they sit below the table in priority) but are marked
+  deprecated, and the *XBSL: move the rule settings into one table* command rewrites them into it
+  scope by scope - the user and the workspace values move separately, because they mean different
+  things.
+
 ### Fixed
 - **Debugging did not see the "Env File" setting and went to the wrong stand.** `xbsl.deploy.envFile`
   applied to the deploy only: debugging took the .env from `launch.json` and nowhere else, so a

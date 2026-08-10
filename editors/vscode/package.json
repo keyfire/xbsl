@@ -128,6 +128,11 @@
     },
     "commands": [
       {
+        "command": "xbsl.migrateRuleSettings",
+        "title": "%cmd.migrateRules%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.lintProject",
         "title": "%cmd.lintProject%",
         "category": "XBSL"
@@ -1483,18 +1488,21 @@
             "description": "%config.linter.lang%"
           },
           "xbsl.linter.select": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
             "scope": "resource",
             "description": "%config.linter.select%"
           },
           "xbsl.linter.enable": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.linter.enable%"
           },
           "xbsl.linter.ignore": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
             "scope": "resource",
@@ -1529,6 +1537,7 @@
         "order": 3,
         "properties": {
           "xbsl.groups.code": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1552,6 +1561,7 @@
             "markdownDescription": "%config.groups.code%"
           },
           "xbsl.groups.yaml": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1575,6 +1585,7 @@
             "markdownDescription": "%config.groups.yaml%"
           },
           "xbsl.groups.style": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1598,6 +1609,7 @@
             "markdownDescription": "%config.groups.style%"
           },
           "xbsl.groups.typography": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1621,6 +1633,7 @@
             "markdownDescription": "%config.groups.typography%"
           },
           "xbsl.groups.whitespace": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1644,6 +1657,7 @@
             "markdownDescription": "%config.groups.whitespace%"
           },
           "xbsl.groups.encoding": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1667,6 +1681,7 @@
             "markdownDescription": "%config.groups.encoding%"
           },
           "xbsl.groups.structure": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1690,6 +1705,7 @@
             "markdownDescription": "%config.groups.structure%"
           },
           "xbsl.groups.form": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1713,6 +1729,7 @@
             "markdownDescription": "%config.groups.form%"
           },
           "xbsl.groups.query": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1736,6 +1753,7 @@
             "markdownDescription": "%config.groups.query%"
           },
           "xbsl.groups.naming": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1759,6 +1777,7 @@
             "markdownDescription": "%config.groups.naming%"
           },
           "xbsl.groups.project": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1782,6 +1801,7 @@
             "markdownDescription": "%config.groups.project%"
           },
           "xbsl.groups.security": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",
@@ -1805,6 +1825,7 @@
             "markdownDescription": "%config.groups.security%"
           },
           "xbsl.groups.conventions": {
+            "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
               "default",

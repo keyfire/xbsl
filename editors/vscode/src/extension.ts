@@ -25,7 +25,7 @@ import { registerUpdateCheck } from "./updateCheck";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
-import { mergeOffRules, registerRuleConfig, ruleOverride } from "./ruleConfig";
+import { engineRuleArgs, primeRuleCatalogue, registerRuleConfig, ruleOverride } from "./ruleConfig";
 import { groupReportByFile, resolveMessageLanguage } from "./workspaceCore";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
@@ -95,9 +95,9 @@ function readSettings(resource?: vscode.Uri): Settings {
       usePython: python.length > 0,
       dataDir: (c.get<string>("linter.dataDir") || "").trim() || undefined,
       lang: lang || undefined,
-      select: (c.get<string>("linter.select") || "").trim() || undefined,
-      // Rules and groups switched off in the settings (off) are not run at all.
-      ignore: mergeOffRules((c.get<string>("linter.ignore") || "").trim() || undefined, resource),
+      // What runs at all comes from the one table (xbsl.rules) plus the legacy strings:
+      // "off" keys are not run, keys with a level are switched on even when off by default.
+      ...engineRuleArgs(resource),
       // An existing baseline file: excluded findings are suppressed in every run.
       baseline: baselineForLint(resource),
     },
@@ -402,6 +402,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // form preview.
   registerPalettePicker(context);
   registerRuleConfig(context);
+  // Tier per rule for the xbsl.rules table - one run of the engine, its result is cached.
+  const lint = readSettings().linter;
+  primeRuleCatalogue(lint.command, lint.usePython ? ["-m", "xbsl"] : []);
   // Excluding a finding into the baseline (the light bulb). After writing: in the CLI mode
   // everything is re-read from scratch; in the LSP mode the server re-reads the baseline on
   // every run - xbsl/relint is enough, and if the file did not exist at server start, the

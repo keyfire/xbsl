@@ -102,7 +102,7 @@
   "config.checkForUpdates": "Check Open VSX once a day for a newer extension and mark it in the status bar. [Details](https://docs.keyfire.ru/xbsl/vscode)",
   "config.lsp.enabled": "Work through the long-living language server: hover, completion and navigation. [Details](https://docs.keyfire.ru/xbsl/servers#lsp-server)",
   "config.lsp.command": "The command that starts the language server, when the default one does not fit. [Details](https://docs.keyfire.ru/xbsl/servers#lsp-server)",
-  "config.rules": "Turn a rule or a whole group off, or report it at another level. [Details](https://docs.keyfire.ru/xbsl/vscode#rules-levels-and-disabling)",
+  "config.rules": "Every rule in one table: the key is a rule (`style/naming`), a group (`style`), a tier letter (`A`) or `*` for all of them; the value is `off` or a level. Priority runs from the specific to the general: rule → group → tier → `*`. A key with a level TURNS THE RULE ON even when it is off by default, and `{\"*\": \"off\"}` reads as \"only the ones listed here\". [Details](https://docs.keyfire.ru/xbsl/vscode#rules-levels-and-disabling)",
   "config.deploy.elemctlPath": "The elemctl executable - used by the deploy command and by debugging. [Details](https://docs.keyfire.ru/xbsl/vscode#deploy)",
   "config.deploy.envFile": "The `.env` that picks the stand: the connection and the default application. Used by both the deploy and debugging (a launch configuration wins). A relative path is resolved against the workspace folder. [Details](https://docs.keyfire.ru/xbsl/vscode#deploy)",
   "config.deploy.appId": "The application ON THAT stand: its identifier or exact name (this is not an address). Overrides `ELEMENT_APP_ID` from the .env - leave it empty when the .env already names the application. [Details](https://docs.keyfire.ru/xbsl/vscode#deploy)",
@@ -183,5 +183,7 @@
   "config.section.templates": "Code templates",
   "config.section.deploy": "Stand: deploy and debugging",
   "config.section.debug": "Debugging: adapter and launch",
-  "config.debug.applicationUrl": "Where to open the application under debug, when it answers on a domain of its own. [Details](https://docs.keyfire.ru/xbsl/vscode#debugging)"
+  "config.debug.applicationUrl": "Where to open the application under debug, when it answers on a domain of its own. [Details](https://docs.keyfire.ru/xbsl/vscode#debugging)",
+  "cmd.migrateRules": "XBSL: move the rule settings into one table",
+  "config.deprecated.rules": "Deprecated: the same thing is said by the single `xbsl.rules` table (a rule, a group, a tier letter or `*`). To move the existing values, run *XBSL: move the rule settings into one table*."
 }
