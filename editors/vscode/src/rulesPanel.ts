@@ -170,7 +170,22 @@ export class RulesPanel {
     // The level in force for a row: its own key, then what it inherits, then the rule's default.
     // The dot is painted by it, so a rule switched off reads as grey without opening the list.
     const effective = (r: Row): string => r.explicit ?? r.inherited?.level ?? r.own;
-    const dot = (level: string): string => `<span class="dot ${escapeHtml(level)}"></span>`;
+    // The level badge is the icon VS Code itself uses for a diagnostic, drawn inline: the panel
+    // must not depend on the codicon font being shipped, and a shape reads faster than a colour
+    // for anyone who does not tell red from green.
+    const GLYPH: Record<string, string> = {
+      error: "M8 1a7 7 0 100 14A7 7 0 008 1zm3 9.2-.8.8L8 8.8 5.8 11 5 10.2 7.2 8 5 5.8 5.8 5 8 7.2 10.2 5l.8.8L8.8 8z",
+      warning: "M7.1 1.7.6 13.4c-.3.5.1 1.1.7 1.1h13.4c.6 0 1-.6.7-1.1L8.9 1.7a1 1 0 00-1.8 0zM8 11.9a.9.9 0 110-1.8.9.9 0 010 1.8zM8.8 9H7.2V5.2h1.6z",
+      info: "M8 1a7 7 0 100 14A7 7 0 008 1zm.8 11H7.2V7h1.6zm0-6.4H7.2V4h1.6z",
+      hint: "M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.6a4.4 4.4 0 110 8.8 4.4 4.4 0 010-8.8z",
+      off: "M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zm0 1.6c1.2 0 2.3.4 3.2 1.1l-7.6 7.6A5 5 0 018 3.1zm0 9.8c-1.2 0-2.3-.4-3.2-1.1l7.6-7.6A5 5 0 018 12.9z",
+      default: "M8 2a6 6 0 100 12A6 6 0 008 2zm0 1.6a4.4 4.4 0 110 8.8 4.4 4.4 0 010-8.8z",
+    };
+    const dot = (level: string): string => {
+      const path = GLYPH[level] ?? GLYPH.default;
+      return `<svg class="lvl-icon ${escapeHtml(level)}" viewBox="0 0 16 16" width="15" height="15" ` +
+        `aria-hidden="true"><path d="${path}"/></svg>`;
+    };
     const groups = [...new Set(rows.map((r) => r.group))];
     const options = (selected: string | undefined): string =>
       [`<option value=""${selected ? "" : " selected"}>${escapeHtml(t.byDefault)}</option>`]
@@ -240,15 +255,14 @@ export class RulesPanel {
   .state { font-size: 11px; margin-top: 2px; }
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); padding: 0 6px; border-radius: 8px; }
   td.lvl { white-space: nowrap; }
-  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px;
-    vertical-align: middle; background: var(--vscode-descriptionForeground); }
-  .dot.error { background: var(--vscode-editorError-foreground, #f14c4c); }
-  .dot.warning { background: var(--vscode-editorWarning-foreground, #cca700); }
-  .dot.info { background: var(--vscode-editorInfo-foreground, #3794ff); }
-  .dot.hint { background: var(--vscode-editorHint-foreground, #969696); }
-  /* a rule switched off is dimmed: the grey dot is visible before opening the list */
-  .dot.off { background: var(--vscode-descriptionForeground); opacity: 0.55; }
-  .dot.default { background: var(--vscode-descriptionForeground); opacity: 0.35; }
+  .lvl-icon { vertical-align: middle; margin-right: 7px; fill: var(--vscode-descriptionForeground); }
+  .lvl-icon.error { fill: var(--vscode-editorError-foreground, #f14c4c); }
+  .lvl-icon.warning { fill: var(--vscode-editorWarning-foreground, #cca700); }
+  .lvl-icon.info { fill: var(--vscode-editorInfo-foreground, #3794ff); }
+  .lvl-icon.hint { fill: var(--vscode-editorHint-foreground, #969696); }
+  /* a rule switched off is dimmed: the grey crossed circle reads before opening the list */
+  .lvl-icon.off { fill: var(--vscode-descriptionForeground); opacity: 0.7; }
+  .lvl-icon.default { fill: var(--vscode-descriptionForeground); opacity: 0.4; }
   a.doc { color: var(--vscode-textLink-foreground); text-decoration: none; font-size: 11px; white-space: nowrap; }
   a.doc:hover { text-decoration: underline; }
 </style></head><body>
@@ -280,7 +294,15 @@ ${rows.length === 0 ? `<p class="dim">${escapeHtml(t.empty)}</p>` : `<table>${bo
     });
   });
   // Groups start collapsed: there are more than two hundred rules, and what you open is what you look for.
-  const collapsed = new Set(Array.from(document.querySelectorAll("tr.group"), (g) => g.dataset.group));
+  // The panel rebuilds its html after every write, so the folded state lives in the webview state -
+  // otherwise picking a level folded everything back and the list jumped under the cursor.
+  const saved = vscodeApi.getState();
+  const collapsed = new Set(
+    saved && saved.collapsed
+      ? saved.collapsed
+      : Array.from(document.querySelectorAll("tr.group"), (g) => g.dataset.group)
+  );
+  const remember = () => vscodeApi.setState({ collapsed: Array.from(collapsed) });
   const apply = () => {
     const q = document.getElementById("q").value.trim().toLowerCase();
     const onlyChanged = document.getElementById("changed").checked;
@@ -305,6 +327,7 @@ ${rows.length === 0 ? `<p class="dim">${escapeHtml(t.empty)}</p>` : `<table>${bo
       if (e.target.closest("select")) { return; }   // picking the group level must not fold it
       const group = head.dataset.group;
       collapsed.has(group) ? collapsed.delete(group) : collapsed.add(group);
+      remember();
       apply();
     });
   });

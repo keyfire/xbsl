@@ -9,6 +9,19 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.59.2
+
+### Changed
+- **The level in the rules panel is an icon, not a dot** - the one VS Code draws for a diagnostic:
+  a circle with a cross for an error, a triangle for a warning, a crossed circle for a rule
+  switched off. The icon is inline SVG, so it does not depend on the codicon font being shipped,
+  and the state reads by shape and not by colour alone.
+
+### Fixed
+- **Collapsed groups sprang open as soon as a level was picked.** The panel rebuilds its markup
+  after every write, and the folded state lived in that markup only. It now lives in the webview
+  state and survives both a redraw and reopening the panel.
+
 ## 0.59.1
 
 ### Added
