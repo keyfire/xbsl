@@ -14,8 +14,9 @@
 ### Added
 - **Rules are configured by one table, `xbsl.rules`.** The key is a rule, a group, a tier letter or
   `*`; the value is `off` or a level; priority runs from the specific to the general:
-  rule → group → tier → `*`. A key with a level TURNS THE RULE ON even when it is off by default,
-  and `{"*": "off"}` reads as "only the ones listed here" - so the table does everything that used
+  rule → group → tier → `*`. A level on a RULE key also switches it on when it is off by default (on a group, a
+  tier or `*` it only recolours what already runs - otherwise "show me the group as warnings" would
+  quietly turn on everything the defaults leave off), and `{"*": "off"}` reads as "only the ones listed here" - so the table does everything that used
   to be split between `linter.select`, `linter.enable`, `linter.ignore` and thirteen `groups.*`
   dropdowns. The old settings keep working (they sit below the table in priority) but are marked
   deprecated, and the *XBSL: move the rule settings into one table* command rewrites them into it

@@ -204,7 +204,7 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.linter.pythonPath` | – | Python interpreter; when set, runs `<python> -m xbsl`. |
 | `xbsl.linter.dataDir` | – | Element data root (folder with `index.json`); empty = auto-resolved. |
 | `xbsl.linter.lang` | auto | Diagnostic language: ` ` (auto) / `ru` / `en`. |
-| `xbsl.rules` | `{}` | **The one rules table.** The key is a rule (`code/brackets`), a group (`style`), a tier letter (`A`) or `*`; the value is `off` or a level. Priority: rule → group → tier → `*`. A key with a level TURNS ON a rule that is off by default; `{"*": "off"}` means "only the ones listed here". See [Rules](#rules-levels-and-disabling). |
+| `xbsl.rules` | `{}` | **The one rules table.** The key is a rule (`code/brackets`), a group (`style`), a tier letter (`A`) or `*`; the value is `off` or a level. Priority: rule → group → tier → `*`. A level on a rule key turns on a rule that is off by default, on a group or a tier it only recolours; `{"*": "off"}` means "only the ones listed here". See [Rules](#rules-levels-and-disabling). |
 | `xbsl.linter.debounce` | `300` | Delay (ms) before linting while typing. |
 | `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (`Id` uniqueness etc.) cross-fire between directories. |
 | `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |

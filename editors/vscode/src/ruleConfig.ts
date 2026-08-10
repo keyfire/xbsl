@@ -1,8 +1,8 @@
 // One table decides everything about rules: xbsl.rules. The key is a rule id
 // ("whitespace/trailing"), a whole group ("style"), a tier letter ("A".."D") or "*" for every
 // rule; the value is off | error | warning | info | hint. "off" hides the findings and keeps
-// the rule out of the run, a level replaces the rule's own severity AND turns the rule on when
-// it is off by default. Priority runs from the specific to the general:
+// the rule out of the run; a level replaces the rule's own severity, and on an EXACT rule key it
+// also switches on a rule that is off by default. Priority runs from the specific to the general:
 // rule > group > tier > "*", and the legacy settings below sit under all of them.
 //
 // Legacy, still read so that nobody's setup breaks: xbsl.groups.<group> (a dropdown per finding
@@ -123,11 +123,16 @@ export interface RuleArgs {
   ignore?: string;
 }
 
-// The engine side of the same table - what runs at all. An "off" key goes to --ignore; a key
-// with a level goes to --enable, because a rule that is off by default never runs and leaves
-// nothing for the overlay to recolour; and {"*": "off"} reads as "only the ones named here",
-// which is exactly --select. The legacy strings are merged in, so a setup half-moved to the
-// table keeps working.
+// The engine side of the same table - what runs at all. An "off" key goes to --ignore, and
+// {"*": "off"} reads as "only the ones named here", which is exactly --select.
+//
+// Switching a rule ON is deliberately narrow: only an EXACT rule key does it (--enable), because
+// a rule that is off by default never runs and leaves nothing for the overlay to recolour. A
+// level on a GROUP, a tier or "*" only recolours what already runs. Otherwise "show me the yaml
+// group as warnings" would quietly turn on every rule the defaults leave off - which is how a
+// migrated {"yaml": "warning"} started reporting yaml/size-needs-no-stretch.
+//
+// The legacy strings are merged in, so a setup half-moved to the table keeps working.
 export function engineRuleArgs(resource?: vscode.Uri): RuleArgs {
   const cfg = vscode.workspace.getConfiguration("xbsl", resource ?? null);
   const map = rulesMap(resource);
@@ -142,8 +147,14 @@ export function engineRuleArgs(resource?: vscode.Uri): RuleArgs {
       onlyListed = value === "off";
       continue;
     }
-    (value === "off" ? off : on).push(key);
+    if (value === "off") {
+      off.push(key);
+    } else {
+      on.push(key);
+    }
   }
+  // Only a rule id (it carries a "/") may switch a rule on; a group or a tier just recolours.
+  const onRules = on.filter((key) => key.includes("/"));
   for (const [group, value] of Object.entries(groupsMap(resource))) {
     if (value === "off" && !isLevel(map[group])) {
       off.push(group);
@@ -156,7 +167,7 @@ export function engineRuleArgs(resource?: vscode.Uri): RuleArgs {
   };
   return {
     select: onlyListed ? merge(legacy("linter.select"), on) : merge(legacy("linter.select"), []),
-    enable: merge(legacy("linter.enable"), onlyListed ? [] : on),
+    enable: merge(legacy("linter.enable"), onlyListed ? [] : onRules),
     ignore: merge(legacy("linter.ignore"), off),
   };
 }
