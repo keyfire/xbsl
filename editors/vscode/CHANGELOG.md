@@ -40,6 +40,10 @@
   the stand behind them is shared. The descriptions of the .env and of the application also spell
   out how they relate: the .env picks the stand and the default application, App ID overrides the
   application ON THAT stand and can stay empty when `ELEMENT_APP_ID` already names it.
+- **The "from install to debugging" diagram** on the start page: where the extension, the engine
+  and elemctl come from, and what the platform distribution hands over - the reference and the
+  types to the engine, the debug adapter to elemctl - with the working, deploy and debugging
+  picture below. The editor-and-engine diagram stays where it was, in the VS Code section.
 - **The metadata tree's title bar keeps two buttons** - deploy and collapse; new project, grouping,
   refresh and hiding empty categories moved into the "..." menu. Six icons in a row read as a row
   with nothing leading.

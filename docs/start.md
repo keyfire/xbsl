@@ -14,7 +14,7 @@ One engine, reached three ways: the editor talks to a long-living server, an age
 operations as MCP tools, and the terminal runs the CLI. The sources on disk are what all three read
 and write.
 
-![The VS Code extension, the xbsl engine and the project: the editor talks to the long-living xbsl-lsp server (diagnostics, the metadata tree, the form preview, the documentation panel), falling back to the CLI when the server is unavailable; the engine reads the yaml/xbsl pairs of the project and honors the baseline](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.svg)
+![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the platform distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the platform stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.svg)
 
 The rest of this page is about getting there: the package, the data, the language of the output.
 
