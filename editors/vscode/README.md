@@ -730,6 +730,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 
 | Command | Id | Invoked from |
 | --- | --- | --- |
+| Collapse to the metadata kinds | `xbsl.metadata.collapse` | Command Palette |
 | XBSL: refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
 | Open description (yaml) | `xbsl.metadata.openYaml` | Command Palette |
 | Open query (xbql) | `xbsl.metadata.openQuery` | Command Palette |
