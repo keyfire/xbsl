@@ -70,10 +70,12 @@ def _pages(locale: str) -> str:
 
 # --- rules --------------------------------------------------------------------------------
 
-#: A row of a rules table: | `id` | level icon | default icon | scope | ... |
-#: The icons replaced the words when the table outgrew the page width.
-_RULE_ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|", re.M)
-_SEVERITIES = {"🔴": "error", "🟡": "warning", "🔵": "info"}
+#: A row of a rules table: | `id` | <img alt="level"> | default mark | scope | ... |
+#: The words became icons when the table outgrew the page width; the level is read from the
+#: alt text, which is also what keeps the row readable in the source.
+_RULE_ROW = re.compile(
+    r"^\|\s*`([^`]+)`\s*\|\s*<img[^>]*\salt=\"(error|warning|info)\"[^>]*>\s*\|\s*(\S+)\s*\|", re.M
+)
 _DEFAULTS = {"✓": "on", "–": "off"}
 
 
@@ -107,7 +109,7 @@ def check_rules(problems: list[str]) -> None:
         text = (DOCS / page).read_text(encoding="utf-8")
         rows = {
             m.group(1): {
-                "severity": _SEVERITIES.get(m.group(2), m.group(2)),
+                "severity": m.group(2),
                 "default": _DEFAULTS.get(m.group(3), m.group(3)),
             }
             for m in _RULE_ROW.finditer(text)

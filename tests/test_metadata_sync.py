@@ -84,13 +84,14 @@ def _levels_by_group() -> dict[str, Counter]:
 
 # Rule ids may carry digits (encoding/utf8) - a stricter pattern silently drops such a row
 # and the guard goes blind exactly where it should look.
-#: The table shows the level and the default state as icons - a word per column did not fit the
-#: page, and the column that matters ("what it checks") was the one being squeezed out.
-_ICON_SEVERITY = {"🔴": "error", "🟡": "warning", "🔵": "info"}
+#: The table shows the level as a Material Symbols icon and the default state as a mark - words
+#: per column did not fit the page, and the column that matters ("what it checks") was the one
+#: being squeezed out. The level is read from the alt text of the picture.
 _ICON_DEFAULT = {"✓": "on", "–": "off"}
 
 _ROW = re.compile(
-    r"^\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|(.*)\|\s*$"
+    r"^\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*<img[^>]*\salt=\"(error|warning|info)\"[^>]*>\s*"
+    r"\|\s*(\S+)\s*\|\s*(\S+)\s*\|(.*)\|\s*$"
 )
 _ANY_ROW = re.compile(r"^\|\s*`")
 _TIER_HEADING = re.compile(r"^###\s+(?:Тир|Tier)\s+([A-D])")
@@ -139,10 +140,6 @@ def _parse_table(name: str) -> dict[str, dict]:
             )
             continue
         rule_id, severity, default, scope, tail = match.groups()
-        assert severity in _ICON_SEVERITY, (
-            f"{name}:{number} – неизвестный значок уровня {severity!r}; "
-            f"допустимы {sorted(_ICON_SEVERITY)}"
-        )
         assert default in _ICON_DEFAULT, (
             f"{name}:{number} – неизвестный значок включённости {default!r}; "
             f"допустимы {sorted(_ICON_DEFAULT)}"
@@ -150,7 +147,7 @@ def _parse_table(name: str) -> dict[str, dict]:
         link = _DOC_LINK.search(tail)
         rows[rule_id] = {
             "tier": tier,
-            "severity": _ICON_SEVERITY[severity],
+            "severity": severity,
             "default": _ICON_DEFAULT[default],
             "scope": scope,
             "link": link.group(1) if link else None,
