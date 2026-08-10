@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.57.1
+
+### Fixed
+- **The settings table pointed at a README that no longer exists.** The `xbsl.deploy.*` row linked
+  to the retired XBSL Debug extension in the elemctl repository; both settings families are now
+  described here, in [Deploy](#deploy) and [Debugging](#debugging). The terminal task of an elemctl
+  install is named after this extension too.
+
 ## 0.57.0
 
 ### Added
