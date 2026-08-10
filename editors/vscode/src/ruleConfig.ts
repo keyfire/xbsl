@@ -41,13 +41,30 @@ function groupsMap(resource?: vscode.Uri): Record<string, unknown> {
 // Filled once by `xbsl --list-rules` (a line is "A  group/rule  warning  title"); if the run
 // fails the map stays empty and tier keys simply do not colour anything - a missing catalogue
 // must not turn into missing diagnostics.
-const catalogue = new Map<string, { tier: string; level: string }>();
+export interface CatalogueEntry {
+  tier: string;
+  level: string;
+  title: string;
+  offByDefault: boolean;
+}
+
+const catalogue = new Map<string, CatalogueEntry>();
+let cataloguePrimed: Promise<void> | undefined;
+
+// The catalogue as the rest of the extension sees it: awaiting the run that fills it, so a
+// picker opened right after the window came up does not meet an empty map.
+export async function ruleCatalogue(): Promise<Map<string, CatalogueEntry>> {
+  await cataloguePrimed;
+  return catalogue;
+}
 
 export function primeRuleCatalogue(command: string, baseArgs: string[] = []): void {
-  if (catalogue.size > 0) {
+  if (cataloguePrimed) {
     return;
   }
   let out = "";
+  let done = () => undefined as void;
+  cataloguePrimed = new Promise<void>((resolve) => (done = resolve));
   try {
     const child = spawn(command, [...baseArgs, "--list-rules"], { windowsHide: true });
     child.stdout?.on("data", (chunk) => (out += String(chunk)));
@@ -56,14 +73,21 @@ export function primeRuleCatalogue(command: string, baseArgs: string[] = []): vo
       for (const line of out.split(/\r?\n/)) {
         // "A  group/rule  warning  title", and a rule that is off by default carries an extra
         // "off" column right after the tier: "D  off  group/rule  warning  title".
-        const m = /^([A-Z])\s+(?:off\s+)?(\S+\/\S+)\s+(\S+)/.exec(line);
+        const m = /^([A-Z])\s+(off\s+)?(\S+\/\S+)\s+(\S+)\s*(.*)$/.exec(line);
         if (m) {
-          catalogue.set(m[2], { tier: m[1], level: m[3] });
+          catalogue.set(m[3], {
+            tier: m[1],
+            level: m[4],
+            title: (m[5] || "").trim(),
+            offByDefault: Boolean(m[2]),
+          });
         }
       }
+      done();
     });
+    child.on("error", () => done());
   } catch {
-    /* no catalogue - tier keys stay inert */
+    done(); /* no catalogue - tier keys stay inert */
   }
 }
 
