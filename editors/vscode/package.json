@@ -794,11 +794,6 @@
       ],
       "editor/title": [
         {
-          "command": "xbsl.deploy",
-          "when": "resourceLangId == xbsl",
-          "group": "navigation"
-        },
-        {
           "command": "xbsl.previewForm",
           "when": "xbsl.formYaml && resourceLangId == yaml",
           "group": "navigation"
@@ -829,6 +824,11 @@
           "command": "xbsl.metadata.showEmptyCategories",
           "when": "view == xbslMetadata && xbsl.metadata.emptyHidden",
           "group": "navigation@3"
+        },
+        {
+          "command": "xbsl.deploy",
+          "when": "view == xbslMetadata",
+          "group": "navigation@4"
         },
         {
           "command": "xbsl.docs.search",

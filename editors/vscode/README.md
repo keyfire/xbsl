@@ -30,7 +30,7 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
   source action (`source.fixAll.xbsl`) fixes the whole file and can run on save via
   `editor.codeActionsOnSave`. Needs `xbsl` ≥ 0.7.1. See [Quick Fix](#quick-fix).
 - **Deploy to the stand** – the *XBSL: deploy the project (elemctl)* command (and a cloud
-  button in the editor title of `.xbsl` files) runs `elemctl deploy` in a terminal task:
+  button in the title bar of the metadata tree) runs `elemctl deploy` in a terminal task:
   build from sources → upload → apply → restart → verification that the apply actually took
   effect. See [Deploy](#deploy).
 - **Form designer** – a panel of three areas: the structure tree on the left, the form's data on
@@ -549,7 +549,8 @@ In the regular (CLI) mode the view reports that the documentation is available i
 ## Deploy
 
 The command **XBSL: deploy the project (elemctl)** (`xbsl.deploy`, also a cloud button in the
-editor title of `.xbsl` files) runs `elemctl deploy` – build, upload, apply and verification
+title bar of the metadata tree – a deploy takes the whole project, not the open file) runs
+`elemctl deploy` – build, upload, apply and verification
 that the apply actually took effect – as a terminal task, after a confirmation dialog with
 the exact command line. The `xbsl.deploy.*` settings, the deploy cycle and the `ELEMENT_*`
 configuration are documented in the
