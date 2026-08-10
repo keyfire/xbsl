@@ -39,6 +39,15 @@
   the stand behind them is shared. The descriptions of the .env and of the application also spell
   out how they relate: the .env picks the stand and the default application, App ID overrides the
   application ON THAT stand and can stay empty when `ELEMENT_APP_ID` already names it.
+- **The paths to the tools are collected in "General"** - the xbsl engine, elemctl and the Python
+  interpreter lived in three different sections while answering one question: where things are
+  installed.
+- **The retired rule settings are gone from the forms.** The thirteen `groups.*` dropdowns and the
+  three `linter.select` / `.enable` / `.ignore` strings are no longer shown - a setting on display
+  is an invitation to use it, and the invitation now belongs to the table alone. The code still
+  READS them, so an existing setup keeps working after the update; move them with the command. The
+  "Rule groups" section went with them, and the guard that checked a description for every group in
+  the settings now checks the rules page in the documentation.
 - **Inside a section the settings go by importance, not alphabetically.** VS Code sorts them by name
   until an explicit order is given - which sank the path to the tool between minor fields and put
   the application id above the .env that picks it. "Stand" now starts with elemctl, then the .env

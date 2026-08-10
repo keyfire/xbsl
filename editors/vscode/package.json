@@ -1399,15 +1399,36 @@
         "title": "%config.section.general%",
         "order": 1,
         "properties": {
-          "xbsl.projectRoot": {
+          "xbsl.linter.command": {
             "order": 1,
+            "type": "string",
+            "default": "xbsl",
+            "scope": "resource",
+            "markdownDescription": "%config.linter.command%"
+          },
+          "xbsl.deploy.elemctlPath": {
+            "order": 2,
+            "type": "string",
+            "default": "elemctl",
+            "scope": "machine-overridable",
+            "markdownDescription": "%config.deploy.elemctlPath%"
+          },
+          "xbsl.linter.pythonPath": {
+            "order": 3,
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.linter.pythonPath%"
+          },
+          "xbsl.projectRoot": {
+            "order": 10,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.projectRoot%"
           },
           "xbsl.checkForUpdates": {
-            "order": 2,
+            "order": 11,
             "type": "boolean",
             "default": true,
             "scope": "application",
@@ -1459,20 +1480,6 @@
             "scope": "resource",
             "markdownDescription": "%config.workspaceLintTimeout%"
           },
-          "xbsl.linter.command": {
-            "order": 1,
-            "type": "string",
-            "default": "xbsl",
-            "scope": "resource",
-            "markdownDescription": "%config.linter.command%"
-          },
-          "xbsl.linter.pythonPath": {
-            "order": 2,
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "markdownDescription": "%config.linter.pythonPath%"
-          },
           "xbsl.linter.dataDir": {
             "order": 3,
             "type": "string",
@@ -1497,30 +1504,6 @@
             "scope": "resource",
             "description": "%config.linter.lang%"
           },
-          "xbsl.linter.select": {
-            "order": 90,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.linter.select%"
-          },
-          "xbsl.linter.enable": {
-            "order": 91,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "markdownDescription": "%config.linter.enable%"
-          },
-          "xbsl.linter.ignore": {
-            "order": 92,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.linter.ignore%"
-          },
           "xbsl.rules": {
             "order": 10,
             "type": "object",
@@ -1544,337 +1527,6 @@
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.baseline%"
-          }
-        }
-      },
-      {
-        "title": "%config.section.groups%",
-        "order": 3,
-        "properties": {
-          "xbsl.groups.code": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 1,
-            "markdownDescription": "%config.groups.code%"
-          },
-          "xbsl.groups.yaml": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 2,
-            "markdownDescription": "%config.groups.yaml%"
-          },
-          "xbsl.groups.style": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 3,
-            "markdownDescription": "%config.groups.style%"
-          },
-          "xbsl.groups.typography": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 4,
-            "markdownDescription": "%config.groups.typography%"
-          },
-          "xbsl.groups.whitespace": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 5,
-            "markdownDescription": "%config.groups.whitespace%"
-          },
-          "xbsl.groups.encoding": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 6,
-            "markdownDescription": "%config.groups.encoding%"
-          },
-          "xbsl.groups.structure": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 7,
-            "markdownDescription": "%config.groups.structure%"
-          },
-          "xbsl.groups.form": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 8,
-            "markdownDescription": "%config.groups.form%"
-          },
-          "xbsl.groups.query": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 9,
-            "markdownDescription": "%config.groups.query%"
-          },
-          "xbsl.groups.naming": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 10,
-            "markdownDescription": "%config.groups.naming%"
-          },
-          "xbsl.groups.project": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 11,
-            "markdownDescription": "%config.groups.project%"
-          },
-          "xbsl.groups.security": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 12,
-            "markdownDescription": "%config.groups.security%"
-          },
-          "xbsl.groups.conventions": {
-            "order": 50,
-            "markdownDeprecationMessage": "%config.deprecated.rules%",
-            "type": "string",
-            "enum": [
-              "default",
-              "error",
-              "warning",
-              "info",
-              "hint",
-              "off"
-            ],
-            "enumDescriptions": [
-              "%config.groups.enum.default%",
-              "%config.groups.enum.error%",
-              "%config.groups.enum.warning%",
-              "%config.groups.enum.info%",
-              "%config.groups.enum.hint%",
-              "%config.groups.enum.off%"
-            ],
-            "default": "default",
-            "scope": "resource",
-            "order": 13,
-            "markdownDescription": "%config.groups.conventions%"
           }
         }
       },
@@ -1912,13 +1564,6 @@
         "title": "%config.section.deploy%",
         "order": 6,
         "properties": {
-          "xbsl.deploy.elemctlPath": {
-            "order": 1,
-            "type": "string",
-            "default": "elemctl",
-            "scope": "machine-overridable",
-            "markdownDescription": "%config.deploy.elemctlPath%"
-          },
           "xbsl.deploy.envFile": {
             "order": 2,
             "type": "string",

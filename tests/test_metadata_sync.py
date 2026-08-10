@@ -203,89 +203,43 @@ def test_docs_table_matches_registry(name: str):
     assert not problems, "таблица правил разошлась с реестром:\n" + "\n".join(problems)
 
 
-# --- editors/vscode/package.nls.* --------------------------------------------------------
+# --- documentation of the rule groups -----------------------------------------------------
+# Until 0.59 every group had its own xbsl.groups.<group> setting carrying a description and the
+# level counters, and the guards checked those against the registry. The settings are retired - a
+# group is now a key of the single xbsl.rules table - so the documentation is checked instead:
+# without it there is nowhere to read about a new group.
 
-_GROUP_KEY = "config.groups."
-# The sentence stating the group defaults; the tail is parsed for "<count> ... <level>" pairs,
-# which covers both spellings ("15 правил error, 13 – warning" / "15 rules at error, 13 at
-# warning") without pinning the wording.
-_DEFAULTS = re.compile(r"(?:По умолчанию|Defaults?):\s*([^.]*)\.")
-_COUNTED = re.compile(rf"(\d+)[^\d]*?({_LEVELS})")
-_SINGLE = re.compile(rf"^({_LEVELS})$")
-
-_NLS = ["package.nls.ru.json", "package.nls.json"]
+_RULES_PAGES = ["RULES.ru.md", "RULES.md"]
 
 
-def _parse_nls(name: str) -> dict[str, str]:
-    """Group id -> the "defaults" sentence tail of its description."""
-    data = json.loads((VSCODE / name).read_text(encoding="utf-8"))
-    tails = {}
-    for key, value in data.items():
-        if not key.startswith(_GROUP_KEY) or ".enum." in key:
-            continue
-        group = key[len(_GROUP_KEY):]
-        stated = _DEFAULTS.search(value)
-        assert stated, (
-            f"{name}: в описании группы {group!r} нет предложения об умолчаниях "
-            "(\"По умолчанию: ...\" / \"Defaults: ...\") – сторож не может его сверить"
-        )
-        tails[group] = stated.group(1).strip()
-    return tails
-
-
-@pytest.mark.parametrize("name", _NLS)
-def test_extension_describes_every_group(name: str):
-    described = set(_parse_nls(name))
-    actual = set(_levels_by_group())
-    assert described == actual, (
-        f"{name}: описаны группы {sorted(described)}, в реестре {sorted(actual)}"
-    )
-
-
-@pytest.mark.parametrize("name", _NLS)
-def test_extension_group_counters_match_registry(name: str):
-    problems = []
-    for group, tail in sorted(_parse_nls(name).items()):
-        actual = _levels_by_group().get(group)
-        if actual is None:
-            continue  # reported by test_extension_describes_every_group
-        counted = _COUNTED.findall(tail)
-        if counted:
-            stated = {level: int(number) for number, level in counted}
-            if stated != dict(actual):
-                problems.append(f"{group}: заявлено {stated}, в реестре {dict(actual)}")
-            continue
-        single = _SINGLE.match(tail)
-        assert single, f"{name}: умолчания группы {group!r} не разобраны: {tail!r}"
-        if set(actual) != {single.group(1)}:
-            problems.append(
-                f"{group}: заявлен единственный уровень {single.group(1)!r}, "
-                f"в реестре {dict(actual)}"
-            )
-    assert not problems, f"{name}: счётчики групп разошлись с реестром:\n" + "\n".join(problems)
+@pytest.mark.parametrize("name", _RULES_PAGES)
+def test_rules_page_mentions_every_group(name: str):
+    text = (ROOT / "docs" / name).read_text(encoding="utf-8")
+    missing = [group for group in sorted(_levels_by_group()) if f"{group}/" not in text]
+    assert not missing, f"docs/{name}: группы {missing} не описаны на странице правил"
 
 
 def _manifest() -> dict:
     return json.loads((VSCODE / "package.json").read_text(encoding="utf-8"))
 
 
-def test_extension_settings_cover_every_group():
-    """Every rule group needs its own xbsl.groups.<group> setting, or it cannot be configured."""
+def test_settings_do_not_offer_the_retired_rule_keys():
+    """The forms must not offer what the one table replaced.
+
+    xbsl.groups.<group> and the three linter.select/enable/ignore strings said the same things in
+    four syntaxes; the code still READS them, so nobody's setup breaks, but a setting shown in the
+    UI is an invitation to use it - and the invitation now belongs to xbsl.rules alone.
+    """
     package = _manifest()
-    sections = package["contributes"]["configuration"]  # split into UI sections
-    if isinstance(sections, dict):
-        sections = [sections]
-    prefix = "xbsl.groups."
-    declared = {
-        key[len(prefix):]
+    sections = package["contributes"]["configuration"]
+    sections = [sections] if isinstance(sections, dict) else sections
+    retired = {
+        key
         for section in sections
         for key in section.get("properties", {})
-        if key.startswith(prefix)
+        if key.startswith("xbsl.groups.") or key in {"xbsl.linter.select", "xbsl.linter.enable", "xbsl.linter.ignore"}
     }
-    assert declared == set(_levels_by_group()), (
-        f"настройки расширения: группы {sorted(declared)}, в реестре "
-        f"{sorted(_levels_by_group())} – добавьте или удалите xbsl.groups.<группа>"
-    )
+    assert not retired, f"настройки расширения снова предлагают снятое: {sorted(retired)}"
 
 
 def test_extension_settings_with_a_link_use_markdown():

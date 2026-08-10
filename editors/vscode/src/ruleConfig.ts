@@ -54,7 +54,9 @@ export function primeRuleCatalogue(command: string, baseArgs: string[] = []): vo
     child.on("error", () => undefined);
     child.on("close", () => {
       for (const line of out.split(/\r?\n/)) {
-        const m = /^([A-Z])\s+(\S+\/\S+)\s+(\S+)/.exec(line);
+        // "A  group/rule  warning  title", and a rule that is off by default carries an extra
+        // "off" column right after the tier: "D  off  group/rule  warning  title".
+        const m = /^([A-Z])\s+(?:off\s+)?(\S+\/\S+)\s+(\S+)/.exec(line);
         if (m) {
           catalogue.set(m[2], { tier: m[1], level: m[3] });
         }
