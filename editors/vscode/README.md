@@ -10,6 +10,8 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
 
+![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the platform distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the platform stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.png)
+
 ## Features
 
 - **Syntax highlighting** for `.xbsl`: keywords (both Russian and English forms), declarations,
