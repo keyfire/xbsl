@@ -9,6 +9,27 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.57.0
+
+### Added
+- **Debugging 1C:Element applications is now part of this extension.** It used to be a separate
+  one, *XBSL Debug*: breakpoints, a call stack chaining client and server frames, variable values
+  and stepping, all through the platform's own debug adapter. The split cost a double setup - the
+  elemctl path and the application id were asked for twice - so the debugger now shares the deploy
+  settings (`xbsl.deploy.elemctlPath`, `xbsl.deploy.appId`) and adds its own `xbsl.debug.*`. The
+  settings of the retired extension (`xbslDebug.*`) are still read, so an existing setup keeps
+  working. Start with *XBSL: Set up 1C:Element debugging*.
+- **The status bar shows the elemctl version** next to the engine one - deploy and debugging both
+  depend on it, and until now nothing answered whether it was there at all.
+
+### Changed
+- **The deploy button moved to the metadata tree's title bar.** It used to sit in the editor title
+  and only appear while an `.xbsl` file was open, although a deploy takes the whole project.
+- **The workaround for the crash on expanding a structure on a client frame is unconditional.** Its
+  setting could only buy a broken session, so it is gone.
+- **The diagrams follow the reader's theme.** They carry a light and a dark palette now; the
+  documentation site shows the SVG, this README keeps the PNG.
+
 ## 0.56.1
 
 - **The changelog was rewritten: shorter and to the point.** Every entry says what changed for the
