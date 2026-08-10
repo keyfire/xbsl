@@ -8,6 +8,16 @@ sidebar:
 
 What it takes to get the linter answering on your sources: the package, the language data generated from your own distribution, and the language of the output.
 
+## How the pieces fit
+
+One engine, reached three ways: the editor talks to a long-living server, an agent calls the same
+operations as MCP tools, and the terminal runs the CLI. The sources on disk are what all three read
+and write.
+
+![The VS Code extension, the xbsl engine and the project: the editor talks to the long-living xbsl-lsp server (diagnostics, the metadata tree, the form preview, the documentation panel), falling back to the CLI when the server is unavailable; the engine reads the yaml/xbsl pairs of the project and honors the baseline](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.svg)
+
+The rest of this page is about getting there: the package, the data, the language of the output.
+
 ## Installation details
 
 ```sh

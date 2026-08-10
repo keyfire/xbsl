@@ -20,6 +20,7 @@ import { execFile, spawn, ChildProcess } from "child_process";
 import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { askAppId } from "./deploy";
 
 const DEBUG_TYPE = "xbsl";
 
@@ -474,7 +475,11 @@ class XbslConfigurationProvider implements vscode.DebugConfigurationProvider {
       // remember the answer in the setting so the next run does not ask again.
       let appId = config.appId ? String(config.appId) : textSetting("deploy.appId", "appId");
       if (!appId && !envProvidesAppId(root, typeof config.envFile === "string" ? config.envFile : undefined)) {
-        const entered = await promptForAppId();
+        // The same picker the deploy uses: the applications elemctl sees, by name.
+        const workspaceFolder = folder ?? vscode.workspace.workspaceFolders?.[0];
+        const entered = workspaceFolder
+          ? await askAppId(workspaceFolder, undefined, vscode.l10n.t("Which application to debug"))
+          : await promptForAppId();
         if (entered === undefined) {
           return undefined; // cancelled input cancels debugging, with no error message
         }
@@ -525,7 +530,13 @@ class XbslConfigurationProvider implements vscode.DebugConfigurationProvider {
       });
 
       // The debuggee URL is opened after the session starts (see onDidStartDebugSession).
-      const appUrl: string | undefined = application.uri;
+      // `uri` of the card is the application's address INSIDE the platform
+      // (https://<space>.1cmycloud.com/applications/<name>); an application answering on a domain
+      // of its own is opened there instead - that is what xbsl.debug.applicationUrl is for.
+      const configured = typeof config.applicationUrl === "string" && config.applicationUrl
+        ? String(config.applicationUrl)
+        : textSetting("debug.applicationUrl", "applicationUrl");
+      const appUrl: string | undefined = configured || application.uri;
       if (appUrl && debugInfo["client-debug-address"]) {
         const { host, port } = hostPort(debugInfo["client-debug-address"]);
         const authModeParam = config.authMode ? `&auth-mode=${config.authMode}` : "";

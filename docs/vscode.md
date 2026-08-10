@@ -572,7 +572,7 @@ elemctl is offered for installation right from the error message.
 | --- | --- | --- |
 | `xbsl.deploy.elemctlPath` | `elemctl` | The elemctl executable – used by the deploy command **and by debugging**. |
 | `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute); handy in a git worktree whose `.env` lives in the main checkout. |
-| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. |
+| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. When it is not set anywhere, the deploy offers the applications `elemctl apps list` can see – pick one by name, the id is what gets saved. |
 | `xbsl.deploy.extraArgs` | – | Extra `elemctl deploy` arguments, space-separated. |
 
 ## Debugging
@@ -614,6 +614,7 @@ with the debug parameters and execution stops on your breakpoint.
 | `xbsl.debug.adapterPath` | – | The platform debug adapter directory from your distribution – a folder with a `repo` subfolder holding the jars. |
 | `xbsl.debug.javaPath` | `java` | The Java 17+ launcher. |
 | `xbsl.debug.openApplicationOnStart` | `true` | Open the debuggee in the browser when the session starts, with the debug parameters. |
+| `xbsl.debug.applicationUrl` | – | Where to open the debuggee. Empty – the `uri` of the application card, which is its address **inside the platform**; set this when the application answers on a domain of its own. The `applicationUrl` attribute of `launch.json` overrides it. |
 
 The elemctl binary and the application id are **shared with deploy** (`xbsl.deploy.elemctlPath`,
 `xbsl.deploy.appId`), and the Console API credentials live in the `.env` of the sources root,

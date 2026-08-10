@@ -9,6 +9,27 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.58.0
+
+### Added
+- **The application to deploy to is picked from a list.** Where the deploy used to ask for a GUID
+  in an empty box, it now offers the applications `elemctl apps list` can see – name, status,
+  address. Debugging asks the same way. Typing the value by hand stays for an environment where
+  the list is out of reach.
+- **`xbsl.debug.applicationUrl`** – where to open the application under debug. Empty keeps the old
+  behaviour (the `uri` of the application card, its address inside the platform); set it when the
+  application answers on a domain of its own.
+
+### Changed
+- **The settings are split into sections** – General, Checking, Rule groups, Language server, Code
+  templates, Deploy, Debugging – instead of one list of 39. The settings tree now opens on the
+  section you need.
+- **The descriptions are one sentence, with a "Details" link.** VS Code always renders a setting's
+  description in full, so a long one turns the screen into a wall of text; the details moved to the
+  documentation site.
+- **The application id and the application address are told apart in the wording**: the deploy
+  setting says plainly that it is an identifier or a name, not an address.
+
 ## 0.57.1
 
 ### Fixed

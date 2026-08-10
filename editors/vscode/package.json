@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.57.1",
+  "version": "0.58.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -1391,7 +1391,26 @@
     },
     "configuration": [
       {
-        "title": "XBSL",
+        "title": "%config.section.general%",
+        "order": 1,
+        "properties": {
+          "xbsl.projectRoot": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.projectRoot%"
+          },
+          "xbsl.checkForUpdates": {
+            "type": "boolean",
+            "default": true,
+            "scope": "application",
+            "markdownDescription": "%config.checkForUpdates%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.linting%",
+        "order": 2,
         "properties": {
           "xbsl.linter.run": {
             "type": "string",
@@ -1409,23 +1428,43 @@
             "scope": "resource",
             "description": "%config.linter.run%"
           },
+          "xbsl.linter.debounce": {
+            "type": "number",
+            "default": 300,
+            "minimum": 0,
+            "scope": "resource",
+            "description": "%config.linter.debounce%"
+          },
+          "xbsl.workspaceLint": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "%config.workspaceLint%"
+          },
+          "xbsl.workspaceLintTimeout": {
+            "type": "number",
+            "default": 60000,
+            "minimum": 0,
+            "scope": "resource",
+            "markdownDescription": "%config.workspaceLintTimeout%"
+          },
           "xbsl.linter.command": {
             "type": "string",
             "default": "xbsl",
             "scope": "resource",
-            "description": "%config.linter.command%"
+            "markdownDescription": "%config.linter.command%"
           },
           "xbsl.linter.pythonPath": {
             "type": "string",
             "default": "",
             "scope": "resource",
-            "description": "%config.linter.pythonPath%"
+            "markdownDescription": "%config.linter.pythonPath%"
           },
           "xbsl.linter.dataDir": {
             "type": "string",
             "default": "",
             "scope": "resource",
-            "description": "%config.linter.dataDir%"
+            "markdownDescription": "%config.linter.dataDir%"
           },
           "xbsl.linter.lang": {
             "type": "string",
@@ -1453,7 +1492,7 @@
             "type": "string",
             "default": "",
             "scope": "resource",
-            "description": "%config.linter.enable%"
+            "markdownDescription": "%config.linter.enable%"
           },
           "xbsl.linter.ignore": {
             "type": "string",
@@ -1477,107 +1516,17 @@
             },
             "markdownDescription": "%config.rules%"
           },
-          "xbsl.projectRoot": {
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.projectRoot%"
-          },
           "xbsl.baseline": {
             "type": "string",
             "default": "",
             "scope": "resource",
-            "description": "%config.baseline%"
-          },
-          "xbsl.templates.file": {
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.templates.file%"
-          },
-          "xbsl.checkForUpdates": {
-            "type": "boolean",
-            "default": true,
-            "scope": "application",
-            "description": "%config.checkForUpdates%"
-          },
-          "xbsl.lsp.enabled": {
-            "type": "boolean",
-            "default": true,
-            "scope": "resource",
-            "description": "%config.lsp.enabled%"
-          },
-          "xbsl.lsp.command": {
-            "type": "string",
-            "default": "",
-            "scope": "machine-overridable",
-            "description": "%config.lsp.command%"
-          },
-          "xbsl.linter.debounce": {
-            "type": "number",
-            "default": 300,
-            "minimum": 0,
-            "scope": "resource",
-            "description": "%config.linter.debounce%"
-          },
-          "xbsl.workspaceLint": {
-            "type": "boolean",
-            "default": true,
-            "scope": "resource",
-            "description": "%config.workspaceLint%"
-          },
-          "xbsl.workspaceLintTimeout": {
-            "type": "number",
-            "default": 60000,
-            "minimum": 0,
-            "scope": "resource",
-            "description": "%config.workspaceLintTimeout%"
-          },
-          "xbsl.deploy.elemctlPath": {
-            "type": "string",
-            "default": "elemctl",
-            "scope": "machine-overridable",
-            "description": "%config.deploy.elemctlPath%"
-          },
-          "xbsl.deploy.envFile": {
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.deploy.envFile%"
-          },
-          "xbsl.deploy.appId": {
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.deploy.appId%"
-          },
-          "xbsl.deploy.extraArgs": {
-            "type": "string",
-            "default": "",
-            "scope": "resource",
-            "description": "%config.deploy.extraArgs%"
-          },
-          "xbsl.debug.adapterPath": {
-            "type": "string",
-            "default": "",
-            "scope": "machine-overridable",
-            "description": "%config.debug.adapterPath%"
-          },
-          "xbsl.debug.javaPath": {
-            "type": "string",
-            "default": "java",
-            "description": "%config.debug.javaPath%",
-            "scope": "machine-overridable"
-          },
-          "xbsl.debug.openApplicationOnStart": {
-            "type": "boolean",
-            "default": true,
-            "description": "%config.debug.openApplicationOnStart%"
+            "markdownDescription": "%config.baseline%"
           }
         }
       },
       {
         "title": "%config.section.groups%",
+        "order": 3,
         "properties": {
           "xbsl.groups.code": {
             "type": "string",
@@ -1600,7 +1549,7 @@
             "default": "default",
             "scope": "resource",
             "order": 1,
-            "description": "%config.groups.code%"
+            "markdownDescription": "%config.groups.code%"
           },
           "xbsl.groups.yaml": {
             "type": "string",
@@ -1623,7 +1572,7 @@
             "default": "default",
             "scope": "resource",
             "order": 2,
-            "description": "%config.groups.yaml%"
+            "markdownDescription": "%config.groups.yaml%"
           },
           "xbsl.groups.style": {
             "type": "string",
@@ -1646,7 +1595,7 @@
             "default": "default",
             "scope": "resource",
             "order": 3,
-            "description": "%config.groups.style%"
+            "markdownDescription": "%config.groups.style%"
           },
           "xbsl.groups.typography": {
             "type": "string",
@@ -1669,7 +1618,7 @@
             "default": "default",
             "scope": "resource",
             "order": 4,
-            "description": "%config.groups.typography%"
+            "markdownDescription": "%config.groups.typography%"
           },
           "xbsl.groups.whitespace": {
             "type": "string",
@@ -1692,7 +1641,7 @@
             "default": "default",
             "scope": "resource",
             "order": 5,
-            "description": "%config.groups.whitespace%"
+            "markdownDescription": "%config.groups.whitespace%"
           },
           "xbsl.groups.encoding": {
             "type": "string",
@@ -1715,7 +1664,7 @@
             "default": "default",
             "scope": "resource",
             "order": 6,
-            "description": "%config.groups.encoding%"
+            "markdownDescription": "%config.groups.encoding%"
           },
           "xbsl.groups.structure": {
             "type": "string",
@@ -1738,7 +1687,7 @@
             "default": "default",
             "scope": "resource",
             "order": 7,
-            "description": "%config.groups.structure%"
+            "markdownDescription": "%config.groups.structure%"
           },
           "xbsl.groups.form": {
             "type": "string",
@@ -1761,7 +1710,7 @@
             "default": "default",
             "scope": "resource",
             "order": 8,
-            "description": "%config.groups.form%"
+            "markdownDescription": "%config.groups.form%"
           },
           "xbsl.groups.query": {
             "type": "string",
@@ -1784,7 +1733,7 @@
             "default": "default",
             "scope": "resource",
             "order": 9,
-            "description": "%config.groups.query%"
+            "markdownDescription": "%config.groups.query%"
           },
           "xbsl.groups.naming": {
             "type": "string",
@@ -1807,7 +1756,7 @@
             "default": "default",
             "scope": "resource",
             "order": 10,
-            "description": "%config.groups.naming%"
+            "markdownDescription": "%config.groups.naming%"
           },
           "xbsl.groups.project": {
             "type": "string",
@@ -1830,7 +1779,7 @@
             "default": "default",
             "scope": "resource",
             "order": 11,
-            "description": "%config.groups.project%"
+            "markdownDescription": "%config.groups.project%"
           },
           "xbsl.groups.security": {
             "type": "string",
@@ -1853,7 +1802,7 @@
             "default": "default",
             "scope": "resource",
             "order": 12,
-            "description": "%config.groups.security%"
+            "markdownDescription": "%config.groups.security%"
           },
           "xbsl.groups.conventions": {
             "type": "string",
@@ -1876,7 +1825,98 @@
             "default": "default",
             "scope": "resource",
             "order": 13,
-            "description": "%config.groups.conventions%"
+            "markdownDescription": "%config.groups.conventions%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.lsp%",
+        "order": 4,
+        "properties": {
+          "xbsl.lsp.enabled": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "markdownDescription": "%config.lsp.enabled%"
+          },
+          "xbsl.lsp.command": {
+            "type": "string",
+            "default": "",
+            "scope": "machine-overridable",
+            "description": "%config.lsp.command%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.templates%",
+        "order": 5,
+        "properties": {
+          "xbsl.templates.file": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.templates.file%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.deploy%",
+        "order": 6,
+        "properties": {
+          "xbsl.deploy.elemctlPath": {
+            "type": "string",
+            "default": "elemctl",
+            "scope": "machine-overridable",
+            "markdownDescription": "%config.deploy.elemctlPath%"
+          },
+          "xbsl.deploy.envFile": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.deploy.envFile%"
+          },
+          "xbsl.deploy.appId": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.deploy.appId%"
+          },
+          "xbsl.deploy.extraArgs": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.deploy.extraArgs%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.debug%",
+        "order": 7,
+        "properties": {
+          "xbsl.debug.adapterPath": {
+            "type": "string",
+            "default": "",
+            "scope": "machine-overridable",
+            "markdownDescription": "%config.debug.adapterPath%",
+            "description": "%config.debug.adapterPath%"
+          },
+          "xbsl.debug.javaPath": {
+            "type": "string",
+            "default": "java",
+            "description": "%config.debug.javaPath%",
+            "scope": "machine-overridable"
+          },
+          "xbsl.debug.applicationUrl": {
+            "type": "string",
+            "default": "",
+            "scope": "resource",
+            "markdownDescription": "%config.debug.applicationUrl%",
+            "description": "%config.debug.applicationUrl%"
+          },
+          "xbsl.debug.openApplicationOnStart": {
+            "type": "boolean",
+            "default": true,
+            "description": "%config.debug.openApplicationOnStart%"
           }
         }
       }

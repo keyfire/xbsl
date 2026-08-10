@@ -462,5 +462,12 @@
   "elemctl: not found": "elemctl: не найден",
   "Adapter directory reported by elemctl: {0}": "Каталог адаптера получен от elemctl: {0}",
   "Adapter (reported by elemctl): {0}": "Адаптер (получен от elemctl): {0}",
-  "The platform debug adapter directory is needed (a folder with a repo subdirectory holding the adapter's jar files). Take it from your 1C:Element distribution: data/ide/theia/plugins/@1c-appengine-plugin/bin/debugger.": "Нужен каталог debug-адаптера платформы (папка с подкаталогом repo, где лежат jar-файлы адаптера). Возьмите его из своего дистрибутива 1С:Элемент: data/ide/theia/plugins/@1c-appengine-plugin/bin/debugger."
+  "The platform debug adapter directory is needed (a folder with a repo subdirectory holding the adapter's jar files). Take it from your 1C:Element distribution: data/ide/theia/plugins/@1c-appengine-plugin/bin/debugger.": "Нужен каталог debug-адаптера платформы (папка с подкаталогом repo, где лежат jar-файлы адаптера). Возьмите его из своего дистрибутива 1С:Элемент: data/ide/theia/plugins/@1c-appengine-plugin/bin/debugger.",
+  "Which application to deploy to": "В какое приложение деплоим",
+  "The list comes from `elemctl apps list`": "Список получен от `elemctl apps list`",
+  "Enter the id or the name...": "Ввести идентификатор или имя...",
+  "Application for the deploy": "Приложение для деплоя",
+  "The identifier (APP_ID) or the exact name of the application - elemctl accepts either. It will be saved to the xbsl.deploy.appId setting.": "Идентификатор (APP_ID) либо точное имя приложения - elemctl принимает и то, и другое. Значение сохранится в настройку xbsl.deploy.appId.",
+  "The application must not be empty.": "Приложение не может быть пустым.",
+  "Which application to debug": "Какое приложение отлаживаем"
 }

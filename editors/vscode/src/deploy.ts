@@ -60,26 +60,104 @@ function envFileHasAppId(folder: vscode.WorkspaceFolder, s: DeploySettings): boo
   }
 }
 
+/** A brief application card of `elemctl apps list --brief`. */
+interface AppCard {
+  id?: string;
+  name?: string;
+  "display-name"?: string;
+  status?: string;
+  uri?: string;
+}
+
+// The applications elemctl can see, or undefined when it cannot answer (not installed, no
+// credentials, an environment without a list). A failure is not an error here: the caller
+// falls back to typing the value by hand.
+function listApps(s: DeploySettings, cwd: string): Promise<AppCard[] | undefined> {
+  const args = [...(s.envFile ? ["--env-file", s.envFile] : []), "apps", "list", "--brief"];
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(s.bin, args, { cwd, windowsHide: true });
+    } catch {
+      resolve(undefined);
+      return;
+    }
+    let out = "";
+    child.stdout.on("data", (d: Buffer) => (out += d.toString("utf8")));
+    child.on("error", () => resolve(undefined));
+    child.on("close", (code) => {
+      if (code !== 0) {
+        resolve(undefined);
+        return;
+      }
+      try {
+        const parsed = JSON.parse(out);
+        resolve(Array.isArray(parsed) ? parsed : parsed?.applications ?? undefined);
+      } catch {
+        resolve(undefined);
+      }
+    });
+    child.stdin?.end();
+  });
+}
+
+// Nobody remembers a GUID, so the applications elemctl can see are offered as a list: the name
+// is what a person recognizes, and since elemctl resolves a name into an id itself, the name is
+// what gets saved. Typing the value by hand stays available - for an environment where the list
+// is not reachable.
+export async function askAppId(
+  folder: vscode.WorkspaceFolder,
+  s: DeploySettings = readDeploySettings(folder.uri),
+  title = vscode.l10n.t("Which application to deploy to")
+): Promise<string | undefined> {
+  const apps = await listApps(s, folder.uri.fsPath);
+  const typeIt = vscode.l10n.t("Enter the id or the name...");
+  if (apps && apps.length) {
+    // The label is what a person recognizes, the saved value is the id: a name only reaches the
+    // platform through an elemctl new enough to resolve it, and the setting outlives that.
+    const items: (vscode.QuickPickItem & { value?: string })[] = apps.map((app) => ({
+      label: String(app["display-name"] || app.name || app.id || ""),
+      description: app.status ? `$(pulse) ${app.status}` : undefined,
+      detail: app.uri,
+      value: String(app.id || app.name || ""),
+    }));
+    items.push({ label: typeIt, value: undefined });
+    const picked = await vscode.window.showQuickPick(items, {
+      title,
+      placeHolder: vscode.l10n.t("The list comes from `elemctl apps list`"),
+      ignoreFocusOut: true,
+    });
+    if (!picked) {
+      return undefined;
+    }
+    if (picked.value) {
+      return picked.value;
+    }
+  }
+  const value = await vscode.window.showInputBox({
+    title: vscode.l10n.t("Application for the deploy"),
+    prompt: vscode.l10n.t(
+      "The identifier (APP_ID) or the exact name of the application - elemctl accepts either. It will be saved to the xbsl.deploy.appId setting."
+    ),
+    placeHolder: "0198c0de-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
+    ignoreFocusOut: true,
+    validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("The application must not be empty.")),
+  });
+  return value === undefined ? undefined : value.trim();
+}
+
 // Without an app id elemctl stops with a bare "не задан app-id" long after the confirmation.
-// Ask up front instead: where to take the id from, and remember the answer in the folder
-// settings so the next deploy does not ask again.
+// Ask up front instead, and remember the answer in the folder settings so the next deploy does
+// not ask again.
 async function ensureAppId(folder: vscode.WorkspaceFolder, s: DeploySettings): Promise<boolean> {
   if (s.appId || envFileHasAppId(folder, s) || process.env.ELEMENT_APP_ID || process.env.APP_ID) {
     return true;
   }
-  const value = await vscode.window.showInputBox({
-    title: vscode.l10n.t("Application id for the deploy"),
-    prompt: vscode.l10n.t(
-      "elemctl needs the target application id (APP_ID). Take it from `elemctl apps list` or from the application card in the platform console; it will be saved to the xbsl.deploy.appId setting."
-    ),
-    placeHolder: "0198c0de-xxxx-xxxx-xxxx-xxxxxxxxxxxx",
-    ignoreFocusOut: true,
-    validateInput: (v) => (v.trim() ? undefined : vscode.l10n.t("The application id must not be empty.")),
-  });
+  const value = await askAppId(folder, s);
   if (value === undefined) {
     return false; // canceled - the deploy is canceled with it
   }
-  s.appId = value.trim();
+  s.appId = value;
   await vscode.workspace
     .getConfiguration("xbsl", folder.uri)
     .update("deploy.appId", s.appId, vscode.ConfigurationTarget.WorkspaceFolder);
