@@ -70,11 +70,11 @@ def _pages(locale: str) -> str:
 
 # --- rules --------------------------------------------------------------------------------
 
-#: A row of a rules table: | N | `id` | severity | on/off | scope | ... |
-_RULE_ROW = re.compile(
-    r"^\|\s*\d+\s*\|\s*`([^`]+)`\s*\|\s*(\w+)\s*\|\s*(on|off|вкл|выкл)\s*\|", re.M
-)
-_DEFAULTS = {"вкл": "on", "выкл": "off"}
+#: A row of a rules table: | `id` | level icon | default icon | scope | ... |
+#: The icons replaced the words when the table outgrew the page width.
+_RULE_ROW = re.compile(r"^\|\s*`([^`]+)`\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|", re.M)
+_SEVERITIES = {"🔴": "error", "🟡": "warning", "🔵": "info"}
+_DEFAULTS = {"✓": "on", "–": "off"}
 
 
 def base_rules() -> dict[str, dict[str, str]]:
@@ -106,7 +106,10 @@ def check_rules(problems: list[str]) -> None:
     for page in ("RULES.md", "RULES.ru.md"):
         text = (DOCS / page).read_text(encoding="utf-8")
         rows = {
-            m.group(1): {"severity": m.group(2), "default": _DEFAULTS.get(m.group(3), m.group(3))}
+            m.group(1): {
+                "severity": _SEVERITIES.get(m.group(2), m.group(2)),
+                "default": _DEFAULTS.get(m.group(3), m.group(3)),
+            }
             for m in _RULE_ROW.finditer(text)
         }
         for rule_id in sorted(set(rules) - set(rows)):

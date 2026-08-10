@@ -45,9 +45,9 @@ sidebar:
 
 - **Правило** – идентификатор `группа/имя`. Группа (часть до `/`) позволяет включать и
   выключать правила пачкой.
-- **Severity** – `error` (сборка/CI должны падать), `warning` (нарушение соглашения),
-  `info` (подсказка, обычно выключена).
-- **Умолч.** – входит ли правило в набор по умолчанию (`вкл`) или включается явно (`выкл`).
+- **Уровень** – 🔴 `error` (сборка и CI должны падать), 🟡 `warning` (нарушено соглашение),
+  🔵 `info` (подсказка, обычно выключена).
+- **Умолч.** – ✓ правило входит в набор по умолчанию, – включается явно.
 - **Область** – `файл` (правило видит один файл) или `проект` (нужен индекс всего проекта:
   дубли Ид, неизвестные типы, кросс-модульные вызовы).
 - **Документация** – ссылка на раздел документации платформы, стоящий за правилом. В VS Code
@@ -59,44 +59,46 @@ sidebar:
 для `--select`/`--ignore` (наряду с группой и идентификатором): `--select A,B` гоняет только
 структуру и текст, `--ignore D` убирает семантику над stdlib.
 
+**Как читать колонки:** 🔴 error · 🟡 warning · 🔵 info; ✓ – входит в набор по умолчанию, – включается явно; область – один файл или весь проект.
+
 ### Тир A – структура и YAML
 
 Файл существует, парсится, у объекта есть уникальный UUID, имя совпадает с файлом.
 
-| # | Правило | Severity | Умолч. | Область | Что проверяет | Документация |
-|---|---|---|---|---|---|---|
-| 1 | `yaml/valid` | error | вкл | файл | YAML не парсится | – |
-| 2 | `yaml/id-uuid` | error | вкл | файл | Ид не является UUID | – |
-| 3 | `yaml/id-required` | warning | вкл | файл | У объекта нет Ид | – |
-| 4 | `yaml/name-matches-file` | warning | вкл | файл | Имя не совпадает с именем файла | – |
-| 5 | `yaml/id-unique` | error | вкл | проект | Дубли Ид в проекте | – |
-| 6 | `yaml/standard-field-length` | error | вкл | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| 7 | `yaml/ref-needs-nullable` | error | вкл | файл | Ссылочный тип в позиции `Тип` без `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`) – у ссылки нет значения по умолчанию, компиляция падает `Default value initialization is not supported` | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 8 | `yaml/no-expression-in-literal` | error | вкл | файл | Выражение `=...` внутри узла литерального типа (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) – платформа принимает здесь только литерал, вычислять нужно весь объект | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
-| 9 | `project/identifier` | warning | вкл | файл | Имя или поставщик проекта не идентификатор | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| 10 | `project/presentation` | warning | вкл | файл | Представление проекта не заполнено | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| 11 | `project/version` | warning | вкл | файл | Версия проекта не A.B.C | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| 12 | `structure/xbsl-pair` | warning | вкл | файл | Модуль .xbsl без парного .yaml | – |
-| 13 | `project/path-matches-descriptor` | error | вкл | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| 14 | `yaml/unknown-component-property` | error | вкл | файл | Ключ разметки, которого у компонента нет, а у ДРУГОГО компонента ui-схемы есть (`Флажок` + `ЗамещающийТекст` – свойство `ПолеВвода`): применение отвечает `Неизвестное свойство`; имя, которого нет ни у одного компонента, не трогается – документация перечисляет ключи yaml не полностью | [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
+| Правило | Уровень | Умолч. | Область | Что проверяет | Документация |
+|---|---|---|---|---|---|
+| `yaml/valid` | 🔴 | ✓ | файл | YAML не парсится | – |
+| `yaml/id-uuid` | 🔴 | ✓ | файл | Ид не является UUID | – |
+| `yaml/id-required` | 🟡 | ✓ | файл | У объекта нет Ид | – |
+| `yaml/name-matches-file` | 🟡 | ✓ | файл | Имя не совпадает с именем файла | – |
+| `yaml/id-unique` | 🔴 | ✓ | проект | Дубли Ид в проекте | – |
+| `yaml/standard-field-length` | 🔴 | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| `yaml/ref-needs-nullable` | 🔴 | ✓ | файл | Ссылочный тип в позиции `Тип` без `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`) – у ссылки нет значения по умолчанию, компиляция падает `Default value initialization is not supported` | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `yaml/no-expression-in-literal` | 🔴 | ✓ | файл | Выражение `=...` внутри узла литерального типа (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) – платформа принимает здесь только литерал, вычислять нужно весь объект | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `project/identifier` | 🟡 | ✓ | файл | Имя или поставщик проекта не идентификатор | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
+| `project/presentation` | 🟡 | ✓ | файл | Представление проекта не заполнено | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
+| `project/version` | 🟡 | ✓ | файл | Версия проекта не A.B.C | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
+| `structure/xbsl-pair` | 🟡 | ✓ | файл | Модуль .xbsl без парного .yaml | – |
+| `project/path-matches-descriptor` | 🔴 | ✓ | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции | [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
+| `yaml/unknown-component-property` | 🔴 | ✓ | файл | Ключ разметки, которого у компонента нет, а у ДРУГОГО компонента ui-схемы есть (`Флажок` + `ЗамещающийТекст` – свойство `ПолеВвода`): применение отвечает `Неизвестное свойство`; имя, которого нет ни у одного компонента, не трогается – документация перечисляет ключи yaml не полностью | [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 
 ### Тир B – текст и соглашения
 
 Кодировка, переводы строк, пробелы, типографика (тире, кавычки, многоточие), длина строки,
 секреты в исходниках.
 
-| # | Правило | Severity | Умолч. | Область | Что проверяет | Документация |
-|---|---|---|---|---|---|---|
-| 15 | `security/hardcoded-secret` | error | вкл | файл | Ключ или пароль литералом в коде | – |
-| 16 | `typography/em-dash` | info | выкл | файл | Длинное тире в комментарии | – |
-| 17 | `typography/ellipsis` | warning | вкл | файл | Символ многоточия в комментарии | – |
-| 18 | `typography/curly-quotes` | warning | вкл | файл | Кудрявые кавычки | – |
-| 19 | `typography/guillemets-comment` | info | выкл | файл | Ёлочки в комментарии | – |
-| 20 | `whitespace/trailing` | warning | вкл | файл | Хвостовые пробелы | – |
-| 21 | `whitespace/mixed-newline` | warning | вкл | файл | Смешанные переводы строк | – |
-| 22 | `encoding/utf8` | error | вкл | файл | Файл не в UTF-8 | – |
-| 23 | `style/tab-indent` | warning | вкл | файл | Табуляция в отступе | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 24 | `style/line-length` | warning | вкл | файл | Строка длиннее 120 символов | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+| Правило | Уровень | Умолч. | Область | Что проверяет | Документация |
+|---|---|---|---|---|---|
+| `security/hardcoded-secret` | 🔴 | ✓ | файл | Ключ или пароль литералом в коде | – |
+| `typography/em-dash` | 🔵 | – | файл | Длинное тире в комментарии | – |
+| `typography/ellipsis` | 🟡 | ✓ | файл | Символ многоточия в комментарии | – |
+| `typography/curly-quotes` | 🟡 | ✓ | файл | Кудрявые кавычки | – |
+| `typography/guillemets-comment` | 🔵 | – | файл | Ёлочки в комментарии | – |
+| `whitespace/trailing` | 🟡 | ✓ | файл | Хвостовые пробелы | – |
+| `whitespace/mixed-newline` | 🟡 | ✓ | файл | Смешанные переводы строк | – |
+| `encoding/utf8` | 🔴 | ✓ | файл | Файл не в UTF-8 | – |
+| `style/tab-indent` | 🟡 | ✓ | файл | Табуляция в отступе | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+| `style/line-length` | 🟡 | ✓ | файл | Строка длиннее 120 символов | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
 
 ### Тир C – структура кода, базовый синтаксис и соглашения по написанию
 
@@ -104,131 +106,131 @@ sidebar:
 соглашения из раздела документации "Рекомендации по написанию кода". Часть правил `style/`
 выключена по умолчанию (накопленный долг, `info`): включаются `--select style` для замера.
 
-| # | Правило | Severity | Умолч. | Область | Что проверяет | Документация |
-|---|---|---|---|---|---|---|
-| 25 | `code/parse-error` | error | вкл | файл | Синтаксическая ошибка (полный разбор по грамматике платформы) | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 26 | `code/statement-no-effect` | warning | вкл | файл | Оператор-выражение без эффекта: значение отбрасывается (часто опечатка в ключевом слове вида `возрат 5`) | – |
-| 27 | `code/return-mismatch` | error | вкл | файл | Возврат не по сигнатуре метода (значение в методе-ничто, пустой `возврат` в типизированном) – компилятор такой код отвергает | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 28 | `code/call-arity` | error | вкл | файл | Число аргументов локального вызова вне диапазона [обязательные, все] сигнатуры | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 29 | `code/brackets` | error | вкл | файл | Дисбаланс скобок () [] {} | – |
-| 30 | `code/blocks` | error | вкл | файл | Дисбаланс блоков и ';' | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 31 | `code/ternary-and-or` | error | вкл | файл | Составное условие тернарного оператора без скобок | [доки](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
-| 32 | `code/param-type-required` | error | вкл | файл | Параметр без типа и без значения по умолчанию | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 33 | `code/loop-header` | error | вкл | файл | Неверный заголовок цикла 'для' | [доки](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
-| 34 | `code/invalid-string-escape` | error | вкл | файл | Недопустимая управляющая последовательность в строковом литерале (`\'`, регексные `\d`) – компилятор отвергает такой литерал; валидны `\н \в \т \\ \" \% \$ \ю<код>` и латинские написания | [доки](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
-| 35 | `code/unused-local` | warning | вкл | файл | Неиспользуемая локальная переменная | – |
-| 36 | `code/unused-loop-var` | warning | вкл | файл | Неиспользуемая переменная цикла | – |
-| 37 | `code/ref-field-needs-req` | error | вкл | файл | Поле-ссылка структуры без 'обз' | [доки](https://1cmycloud.com/docs/help/topics/structure/) |
-| 38 | `style/boolean-compare` | warning | вкл | файл | Сравнение булева значения с Истина/Ложь | [доки](https://1cmycloud.com/docs/help/topics/check-logical-values/) |
-| 39 | `style/undefined-is` | warning | вкл | файл | Проверка Неопределено оператором 'это' | [доки](https://1cmycloud.com/docs/help/topics/check-if-undefined/) |
-| 40 | `style/negated-is` | warning | вкл | файл | Отрицание оператора 'это' снаружи | [доки](https://1cmycloud.com/docs/help/topics/is-operator/) |
-| 41 | `style/semicolon-line` | warning | вкл | файл | ';' не на отдельной строке | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
-| 42 | `style/wrap-operator` | warning | вкл | файл | Операция в конце перенесённой строки | [доки](https://1cmycloud.com/docs/help/topics/split-expressions/) |
-| 43 | `style/wrap-comma` | warning | вкл | файл | Запятая в начале перенесённой строки | [доки](https://1cmycloud.com/docs/help/topics/split-expressions/) |
-| 44 | `style/camel-case` | warning | вкл | файл | Имя не в UpperCamelCase | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 45 | `style/const-case` | warning | вкл | файл | Константа не БОЛЬШИМИ_БУКВАМИ | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 46 | `style/exception-prefix` | warning | вкл | файл | Имя исключения без префикса "Исключение" | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 47 | `style/abbreviation-case` | warning | вкл | файл | Аббревиатура заглавными буквами в имени | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 48 | `style/enum-name-vid` | warning | вкл | файл | Имя перечисления начинается с "Тип" | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 49 | `style/collection-literal` | warning | вкл | файл | Ручное наполнение коллекции вместо литерала | [доки](https://1cmycloud.com/docs/help/topics/collection-literals-usage/) |
-| 50 | `style/redundant-tostring` | warning | вкл | файл | '.ВСтроку()' в конкатенации | [доки](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
-| 51 | `style/interpolation` | warning | вкл | файл | Конкатенация вместо интерполяции | [доки](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
-| 52 | `style/type-colon-space` | warning | вкл | файл | Пробелы вокруг двоеточия типа | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 53 | `style/union-spaces` | warning | вкл | файл | Пробелы вокруг '\|' в составном типе | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 54 | `style/nullable-shorthand` | warning | вкл | файл | Неопределено в типе без сокращения '?' | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 55 | `style/redundant-type` | warning | вкл | файл | Избыточная аннотация типа при инициализации | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| 56 | `style/optional-params-last` | warning | вкл | файл | Необязательный параметр перед обязательным | [доки](https://1cmycloud.com/docs/help/topics/method-declarations/) |
-| 57 | `code/resource-bare-name` | error | вкл | файл | `Ресурс{Ресурсы/Имя.svg}` – ключ ресурса задается ОТНОСИТЕЛЬНО каталога Ресурсы; сам каталог в ключе ломает поиск | [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
-| 58 | `query/named-parameter` | error | вкл | файл | Именованный параметр `&Имя` внутри литерала запроса – значения в литерал передаются интерполяцией (`%Имя`) | [доки](https://1cmycloud.com/docs/help/topics/query-literal/) |
-| 59 | `code/this-in-static-method` | error | вкл | файл | Ключевое слово `этот` в теле статического метода – статический метод общий для всего типа и контекста объекта не имеет, проект компилятор отвергает | [доки](https://1cmycloud.com/docs/help/topics/static-methods/) |
-| 60 | `code/instance-call-from-static` | error | вкл | файл | Вызов обычного метода того же владельца по голому имени из статического метода – документация запрещает это прямо; вызывайте метод у значения либо сделайте его статическим | [доки](https://1cmycloud.com/docs/help/topics/static-methods/) |
-| 61 | `code/close-in-before-close` | warning | вкл | файл | `Закрыть()` внутри `ПередЗакрытием` – платформа игнорирует вызов, и форму не закрывает уже ничто | – |
-| 62 | `query/no-isnull` | error | вкл | файл | `ЕСТЬNULL(` внутри литерала запроса – такой функции в языке запросов нет | – |
-| 63 | `style/abstract-name` | warning | вкл | файл | Абстрактное имя переменной (`Данные`, `Элемент`, `Объект`, `Строка`, `Значение`, `Документ` – точное или с числовым хвостом `Данные1`) не отражает суть; основа внутри длинного имени (`ДанныеКлиента`) и поля структур (контракт сериализации) не трогаются | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 64 | `style/single-letter-name` | warning | вкл | файл | Однобуквенное имя переменной, параметра или переменной цикла – по стандарту имён односимвольными бывают только параметры коротких лямбда-выражений (`(А, Б) -> А + Б`) | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 65 | `style/negated-boolean-name` | warning | вкл | файл | Булева переменная названа от отрицания (`НеПодключен`, `НетОшибок`) – имя образуют от истинного значения признака (`Подключен`, `ЕстьОшибки`); судится только доказанное Булево: аннотация типа или булев литерал в инициализации | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 66 | `style/type-in-name` | warning | вкл | файл | Имя переменной начинается с типа-контейнера (`МассивСтруктурИмен`, `СтруктураОтвета`) – тип виден по объявлению и подсказке редактора, в имя его не включают | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 67 | `style/numeral-in-const-name` | warning | вкл | файл | Числительное в имени константы (`ТАЙМАУТ_ОДНА_МИНУТА`) описывает её значение – константу называют абстрактно (`ТАЙМАУТ`), чтобы смена значения не ломала имя | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| Правило | Уровень | Умолч. | Область | Что проверяет | Документация |
+|---|---|---|---|---|---|
+| `code/parse-error` | 🔴 | ✓ | файл | Синтаксическая ошибка (полный разбор по грамматике платформы) | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+| `code/statement-no-effect` | 🟡 | ✓ | файл | Оператор-выражение без эффекта: значение отбрасывается (часто опечатка в ключевом слове вида `возрат 5`) | – |
+| `code/return-mismatch` | 🔴 | ✓ | файл | Возврат не по сигнатуре метода (значение в методе-ничто, пустой `возврат` в типизированном) – компилятор такой код отвергает | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| `code/call-arity` | 🔴 | ✓ | файл | Число аргументов локального вызова вне диапазона [обязательные, все] сигнатуры | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| `code/brackets` | 🔴 | ✓ | файл | Дисбаланс скобок () [] {} | – |
+| `code/blocks` | 🔴 | ✓ | файл | Дисбаланс блоков и ';' | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+| `code/ternary-and-or` | 🔴 | ✓ | файл | Составное условие тернарного оператора без скобок | [доки](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
+| `code/param-type-required` | 🔴 | ✓ | файл | Параметр без типа и без значения по умолчанию | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| `code/loop-header` | 🔴 | ✓ | файл | Неверный заголовок цикла 'для' | [доки](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
+| `code/invalid-string-escape` | 🔴 | ✓ | файл | Недопустимая управляющая последовательность в строковом литерале (`\'`, регексные `\d`) – компилятор отвергает такой литерал; валидны `\н \в \т \\ \" \% \$ \ю<код>` и латинские написания | [доки](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
+| `code/unused-local` | 🟡 | ✓ | файл | Неиспользуемая локальная переменная | – |
+| `code/unused-loop-var` | 🟡 | ✓ | файл | Неиспользуемая переменная цикла | – |
+| `code/ref-field-needs-req` | 🔴 | ✓ | файл | Поле-ссылка структуры без 'обз' | [доки](https://1cmycloud.com/docs/help/topics/structure/) |
+| `style/boolean-compare` | 🟡 | ✓ | файл | Сравнение булева значения с Истина/Ложь | [доки](https://1cmycloud.com/docs/help/topics/check-logical-values/) |
+| `style/undefined-is` | 🟡 | ✓ | файл | Проверка Неопределено оператором 'это' | [доки](https://1cmycloud.com/docs/help/topics/check-if-undefined/) |
+| `style/negated-is` | 🟡 | ✓ | файл | Отрицание оператора 'это' снаружи | [доки](https://1cmycloud.com/docs/help/topics/is-operator/) |
+| `style/semicolon-line` | 🟡 | ✓ | файл | ';' не на отдельной строке | [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+| `style/wrap-operator` | 🟡 | ✓ | файл | Операция в конце перенесённой строки | [доки](https://1cmycloud.com/docs/help/topics/split-expressions/) |
+| `style/wrap-comma` | 🟡 | ✓ | файл | Запятая в начале перенесённой строки | [доки](https://1cmycloud.com/docs/help/topics/split-expressions/) |
+| `style/camel-case` | 🟡 | ✓ | файл | Имя не в UpperCamelCase | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/const-case` | 🟡 | ✓ | файл | Константа не БОЛЬШИМИ_БУКВАМИ | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/exception-prefix` | 🟡 | ✓ | файл | Имя исключения без префикса "Исключение" | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/abbreviation-case` | 🟡 | ✓ | файл | Аббревиатура заглавными буквами в имени | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/enum-name-vid` | 🟡 | ✓ | файл | Имя перечисления начинается с "Тип" | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/collection-literal` | 🟡 | ✓ | файл | Ручное наполнение коллекции вместо литерала | [доки](https://1cmycloud.com/docs/help/topics/collection-literals-usage/) |
+| `style/redundant-tostring` | 🟡 | ✓ | файл | '.ВСтроку()' в конкатенации | [доки](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
+| `style/interpolation` | 🟡 | ✓ | файл | Конкатенация вместо интерполяции | [доки](https://1cmycloud.com/docs/help/topics/string-concatenation/) |
+| `style/type-colon-space` | 🟡 | ✓ | файл | Пробелы вокруг двоеточия типа | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `style/union-spaces` | 🟡 | ✓ | файл | Пробелы вокруг '\|' в составном типе | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `style/nullable-shorthand` | 🟡 | ✓ | файл | Неопределено в типе без сокращения '?' | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `style/redundant-type` | 🟡 | ✓ | файл | Избыточная аннотация типа при инициализации | [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `style/optional-params-last` | 🟡 | ✓ | файл | Необязательный параметр перед обязательным | [доки](https://1cmycloud.com/docs/help/topics/method-declarations/) |
+| `code/resource-bare-name` | 🔴 | ✓ | файл | `Ресурс{Ресурсы/Имя.svg}` – ключ ресурса задается ОТНОСИТЕЛЬНО каталога Ресурсы; сам каталог в ключе ломает поиск | [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `query/named-parameter` | 🔴 | ✓ | файл | Именованный параметр `&Имя` внутри литерала запроса – значения в литерал передаются интерполяцией (`%Имя`) | [доки](https://1cmycloud.com/docs/help/topics/query-literal/) |
+| `code/this-in-static-method` | 🔴 | ✓ | файл | Ключевое слово `этот` в теле статического метода – статический метод общий для всего типа и контекста объекта не имеет, проект компилятор отвергает | [доки](https://1cmycloud.com/docs/help/topics/static-methods/) |
+| `code/instance-call-from-static` | 🔴 | ✓ | файл | Вызов обычного метода того же владельца по голому имени из статического метода – документация запрещает это прямо; вызывайте метод у значения либо сделайте его статическим | [доки](https://1cmycloud.com/docs/help/topics/static-methods/) |
+| `code/close-in-before-close` | 🟡 | ✓ | файл | `Закрыть()` внутри `ПередЗакрытием` – платформа игнорирует вызов, и форму не закрывает уже ничто | – |
+| `query/no-isnull` | 🔴 | ✓ | файл | `ЕСТЬNULL(` внутри литерала запроса – такой функции в языке запросов нет | – |
+| `style/abstract-name` | 🟡 | ✓ | файл | Абстрактное имя переменной (`Данные`, `Элемент`, `Объект`, `Строка`, `Значение`, `Документ` – точное или с числовым хвостом `Данные1`) не отражает суть; основа внутри длинного имени (`ДанныеКлиента`) и поля структур (контракт сериализации) не трогаются | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/single-letter-name` | 🟡 | ✓ | файл | Однобуквенное имя переменной, параметра или переменной цикла – по стандарту имён односимвольными бывают только параметры коротких лямбда-выражений (`(А, Б) -> А + Б`) | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/negated-boolean-name` | 🟡 | ✓ | файл | Булева переменная названа от отрицания (`НеПодключен`, `НетОшибок`) – имя образуют от истинного значения признака (`Подключен`, `ЕстьОшибки`); судится только доказанное Булево: аннотация типа или булев литерал в инициализации | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/type-in-name` | 🟡 | ✓ | файл | Имя переменной начинается с типа-контейнера (`МассивСтруктурИмен`, `СтруктураОтвета`) – тип виден по объявлению и подсказке редактора, в имя его не включают | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `style/numeral-in-const-name` | 🟡 | ✓ | файл | Числительное в имени константы (`ТАЙМАУТ_ОДНА_МИНУТА`) описывает её значение – константу называют абстрактно (`ТАЙМАУТ`), чтобы смена значения не ломала имя | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
 
 ### Тир D – семантика над stdlib, формы и метамодель
 
 Требует индекс проекта и данные платформы: неизвестные типы и объекты, значения перечислений,
 модель выполнения (клиент/сервер), обработчики форм, свойства и запросы.
 
-| # | Правило | Severity | Умолч. | Область | Что проверяет | Документация |
-|---|---|---|---|---|---|---|
-| 68 | `yaml/choice-needs-static-list` | warning | вкл | файл | ВыборЗначения без статичного СпискаВыбора | [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
-| 69 | `code/unknown-type` | warning | вкл | проект | Неизвестный тип | – |
-| 70 | `code/catch-non-exception` | error | вкл | файл | Тип в `поймать` не исключение (stdlib-тип без сигнатуры исключения или локальная `структура`) – компилятор такой код отвергает | [доки](https://1cmycloud.com/docs/help/topics/exceptions/) |
-| 71 | `code/unknown-member` | error | вкл | файл | Обращение к отсутствующему члену переменной известного stdlib-типа – простого или дженерика, у которого аргументы типизируют члены, но не называют их (первый шаг цепочки, у опечаток подсказка) | – |
-| 72 | `code/unknown-static-member` | error | вкл | проект | Обращение к отсутствующему члену по имени типа (`ДатаВремя.Минимальная()`); тип результата такого вызова переносится на следующий шаг цепочки. Голое имя читается как тип, только если проект не придаёт ему другого смысла; парный yaml модуля учитывается и при проверке одиночного файла | – |
-| 73 | `yaml/foreign-not-public` | error | вкл | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на элемент чужой подсистемы, у которого `ОбластьВидимости` не `ВПроекте`/`Глобально` – снаружи своей подсистемы он недоступен, и импорт не поможет | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 74 | `code/call-arity-cross` | error | вкл | проект | Число аргументов вызова `Модуль.Метод(...)` вне диапазона сигнатуры модуля-адресата | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
-| 75 | `code/undefined-name` | error | вкл | проект | Неизвестное имя в выражении (опечатки вида `Адресар` вместо `Адреса`) и в короткой интерполяции строки (`"?$format=json"` – подстановка имени `format`, нужен `\$`) – компилятор такой код отвергает | – |
-| 76 | `code/unknown-object-type` | warning | вкл | проект | Неизвестный тип объекта проекта | – |
-| 77 | `yaml/unknown-type` | warning | вкл | проект | Неизвестный тип в yaml | – |
-| 78 | `yaml/dynlist-missing-field` | warning | вкл | проект | Нет поля динамического списка | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 79 | `code/unknown-enum-value` | warning | вкл | проект | Неизвестное значение перечисления | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
-| 80 | `yaml/enum-needs-nullable` | warning | вкл | проект | Перечисление без nullable | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
-| 81 | `yaml/unknown-enum-value` | error | вкл | файл | Значение свойства компонента вне списка перечисления ui-схемы (`ВыравниваниеСодержимогоПоВертикали: Конец` – по вертикали значения `Конец` нет) | – |
-| 82 | `yaml/bare-object-value` | error | вкл | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках, выражение с `=` либо `$`-ссылку локализованной строки | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
-| 83 | `code/unknown-resource` | error | вкл | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы | [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
-| 84 | `form/unknown-handler` | warning | вкл | проект | Обработчик формы не найден в модуле | [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
-| 85 | `code/server-call-from-handler` | warning | вкл | проект | Серверный метод недоступен клиентскому обработчику | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 86 | `code/client-annotation-in-server-module` | warning | вкл | проект | Клиентская аннотация в серверном общем модуле | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 87 | `code/client-module-in-http-service` | warning | вкл | проект | Клиентский общий модуль в HTTP-сервисе | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 88 | `code/query-needs-server` | error | вкл | проект | Блок `Запрос{...}` в методе клиентского модуля (форма либо общий модуль с клиентским `Окружение`) без `@НаСервере` – на клиенте такого типа нет, сборку компилятор отвергает | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 89 | `code/local-method-cross-component` | warning | вкл | проект | Кросс-компонентный вызов локального метода | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 90 | `code/local-method-cross-module` | error | вкл | проект | Межмодульный вызов локального метода | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 91 | `naming/yo` | warning | вкл | файл | Буква "ё" в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 92 | `naming/underscore` | warning | вкл | файл | Подчёркивание в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 93 | `naming/abbreviation` | warning | вкл | файл | Аббревиатура заглавными буквами в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 94 | `naming/latin-term` | warning | вкл | файл | Англоязычный термин записан русскими буквами | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 95 | `naming/enum-vid` | warning | вкл | файл | Имя перечисления со словом "Тип" | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 96 | `naming/kind-in-name` | warning | вкл | файл | Вид элемента в его имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 97 | `naming/filler-word` | warning | вкл | файл | Слово-пустышка в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 98 | `naming/module-suffix` | warning | вкл | файл | Постфикс окружения в имени общего модуля | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 99 | `naming/number` | warning | вкл | файл | Число имени не по виду элемента | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 100 | `naming/boolean-name` | warning | вкл | файл | Имя булева реквизита | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 101 | `naming/presentation` | warning | вкл | файл | Представление элемента | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 102 | `naming/prefix-by-kind` | warning | вкл | файл | Имя вида без обязательного префикса | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
-| 103 | `code/unknown-ns-object` | warning | вкл | проект | Неизвестный объект в пространстве имён вида | – |
-| 104 | `query/unknown-table` | warning | вкл | проект | Неизвестная таблица в запросе | [доки](https://1cmycloud.com/docs/help/topics/select-from/) |
-| 105 | `query/in-subquery-composite` | warning | вкл | проект | 'В' с подзапросом по составному типу | [доки](https://1cmycloud.com/docs/help/topics/in-expression/) |
-| 106 | `yaml/unknown-property` | warning | вкл | файл | Неизвестное свойство объекта | – |
-| 107 | `code/reserved-name` | warning | вкл | файл | Зарезервированное имя | – |
-| 108 | `yaml/builtin-property-name` | warning | вкл | файл | Совпадение со встроенным свойством | – |
-| 109 | `yaml/size-needs-no-stretch` | info | выкл | файл | Размер без отключения растягивания | [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
-| 110 | `code/unused-method` | warning | выкл | проект | Метод нигде не используется | – |
-| 111 | `yaml/missing-import` | warning | вкл | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на публичный элемент чужой подсистемы, которой нет в секции `Импорт` | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| 112 | `yaml/presentation-field` | error | вкл | файл | Поле представления объекта | [доки](https://1cmycloud.com/docs/help/topics/element-view/) |
-| 113 | `yaml/unexpected-type-argument` | error | вкл | файл | Параметр типа у свойства, которое ui-схема объявляет без параметра, – это другой тип, применение сборки его отвергнет (`ДополнительныеКоманды` формы принимают `ФрагментКомандногоИнтерфейса`, а не `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>`) | [доки](https://1cmycloud.com/docs/help/topics/command-interface/) |
-| 114 | `yaml/property-since-compat` | error | вкл | проект | Свойство компонента новее, чем `РежимСовместимости` проекта (версию появления несёт ui-схема) – применение отвергает его как неизвестное | [доки](https://1cmycloud.com/docs/help/topics/update-server/) |
-| 115 | `query/deletion-mark-immediate` | error | вкл | проект | Условие с пометкой удаления в запросе к объекту с `РежимУдаления: Немедленно` – поля пометки у него нет, запрос падает применением | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| 116 | `yaml/item-id-required` | error | вкл | файл | Элемент коллекции метаданных (реквизит, табличная часть, элемент перечисления, параметр ключа доступа) без `Ид`, который объявляет его класс – применение отвечает `ID required` | – |
-| 117 | `code/unknown-row-field` | error | вкл | проект | Поле строки динамического списка (`СтрокаДинамическогоСписка<Форма.Тип>`), которого нет среди `Поля` списка | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 118 | `code/row-field-null` | error | вкл | проект | Поле динамического списка, взятое через ссылку (`Абонент.Номер`), имеет тип `<тип>|Null` и не годится типизированному полю структуры – компилятор отвечает `Null cannot be assigned` | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
-| 119 | `yaml/unknown-attribute-property` | error | вкл | файл | Ключ, которого класс самого реквизита не объявляет (`Длина` у обычного реквизита – её объявляет стандартный `Код`, а у числового есть `ДлинаЦелойЧасти`) – применение сборки отвергает объект | – |
-| 120 | `yaml/empty-group-sized` | warning | вкл | файл | Пустая `Группа` с `Высота`/`Ширина` – рендер выбрасывает узел, зазора не будет | – |
-| 121 | `yaml/hint-too-long` | warning | вкл | файл | `Подсказка` длиннее предела отрисовки – хвост не показывается вовсе | – |
-| 122 | `code/client-available-needs-context` | error | вкл | проект | `@ДоступноСКлиента` у метода модуля компонента интерфейса, который не статический и без `@Контекстный` – тип компонента не синглтонный, применение отвергает модификатор | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 123 | `code/server-module-in-client-context` | error | вкл | проект | Обращение `Модуль.Член(...)` к общему модулю с `Окружение: Сервер` из метода, исполняемого на клиенте (компонент интерфейса, команда, клиентский общий модуль) – на клиенте типа нет | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 124 | `yaml/delete-current-needs-immediate` | error | вкл | файл | `ПриУдаленииОбъектаПоСсылке: УдалятьТекущий` у реквизита владельца, чей `РежимУдаления` только помечает (`ПометкаУдаления` – это ещё и умолчание) – применение отвечает `Action УдалятьТекущий cannot apply to object with a DeletionMark` | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| 125 | `code/per-object-permissions-need-common` | warning | вкл | проект | Объект вычисляет разрешения для каждого объекта, но в его модуле нет обработчика `ВычислитьРазрешенияДоступа` – общий расчёт обязателен и при per-object, пусть и возвращает пустой массив | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| 126 | `code/permission-field-not-declared` | warning | вкл | проект | В `ВычислитьРазрешенияДоступаДляОбъектов` читается поле, которого нет среди `РасчетРазрешенийПо`, либо объявленное поле берётся через `Сущность` вместо `Запись` | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
-| 127 | `yaml/placeholder-key-in-strings` | error | вкл | файл | Ключ с подстановкой `$0` в секции `Строки` словаря `ЛокализованныеСтроки`: секция компилируется в метод БЕЗ параметров, и вызов с аргументом падает на применении "Неизвестный метод" | [доки](https://1cmycloud.com/docs/help/topics/localization/) |
-| 128 | `code/compare-with-localized` | warning | вкл | проект | Локализованное значение (`Словарь.Ключ()`, `Представление()`) сравнивается с литералом или со вторым локализованным – на другом языке ветка молча не срабатывает | [доки](https://1cmycloud.com/docs/help/topics/localization/) |
-| 129 | `code/bound-property-assign` | warning | вкл | файл | Свойство, ВЫЧИСЛЯЕМОЕ выражением в парной разметке (`Высота: =Общее.ЭтоМобильный()?820:528`), присваивается из кода – платформа такое присваивание отвергает, а в попытка/поймать отказ не виден; связь с данными (голый путь) не трогается, она двунаправленная по устройству | – |
-| 130 | `yaml/event-needs-importance` | warning | вкл | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание – `ИзКонструктора`, и тогда платформа требует значение в КАЖДОМ конструкторе, а пропуск хотя бы в одном месте записи роняет применение на строке конструктора; явное `Важность: ИзКонструктора` объявляет выбор и снимает предупреждение | [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
-| 131 | `code/collection-field-needs-req` | error | вкл | файл | Поле структуры с обобщённым типом без конструктора без аргументов (`ЧитаемыйМассив<Строка>`) и без `обз`, `?` или инициализатора – применение отвечает "не может быть проинициализировано значением по умолчанию"; `Массив<Строка>` и подобные конструируются пустыми и не трогаются | [доки](https://1cmycloud.com/docs/help/topics/structure/) |
-| 132 | `code/var-needs-init` | warning | вкл | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) – компиляция отвечает "не имеет конструктора и значения по умолчанию"; перечисление, аннотация, одиночка и имя, перекрытое типом проекта, пропускаются | [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
-| 133 | `code/unknown-tabular-member` | error | вкл | проект | Обращение к отсутствующему члену коллекции строк табличной части (`Объект.Секция.Член` в модуле формы объекта, голое имя секции или `этот.Секция` в модулях сущности) – коллекция это `Массив<Сущность.Секция>`, и привычное из другой платформы `Количество()` здесь зовётся `Размер()`; секцию затеняет одноимённый модуль, реквизиты не судятся | – |
-| 134 | `code/global-unavailable` | error | вкл | проект | Вызов глобального имени вне его окружения: `Сообщить` (только клиент) в серверном модуле – применение отвечает "Метод недоступен в текущем окружении", `Вычислить` (только сервер) в клиентском методе без `@НаСервере`; `@НаКлиенте`/`@НаСервере` переопределяют окружение модуля, доступность имён – из строк "Доступность" пакетов глобального контекста | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| 135 | `style/shadow-project-name` | warning | вкл | проект | Переменная, параметр или метод с именем элемента проекта (`знч Склады` при справочнике `Склады`) – объявление закрывает обращение к элементу из этой области; платформенные имена параметров обработчиков с именами проекта не пересекаются | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
-| 136 | `code/unclosed-resource` | warning | вкл | файл | Закрываемый ресурс (`знч Выборка = Запрос{...}.Выполнить()`), брошенный досрочным выходом из перебора: полный проход платформа закрывает сама, а `возврат` или `прервать` в середине оставляет ресурс открытым, и платформа пишет в журнал событий незакрытый ресурс; объявление через `исп` закрывает его на любом пути выхода. Ресурс, пришедший параметром, закрытый вручную и возвращённый вызывающему, оставлены автору | [доки](https://1cmycloud.com/docs/help/topics/closeable-type/) |
-| 137 | `conventions/untranslated-visible-literal` | warning | вкл | проект | Видимый текст, оставшийся кириллическим литералом там, где то же свойство проект уже вынес ссылкой на словарь локализации – намерение считается в разрезе вида элемента, и свойство-тёзка другого вида не судится; молчит на проекте, у которого в дескрипторе меньше двух языков локализации | – |
-| 138 | `conventions/untranslated-code-literal` | warning | выкл | проект | Видимый текст, оставшийся кириллическим литералом В МОДУЛЕ – судится по СТОКУ, куда он попадает (аргумент платформенного вызова сообщения, свойство события журнала или то же самое через метод, пробрасывающий свой параметр); разметка, чистая интерполяция и одиночные слова пропускаются, а на проекте с менее чем двумя языками локализации правило молчит | – |
-| 139 | `code/unknown-structure-field` | error | вкл | проект | Обращение к полю структуры, объявленной В ПРОЕКТЕ, сверяется с её объявлением: переименовали поле – потребитель в другом модуле краснеет здесь, а не на серверной компиляции. Тип берётся из объявления переменной (`Модуль.Структура`, голое имя структуры своего модуля), из конструктора `новый` и из элемента коллекции в `для X из Список`; имя, объявленное в методе ещё чем-нибудь, тёзка stdlib-типа, второй шаг цепочки и латинские написания члена не судятся | – |
+| Правило | Уровень | Умолч. | Область | Что проверяет | Документация |
+|---|---|---|---|---|---|
+| `yaml/choice-needs-static-list` | 🟡 | ✓ | файл | ВыборЗначения без статичного СпискаВыбора | [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
+| `code/unknown-type` | 🟡 | ✓ | проект | Неизвестный тип | – |
+| `code/catch-non-exception` | 🔴 | ✓ | файл | Тип в `поймать` не исключение (stdlib-тип без сигнатуры исключения или локальная `структура`) – компилятор такой код отвергает | [доки](https://1cmycloud.com/docs/help/topics/exceptions/) |
+| `code/unknown-member` | 🔴 | ✓ | файл | Обращение к отсутствующему члену переменной известного stdlib-типа – простого или дженерика, у которого аргументы типизируют члены, но не называют их (первый шаг цепочки, у опечаток подсказка) | – |
+| `code/unknown-static-member` | 🔴 | ✓ | проект | Обращение к отсутствующему члену по имени типа (`ДатаВремя.Минимальная()`); тип результата такого вызова переносится на следующий шаг цепочки. Голое имя читается как тип, только если проект не придаёт ему другого смысла; парный yaml модуля учитывается и при проверке одиночного файла | – |
+| `yaml/foreign-not-public` | 🔴 | ✓ | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на элемент чужой подсистемы, у которого `ОбластьВидимости` не `ВПроекте`/`Глобально` – снаружи своей подсистемы он недоступен, и импорт не поможет | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/call-arity-cross` | 🔴 | ✓ | проект | Число аргументов вызова `Модуль.Метод(...)` вне диапазона сигнатуры модуля-адресата | [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
+| `code/undefined-name` | 🔴 | ✓ | проект | Неизвестное имя в выражении (опечатки вида `Адресар` вместо `Адреса`) и в короткой интерполяции строки (`"?$format=json"` – подстановка имени `format`, нужен `\$`) – компилятор такой код отвергает | – |
+| `code/unknown-object-type` | 🟡 | ✓ | проект | Неизвестный тип объекта проекта | – |
+| `yaml/unknown-type` | 🟡 | ✓ | проект | Неизвестный тип в yaml | – |
+| `yaml/dynlist-missing-field` | 🟡 | ✓ | проект | Нет поля динамического списка | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `code/unknown-enum-value` | 🟡 | ✓ | проект | Неизвестное значение перечисления | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
+| `yaml/enum-needs-nullable` | 🟡 | ✓ | проект | Перечисление без nullable | [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
+| `yaml/unknown-enum-value` | 🔴 | ✓ | файл | Значение свойства компонента вне списка перечисления ui-схемы (`ВыравниваниеСодержимогоПоВертикали: Конец` – по вертикали значения `Конец` нет) | – |
+| `yaml/bare-object-value` | 🔴 | ✓ | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках, выражение с `=` либо `$`-ссылку локализованной строки | [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `code/unknown-resource` | 🔴 | ✓ | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы | [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
+| `form/unknown-handler` | 🟡 | ✓ | проект | Обработчик формы не найден в модуле | [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
+| `code/server-call-from-handler` | 🟡 | ✓ | проект | Серверный метод недоступен клиентскому обработчику | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/client-annotation-in-server-module` | 🟡 | ✓ | проект | Клиентская аннотация в серверном общем модуле | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/client-module-in-http-service` | 🟡 | ✓ | проект | Клиентский общий модуль в HTTP-сервисе | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/query-needs-server` | 🔴 | ✓ | проект | Блок `Запрос{...}` в методе клиентского модуля (форма либо общий модуль с клиентским `Окружение`) без `@НаСервере` – на клиенте такого типа нет, сборку компилятор отвергает | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/local-method-cross-component` | 🟡 | ✓ | проект | Кросс-компонентный вызов локального метода | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/local-method-cross-module` | 🔴 | ✓ | проект | Межмодульный вызов локального метода | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `naming/yo` | 🟡 | ✓ | файл | Буква "ё" в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/underscore` | 🟡 | ✓ | файл | Подчёркивание в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/abbreviation` | 🟡 | ✓ | файл | Аббревиатура заглавными буквами в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/latin-term` | 🟡 | ✓ | файл | Англоязычный термин записан русскими буквами | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/enum-vid` | 🟡 | ✓ | файл | Имя перечисления со словом "Тип" | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/kind-in-name` | 🟡 | ✓ | файл | Вид элемента в его имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/filler-word` | 🟡 | ✓ | файл | Слово-пустышка в имени | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/module-suffix` | 🟡 | ✓ | файл | Постфикс окружения в имени общего модуля | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/number` | 🟡 | ✓ | файл | Число имени не по виду элемента | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/boolean-name` | 🟡 | ✓ | файл | Имя булева реквизита | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/presentation` | 🟡 | ✓ | файл | Представление элемента | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `naming/prefix-by-kind` | 🟡 | ✓ | файл | Имя вида без обязательного префикса | [доки](https://1cmycloud.com/docs/help/topics/project-element-names-standard/) |
+| `code/unknown-ns-object` | 🟡 | ✓ | проект | Неизвестный объект в пространстве имён вида | – |
+| `query/unknown-table` | 🟡 | ✓ | проект | Неизвестная таблица в запросе | [доки](https://1cmycloud.com/docs/help/topics/select-from/) |
+| `query/in-subquery-composite` | 🟡 | ✓ | проект | 'В' с подзапросом по составному типу | [доки](https://1cmycloud.com/docs/help/topics/in-expression/) |
+| `yaml/unknown-property` | 🟡 | ✓ | файл | Неизвестное свойство объекта | – |
+| `code/reserved-name` | 🟡 | ✓ | файл | Зарезервированное имя | – |
+| `yaml/builtin-property-name` | 🟡 | ✓ | файл | Совпадение со встроенным свойством | – |
+| `yaml/size-needs-no-stretch` | 🔵 | – | файл | Размер без отключения растягивания | [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `code/unused-method` | 🟡 | – | проект | Метод нигде не используется | – |
+| `yaml/missing-import` | 🟡 | ✓ | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на публичный элемент чужой подсистемы, которой нет в секции `Импорт` | [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/presentation-field` | 🔴 | ✓ | файл | Поле представления объекта | [доки](https://1cmycloud.com/docs/help/topics/element-view/) |
+| `yaml/unexpected-type-argument` | 🔴 | ✓ | файл | Параметр типа у свойства, которое ui-схема объявляет без параметра, – это другой тип, применение сборки его отвергнет (`ДополнительныеКоманды` формы принимают `ФрагментКомандногоИнтерфейса`, а не `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>`) | [доки](https://1cmycloud.com/docs/help/topics/command-interface/) |
+| `yaml/property-since-compat` | 🔴 | ✓ | проект | Свойство компонента новее, чем `РежимСовместимости` проекта (версию появления несёт ui-схема) – применение отвергает его как неизвестное | [доки](https://1cmycloud.com/docs/help/topics/update-server/) |
+| `query/deletion-mark-immediate` | 🔴 | ✓ | проект | Условие с пометкой удаления в запросе к объекту с `РежимУдаления: Немедленно` – поля пометки у него нет, запрос падает применением | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| `yaml/item-id-required` | 🔴 | ✓ | файл | Элемент коллекции метаданных (реквизит, табличная часть, элемент перечисления, параметр ключа доступа) без `Ид`, который объявляет его класс – применение отвечает `ID required` | – |
+| `code/unknown-row-field` | 🔴 | ✓ | проект | Поле строки динамического списка (`СтрокаДинамическогоСписка<Форма.Тип>`), которого нет среди `Поля` списка | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `code/row-field-null` | 🔴 | ✓ | проект | Поле динамического списка, взятое через ссылку (`Абонент.Номер`), имеет тип `<тип>|Null` и не годится типизированному полю структуры – компилятор отвечает `Null cannot be assigned` | [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
+| `yaml/unknown-attribute-property` | 🔴 | ✓ | файл | Ключ, которого класс самого реквизита не объявляет (`Длина` у обычного реквизита – её объявляет стандартный `Код`, а у числового есть `ДлинаЦелойЧасти`) – применение сборки отвергает объект | – |
+| `yaml/empty-group-sized` | 🟡 | ✓ | файл | Пустая `Группа` с `Высота`/`Ширина` – рендер выбрасывает узел, зазора не будет | – |
+| `yaml/hint-too-long` | 🟡 | ✓ | файл | `Подсказка` длиннее предела отрисовки – хвост не показывается вовсе | – |
+| `code/client-available-needs-context` | 🔴 | ✓ | проект | `@ДоступноСКлиента` у метода модуля компонента интерфейса, который не статический и без `@Контекстный` – тип компонента не синглтонный, применение отвергает модификатор | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `code/server-module-in-client-context` | 🔴 | ✓ | проект | Обращение `Модуль.Член(...)` к общему модулю с `Окружение: Сервер` из метода, исполняемого на клиенте (компонент интерфейса, команда, клиентский общий модуль) – на клиенте типа нет | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `yaml/delete-current-needs-immediate` | 🔴 | ✓ | файл | `ПриУдаленииОбъектаПоСсылке: УдалятьТекущий` у реквизита владельца, чей `РежимУдаления` только помечает (`ПометкаУдаления` – это ещё и умолчание) – применение отвечает `Action УдалятьТекущий cannot apply to object with a DeletionMark` | [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
+| `code/per-object-permissions-need-common` | 🟡 | ✓ | проект | Объект вычисляет разрешения для каждого объекта, но в его модуле нет обработчика `ВычислитьРазрешенияДоступа` – общий расчёт обязателен и при per-object, пусть и возвращает пустой массив | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| `code/permission-field-not-declared` | 🟡 | ✓ | проект | В `ВычислитьРазрешенияДоступаДляОбъектов` читается поле, которого нет среди `РасчетРазрешенийПо`, либо объявленное поле берётся через `Сущность` вместо `Запись` | [доки](https://1cmycloud.com/docs/help/topics/project-element-permissions/) |
+| `yaml/placeholder-key-in-strings` | 🔴 | ✓ | файл | Ключ с подстановкой `$0` в секции `Строки` словаря `ЛокализованныеСтроки`: секция компилируется в метод БЕЗ параметров, и вызов с аргументом падает на применении "Неизвестный метод" | [доки](https://1cmycloud.com/docs/help/topics/localization/) |
+| `code/compare-with-localized` | 🟡 | ✓ | проект | Локализованное значение (`Словарь.Ключ()`, `Представление()`) сравнивается с литералом или со вторым локализованным – на другом языке ветка молча не срабатывает | [доки](https://1cmycloud.com/docs/help/topics/localization/) |
+| `code/bound-property-assign` | 🟡 | ✓ | файл | Свойство, ВЫЧИСЛЯЕМОЕ выражением в парной разметке (`Высота: =Общее.ЭтоМобильный()?820:528`), присваивается из кода – платформа такое присваивание отвергает, а в попытка/поймать отказ не виден; связь с данными (голый путь) не трогается, она двунаправленная по устройству | – |
+| `yaml/event-needs-importance` | 🟡 | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание – `ИзКонструктора`, и тогда платформа требует значение в КАЖДОМ конструкторе, а пропуск хотя бы в одном месте записи роняет применение на строке конструктора; явное `Важность: ИзКонструктора` объявляет выбор и снимает предупреждение | [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| `code/collection-field-needs-req` | 🔴 | ✓ | файл | Поле структуры с обобщённым типом без конструктора без аргументов (`ЧитаемыйМассив<Строка>`) и без `обз`, `?` или инициализатора – применение отвечает "не может быть проинициализировано значением по умолчанию"; `Массив<Строка>` и подобные конструируются пустыми и не трогаются | [доки](https://1cmycloud.com/docs/help/topics/structure/) |
+| `code/var-needs-init` | 🟡 | ✓ | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) – компиляция отвечает "не имеет конструктора и значения по умолчанию"; перечисление, аннотация, одиночка и имя, перекрытое типом проекта, пропускаются | [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| `code/unknown-tabular-member` | 🔴 | ✓ | проект | Обращение к отсутствующему члену коллекции строк табличной части (`Объект.Секция.Член` в модуле формы объекта, голое имя секции или `этот.Секция` в модулях сущности) – коллекция это `Массив<Сущность.Секция>`, и привычное из другой платформы `Количество()` здесь зовётся `Размер()`; секцию затеняет одноимённый модуль, реквизиты не судятся | – |
+| `code/global-unavailable` | 🔴 | ✓ | проект | Вызов глобального имени вне его окружения: `Сообщить` (только клиент) в серверном модуле – применение отвечает "Метод недоступен в текущем окружении", `Вычислить` (только сервер) в клиентском методе без `@НаСервере`; `@НаКлиенте`/`@НаСервере` переопределяют окружение модуля, доступность имён – из строк "Доступность" пакетов глобального контекста | [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `style/shadow-project-name` | 🟡 | ✓ | проект | Переменная, параметр или метод с именем элемента проекта (`знч Склады` при справочнике `Склады`) – объявление закрывает обращение к элементу из этой области; платформенные имена параметров обработчиков с именами проекта не пересекаются | [доки](https://1cmycloud.com/docs/help/topics/naming-convention/) |
+| `code/unclosed-resource` | 🟡 | ✓ | файл | Закрываемый ресурс (`знч Выборка = Запрос{...}.Выполнить()`), брошенный досрочным выходом из перебора: полный проход платформа закрывает сама, а `возврат` или `прервать` в середине оставляет ресурс открытым, и платформа пишет в журнал событий незакрытый ресурс; объявление через `исп` закрывает его на любом пути выхода. Ресурс, пришедший параметром, закрытый вручную и возвращённый вызывающему, оставлены автору | [доки](https://1cmycloud.com/docs/help/topics/closeable-type/) |
+| `conventions/untranslated-visible-literal` | 🟡 | ✓ | проект | Видимый текст, оставшийся кириллическим литералом там, где то же свойство проект уже вынес ссылкой на словарь локализации – намерение считается в разрезе вида элемента, и свойство-тёзка другого вида не судится; молчит на проекте, у которого в дескрипторе меньше двух языков локализации | – |
+| `conventions/untranslated-code-literal` | 🟡 | – | проект | Видимый текст, оставшийся кириллическим литералом В МОДУЛЕ – судится по СТОКУ, куда он попадает (аргумент платформенного вызова сообщения, свойство события журнала или то же самое через метод, пробрасывающий свой параметр); разметка, чистая интерполяция и одиночные слова пропускаются, а на проекте с менее чем двумя языками локализации правило молчит | – |
+| `code/unknown-structure-field` | 🔴 | ✓ | проект | Обращение к полю структуры, объявленной В ПРОЕКТЕ, сверяется с её объявлением: переименовали поле – потребитель в другом модуле краснеет здесь, а не на серверной компиляции. Тип берётся из объявления переменной (`Модуль.Структура`, голое имя структуры своего модуля), из конструктора `новый` и из элемента коллекции в `для X из Список`; имя, объявленное в методе ещё чем-нибудь, тёзка stdlib-типа, второй шаг цепочки и латинские написания члена не судятся | – |
 
 ## Подробнее о группах
 

@@ -84,11 +84,15 @@ def _levels_by_group() -> dict[str, Counter]:
 
 # Rule ids may carry digits (encoding/utf8) - a stricter pattern silently drops such a row
 # and the guard goes blind exactly where it should look.
+#: The table shows the level and the default state as icons - a word per column did not fit the
+#: page, and the column that matters ("what it checks") was the one being squeezed out.
+_ICON_SEVERITY = {"🔴": "error", "🟡": "warning", "🔵": "info"}
+_ICON_DEFAULT = {"✓": "on", "–": "off"}
+
 _ROW = re.compile(
-    r"^\|\s*(\d+)\s*\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*(\w+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*"
-    r"\|(.*)\|\s*$"
+    r"^\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|(.*)\|\s*$"
 )
-_ANY_ROW = re.compile(r"^\|\s*\d*\s*\|?\s*`")
+_ANY_ROW = re.compile(r"^\|\s*`")
 _TIER_HEADING = re.compile(r"^###\s+(?:Тир|Tier)\s+([A-D])")
 _DOC_LINK = re.compile(r"\[(?:доки|docs)\]\((\S+?)\)")
 
@@ -134,12 +138,23 @@ def _parse_table(name: str) -> dict[str, dict]:
                 "молча пропускать строки."
             )
             continue
-        position, rule_id, severity, default, scope, tail = match.groups()
+        rule_id, severity, default, scope, tail = match.groups()
+        assert severity in _ICON_SEVERITY, (
+            f"{name}:{number} – неизвестный значок уровня {severity!r}; "
+            f"допустимы {sorted(_ICON_SEVERITY)}"
+        )
+        assert default in _ICON_DEFAULT, (
+            f"{name}:{number} – неизвестный значок включённости {default!r}; "
+            f"допустимы {sorted(_ICON_DEFAULT)}"
+        )
         link = _DOC_LINK.search(tail)
         rows[rule_id] = {
-            "tier": tier, "severity": severity, "default": default, "scope": scope,
-            "link": link.group(1) if link else None, "line": number,
-            "position": int(position),
+            "tier": tier,
+            "severity": _ICON_SEVERITY[severity],
+            "default": _ICON_DEFAULT[default],
+            "scope": scope,
+            "link": link.group(1) if link else None,
+            "line": number,
         }
     return rows
 
@@ -174,9 +189,11 @@ def test_docs_table_matches_registry(name: str):
         info = _by_id().get(rule_id)
         if info is None:
             continue  # reported by test_docs_table_lists_every_rule
+        # Level and default state come back from the icons already normalized; the scope is
+        # still a word, and that one is spelled per locale.
         expected = {
             "severity": info["severity"],
-            "default": words["on"] if info["default"] else words["off"],
+            "default": "on" if info["default"] else "off",
             "scope": words[info["scope"]],
             "tier": info["tier"],
         }
@@ -395,28 +412,18 @@ def test_docs_table_links_agree_with_extension(name: str):
     )
 
 
-@pytest.mark.parametrize("name", sorted(_TABLES))
-def test_table_numbering_is_continuous(name):
-    """The leading column numbers the rules 1..N straight through the tier tables.
+def test_table_order_matches_across_locales():
+    """A rule sits in the same place in both locales, so the tables can be read side by side.
 
-    A hand-written number is the kind of thing that quietly rots: a rule inserted in the
-    middle shifts everything below it. The guard fails with the first position that broke.
+    The numbering column is gone - it cost width the "what it checks" column needed - and the
+    order itself is what is left to keep in step.
     """
-    rows = _parse_table(name)
-    positions = sorted(row["position"] for row in rows.values())
-    expected = list(range(1, len(rows) + 1))
-    assert positions == expected, (
-        f"{name}: нумерация правил разошлась – ожидались номера 1..{len(rows)}, "
-        f"первое расхождение на {next(iter(set(positions) ^ set(expected)), '?')}"
+    ru = list(_parse_table("RULES.ru.md"))
+    en = list(_parse_table("RULES.md"))
+    assert ru == en, (
+        "порядок правил разошёлся между локалями; первое расхождение: "
+        f"{next((pair for pair in zip(en, ru) if pair[0] != pair[1]), '?')}"
     )
-
-
-def test_table_numbering_matches_across_locales():
-    """A rule keeps the same number in both locales - so a number can be quoted as an id."""
-    ru = {rule: row["position"] for rule, row in _parse_table("RULES.ru.md").items()}
-    en = {rule: row["position"] for rule, row in _parse_table("RULES.md").items()}
-    diverged = {rule: (en[rule], ru[rule]) for rule in en if ru.get(rule) != en[rule]}
-    assert not diverged, f"номера правил разошлись между локалями: {diverged}"
 
 
 @pytest.mark.needs_data
