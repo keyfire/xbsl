@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.59.0
 
 ### Added
 - **The logo says what the extension does:** the "//" tile became a deploy arrow and the ";" one
