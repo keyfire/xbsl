@@ -181,8 +181,8 @@
   "config.section.linting": "Проверка",
   "config.section.lsp": "Языковой сервер",
   "config.section.templates": "Шаблоны кода",
-  "config.section.deploy": "Стенд: деплой и отладка",
-  "config.section.debug": "Отладка: адаптер и запуск",
+  "config.section.deploy": "Стенд",
+  "config.section.debug": "Отладчик",
   "config.debug.applicationUrl": "По какому адресу открывать отлаживаемое приложение, если оно отвечает на своём домене. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)",
   "cmd.migrateRules": "XBSL: перенести настройки правил в одну таблицу",
   "config.deprecated.rules": "Устарело: то же самое задаётся одной таблицей `xbsl.rules` (правило, группа, буква тира или `*`). Перенести существующие значения – команда *XBSL: перенести настройки правил в одну таблицу*."

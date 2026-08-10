@@ -1400,12 +1400,14 @@
         "order": 1,
         "properties": {
           "xbsl.projectRoot": {
+            "order": 1,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.projectRoot%"
           },
           "xbsl.checkForUpdates": {
+            "order": 2,
             "type": "boolean",
             "default": true,
             "scope": "application",
@@ -1418,6 +1420,7 @@
         "order": 2,
         "properties": {
           "xbsl.linter.run": {
+            "order": 4,
             "type": "string",
             "enum": [
               "onType",
@@ -1434,6 +1437,7 @@
             "description": "%config.linter.run%"
           },
           "xbsl.linter.debounce": {
+            "order": 5,
             "type": "number",
             "default": 300,
             "minimum": 0,
@@ -1441,12 +1445,14 @@
             "description": "%config.linter.debounce%"
           },
           "xbsl.workspaceLint": {
+            "order": 6,
             "type": "boolean",
             "default": true,
             "scope": "resource",
             "markdownDescription": "%config.workspaceLint%"
           },
           "xbsl.workspaceLintTimeout": {
+            "order": 7,
             "type": "number",
             "default": 60000,
             "minimum": 0,
@@ -1454,24 +1460,28 @@
             "markdownDescription": "%config.workspaceLintTimeout%"
           },
           "xbsl.linter.command": {
+            "order": 1,
             "type": "string",
             "default": "xbsl",
             "scope": "resource",
             "markdownDescription": "%config.linter.command%"
           },
           "xbsl.linter.pythonPath": {
+            "order": 2,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.linter.pythonPath%"
           },
           "xbsl.linter.dataDir": {
+            "order": 3,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.linter.dataDir%"
           },
           "xbsl.linter.lang": {
+            "order": 8,
             "type": "string",
             "enum": [
               "",
@@ -1488,6 +1498,7 @@
             "description": "%config.linter.lang%"
           },
           "xbsl.linter.select": {
+            "order": 90,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
@@ -1495,6 +1506,7 @@
             "description": "%config.linter.select%"
           },
           "xbsl.linter.enable": {
+            "order": 91,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
@@ -1502,6 +1514,7 @@
             "markdownDescription": "%config.linter.enable%"
           },
           "xbsl.linter.ignore": {
+            "order": 92,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "default": "",
@@ -1509,6 +1522,7 @@
             "description": "%config.linter.ignore%"
           },
           "xbsl.rules": {
+            "order": 10,
             "type": "object",
             "default": {},
             "scope": "resource",
@@ -1525,6 +1539,7 @@
             "markdownDescription": "%config.rules%"
           },
           "xbsl.baseline": {
+            "order": 9,
             "type": "string",
             "default": "",
             "scope": "resource",
@@ -1537,6 +1552,7 @@
         "order": 3,
         "properties": {
           "xbsl.groups.code": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1561,6 +1577,7 @@
             "markdownDescription": "%config.groups.code%"
           },
           "xbsl.groups.yaml": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1585,6 +1602,7 @@
             "markdownDescription": "%config.groups.yaml%"
           },
           "xbsl.groups.style": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1609,6 +1627,7 @@
             "markdownDescription": "%config.groups.style%"
           },
           "xbsl.groups.typography": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1633,6 +1652,7 @@
             "markdownDescription": "%config.groups.typography%"
           },
           "xbsl.groups.whitespace": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1657,6 +1677,7 @@
             "markdownDescription": "%config.groups.whitespace%"
           },
           "xbsl.groups.encoding": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1681,6 +1702,7 @@
             "markdownDescription": "%config.groups.encoding%"
           },
           "xbsl.groups.structure": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1705,6 +1727,7 @@
             "markdownDescription": "%config.groups.structure%"
           },
           "xbsl.groups.form": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1729,6 +1752,7 @@
             "markdownDescription": "%config.groups.form%"
           },
           "xbsl.groups.query": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1753,6 +1777,7 @@
             "markdownDescription": "%config.groups.query%"
           },
           "xbsl.groups.naming": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1777,6 +1802,7 @@
             "markdownDescription": "%config.groups.naming%"
           },
           "xbsl.groups.project": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1801,6 +1827,7 @@
             "markdownDescription": "%config.groups.project%"
           },
           "xbsl.groups.security": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1825,6 +1852,7 @@
             "markdownDescription": "%config.groups.security%"
           },
           "xbsl.groups.conventions": {
+            "order": 50,
             "markdownDeprecationMessage": "%config.deprecated.rules%",
             "type": "string",
             "enum": [
@@ -1885,24 +1913,28 @@
         "order": 6,
         "properties": {
           "xbsl.deploy.elemctlPath": {
+            "order": 1,
             "type": "string",
             "default": "elemctl",
             "scope": "machine-overridable",
             "markdownDescription": "%config.deploy.elemctlPath%"
           },
           "xbsl.deploy.envFile": {
+            "order": 2,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.deploy.envFile%"
           },
           "xbsl.deploy.appId": {
+            "order": 3,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.deploy.appId%"
           },
           "xbsl.deploy.extraArgs": {
+            "order": 4,
             "type": "string",
             "default": "",
             "scope": "resource",
@@ -1915,24 +1947,28 @@
         "order": 7,
         "properties": {
           "xbsl.debug.adapterPath": {
+            "order": 1,
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
             "markdownDescription": "%config.debug.adapterPath%"
           },
           "xbsl.debug.javaPath": {
+            "order": 2,
             "type": "string",
             "default": "java",
             "description": "%config.debug.javaPath%",
             "scope": "machine-overridable"
           },
           "xbsl.debug.applicationUrl": {
+            "order": 3,
             "type": "string",
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.debug.applicationUrl%"
           },
           "xbsl.debug.openApplicationOnStart": {
+            "order": 4,
             "type": "boolean",
             "default": true,
             "description": "%config.debug.openApplicationOnStart%"

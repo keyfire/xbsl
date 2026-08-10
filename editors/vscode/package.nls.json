@@ -181,8 +181,8 @@
   "config.section.linting": "Checking",
   "config.section.lsp": "Language server",
   "config.section.templates": "Code templates",
-  "config.section.deploy": "Stand: deploy and debugging",
-  "config.section.debug": "Debugging: adapter and launch",
+  "config.section.deploy": "Stand",
+  "config.section.debug": "Debugger",
   "config.debug.applicationUrl": "Where to open the application under debug, when it answers on a domain of its own. [Details](https://docs.keyfire.ru/xbsl/vscode#debugging)",
   "cmd.migrateRules": "XBSL: move the rule settings into one table",
   "config.deprecated.rules": "Deprecated: the same thing is said by the single `xbsl.rules` table (a rule, a group, a tier letter or `*`). To move the existing values, run *XBSL: move the rule settings into one table*."

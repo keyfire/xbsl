@@ -33,13 +33,17 @@
   subfolder open those two are not the same place.
 
 ### Changed
-- **The settings sections are named after what they mean, not after a command:** "Stand: deploy and
-  debugging" (elemctl, the .env, the application - both features use them) and "Debugging: adapter
-  and launch" (the adapter, java, the application address). The old "Deploy" and "Debugging" read as
-  "this one is for the deploy only", while the stand behind them is shared. The descriptions of the
-  .env and of the application also spell out how they relate: the .env picks the stand and the
-  default application, App ID overrides the application ON THAT stand and can stay empty when
-  `ELEMENT_APP_ID` already names it.
+- **The settings sections are named after what they mean, not after a command:** "Stand" (elemctl,
+  the .env, the application - the deploy and debugging both use them) and "Debugger" (the adapter,
+  java, the application address). The old "Deploy" read as "this one is for the deploy only", while
+  the stand behind them is shared. The descriptions of the .env and of the application also spell
+  out how they relate: the .env picks the stand and the default application, App ID overrides the
+  application ON THAT stand and can stay empty when `ELEMENT_APP_ID` already names it.
+- **Inside a section the settings go by importance, not alphabetically.** VS Code sorts them by name
+  until an explicit order is given - which sank the path to the tool between minor fields and put
+  the application id above the .env that picks it. "Stand" now starts with elemctl, then the .env
+  with the application under it; "Checking" starts with the path to the engine, and the rule groups
+  and the three deprecated strings moved to the bottom.
 
 ## 0.58.1
 
