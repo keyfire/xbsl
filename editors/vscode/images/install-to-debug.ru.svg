@@ -1,0 +1,198 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="872" viewBox="0 0 880 872">
+  <!-- The whole picture: what gets installed and where from, then the working loop, the deploy
+       and the debugging. The palette follows the reader's theme, exactly as in how-it-works.svg;
+       the PNG next to it is rendered from this file with one palette forced, because a README
+       cannot carry an SVG (vsce refuses to package one). -->
+  <style>
+    :root {
+      --card: #ffffff; --card-edge: #d0d7e2;
+      --zone: #f4f6fa; --zone-edge: #d7dde8;
+      --box: #ffffff; --box-edge: #ccd4e0;
+      --title: #1c2029; --muted: #5c6577; --body: #414a5c;
+      --code: #2b3346; --code-dim: #67707f;
+      --edge-text: #3c4557; --edge: #8a94a6;
+      --accent-blue: #0969da; --accent-orange: #bc4c00; --accent-green: #1a7f37;
+      --accent-purple: #8250df; --accent-teal: #0b7285; --accent-pink: #bf3989;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --card: #14171e; --card-edge: #262c38;
+        --zone: #181c26; --zone-edge: #2c3345;
+        --box: #232a38; --box-edge: #3b445c;
+        --title: #eef1f8; --muted: #7f8aa3; --body: #aab3c7;
+        --code: #c9d4ea; --code-dim: #8b95ab;
+        --edge-text: #c6cddd; --edge: #6d7891;
+        --accent-blue: #3794ff; --accent-orange: #f0883e; --accent-green: #56d364;
+        --accent-purple: #a78bfa; --accent-teal: #39c5cf; --accent-pink: #f778ba;
+      }
+    }
+    text { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+    .mono { font-family: Consolas, 'Cascadia Mono', Menlo, monospace; }
+    .zone-label { font-size: 11.5px; font-weight: 600; letter-spacing: 1.5px; fill: var(--muted); }
+    .box-title { font-size: 15px; font-weight: 600; fill: var(--title); }
+    .box-sub { font-size: 12px; fill: var(--muted); }
+    .box-body { font-size: 12.5px; fill: var(--body); }
+    .code { font-size: 11.5px; fill: var(--code); }
+    .code-dim { font-size: 11.5px; fill: var(--code-dim); }
+    .edge-sub { font-size: 11.5px; font-style: italic; fill: var(--code-dim); }
+    .box { fill: var(--box); stroke: var(--box-edge); }
+    .edge { stroke: var(--edge); stroke-width: 1.5; fill: none; }
+    .arrow { fill: var(--edge); }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L8,4 L0,8 Z" class="arrow"/>
+    </marker>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="879" height="871" rx="12" fill="var(--card)" stroke="var(--card-edge)"/>
+
+  <!-- installation: three sources, each above what it installs -->
+  <rect x="14" y="30" width="852" height="126" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <text x="30" y="54" class="zone-label">УСТАНОВКА</text>
+
+  <rect x="30" y="66" width="232" height="76" rx="8" class="box"/>
+  <rect x="30" y="74" width="3" height="60" rx="1.5" fill="var(--accent-blue)"/>
+  <text x="44" y="88" class="box-title">Open VSX · Marketplace</text>
+  <text x="44" y="110" class="box-body">расширение keyfire.xbsl</text>
+  <text x="44" y="130" class="mono code-dim">code --install-extension</text>
+
+  <rect x="278" y="66" width="232" height="76" rx="8" class="box"/>
+  <rect x="278" y="74" width="3" height="60" rx="1.5" fill="var(--accent-teal)"/>
+  <text x="292" y="88" class="box-title">PyPI</text>
+  <text x="292" y="110" class="box-body">движок xbsl и утилита elemctl</text>
+  <text x="292" y="130" class="mono code-dim">pipx install "xbsl[lsp]" elemctl</text>
+
+  <rect x="526" y="66" width="324" height="76" rx="8" class="box"/>
+  <rect x="526" y="74" width="3" height="60" rx="1.5" fill="var(--accent-orange)"/>
+  <text x="540" y="88" class="box-title">Дистрибутив платформы</text>
+  <text x="540" y="110" class="box-body">справка, типы, метамодель – экспортом → движку</text>
+  <text x="540" y="130" class="box-body">debug-адаптер (jar 1С) – извлечением → elemctl</text>
+
+  <!-- what each source installs; the arrows carry no captions on purpose, it is written inside
+       the boxes they connect. The adapter runs down the gutter and hops over the "читает" arrow. -->
+  <line x1="146" y1="156" x2="146" y2="186" class="edge" marker-end="url(#ah)"/>
+  <line x1="394" y1="156" x2="394" y2="186" class="edge" marker-end="url(#ah)"/>
+  <path d="M560,156 V172 H470 V186" class="edge" marker-end="url(#ah)"/>
+  <path d="M590,156 V172 H572 V310 a6 6 0 0 1 0 12 V660 H548" class="edge" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+  <text x="560" y="642" text-anchor="end" class="edge-sub">debug-адаптер</text>
+
+  <!-- zones: the editor spans both rows, the engine and the project sit above elemctl and the stand -->
+  <rect x="14" y="186" width="248" height="656" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="278" y="186" width="286" height="400" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="580" y="186" width="286" height="400" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="278" y="602" width="286" height="240" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <rect x="580" y="602" width="286" height="240" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
+  <text x="30" y="210" class="zone-label">VS CODE</text>
+  <text x="294" y="210" class="zone-label">ДВИЖОК XBSL</text>
+  <text x="596" y="210" class="zone-label">ПРОЕКТ</text>
+  <text x="294" y="626" class="zone-label">ELEMCTL</text>
+  <text x="596" y="626" class="zone-label">СТЕНД ПЛАТФОРМЫ</text>
+
+  <!-- the four features that talk to the engine -->
+  <rect x="30" y="224" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="232" width="3" height="60" rx="1.5" fill="var(--accent-blue)"/>
+  <text x="44" y="246" class="box-title">Диагностика</text>
+  <text x="44" y="266" class="box-body">по мере набора; проект</text>
+  <text x="44" y="284" class="box-body">целиком по сохранению + фиксы</text>
+
+  <rect x="30" y="314" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="322" width="3" height="60" rx="1.5" fill="var(--accent-pink)"/>
+  <text x="44" y="336" class="box-title">Дерево метаданных</text>
+  <text x="44" y="356" class="box-body">создаёт объекты, реквизиты,</text>
+  <text x="44" y="374" class="box-body">формы через движок</text>
+
+  <rect x="30" y="404" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="412" width="3" height="60" rx="1.5" fill="var(--accent-green)"/>
+  <text x="44" y="426" class="box-title">Предпросмотр формы</text>
+  <text x="44" y="446" class="box-body">каркас формы</text>
+  <text x="44" y="464" class="box-body">+ панель свойств</text>
+
+  <rect x="30" y="494" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="502" width="3" height="60" rx="1.5" fill="var(--accent-purple)"/>
+  <text x="44" y="516" class="box-title">Панель документации</text>
+  <text x="44" y="536" class="box-body">справка Элемента</text>
+  <text x="44" y="554" class="box-body">по символу под курсором</text>
+
+  <!-- the two that go to elemctl -->
+  <rect x="30" y="626" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="634" width="3" height="60" rx="1.5" fill="var(--accent-teal)"/>
+  <text x="44" y="648" class="box-title">Деплой на стенд</text>
+  <text x="44" y="668" class="mono code">elemctl deploy</text>
+  <text x="44" y="686" class="box-body">с проверкой применения</text>
+
+  <rect x="30" y="718" width="216" height="76" rx="8" class="box"/>
+  <rect x="30" y="726" width="3" height="60" rx="1.5" fill="var(--accent-orange)"/>
+  <text x="44" y="740" class="box-title">Отладка</text>
+  <text x="44" y="760" class="mono code">elemctl apps debug</text>
+  <text x="44" y="778" class="box-body">точки останова, стек</text>
+
+  <!-- editor to engine -->
+  <line x1="262" y1="396" x2="278" y2="396" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <!-- editor to elemctl -->
+  <line x1="262" y1="664" x2="278" y2="664" class="edge" marker-end="url(#ah)"/>
+  <line x1="262" y1="756" x2="278" y2="756" class="edge" marker-end="url(#ah)"/>
+
+  <!-- engine -->
+  <rect x="294" y="228" width="254" height="176" rx="8" class="box"/>
+  <rect x="294" y="236" width="3" height="160" rx="1.5" fill="var(--accent-orange)"/>
+  <text x="308" y="252" class="box-title">xbsl-lsp</text>
+  <text x="308" y="270" class="box-sub">(долгоживущий сервер, stdio)</text>
+  <text x="308" y="296" class="box-body">пофайловый линт при наборе,</text>
+  <text x="308" y="314" class="box-body">проектный по сохранению, индекс:</text>
+  <text x="308" y="332" class="box-body">определения, дополнение, hover</text>
+  <text x="308" y="358" class="mono code">xbsl/docs* · xbsl/meta*</text>
+  <text x="308" y="382" class="box-body">справка и типы – данные дистрибутива</text>
+
+  <rect x="294" y="438" width="254" height="98" rx="8" fill="var(--box)" stroke="var(--box-edge)" stroke-dasharray="5 4"/>
+  <rect x="294" y="446" width="3" height="82" rx="1.5" fill="var(--accent-teal)"/>
+  <text x="308" y="462" class="box-title">Режим CLI</text>
+  <text x="308" y="486" class="mono code">xbsl --stdin · --dry-run</text>
+  <text x="308" y="508" class="box-body">те же проверки и создание</text>
+  <text x="308" y="526" class="box-body">метаданных без сервера</text>
+
+  <!-- engine reads the project -->
+  <line x1="548" y1="316" x2="596" y2="316" class="edge" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text x="572" y="304" text-anchor="middle" class="edge-sub">читает</text>
+
+  <!-- project -->
+  <rect x="596" y="244" width="254" height="112" rx="8" class="box"/>
+  <rect x="596" y="252" width="3" height="96" rx="1.5" fill="var(--accent-green)"/>
+  <text x="610" y="268" class="box-title">Исходники</text>
+  <text x="610" y="292" class="mono code">Имя.yaml · Имя.xbsl</text>
+  <text x="610" y="314" class="box-body">пары: описание элемента</text>
+  <text x="610" y="332" class="box-body">+ модуль кода</text>
+
+  <rect x="596" y="396" width="254" height="112" rx="8" class="box"/>
+  <rect x="596" y="404" width="3" height="96" rx="1.5" fill="var(--muted)"/>
+  <text x="610" y="420" class="box-title">Базлайн</text>
+  <text x="610" y="444" class="mono code">.xbsllint-baseline</text>
+  <text x="610" y="466" class="box-body">исключённые находки,</text>
+  <text x="610" y="484" class="box-body">учитываются каждым прогоном</text>
+
+  <!-- elemctl -->
+  <rect x="294" y="646" width="254" height="176" rx="8" class="box"/>
+  <rect x="294" y="654" width="3" height="160" rx="1.5" fill="var(--accent-teal)"/>
+  <text x="308" y="670" class="box-title">elemctl</text>
+  <text x="308" y="694" class="mono code">deploy</text>
+  <text x="308" y="714" class="box-body">сборка → загрузка → применение</text>
+  <text x="308" y="732" class="box-body">и честная проверка, что</text>
+  <text x="308" y="750" class="box-body">применение случилось</text>
+  <text x="308" y="776" class="mono code">apps debug</text>
+  <text x="308" y="796" class="box-body">координаты сессии; отдаёт адаптер</text>
+
+  <!-- elemctl to the stand: the arrows carry no captions on purpose - the gap between the zones
+       is 48px wide, and a caption there ran over the neighbouring box. What each arrow means is
+       written inside the boxes it connects. -->
+  <line x1="548" y1="702" x2="596" y2="702" class="edge" marker-end="url(#ah)"/>
+  <line x1="548" y1="776" x2="596" y2="776" class="edge" stroke-dasharray="5 4" marker-end="url(#ah)"/>
+
+  <!-- the running application -->
+  <rect x="596" y="656" width="254" height="150" rx="8" class="box"/>
+  <rect x="596" y="664" width="3" height="134" rx="1.5" fill="var(--accent-blue)"/>
+  <text x="610" y="680" class="box-title">Приложение</text>
+  <text x="610" y="704" class="box-body">клиент в браузере</text>
+  <text x="610" y="722" class="box-body">и серверная часть</text>
+  <text x="610" y="752" class="mono code-dim">?debug-session-id=...</text>
+  <text x="610" y="776" class="box-body">отладчик цепляется по sessionId</text>
+</svg>

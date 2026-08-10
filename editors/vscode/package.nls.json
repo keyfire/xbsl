@@ -181,7 +181,7 @@
   "config.section.linting": "Checking",
   "config.section.lsp": "Language server",
   "config.section.templates": "Code templates",
-  "config.section.deploy": "Deploy and debugging",
-  "config.section.debug": "Debugging",
+  "config.section.deploy": "Stand: deploy and debugging",
+  "config.section.debug": "Debugging: adapter and launch",
   "config.debug.applicationUrl": "Where to open the application under debug, when it answers on a domain of its own. [Details](https://docs.keyfire.ru/xbsl/vscode#debugging)"
 }

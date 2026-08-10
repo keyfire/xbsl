@@ -181,7 +181,7 @@
   "config.section.linting": "Проверка",
   "config.section.lsp": "Языковой сервер",
   "config.section.templates": "Шаблоны кода",
-  "config.section.deploy": "Деплой и отладка",
-  "config.section.debug": "Отладка",
+  "config.section.deploy": "Стенд: деплой и отладка",
+  "config.section.debug": "Отладка: адаптер и запуск",
   "config.debug.applicationUrl": "По какому адресу открывать отлаживаемое приложение, если оно отвечает на своём домене. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#отладка)"
 }

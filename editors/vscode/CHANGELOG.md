@@ -22,9 +22,12 @@
   subfolder open those two are not the same place.
 
 ### Changed
-- **The "Deploy" settings section is now "Deploy and debugging"**, and the descriptions of the .env
-  and of the application spell out how they relate: the .env picks the stand and the default
-  application, App ID overrides the application ON THAT stand and can stay empty when
+- **The settings sections are named after what they mean, not after a command:** "Stand: deploy and
+  debugging" (elemctl, the .env, the application - both features use them) and "Debugging: adapter
+  and launch" (the adapter, java, the application address). The old "Deploy" and "Debugging" read as
+  "this one is for the deploy only", while the stand behind them is shared. The descriptions of the
+  .env and of the application also spell out how they relate: the .env picks the stand and the
+  default application, App ID overrides the application ON THAT stand and can stay empty when
   `ELEMENT_APP_ID` already names it.
 
 ## 0.58.1
