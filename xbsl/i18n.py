@@ -331,7 +331,7 @@ _CORE_MESSAGES = {
         "en": "compare two data versions: what changed in the platform",
     },
     "cli.help.commands.scaffold-header": {
-        "ru": "скаффолдинг метаданных (создание и правка исходников):",
+        "ru": "создание метаданных (создание и правка исходников):",
         "en": "metadata scaffolding (create and edit sources):",
     },
     "cli.help.commands.footer": {
@@ -393,7 +393,7 @@ _CORE_MESSAGES = {
         "en": "the port (default 8771)",
     },
     "cli.help.mcp.description": {
-        "ru": "MCP-сервер xbsl (stdio): линт, документация Элемента и скаффолдинг метаданных "
+        "ru": "MCP-сервер xbsl (stdio): линт, документация Элемента и создание метаданных "
               "как инструменты агента.",
         "en": "The xbsl MCP server (stdio): linting, the Element documentation and metadata "
               "scaffolding as agent tools.",
@@ -566,7 +566,7 @@ _CORE_MESSAGES = {
               "it extends the builtin set and overrides same-named templates",
     },
     "cli.help.scaf.description": {
-        "ru": "Скаффолдинг метаданных 1С:Элемент (вывод – JSON)",
+        "ru": "Создание метаданных 1С:Элемент (вывод – JSON)",
         "en": "1C:Element metadata scaffolding (output – JSON)",
     },
     "cli.help.scaf.new-project": {

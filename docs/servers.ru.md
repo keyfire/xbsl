@@ -26,11 +26,11 @@ Language Server по stdio: живые пофайловые диагностик
 | Диагностики и подсказки | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
 | Документация платформы | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Схемы и словари | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
-| Скаффолдинг метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
+| Создание метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
 | Формы | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
 | Обработчики событий | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
 
-Запрос скаффолдинга возвращает план – полный текст каждого файла, который был бы записан, – а
+Запрос на создание метаданных возвращает план – полный текст каждого файла, который был бы записан, – а
 редактор применяет его одной отменяемой правкой; сам сервер не пишет ничего (CLI и MCP-сервер на
 том же коде – пишут). `xbsl/metaCapabilities` отвечает версией сервера и наборами видов, которые
 он умеет создавать: объектов, элементов разделов, форм – по ним клиент строит меню от живого

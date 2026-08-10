@@ -246,7 +246,7 @@ sidebar:
 Те же операции доступны вне интерфейса: CLI (`xbsl form-tree`, `xbsl form-edit`), инструменты
 MCP (`meta_component_tree`, `meta_add_component`, `meta_move_component`, ...) и LSP-запросы
 (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). См.
-[Руководство](/ru/scaffolding#скаффолдинг-метаданных).
+[Руководство](/ru/scaffolding#создание-метаданных).
 
 ## Происхождение
 
