@@ -486,5 +486,6 @@
   "off by default": "по умолчанию выключено",
   "the whole group": "всей группе",
   "The rule catalogue is empty - the engine did not answer `xbsl --list-rules`.": "Каталог правил пуст – движок не ответил на `xbsl --list-rules`.",
-  "inherited from": "наследует от"
+  "inherited from": "наследует от",
+  "reference": "справка"
 }

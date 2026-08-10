@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.59.1
+
+### Added
+- **The rules panel got reference links and collapsible groups.** A rule backed by a documented
+  requirement now carries a "reference" link in its row - it opens the same page and the same
+  section the rule badge opens from "Problems", inside the editor rather than on the site. A dot of the level colour now sits next to it - red, yellow, blue, and grey for a rule switched
+  off, so the state reads without opening the list. Groups start collapsed and open on click: there are more than two hundred rules and no reason to read
+  them all at once. The search and the "changed only" filter show their hits regardless of the
+  collapsed state, otherwise searching would look broken.
+
 ## 0.59.0
 
 ### Added

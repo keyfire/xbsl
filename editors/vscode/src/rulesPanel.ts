@@ -8,6 +8,7 @@
 
 import * as vscode from "vscode";
 import { CatalogueEntry, RuleLevel, ruleCatalogue } from "./ruleConfig";
+import { ruleDoc } from "./ruleDocs";
 import { cspMeta, escapeHtml, inlineJson, makeNonce } from "./webviewShared";
 
 const VIEW_TYPE = "xbsl.rulesPanel";
@@ -24,6 +25,9 @@ interface Row {
   offByDefault: boolean;
   explicit?: string; // the value written in the table of the chosen scope
   inherited?: { from: string; level: string }; // what a group / tier / "*" key gives it
+  // The documentation page behind a rule backed by a standard - the same one the rule badge in
+  // "Problems" opens. Without it the table names a requirement and leaves you to find its source.
+  doc?: { page: string; anchor?: string };
 }
 
 function target(scope: Scope): vscode.ConfigurationTarget {
@@ -90,6 +94,8 @@ export class RulesPanel {
         explicit: table[id],
       };
       row.inherited = row.explicit ? undefined : inheritedFor(row, table);
+      const doc = ruleDoc(id);
+      row.doc = doc ? { page: doc.page, anchor: doc.anchor } : undefined;
       rows.push(row);
     }
     rows.sort((a, b) => (a.group === b.group ? a.id.localeCompare(b.id) : a.group.localeCompare(b.group)));
@@ -101,7 +107,9 @@ export class RulesPanel {
     this.panel.webview.html = this.html(await this.rows(table), table);
   }
 
-  private async onMessage(msg: { type: string; key?: string; level?: string; scope?: Scope }): Promise<void> {
+  private async onMessage(
+    msg: { type: string; key?: string; level?: string; scope?: Scope; page?: string; anchor?: string }
+  ): Promise<void> {
     if (msg.type === "scope" && msg.scope) {
       this.scope = msg.scope;
       await this.refresh();
@@ -115,6 +123,11 @@ export class RulesPanel {
         table[msg.key] = msg.level;
       }
       await this.update(table);
+      return;
+    }
+    if (msg.type === "docs" && msg.page) {
+      // The panel's own Documentation view, not the site: the same command the rule badge uses.
+      await vscode.commands.executeCommand("xbsl.docs.open", msg.page, msg.anchor);
       return;
     }
     if (msg.type === "reset") {
@@ -152,7 +165,12 @@ export class RulesPanel {
       groupLevel: vscode.l10n.t("the whole group"),
       empty: vscode.l10n.t("The rule catalogue is empty - the engine did not answer `xbsl --list-rules`."),
       inherits: vscode.l10n.t("inherited from"),
+      docs: vscode.l10n.t("reference"),
     };
+    // The level in force for a row: its own key, then what it inherits, then the rule's default.
+    // The dot is painted by it, so a rule switched off reads as grey without opening the list.
+    const effective = (r: Row): string => r.explicit ?? r.inherited?.level ?? r.own;
+    const dot = (level: string): string => `<span class="dot ${escapeHtml(level)}"></span>`;
     const groups = [...new Set(rows.map((r) => r.group))];
     const options = (selected: string | undefined): string =>
       [`<option value=""${selected ? "" : " selected"}>${escapeHtml(t.byDefault)}</option>`]
@@ -165,11 +183,14 @@ export class RulesPanel {
     const body = groups
       .map((group) => {
         const inGroup = rows.filter((r) => r.group === group);
+        const changed = inGroup.filter((r) => r.explicit).length;
         const head =
           `<tr class="group" data-group="${escapeHtml(group)}">` +
-          `<td colspan="2"><b>${escapeHtml(group)}</b> <span class="dim">${inGroup.length}</span></td>` +
+          `<td colspan="2"><span class="caret">&#9656;</span> <b>${escapeHtml(group)}</b> ` +
+          `<span class="dim">${inGroup.length}${changed ? ` &middot; ${changed}` : ""}</span></td>` +
           `<td class="right dim">${escapeHtml(t.groupLevel)}</td>` +
-          `<td><select class="level" data-key="${escapeHtml(group)}">${options(table[group])}</select></td></tr>`;
+          `<td class="lvl">${dot(table[group] ?? "default")}` +
+          `<select class="level" data-key="${escapeHtml(group)}">${options(table[group])}</select></td></tr>`;
         const items = inGroup
           .map((r) => {
             const state = r.explicit
@@ -177,13 +198,18 @@ export class RulesPanel {
               : r.inherited
                 ? `<span class="dim">${escapeHtml(t.inherits)} ${escapeHtml(r.inherited.from)}: ${escapeHtml(r.inherited.level)}</span>`
                 : `<span class="dim">${escapeHtml(r.own)}${r.offByDefault ? ", " + escapeHtml(t.offByDefault) : ""}</span>`;
+            const doc = r.doc
+              ? `<a class="doc" href="#" data-page="${escapeHtml(r.doc.page)}" ` +
+                `data-anchor="${escapeHtml(r.doc.anchor ?? "")}">${escapeHtml(t.docs)}</a>`
+              : "";
             return (
-              `<tr class="rule" data-changed="${r.explicit ? "1" : "0"}" ` +
+              `<tr class="rule" data-group="${escapeHtml(r.group)}" data-changed="${r.explicit ? "1" : "0"}" ` +
               `data-text="${escapeHtml((r.id + " " + r.title).toLowerCase())}">` +
               `<td class="tier">${escapeHtml(r.tier)}</td>` +
               `<td class="id">${escapeHtml(r.id)}</td>` +
-              `<td class="title">${escapeHtml(r.title)}<div class="state">${state}</div></td>` +
-              `<td><select class="level" data-key="${escapeHtml(r.id)}">${options(r.explicit)}</select></td></tr>`
+              `<td class="title">${escapeHtml(r.title)} ${doc}<div class="state">${state}</div></td>` +
+              `<td class="lvl">${dot(effective(r))}` +
+              `<select class="level" data-key="${escapeHtml(r.id)}">${options(r.explicit)}</select></td></tr>`
             );
           })
           .join("");
@@ -204,13 +230,27 @@ export class RulesPanel {
     border: none; cursor: pointer; }
   table { border-collapse: collapse; width: 100%; }
   td { padding: 4px 8px; border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); vertical-align: top; }
-  tr.group td { background: var(--vscode-editorWidget-background); }
+  tr.group td { background: var(--vscode-editorWidget-background); cursor: pointer; user-select: none; }
+  .caret { display: inline-block; width: 12px; color: var(--vscode-descriptionForeground); }
+  tr.group.open .caret { transform: rotate(90deg); }
   .tier { width: 2ch; color: var(--vscode-descriptionForeground); }
   .id { font-family: var(--vscode-editor-font-family); white-space: nowrap; }
   .dim { color: var(--vscode-descriptionForeground); }
   .right { text-align: right; }
   .state { font-size: 11px; margin-top: 2px; }
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); padding: 0 6px; border-radius: 8px; }
+  td.lvl { white-space: nowrap; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 7px;
+    vertical-align: middle; background: var(--vscode-descriptionForeground); }
+  .dot.error { background: var(--vscode-editorError-foreground, #f14c4c); }
+  .dot.warning { background: var(--vscode-editorWarning-foreground, #cca700); }
+  .dot.info { background: var(--vscode-editorInfo-foreground, #3794ff); }
+  .dot.hint { background: var(--vscode-editorHint-foreground, #969696); }
+  /* a rule switched off is dimmed: the grey dot is visible before opening the list */
+  .dot.off { background: var(--vscode-descriptionForeground); opacity: 0.55; }
+  .dot.default { background: var(--vscode-descriptionForeground); opacity: 0.35; }
+  a.doc { color: var(--vscode-textLink-foreground); text-decoration: none; font-size: 11px; white-space: nowrap; }
+  a.doc:hover { text-decoration: underline; }
 </style></head><body>
 <h1>${escapeHtml(t.title)}</h1>
 <p class="lead">${escapeHtml(t.lead)}</p>
@@ -233,24 +273,44 @@ ${rows.length === 0 ? `<p class="dim">${escapeHtml(t.empty)}</p>` : `<table>${bo
   document.getElementById("scope").addEventListener("change", (e) =>
     vscodeApi.postMessage({ type: "scope", scope: e.target.value }));
   document.getElementById("reset").addEventListener("click", () => vscodeApi.postMessage({ type: "reset" }));
-  const filter = () => {
+  document.querySelectorAll("a.doc").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      vscodeApi.postMessage({ type: "docs", page: a.dataset.page, anchor: a.dataset.anchor || undefined });
+    });
+  });
+  // Groups start collapsed: there are more than two hundred rules, and what you open is what you look for.
+  const collapsed = new Set(Array.from(document.querySelectorAll("tr.group"), (g) => g.dataset.group));
+  const apply = () => {
     const q = document.getElementById("q").value.trim().toLowerCase();
     const onlyChanged = document.getElementById("changed").checked;
+    const searching = Boolean(q) || onlyChanged;
+    const shown = new Set();
     document.querySelectorAll("tr.rule").forEach((tr) => {
-      const hit = (!q || tr.dataset.text.includes(q)) && (!onlyChanged || tr.dataset.changed === "1");
-      tr.style.display = hit ? "" : "none";
+      const matches = (!q || tr.dataset.text.includes(q)) && (!onlyChanged || tr.dataset.changed === "1");
+      // a search shows its hits regardless of the collapsed state - otherwise searching looks broken
+      const open = searching || !collapsed.has(tr.dataset.group);
+      const visible = matches && open;
+      tr.style.display = visible ? "" : "none";
+      if (matches) { shown.add(tr.dataset.group); }
     });
     document.querySelectorAll("tr.group").forEach((head) => {
-      let next = head.nextElementSibling, visible = false;
-      while (next && next.classList.contains("rule")) {
-        if (next.style.display !== "none") { visible = true; break; }
-        next = next.nextElementSibling;
-      }
-      head.style.display = visible ? "" : "none";
+      const group = head.dataset.group;
+      head.style.display = shown.has(group) ? "" : "none";
+      head.classList.toggle("open", searching || !collapsed.has(group));
     });
   };
-  document.getElementById("q").addEventListener("input", filter);
-  document.getElementById("changed").addEventListener("change", filter);
+  document.querySelectorAll("tr.group").forEach((head) => {
+    head.addEventListener("click", (e) => {
+      if (e.target.closest("select")) { return; }   // picking the group level must not fold it
+      const group = head.dataset.group;
+      collapsed.has(group) ? collapsed.delete(group) : collapsed.add(group);
+      apply();
+    });
+  });
+  document.getElementById("q").addEventListener("input", apply);
+  document.getElementById("changed").addEventListener("change", apply);
+  apply();
   void state;
 </script></body></html>`;
   }
