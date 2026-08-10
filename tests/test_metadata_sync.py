@@ -90,8 +90,8 @@ def _levels_by_group() -> dict[str, Counter]:
 _ICON_DEFAULT = {"✓": "on", "–": "off"}
 
 _ROW = re.compile(
-    r"^\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*<img[^>]*\salt=\"(error|warning|info)\"[^>]*>\s*"
-    r"\|\s*(\S+)\s*\|\s*(\S+)\s*\|(.*)\|\s*$"
+    r"^\|\s*`([a-z0-9-]+/[a-z0-9-]+)`\s*\|\s*<svg[^>]*aria-label=\"(error|warning|info)\"[^>]*>"
+    r".*?</svg>\s*\|\s*(\S+)\s*\|\s*(\S+)\s*\|(.*)\|\s*$"
 )
 _ANY_ROW = re.compile(r"^\|\s*`")
 _TIER_HEADING = re.compile(r"^###\s+(?:Тир|Tier)\s+([A-D])")

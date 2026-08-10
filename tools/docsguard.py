@@ -70,11 +70,13 @@ def _pages(locale: str) -> str:
 
 # --- rules --------------------------------------------------------------------------------
 
-#: A row of a rules table: | `id` | <img alt="level"> | default mark | scope | ... |
+#: A row of a rules table: | `id` | <svg aria-label="level"> | default mark | scope | ... |
 #: The words became icons when the table outgrew the page width; the level is read from the
-#: alt text, which is also what keeps the row readable in the source.
+#: aria-label, which is also what keeps the row readable in the source.
 _RULE_ROW = re.compile(
-    r"^\|\s*`([^`]+)`\s*\|\s*<img[^>]*\salt=\"(error|warning|info)\"[^>]*>\s*\|\s*(\S+)\s*\|", re.M
+    r"^\|\s*`([^`]+)`\s*\|\s*<svg[^>]*aria-label=\"(error|warning|info)\"[^>]*>.*?</svg>\s*"
+    r"\|\s*(\S+)\s*\|",
+    re.M,
 )
 _DEFAULTS = {"✓": "on", "–": "off"}
 
