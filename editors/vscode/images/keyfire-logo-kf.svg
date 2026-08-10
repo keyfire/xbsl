@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- Вариант A: монограмма KF, пламя как градиент. -->
+  <defs>
+    <linearGradient id="flame" x1="0" y1="1" x2="0.4" y2="0">
+      <stop offset="0" stop-color="#f0883e"/>
+      <stop offset="0.55" stop-color="#ffb347"/>
+      <stop offset="1" stop-color="#ffd23f"/>
+    </linearGradient>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2030"/>
+      <stop offset="1" stop-color="#11141c"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <g transform="translate(256 256)">
+    <!-- K -->
+    <g fill="#eef1f8">
+      <rect x="-118" y="-108" width="34" height="216" rx="6"/>
+      <path d="M-78,-2 L-2,-108 h44 L-34,0 L42,108 H-2 Z"/>
+    </g>
+    <!-- F, пламенем -->
+    <g fill="url(#flame)">
+      <rect x="58" y="-108" width="34" height="216" rx="6"/>
+      <rect x="58" y="-108" width="104" height="32" rx="6"/>
+      <rect x="58" y="-16" width="82" height="30" rx="6"/>
+    </g>
+  </g>
+</svg>
