@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.58.0",
+  "version": "0.58.1",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -1439,7 +1439,7 @@
             "type": "boolean",
             "default": true,
             "scope": "resource",
-            "description": "%config.workspaceLint%"
+            "markdownDescription": "%config.workspaceLint%"
           },
           "xbsl.workspaceLintTimeout": {
             "type": "number",
@@ -1843,7 +1843,7 @@
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
-            "description": "%config.lsp.command%"
+            "markdownDescription": "%config.lsp.command%"
           }
         }
       },
@@ -1897,8 +1897,7 @@
             "type": "string",
             "default": "",
             "scope": "machine-overridable",
-            "markdownDescription": "%config.debug.adapterPath%",
-            "description": "%config.debug.adapterPath%"
+            "markdownDescription": "%config.debug.adapterPath%"
           },
           "xbsl.debug.javaPath": {
             "type": "string",
@@ -1910,8 +1909,7 @@
             "type": "string",
             "default": "",
             "scope": "resource",
-            "markdownDescription": "%config.debug.applicationUrl%",
-            "description": "%config.debug.applicationUrl%"
+            "markdownDescription": "%config.debug.applicationUrl%"
           },
           "xbsl.debug.openApplicationOnStart": {
             "type": "boolean",

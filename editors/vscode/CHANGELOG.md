@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.58.1
+
+### Fixed
+- **Four settings showed the "Details" link as raw markdown.** A description carrying a link has to
+  live in `markdownDescription`; in a plain `description` VS Code prints it as text. Affected
+  *Checking > Workspace Lint*, *Language server > Command* and both debugging paths. A test now
+  refuses a description with a link outside `markdownDescription`.
+
 ## 0.58.0
 
 ### Added

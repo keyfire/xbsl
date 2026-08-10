@@ -274,6 +274,38 @@ def test_extension_settings_cover_every_group():
     )
 
 
+def test_extension_settings_with_a_link_use_markdown():
+    """A description carrying a link belongs in markdownDescription.
+
+    In a plain `description` VS Code prints the markdown as it is, and the settings screen shows
+    a raw "[Details](https://...)" instead of a link - which is exactly what shipped in 0.58.0
+    for four settings.
+    """
+    package = _manifest()
+    sections = package["contributes"]["configuration"]
+    sections = [sections] if isinstance(sections, dict) else sections
+    catalogs = [
+        json.loads((VSCODE / name).read_text(encoding="utf-8"))
+        for name in ("package.nls.json", "package.nls.ru.json")
+    ]
+    link = re.compile(r"\[[^\]]+\]\(https?://")
+
+    offenders = []
+    for section in sections:
+        for key, entry in section.get("properties", {}).items():
+            raw = entry.get("description")
+            if not raw:
+                continue
+            found = re.fullmatch(r"%(.+)%", raw)
+            texts = [c.get(found.group(1), "") for c in catalogs] if found else [raw]
+            if any(link.search(text) for text in texts):
+                offenders.append(key)
+    assert not offenders, (
+        "описание со ссылкой лежит в description – VS Code покажет сырой markdown; "
+        f"перенесите в markdownDescription: {sorted(offenders)}"
+    )
+
+
 @pytest.mark.parametrize("name", ["CHANGELOG.ru.md", "CHANGELOG.md"])
 def test_extension_version_is_described_in_changelog(name: str):
     """The published version needs its own section; 0.24.0 shipped without one and nobody saw it."""
