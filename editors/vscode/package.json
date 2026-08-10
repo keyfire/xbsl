@@ -128,6 +128,11 @@
     },
     "commands": [
       {
+        "command": "xbsl.rules.panel",
+        "title": "%cmd.rules.panel%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.collapse",
         "title": "%cmd.metadata.collapse%",
         "category": "XBSL",

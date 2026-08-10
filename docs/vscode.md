@@ -17,6 +17,8 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
 
+![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the platform distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the platform stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.svg)
+
 ## Features
 
 - **Syntax highlighting** for `.xbsl`: keywords (both Russian and English forms), declarations,
@@ -215,6 +217,11 @@ newlines) are left to `xbsl --fix` on the command line.
 | `xbsl.debug.*` | – | Debugging: the platform adapter directory, the Java launcher, opening the debuggee on start. See [Debugging](#debugging). |
 
 ## Rules: levels and disabling
+
+The table does not have to be edited by hand: the **XBSL: rules** command opens a panel - every
+rule of the engine listed by group, each with its own level or "by default", a search by name, a
+"changed only" filter and a reset button. The scope is chosen explicitly (the user or the
+workspace settings), and the panel writes into `xbsl.rules` and nowhere else.
 
 **By group – in the Settings UI.** The **Rule groups** section (search for `xbsl.groups` in
 the Settings editor, or browse Extensions → XBSL) has a dropdown per finding type – code,

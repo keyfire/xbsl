@@ -12,6 +12,13 @@
 ## Unreleased
 
 ### Added
+- **The rules panel: the "XBSL: rules" command.** Every rule of the engine listed by group - the
+  tier, the id, the title and the current state: its own level, one inherited from a group or a
+  tier, or the default. A dropdown changes the level, and "by default" removes the key from the
+  table instead of writing a level equal to the default one. There is a search, a "changed only"
+  filter and a reset. The scope is chosen explicitly - the user or the workspace settings: VS Code
+  decides that silently otherwise, and "why does my colleague see other findings" starts exactly
+  there. The panel writes into `xbsl.rules` and nowhere else.
 - **Rules are configured by one table, `xbsl.rules`.** The key is a rule, a group, a tier letter or
   `*`; the value is `off` or a level; priority runs from the specific to the general:
   rule → group → tier → `*`. A level on a RULE key also switches it on when it is off by default (on a group, a

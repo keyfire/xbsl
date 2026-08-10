@@ -211,6 +211,11 @@ newlines) are left to `xbsl --fix` on the command line.
 
 ## Rules: levels and disabling
 
+The table does not have to be edited by hand: the **XBSL: rules** command opens a panel - every
+rule of the engine listed by group, each with its own level or "by default", a search by name, a
+"changed only" filter and a reset button. The scope is chosen explicitly (the user or the
+workspace settings), and the panel writes into `xbsl.rules` and nowhere else.
+
 **By group – in the Settings UI.** The **Rule groups** section (search for `xbsl.groups` in
 the Settings editor, or browse Extensions → XBSL) has a dropdown per finding type – code,
 yaml descriptions, style, typography, whitespace, encoding, structure, forms, queries,

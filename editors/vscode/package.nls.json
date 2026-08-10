@@ -162,5 +162,6 @@
   "config.section.debug": "Debugger",
   "config.debug.applicationUrl": "Where to open the application under debug, when it answers on a domain of its own. [Details](https://docs.keyfire.ru/xbsl/vscode#debugging)",
   "cmd.migrateRules": "XBSL: move the rule settings into one table",
-  "cmd.metadata.collapse": "Collapse to the metadata kinds"
+  "cmd.metadata.collapse": "Collapse to the metadata kinds",
+  "cmd.rules.panel": "XBSL: rules"
 }

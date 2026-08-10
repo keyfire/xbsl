@@ -26,6 +26,7 @@ import { registerTemplates, setTemplatesReload } from "./templatesPanel";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { engineRuleArgs, primeRuleCatalogue, registerRuleConfig, ruleOverride } from "./ruleConfig";
+import { registerRulesPanel } from "./rulesPanel";
 import { groupReportByFile, resolveMessageLanguage } from "./workspaceCore";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
@@ -402,6 +403,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // form preview.
   registerPalettePicker(context);
   registerRuleConfig(context);
+  registerRulesPanel(context);
   // Tier per rule for the xbsl.rules table - one run of the engine, its result is cached.
   const lint = readSettings().linter;
   primeRuleCatalogue(lint.command, lint.usePython ? ["-m", "xbsl"] : []);
