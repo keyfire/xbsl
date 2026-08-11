@@ -970,7 +970,7 @@ i18n.register(MESSAGES_COMPONENT)
 
 @lru_cache(maxsize=1)
 def _both_env_forms() -> frozenset[str]:
-    """Both spellings of the `КлиентИСервер` environment value (from terms.json)."""
+    """Both spellings of the client-and-server environment value (from terms.json)."""
     return frozenset({"КлиентИСервер", terms.english("КлиентИСервер", "enums") or "КлиентИСервер"})
 
 
