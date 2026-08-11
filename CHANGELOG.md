@@ -15,6 +15,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Rule `code/component-in-server-context`: an interface component in a server environment.**
+  A `Component.Member(...)` access from code compiled for the server – a `@OnServer` method
+  anywhere, or an unannotated method of a server or client-and-server module. The component's
+  type lives on the client, and the server compilation answers "Variable X is not defined" –
+  the linter said nothing while the stand silently rolled back to the previous build. A
+  namesake of the component among elements of other kinds and shadowed names are not judged;
+  verified against the live case (the finding's position matches the compiler's) and by corpus
+  runs with zero false positives.
 - **The check gained `--out`: the report is written to a UTF-8 file without BOM.** Comparing
   findings before and after a change is an everyday scenario, and on Windows the shell
   redirection prefixes the output with a BOM that breaks JSON parsing. Works with every

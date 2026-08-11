@@ -17,7 +17,34 @@ Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`),
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
 
-![The whole path: the installation sources on top - Open VSX with the extension, PyPI with the engine and elemctl, the platform distribution that hands the reference and the types to the engine and the debug adapter to elemctl; below, the editor and the engine read the project sources while elemctl carries the deploy and the debugging to the platform stand](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/install-to-debug.svg)
+## How it works
+
+The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine: in the
+default [LSP mode](#lsp-mode-default) every feature – diagnostics, navigation, the docs panel
+and the metadata scaffolding – talks to one long-living `xbsl-lsp` server; without the server
+the same checks and scaffolding run through the CLI:
+
+![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.svg)
+
+In the CLI mode two producers feed one diagnostic collection, and the split is by buffer state:
+
+- **While you type** (dirty buffer) the extension runs
+  `xbsl --stdin --filename <name> --format json` on the live text – per-file rules only,
+  fast, debounced. Its result replaces the diagnostics of *that buffer only*.
+- **When you save** any `.xbsl`/`.yaml` file, the extension runs
+  `xbsl <workspace folder> --format json` in the background (debounced, at most one run
+  at a time; a save during a run cancels the now-stale run and starts over). The result covers
+  per-file *and* project-scope rules, so it replaces the diagnostics of *every* file in the
+  folder – except buffers that are dirty again by then: those stay with their live `--stdin`
+  diagnostics until the next save.
+
+This way there are no duplicates and no rule is lost: a clean file always shows the full
+workspace-run picture, a file being edited shows the instant per-file picture, and each save
+reconciles the two. Both runs speak the same `{diagnostics, summary}` JSON contract that the
+linter's MCP server exposes.
+
+A workspace run that fails or exceeds `xbsl.workspaceLintTimeout` is reported to the *XBSL*
+output channel only – no popups on every save.
 
 ## Features
 
@@ -815,35 +842,6 @@ Every command of the extension. Generated from `package.json` – do not edit by
 <!-- commands:end -->
 
 </details>
-
-## How it works
-
-The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine: in the
-default [LSP mode](#lsp-mode-default) every feature – diagnostics, navigation, the docs panel
-and the metadata scaffolding – talks to one long-living `xbsl-lsp` server; without the server
-the same checks and scaffolding run through the CLI:
-
-![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.svg)
-
-In the CLI mode two producers feed one diagnostic collection, and the split is by buffer state:
-
-- **While you type** (dirty buffer) the extension runs
-  `xbsl --stdin --filename <name> --format json` on the live text – per-file rules only,
-  fast, debounced. Its result replaces the diagnostics of *that buffer only*.
-- **When you save** any `.xbsl`/`.yaml` file, the extension runs
-  `xbsl <workspace folder> --format json` in the background (debounced, at most one run
-  at a time; a save during a run cancels the now-stale run and starts over). The result covers
-  per-file *and* project-scope rules, so it replaces the diagnostics of *every* file in the
-  folder – except buffers that are dirty again by then: those stay with their live `--stdin`
-  diagnostics until the next save.
-
-This way there are no duplicates and no rule is lost: a clean file always shows the full
-workspace-run picture, a file being edited shows the instant per-file picture, and each save
-reconciles the two. Both runs speak the same `{diagnostics, summary}` JSON contract that the
-linter's MCP server exposes.
-
-A workspace run that fails or exceeds `xbsl.workspaceLintTimeout` is reported to the *XBSL*
-output channel only – no popups on every save.
 
 ## Feedback and bugs
 

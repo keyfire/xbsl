@@ -4,7 +4,7 @@ The platform assigns every module an environment – Клиент, Сервер 
 "Исполнение модуля") – and the annotations @НаСервере/@НаКлиенте/@ДоступноСКлиента refine
 it per method or type. An environment mismatch is among the most painful failures: the
 server-side apply silently rolls the whole project back without pointing at the line.
-Five checks, all narrow by design (a skipped case is a false negative, never a false
+The checks are all narrow by design (a skipped case is a false negative, never a false
 positive); each is project-wide because it needs the paired yaml of the module.
 
 - code/server-call-from-handler: in an interface component module (a form – environment
@@ -46,6 +46,11 @@ positive); each is project-wide because it needs the paired yaml of the module.
   `ИмяМодуля.Метод(...)` fails at runtime ("Type unavailable"). Members declared
   @НаСервере inside the client module do exist on the server and are not flagged; a
   member that cannot be resolved in the module is skipped rather than guessed.
+
+- code/component-in-server-context: a `Компонент.Член(...)` access from code compiled
+  for the server – a @НаСервере method anywhere, or an unannotated method of a module
+  whose environment includes the server. The component's type lives on the client, so
+  the server compilation refuses with "Переменная X не определена".
 
 The call detection of the first check is exercised by its own tests: a client handler calling
 a @НаСервере @ДоступноСКлиента method is found by the same matching and correctly not flagged.
@@ -938,4 +943,164 @@ def global_unavailable(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 continue
             yield Diagnostic(
                 rel, line, col, "code/global-unavailable", Severity.ERROR, message,
+            )
+
+
+# --- An interface component referenced from server-compiled code ------------------------
+
+MESSAGES_COMPONENT = {
+    "code/component-in-server-context.title": {
+        "ru": "Компонент интерфейса в серверном окружении",
+        "en": "Interface component in a server environment",
+    },
+    "code/component-in-server-context.call": {
+        "ru": "Обращение '{name}' из метода '{method}', который компилируется для "
+              "серверного окружения: '{root}' – компонент интерфейса, он существует "
+              "только на клиенте, и на сервере компиляция откажет (\"Переменная {root} "
+              "не определена\"). Пометьте метод @НаКлиенте либо перенесите обращение "
+              "в клиентский код.",
+        "en": "Access '{name}' from method '{method}', which is compiled for the server "
+              "environment: '{root}' is an interface component and exists on the client "
+              "only – the server compilation refuses (\"Variable {root} is not defined\"). "
+              "Annotate the method @{n[НаКлиенте]} or move the access to client code.",
+    },
+}
+i18n.register(MESSAGES_COMPONENT)
+
+
+@lru_cache(maxsize=1)
+def _both_env_forms() -> frozenset[str]:
+    """Both spellings of the `КлиентИСервер` environment value (from terms.json)."""
+    return frozenset({"КлиентИСервер", terms.english("КлиентИСервер", "enums") or "КлиентИСервер"})
+
+
+dataset.register_reset(_both_env_forms.cache_clear)
+
+
+def _component_env_mapper(source: SourceFile) -> dict | None:
+    """The map phase. Every project yaml contributes its element's name and kind (the
+    component names and their possible namesakes are only known in the reduce) plus the
+    environment role of its pair; a module contributes its bare `Имя.Член(...)` accesses,
+    each with the execution side of its method, exactly as in _global_env_mapper.
+
+    The roles differ from that mapper in one value: a common module (or a structure) with
+    `Окружение: КлиентИСервер` is `both` – an unannotated method of such a module is
+    compiled for BOTH environments, so a component reference in it fails the server half
+    even when every runtime path is client-side. That is the exact shape of the live
+    failure this rule encodes. An enumeration module is `both` by the standard
+    environments table (docs topics/module-execution)."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        kind = object_kind(data)
+        server_env, client_env = _environment_forms()
+        role = None
+        if kind in ("ОбщийМодуль", "Структура"):
+            env = value_of(data, "Окружение", kind)
+            if env in server_env:
+                role = "server"
+            elif env in client_env:
+                role = "client"
+            elif env in _both_env_forms():
+                role = "both"
+        elif kind in _SERVER_ENV_KINDS:
+            role = "server"
+        elif kind in _CLIENT_ENV_KINDS:
+            role = "client"
+        elif kind == "Перечисление":
+            role = "both"
+        name = value_of(data, "Имя", kind)
+        if not isinstance(name, str):
+            name = None
+        if role is None and name is None:
+            return None
+        return {"k": "y", "stem": _pair_stem(source.rel), "role": role,
+                "name": name, "kind": kind}
+    if source.kind != "xbsl":
+        return None
+    toks = code_tokens(source)
+    decls, methods = _module_decls(toks)
+    on_server = _on_server_forms()
+    on_client = _on_client_forms()
+    bodies = _method_bodies(toks, methods, _decl_anchors(toks))
+    anns = {name: a for name, a, _ in methods}
+    shadowed = _shadowed_names(toks)
+    n = len(toks)
+    accesses: list[list] = []
+    for method, (start, end) in bodies.items():
+        method_anns = anns.get(method, frozenset())
+        server_ann = bool(method_anns & on_server)
+        client_ann = bool(method_anns & on_client)
+        if server_ann and client_ann:
+            continue  # runs where called from - not judged
+        side = "server" if server_ann else "client" if client_ann else "module"
+        if side == "client":
+            continue  # pinned to the client - the component is at home there
+        for i in range(start, min(end, n)):
+            t = toks[i]
+            if t.kind != "IDENT" or t.value in shadowed or t.value in decls:
+                continue
+            if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == ".":
+                continue  # a member of another object, not the bare name
+            if not (i + 3 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
+                    and toks[i + 2].kind == "IDENT"
+                    and toks[i + 3].kind == "OP" and toks[i + 3].value == "("):
+                continue  # only `Имя.Член(...)` accesses are judged
+            accesses.append([t.value, toks[i + 2].value, method, side, t.line, t.col])
+    if not accesses:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "accesses": accesses}
+
+
+@rule(
+    "code/component-in-server-context",
+    "code/component-in-server-context.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_component_env_mapper,
+)
+def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A qualified access to an interface component from code compiled for the server.
+
+    The component's type lives in the Client environment (docs topics/module-execution),
+    so its name is simply not declared on the server: the apply refuses with `<Сервер>
+    Переменная X не определена` – after the linter said nothing and the stand silently
+    rolled back to the previous build. Flagged are the accesses of @НаСервере methods
+    anywhere and of unannotated methods in server or client-and-server modules; a name
+    that also belongs to a non-component element somewhere in the project (a namesake
+    across subsystems) is left alone rather than guessed.
+    """
+    components: set[str] = set()
+    other_kinds: set[str] = set()
+    roles: dict[str, str] = {}
+    for fact in facts.values():
+        if fact["k"] != "y":
+            continue
+        if fact["role"] is not None:
+            roles[fact["stem"]] = fact["role"]
+        name = fact.get("name")
+        if name:
+            if fact.get("kind") == "КомпонентИнтерфейса":
+                components.add(name)
+            else:
+                other_kinds.add(name)
+    judged = components - other_kinds
+    if not judged:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        stem = fact["stem"]
+        role = roles.get(stem) or roles.get(stem.rsplit(".", 1)[0])
+        for root, member, method, side, line, col in fact["accesses"]:
+            if root not in judged:
+                continue
+            runs_on = role if side == "module" else side
+            if runs_on not in ("server", "both"):
+                continue
+            yield Diagnostic(
+                rel, line, col, "code/component-in-server-context", Severity.ERROR,
+                i18n.t("code/component-in-server-context.call",
+                       name=f"{root}.{member}", method=method, root=root),
             )

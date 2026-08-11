@@ -36,6 +36,7 @@ _DATA_DEPENDENT = {
     "test_rule_ns_objects",
     "test_rules",
     "test_rule_environment",
+    "test_rule_component_server",  # the rule tokenizes the module and reads terms
     "test_rule_global_unavailable",
     "test_rule_unknown_tabular_member",
     "test_rule_variable_names",  # code rules tokenize the module
