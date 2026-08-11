@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.59.3
+
+### Changed
+- **The "How it works" section moved to the top of the README** - the extension page opens
+  with the mechanism, not with the feature list.
+- **The "docs" link knows the `code/component-in-server-context` rule** (engine 0.62.0) - the
+  rules panel and the Problems view open the "Module execution" section, as the neighbouring
+  environment rules do.
+
 ## 0.59.2
 
 ### Changed
