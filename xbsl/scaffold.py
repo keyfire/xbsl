@@ -1799,7 +1799,7 @@ def op_add_field(
             props, kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)), ("Ид", "Имя", "Тип"),
         )
         lines = spelled_lines(
-            _without_unknown_id(
+            _reconciled_id(
                 [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"],
                 kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)),
             ) + _prop_lines(extra), lang
@@ -1837,7 +1837,7 @@ def op_add_field(
     extra = _checked_props(
         props, kind, ((spec["section"], None),), ("Ид", "Имя", "Тип"),
     )
-    lines = spelled_lines(_without_unknown_id([
+    lines = spelled_lines(_reconciled_id([
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=type_)
         for line in template
     ], kind, ((spec["section"], None),)) + _prop_lines(extra), lang)
@@ -1900,24 +1900,31 @@ def item_property_forms(kind: str, path: tuple[tuple[str, str | None], ...]) -> 
     return forms
 
 
-def _without_unknown_id(
+def _reconciled_id(
     lines: list[str], kind: str, path: tuple[tuple[str, str | None], ...]
 ) -> list[str]:
-    """Drop the top-level `Id` line when the item's class does not declare that property.
+    """Align the top-level `Id` line with the item's metamodel class, both ways.
 
     Not every section item is identified: an attribute of a Catalog carries `Id`, an
-    attribute of a Processing has no such property at all, and the compiler rejects the whole
-    file with "unknown property Id" - a failure that only surfaces on deploy. The metamodel
-    knows the difference, so the templates no longer have to: a kind whose class is unknown
-    (no data, an unmapped kind) keeps whatever the template says.
+    attribute of a Processing has no such property at all - and the compiler rejects the
+    whole file with "unknown property Id". The reverse also happens: the property of an
+    event-log event DECLARES `Id`, and applying the build rejects the object without it
+    ("ID required") - a hand-written template missed exactly that case. The metamodel knows
+    the difference (the same source the `yaml/item-id-required` rule judges by), so the
+    templates no longer have to; a kind whose class is unknown (no data, an unmapped kind)
+    keeps whatever the template says.
 
-    Only the item's OWN key is dropped - a nested starter item (the attribute inside a new
+    Only the item's OWN key is touched - a nested starter item (the attribute inside a new
     tabular part) is judged by its own class, not by this one.
     """
     forms = item_property_forms(kind, path)
-    if not forms or "Ид" in forms:
+    if not forms:
         return lines
-    return [line for line in lines if not line.startswith("Ид:")]
+    if "Ид" not in forms:
+        return [line for line in lines if not line.startswith("Ид:")]
+    if not any(line.startswith("Ид:") for line in lines):
+        return [f"Ид: {new_uuid()}", *lines]
+    return lines
 
 
 def _checked_props(

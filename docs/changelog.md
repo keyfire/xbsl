@@ -27,6 +27,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   redirection prefixes the output with a BOM that breaks JSON parsing. Works with every
   `--format` value (and together with `--fix`); the text-format summary stays on stderr.
 
+### Fixed
+- **An event-log event property gets its `Id`.** Adding a field now reconciles the `Id` line
+  with the item's metamodel class BOTH ways: a class that declares `Id` gets one written
+  (without it applying the build rejects the object, "ID required"), a class without it has
+  the line dropped, as before. The judge is the same source the `yaml/item-id-required` rule
+  uses; the hand-written section templates no longer have to know the exceptions. A sweep of
+  every kind-section pair against the metamodel found exactly two divergences: the event
+  property (the missing `Id`, this defect) and the processing attribute (a superfluous one,
+  already dropped on the fly).
+
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
 
 ### Added
