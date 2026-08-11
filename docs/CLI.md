@@ -50,6 +50,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
 | `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
 | `--format {text,json,codeclimate}` | output format: text (default), json (machine-readable: diagnostics + summary) or codeclimate (a GitLab Code Quality report – the merge request widget) |
+| `--out FILE` | write the check report to a UTF-8 file without BOM instead of stdout (shell redirection on Windows adds a BOM that breaks JSON parsing); applies to every `--format` value |
 | `--stdin` | check a single buffer from stdin (for editor integration); `--filename` sets the file kind and the reported path |
 | `--index` | instead of checking, print a JSON project index (objects, methods, form components) for editor navigation; the path is the project root |
 | `--filename NAME` | name of the buffer checked with `--stdin` (e.g. Form.xbsl); the extension sets the file kind |

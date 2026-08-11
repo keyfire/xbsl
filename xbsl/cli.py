@@ -239,6 +239,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=i18n.t("cli.help.format"),
     )
     parser.add_argument(
+        "--out",
+        metavar=i18n.t("cli.help.meta.file"),
+        help=i18n.t("cli.help.out"),
+    )
+    parser.add_argument(
         "--stdin",
         action="store_true",
         help=i18n.t("cli.help.stdin"),
@@ -280,6 +285,20 @@ def _parse_set(values: list[str] | None) -> set[str] | None:
     return parts or None
 
 
+def _emit_report(text: str, out: str | None) -> None:
+    """Print the check report to stdout, or write it to `out`.
+
+    The file route exists because on Windows the shell redirection
+    (`> file` in PowerShell) prefixes the output with a BOM, and a
+    `json.load` of the result refuses it. The file is written as UTF-8
+    without BOM with `\\n` newlines.
+    """
+    if not out:
+        print(text)
+        return
+    Path(out).write_text(text + "\n", encoding="utf-8", newline="\n")
+
+
 def _apply_fixes(sources, diagnostics, args) -> int:
     """--fix: rewrite files with the mechanical fixes, then report the remaining findings."""
     from xbsl import fixer
@@ -298,9 +317,13 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 
     remaining = [d for d in diagnostics if not fixer.is_fixable(d)]
     if args.format == "json":
-        print(json.dumps(report.report(remaining, len(sources)), ensure_ascii=False))
+        _emit_report(json.dumps(report.report(remaining, len(sources)), ensure_ascii=False),
+                     args.out)
     elif args.format == "codeclimate":
-        print(json.dumps(report.codeclimate(remaining), ensure_ascii=False))
+        _emit_report(json.dumps(report.codeclimate(remaining), ensure_ascii=False), args.out)
+    elif args.out:
+        lines = [d.format() for d in sorted(remaining, key=lambda x: x.sort_key())]
+        _emit_report("\n".join(lines), args.out)
     else:
         for d in sorted(remaining, key=lambda x: x.sort_key()):
             print(d.format())
@@ -1073,7 +1096,7 @@ def main(argv: list[str] | None = None) -> int:
                   file=sys.stderr)
 
     if args.format == "json":
-        # Machine-readable: the whole payload on stdout, nothing on stderr.
+        # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
         if suppressed is not None:
             payload["summary"]["baselined"] = suppressed
@@ -1082,14 +1105,18 @@ def main(argv: list[str] | None = None) -> int:
             payload["summary"]["baseline_unused"] = unused
             payload["summary"]["baseline_stale"] = len(stale)
             payload["summary"]["baseline_stale_entries"] = stale
-        print(json.dumps(payload, ensure_ascii=False))
+        _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
         # Paths are made relative to the current directory – run from the repository root.
-        print(json.dumps(report.codeclimate(diagnostics), ensure_ascii=False))
+        _emit_report(json.dumps(report.codeclimate(diagnostics), ensure_ascii=False), args.out)
     else:
-        for d in sorted(diagnostics, key=lambda x: x.sort_key()):
-            print(d.format())
+        if args.out:
+            lines = [d.format() for d in sorted(diagnostics, key=lambda x: x.sort_key())]
+            _emit_report("\n".join(lines), args.out)
+        else:
+            for d in sorted(diagnostics, key=lambda x: x.sort_key()):
+                print(d.format())
         n_xbsl = sum(1 for f in files if f.suffix == ".xbsl")
         n_yaml = sum(1 for f in files if f.suffix == ".yaml")
         n_err = sum(1 for d in diagnostics if d.severity.value == "error")

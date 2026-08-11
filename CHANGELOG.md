@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **The check gained `--out`: the report is written to a UTF-8 file without BOM.** Comparing
+  findings before and after a change is an everyday scenario, and on Windows the shell
+  redirection prefixes the output with a BOM that breaks JSON parsing. Works with every
+  `--format` value (and together with `--fix`); the text-format summary stays on stderr.
+
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
 
 ### Added

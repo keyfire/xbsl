@@ -233,6 +233,14 @@ _CORE_MESSAGES = {
         "en": "output format: text (default), json (machine-readable: diagnostics + summary) "
               "or codeclimate (a GitLab Code Quality report – the merge request widget)",
     },
+    "cli.help.out": {
+        "ru": "записать отчёт проверки в файл UTF-8 без BOM вместо stdout (перенаправление "
+              "оболочки на Windows добавляет BOM, и разбор JSON на нём падает); "
+              "действует для всех значений --format",
+        "en": "write the check report to a UTF-8 file without BOM instead of stdout "
+              "(shell redirection on Windows adds a BOM that breaks JSON parsing); "
+              "applies to every --format value",
+    },
     "cli.help.stdin": {
         "ru": "проверить один буфер из stdin (для интеграции с редактором); "
               "вид файла и путь в позициях задаёт --filename",
