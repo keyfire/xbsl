@@ -49,8 +49,8 @@ def _lint(*sources):
 
 
 def test_component_call_in_both_environments_module_flagged():
-    """The live failure: an unannotated method of a КлиентИСервер module is compiled for
-    the server too, and there the component's name does not exist."""
+    """The live failure: an unannotated method of a client-and-server module is compiled
+    for the server too, and there the component's name does not exist."""
     i18n.set_lang("ru")
     try:
         d = _lint(_COMPONENT, _BOTH_MODULE, engine.load_text(
@@ -73,7 +73,7 @@ def test_component_call_in_server_module_flagged():
 
 
 def test_component_call_in_on_server_method_of_a_component_flagged():
-    """The side benefit named in the backlog: a @НаСервере method of a component module
+    """The side benefit named in the backlog: a `@НаСервере` method of a component module
     reaching for a component (its own or another) runs on the server all the same."""
     other = engine.load_text(
         "Карточка.yaml",

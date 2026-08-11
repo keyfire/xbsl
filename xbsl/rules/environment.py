@@ -48,7 +48,7 @@ positive); each is project-wide because it needs the paired yaml of the module.
   member that cannot be resolved in the module is skipped rather than guessed.
 
 - code/component-in-server-context: a `Компонент.Член(...)` access from code compiled
-  for the server – a @НаСервере method anywhere, or an unannotated method of a module
+  for the server – a `@НаСервере` method anywhere, or an unannotated method of a module
   whose environment includes the server. The component's type lives on the client, so
   the server compilation refuses with "Переменная X не определена".
 
@@ -984,7 +984,7 @@ def _component_env_mapper(source: SourceFile) -> dict | None:
     each with the execution side of its method, exactly as in _global_env_mapper.
 
     The roles differ from that mapper in one value: a common module (or a structure) with
-    `Окружение: КлиентИСервер` is `both` – an unannotated method of such a module is
+    `Environment: ClientAndServer` is `both` – an unannotated method of such a module is
     compiled for BOTH environments, so a component reference in it fails the server half
     even when every runtime path is client-side. That is the exact shape of the live
     failure this rule encodes. An enumeration module is `both` by the standard
@@ -1064,9 +1064,9 @@ def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """A qualified access to an interface component from code compiled for the server.
 
     The component's type lives in the Client environment (docs topics/module-execution),
-    so its name is simply not declared on the server: the apply refuses with `<Сервер>
-    Переменная X не определена` – after the linter said nothing and the stand silently
-    rolled back to the previous build. Flagged are the accesses of @НаСервере methods
+    so its name is simply not declared on the server: the apply refuses with
+    "Переменная X не определена" – after the linter said nothing and the stand silently
+    rolled back to the previous build. Flagged are the accesses of `@НаСервере` methods
     anywhere and of unannotated methods in server or client-and-server modules; a name
     that also belongs to a non-component element somewhere in the project (a namesake
     across subsystems) is left alone rather than guessed.
