@@ -213,6 +213,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "stdlib/element/xbsl/Std/Http/Url_ru",
     anchor: "спараметрамизапроса",
   },
+  {
+    match: (r) => r === "code/permission-handlers-need-recalc",
+    page: "topics/recalculate-access-permissions-and-keys",
+  },
 ];
 
 export interface RuleDoc {

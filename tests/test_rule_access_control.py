@@ -125,3 +125,93 @@ def test_record_outside_the_handler_not_checked(tmp_path):
         + "\n@ВПроекте\nметод Иное(Запись: Строка): Строка\n    возврат Запись.Пользователь\n;\n",
     )
     assert not _has(d, FIELD)
+
+
+# --- code/permission-handlers-need-recalc ----------------------------------------------
+
+RECALC = "code/permission-handlers-need-recalc"
+
+_RECALC_CALL = (
+    "@ВПроекте\n"
+    "метод Обновление()\n"
+    "    Записи.ПересчитатьРазрешенияДоступа()\n"
+    ";\n"
+)
+
+
+def _recalc_project(tmp_path, module, extra=None):
+    (tmp_path / "Записи.yaml").write_text(_YAML.format(control=_CONTROL), encoding="utf-8")
+    (tmp_path / "Записи.xbsl").write_text(module, encoding="utf-8")
+    for name, text in (extra or {}).items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    return engine.run(discover([str(tmp_path)]), select={RECALC})
+
+
+def test_handler_without_recalc_flagged(tmp_path):
+    """The platform never calls the handler by itself: a project that recomputes nowhere
+    ships permission edits that silently do not act - the very defect of the registry."""
+    d = _recalc_project(tmp_path, _COMMON_HANDLER)
+    assert any(x.rule_id == RECALC and "Записи" in x.message for x in d)
+
+
+def test_recalc_anywhere_in_the_project_silences(tmp_path):
+    d = _recalc_project(tmp_path, _COMMON_HANDLER, {"Проект.xbsl": _RECALC_CALL})
+    assert not _has(d, RECALC)
+
+
+def test_recalc_for_objects_counts_too(tmp_path):
+    call = _RECALC_CALL.replace(
+        "ПересчитатьРазрешенияДоступа()", "ПересчитатьРазрешенияДоступаДляОбъектов()"
+    )
+    d = _recalc_project(tmp_path, _COMMON_HANDLER, {"Проект.xbsl": call})
+    assert not _has(d, RECALC)
+
+
+def test_a_generic_loop_receiver_stands_the_rule_down(tmp_path):
+    """The documentation itself shows the loop form - the receiver is a loop variable, and
+    what such a loop covers cannot be told, so the rule does not guess."""
+    loop = (
+        "@ВПроекте\n"
+        "метод Обновление()\n"
+        "    для Сервис из HttpСервисы\n"
+        "        Сервис.ПересчитатьРазрешенияДоступа()\n"
+        "    ;\n"
+        ";\n"
+    )
+    d = _recalc_project(tmp_path, _COMMON_HANDLER, {"Проект.xbsl": loop})
+    assert not _has(d, RECALC)
+
+
+def test_a_rights_element_is_not_judged(tmp_path):
+    """A rights element declares the same-named handler yet has no recompute method at all:
+    demanding the call would demand code that cannot compile."""
+    (tmp_path / "ПравоНаПробу.yaml").write_text(
+        "ВидЭлемента: ПравоНаДействие\n"
+        "Ид: 34343434-3434-3434-3434-343434343434\n"
+        "Имя: ПравоНаПробу\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "ПравоНаПробу.xbsl").write_text(_COMMON_HANDLER, encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={RECALC})
+    assert not _has(d, RECALC)
+
+
+def test_recalc_rule_speaks_both_spellings(tmp_path):
+    (tmp_path / "Records.yaml").write_text(
+        "ElementKind: Catalog\nИд: 56565656-5656-5656-5656-565656565656\nName: Records\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Records.xbsl").write_text(
+        "@Обработчик\nметод ComputeAccessPermissions(): Массив<РазрешениеДоступа>\n"
+        "    возврат новый Массив<РазрешениеДоступа>()\n;\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={RECALC})
+    assert any(x.rule_id == RECALC and "Records" in x.message for x in d)
+
+    (tmp_path / "Проект.xbsl").write_text(
+        "@ВПроекте\nметод Обновление()\n    Records.RecomputeAccessPermissions()\n;\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={RECALC})
+    assert not _has(d, RECALC)

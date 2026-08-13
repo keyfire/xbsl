@@ -1,9 +1,9 @@
-"""Tier D: the two halves of per-object access control that the compiler does not check.
+"""Tier D: the halves of computed access control that the compiler does not check.
 
 An object may declare that a permission is decided per record - `Permissions: {Read:
 PermissionsCalculatedForEachObject}` - and then name, in `PermissionsCalculatedBy`, the
-attributes the decision is allowed to read. Two consequences of that contract are silent
-until the application runs or refuses to build, and both are settled by the pair of files:
+attributes the decision is allowed to read. The consequences of that contract are silent
+until the application runs or refuses to build, and they are settled by this module:
 
 - code/per-object-permissions-need-common: an object asking for per-object permissions still
   needs the common handler `ВычислитьРазрешенияДоступа` in its module. It may return an empty
@@ -23,6 +23,28 @@ Both are narrow on purpose. The field check runs only inside the body of the per
 handler (a variable named `Запись` elsewhere in the module is not this record) and only when
 the yaml lists the fields at all - an object that declares none is a different defect and is
 left alone rather than guessed at.
+
+- code/permission-handlers-need-recalc: the platform never calls a permission handler by
+  itself. The documentation ("Пересчет разрешений и экземпляров ключей") requires an explicit
+  `<Entity>.RecomputeAccessPermissions()` in a project-update handler both when the
+  algorithm changes and when an access-controlled element is added - without it the edit has
+  no effect on existing data, while the deploy looks successful. The rule reports a module
+  that declares any of the four computation handlers while the project calls the recompute
+  method for that entity nowhere.
+
+  The narrowings, each a measured decision:
+
+  * the judged kinds come from the DATA, not from a list: only a kind whose stdlib record
+    carries the recompute method is judged. A rights element (PrivilegeOnAction and kin)
+    declares the same-named handler but has no recompute method at all - its currency is
+    kept by key recomputation, a different mechanism (verified live on a project);
+  * a recompute call whose receiver is not a project entity name silences the rule for the
+    WHOLE project: the documentation itself shows the loop form over all catalogs, where
+    the receiver is a loop variable, and guessing what such a loop covers would fabricate
+    false positives;
+  * a call anywhere in the project counts - the documentation asks for the project-update
+    handler, but a recompute reachable from seeding or an administrative action keeps the
+    permissions current too, and judging the call site would argue with working projects.
 """
 
 from __future__ import annotations
@@ -79,12 +101,33 @@ MESSAGES = {
               "Entity is not defined\"). {n[Сущность]} itself stays the namespace of "
               "{n[Сущность]}.{n[Право]}.",
     },
+    "code/permission-handlers-need-recalc.title": {
+        "ru": "Обработчик разрешений без пересчёта",
+        "en": "A permission handler with no recomputation",
+    },
+    "code/permission-handlers-need-recalc.missing": {
+        "ru": "Модуль объявляет '{handler}', но нигде в проекте не вызван "
+              "'{name}.ПересчитатьРазрешенияДоступа()' – платформа обработчик сама не "
+              "вызывает: без пересчёта правка алгоритма прав не действует на существующих "
+              "данных, а деплой выглядит успешным. Добавьте пересчёт в обработчик "
+              "@ОбновлениеПроекта.",
+        "en": "The module declares '{handler}', but "
+              "'{name}.{n[ПересчитатьРазрешенияДоступа]}()' is called nowhere in the "
+              "project – the platform never calls the handler by itself: without a "
+              "recomputation an edit of the permission algorithm has no effect on existing "
+              "data, while the deploy looks successful. Add the recomputation to an "
+              "@{n[ОбновлениеПроекта]} update handler.",
+    },
 }
 i18n.register(MESSAGES)
 
 _PER_OBJECT = "РазрешенияВычисляютсяДляКаждогоОбъекта"
 _COMMON_HANDLER = "ВычислитьРазрешенияДоступа"
 _PER_OBJECT_HANDLER = "ВычислитьРазрешенияДоступаДляОбъектов"
+_KEYS_READ_HANDLER = "ВычислитьКлючиДоступаДляЧтения"
+_KEYS_WRITE_HANDLER = "ВычислитьКлючиДоступаДляИзменения"
+_RECALC = "ПересчитатьРазрешенияДоступа"
+_RECALC_OBJECTS = "ПересчитатьРазрешенияДоступаДляОбъектов"
 _RECORD = "Запись"
 _ENTITY = "Сущность"
 
@@ -214,6 +257,115 @@ def per_object_permissions_need_common(facts: dict[str, dict]) -> Iterable[Diagn
             "code/per-object-permissions-need-common", Severity.WARNING,
             i18n.t("code/per-object-permissions-need-common.missing",
                    name=fact["name"], rights=", ".join(fact["rights"])),
+        )
+
+
+@lru_cache(maxsize=1)
+def _recalc_names() -> tuple[frozenset[str], frozenset[str], frozenset[str]]:
+    """(triggering handlers, recompute methods, judged kinds) - all from the data.
+
+    A kind is judged only when its stdlib record carries the recompute method: a rights
+    element declares the same-named handler yet has no such method at all, and its currency
+    is kept by key recomputation - flagging it would demand a call that cannot compile.
+    An empty kind set (no Element data) switches the rule off.
+    """
+    handlers = frozenset().union(
+        _forms(_COMMON_HANDLER), _forms(_PER_OBJECT_HANDLER),
+        _forms(_KEYS_READ_HANDLER), _forms(_KEYS_WRITE_HANDLER),
+    )
+    recalc = frozenset().union(_forms(_RECALC), _forms(_RECALC_OBJECTS))
+    try:
+        members = dataset.load_json("stdlib.json").get("type_members") or {}
+    except Exception:  # noqa: BLE001 - no data, no rule
+        members = {}
+    kinds = frozenset(
+        kind for kind, record in members.items()
+        if _RECALC in (record.get("methods") or ())
+    )
+    return handlers, recalc, kinds
+
+
+dataset.register_reset(_recalc_names.cache_clear)
+
+
+def _recalc_mapper(source: SourceFile) -> dict | None:
+    """The map phase. Every object yaml contributes its name and kind - the reduce needs
+    the full name set to tell a specific recompute receiver from a generic one (a loop
+    variable). A module contributes the permission handlers it declares, with their
+    positions, and the receivers of the recompute calls it makes."""
+    handlers, recalc, kinds = _recalc_names()
+    if not kinds:
+        return None
+    if source.kind == "yaml":
+        if not _HAVE_YAML:
+            return None
+        data, error = _parsed(source)
+        if error is not None or not isinstance(data, dict):
+            return None
+        kind = object_kind(data)
+        name = data.get("Имя") or data.get("Name")
+        if not kind or not isinstance(name, str) or not name:
+            return None
+        return {"k": "p", "stem": _pair_stem(source.rel), "name": name, "kind": kind}
+    if source.kind != "xbsl":
+        return None
+    if not any(name in source.text for name in handlers | recalc):
+        return None
+    toks = code_tokens(source)
+    _decls, methods = _module_decls(toks)
+    declared: list[tuple[str, int, int]] = []
+    n = len(toks)
+    for name, _annotations, anchor in methods:
+        if name not in handlers:
+            continue
+        t = toks[anchor + 1] if anchor + 1 < n else toks[anchor]
+        declared.append((name, t.line, t.col))
+    receivers: list[str] = []
+    for i, t in enumerate(toks):
+        if (t.kind == "IDENT" and t.value in recalc
+                and i >= 2 and toks[i - 1].kind == "OP" and toks[i - 1].value == "."
+                and toks[i - 2].kind == "IDENT"
+                and i + 1 < n and toks[i + 1].kind == "OP" and toks[i + 1].value == "("):
+            receivers.append(toks[i - 2].value)
+    if not declared and not receivers:
+        return None
+    return {"k": "m", "stem": _pair_stem(source.rel),
+            "declared": declared, "receivers": receivers}
+
+
+@rule(
+    "code/permission-handlers-need-recalc",
+    "code/permission-handlers-need-recalc.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_recalc_mapper,
+)
+def permission_handlers_need_recalc(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    objects = {f["stem"]: f for f in facts.values() if f["k"] == "p"}
+    names = {f["name"] for f in objects.values()}
+    _handlers, _recalc_forms, kinds = _recalc_names()
+    recalled: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] != "m":
+            continue
+        for receiver in fact["receivers"]:
+            if receiver in names:
+                recalled.add(receiver)
+            else:
+                # A loop variable or another indirection: what it covers cannot be told,
+                # and guessing would fabricate findings - the rule stands down entirely.
+                return
+    for rel, fact in facts.items():
+        if fact["k"] != "m" or not fact["declared"]:
+            continue
+        entity = objects.get(fact["stem"])
+        if entity is None or entity["kind"] not in kinds:
+            continue  # no paired yaml, or a kind with no recompute method
+        if entity["name"] in recalled:
+            continue
+        handler, line, col = fact["declared"][0]
+        yield Diagnostic(
+            rel, line, col, "code/permission-handlers-need-recalc", Severity.WARNING,
+            i18n.t("code/permission-handlers-need-recalc.missing",
+                   name=entity["name"], handler=handler),
         )
 
 
