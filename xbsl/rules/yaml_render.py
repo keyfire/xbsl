@@ -1,8 +1,9 @@
-"""Tier D: what the renderer silently drops – an empty sized group and an over-long hint.
+"""Tier D: what the renderer silently drops – an empty sized group, an over-long hint, a
+nullable date input.
 
-Both gotchas share a shape: the file is valid, the compiler is happy, the application deploys,
-and the screen simply does not show what the author wrote. Nothing but a rule catches that
-before a human notices it in a browser.
+The gotchas here share a shape: the file is valid, the compiler is happy, the application
+deploys, and the screen simply does not show what the author wrote. Nothing but a rule catches
+that before a human notices it in a browser.
 
 - `yaml/empty-group-sized` – a `Группа` with a fixed `Высота`/`Ширина` and no `Содержимое` is
   thrown out of the DOM entirely: the spacer it was meant to be leaves no gap at all (found
@@ -11,6 +12,12 @@ before a human notices it in a browser.
 - `yaml/hint-too-long` – the renderer cuts a `Подсказка` off with an ellipsis at about 290
   characters, and the tail is not shown at all: there is no scroll and no "more" affordance,
   so the end of a long explanation is simply lost.
+- `yaml/date-input-needs-plain-date` – `Edit<Date?>` is silently not rendered: no field,
+  no apply-time error, and a group that held only such fields disappears entirely (found on a
+  live project, 2026-08: two date fields read as "the change did not apply"). The cure is a
+  plain type – the attribute `Type: Date`, the field `Edit<Date>`, "not set" expressed as
+  the empty date. Only `Date` is judged: the `DateTime`/`Time` siblings have not been
+  verified on a live stand, and silence is the safe side until they are.
 
 The limit is deliberately checked with a margin (the exact cut-off depends on the font and the
 width, and the measured value is about 290): only a hint that is longer than the measured limit
@@ -22,6 +29,7 @@ apart.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 
 from xbsl import i18n, uischema
@@ -62,6 +70,22 @@ MESSAGES = {
         "en": "A {n[Подсказка]} of {length} characters – the renderer cuts it off at about {limit}, "
               "and the tail is not shown at all. Shorten the text to fit.",
     },
+    "yaml/date-input-needs-plain-date.title": {
+        "ru": "Поле ввода даты с nullable-типом не рисуется",
+        "en": "A nullable date input field does not render",
+    },
+    "yaml/date-input-needs-plain-date.invisible": {
+        "ru": "Тип '{field}<{spelled}>' – поле ввода даты, допускающей пустое значение, платформа "
+              "молча не отрисовывает: ни поля, ни ошибки применения, а группа, оставшаяся без "
+              "содержимого, исчезает целиком. Объявите тип непустым – реквизит "
+              "'{n[Тип]}: {arg}', поле '{field}<{arg}>'; 'не задано' выражается пустой датой "
+              "'{arg}{{}}'.",
+        "en": "Type '{field}<{spelled}>' – an input field for a date that allows the empty value "
+              "is silently not rendered: no field, no apply-time error, and a group left without "
+              "content disappears entirely. Make the type plain – the attribute "
+              "'{n[Тип]}: {arg}', the field '{field}<{arg}>'; 'not set' is expressed by the "
+              "empty date '{arg}{{}}'.",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -73,6 +97,11 @@ HINT_LIMIT = 290
 HINT_MARGIN = 20
 
 _SIZE_KEYS = ("Высота", "Ширина")
+
+#: A date input with a nullable parameter, both spellings, `?` or `|?` flavour of nullable.
+_NULLABLE_DATE_INPUT_RE = re.compile(
+    r"^\s*(ПолеВвода|Edit)\s*<\s*((Дата|Date)\s*(?:\?|\|\s*\?))\s*>\s*$"
+)
 
 
 def _fixed_size(node) -> bool:
@@ -135,6 +164,39 @@ def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
                 ),
             )
             return  # one finding per node: both axes are the same defect
+
+
+@rule(
+    "yaml/date-input-needs-plain-date", "yaml/date-input-needs-plain-date.title", "D",
+    severity=Severity.WARNING,
+)
+def date_input_needs_plain_date(source: SourceFile) -> Iterable[Diagnostic]:
+    """`ПолеВвода<Дата?>` – the renderer silently drops the field; the type must be plain.
+
+    The position points at the argument inside the value – the place to actually edit. A
+    block scalar is text, not a type, and is skipped the same way the reference rule does.
+    """
+    for mapping in _object_mappings(source):
+        entry = _scalar_entries(mapping).get("Тип")
+        if entry is None or not isinstance(entry[1], yaml.ScalarNode):
+            continue
+        value_node = entry[1]
+        if value_node.style in ("|", ">"):
+            continue
+        m = _NULLABLE_DATE_INPUT_RE.match(value_node.value)
+        if m is None:
+            continue
+        quote = 1 if value_node.style in ("'", '"') else 0
+        yield Diagnostic(
+            source.rel,
+            value_node.start_mark.line + 1,
+            value_node.start_mark.column + 1 + m.start(2) + quote,
+            "yaml/date-input-needs-plain-date", Severity.WARNING,
+            i18n.t(
+                "yaml/date-input-needs-plain-date.invisible",
+                field=m.group(1), spelled=m.group(2), arg=m.group(3),
+            ),
+        )
 
 
 @rule("yaml/hint-too-long", "yaml/hint-too-long.title", "D", severity=Severity.WARNING)

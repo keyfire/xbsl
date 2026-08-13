@@ -176,6 +176,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "form/unknown-handler", page: "topics/form-component", anchor: "события" },
   { match: (r) => r === "yaml/enum-needs-nullable", page: ENUM, anchor: "элементы" },
   { match: (r) => r === "yaml/ref-needs-nullable", page: TYPES, anchor: "тип-неопределено" },
+  { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },
   { match: (r) => r === "code/resource-bare-name", page: IMAGES },
   { match: (r) => r === "code/unknown-resource", page: IMAGES },
   { match: (r) => r === "yaml/no-expression-in-literal", page: "topics/label-component" },

@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 140.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 141.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -217,6 +217,7 @@ sidebar:
 | `yaml/unknown-attribute-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ, которого класс самого реквизита не объявляет (`Длина` у обычного реквизита – её объявляет стандартный `Код`, а у числового есть `ДлинаЦелойЧасти`) – применение сборки отвергает объект |
 | `yaml/empty-group-sized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Пустая `Группа` с `Высота`/`Ширина` – рендер выбрасывает узел, зазора не будет |
 | `yaml/hint-too-long` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `Подсказка` длиннее предела отрисовки – хвост не показывается вовсе |
+| `yaml/date-input-needs-plain-date` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ПолеВвода<Дата?>` – поле ввода даты, допускающей пустое значение, рендер молча не рисует; тип делается непустым, "не задано" – пустая дата [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `code/client-available-needs-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | `@ДоступноСКлиента` у метода модуля компонента интерфейса, который не статический и без `@Контекстный` – тип компонента не синглтонный, применение отвергает модификатор [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/server-module-in-client-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение `Модуль.Член(...)` к общему модулю с `Окружение: Сервер` из метода, исполняемого на клиенте (компонент интерфейса, команда, клиентский общий модуль) – на клиенте типа нет [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/component-in-server-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение `Компонент.Член(...)` к компоненту интерфейса из кода, компилируемого для сервера – метод `@НаСервере` где угодно либо метод без аннотации в серверном или клиент-серверном модуле: тип компонента живёт на клиенте, и серверная компиляция отвечает "Переменная X не определена" [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |

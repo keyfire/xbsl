@@ -12,6 +12,25 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **Rule `yaml/date-input-needs-plain-date`: a nullable date input is silently not rendered.**
+  `Edit<Date?>` deploys cleanly, but the platform draws neither the field nor an
+  apply-time error, and a group left without content disappears entirely - on a live project
+  two such fields read as "the change did not apply". The cure is a plain type: the attribute
+  `Type: Date`, the field `Edit<Date>`, "not set" expressed by the empty date. Only
+  `Date` is judged - the `DateTime`/`Time` siblings are left alone until verified on a live
+  stand.
+
+### Fixed
+- **`yaml/ref-needs-nullable` judges unions.** A compiler probe showed that a union carrying
+  a reference member and no nullable member fails to apply - and a MIXED union
+  (`String|Goods.Ref`) fails the same way, both in the attribute position and inside
+  `Edit<...>`. The rule used to skip unions altogether; now it flags both shapes and
+  suggests `|?`. A union with a nullable member (a trailing `?` on a member counts) or with
+  a member outside the plain-chain shape stays silent. Corpus runs: zero false findings.
+
 ## 2026-08-11 – 0.62.0
 
 ### Added

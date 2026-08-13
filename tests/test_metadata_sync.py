@@ -108,10 +108,12 @@ _COUNTS = {
     "docs/RULES.md": re.compile(r"Currently there are\s+(\d+)\s+rules"),
     "README.ru.md": re.compile(r"\*\*Правила\.\*\*\s*(\d+)\s+правил"),
     "README.md": re.compile(r"\*\*Rules\.\*\*\s*(\d+)\s+rules"),
-    "docs/index.ru.md": re.compile(r"(\d+)\s+правил в четырёх тирах"),
+    # The Russian counters accept the case endings the numeral dictates ("правило",
+    # "правила", "правил") - the count must not be hostage to grammar.
+    "docs/index.ru.md": re.compile(r"(\d+)\s+правил[оа]? в четырёх тирах"),
     "docs/index.md": re.compile(r"(\d+)\s+rules in four tiers"),
     # "Rules in depth" moved out of the guide when it was split by task.
-    "docs/linting.ru.md": re.compile(r"Полный перечень всех\s+(\d+)\s+правил"),
+    "docs/linting.ru.md": re.compile(r"Полный перечень все(?:х|го)\s+(\d+)\s+правил[оа]?"),
     "docs/linting.md": re.compile(r"The full list of all\s+(\d+)\s+rules"),
 }
 
