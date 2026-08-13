@@ -1,7 +1,7 @@
 // Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
 // that serve the metadata properties panel. Run with plain node (see npm test).
 
-import { collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, setFormKeyAliases } from "../src/formPreviewCore";
+import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, setFormKeyAliases } from "../src/formPreviewCore";
 
 let failures = 0;
 
@@ -96,6 +96,75 @@ if (result.ok) {
   check("node tooltip without a name is the bare type", html.includes('title="Надпись"'));
 }
 
+// A localization reference (`$Словарь.Ключ`) shows its last segment with the full key in the
+// tooltip: the real text lives in the localization files, the wireframe stays readable without them.
+const LOC_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Заголовок: $ОсновноеЛокализация.ЗаголовокФормы",
+  "    Содержимое:",
+  "        Тип: ПолеВвода<Строка>",
+  "        Заголовок: $ОсновноеЛокализация.Название",
+  "        Обязательное: Истина",
+  "",
+].join("\n");
+const loc = renderFormPreview(LOC_FORM);
+check("локализация: последний сегмент ключа", loc.ok && loc.html.includes(">Название</span>") && !loc.html.includes(">$ОсновноеЛокализация.Название<"));
+check("локализация: полный ключ в подсказке", loc.ok && loc.html.includes('title="$ОсновноеЛокализация.Название"'));
+check("обязательное поле: звёздочка", loc.ok && loc.html.includes('class="req"'));
+
+// A project component whose yaml was handed over by the host is drawn with its own content; the
+// offsets of the nested file are stripped - navigation goes to the USE site. No yaml - a placeholder.
+const SUB_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        Тип: КарточкаОблако",
+  "        Имя: Карточка1",
+  "",
+].join("\n");
+const SUB_COMPONENT = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Имя: КарточкаОблако",
+  "Наследует:",
+  "    Тип: Форма",
+  "    Содержимое:",
+  "        Тип: Надпись",
+  "        Значение: Текст карточки",
+  "",
+].join("\n");
+const nested = renderFormPreview(SUB_FORM, {}, { КарточкаОблако: SUB_COMPONENT });
+check("вложенный компонент: содержимое из его yaml", nested.ok && nested.html.includes("Текст карточки") && nested.html.includes('class="subc"'));
+check(
+  "вложенный компонент: одно смещение - место использования",
+  nested.ok && collectDataOffsets(nested.html).length === 1 && collectDataOffsets(nested.html)[0] === SUB_FORM.indexOf("Тип: КарточкаОблако")
+);
+const bare = renderFormPreview(SUB_FORM);
+check("без yaml компонента - заглушка", bare.ok && bare.html.includes('class="unknown'));
+check(
+  "collectComponentTypes отдаёт кандидатов без нарисованных типов",
+  JSON.stringify(collectComponentTypes(SUB_FORM)) === JSON.stringify(["КарточкаОблако"]) &&
+    collectComponentTypes(SUB_COMPONENT).length === 1 // Form is an inheritance type, not a drawn component
+);
+
+// A sectioned application: no content, a navigation panel instead - the wireframe draws the app chrome.
+const APP_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Тип: СтандартноеКлиентскоеПриложениеСРазделами",
+  "    ОриентацияПанелиНавигации: Вертикальная",
+  "    КомандныйИнтерфейсПанелиНавигации:",
+  "        Тип: ФрагментКомандногоИнтерфейса",
+  "        Элементы:",
+  "            -",
+  "                Тип: НавигационнаяКоманда",
+  "                Представление: Программы",
+  "                ТипФормы: ПрограммыФормаСписка",
+  "",
+].join("\n");
+const app = renderFormPreview(APP_FORM);
+check("приложение с разделами: панель навигации", app.ok && app.html.includes('class="app vert"') && app.html.includes("Программы"));
+
 const notForm = renderFormPreview("Ид: 1\nИмя: Просто\n");
 check("не-форма распознана", !notForm.ok && notForm.reason === "not-form");
 
@@ -183,7 +252,7 @@ check(
 const withImg = renderFormPreview(IMG_FORM, { "info.svg": "data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=" });
 check("Картинка renders an <img> when the resource is resolved", withImg.ok && withImg.html.includes("<img class=\"rimg\" src=\"data:image/svg+xml;base64,"));
 const withoutImg = renderFormPreview(IMG_FORM);
-check("Картинка keeps the placeholder when the resource is not resolved", withoutImg.ok && !withoutImg.html.includes("<img") && withoutImg.html.includes("🖼"));
+check("Картинка keeps the placeholder when the resource is not resolved", withoutImg.ok && !withoutImg.html.includes("<img") && withoutImg.html.includes('class="iph'));
 
 // --- buttons: icon display kind, danger tint, explicit sizes -------------------------------
 

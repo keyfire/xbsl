@@ -26,6 +26,7 @@
 
 import * as vscode from "vscode";
 import {
+  collectComponentTypes,
   collectDataOffsets,
   collectResourceImages,
   esc,
@@ -34,6 +35,7 @@ import {
   restoredTargetUri,
   selectionForCursor,
   setFormKeyAliases,
+  setPreviewStrings,
 } from "./formPreviewCore";
 import { formKeyAliases } from "./uiSchemaClient";
 import { DataHost, DataSnapshot, FormDataModel } from "./formData";
@@ -57,9 +59,37 @@ const OPEN_CONTEXT = "xbsl.formDesigner.open";
 interface ViewState {
   zoom: number; // percent
   theme: "light" | "dark" | "editor";
+  //: The emulated device size (the wireframe page floats at it on a neutral canvas); null is
+  //: the fluid layout that fills the pane - the designer's original behavior.
+  dev: { w: number; h: number } | null;
 }
 
-const DEFAULT_VIEW: ViewState = { zoom: 100, theme: "light" };
+const DEFAULT_VIEW: ViewState = { zoom: 100, theme: "light", dev: null };
+
+// The device presets of the platform's own web designer (its toolbar lists exactly these).
+const DEVICE_PRESETS: Record<string, [number, number]> = {
+  "iphone-se": [375, 667],
+  "iphone-12pro": [390, 844],
+  "pixel-5": [393, 851],
+  "galaxy-s8": [360, 740],
+  "ipad-air": [820, 1180],
+  "ipad-mini": [768, 1024],
+  "pc-small": [1024, 768],
+  "pc-medium": [1366, 768],
+  "pc-fullhd": [1920, 1080],
+};
+
+const DEVICE_LABELS: Record<string, string> = {
+  "iphone-se": "iPhone SE",
+  "iphone-12pro": "iPhone 12 Pro",
+  "pixel-5": "Pixel 5",
+  "galaxy-s8": "Galaxy S8+",
+  "ipad-air": "iPad Air",
+  "ipad-mini": "iPad Mini",
+  "pc-small": "Small PC",
+  "pc-medium": "Medium PC",
+  "pc-fullhd": "Full HD",
+};
 
 // Zoom, theme and the splitter positions are the DESIGNER's settings, not one form's: they are
 // shared by every open panel and remembered globally.
@@ -110,6 +140,9 @@ function labels(): Record<string, string> {
     empty: vscode.l10n.t("Open a form yaml (InterfaceComponent)."),
     zoomIn: vscode.l10n.t("Zoom in"),
     zoomOut: vscode.l10n.t("Zoom out"),
+    deviceAuto: vscode.l10n.t("Auto"),
+    deviceCustom: vscode.l10n.t("Custom size"),
+    rotate: vscode.l10n.t("Rotate"),
   };
 }
 
@@ -209,6 +242,50 @@ async function resolveResources(names: string[]): Promise<Record<string, string>
       const uri = await resolveResource(name);
       if (uri) {
         out[name] = uri;
+      }
+    })
+  );
+  return out;
+}
+
+// The yaml texts of the PROJECT components a form uses (`Тип: КарточкаОблако` ->
+// КарточкаОблако.yaml somewhere in the workspace): with them the wireframe draws the
+// component's content instead of a placeholder. Platform type names simply have no such file.
+// Cached for the session, like the resources: fine while editing ONE form, the refresh button
+// re-reads nothing here by design (the cache keeps misses too, or every render would search
+// the workspace for every platform type over and over).
+const componentCache = new Map<string, string | null>();
+
+async function resolveComponent(name: string, self: vscode.Uri): Promise<string | null> {
+  const cached = componentCache.get(name);
+  if (cached !== undefined) {
+    return cached;
+  }
+  let text: string | null = null;
+  try {
+    const found = await vscode.workspace.findFiles(`**/${name}.yaml`, undefined, 2);
+    const hit = found.find((f) => f.toString() !== self.toString());
+    if (hit) {
+      const raw = Buffer.from(await vscode.workspace.fs.readFile(hit)).toString("utf8");
+      // Only an interface component is drawable; other namesakes (a subsystem, an enum) are not.
+      if (raw.includes("КомпонентИнтерфейса") || raw.includes("InterfaceComponent")) {
+        text = raw;
+      }
+    }
+  } catch {
+    text = null;
+  }
+  componentCache.set(name, text);
+  return text;
+}
+
+async function resolveComponents(names: string[], self: vscode.Uri): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  await Promise.all(
+    names.map(async (name) => {
+      const text = await resolveComponent(name, self);
+      if (text !== null) {
+        out[name] = text;
       }
     })
   );
@@ -376,11 +453,20 @@ class Designer implements StructureHost, DataHost {
     // Russian key). Asked once per session and cached by the client.
     const pairs = await formKeyAliases();
     setFormKeyAliases(pairs.aliases, pairs.types);
-    const resources = await resolveResources(collectResourceImages(text));
+    // Project components used by the form, with THEIR resource images: a nested card shows its
+    // own icons, not placeholders.
+    const components = await resolveComponents(collectComponentTypes(text), this.target);
+    const imageNames = new Set(collectResourceImages(text));
+    for (const sub of Object.values(components)) {
+      for (const name of collectResourceImages(sub)) {
+        imageNames.add(name);
+      }
+    }
+    const resources = await resolveResources([...imageNames]);
     if (my !== this.renderSeq) {
       return;
     }
-    const result = renderFormPreview(text, resources);
+    const result = renderFormPreview(text, resources, components);
     let body: string;
     let title = "";
     if (result.ok) {
@@ -635,8 +721,13 @@ class Designer implements StructureHost, DataHost {
         return;
       }
       case "view": {
-        // Zoom and theme are applied inside the webview; here we only remember the choice.
-        const next = { zoom: Number(m.zoom), theme: m.theme } as ViewState;
+        // Zoom, theme and the device are applied inside the webview; here we only remember them.
+        const rawDev = m.dev as { w?: unknown; h?: unknown } | null | undefined;
+        const dev =
+          rawDev && typeof rawDev.w === "number" && typeof rawDev.h === "number"
+            ? { w: rawDev.w, h: rawDev.h }
+            : null;
+        const next = { zoom: Number(m.zoom), theme: m.theme, dev } as ViewState;
         if (isViewState(next)) {
           view = next;
           void this.context.globalState.update(STATE_KEY, view);
@@ -655,7 +746,10 @@ class Designer implements StructureHost, DataHost {
 
 function isViewState(v: unknown): v is ViewState {
   const s = v as ViewState;
-  return !!s && typeof s.zoom === "number" && (s.theme === "light" || s.theme === "dark" || s.theme === "editor");
+  // A state saved before the device toolbar has no `dev` - it reads as the fluid layout.
+  const devOk =
+    s?.dev === undefined || s?.dev === null || (typeof s.dev.w === "number" && typeof s.dev.h === "number");
+  return !!s && typeof s.zoom === "number" && (s.theme === "light" || s.theme === "dark" || s.theme === "editor") && devOk;
 }
 
 // A form gets ONE panel: opening it again brings that panel forward instead of making a second
@@ -723,9 +817,27 @@ export function registerFormDesigner(
   makeModels = models;
   const saved = context.globalState.get(STATE_KEY);
   if (isViewState(saved)) {
-    view = saved;
+    view = { zoom: saved.zoom, theme: saved.theme, dev: saved.dev ?? null };
   }
   layout = sanitizeLayout(context.globalState.get(LAYOUT_KEY));
+
+  // The wireframe's own placeholder texts follow the editor's language; the core defaults to
+  // the platform's canonical Russian and stays free of vscode.
+  setPreviewStrings({
+    label: vscode.l10n.t("Label"),
+    button: vscode.l10n.t("Button"),
+    checkbox: vscode.l10n.t("Checkbox"),
+    section: vscode.l10n.t("Section"),
+    mainCommand: vscode.l10n.t("Main command"),
+    form: vscode.l10n.t("form"),
+    add: vscode.l10n.t("Add"),
+    search: vscode.l10n.t("Search..."),
+    option: vscode.l10n.t("Option"),
+    dropText: vscode.l10n.t("Drop files into the window or {0} manually"),
+    dropLink: vscode.l10n.t("add them"),
+    fileDropText: vscode.l10n.t("{0} or drag files into this area"),
+    fileDropLink: vscode.l10n.t("Choose files"),
+  });
 
   // An event names a document, not a panel: it goes to the designer of THAT form, wherever its
   // panel sits and whether or not it is the active one.
@@ -818,6 +930,20 @@ function shell(webview: vscode.Webview, extensionUri: vscode.Uri, target: vscode
   ]
     .map((o) => `<option value="${o.value}"${o.value === view.theme ? " selected" : ""}>${esc(o.label)}</option>`)
     .join("");
+  // The device list of the platform's designer toolbar: fluid, the presets, a custom size.
+  const devValue = view.dev
+    ? Object.keys(DEVICE_PRESETS).find(
+        (k) => DEVICE_PRESETS[k][0] === view.dev!.w && DEVICE_PRESETS[k][1] === view.dev!.h
+      ) ?? "custom"
+    : "auto";
+  const deviceOptions = [
+    `<option value="auto"${devValue === "auto" ? " selected" : ""}>${esc(vscode.l10n.t("Auto"))}</option>`,
+    ...Object.keys(DEVICE_PRESETS).map(
+      (k) =>
+        `<option value="${k}"${devValue === k ? " selected" : ""}>${esc(DEVICE_LABELS[k])} ${DEVICE_PRESETS[k][0]}×${DEVICE_PRESETS[k][1]}</option>`
+    ),
+    `<option value="custom"${devValue === "custom" ? " selected" : ""}>${esc(vscode.l10n.t("Custom size"))}</option>`,
+  ].join("");
   return `<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data: ${webview.cspSource}` })}
@@ -850,6 +976,10 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .hbtn:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.2)); }
   .hbtn.on { opacity: 1; color: var(--vscode-charts-blue, #3794ff); }
   #zoombox { display: inline-flex; align-items: center; gap: 2px; }
+  #devsize { display: inline-flex; align-items: center; gap: 2px; }
+  #devsize input { width: 40px; background: var(--vscode-input-background, transparent);
+    color: var(--vscode-input-foreground, inherit); border: 1px solid var(--vscode-input-border, rgba(128,128,128,.4));
+    border-radius: 3px; font-size: 11px; font-family: inherit; padding: 0 2px; }
   .pane-head select { background: var(--vscode-dropdown-background, transparent); color: var(--vscode-dropdown-foreground, inherit);
     border: 1px solid var(--vscode-dropdown-border, rgba(128,128,128,.4)); border-radius: 3px;
     font-size: 11px; font-family: inherit; padding: 0 2px; }
@@ -903,74 +1033,129 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     color: var(--vscode-menu-selectionForeground, inherit); }
   .ctx .sep { height: 1px; margin: 3px 6px; background: var(--vscode-menu-separatorBackground, rgba(128,128,128,.35)); }
   /* --- the wireframe frame (its own light/dark/editor theme, like a form on a page) --- */
+  /* The palette is MEASURED on the platform's web designer (preview-app, light theme) and the
+     site's own dark scheme; the editor theme maps the same roles onto VS Code variables. */
   #frame .theme-editor {
     --fp-bg: var(--vscode-editor-background); --fp-fg: var(--vscode-foreground);
-    --fp-border: var(--vscode-panel-border); --fp-soft: rgba(128,128,128,.16);
-    --fp-input-bg: var(--vscode-input-background); --fp-input-border: var(--vscode-input-border, rgba(128,128,128,.5));
-    --fp-btn-bg: var(--vscode-button-background); --fp-btn-fg: var(--vscode-button-foreground);
-    --fp-link: var(--vscode-textLink-foreground); --fp-focus: var(--vscode-focusBorder);
-    --fp-sel-bg: rgba(64,128,255,.12);
+    --fp-fg2: var(--vscode-descriptionForeground, rgba(128,128,128,.9));
+    --fp-val: var(--vscode-input-foreground, var(--vscode-foreground));
+    --fp-border: var(--vscode-panel-border); --fp-soft: rgba(128,128,128,.14);
+    --fp-input-bg: var(--vscode-input-background); --fp-input-border: var(--vscode-input-border, rgba(128,128,128,.55));
+    --fp-accent: var(--vscode-button-background); --fp-accent-fg: var(--vscode-button-foreground);
+    --fp-btn2-bg: rgba(128,128,128,.25); --fp-btn2-fg: var(--vscode-foreground);
+    --fp-link: var(--vscode-textLink-foreground); --fp-danger: #ff3e33;
+    --fp-focus: var(--vscode-focusBorder); --fp-sel-bg: rgba(64,128,255,.12);
   }
   #frame .theme-light {
-    --fp-bg: #ffffff; --fp-fg: #1f2328; --fp-border: #d5d9de; --fp-soft: rgba(31,35,40,.07);
-    --fp-input-bg: #ffffff; --fp-input-border: #c3c9d0;
-    --fp-btn-bg: #ffdd00; --fp-btn-fg: #1c1c1f; --fp-link: #1668dc; --fp-focus: #1668dc;
-    --fp-sel-bg: rgba(22,104,220,.08);
+    --fp-bg: #ffffff; --fp-fg: #1c1c1f; --fp-fg2: #81818a; --fp-val: #4d4d54;
+    --fp-border: #dbdbdb; --fp-soft: #f2f2f2;
+    --fp-input-bg: #ffffff; --fp-input-border: rgba(153,153,153,.9);
+    --fp-accent: #ffdd00; --fp-accent-fg: #403700;
+    --fp-btn2-bg: #dbdbdb; --fp-btn2-fg: #1c1c1f;
+    --fp-link: #007aff; --fp-danger: #ff3e33;
+    --fp-focus: #1668dc; --fp-sel-bg: rgba(22,104,220,.08);
   }
   #frame .theme-dark {
-    --fp-bg: #1e1e1e; --fp-fg: #e6e6e6; --fp-border: #474747; --fp-soft: rgba(230,230,230,.09);
-    --fp-input-bg: #2b2b2b; --fp-input-border: #5a5a5a;
-    --fp-btn-bg: #ffdd00; --fp-btn-fg: #1c1c1f; --fp-link: #58a6ff; --fp-focus: #2f81f7;
-    --fp-sel-bg: rgba(47,129,247,.16);
+    --fp-bg: #1a1a1a; --fp-fg: #ededf2; --fp-fg2: #84848c; --fp-val: #b8b8bf;
+    --fp-border: #3a3a40; --fp-soft: #2a2a2e;
+    --fp-input-bg: #232327; --fp-input-border: rgba(153,153,153,.55);
+    --fp-accent: #ffdd00; --fp-accent-fg: #403700;
+    --fp-btn2-bg: #3d3d44; --fp-btn2-fg: #ededf2;
+    --fp-link: #3395ff; --fp-danger: #ff3e33;
+    --fp-focus: #2f81f7; --fp-sel-bg: rgba(47,129,247,.16);
   }
-  #canvas { flex: 1; overflow: auto; background: var(--fp-bg); color: var(--fp-fg); padding: 0 14px 14px; }
-  .form-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; padding-top: 10px; }
-  .form-title { font-size: 1.35em; font-weight: 600; }
-  .form-type { opacity: .55; font-size: .85em; }
-  .cmdbar { display: flex; gap: 6px; padding: 6px 0 10px; border-bottom: 1px solid var(--fp-border); margin-bottom: 10px; flex-wrap: wrap; }
-  .col { display: flex; flex-direction: column; gap: 7px; align-items: flex-start; }
-  #canvas .row { display: flex; flex-direction: row; gap: 9px; align-items: flex-start; flex-wrap: wrap; }
+  /* The platform types everything in Noto Sans Display: captions and cells 14px, values,
+     buttons and tabs 16px, the form title 24px regular. */
+  #canvas { flex: 1; overflow: auto; background: var(--fp-bg); color: var(--fp-fg); padding: 0 14px 14px;
+    font-family: "Noto Sans Display", "Noto Sans", var(--vscode-font-family, "Segoe UI"), sans-serif; font-size: 14px; }
+  /* An emulated device: the page floats on the neutral canvas at its own size. */
+  #canvas.devbg { background: var(--vscode-editorGroupHeader-tabsBackground, rgba(128,128,128,.18));
+    display: flex; align-items: flex-start; padding: 14px; }
+  #root.device { background: var(--fp-bg); flex: none; margin: 0 auto; border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,.3); padding: 0 24px 24px; box-sizing: border-box; overflow: hidden; }
+  .form-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; padding-top: 12px; }
+  /* Длинный заголовок-выражение обрезается, как в дизайнере платформы, а не ломает шапку. */
+  .form-title { font-size: 24px; font-weight: 400; line-height: 1.4; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+  .form-title .chip { white-space: nowrap; }
+  .form-type { color: var(--fp-fg2); font-size: 12px; }
+  .form-head .hsp { flex: 1; }
+  .cmdbar { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .cmdbar.pills { gap: 16px; }
+  .cmdbar.footer { display: flex; justify-content: flex-end; gap: 16px; margin-top: 16px; }
+  .searchbar { display: flex; align-items: center; gap: 8px; background: var(--fp-soft); border-radius: 8px;
+    padding: 8px 10px; color: var(--fp-fg2); font-size: 16px; line-height: 24px; margin-bottom: 16px; }
+  .col { display: flex; flex-direction: column; gap: 16px; align-items: flex-start; }
+  #canvas .row { display: flex; flex-direction: row; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
   /* Горизонтальная группа при нехватке места СЖИМАЕТ содержимое, а не вылезает за границу:
      без min-width:0 флекс-элемент не сжимается меньше своего содержимого и налезает на соседа. */
   #canvas .row > *, #canvas .grid > *, #canvas .col > * { min-width: 0; }
   /* Матричная и Бенто - сетка; число колонок задаёт инлайн-стиль по настройкам группы. */
-  #canvas .grid { display: grid; gap: 9px; align-items: start; }
+  #canvas .grid { display: grid; gap: 16px; align-items: start; }
   .form-body { align-items: stretch; }
-  .grp, .card, .unknown, .tabs { position: relative; padding: 11px 9px 9px; border-radius: 4px; min-width: 40px; }
-  .grp { border: 1px dashed rgba(128,128,128,.45); }
+  /* Групп платформа не рисует - каркас держит только позицию для ярлычка имени и подсветку
+     выбора; постоянная пунктирная коробка делала форму клеткой, которой на экране нет. */
+  .grp, .card, .unknown, .tabs { position: relative; min-width: 40px; }
+  .card, .unknown { padding: 16px; border-radius: 16px; }
+  /* Именованной группе ярлычок даёт зазор, чтобы не ложиться на её содержимое. */
+  .grp:has(> .tag) { padding-top: 6px; }
+  .grp > .tag { top: -4px; }
   /* Видимость: Ложь - платформа такой узел не рисует; в каркасе он приглушён, чтобы
      дерево yaml и каркас оставались одной формы. */
   .off { opacity: .38; }
-  /* Видимость выражением: показан ли узел, решает рантайм - помечаем слабее, чем Ложь. */
+  /* Видимость выражением: показан ли узел, решает рантайм - помечаем слабее, чем Ложь.
+     Вложенные условные узлы НЕ перемножают прозрачность - иначе страница из условных секций
+     выцветала до нечитаемости. */
   .cond { opacity: .72; }
-  .card { border: 1px solid var(--fp-border); border-radius: 8px; padding: 13px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  .card.banner { background: var(--fp-soft); }
-  .unknown { border: 1px solid rgba(128,128,128,.55); }
+  .cond .cond, .cond .off { opacity: 1; }
+  /* Вложенный проектный компонент, отрисованный по его собственному yaml. */
+  .subc { position: relative; min-width: 24px; }
+  /* СтандартнаяКарточка: скругление 16, волосяная рамка, без тени - как на платформе. */
+  .card { border: 1px solid var(--fp-border); }
+  .card.banner { background: var(--fp-soft); border-color: transparent; }
+  .unknown { border: 1px dashed rgba(128,128,128,.55); border-radius: 8px; }
   /* Имя заглушки - в потоке: коробка растёт под подпись и не налезает на соседей. */
   .uname { font-size: 9px; opacity: .65; white-space: nowrap; }
-  .tag { position: absolute; top: -8px; left: 8px; z-index: 2; font-size: 9px; opacity: .65; background: var(--fp-bg); padding: 0 4px; border-radius: 3px; white-space: nowrap; }
+  .tag { position: absolute; top: -9px; left: 8px; z-index: 2; font-size: 9px; opacity: .65; background: var(--fp-bg); padding: 0 4px; border-radius: 3px; white-space: nowrap; }
   .ph { opacity: .45; font-style: italic; }
   .chip { font-family: var(--vscode-editor-font-family, monospace); font-size: .85em; background: var(--fp-soft); padding: 0 4px; border-radius: 3px; }
-  .sechead { font-weight: 600; font-size: 1.1em; margin-top: 4px; }
-  .fld { display: inline-flex; flex-direction: column; gap: 3px; min-width: 160px; }
-  .fld-cap { font-size: .85em; opacity: .75; }
-  .inp { border: 1px solid var(--fp-input-border); background: var(--fp-input-bg); border-radius: 4px; padding: 5px 9px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-  .dd { opacity: .6; }
-  .chk { display: inline-block; }
-  .btn { border: 1px solid var(--fp-border); background: transparent; color: var(--fp-fg); border-radius: 4px; padding: 5px 14px; font-size: inherit; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
-  /* Primary button - the native Element yellow (--themeColorPrimaryBtnBg #fd0, text #1c1c1f). */
-  .btn.primary { background: var(--fp-btn-bg); color: var(--fp-btn-fg); border-color: var(--fp-btn-bg); }
-  .btn.link { border-color: transparent; color: var(--fp-link); padding-left: 4px; padding-right: 4px; }
-  .btn.ico { padding: 5px 7px; }
+  .sechead { font-weight: 600; font-size: 24px; line-height: 1.25; color: var(--fp-val); margin-top: 8px; }
+  .lbl { color: var(--fp-val); line-height: 1.4; }
+  .fld { display: inline-flex; flex-direction: column; gap: 4px; min-width: 160px; }
+  .fld-cap { font-size: 14px; line-height: 20px; color: var(--fp-fg2); }
+  .req { color: var(--fp-danger); margin-right: 1px; }
+  .inp { border: 1px solid var(--fp-input-border); background: var(--fp-input-bg); color: var(--fp-val);
+    border-radius: 8px; padding: 8px 10px; font-size: 16px; line-height: 24px;
+    display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .fico { color: #b0b0b0; font-size: 16px; }
+  /* Флажок и радиокнопка: платформенные 24px с рамкой 1.6 и скруглением 6 / кругом. */
+  .chk, .radio { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; line-height: 24px; color: var(--fp-fg); }
+  .cbox, .rdo { width: 24px; height: 24px; border: 1.6px solid var(--fp-input-border); box-sizing: border-box; flex: none; }
+  .cbox { border-radius: 6px; }
+  .rdo { border-radius: 50%; }
+  .rgrp { display: inline-flex; gap: 8px; }
+  /* Кнопки: скругление 8, 16px medium; primary - жёлтая с оливковым текстом, обычная серая,
+     дополнительная - синий текст, пилюли шапки - мягкая заливка и полное скругление. */
+  .btn { border: none; background: var(--fp-btn2-bg); color: var(--fp-btn2-fg); border-radius: 8px;
+    padding: 8px 12px; font-size: 16px; font-weight: 500; line-height: 24px; font-family: inherit;
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+  .btn.primary { background: var(--fp-accent); color: var(--fp-accent-fg); }
+  .btn.link { background: transparent; color: var(--fp-link); padding-left: 4px; padding-right: 4px; }
+  .btn.create { background: transparent; color: var(--fp-link); padding: 0; }
+  .btn.pill { background: var(--fp-soft); color: var(--fp-fg); border-radius: 16px; padding: 4px 10px;
+    font-size: 14px; font-weight: 400; line-height: 24px; }
+  .btn.ico { padding: 8px; }
   .btn .bico { width: 16px; height: 16px; object-fit: contain; display: block; }
   .btn .bico-ph { font-size: 14px; line-height: 1; }
   /* Action danger (ОпасностьДействия): red for Высокая, amber for Средняя. */
-  .btn.dng-hi { color: #d34040; border-color: #d34040; }
-  .btn.dng-mid { color: #c77700; border-color: #c77700; }
-  .btn.primary.dng-hi { background: #d34040; border-color: #d34040; color: #fff; }
-  .btn.primary.dng-mid { background: #e08a00; border-color: #e08a00; color: #fff; }
-  .btn.link.dng-hi, .btn.link.dng-mid { border-color: transparent; }
-  .img { width: 110px; height: 74px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--fp-border); border-radius: 4px; font-size: 24px; background: var(--fp-soft); overflow: hidden; }
+  .btn.dng-hi { color: #d34040; }
+  .btn.dng-mid { color: #c77700; }
+  .btn.primary.dng-hi { background: #d34040; color: #fff; }
+  .btn.primary.dng-mid { background: #e08a00; color: #fff; }
+  /* Картинка-заглушка: серый глиф по размеру компонента, без рамки и фона - как на платформе. */
+  .img { width: 90px; height: 80px; display: flex; align-items: center; justify-content: center;
+    color: #8a8a90; overflow: hidden; }
+  .img .iph { font-size: 40px; opacity: .75; }
   .img .rimg { max-width: 100%; max-height: 100%; object-fit: contain; }
   /* An image repainted by an explicit Цвет: the SVG is the mask, the color is the fill. */
   .img .rmask { display: block; width: 100%; height: 100%; -webkit-mask-size: contain; mask-size: contain; -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat; -webkit-mask-position: center; mask-position: center; }
@@ -979,18 +1164,59 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .fcmd { display: inline-flex; cursor: pointer; opacity: .8; }
   .fcmd .cico { width: 14px; height: 14px; object-fit: contain; display: block; }
   .fcmd .cph { font-size: 12px; line-height: 1; }
-  .htmlbox { border: 1px dashed rgba(128,128,128,.6); border-radius: 4px; min-height: 48px; min-width: 140px; position: relative; padding: 11px 9px 9px;
+  .htmlbox { border: 1px dashed rgba(128,128,128,.6); border-radius: 8px; min-height: 48px; min-width: 140px; position: relative; padding: 11px 9px 9px;
     background: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--fp-soft) 6px, var(--fp-soft) 12px); }
-  table.tbl { border-collapse: collapse; }
-  .tbl th, .tbl td { border: 1px solid var(--fp-border); padding: 4px 12px; font-size: .92em; text-align: left; }
-  .tbl th { background: var(--fp-soft); }
-  .tbl td { opacity: .5; }
+  /* РедакторHtml: бокс поля с полосой форматирования. */
+  .editor { border: 1px solid var(--fp-input-border); border-radius: 8px; background: var(--fp-input-bg);
+    min-height: 120px; align-self: stretch; }
+  .edbar { display: flex; gap: 10px; align-items: center; padding: 4px 10px; color: #999; font-size: 13px;
+    border-bottom: 1px solid var(--fp-soft); }
+  .edbar .codicon { font-size: 14px; }
+  .edbody { padding: 8px 10px; min-height: 60px; color: var(--fp-val); }
+  /* Зоны загрузки файлов: пунктир 1px, скругление 8, синяя ссылка. */
+  .drop { border: 1px dashed var(--fp-input-border); border-radius: 8px; background: var(--fp-soft);
+    color: var(--fp-fg2); font-size: 14px; line-height: 20px; padding: 16px; }
+  .dlink { color: var(--fp-link); cursor: pointer; }
+  .filedrop { border: 1px dashed var(--fp-input-border); border-radius: 8px; background: var(--fp-input-bg);
+    padding: 24px 16px; display: flex; flex-direction: column; align-items: center; gap: 6px;
+    font-size: 14px; line-height: 20px; color: var(--fp-fg); align-self: stretch; }
+  .filedrop .clip { color: var(--fp-link); font-size: 22px; }
+  /* Таблица без сетки: голая шапка 14 medium, строки с волосяным разделителем; тулбар
+     добавления - мягкая полоса над таблицей. */
+  .tblbox { min-width: 260px; }
+  .tbar { display: flex; align-items: center; gap: 6px; background: var(--fp-soft); border-radius: 8px;
+    padding: 8px 10px; font-size: 14px; color: var(--fp-fg); margin-bottom: 8px; }
+  .tbar .tsp { flex: 1; }
+  .tbar .codicon { color: var(--fp-fg2); font-size: 16px; }
+  table.tbl { border-collapse: collapse; width: 100%; }
+  .tbl th, .tbl td { border: none; padding: 6px 12px 6px 4px; font-size: 14px; text-align: left; }
+  .tbl th { font-weight: 500; color: var(--fp-fg); }
+  .tbl td { color: var(--fp-val); border-top: 1px solid rgba(128,128,128,.18); padding: 10px 12px 10px 4px; }
+  /* Вкладки: чистый текст 16px, активная тёмная с жёлтой полоской 3px, без коробок. */
   .tabs { border: none; padding: 0; }
-  .tabbar { display: flex; gap: 2px; border-bottom: 1px solid var(--fp-border); }
-  .tabbtn { border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--fp-fg); padding: 5px 14px; cursor: pointer; border-radius: 4px 4px 0 0; opacity: .7; font-size: inherit; }
-  .tabbtn.act { border-color: var(--fp-border); opacity: 1; font-weight: 600; }
-  .tabpage { display: none; padding-top: 10px; }
+  .tabbar { display: flex; gap: 0; border-bottom: none; }
+  .tabbtn { border: none; border-bottom: 3px solid transparent; background: transparent; color: var(--fp-fg2);
+    padding: 0 12px 3px; cursor: pointer; border-radius: 0; font-size: 16px; line-height: 24px; font-family: inherit; }
+  .tabbtn.act { color: var(--fp-fg); border-bottom-color: var(--fp-accent); font-weight: 400; }
+  /* Заголовок вкладки выражением обрезается: дизайнер платформы показывает результат, каркасу
+     достаточно начала формулы. */
+  .tabbtn .chip { display: inline-block; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; vertical-align: bottom; }
+  .tabpage { display: none; padding-top: 24px; }
   .tabpage.act { display: block; }
+  /* Приложение с разделами: панель навигации (горизонтальная или вертикальная) и область
+     содержимого - как рисует их платформа, без реальных прав и маршрутов. */
+  .app { display: flex; flex-direction: column; align-self: stretch; border: 1px solid var(--fp-border);
+    border-radius: 8px; overflow: hidden; min-height: 220px; }
+  .app.vert { flex-direction: row; }
+  .navbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: var(--fp-soft);
+    font-size: 14px; color: var(--fp-fg2); flex-wrap: wrap; }
+  .navbar.vert { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px 12px;
+    min-width: 180px; flex: none; }
+  .navitem { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+  .navico { width: 16px; height: 16px; object-fit: contain; }
+  .applogo { height: 20px; margin-right: 8px; }
+  .appbody { flex: 1; min-height: 160px; background: var(--fp-bg); }
   #canvas [data-off]:hover { outline: 1px solid var(--fp-focus); outline-offset: 1px; }
   /* Selected node: a strong focus-colored frame plus a light tint. The tint is an overlay
      (::after), so blocks with their own background (primary button, banner) keep it. */
@@ -1029,6 +1255,9 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
       <span class="cap" id="frame-cap"></span>
       <span class="sub" id="frame-sub"></span>
       <span class="sp"></span>
+      <select id="dev">${deviceOptions}</select>
+      <span id="devsize" style="display:none"><input id="dw" inputmode="numeric"><span class="sub">×</span><input id="dh" inputmode="numeric"></span>
+      <button class="hbtn" id="rot" title="" style="display:none"><span class="codicon codicon-arrow-swap"></span></button>
       <select id="theme">${themeOptions}</select>
       <span id="zoombox"><button class="hbtn" id="zo" title="">&#8722;</button><span class="sub" id="zv">${view.zoom}%</span><button class="hbtn" id="zi" title="">+</button></span>
     </div>
@@ -1056,6 +1285,8 @@ function panelScript(target: vscode.Uri): string {
   let L = ${inlineJson(labels())};
   let layout = ${inlineJson(layout)};
   let zoom = ${view.zoom};
+  let dev = ${inlineJson(view.dev ?? null)};
+  const DEVICES = ${inlineJson(DEVICE_PRESETS)};
   let structure = { available: false, rows: [], selection: [], namedOnly: false, readonly: false };
   let data = { available: false, rows: [] };
   let menuFor = null;
@@ -1082,6 +1313,7 @@ function panelScript(target: vscode.Uri): string {
     el("btn-filter").title = structure.namedOnly ? L.filterAll : L.filterNamed;
     el("zi").title = L.zoomIn;
     el("zo").title = L.zoomOut;
+    el("rot").title = L.rotate;
   }
 
   function applyLayout() {
@@ -1422,9 +1654,66 @@ function panelScript(target: vscode.Uri): string {
     if (viewSaveTimer) { clearTimeout(viewSaveTimer); }
     viewSaveTimer = setTimeout(function () {
       viewSaveTimer = null;
-      post({ type: "view", zoom: zoom, theme: el("theme").value });
+      post({ type: "view", zoom: zoom, theme: el("theme").value, dev: dev });
     }, 250);
   }
+
+  // --- the emulated device (the platform designer's toolbar: presets, W×H, rotate) -----------
+
+  function deviceKey() {
+    if (!dev) { return "auto"; }
+    for (const key of Object.keys(DEVICES)) {
+      if (DEVICES[key][0] === dev.w && DEVICES[key][1] === dev.h) { return key; }
+    }
+    return "custom";
+  }
+
+  // fit: pick the zoom that shows the whole device width in the pane (a fresh device choice);
+  // a manual size tweak keeps the zoom the user has set.
+  function applyDevice(fit) {
+    el("dev").value = deviceKey();
+    el("devsize").style.display = dev ? "" : "none";
+    el("rot").style.display = dev ? "" : "none";
+    if (dev) {
+      el("dw").value = dev.w;
+      el("dh").value = dev.h;
+      root.style.width = dev.w + "px";
+      root.style.minHeight = dev.h + "px";
+      root.classList.add("device");
+      canvas.classList.add("devbg");
+      if (fit) {
+        const avail = canvas.clientWidth - 28;
+        if (avail > 50) { zoom = Math.max(25, Math.min(100, Math.floor((avail / dev.w) * 100))); }
+      }
+    } else {
+      root.style.width = "";
+      root.style.minHeight = "";
+      root.classList.remove("device");
+      canvas.classList.remove("devbg");
+    }
+    applyView();
+  }
+
+  el("dev").addEventListener("change", (e) => {
+    const value = e.target.value;
+    if (value === "auto") { dev = null; }
+    else if (value === "custom") { dev = dev || { w: 1366, h: 768 }; }
+    else { dev = { w: DEVICES[value][0], h: DEVICES[value][1] }; }
+    applyDevice(value !== "custom");
+  });
+  function sizeInput(id, axis) {
+    el(id).addEventListener("change", (e) => {
+      const n = Math.round(Number(e.target.value));
+      if (!dev || !isFinite(n) || n < 200 || n > 4000) { applyDevice(false); return; }
+      dev[axis] = n;
+      applyDevice(false);
+    });
+  }
+  sizeInput("dw", "w");
+  sizeInput("dh", "h");
+  el("rot").addEventListener("click", () => {
+    if (dev) { dev = { w: dev.h, h: dev.w }; applyDevice(true); }
+  });
   function bumpZoom(delta) {
     const next = Math.min(300, Math.max(50, zoom + delta));
     if (next === zoom) { return; }
@@ -1441,7 +1730,8 @@ function panelScript(target: vscode.Uri): string {
     e.preventDefault();
     bumpZoom(e.deltaY < 0 ? 5 : -5);
   }, { passive: false });
-  el("theme").addEventListener("change", (e) => { canvas.className = "theme-" + e.target.value; applyView(); });
+  // className would wipe the device canvas class - the theme swap re-applies the device state.
+  el("theme").addEventListener("change", (e) => { canvas.className = "theme-" + e.target.value; applyDevice(false); });
 
   // Visual selection only: the class, the saved state and (optionally) the scroll. Telling the
   // extension is the caller's business - a highlight pushed FROM the extension must not echo
@@ -1532,12 +1822,14 @@ function panelScript(target: vscode.Uri): string {
       L = m.labels;
       layout = m.layout;
       zoom = m.view.zoom;
+      dev = m.view.dev || null;
       canvas.className = "theme-" + m.view.theme;
       el("theme").value = m.view.theme;
       root.style.zoom = zoom / 100;
       el("zv").textContent = zoom + "%";
       applyLabels();
       applyLayout();
+      applyDevice(false);
     } else if (m.type === "structure") {
       structure = m.snapshot;
       renderStructure();
@@ -1561,6 +1853,7 @@ function panelScript(target: vscode.Uri): string {
 
   applyLabels();
   applyLayout();
+  applyDevice(false);
   post({ type: "ready" });
 `;
 }

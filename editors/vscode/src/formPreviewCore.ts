@@ -37,6 +37,39 @@ function canonicalKey(key: string): string {
   return _keyAliases[key] ?? key;
 }
 
+// -- wireframe placeholder strings -----------------------------------------------------------
+//
+// The texts the wireframe shows on its own (placeholders, the table toolbar, the search bar)
+// in the platform's canonical Russian; the host overrides them with the editor's language
+// (vscode.l10n), so an English VS Code shows an English wireframe. The core stays pure.
+const PREVIEW_STRINGS_RU = {
+  label: "Надпись",
+  button: "Кнопка",
+  checkbox: "Флажок",
+  section: "Секция",
+  mainCommand: "Основная команда",
+  form: "форма",
+  add: "Добавить",
+  search: "Поиск...",
+  option: "Вариант",
+  dropText: "Перетащите файлы в окно или {0} вручную",
+  dropLink: "добавьте",
+  fileDropText: "{0} или перетащите файлы в эту область",
+  fileDropLink: "Выберите",
+};
+
+export type PreviewStrings = typeof PREVIEW_STRINGS_RU;
+
+let _strings: PreviewStrings = PREVIEW_STRINGS_RU;
+
+export function setPreviewStrings(overrides: Partial<PreviewStrings>): void {
+  _strings = { ...PREVIEW_STRINGS_RU, ...overrides };
+}
+
+function s(key: keyof PreviewStrings): string {
+  return _strings[key];
+}
+
 /** The component type as the schema names it (`Group` -> `Группа`). */
 function canonicalType(type: string): string {
   return _typeAliases[type] ?? type;
@@ -109,13 +142,20 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   return `class="${cls}${mark}"${styleAttr}${offAttr}${titleAttr}`;
 }
 
-// Property value: a binding (=Данные.Х) is shown as a monospaced chip, a literal - as text.
+// Property value: a binding (`=Данные.Х`) is shown as a monospaced chip, a localization
+// reference (`$Словарь.Ключ`) - as its last segment with the full key in the tooltip (the real
+// text lives in the localization files and is resolved by the platform, not by the wireframe),
+// a literal - as text.
 function valueHtml(v: string | undefined, placeholder = ""): string {
   if (v === undefined || v === "") {
     return `<span class="ph">${esc(placeholder)}</span>`;
   }
   if (v.startsWith("=")) {
     return `<code class="chip">${esc(v)}</code>`;
+  }
+  if (v.startsWith("$")) {
+    const last = v.slice(v.lastIndexOf(".") + 1) || v.slice(1);
+    return `<span class="loc" title="${esc(v)}">${esc(last)}</span>`;
   }
   return esc(v);
 }
@@ -429,15 +469,25 @@ function gridStyle(node: unknown, layout: string): string {
   return `grid-template-columns:repeat(auto-fill,minmax(${min ?? 200}px,1fr))`;
 }
 
+// The component's background: a literal absolute color paints it; an expression is computed
+// by the runtime and the wireframe leaves it alone.
+function bgStyle(node: unknown): string {
+  const rgb = prop(get(node, "Фон"), "Значение");
+  const hex = rgb && /^RGB\(([0-9A-Fa-f]{6})\)$/.exec(rgb.trim());
+  return hex ? `background-color:#${hex[1]}` : "";
+}
+
 function renderGroup(node: unknown, cls: string, extraStyle = ""): string {
   const layout = layoutClass(node);
-  const style = [extraStyle, contentAlignStyle(node), spacingStyle(node), layout.style]
+  const style = [extraStyle, bgStyle(node), contentAlignStyle(node), spacingStyle(node), layout.style]
     .filter(Boolean).join(";");
   const inner = renderChildren(get(node, "Содержимое"), layout.horizontal, layout.byColumns);
   return `<div ${tagAttrs(node, `${cls} ${layout.cls}`, style)}>${nameTag(node)}${inner}</div>`;
 }
 
-function renderTable(node: unknown): string {
+// The platform draws tables without a grid: bare headers, hairline row separators and - when
+// rows are created right in the table (OnRowCreate) - a toolbar strip above it.
+function renderTable(node: unknown, layout = ""): string {
   const cols = get(node, "Колонки");
   const heads: string[] = [];
   if (isSeq(cols)) {
@@ -448,9 +498,16 @@ function renderTable(node: unknown): string {
   if (heads.length === 0) {
     heads.push("", "", "");
   }
-  const th = heads.map((h) => `<th>${esc(h) || "&nbsp;"}</th>`).join("");
+  const th = heads.map((h) => `<th>${h ? valueHtml(h) : "&nbsp;"}</th>`).join("");
   const placeholderRow = `<tr>${heads.map(() => "<td>···</td>").join("")}</tr>`;
-  return `<table ${tagAttrs(node, "tbl")}><thead><tr>${th}</tr></thead><tbody>${placeholderRow}${placeholderRow}</tbody></table>`;
+  const editable = get(node, "ПриСозданииСтроки") !== undefined;
+  const bar = editable
+    ? `<div class="tbar"><span class="codicon codicon-add"></span>${esc(s("add"))}<span class="tsp"></span><span class="codicon codicon-search"></span></div>`
+    : "";
+  return (
+    `<div ${tagAttrs(node, "tblbox", layout)}>${bar}` +
+    `<table class="tbl"><thead><tr>${th}</tr></thead><tbody>${placeholderRow}${placeholderRow}</tbody></table></div>`
+  );
 }
 
 function renderTabs(node: unknown, horizontalParent: boolean): string {
@@ -463,16 +520,36 @@ function renderTabs(node: unknown, horizontalParent: boolean): string {
   pages.items.forEach((page, i) => {
     const title = prop(page, "Заголовок") ?? prop(page, "Имя") ?? `${i + 1}`;
     const off = offsetOf(page);
-    bar.push(`<button class="tabbtn${i === 0 ? " act" : ""}" data-tab="${i}"${off !== undefined ? ` data-off="${off}"` : ""}>${esc(title)}</button>`);
+    bar.push(`<button class="tabbtn${i === 0 ? " act" : ""}" data-tab="${i}"${off !== undefined ? ` data-off="${off}"` : ""}>${valueHtml(title)}</button>`);
     bodies.push(`<div class="tabpage${i === 0 ? " act" : ""}" data-tab="${i}">${renderChildren(get(page, "Содержимое"), false)}</div>`);
   });
   return `<div ${tagAttrs(node, "tabs", growStyle(node, horizontalParent))}><div class="tabbar">${bar.join("")}</div>${bodies.join("")}</div>`;
 }
 
 function renderUnknown(node: unknown, type: string): string {
+  // A PROJECT component (its yaml was handed over by the host): its own content is drawn
+  // inline, so a site page assembled from cards and buttons looks like the page and not like a
+  // fence of placeholders. The offsets of the nested yaml are stripped - they belong to another
+  // file, and the whole block navigates to its USE site. Depth is capped and a name on the
+  // rendering stack is skipped: components may nest and, in a broken project, recurse.
+  const sub = _components[type];
+  if (sub !== undefined && _subStack.length < 2 && !_subStack.includes(type)) {
+    let contents = _componentCache.get(type);
+    if (contents === undefined) {
+      contents = parsedContents(sub) ?? null;
+      _componentCache.set(type, contents);
+    }
+    const content = get(get(contents, "Наследует"), "Содержимое");
+    if (content) {
+      _subStack.push(type);
+      const inner = renderComponent(content, false).replace(/ data-off="\d+"/g, "");
+      _subStack.pop();
+      return `<div ${tagAttrs(node, "subc")}>${inner}</div>`;
+    }
+  }
   const inner = renderChildren(get(node, "Содержимое"), false);
   const label = `${esc(type)}${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}`;
-  // A project component the wireframe cannot draw: its caption goes IN FLOW, not as the absolute
+  // A component the wireframe cannot draw: its caption goes IN FLOW, not as the absolute
   // tag the containers use. An empty placeholder is 20 pixels wide while its name is a hundred
   // and a half, so an absolute caption hung far outside the box and painted over the neighbours.
   return `<div ${tagAttrs(node, "unknown col")}><span class="uname">${label}</span>${inner}</div>`;
@@ -529,23 +606,42 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
     }
     case "Надпись": {
       const text = prop(node, "Значение") ?? prop(node, "Заголовок");
-      return `<span ${tagAttrs(node, "lbl", joinStyle(textStyle(node), layout))}>${valueHtml(text, "Надпись")}</span>`;
+      return `<span ${tagAttrs(node, "lbl", joinStyle(textStyle(node), layout))}>${valueHtml(text, s("label"))}</span>`;
     }
     case "ЗаголовокСекции":
-      return `<div ${tagAttrs(node, "sechead", layout)}>${valueHtml(prop(node, "Заголовок"), "Секция")}</div>`;
+      return `<div ${tagAttrs(node, "sechead", layout)}>${valueHtml(prop(node, "Заголовок"), s("section"))}</div>`;
     case "ПолеВвода":
     case "ПолеВыбора":
     case "ВыборЗначения": {
       const cap = prop(node, "Заголовок");
-      const suffix = type === "ПолеВвода" ? "" : `<span class="dd">▾</span>`;
+      // A required field gets the platform's red asterisk before the caption.
+      const required = isTrue(node, "Обязательное");
+      const capHtml = cap
+        ? `<div class="fld-cap">${required ? `<span class="req">*</span>` : ""}${valueHtml(cap)}</div>`
+        : "";
+      // A switcher: a value choice with a radio-button group is drawn as circles, not as a box.
+      if (prop(node, "ВидОтображенияПереключателя") !== undefined) {
+        return (
+          `<div ${tagAttrs(node, "rgrp col", layout)}>${capHtml}` +
+          `<label class="radio"><span class="rdo"></span>${valueHtml(prop(node, "Значение"), s("option"))}</label></div>`
+        );
+      }
+      // A date field carries a calendar at its right edge, a choice field - a chevron; gray,
+      // inside the box. The type parameter is bilingual like the source: InputField<Date>.
+      const rawType = prop(node, "Тип") ?? "";
+      const icon =
+        type === "ПолеВвода"
+          ? /<\s*(Дата|Date)/.test(rawType)
+            ? `<span class="fico codicon codicon-calendar"></span>`
+            : ""
+          : `<span class="fico codicon codicon-chevron-down"></span>`;
       return (
-        `<div ${tagAttrs(node, "fld", layout)}>` +
-        (cap ? `<div class="fld-cap">${esc(cap)}</div>` : "") +
-        `<div class="inp">${valueHtml(prop(node, "Значение"), "…")}${suffix}${fieldCommands(node)}</div></div>`
+        `<div ${tagAttrs(node, "fld", layout)}>${capHtml}` +
+        `<div class="inp">${valueHtml(prop(node, "Значение"), "…")}${icon}${fieldCommands(node)}</div></div>`
       );
     }
     case "Флажок":
-      return `<label ${tagAttrs(node, "chk", layout)}>☐ ${valueHtml(prop(node, "Заголовок"), "Флажок")}</label>`;
+      return `<label ${tagAttrs(node, "chk", layout)}><span class="cbox"></span>${valueHtml(prop(node, "Заголовок"), s("checkbox"))}</label>`;
     case "Кнопка":
     case "КнопкаФормы":
     case "ОбычнаяКоманда":
@@ -571,9 +667,9 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
         cls += " ico";
         inner = icon;
       } else if (head === "Текст" || !icon) {
-        inner = valueHtml(title, "Кнопка");
+        inner = valueHtml(title, s("button"));
       } else {
-        inner = icon + valueHtml(title, "Кнопка");
+        inner = icon + valueHtml(title, s("button"));
       }
       return `<button ${tagAttrs(node, cls, layout)}>${inner}</button>`;
     }
@@ -593,7 +689,8 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
       } else if (src) {
         inner = `<img class="rimg" src="${esc(src)}" alt="">`;
       } else {
-        inner = "🖼";
+        // The platform's placeholder - a gray image glyph with no border and no background.
+        inner = `<span class="iph codicon codicon-file-media"></span>`;
       }
       // Explicit sizes defeat the fixed placeholder tile; when only one dimension is given
       // the other follows the image's aspect ratio instead of the tile's.
@@ -604,41 +701,85 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
     }
     case "Таблица":
     case "ПроизвольныйСписок":
-      return renderTable(node);
+      return renderTable(node, boxed);
     case "Страницы":
       return renderTabs(node, horizontalParent);
-    case "КонтейнерHtml":
     case "РедакторHtml":
+      // The text editor: an input-like box with the formatting toolbar on top.
+      return (
+        `<div ${tagAttrs(node, "editor", layout)}>` +
+        `<div class="edbar"><b>B</b><i>I</i><u>U</u>` +
+        `<span class="codicon codicon-list-unordered"></span><span class="codicon codicon-link"></span></div>` +
+        `<div class="edbody">${valueHtml(prop(node, "Значение"), "")}</div></div>`
+      );
+    case "ВыборФайлов":
+      return (
+        `<div ${tagAttrs(node, "drop", layout)}>` +
+        `${esc(s("dropText")).replace("{0}", `<span class="dlink">${esc(s("dropLink"))}</span>`)}</div>`
+      );
+    case "СписокФайлов":
+      return (
+        `<div ${tagAttrs(node, "filedrop", layout)}>` +
+        `<span class="clip codicon codicon-cloud-upload"></span>` +
+        `<div>${esc(s("fileDropText")).replace("{0}", `<span class="dlink">${esc(s("fileDropLink"))}</span>`)}</div></div>`
+      );
+    case "КонтейнерHtml":
       return `<div ${tagAttrs(node, "htmlbox", layout)}><span class="tag">HTML${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}</span></div>`;
     default:
       return renderUnknown(node, type || "?");
   }
 }
 
-// Form command bar: ОсновнаяКоманда + maps of named commands (КомандыЗаписи etc.).
-function renderCommandBar(inherit: unknown): string {
+// Form commands, placed the way the platform places them: the main commands (ОсновнаяКоманда,
+// КомандыЗаписи) sit at the BOTTOM right as the yellow primary and its gray neighbours, the
+// auxiliary ones (ДополнительныеКоманды, Команды) are gray pills at the top right of the title,
+// and the create commands of a list form are a blue text button next to it.
+function commandButton(cmd: unknown, cls: string, fallback: string): string | undefined {
+  if (!isMap(cmd)) {
+    return undefined;
+  }
+  const title = prop(cmd, "Представление") ?? prop(cmd, "Заголовок") ?? fallback;
+  return `<button ${tagAttrs(cmd, cls)}>${valueHtml(title)}</button>`;
+}
+
+function collectCommands(inherit: unknown, keys: string[], cls: string): string[] {
   const buttons: string[] = [];
-  const push = (cmd: unknown, fallback: string) => {
-    if (!isMap(cmd)) {
-      return;
-    }
-    const title = prop(cmd, "Представление") ?? prop(cmd, "Заголовок") ?? fallback;
-    buttons.push(`<button ${tagAttrs(cmd, buttons.length === 0 ? "btn primary" : "btn")}>${esc(title)}</button>`);
-  };
-  push(get(inherit, "ОсновнаяКоманда"), "Основная команда");
-  for (const key of ["КомандыЗаписи", "ДополнительныеКоманды", "Команды"]) {
+  for (const key of keys) {
     const cmds = get(inherit, key);
     if (isMap(cmds)) {
       for (const item of (cmds as YAMLMap).items) {
-        push(item.value, isScalar(item.key) ? String(item.key.value) : "");
+        const btn = commandButton(item.value, cls, isScalar(item.key) ? String(item.key.value) : "");
+        if (btn) {
+          buttons.push(btn);
+        }
       }
     } else if (isSeq(cmds)) {
       for (const item of cmds.items) {
-        push(item, "");
+        const btn = commandButton(item, cls, "");
+        if (btn) {
+          buttons.push(btn);
+        }
       }
     }
   }
-  return buttons.length > 0 ? `<div class="cmdbar">${buttons.join("")}</div>` : "";
+  return buttons;
+}
+
+function renderHeaderCommands(inherit: unknown): string {
+  const create = collectCommands(inherit, ["КомандыСоздания"], "btn create");
+  const pills = collectCommands(inherit, ["ДополнительныеКоманды", "Команды"], "btn pill");
+  const parts = [...create, ...pills];
+  return parts.length > 0 ? `<span class="hsp"></span><span class="cmdbar pills">${parts.join("")}</span>` : "";
+}
+
+function renderFooterCommands(inherit: unknown): string {
+  const buttons: string[] = [];
+  const main = commandButton(get(inherit, "ОсновнаяКоманда"), "btn primary", s("mainCommand"));
+  if (main) {
+    buttons.push(main);
+  }
+  buttons.push(...collectCommands(inherit, ["КомандыЗаписи"], "btn"));
+  return buttons.length > 0 ? `<div class="cmdbar footer">${buttons.join("")}</div>` : "";
 }
 
 // -- entry point ----------------------------------------------------------------------------
@@ -747,12 +888,56 @@ export function propertyEdit(text: string, nodeOffset: number, key: string, valu
 }
 
 // Resource images for the current render, filename -> data URI (resolved by the host from the
-// project's Ресурсы directories). Module-scoped render context so it does not have to thread
-// through every render function; set at the start of each (synchronous) renderFormPreview call.
+// project's Ресурсы directories), and the yaml texts of the PROJECT components used by the
+// form (component type name -> its yaml) - with them a page assembled from project cards is
+// drawn with their content instead of placeholders. Module-scoped render context so it does
+// not have to thread through every render function; set at the start of each (synchronous)
+// renderFormPreview call.
 let _resources: Record<string, string> = {};
+let _components: Record<string, string> = {};
+const _componentCache = new Map<string, unknown>();
+const _subStack: string[] = [];
 
-export function renderFormPreview(text: string, resources: Record<string, string> = {}): PreviewResult {
+// The navigation panel of a sectioned application (СтандартноеКлиентскоеПриложениеСРазделами):
+// the items live in КомандныйИнтерфейсПанелиНавигации, not in Содержимое.
+function renderNavPanel(inherit: unknown): string {
+  const nav = get(inherit, "КомандныйИнтерфейсПанелиНавигации");
+  const elements = get(nav, "Элементы");
+  if (!isSeq(elements)) {
+    return "";
+  }
+  const items: string[] = [];
+  const pushItem = (cmd: unknown, group: boolean) => {
+    const title = prop(cmd, "Представление") ?? prop(cmd, "Имя") ?? "";
+    const image = prop(cmd, "Изображение");
+    const src = image ? _resources[image] : undefined;
+    const icon = src ? `<img class="navico" src="${esc(src)}" alt="">` : "";
+    const chevron = group ? `<span class="codicon codicon-chevron-down"></span>` : "";
+    items.push(`<span ${tagAttrs(cmd, "navitem")}>${icon}${valueHtml(title)}${chevron}</span>`);
+  };
+  for (const item of elements.items) {
+    const type = baseType(item) ?? "";
+    pushItem(item, type === "ГруппаКомандногоИнтерфейса");
+  }
+  const theme = get(inherit, "ТемаОформления");
+  const logoName = prop(theme, "Логотип");
+  const logoSrc = logoName ? _resources[logoName] : undefined;
+  const logo = logoSrc ? `<img class="applogo" src="${esc(logoSrc)}" alt="">` : "";
+  const vertical = prop(inherit, "ОриентацияПанелиНавигации") === "Вертикальная";
+  const bar = `<div class="navbar${vertical ? " vert" : ""}">${logo}${items.join("")}</div>`;
+  const body = `<div class="appbody"></div>`;
+  return `<div class="app${vertical ? " vert" : ""}">${bar}${body}</div>`;
+}
+
+export function renderFormPreview(
+  text: string,
+  resources: Record<string, string> = {},
+  components: Record<string, string> = {},
+): PreviewResult {
   _resources = resources;
+  _components = components;
+  _componentCache.clear();
+  _subStack.length = 0;
   let doc;
   try {
     doc = parseDocument(text, { uniqueKeys: false });
@@ -765,7 +950,8 @@ export function renderFormPreview(text: string, resources: Record<string, string
   const root = doc.contents;
   const inherit = get(root, "Наследует");
   const content = get(inherit, "Содержимое");
-  if (!content) {
+  const navPanel = content ? "" : renderNavPanel(inherit);
+  if (!content && !navPanel) {
     return { ok: false, reason: "not-form" };
   }
   const rawTitle = prop(inherit, "Заголовок");
@@ -773,9 +959,17 @@ export function renderFormPreview(text: string, resources: Record<string, string
   const baseTypeName = prop(inherit, "Тип") ?? "";
   const titleHtml =
     `<div class="form-head"><span class="form-title">${valueHtml(rawTitle, name)}</span>` +
-    `<span class="form-type">${esc(baseTypeName)}</span></div>`;
-  const body = titleHtml + renderCommandBar(inherit) + `<div class="form-body col">${renderComponent(content, false)}</div>`;
-  return { ok: true, html: body, title: name || rawTitle || "форма" };
+    `<span class="form-type">${esc(baseTypeName)}</span>${renderHeaderCommands(inherit)}</div>`;
+  // A list form gets its chrome from the platform, not from the yaml: the search bar above
+  // the list is drawn so the wireframe reads like the page the user will see.
+  const searchBar = baseTypeName.startsWith("ФормаСписка")
+    ? `<div class="searchbar"><span class="codicon codicon-search"></span>${esc(s("search"))}</div>`
+    : "";
+  const body =
+    titleHtml + searchBar +
+    `<div class="form-body col">${content ? renderComponent(content, false) : navPanel}</div>` +
+    renderFooterCommands(inherit);
+  return { ok: true, html: body, title: name || rawTitle || s("form") };
 }
 
 // -- selection sync (the preview panel drives these) ------------------------------------------
@@ -795,6 +989,30 @@ export function collectResourceImages(text: string): string[] {
   for (const m of text.matchAll(RESOURCE_IMAGE_RE)) {
     if (!m[1].includes("://")) {
       seen.add(m[1]);
+    }
+  }
+  return [...seen];
+}
+
+// Component type names the wireframe draws itself - there is no point looking for their yaml.
+const DRAWN_TYPES = new Set([
+  "ПроизвольныйШаблонФормы", "Группа", "СтандартнаяКарточка", "Надпись", "ЗаголовокСекции",
+  "ПолеВвода", "ПолеВыбора", "ВыборЗначения", "Флажок", "Кнопка", "КнопкаФормы",
+  "ОбычнаяКоманда", "НавигационнаяКоманда", "Картинка", "Таблица", "ПроизвольныйСписок",
+  "Страницы", "РедакторHtml", "ВыборФайлов", "СписокФайлов", "КонтейнерHtml",
+]);
+
+// The bare type names used by the form (`Тип: КарточкаОблако`) that MAY be project components:
+// the host looks their yaml up in the workspace (`<Имя>.yaml`) and hands the texts to
+// renderFormPreview - platform types simply have no such file and drop out on their own.
+export function collectComponentTypes(text: string): string[] {
+  const seen = new Set<string>();
+  const re = /(?:^|\n)[ \t-]*(?:Тип|Type):[ \t]*([A-Za-zА-ЯЁ][A-Za-zА-Яа-яЁё0-9_]*)[ \t]*(?:<[^\n]*)?(?=\n|$)/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const name = canonicalType(m[1]);
+    if (!DRAWN_TYPES.has(name)) {
+      seen.add(name);
     }
   }
   return [...seen];
