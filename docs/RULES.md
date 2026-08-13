@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 141 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 142 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -219,6 +219,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/empty-group-sized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap |
 | `yaml/hint-too-long` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `Tooltip` longer than the render limit – the tail is not shown at all |
 | `yaml/date-input-needs-plain-date` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `Edit<Date?>` – the renderer silently drops a date input that allows the empty value; make the type plain and express "not set" with the empty date [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
+| `yaml/binding-needs-auto` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A binding of a plain component property calls a method declared nullable - the client registers an "unexpected Undefined value" error on every recomputation; "not set" is the Auto value |
 | `code/client-available-needs-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | `@AvailableFromClient` on a method of an interface component module that is neither static nor `@Contextual` – the component type is not a singleton, so the apply rejects the modifier [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/server-module-in-client-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `Module.Member(...)` access to a common module with `Environment: Server` from a method that runs on the client (an interface component, a command, a client common module) – the type does not exist on the client [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/component-in-server-context` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `Component.Member(...)` access to an interface component from code compiled for the server – a `@OnServer` method anywhere, or an unannotated method of a server or client-and-server module: the component's type lives on the client, and the server compilation refuses with "Variable X is not defined" [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |

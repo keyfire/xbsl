@@ -15,6 +15,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Rule `yaml/binding-needs-auto`: a nullable binding on a property with no empty value.**
+  "Not set" for a component property is the `Auto` value: the palette declares properties as
+  unions without the empty value, and a binding whose method is declared `(): Color?` makes
+  the client register "Неожиданное значение" on every recomputation - the records go to the
+  server log, invisible in the browser console (a live project had accumulated 1866 before
+  anyone noticed). Judged is the narrow slice with both sides known exactly: a bare local
+  call bound to a typed palette property whose union carries `Auto` and no nullable flag,
+  against the paired module's declared return types. A `?` inside a generic argument is not
+  a nullable return - caught by the corpus run.
 - **Rule `yaml/date-input-needs-plain-date`: a nullable date input is silently not rendered.**
   `Edit<Date?>` deploys cleanly, but the platform draws neither the field nor an
   apply-time error, and a group left without content disappears entirely - on a live project

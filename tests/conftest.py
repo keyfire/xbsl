@@ -33,6 +33,7 @@ def _pinned_language(monkeypatch):
 _DATA_DEPENDENT = {
     "test_lexer",
     "test_language",
+    "test_rule_binding_auto",  # the rule reads property unions from the ui schema
     "test_rule_ns_objects",
     "test_rules",
     "test_rule_environment",
