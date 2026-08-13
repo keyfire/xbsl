@@ -64,6 +64,7 @@ from . import (  # noqa: F401
     type_defaults,
     unknown_members,
     unused_methods,
+    url_params,
     access_control,
     yaml_deletion,
     localization,

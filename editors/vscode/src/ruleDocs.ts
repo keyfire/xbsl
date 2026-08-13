@@ -208,6 +208,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "topics/arrange-components-on-screen",
     anchor: "растягиватьповертикали-и-растягиватьпогоризонтали",
   },
+  {
+    match: (r) => r === "code/url-params-partial-encoding",
+    page: "stdlib/element/xbsl/Std/Http/Url_ru",
+    anchor: "спараметрамизапроса",
+  },
 ];
 
 export interface RuleDoc {
