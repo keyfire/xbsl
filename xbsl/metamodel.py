@@ -120,7 +120,7 @@ def _reset() -> None:
     """Drop the derived tables when the data root or version changes (dataset hook)."""
     for cached in (_data, _class_properties, properties, properties_of_class, _bases, allowed_keys,
                    _english_keys, _common_english, english_name, _english_kinds,
-                   dispatched_classes):
+                   dispatched_classes, key_aliases):
         cached.cache_clear()
 
 
