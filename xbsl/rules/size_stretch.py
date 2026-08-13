@@ -1,4 +1,45 @@
-"""Tier D: a fixed component size without disabling the stretch (yaml/size-needs-no-stretch).
+"""Tier D: fixed sizes and stretch weights the platform reads differently than intended.
+
+Three checks, all of them disabled by default: each one is true about the layout, yet whether
+it MATTERS depends on where the component ends up, which a file cannot say. Enable them
+point-blank when the symptom is on the screen.
+
+--- yaml/matrix-group-max-width (a phone draws the page at desktop width) ---
+
+`MaxWidth` of a group is not only a ceiling but the AVAILABLE width the platform lays the
+automatic columns of a matrix layout out by. A group with automatic columns of
+`MinWidth: 260` and a maximum of 2000 gets `grid-template-columns: 260px 260px 260px 260px`
+even on a 390 px screen: the width is computed from the maximum rather than from the window.
+The chain of groups then carries that width upwards (groups are `min-width: min-content`) and
+the application root becomes wider than the screen - the content runs off the right edge
+while `InterfaceKind` is Phone and every mobile branch of the markup has worked.
+
+Hence the rule: "a deliberately large number so the limit never applies" is NOT a technique
+on a phone - there must be no limit at all. `MaxWidth` accepts `Auto|Number`, and a width
+token is expected to answer `Auto`; a number for computations in code belongs in a separate
+method. Judged is a numeric `MaxWidth` on a group that lays out as a matrix (the layout value
+or the matrix settings say so); `Auto` and bindings are the cure, not the defect.
+
+--- yaml/card-literal-stretch-weight (a card collapsed to one line on iPhone) ---
+
+`StretchWeight` on a card becomes a flex with a ZERO BASIS. In a horizontal row that is
+exactly right - the cards share the width. But when the same component goes into a vertical
+column on a phone, the zero basis applies to the HEIGHT instead: Safari leaves the card zero
+height and clips the content with the rounding, while Chrome inflates it by content and shows
+no defect at all. The cure is to drop the weight on a phone (a binding that answers `Auto`
+there and the weight on a wide screen) - on the card AND on its inner columns.
+
+The defect was found on the owner's own device: neither Chrome's emulation nor WebKit with an
+iPhone profile reproduces it. So the rule judges only the LITERAL weight - a binding is
+already the cure - and stays off by default: a card that lives only in a wide row keeps its
+literal weight legitimately.
+
+Judged are the card itself and the GROUPS inside it - the inner columns the cure had to
+cover as well. Everything else inside a card is left alone, and reconnaissance is why: a
+live project carries four literal weights on `Label` nodes inside cards (a text sharing
+the width of its row), which the collapse does not touch.
+
+--- yaml/size-needs-no-stretch (a fixed size without disabling the stretch) ---
 
 The platform gotcha: РастягиватьПоВертикали/РастягиватьПоГоризонтали are `Авто|Булево` and at
 `Авто` the platform decides on its own whether to stretch the component (the docs topic
@@ -35,8 +76,9 @@ equal values in different nodes are told apart; PyYAML counts CRLF line breaks c
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n, terms, uischema
+from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.yaml_schema import (
@@ -52,6 +94,40 @@ if _HAVE_YAML:
     import yaml
 
 MESSAGES = {
+    "yaml/matrix-group-max-width.title": {
+        "ru": "Числовой максимум ширины у матричной группы",
+        "en": "A numeric width maximum on a matrix group",
+    },
+    "yaml/matrix-group-max-width.available": {
+        "ru": "МаксимальнаяШирина: {value} у группы с матричной компоновкой – это не только "
+              "потолок, но и РАСПОЛАГАЕМАЯ ширина: платформа разложит автоматические колонки "
+              "по максимуму, а не по окну, и на телефоне корень приложения станет шире "
+              "экрана (контент уйдёт за правый край, хотя мобильные ветки разметки "
+              "отработали). Заведомо большое число не помогает – ограничения быть не должно "
+              "вовсе: отдавайте Авто.",
+        "en": "MaxWidth: {value} on a group with a matrix layout is not only a ceiling but "
+              "the AVAILABLE width: the platform lays the automatic columns out by the "
+              "maximum rather than by the window, and on a phone the application root "
+              "becomes wider than the screen (the content runs off the right edge though "
+              "every mobile branch of the markup has worked). A deliberately large number "
+              "does not help – there must be no limit at all: answer {n[Авто]}.",
+    },
+    "yaml/card-literal-stretch-weight.title": {
+        "ru": "Литеральный вес растягивания у карточки",
+        "en": "A literal stretch weight on a card",
+    },
+    "yaml/card-literal-stretch-weight.collapses": {
+        "ru": "ВесПриРастягивании: {value} у карточки '{type}' даёт flex с НУЛЕВОЙ базой. В "
+              "горизонтальном ряду это и нужно, но в вертикальной колонке (мобильная "
+              "раскладка) нулевая база относится уже к высоте: Safari оставляет карточке ноль "
+              "и обрезает содержимое скруглением, а Chrome дефекта не показывает. Снимайте "
+              "вес на телефоне биндингом – у карточки И у её внутренних колонок.",
+        "en": "StretchWeight: {value} on the '{type}' card makes a flex with a ZERO basis. In "
+              "a horizontal row that is what is wanted, but in a vertical column (the mobile "
+              "layout) the zero basis applies to the HEIGHT: Safari leaves the card zero and "
+              "clips the content with the rounding, while Chrome shows no defect. Drop the "
+              "weight on a phone through a binding – on the card AND on its inner columns.",
+    },
     "yaml/size-needs-no-stretch.title": {
         "ru": "Размер без отключения растягивания",
         "en": "A size without disabling the stretch",
@@ -86,6 +162,168 @@ def _fixed_size(node) -> bool:
         return float(node.value) > 0
     except ValueError:
         return False
+
+
+#: The layout that lays children out in automatic columns, and the settings block that
+#: describes those columns (either key alone marks the group as a matrix one).
+_MATRIX = "Матричная"
+_LAYOUT_ENUM = "КомпоновкаСодержимого"
+_LAYOUT_KEYS = ("Компоновка", "Layout")
+_MATRIX_SETTINGS_KEYS = ("НастройкиМатричнойКомпоновки", "MatrixLayoutSettings")
+_MAX_WIDTH_KEYS = ("МаксимальнаяШирина", "MaxWidth")
+_WEIGHT_KEYS = ("ВесПриРастягивании", "StretchWeight")
+#: The inner columns of a card: the cure had to cover them too. A text or a picture inside a
+#: card carries a weight legitimately and is left alone.
+_GROUP_COMPONENTS = frozenset({"Группа", "Group"})
+
+
+@lru_cache(maxsize=1)
+def _matrix_names() -> frozenset[str]:
+    """Both spellings of the matrix layout value, from the platform's own dictionary."""
+    aliases = uischema.enum_value_aliases(_LAYOUT_ENUM)
+    return frozenset({_MATRIX, aliases.get(_MATRIX)} - {None})
+
+
+@lru_cache(maxsize=1)
+def _card_components() -> frozenset[str]:
+    """Palette components that are cards - the shape the zero basis collapses."""
+    schema = dataset.load_ui_schema() or {}
+    return frozenset(
+        name for name in (schema.get("components") or {}) if "Карточка" in name
+    )
+
+
+dataset.register_reset(_matrix_names.cache_clear)
+dataset.register_reset(_card_components.cache_clear)
+
+
+def _numeric(node) -> str | None:
+    """The value of a scalar that is a plain number (not Авто, not a binding), else None."""
+    if not isinstance(node, yaml.ScalarNode):
+        return None
+    try:
+        float(node.value)
+    except ValueError:
+        return None
+    return node.value
+
+
+def _entry(entries: dict, keys: tuple[str, ...]):
+    for key in keys:
+        if key in entries:
+            return entries[key]
+    return None
+
+
+@rule(
+    "yaml/matrix-group-max-width", "yaml/matrix-group-max-width.title", "D",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="yaml/matrix-group-max-width.off",
+)
+def matrix_group_max_width(source: SourceFile) -> Iterable[Diagnostic]:
+    """A numeric width maximum on a matrix group - the phone lays out by the maximum."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    if not any(key in source.text for key in _MAX_WIDTH_KEYS):
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    matrix_names = _matrix_names()
+    for mapping in _mapping_nodes(root):
+        entries = _scalar_entries(mapping)
+        max_width = _entry(entries, _MAX_WIDTH_KEYS)
+        if max_width is None:
+            continue
+        value = _numeric(max_width[1])
+        if value is None:
+            continue  # the auto value or a binding - the cure, not the defect
+        layout = _entry(entries, _LAYOUT_KEYS)
+        is_matrix = (
+            layout is not None
+            and isinstance(layout[1], yaml.ScalarNode)
+            and layout[1].value.strip() in matrix_names
+        )
+        if not is_matrix:
+            # The settings block is a mapping rather than a scalar: look it up on the node.
+            is_matrix = any(
+                isinstance(key, yaml.ScalarNode) and key.value in _MATRIX_SETTINGS_KEYS
+                for key, _value in mapping.value
+            )
+        if not is_matrix:
+            continue
+        key_node = max_width[0]
+        yield Diagnostic(
+            source.rel, key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+            "yaml/matrix-group-max-width", Severity.INFO,
+            i18n.t("yaml/matrix-group-max-width.available", value=value),
+        )
+
+
+def _component_head(mapping) -> str | None:
+    """The canonical component name of a node, or None when it declares no type."""
+    entries = _scalar_entries(mapping)
+    type_entry = entries.get("Тип") or entries.get("Type")
+    if type_entry is None or not isinstance(type_entry[1], yaml.ScalarNode):
+        return None
+    return uischema.canonical_component(type_entry[1].value.split("<", 1)[0].strip())
+
+
+def _card_scoped_nodes(node, cards: frozenset[str], inside: bool = False):
+    """(node, head) of every card and of every group standing inside one.
+
+    The whole tree is walked rather than the flat node list: whether a group is INSIDE a
+    card is exactly what the flat list cannot say, and a form nests its content through
+    `Inherits` as readily as through `Content`.
+    """
+    if isinstance(node, yaml.MappingNode):
+        head = _component_head(node)
+        is_card = head in cards
+        if is_card or (inside and head in _GROUP_COMPONENTS):
+            yield node, head
+        for _key, value in node.value:
+            yield from _card_scoped_nodes(value, cards, inside or is_card)
+    elif isinstance(node, yaml.SequenceNode):
+        for item in node.value:
+            yield from _card_scoped_nodes(item, cards, inside)
+
+
+@rule(
+    "yaml/card-literal-stretch-weight", "yaml/card-literal-stretch-weight.title", "D",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="yaml/card-literal-stretch-weight.off",
+)
+def card_literal_stretch_weight(source: SourceFile) -> Iterable[Diagnostic]:
+    """A literal stretch weight on a card - the zero basis collapses it in a column."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    if not any(key in source.text for key in _WEIGHT_KEYS):
+        return
+    cards = _card_components()
+    if not cards:
+        return  # no palette data - no rule
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    for mapping, head in _card_scoped_nodes(root, cards):
+        weight = _entry(_scalar_entries(mapping), _WEIGHT_KEYS)
+        if weight is None:
+            continue
+        value = _numeric(weight[1])
+        if value is None or float(value) == 0:
+            continue  # a binding is the cure; a zero weight does not stretch at all
+        key_node = weight[0]
+        yield Diagnostic(
+            source.rel, key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+            "yaml/card-literal-stretch-weight", Severity.INFO,
+            i18n.t("yaml/card-literal-stretch-weight.collapses", value=value, type=head),
+        )
 
 
 @rule(

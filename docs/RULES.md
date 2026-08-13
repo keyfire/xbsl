@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 148 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 150 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -208,6 +208,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/reserved-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Reserved name |
 | `yaml/builtin-property-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Built-in property name clash |
 | `yaml/size-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A size without disabling the stretch [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `MaxWidth` on a group that lays out as a matrix: the maximum is also the AVAILABLE width, so the automatic columns are laid out by it rather than by the window and a phone draws the page at desktop width (the content runs off the right edge). Answer `Auto` instead. Off by default: a desktop-only page lives with a maximum fine [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A literal `StretchWeight` on a card or on a group inside one: the weight is a flex with a ZERO basis, and in a vertical column (the mobile layout) that basis applies to the HEIGHT - Safari collapses the card and clips it with the rounding, Chrome shows nothing. Drop the weight on a phone through a binding. Off by default: a card living only in a wide row keeps it legitimately [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Method is never referenced |
 | `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A yaml reference (a type position or a `FormType` navigation target) to a public element of another subsystem that the `Import` section does not list [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The presentation field of an object [docs](https://1cmycloud.com/docs/help/topics/element-view/) |

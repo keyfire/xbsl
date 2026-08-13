@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 148.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 150.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -207,6 +207,8 @@ sidebar:
 | `code/reserved-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Зарезервированное имя |
 | `yaml/builtin-property-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Совпадение со встроенным свойством |
 | `yaml/size-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Размер без отключения растягивания [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Числовая `МаксимальнаяШирина` у группы с матричной компоновкой: максимум – это и РАСПОЛАГАЕМАЯ ширина, автоматические колонки раскладываются по нему, а не по окну, и телефон рисует страницу десктопной шириной (контент уходит за правый край). Отдавайте `Авто`. Выключено по умолчанию: страница только для десктопа живёт с максимумом нормально [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Литеральный `ВесПриРастягивании` у карточки или у группы внутри неё: вес – это flex с НУЛЕВОЙ базой, а в вертикальной колонке (мобильная раскладка) база относится к высоте – Safari схлопывает карточку и обрезает её скруглением, Chrome не показывает ничего. Снимайте вес на телефоне биндингом. Выключено по умолчанию: карточка, живущая только в широком ряду, носит вес законно [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Метод нигде не используется |
 | `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на публичный элемент чужой подсистемы, которой нет в секции `Импорт` [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле представления объекта [доки](https://1cmycloud.com/docs/help/topics/element-view/) |
