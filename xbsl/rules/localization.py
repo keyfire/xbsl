@@ -19,6 +19,22 @@ the cause.
 The check is file-local (both the section and its entries are in one yaml) and reads the
 section names in either spelling, from the metamodel record of the kind.
 
+--- yaml/localization-ref-to-template ---
+
+The mirror defect, and the one the apply refuses over: a `$Dictionary.Key` reference in a
+yaml resolves against the `Strings` section ALONE. A key that lives in `Templates` is not
+found by such a reference at all, and the apply fails with a localized-string-not-found
+answer naming the key - the stand rolls back to the previous build.
+
+Reconnaissance settled the slice, and it is narrower than "a plain string in the templates
+section": a live project carries eleven placeholder-less keys in `Templates` that work
+perfectly well, because CODE calls them (`Dictionary.Key()`), and only a yaml REFERENCE
+goes through the strings-only lookup. So the rule judges the reference, not the entry: a
+`$Dictionary.Key` whose key the dictionary declares under `Templates` and not under
+`Strings`. Both sides are known exactly - the dictionary is a project element, and the
+sections are read from its own yaml - and the same project's 1040 working references all
+resolve into `Strings`, which is what makes the zero on the corpus an honest one.
+
 --- code/compare-with-localized ---
 
 A localized value is whatever the reader's language turns it into, so comparing it against a
@@ -100,6 +116,7 @@ import yaml as _yaml
 from xbsl import dataset, i18n, metamodel, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.lexer import linemap
 from xbsl.rules._syntax import code_tokens, in_query, signatures
 from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _mapping_nodes, _parsed, object_kind
 
@@ -107,6 +124,23 @@ MESSAGES = {
     "yaml/placeholder-key-in-strings.title": {
         "ru": "Подстановка в секции Строки, а не Шаблоны",
         "en": "A placeholder in the Strings section instead of Templates",
+    },
+    "yaml/localization-ref-to-template.title": {
+        "ru": "Ссылка на ключ из секции Шаблоны",
+        "en": "A reference to a key of the templates section",
+    },
+    "yaml/localization-ref-to-template.found": {
+        "ru": "Ссылка '${dict}.{key}' указывает на ключ секции Шаблоны словаря '{dict}' – "
+              "ссылка ищет ключ ТОЛЬКО в секции Строки, и применение сборки упадёт с "
+              "\"Не удалось найти локализованную строку с именем {key}\" (стенд откатится "
+              "на прежнюю сборку). Перенесите ключ в конец секции Строки – либо, если "
+              "подстановки нужны, зовите его из кода как '{dict}.{key}(...)'.",
+        "en": "The reference '${dict}.{key}' points at a key of the {n[Шаблоны]} section of "
+              "dictionary '{dict}' – a reference looks the key up in {n[Строки]} ONLY, and "
+              "the apply fails with \"localized string {key} not found\" (the stand rolls "
+              "back to the previous build). Move the key to the end of the {n[Строки]} "
+              "section – or, when the substitutions are needed, call it from code as "
+              "'{dict}.{key}(...)'.",
     },
     "code/compare-with-localized.title": {
         "ru": "Сравнение с локализованным значением",
@@ -210,6 +244,83 @@ def _section_names() -> frozenset[str]:
 
 
 dataset.register_reset(_section_names.cache_clear)
+
+
+@lru_cache(maxsize=1)
+def _template_section_names() -> frozenset[str]:
+    """Both spellings of the templates section, from the metamodel record of the kind."""
+    record = metamodel.properties(_KIND).get(_TEMPLATES) or {}
+    return frozenset({_TEMPLATES, record.get("en")} - {None})
+
+
+dataset.register_reset(_template_section_names.cache_clear)
+
+
+#: A dictionary reference of a yaml value: `$Словарь.Ключ` (the two-segment form alone -
+#: a longer path is not a dictionary lookup).
+_DICT_REF = re.compile(r"\$([^\W\d]\w*)\.([^\W\d]\w*)", re.UNICODE)
+
+
+def _section_keys(data: dict, names: frozenset[str]) -> set[str]:
+    """Keys of a dictionary section, whichever spelling the file uses."""
+    for name in names:
+        block = data.get(name)
+        if isinstance(block, dict):
+            return {key for key in block if isinstance(key, str)}
+    return set()
+
+
+def _localization_ref_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a dictionary yaml contributes its two key sets, any yaml the
+    `$Словарь.Ключ` references it makes, with their positions."""
+    if not _HAVE_YAML or source.kind != "yaml":
+        return None
+    fact: dict = {}
+    data, error = _parsed(source)
+    if error is None and isinstance(data, dict) and object_kind(data) == _KIND:
+        name = data.get("Имя") or data.get("Name")
+        if isinstance(name, str) and name:
+            fact["dict"] = (
+                name,
+                sorted(_section_keys(data, _section_names())),
+                sorted(_section_keys(data, _template_section_names())),
+            )
+    if "$" in source.text:
+        lm = linemap(source)
+        refs = [
+            [m.group(1), m.group(2), *lm.linecol(m.start())]
+            for m in _DICT_REF.finditer(source.text)
+        ]
+        if refs:
+            fact["refs"] = refs
+    return fact or None
+
+
+@rule(
+    "yaml/localization-ref-to-template",
+    "yaml/localization-ref-to-template.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_localization_ref_mapper,
+)
+def localization_ref_to_template(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    sections: dict[str, tuple[set[str], set[str]]] = {}
+    for fact in facts.values():
+        if "dict" in fact:
+            name, strings, templates = fact["dict"]
+            sections[name] = (set(strings), set(templates))
+    if not sections:
+        return
+    for rel, fact in facts.items():
+        for name, key, line, col in fact.get("refs", ()):
+            found = sections.get(name)
+            if found is None:
+                continue  # not a dictionary of this project - nothing to judge against
+            strings, templates = found
+            if key in strings or key not in templates:
+                continue  # resolvable, or a key this dictionary does not declare at all
+            yield Diagnostic(
+                rel, line, col, "yaml/localization-ref-to-template", Severity.ERROR,
+                i18n.t("yaml/localization-ref-to-template.found", dict=name, key=key),
+            )
 
 
 @rule(

@@ -168,7 +168,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   {
     match: (r) => r === "yaml/placeholder-key-in-strings"
-      || r === "code/compare-with-localized",
+      || r === "code/compare-with-localized"
+      || r === "yaml/localization-ref-to-template",
     page: "topics/localization",
   },
   { match: (r) => r === "code/unknown-row-field", page: "topics/dynamic-list" },

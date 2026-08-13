@@ -190,3 +190,73 @@ def test_module_without_comparisons_contributes_nothing(tmp_path):
         "@ВПроекте\nметод Проба(): Строка\n    возврат Модуль.Значение()\n;\n", encoding="utf-8"
     )
     assert localization._compare_mapper(engine.load(module)) is None
+
+
+# --- yaml/localization-ref-to-template ---------------------------------------------------
+
+REF_RULE = "yaml/localization-ref-to-template"
+
+_REF_DICT = (
+    "ВидЭлемента: ЛокализованныеСтроки\n"
+    "Ид: dddddddd-1111-2222-3333-444444444444\n"
+    "Имя: Словарь\n"
+    "Строки:\n"
+    "    Заголовок: Каталог\n"
+    "Шаблоны:\n"
+    "    ВсеМатериалы: Все материалы\n"
+    "    Расширена: \"Расширена (до $0)\"\n"
+)
+
+
+def _refs(tmp_path, value, dictionary=_REF_DICT):
+    (tmp_path / "Словарь.yaml").write_text(dictionary, encoding="utf-8")
+    (tmp_path / "Ф.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Ф\n"
+        "Содержимое:\n"
+        "    -\n"
+        "        Тип: Надпись\n"
+        f"        Значение: {value}\n",
+        encoding="utf-8",
+    )
+    return engine.run(discover([str(tmp_path)]), select={REF_RULE})
+
+
+def test_reference_to_a_template_key_flagged(tmp_path):
+    """The apply refuses over it: a reference resolves against the strings section alone."""
+    d = _refs(tmp_path, "$Словарь.ВсеМатериалы")
+    assert [x.rule_id for x in d] == [REF_RULE]
+    assert "ВсеМатериалы" in d[0].message
+    assert (d[0].line, d[0].col) == (6, 19)  # the reference itself
+
+
+def test_reference_to_a_strings_key_is_silent(tmp_path):
+    d = _refs(tmp_path, "$Словарь.Заголовок")
+    assert d == []
+
+
+def test_a_template_key_nobody_references_is_left_alone(tmp_path):
+    """Reconnaissance: a live project keeps placeholder-less keys in the templates section
+    on purpose - code calls them, and only a yaml REFERENCE goes through the strings lookup."""
+    d = _refs(tmp_path, "Просто текст")
+    assert d == []
+
+
+def test_a_key_declared_in_both_sections_is_silent(tmp_path):
+    """The strings section answers the reference - the template namesake is not the target."""
+    dictionary = _REF_DICT.replace(
+        "    Заголовок: Каталог\n", "    Заголовок: Каталог\n    ВсеМатериалы: Все материалы\n"
+    )
+    d = _refs(tmp_path, "$Словарь.ВсеМатериалы", dictionary=dictionary)
+    assert d == []
+
+
+def test_an_unknown_key_is_not_this_rule(tmp_path):
+    """A key the dictionary declares nowhere is another defect (a typo, a foreign library)."""
+    d = _refs(tmp_path, "$Словарь.НетТакого")
+    assert d == []
+
+
+def test_a_foreign_dictionary_is_left_alone(tmp_path):
+    d = _refs(tmp_path, "$Чужой.ВсеМатериалы")
+    assert d == []
