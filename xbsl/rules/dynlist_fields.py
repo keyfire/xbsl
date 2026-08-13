@@ -52,17 +52,45 @@ The slice keeps both sides certain:
 * the entity's yaml is in the project and declares NO hierarchy (none of the hierarchy
   keys): a hierarchical source has node rows, for which the event is documented, so it is
   left alone whatever the component does with the hierarchy.
+
+--- yaml/dynlist-column-sort-lost ---
+
+A column whose `Value` CALLS something (`=FormatDate(RowData.Data.Start)`) cannot be sorted
+by clicking its header: the sort is bound to the FIELD of the source, not to the text on the
+screen, and the platform simply does not react to the click. The cure is a binding straight
+onto the field (`=RowData.Data.Start`, the platform renders the value by its type); when both
+a custom format and sorting are needed, the presentation field goes into the dynamic list
+itself (a `DynamicListField` with an `Expression`) instead of being computed on the client.
+
+Only a column of a table over a DYNAMIC LIST is judged - header sorting exists there; an
+array-backed list has none, and a computed column in it is not a defect at all. The rule is
+info and OFF by default: the finding is true (the header really does not sort), but whether
+that column was ever meant to sort is not visible from the file - a status badge or a
+service column is legitimately unsortable. Enable it when a header does not react and you
+are looking for the reason.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Iterator
 from functools import lru_cache
 
 from xbsl import dataset, i18n, metamodel, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import (
+    _composed,
+    _HAVE_YAML,
+    _mapping_nodes,
+    _parsed,
+    _scalar_entries,
+    object_kind,
+    value_of,
+)
+
+if _HAVE_YAML:
+    import yaml
 from xbsl.rules.yaml_types import _NAME_RE, _parse_type_string, _value_positions
 
 MESSAGES = {
@@ -77,6 +105,23 @@ MESSAGES = {
         "en": "{n[Источник.Поля]} misses attribute '{attr}' of object '{obj}' – the list is typed "
               "with '{obj}.{n[АвтоматическаяФормаСписка]}.ДанныеСтрокиСписка' and requires every "
               "attribute; at runtime the list crashes with a required-field error.",
+    },
+    "yaml/dynlist-column-sort-lost.title": {
+        "ru": "Колонка с вычисляемым значением не сортируется",
+        "en": "A column with a computed value does not sort",
+    },
+    "yaml/dynlist-column-sort-lost.computed": {
+        "ru": "Значение колонки – вызов '{call}', и сортировка по её заголовку работать не "
+              "будет: платформа сортирует по ПОЛЮ источника, а не по отображаемому тексту. "
+              "Нужна сортировка – привязывайте колонку прямо к полю (представление платформа "
+              "нарисует по типу значения) либо добавьте поле-представление в сам динамический "
+              "список (ПолеДинамическогоСписка с Выражение), а не считайте его на клиенте.",
+        "en": "The column value is a call of '{call}', so sorting by its header will not "
+              "work: the platform sorts by the FIELD of the source, not by the text on "
+              "screen. If sorting is needed, bind the column straight to the field (the "
+              "platform renders the value by its type) or add a presentation field to the "
+              "dynamic list itself (a {n[ПолеДинамическогоСписка]} with an {n[Выражение]}) "
+              "instead of computing it on the client.",
     },
     "yaml/dynlist-row-editing.title": {
         "ru": "ПриРедактированииСтроки у плоского динамического списка",
@@ -307,6 +352,64 @@ def _row_edit_mapper(source: SourceFile) -> dict | None:
         if handlers:
             fact["row_edits"] = handlers
     return fact or None
+
+
+#: The value of a column that CALLS something: `=Метод(...)`, `=Модуль.Метод(...)`. A bare
+#: path binding (`=RowData.Data.Поле`) carries no parentheses and is the sortable form.
+_CALL_VALUE_RE = re.compile(r"^\s*=\s*(?P<call>[^\W\d][\w.]*)\s*\(", re.UNICODE)
+_COLUMNS_KEYS = ("Колонки", "Columns")
+_VALUE_KEYS = ("Значение", "Value")
+
+
+@rule(
+    "yaml/dynlist-column-sort-lost", "yaml/dynlist-column-sort-lost.title", "D",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="yaml/dynlist-column-sort-lost.off",
+)
+def dynlist_column_sort_lost(source: SourceFile) -> Iterable[Diagnostic]:
+    """A computed column of a table over a dynamic list - its header will not sort."""
+    if not _HAVE_YAML or source.kind != "yaml" or "(" not in source.text:
+        return
+    _events, dynlist_names, _hier = _row_edit_names()
+    if not dynlist_names:
+        return
+    root = _composed(source)
+    if root is None:
+        return
+    for mapping in _mapping_nodes(root):
+        entries = _scalar_entries(mapping)
+        type_entry = entries.get("Тип") or entries.get("Type")
+        if type_entry is None or not isinstance(type_entry[1], yaml.ScalarNode):
+            continue
+        chains = _parse_type_string(type_entry[1].value)
+        if not chains or not any(
+            len(chain) == 1 and chain[0] in dynlist_names for chain in chains
+        ):
+            continue  # the table is not typed over a dynamic list - no header sorting at all
+        columns = None
+        for key, value in mapping.value:
+            if isinstance(key, yaml.ScalarNode) and key.value in _COLUMNS_KEYS:
+                columns = value
+        if not isinstance(columns, yaml.SequenceNode):
+            continue
+        for column in columns.value:
+            if not isinstance(column, yaml.MappingNode):
+                continue
+            for key, value in column.value:
+                if not (isinstance(key, yaml.ScalarNode) and key.value in _VALUE_KEYS):
+                    continue
+                if not isinstance(value, yaml.ScalarNode):
+                    continue
+                found = _CALL_VALUE_RE.match(value.value or "")
+                if found is None:
+                    continue
+                yield Diagnostic(
+                    source.rel,
+                    value.start_mark.line + 1, value.start_mark.column + 1,
+                    "yaml/dynlist-column-sort-lost", Severity.INFO,
+                    i18n.t("yaml/dynlist-column-sort-lost.computed",
+                           call=found.group("call")),
+                )
 
 
 @rule(

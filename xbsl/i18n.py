@@ -64,6 +64,10 @@ _CORE_MESSAGES = {
         "ru": "у части компонентов размер без явного запрета растягивания работает законно (у родителя нет свободного места по этой оси, статически это не решается) – предупреждение дало бы ложные. Зовите точечно, когда видите симптом: пустое место или раздутые соседи",
         "en": "for some components a size without an explicit stretch ban is perfectly valid (the parent has no leftover space along that axis, which is not statically decidable) - a warning would be false. Enable it point-blank when you see the symptom: blank space or inflated neighbours",
     },
+    "yaml/dynlist-column-sort-lost.off": {
+        "ru": "находка верна (заголовок такой колонки правда не сортирует), но нужна ли сортировка именно ей – из файла не видно: значок статуса или служебная колонка не сортируются законно. Включайте, когда заголовок не реагирует и вы ищете причину",
+        "en": "the finding is true (such a header really does not sort), but whether that column was meant to sort is not visible from the file: a status badge or a service column is legitimately unsortable. Enable it when a header does not react and you are looking for the reason",
+    },
     "code/url-params-partial-encoding.off": {
         "ru": "видны ли статически '&' и '=' в значениях – нет: вызов с заведомо простыми значениями (state, фиксированный scope, случайный токен) легален и обычен. Включайте точечно, когда среди значений может оказаться адрес",
         "en": "whether a value carries '&' or '=' is not statically visible: a call with known-plain values (a state, a fixed scope, a random token) is legitimate and common. Enable it point-wise when an address can end up among the values",

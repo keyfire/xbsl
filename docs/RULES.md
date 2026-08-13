@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 147 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 148 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -176,6 +176,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/unknown-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Unknown type in yaml |
 | `yaml/dynlist-missing-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Missing dynamic-list field [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An `OnRowEdit` handler on a list over a FLAT dynamic source: the event is declared for the node rows of a hierarchy, and on a flat list the platform never calls it - a click opens the object's automatic form instead; give the object its own object form [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/dynlist-column-sort-lost` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A column of a table over a dynamic list whose value CALLS something: the header will not sort, because the platform sorts by the FIELD of the source rather than by the text on screen. Bind the column to the field, or add a presentation field to the list itself. Off by default: whether that column was meant to sort is not visible from the file [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `code/unknown-enum-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Unknown enumeration value [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/enum-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Enumeration without nullable [docs](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/unknown-enum-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A component property value outside the enumeration of the ui schema (`ContentVerticalAlign: End` - the vertical axis has `Top`, `Center`, `Bottom`, `Baseline` and no `End`) |

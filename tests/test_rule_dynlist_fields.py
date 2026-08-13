@@ -231,3 +231,58 @@ def test_other_row_events_are_legal_on_a_flat_list():
         )),
     )
     assert d == []
+
+
+# --- yaml/dynlist-column-sort-lost -----------------------------------------------------
+
+SORT_RULE = "yaml/dynlist-column-sort-lost"
+
+
+def _column_form(value: str, *, table="Таблица<ДинамическийСписок<Подписки>>") -> str:
+    return (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Ф\n"
+        "Содержимое:\n"
+        "    -\n"
+        f"        Тип: {table}\n"
+        "        Имя: Список\n"
+        "        Колонки:\n"
+        "            -\n"
+        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Подписки>>\n"
+        f"                Значение: {value}\n"
+    )
+
+
+def _lint_sort(form: str):
+    return engine.run_sources([engine.load_text("Ф.yaml", form)], select={SORT_RULE})
+
+
+def test_a_computed_column_is_reported():
+    """The live case: a status badge built by a form method never sorts by its header."""
+    d = _lint_sort(_column_form("=ТекстСтатуса(ДанныеСтроки.Данные.Состояние)"))
+    assert [(x.rule_id, x.line) for x in d] == [(SORT_RULE, 10)]
+    assert "ТекстСтатуса" in d[0].message
+
+
+def test_a_qualified_call_is_reported_too():
+    d = _lint_sort(_column_form("=СтатусПриложения.Текст(ДанныеСтроки.Данные.Статус)"))
+    assert len(d) == 1 and "СтатусПриложения.Текст" in d[0].message
+
+
+def test_a_bare_field_binding_is_the_sortable_form():
+    d = _lint_sort(_column_form("=ДанныеСтроки.Данные.Начало"))
+    assert d == []
+
+
+def test_an_array_backed_list_has_no_header_sorting_to_lose():
+    d = _lint_sort(_column_form(
+        "=ТекстСтатуса(ДанныеСтроки.Данные.Состояние)",
+        table="Таблица<ИсточникДанныхМассив<Строка>>",
+    ))
+    assert d == []
+
+
+def test_the_rule_is_off_by_default():
+    info = next(r for r in engine.RULES if r.id == SORT_RULE)
+    assert info.enabled_by_default is False
+    assert info.off_reason

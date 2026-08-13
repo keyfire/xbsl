@@ -194,6 +194,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "наименование",
   },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
+  { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
   {
     match: (r) => r === "yaml/dynlist-row-editing",
     page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
