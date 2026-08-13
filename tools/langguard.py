@@ -17,8 +17,12 @@ GROWING, and that is exactly what a diff answers.
 
     python tools/langguard.py                 # uncommitted work + untracked files
     python tools/langguard.py --base HEAD~1   # what a commit added
-    python tools/langguard.py --base origin/main
+    python tools/langguard.py --base origin/main   # what a push would add
     python tools/langguard.py --all           # the whole tree: the size of the debt
+
+Untracked files are judged whole under EVERY base: `git diff` does not see a file until
+`git add`, against any base - a run with `--base` once answered "clean" over a new module
+whose bare Cyrillic CI then found (2026-08-13, a full CI round).
 
 Exit code 1 when something is found, 0 when clean - so CI and a pre-commit run can gate on
 it. What counts as a find:
@@ -346,12 +350,18 @@ def _is_source(name: str) -> bool:
 
 
 def scan_diff(base: str) -> list[tuple[str, int, str, str]]:
-    """Finds among the lines added since `base` (plus untracked files when base is HEAD)."""
-    targets = added_lines(_git("diff", "--unified=0", "--no-color", base, "--", "*.py", "*.ts"))
-    if base == "HEAD":
-        for name in _git("ls-files", "--others", "--exclude-standard").splitlines():
-            if _is_source(name):
-                targets.setdefault(name, set()).update(range(1, 10**6))
+    """Finds among the lines added since `base`, untracked files included.
+
+    Untracked files enter whole and under EVERY base, not only the default: a diff against
+    any base is blind to a file until `git add`, so leaving them to the HEAD case made a
+    `--base origin/main` run disagree with CI over a brand-new module (2026-08-13).
+    """
+    targets: dict[str, set[int] | None] = {
+        name: None  # the whole file is an addition
+        for name in _git("ls-files", "--others", "--exclude-standard").splitlines()
+        if _is_source(name)
+    }
+    targets.update(added_lines(_git("diff", "--unified=0", "--no-color", base, "--", "*.py", "*.ts")))
     found = []
     for name, numbers in sorted(targets.items()):
         if not _is_source(name):

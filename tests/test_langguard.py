@@ -160,6 +160,19 @@ def test_only_the_added_lines_are_judged(tmp_path):
     assert langguard.check_file(path, {2}) == [(2, "comment", "комментарий новый")]
 
 
+def test_untracked_files_are_judged_under_every_base(tmp_path, monkeypatch):
+    """A diff against any base is blind to a file until `git add` - so a `--base` run used
+    to answer "clean" over a brand-new module whose bare Cyrillic CI then found."""
+    (tmp_path / "fresh.py").write_text("x = 1  # свежий модуль\n", encoding="utf-8")
+    replies = {
+        ("ls-files", "--others", "--exclude-standard"): "fresh.py\n",
+    }
+    monkeypatch.setattr(langguard, "ROOT", tmp_path)
+    monkeypatch.setattr(langguard, "_git", lambda *args: replies.get(args, ""))
+    found = langguard.scan_diff("origin/main")
+    assert [(name, kind) for name, _line, kind, _words in found] == [("fresh.py", "comment")]
+
+
 @pytest.mark.parametrize("name", ["node_modules/pkg/index.ts", "dist/out.js", "docs/page.md"])
 def test_foreign_and_generated_files_are_out_of_scope(name):
     assert not langguard._is_source(name)
