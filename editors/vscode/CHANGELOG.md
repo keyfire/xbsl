@@ -9,6 +9,41 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.60.0
+
+### Added
+- **The form wireframe looks like the platform's own web designer.** The visual system is
+  measured on the real designer: fields with a gray caption above a rounded box with a hairline
+  border, the yellow primary button with its dark-olive text, gray regular and blue text
+  buttons, tabs as plain text with the yellow bar under the active one, grid-less tables - a
+  bare header, hairline row separators and an add-with-search strip, real checkbox squares and
+  radio circles, cards with a 16px radius and no shadow, gray image glyphs without frames,
+  dashed file-drop zones, a text editor with its formatting strip. Form commands sit where the
+  platform puts them: the main ones at the bottom right, the auxiliary ones as pills in the
+  header, a list form gets its search bar and the blue create command. The red asterisk of a
+  required field, a calendar on a date field, a chevron on a choice field.
+- **A device toolbar above the wireframe** - as in the platform's designer: presets (iPhone SE
+  ... Full HD), a custom width and height, rotation, an auto-fitted zoom; the page floats on a
+  neutral canvas at the device size. The choice is remembered along with the zoom and the theme.
+- **Project components are drawn with their own content.** A project component placed on a form
+  by its type name is no longer a dashed placeholder: the designer finds its yaml in the
+  workspace and draws the content right in the page (up to two levels deep, with its own
+  resource icons); a click on the block navigates to the use site. A site page assembled from
+  cards looks like the page, not like a fence of placeholders.
+- **A sectioned application draws its navigation panel** - the logo, items with their icons,
+  the vertical or horizontal orientation by the property and the content area, instead of
+  refusing with "not a form".
+- **Localization references are readable**: a dollar-prefixed "dictionary.key" value shows the
+  last segment of the key, with the full key in the tooltip.
+- **The wireframe's own texts are localized** - the placeholders, the table strip and the
+  search bar follow the editor language (Russian and English).
+
+### Changed
+- **The dark theme of the wireframe is the palette of the platform site's dark scheme**, not
+  the editor's palette.
+- **The "docs" link knows the `yaml/date-input-needs-plain-date` rule** (engine 0.63.0) - it
+  opens the section on the edit component.
+
 ## 0.59.3
 
 ### Changed
