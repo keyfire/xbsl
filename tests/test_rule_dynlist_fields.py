@@ -270,8 +270,16 @@ def test_a_qualified_call_is_reported_too():
 
 
 def test_a_bare_field_binding_is_the_sortable_form():
-    d = _lint_sort(_column_form("=ДанныеСтроки.Данные.Начало"))
-    assert d == []
+    """A second, computed column stands next to it on purpose: without a call anywhere in
+    the file the cheap text gate would carry the test, and a broken pattern would pass."""
+    form = _column_form("=ДанныеСтроки.Данные.Начало")
+    form += (
+        "            -\n"
+        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Подписки>>\n"
+        "                Значение: =ТекстСтатуса(ДанныеСтроки.Данные.Состояние)\n"
+    )
+    d = _lint_sort(form)
+    assert [x.line for x in d] == [13], [x.message for x in d]  # only the computed one
 
 
 def test_an_array_backed_list_has_no_header_sorting_to_lose():
