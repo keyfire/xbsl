@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 146.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 147.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -217,6 +217,7 @@ sidebar:
 | `code/row-field-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Поле динамического списка, взятое через ссылку (`Абонент.Номер`), имеет тип `<тип>|Null` и не годится типизированному полю структуры – компилятор отвечает `Null cannot be assigned` [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/unknown-attribute-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ, которого класс самого реквизита не объявляет (`Длина` у обычного реквизита – её объявляет стандартный `Код`, а у числового есть `ДлинаЦелойЧасти`) – применение сборки отвергает объект |
 | `yaml/empty-group-sized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Пустая `Группа` с `Высота`/`Ширина` – рендер выбрасывает узел, зазора не будет |
+| `yaml/insert-row-needs-align` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Горизонтальная группа со вставкой `КонтейнерHtml` и без `ВыравниваниеСодержимогоПоВертикали`: дети равняются ПО БАЗОВОЙ ЛИНИИ, а у вставки она своя – элемент со вставкой съезжает вниз относительно соседей (на живом ряду 50 px). Отвечает ближайший горизонтальный предок, поэтому ряд с уже выровненной внутренней полосой молчит [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/hint-too-long` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `Подсказка` длиннее предела отрисовки – хвост не показывается вовсе |
 | `yaml/date-input-needs-plain-date` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `ПолеВвода<Дата?>` – поле ввода даты, допускающей пустое значение, рендер молча не рисует; тип делается непустым, "не задано" – пустая дата [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/binding-needs-auto` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Биндинг свойства без пустого значения зовёт метод с nullable-возвратом – клиент регистрирует "Неожиданное значение" на каждом пересчёте; "не задано" – это значение Авто |

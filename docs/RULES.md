@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 146 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 147 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -218,6 +218,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/row-field-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/unknown-attribute-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object |
 | `yaml/empty-group-sized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An empty `Group` with `Height`/`Width` – the renderer drops the node and there is no gap |
+| `yaml/insert-row-needs-align` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A horizontal group holding an `HtmlContainer` insert and no `VerticalContentAlignment`: children are laid out on the BASELINE, and the insert carries one of its own, so the element holding it slides down against its neighbours (50 px on a live row). The nearest horizontal ancestor answers, so a row whose inner strip is already aligned stays silent [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/hint-too-long` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `Tooltip` longer than the render limit – the tail is not shown at all |
 | `yaml/date-input-needs-plain-date` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `Edit<Date?>` – the renderer silently drops a date input that allows the empty value; make the type plain and express "not set" with the empty date [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/binding-needs-auto` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A binding of a plain component property calls a method declared nullable - the client registers an "unexpected Undefined value" error on every recomputation; "not set" is the Auto value |

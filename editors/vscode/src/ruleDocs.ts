@@ -215,6 +215,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "растягиватьповертикали-и-растягиватьпогоризонтали",
   },
   {
+    match: (r) => r === "yaml/insert-row-needs-align",
+    page: "topics/arrange-components-on-screen",
+  },
+  {
     match: (r) => r === "code/url-params-partial-encoding",
     page: "stdlib/element/xbsl/Std/Http/Url_ru",
     anchor: "спараметрамизапроса",

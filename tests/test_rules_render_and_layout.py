@@ -201,3 +201,96 @@ def test_a_computed_hint_is_silent(tmp_path):
         + "    -\n        Тип: Надпись\n        Заголовок: Поле\n        Подсказка: =ДлинныйТекст()\n"
     )
     assert _diags(tmp_path, "ПробнаяФорма.yaml", text, "yaml/hint-too-long") == []
+
+
+# --- yaml/insert-row-needs-align -----------------------------------------------------
+
+ALIGN_RULE = "yaml/insert-row-needs-align"
+
+_ROW_HEAD = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: aaaaaaaa-1111-2222-3333-444444444444\n"
+    "Имя: Ф\n"
+    "Содержимое:\n"
+    "    -\n"
+    "        Тип: Группа\n"
+    "        Имя: Ряд\n"
+    "        Компоновка: Горизонтальная\n"
+)
+
+
+def _row(cards: str, *, align: str = "", head: str = _ROW_HEAD) -> str:
+    aligned = f"        ВыравниваниеСодержимогоПоВертикали: {align}\n" if align else ""
+    return head + aligned + "        Содержимое:\n" + cards
+
+
+_CARD_WITH_INSERT = (
+    "            -\n"
+    "                Тип: Группа\n"
+    "                Имя: КарточкаСоВставкой\n"
+    "                Компоновка: Вертикальная\n"
+    "                Содержимое:\n"
+    "                    -\n"
+    "                        Тип: КонтейнерHtml\n"
+    "                        Имя: Вставка\n"
+)
+_PLAIN_CARD = (
+    "            -\n"
+    "                Тип: Группа\n"
+    "                Имя: КарточкаТекст\n"
+    "                Компоновка: Вертикальная\n"
+    "                Содержимое:\n"
+    "                    -\n"
+    "                        Тип: Надпись\n"
+    "                        Значение: Текст\n"
+)
+
+
+def test_row_with_an_insert_card_flagged(tmp_path):
+    """The live case: a bento row where the card holding an insert slides down 50 px."""
+    d = _diags(tmp_path, "Ф.yaml", _row(_CARD_WITH_INSERT + _PLAIN_CARD), ALIGN_RULE)
+    assert len(d) == 1, d
+    assert d[0][:2] == (8, 9)  # the layout key of the row, not the top of the file
+    assert "БАЗОВОЙ" in d[0][2]
+
+
+def test_an_explicit_alignment_silences_the_row(tmp_path):
+    d = _diags(tmp_path, "Ф.yaml", _row(_CARD_WITH_INSERT + _PLAIN_CARD, align="Верх"), ALIGN_RULE)
+    assert d == []
+
+
+def test_a_row_without_an_insert_is_left_alone(tmp_path):
+    d = _diags(tmp_path, "Ф.yaml", _row(_PLAIN_CARD + _PLAIN_CARD), ALIGN_RULE)
+    assert d == []
+
+
+def test_a_single_child_has_nothing_to_slide_against(tmp_path):
+    d = _diags(tmp_path, "Ф.yaml", _row(_CARD_WITH_INSERT), ALIGN_RULE)
+    assert d == []
+
+
+def test_a_vertical_group_is_not_a_row(tmp_path):
+    head = _ROW_HEAD.replace("Компоновка: Горизонтальная", "Компоновка: Вертикальная")
+    d = _diags(tmp_path, "Ф.yaml", _row(_CARD_WITH_INSERT + _PLAIN_CARD, head=head), ALIGN_RULE)
+    assert d == []
+
+
+def test_the_nearest_row_answers_not_its_parent(tmp_path):
+    """A live project's media group reads exactly this way: the inner strip is aligned, so
+    the outer row must stay silent - the insert's baseline is settled deeper."""
+    inner = (
+        "            -\n"
+        "                Тип: Группа\n"
+        "                Имя: Полоса\n"
+        "                Компоновка: Горизонтальная\n"
+        "                ВыравниваниеСодержимогоПоВертикали: Центр\n"
+        "                Содержимое:\n"
+        "                    -\n"
+        "                        Тип: КонтейнерHtml\n"
+        "                        Имя: Вставка\n"
+        "                    -\n"
+        "                        Тип: Надпись\n"
+        "                        Значение: Рядом\n"
+    )
+    d = _diags(tmp_path, "Ф.yaml", _row(inner + _PLAIN_CARD), ALIGN_RULE)
+    assert d == []
