@@ -9,8 +9,8 @@ is simply "not set" - but the client registers an error on EVERY recomputation o
 binding, and the records go to the server log, invisible in the browser console.
 
 The live case (2026-08): three cards of a live project returned the empty value from a
-hover-background binding; the client log had accumulated 1866 records of
-"Неожиданное значение "Неопределено"" pointing at the binding's yaml coordinate before
+hover-background binding; the client log had accumulated 1866 records of the
+"Неожиданное значение" error pointing at the binding's yaml coordinate before
 anyone noticed. The neighbouring bindings of nullable-typed properties (`Изображение`,
 declared with the nullable flag) produced none - the flag in the schema is exactly the
 boundary of the defect.
