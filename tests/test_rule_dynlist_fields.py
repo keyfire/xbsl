@@ -148,3 +148,86 @@ def test_qualified_expression_and_alias_count_as_present():
     form += "                    Псевдоним: Опубликован\n"
     d = _lint_form(form)
     assert d == []
+
+
+# --- yaml/dynlist-row-editing ----------------------------------------------------------
+
+EDIT_RULE = "yaml/dynlist-row-editing"
+
+_ПОДПИСКИ = "ВидЭлемента: Справочник\nИмя: Подписки\n"
+_КАТЕГОРИИ = "ВидЭлемента: Справочник\nИмя: Категории\nИерархический: Истина\n"
+
+
+def _форма_с_событием(тип: str, событие: str = "ПриРедактированииСтроки") -> str:
+    return (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Ф\n"
+        "Содержимое:\n"
+        "    -\n"
+        f"        Тип: {тип}\n"
+        "        Имя: Список\n"
+        f"        {событие}: СтрокаПриРедактировании\n"
+    )
+
+
+def _lint_edit(*files: tuple[str, str]):
+    sources = [engine.load_text(name, content) for name, content in files]
+    return engine.run_sources(sources, select={EDIT_RULE})
+
+
+def test_row_edit_on_a_flat_dynlist_flagged():
+    """The registry case: the handler looks like working code, the platform never calls it."""
+    d = _lint_edit(
+        ("Подписки.yaml", _ПОДПИСКИ),
+        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Подписки>>")),
+    )
+    assert [x.rule_id for x in d] == [EDIT_RULE]
+    assert "Подписки" in d[0].message and "не вызывает" in d[0].message
+    assert (d[0].line, d[0].col) == (7, 34)  # the handler name, not the top of the file
+
+
+def test_a_hierarchical_source_is_left_alone():
+    """Node rows of a hierarchy are what the event is documented for."""
+    d = _lint_edit(
+        ("Категории.yaml", _КАТЕГОРИИ),
+        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Категории>>")),
+    )
+    assert d == []
+
+
+def test_an_untyped_dynlist_is_not_guessed():
+    """The untyped list of a list form implies its entity - resolving that would guess."""
+    d = _lint_edit(
+        ("Подписки.yaml", _ПОДПИСКИ),
+        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок>")),
+    )
+    assert d == []
+
+
+def test_an_entity_outside_the_project_is_left_alone():
+    d = _lint_edit(("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Чужая>>")))
+    assert d == []
+
+
+def test_the_row_form_chain_resolves_the_entity():
+    chain = "Таблица<ДинамическийСписок<Подписки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>"
+    d = _lint_edit(("Подписки.yaml", _ПОДПИСКИ), ("Ф.yaml", _форма_с_событием(chain)))
+    assert [x.rule_id for x in d] == [EDIT_RULE]
+
+
+def test_an_array_source_is_not_judged():
+    d = _lint_edit(
+        ("Подписки.yaml", _ПОДПИСКИ),
+        ("Ф.yaml", _форма_с_событием("Таблица<ИсточникДанныхМассив<Строка>>")),
+    )
+    assert d == []
+
+
+def test_other_row_events_are_legal_on_a_flat_list():
+    d = _lint_edit(
+        ("Подписки.yaml", _ПОДПИСКИ),
+        ("Ф.yaml", _форма_с_событием(
+            "Таблица<ДинамическийСписок<Подписки>>", событие="ПриНажатииСтроки"
+        )),
+    )
+    assert d == []

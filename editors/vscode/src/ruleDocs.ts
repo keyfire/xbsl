@@ -194,6 +194,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   {
+    match: (r) => r === "yaml/dynlist-row-editing",
+    page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
+    anchor: "приредактированиистроки",
+  },
+  {
     match: (r) => r === "yaml/event-needs-importance",
     page: "topics/event-properties",
     anchor: "важность",
