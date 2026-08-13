@@ -12,6 +12,46 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-14 – 0.64.0
+
+### Added
+- **Eight rules for platform behaviour the compiler accepts and the screen then contradicts**
+  (142 → 150). Each one was cut by reconnaissance over four real projects, and every slice is
+  as narrow as the evidence allowed:
+  - `code/permission-handlers-need-recalc` – a module declares a permission handler while the
+    project recomputes that entity's permissions nowhere: the platform never calls the handler
+    by itself, so an edit of the algorithm silently does not act on existing data. Kinds are
+    taken from the data (a kind with no recompute method is not judged), and the documented
+    loop form of the recomputation stands the rule down instead of producing false positives.
+  - `yaml/dynlist-row-editing` – an `OnRowEdit` handler on a list over a FLAT dynamic source:
+    the event is declared for the node rows of a hierarchy, and on a flat list the platform
+    never calls it, so a click opens the automatic form instead.
+  - `yaml/localization-ref-to-template` – a `$Dictionary.Key` reference pointing at a key of
+    the templates section: a reference resolves against the strings section alone, and the
+    apply fails with a localized-string-not-found answer. A template key nobody references is
+    left alone – code calls it legitimately.
+  - `yaml/insert-row-needs-align` – a horizontal group holding an insert and no explicit
+    vertical alignment: children are laid out on the baseline, and the element holding the
+    insert slides down against its neighbours. The nearest horizontal ancestor answers.
+  - `code/url-params-partial-encoding` (info, off) – the Url method that encodes a parameter
+    value only partially: separators inside the value survive, and an address arrives cut.
+  - `yaml/dynlist-column-sort-lost` (info, off) – a column of a table over a dynamic list
+    whose value CALLS something: the header does not sort, the platform sorts by the field.
+  - `yaml/matrix-group-max-width` (info, off) – a numeric width maximum on a group that lays
+    out as a matrix: the maximum is also the AVAILABLE width, so a phone draws the page at
+    desktop width and the content runs off the right edge.
+  - `yaml/card-literal-stretch-weight` (info, off) – a literal stretch weight on a card or on
+    a group inside one: the weight is a flex with a zero basis, which in a vertical column
+    applies to the height and collapses the card on Safari while Chrome shows nothing.
+
+### Fixed
+- **The metamodel reset now clears the `key_aliases` cache as well.** Pinning another data
+  root left that one answering from the previous root – the surfaces outside python (the
+  editor's metadata tree) could get the pairs of a version they were not looking at.
+- **The language guard judges untracked files under every base.** `git diff` is blind to a
+  file until it is added, so a run against a branch answered "clean" over a brand-new module
+  whose bare Cyrillic CI then found; untracked sources now enter the scan whole.
+
 ## 2026-08-13 – 0.63.0
 
 ### Added

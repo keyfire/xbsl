@@ -44,7 +44,7 @@ def test_computed_property_assignment_flagged(tmp_path):
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",
-        height="Высота: =Общее.ЭтоМобильный()?820:528",
+        height="Высота: =Устройство.ЭтоТелефон()?820:528",
         code="метод Ф()\n    Компоненты.Вставка.Высота = 640\n;\n",
     )
     assert len(diags) == 1
@@ -78,7 +78,7 @@ def test_comparison_is_not_an_assignment(tmp_path):
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",
-        height="Высота: =Общее.ЭтоМобильный()?820:528",
+        height="Высота: =Устройство.ЭтоТелефон()?820:528",
         code="метод Ф()\n    если Компоненты.Вставка.Высота == 640\n        Метод1()\n    ;\n;\n",
     )
     assert diags == []
@@ -89,7 +89,7 @@ def test_assignment_through_an_event_source_is_left_alone(tmp_path):
     diags = _pair(
         tmp_path,
         value="Значение: =Запись.Значение",
-        height="Высота: =Общее.ЭтоМобильный()?820:528",
+        height="Высота: =Устройство.ЭтоТелефон()?820:528",
         code="метод Ф(Источник: КонтейнерHtml)\n    Источник.Высота = 640\n;\n",
     )
     assert diags == []

@@ -201,7 +201,7 @@ def test_the_matrix_settings_block_marks_the_group_too():
 
 
 def test_auto_and_bindings_are_the_cure_not_the_defect():
-    for value in ("Авто", "=СтильСайта.ШиринаКонтента()"):
+    for value in ("Авто", "=Оформление.ШиринаКолонки()"):
         body = (
             "        -\n"
             "            Тип: Группа\n"
@@ -281,7 +281,7 @@ def test_a_binding_weight_is_the_cure():
     body = (
         "        -\n"
         "            Тип: СтандартнаяКарточка\n"
-        "            ВесПриРастягивании: =Общее.ЭтоМобильный()?Авто:1\n"
+        "            ВесПриРастягивании: =Устройство.ЭтоТелефон()?Авто:1\n"
     )
     assert _lint("Ф.yaml", _form(body), select={CARD_RULE}) == []
 

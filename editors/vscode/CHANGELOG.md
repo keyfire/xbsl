@@ -9,6 +9,11 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.60.1
+
+### Changed
+- **The documentation links of the eight new engine rules.** A rule backed by a platform documentation section opens it right in the editor from the Problems panel; the rules added in engine 0.64.0 (permissions recomputation, the dynamic-list checks, the localization reference, the layout and mobile hints) now carry those links too.
+
 ## 0.60.0
 
 ### Added
