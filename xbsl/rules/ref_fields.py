@@ -50,11 +50,31 @@ editor). Positions match the compiler's on the attribute and the property; on th
 field the compiler points at the component node while the rule points at the argument
 inside the value – the place to actually edit.
 
-Narrowing mirrors the code side – exactly two shapes are flagged, a bare chain and
-`ПолеВвода<chain>` with a single bare argument. Other generics are left alone, and
+Unions are judged too – a second probe (2026-08-13) showed the compiler rejects a union
+that carries a reference member and has no nullable member, and a MIXED union fails the
+same way (a value-typed member does not provide the default):
+
+    Пробы.yaml      [15] Default value initialization is not supported for types
+                         "ЦелиДругие.Ссылка|ЦелиОдни.Ссылка". Explicitly specify a value or
+                         add it to the set of types "Неопределено"
+    Пробы.yaml      [23] (the same for "Строка|ЦелиОдни.Ссылка" – a mixed union)
+    ФормаПробы.yaml [10] Parameter "ТипДанных" of type
+                         "ПолеВвода<ЦелиДругие.Ссылка|ЦелиОдни.Ссылка>" must have a
+                         default value
+
+The `...|?` counterparts of both applied cleanly in the same run. A union is nullable when
+any alternative is `?`, the `Undefined` literal (either spelling) or ends with `?` (a
+nullable member injects the empty value into the whole set) – such unions are skipped. A
+union whose every alternative is a plain chain but none is a reference is left alone: the
+probe has not established whether a reference-free union defaults, and silence is the safe
+side.
+
+Other narrowing mirrors the code side – other generics are left alone, and
 `Массив<Товары.Ссылка>` is not merely unproven but legal: the same probe applied it without
-a complaint (a collection has its own default – the empty collection). Unions and qualified
-`Поставщик::Проект::Объект.Ссылка` names are skipped as well.
+a complaint (a collection has its own default – the empty collection). A union with a
+generic or a qualified `Поставщик::Проект::Объект.Ссылка` member is skipped as a whole. On
+the CODE side (structure fields) unions stay skipped: the probe covered the yaml positions
+only.
 """
 
 from __future__ import annotations
@@ -113,6 +133,23 @@ MESSAGES = {
               "value, the server-side compilation will fail with 'Parameter \"ТипДанных\" ... "
               "must have a default value'. Use '{field}<{name}?>'.",
     },
+    "yaml/ref-needs-nullable.union": {
+        "ru": "Тип '{name}' – союз со ссылкой и без пустого значения: значения по умолчанию у "
+              "такого союза нет, серверная компиляция упадёт с 'Default value initialization "
+              "is not supported for types ...'. Добавьте пустое значение в состав: '{name}|?'.",
+        "en": "Type '{name}' – a union with a reference member and no empty value: such a union "
+              "has no default value, the server-side compilation will fail with 'Default value "
+              "initialization is not supported for types ...'. Add the empty value to the set: "
+              "'{name}|?'.",
+    },
+    "yaml/ref-needs-nullable.input-union": {
+        "ru": "Тип '{field}<{name}>' – союз-аргумент со ссылкой и без пустого значения: значения "
+              "по умолчанию нет, серверная компиляция упадёт с 'Parameter \"ТипДанных\" ... must "
+              "have a default value'. Укажите '{field}<{name}|?>'.",
+        "en": "Type '{field}<{name}>' – a union argument with a reference member and no empty "
+              "value: there is no default value, the server-side compilation will fail with "
+              "'Parameter \"ТипДанных\" ... must have a default value'. Use '{field}<{name}|?>'.",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -123,6 +160,15 @@ _YAML_REF_RE = re.compile(
 )
 _YAML_BARE_RE = re.compile(rf"^\s*({_YAML_REF_RE.pattern})\s*$")
 _YAML_INPUT_RE = re.compile(rf"^\s*(ПолеВвода|Edit)\s*<\s*({_YAML_REF_RE.pattern})\s*>\s*$")
+#: An input field with ANY argument – the union check parses the inside itself.
+_YAML_INPUT_ANY_RE = re.compile(r"^\s*(ПолеВвода|Edit)\s*<\s*(.+?)\s*>\s*$")
+#: A union alternative the rule understands: a plain dotted chain, optionally nullable.
+_YAML_UNION_ALT_RE = re.compile(
+    r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*"
+    r"(?:\.[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)*\??$"
+)
+#: Alternatives that inject the empty value into the union by themselves.
+_NULLABLE_ALTS = frozenset({"?", "Неопределено", "Undefined"})
 
 _FIELD_KEYWORDS = ("VAR", "VAL")
 
@@ -253,13 +299,34 @@ def ref_field_needs_req(source: SourceFile) -> Iterable[Diagnostic]:
     return diags
 
 
+def _union_needs_nullable(text: str) -> bool:
+    """A union of plain chains with a reference member and no nullable member.
+
+    Any alternative that is `?`, the `Undefined` literal (either spelling) or ends with `?`
+    makes the whole union nullable – skipped. Any alternative outside the plain-chain shape
+    (a generic, a qualified name) makes the union something the rule does not judge –
+    skipped too.
+    """
+    if "|" not in text:
+        return False
+    has_ref = False
+    for alt in (a.strip() for a in text.split("|")):
+        if alt in _NULLABLE_ALTS or alt.endswith("?"):
+            return False
+        if not _YAML_UNION_ALT_RE.match(alt):
+            return False
+        if _YAML_REF_RE.fullmatch(alt):
+            has_ref = True
+    return has_ref
+
+
 def _yaml_ref_shape(value: str) -> tuple[str, int, str, str] | None:
     """(reference type, offset within the value, message key, input-field spelling) or None.
 
-    Exactly two shapes qualify: a bare chain and ПолеВвода<chain> with a bare argument. The
-    component is taken as the FILE spells it - the platform reads a form written in English
-    the same way, and advising `ПолеВвода` there would send the author looking for a key that
-    must not be in their sources.
+    Four shapes qualify: a bare chain, a bare union, and the input-field component around
+    either. The component is taken as the FILE spells it - the platform reads a form written
+    in English the same way, and advising the Russian spelling there would send the author
+    looking for a key that must not be in their sources.
     """
     m = _YAML_BARE_RE.match(value)
     if m:
@@ -267,6 +334,15 @@ def _yaml_ref_shape(value: str) -> tuple[str, int, str, str] | None:
     m = _YAML_INPUT_RE.match(value)
     if m:
         return m.group(2), m.start(2), "yaml/ref-needs-nullable.input", m.group(1)
+    m = _YAML_INPUT_ANY_RE.match(value)
+    if m:
+        if _union_needs_nullable(m.group(2)):
+            return m.group(2), m.start(2), "yaml/ref-needs-nullable.input-union", m.group(1)
+        return None
+    stripped = value.strip()
+    if _union_needs_nullable(stripped):
+        offset = len(value) - len(value.lstrip())
+        return stripped, offset, "yaml/ref-needs-nullable.union", ""
     return None
 
 

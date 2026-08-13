@@ -93,11 +93,93 @@ def test_array_of_references_not_flagged(tmp_path):
     assert not _has(d)
 
 
-def test_union_not_flagged(tmp_path):
+def test_union_of_references_flagged(tmp_path):
+    # probe 2026-08-13: "Default value initialization is not supported for types ..."
     d = _run(
         tmp_path,
         "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
-        "    -\n        Имя: А\n        Тип: Организации.Ссылка|Строка\n",
+        "    -\n        Имя: А\n        Тип: Организации.Ссылка|Товары.Ссылка\n",
+    )
+    assert len(d) == 1 and "Организации.Ссылка|Товары.Ссылка|?" in d[0].message
+    assert (d[0].line, d[0].col) == (6, 14)
+
+
+def test_mixed_union_flagged(tmp_path):
+    # the same probe: a value-typed member does not provide the default
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: Строка|Организации.Ссылка\n",
+    )
+    assert len(d) == 1 and "Строка|Организации.Ссылка|?" in d[0].message
+
+
+def test_union_with_nullable_marker_not_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: Организации.Ссылка|Товары.Ссылка|?\n",
+    )
+    assert not _has(d)
+
+
+def test_union_with_nullable_member_not_flagged(tmp_path):
+    # a nullable MEMBER injects the empty value into the whole set (a live project ships this)
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: Организации.Ссылка|Товары.Ссылка?\n",
+    )
+    assert not _has(d)
+
+
+def test_union_without_references_not_flagged(tmp_path):
+    # not established by the probe - silence is the safe side
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: Строка|Число\n",
+    )
+    assert not _has(d)
+
+
+def test_union_with_generic_member_not_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: Массив<Строка>|Организации.Ссылка\n",
+    )
+    assert not _has(d)
+
+
+def test_union_with_qualified_member_not_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
+        "    -\n        Имя: А\n        Тип: acme::Проект::Организации.Ссылка|Строка\n",
+    )
+    assert not _has(d)
+
+
+def test_input_field_union_flagged(tmp_path):
+    # probe 2026-08-13: Parameter "ТипДанных" ... must have a default value
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Ф\nСодержимое:\n"
+        "    -\n        Имя: Поле\n        Тип: ПолеВвода<Организации.Ссылка|Товары.Ссылка>\n",
+    )
+    assert len(d) == 1
+    assert "ПолеВвода<Организации.Ссылка|Товары.Ссылка|?>" in d[0].message
+    # the position points at the argument inside the value
+    assert (d[0].line, d[0].col) == (6, 24)
+
+
+def test_input_field_union_with_nullable_not_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Ф\nСодержимое:\n"
+        "    -\n        Имя: Поле\n"
+        "        Тип: ПолеВвода<Организации.Ссылка|Товары.Ссылка|?>\n",
     )
     assert not _has(d)
 

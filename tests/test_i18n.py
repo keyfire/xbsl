@@ -317,6 +317,7 @@ _VERBATIM_QUOTES = {
     "query/deletion-mark-immediate.absent",  # 'Поле не найдено' - the compiler's own wording
     "yaml/bare-object-value.bare",           # 'Ожидалось Неопределено...' - the same
     "yaml/ref-needs-nullable.input",         # 'Parameter "ТипДанных" ... must' - the same
+    "yaml/ref-needs-nullable.input-union",   # 'Parameter "ТипДанных" ... must' - the same
 }
 
 
