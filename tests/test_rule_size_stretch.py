@@ -1,5 +1,7 @@
 """Checks of the yaml/size-needs-no-stretch rule (a fixed size without Растягивать*: Ложь)."""
 
+import pytest
+
 from xbsl import engine
 
 RULE = "yaml/size-needs-no-stretch"
@@ -224,6 +226,7 @@ def test_a_plain_group_keeps_its_maximum():
 CARD_RULE = "yaml/card-literal-stretch-weight"
 
 
+@pytest.mark.needs_data  # the card list comes from the ui schema
 def test_a_literal_weight_on_a_card_is_reported():
     body = (
         "        -\n"
@@ -235,6 +238,7 @@ def test_a_literal_weight_on_a_card_is_reported():
     assert "СтандартнаяКарточка" in d[0].message
 
 
+@pytest.mark.needs_data  # the card list comes from the ui schema
 def test_an_inner_column_of_a_card_is_reported_as_well():
     """The cure had to cover the inner columns too - so they are judged."""
     body = (
