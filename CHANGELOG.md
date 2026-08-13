@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-13 – 0.63.0
 
 ### Added
 - **Rule `yaml/binding-needs-auto`: a nullable binding on a property with no empty value.**
