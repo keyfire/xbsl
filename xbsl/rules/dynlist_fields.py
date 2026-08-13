@@ -224,7 +224,7 @@ def _own_attributes(data: dict) -> tuple[str, list[str]] | None:
 _LIST_HEADS = frozenset({"Таблица", "СтандартныйСписок", "ПроизвольныйСписок", "Список"})
 _ROW_EDIT = "ПриРедактированииСтроки"
 _DYNLIST = "ДинамическийСписок"
-#: The keys an entity yaml declares a hierarchy with (the metamodel of Справочник).
+#: The keys an entity yaml declares a hierarchy with (the Catalog metamodel).
 _HIER_KEYS = ("Иерархический", "Иерархия", "ДополнительныеИерархии")
 
 
@@ -250,7 +250,7 @@ dataset.register_reset(_row_edit_names.cache_clear)
 
 
 def _typed_nodes(node) -> Iterator[dict]:
-    """Mapping nodes of the parsed yaml tree that carry a `Тип` in either spelling."""
+    """Mapping nodes of the parsed yaml tree that carry a type key in either spelling."""
     if isinstance(node, dict):
         if "Тип" in node or "Type" in node:
             yield node

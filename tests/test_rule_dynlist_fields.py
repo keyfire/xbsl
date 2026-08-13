@@ -154,19 +154,19 @@ def test_qualified_expression_and_alias_count_as_present():
 
 EDIT_RULE = "yaml/dynlist-row-editing"
 
-_ПОДПИСКИ = "ВидЭлемента: Справочник\nИмя: Подписки\n"
-_КАТЕГОРИИ = "ВидЭлемента: Справочник\nИмя: Категории\nИерархический: Истина\n"
+_FLAT_CATALOG = "ВидЭлемента: Справочник\nИмя: Подписки\n"
+_HIER_CATALOG = "ВидЭлемента: Справочник\nИмя: Категории\nИерархический: Истина\n"
 
 
-def _форма_с_событием(тип: str, событие: str = "ПриРедактированииСтроки") -> str:
+def _event_form(type_text: str, event_key: str = "ПриРедактированииСтроки") -> str:
     return (
         "ВидЭлемента: КомпонентИнтерфейса\n"
         "Имя: Ф\n"
         "Содержимое:\n"
         "    -\n"
-        f"        Тип: {тип}\n"
+        f"        Тип: {type_text}\n"
         "        Имя: Список\n"
-        f"        {событие}: СтрокаПриРедактировании\n"
+        f"        {event_key}: СтрокаПриРедактировании\n"
     )
 
 
@@ -178,8 +178,8 @@ def _lint_edit(*files: tuple[str, str]):
 def test_row_edit_on_a_flat_dynlist_flagged():
     """The registry case: the handler looks like working code, the platform never calls it."""
     d = _lint_edit(
-        ("Подписки.yaml", _ПОДПИСКИ),
-        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Подписки>>")),
+        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Ф.yaml", _event_form("Таблица<ДинамическийСписок<Подписки>>")),
     )
     assert [x.rule_id for x in d] == [EDIT_RULE]
     assert "Подписки" in d[0].message and "не вызывает" in d[0].message
@@ -189,8 +189,8 @@ def test_row_edit_on_a_flat_dynlist_flagged():
 def test_a_hierarchical_source_is_left_alone():
     """Node rows of a hierarchy are what the event is documented for."""
     d = _lint_edit(
-        ("Категории.yaml", _КАТЕГОРИИ),
-        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Категории>>")),
+        ("Категории.yaml", _HIER_CATALOG),
+        ("Ф.yaml", _event_form("Таблица<ДинамическийСписок<Категории>>")),
     )
     assert d == []
 
@@ -198,36 +198,36 @@ def test_a_hierarchical_source_is_left_alone():
 def test_an_untyped_dynlist_is_not_guessed():
     """The untyped list of a list form implies its entity - resolving that would guess."""
     d = _lint_edit(
-        ("Подписки.yaml", _ПОДПИСКИ),
-        ("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок>")),
+        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Ф.yaml", _event_form("Таблица<ДинамическийСписок>")),
     )
     assert d == []
 
 
 def test_an_entity_outside_the_project_is_left_alone():
-    d = _lint_edit(("Ф.yaml", _форма_с_событием("Таблица<ДинамическийСписок<Чужая>>")))
+    d = _lint_edit(("Ф.yaml", _event_form("Таблица<ДинамическийСписок<Чужая>>")))
     assert d == []
 
 
 def test_the_row_form_chain_resolves_the_entity():
     chain = "Таблица<ДинамическийСписок<Подписки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>"
-    d = _lint_edit(("Подписки.yaml", _ПОДПИСКИ), ("Ф.yaml", _форма_с_событием(chain)))
+    d = _lint_edit(("Подписки.yaml", _FLAT_CATALOG), ("Ф.yaml", _event_form(chain)))
     assert [x.rule_id for x in d] == [EDIT_RULE]
 
 
 def test_an_array_source_is_not_judged():
     d = _lint_edit(
-        ("Подписки.yaml", _ПОДПИСКИ),
-        ("Ф.yaml", _форма_с_событием("Таблица<ИсточникДанныхМассив<Строка>>")),
+        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Ф.yaml", _event_form("Таблица<ИсточникДанныхМассив<Строка>>")),
     )
     assert d == []
 
 
 def test_other_row_events_are_legal_on_a_flat_list():
     d = _lint_edit(
-        ("Подписки.yaml", _ПОДПИСКИ),
-        ("Ф.yaml", _форма_с_событием(
-            "Таблица<ДинамическийСписок<Подписки>>", событие="ПриНажатииСтроки"
+        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Ф.yaml", _event_form(
+            "Таблица<ДинамическийСписок<Подписки>>", event_key="ПриНажатииСтроки"
         )),
     )
     assert d == []
