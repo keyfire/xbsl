@@ -108,6 +108,16 @@ _CORE_MESSAGES = {
         "ru": "Путь '{path}' не существует.",
         "en": "Path '{path}' does not exist.",
     },
+    "cli.missing-paths": {
+        "ru": "Нечего проверять: путь не существует – {paths}.",
+        "en": "Nothing to check: no such path - {paths}.",
+    },
+    "cli.nothing-collected": {
+        "ru": "Внимание: по указанным путям не найдено ни одного исходника ({paths}). "
+              "Проверьте путь – каталог проекта, файл .xbsl/.yaml/.xbql.",
+        "en": "Warning: the given paths hold no sources at all ({paths}). Check the path - "
+              "a project directory, an .xbsl/.yaml/.xbql file.",
+    },
     "cli.baseline-found": {
         "ru": "Найден базлайн проекта: {path} (отключить – ключом --no-baseline)",
         "en": "Project baseline found: {path} (disable it with --no-baseline)",

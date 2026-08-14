@@ -12,6 +12,13 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Fixed
+- **A typo in a path no longer passes for a clean check.** A path that is not there is an error
+  with a plain message instead of "0 files checked, 0 findings" and the exit code of success; a
+  path that exists but holds no sources now gets a warning.
+
 ## 2026-08-14 – 0.64.0, 0.65.0
 
 ### Added

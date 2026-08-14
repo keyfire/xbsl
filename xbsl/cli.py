@@ -1038,7 +1038,24 @@ def main(argv: list[str] | None = None) -> int:
         )
         files = [Path(args.filename)]
     else:
+        # A path that does not exist is a mistake, not an empty check: `xbsl e1c/sit` used to
+        # answer "0 files checked, 0 findings" with the exit code of a clean run, so a typo in
+        # a CI step passed for a green check of the whole project. The same shape covers a
+        # mistyped subcommand - an unknown name is parsed as a path (`list-rules` against
+        # `--list-rules`).
+        missing = [p for p in (args.paths or []) if not Path(p).exists()]
+        if missing:
+            print(i18n.t("cli.missing-paths", paths=", ".join(f"'{p}'" for p in missing)),
+                  file=sys.stderr)
+            return 2
         files, requested = discover_with_context(args.paths or ["."])
+        if not files:
+            # The paths exist but hold no sources at all: not an error (an empty directory is
+            # a legitimate state of a fresh project), yet worth saying out loud - silence here
+            # reads as "everything is clean".
+            asked = args.paths or ["."]
+            print(i18n.t("cli.nothing-collected", paths=", ".join(f"'{p}'" for p in asked)),
+                  file=sys.stderr)
         if args.fix:
             # --fix rewrites the buffers in place - it needs the sources in this process.
             sources = [load(p) for p in files]

@@ -193,3 +193,37 @@ def test_a_query_file_is_not_judged_as_a_module(tmp_path):
     found = engine.run(paths)
     in_query = [x.rule_id for x in found if x.path.endswith(".xbql")]
     assert in_query == [], in_query
+
+
+# --- a path that is not there ---------------------------------------------------------------
+
+
+def test_a_missing_path_is_an_error(tmp_path, capsys):
+    """A typo in a path used to answer "0 files checked" with the exit code of a clean run.
+
+    In CI that is a green step which checked nothing: `xbsl e1c/sit` passes for the whole
+    project. The same shape covers a mistyped subcommand - an unknown name is parsed as a path.
+    """
+    code = cli.main([str(tmp_path / "нет-такого")])
+    assert code == 2
+    assert "нет-такого" in capsys.readouterr().err
+
+
+def test_a_missing_path_among_good_ones_is_an_error(tmp_path, capsys):
+    (tmp_path / "М.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    code = cli.main([str(tmp_path), str(tmp_path / "нет-такого")])
+    assert code == 2
+
+
+def test_an_empty_directory_warns_but_passes(tmp_path, capsys):
+    """An empty directory is a legitimate state of a fresh project - a warning, not an error."""
+    code = cli.main([str(tmp_path)])
+    assert code == 0
+    assert "исходник" in capsys.readouterr().err
+
+
+def test_a_directory_with_sources_says_nothing_extra(tmp_path, capsys):
+    (tmp_path / "М.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    code = cli.main([str(tmp_path)])
+    assert code == 0
+    assert "исходник" not in capsys.readouterr().err
