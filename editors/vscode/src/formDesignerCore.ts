@@ -60,6 +60,17 @@ export interface FlattenOptions {
   slotTooltip?: (name: string) => string;
 }
 
+// The component name a yaml path stands for: the platform names the file after the element, so a
+// path of `.../КарточкаОблако.yaml` is the component `КарточкаОблако`. The designer keys its cache
+// of nested components by that name and drops the entry when the file is edited - without which
+// the frame kept showing the previous version of the component until a manual refresh.
+export function componentNameOfPath(path: string): string | undefined {
+  const file = path.split(/[\\/]/).pop() ?? "";
+  return file.toLowerCase().endsWith(".yaml") && file.length > ".yaml".length
+    ? file.slice(0, -".yaml".length)
+    : undefined;
+}
+
 export function isRowExpanded(node: FormNode, isRoot: boolean, options: FlattenOptions): boolean {
   if (options.collapsed.has(node.id)) {
     return false;

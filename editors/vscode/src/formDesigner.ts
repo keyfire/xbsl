@@ -40,7 +40,7 @@ import {
 } from "./formPreviewCore";
 import { formKeyAliases, localizationStrings } from "./uiSchemaClient";
 import { DataHost, DataSnapshot, FormDataModel } from "./formData";
-import { dataMenu, DEFAULT_LAYOUT, sanitizeLayout, structureMenu } from "./formDesignerCore";
+import { componentNameOfPath, dataMenu, DEFAULT_LAYOUT, sanitizeLayout, structureMenu } from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
 import { hintName } from "./metadataCore";
 import { projectWritesEnglishNames } from "./metadataTree";
@@ -895,7 +895,23 @@ export function registerFormDesigner(
         designer.panel.reveal(designer.panel.viewColumn, true);
       }
     }),
-    vscode.workspace.onDidChangeTextDocument((e) => designerFor(e.document.uri)?.scheduleReload()),
+    vscode.workspace.onDidChangeTextDocument((e) => {
+      const own = designerFor(e.document.uri);
+      if (own) {
+        own.scheduleReload();
+        return;
+      }
+      // An edit of a NESTED component's own file: the frame draws that component inline, so the
+      // parent has to be redrawn too - and the cached text of the component dropped, otherwise
+      // the panel would show the previous version until a manual refresh.
+      const name = componentNameOfPath(e.document.uri.path);
+      if (name !== undefined && componentCache.has(name)) {
+        componentCache.delete(name);
+        for (const designer of designers.values()) {
+          designer.scheduleReload();
+        }
+      }
+    }),
     vscode.languages.onDidChangeDiagnostics((e) => {
       for (const uri of e.uris) {
         designerFor(uri)?.structure.scheduleDiagnostics();

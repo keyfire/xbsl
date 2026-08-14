@@ -12,6 +12,8 @@
 ## Unreleased
 
 ### Changed
+- **An edit of a nested component shows in the parent's wireframe at once** - the panel used to
+  keep the previous version until a manual refresh.
 - **The layout of the use site reaches a nested component** - stretching, width and alignment
   apply to it exactly as they do to any other component.
 - **A long expression in the wireframe is cut in the middle,** the way the platform's designer

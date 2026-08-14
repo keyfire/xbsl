@@ -3,6 +3,7 @@
 
 import * as assert from "assert";
 import {
+  componentNameOfPath,
   revealStartColumn,
   DataLabels,
   DataModel,
@@ -339,4 +340,22 @@ test("переход к узлу оставляет один уровень от
   assert.strictEqual(revealStartColumn(0, 4), 0);
   assert.strictEqual(revealStartColumn(4, 4), 0);
   assert.strictEqual(revealStartColumn(12, NaN), 8);
+});
+
+// The component name behind a yaml path: the designer drops the cached text of a nested component
+// when its own file is edited, so the frame stops showing the previous version.
+test("componentNameOfPath: имя элемента из пути", () => {
+  assert.strictEqual(componentNameOfPath("/d/proj/e1c/Сайт/КарточкаОблако.yaml"), "КарточкаОблако");
+});
+
+test("componentNameOfPath: путь Windows", () => {
+  assert.strictEqual(componentNameOfPath(String.raw`D:\Repos\site\Форма.yaml`), "Форма");
+});
+
+test("componentNameOfPath: не yaml - ничего", () => {
+  assert.strictEqual(componentNameOfPath("/d/proj/Модуль.xbsl"), undefined);
+});
+
+test("componentNameOfPath: голое расширение - ничего", () => {
+  assert.strictEqual(componentNameOfPath("/d/proj/.yaml"), undefined);
 });
