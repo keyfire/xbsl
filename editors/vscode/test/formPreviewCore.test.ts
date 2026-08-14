@@ -603,3 +603,45 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log("итого: все проверки ok");
+
+// Availability: the platform draws an inaccessible field as a gray fill with no border, and the
+// state travels DOWN the tree until a node overrides it - so a group switched off carries its
+// content with it, while a sibling of that group stays as it was.
+const ACC_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        -",
+  "            Тип: ПолеВвода<Строка>",
+  "            Имя: Обычное",
+  "        -",
+  "            Тип: ПолеВвода<Строка>",
+  "            Имя: Закрытое",
+  "            Доступность: Ложь",
+  "        -",
+  "            Тип: Группа",
+  "            Доступность: Ложь",
+  "            Содержимое:",
+  "                -",
+  "                    Тип: ПолеВвода<Строка>",
+  "                    Имя: Внутри",
+  "        -",
+  "            Тип: ПолеВвода<Строка>",
+  "            Имя: Вычисляемое",
+  "            Доступность: =Данные.Разрешено",
+  "",
+].join("\n");
+const acc = renderFormPreview(ACC_FORM);
+const accHtml = acc.ok ? acc.html : "";
+function fieldClasses(html: string, name: string): string {
+  // the node names itself in its tooltip (`Тип · Имя · ...`); the class list sits in the same tag
+  const at = html.indexOf(`· ${name}`);
+  if (at < 0) return "";
+  const start = html.lastIndexOf("<", at);
+  return html.slice(start, at);
+}
+check("доступность: обычное поле не помечено", acc.ok && !fieldClasses(accHtml, "Обычное").includes("dis"));
+check("доступность: Ложь помечает поле", acc.ok && fieldClasses(accHtml, "Закрытое").includes("dis"));
+check("доступность: наследуется в содержимое группы", acc.ok && fieldClasses(accHtml, "Внутри").includes("dis"));
+check("доступность: вычисляемая тоже помечает", acc.ok && fieldClasses(accHtml, "Вычисляемое").includes("dis"));
+check("доступность: в подсказке видно значение", acc.ok && accHtml.includes("Доступность: Ложь"));

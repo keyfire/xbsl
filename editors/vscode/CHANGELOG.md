@@ -12,6 +12,9 @@
 ## Unreleased
 
 ### Changed
+- **Inaccessible fields of the wireframe are drawn the way the platform draws them** - a gray
+  fill with no border. An availability switched off, or computed, travels down the content until
+  a node overrides it; the value shows in the tooltip.
 - **The form wireframe shows the localized TEXT, not the key.** A `$Dictionary.Key` value is drawn
   as the words the user will see, in the editor's language, with the key kept in the tooltip. A key
   with no text behind it falls back to its last segment, as before.

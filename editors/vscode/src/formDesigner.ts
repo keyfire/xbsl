@@ -1045,6 +1045,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-val: var(--vscode-input-foreground, var(--vscode-foreground));
     --fp-border: var(--vscode-panel-border); --fp-soft: rgba(128,128,128,.14);
     --fp-input-bg: var(--vscode-input-background); --fp-input-border: var(--vscode-input-border, rgba(128,128,128,.55));
+    --fp-dis-bg: rgba(128,128,128,.16); --fp-dis-border: rgba(128,128,128,.45);
     --fp-accent: var(--vscode-button-background); --fp-accent-fg: var(--vscode-button-foreground);
     --fp-btn2-bg: rgba(128,128,128,.25); --fp-btn2-fg: var(--vscode-foreground);
     --fp-link: var(--vscode-textLink-foreground); --fp-danger: #ff3e33;
@@ -1054,6 +1055,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-bg: #ffffff; --fp-fg: #1c1c1f; --fp-fg2: #81818a; --fp-val: #4d4d54;
     --fp-border: #dbdbdb; --fp-soft: #f2f2f2;
     --fp-input-bg: #ffffff; --fp-input-border: rgba(153,153,153,.9);
+    --fp-dis-bg: #f2f2f2; --fp-dis-border: #c8c8c8;
     --fp-accent: #ffdd00; --fp-accent-fg: #403700;
     --fp-btn2-bg: #dbdbdb; --fp-btn2-fg: #1c1c1f;
     --fp-link: #007aff; --fp-danger: #ff3e33;
@@ -1063,6 +1065,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-bg: #1a1a1a; --fp-fg: #ededf2; --fp-fg2: #84848c; --fp-val: #b8b8bf;
     --fp-border: #3a3a40; --fp-soft: #2a2a2e;
     --fp-input-bg: #232327; --fp-input-border: rgba(153,153,153,.55);
+    --fp-dis-bg: #2a2a2e; --fp-dis-border: #4a4a52;
     --fp-accent: #ffdd00; --fp-accent-fg: #403700;
     --fp-btn2-bg: #3d3d44; --fp-btn2-fg: #ededf2;
     --fp-link: #3395ff; --fp-danger: #ff3e33;
@@ -1112,6 +1115,11 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
      выцветала до нечитаемости. */
   .cond { opacity: .72; }
   .cond .cond, .cond .off { opacity: 1; }
+  /* Недоступный компонент (Доступность: Ложь или вычисляемая): платформа рисует такое поле
+     серой заливкой без рамки - редактировать нечего, а место поле занимает прежнее. Правило
+     наследуется вниз, поэтому классом помечен и сам узел, и его содержимое. */
+  .dis .inp, .inp.dis { background: var(--fp-dis-bg); border-color: transparent; }
+  .dis .cbox, .dis .rdo { border-color: var(--fp-dis-border); }
   /* Вложенный проектный компонент, отрисованный по его собственному yaml. */
   .subc { position: relative; min-width: 24px; }
   /* СтандартнаяКарточка: скругление 16, волосяная рамка, без тени - как на платформе. */

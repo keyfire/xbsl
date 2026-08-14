@@ -42,6 +42,12 @@ function canonicalKey(key: string): string {
 // the page read as a row of identifiers instead of the words the user will see.
 let _locStrings: Record<string, string> = {};
 
+// Availability travels DOWN the tree: "the availability state applies to every component of
+// the content until an override is met" (docs of the component properties). The wireframe keeps
+// it in a flag rather than in a parameter - the render is synchronous and single-threaded, and
+// threading a parameter through every renderer would touch a dozen call sites for one bit.
+let _inaccessible = false;
+
 export function setLocalizationStrings(strings: Record<string, string>): void {
   _locStrings = strings ?? {};
 }
@@ -141,13 +147,20 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   const visibility = prop(node, "Видимость");
   const hidden = visibility === "Ложь";
   const conditional = visibility !== undefined && visibility.startsWith("=");
+  // Availability is drawn the way the platform draws it - a gray fill with no border - both when
+  // it is switched off outright and when it is computed: the frame cannot know which way the
+  // expression goes, and a field that may be closed reads better closed.
+  const availability = prop(node, "Доступность");
+  const inaccessible = _inaccessible || availability === "Ложь"
+    || (availability !== undefined && availability.startsWith("="));
   const tip = [
     prop(node, "Тип"),
     prop(node, "Имя"),
     hidden ? "Видимость: Ложь" : conditional ? `Видимость: ${visibility}` : undefined,
+    availability !== undefined ? `Доступность: ${availability}` : undefined,
   ].filter(Boolean).join(" · ");
   const titleAttr = tip ? ` title="${esc(tip)}"` : "";
-  const mark = hidden ? " off" : conditional ? " cond" : "";
+  const mark = (hidden ? " off" : conditional ? " cond" : "") + (inaccessible ? " dis" : "");
   return `class="${cls}${mark}"${styleAttr}${offAttr}${titleAttr}`;
 }
 
@@ -601,6 +614,23 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
   if (!isMap(node)) {
     return "";
   }
+  // An override switches the state for this node AND for everything under it; the flag is
+  // restored on the way out, so a sibling of an inaccessible group stays as it was.
+  const availability = prop(node, "Доступность");
+  const outerInaccessible = _inaccessible;
+  if (availability === "Ложь" || (availability !== undefined && availability.startsWith("="))) {
+    _inaccessible = true;
+  } else if (availability === "Истина") {
+    _inaccessible = false;
+  }
+  try {
+    return renderComponentBody(node, horizontalParent, byColumnsParent);
+  } finally {
+    _inaccessible = outerInaccessible;
+  }
+}
+
+function renderComponentBody(node: unknown, horizontalParent: boolean, byColumnsParent = false): string {
   const type = baseType(node) ?? "";
   const layout = joinStyle(
     growStyle(node, horizontalParent),
