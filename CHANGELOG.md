@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-15 – 0.66.0
 
 ### Added
 - **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
@@ -22,7 +22,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   its own: the platform draws a button that opens the value in a separate window next to it. That
   is usually what the author wants, so the rule answers "where did this button come from" rather
   than reports a mistake.
-
 - **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
   project in the chosen language. A key with no translation keeps its default text - the same
   fallback the platform makes.
