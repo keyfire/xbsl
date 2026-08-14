@@ -43,95 +43,58 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Added
 - **Eight rules for platform behaviour the compiler accepts and the screen then contradicts**
-  (142 → 150). Each one was cut by reconnaissance over four real projects, and every slice is
-  as narrow as the evidence allowed:
-  - `code/permission-handlers-need-recalc` – a module declares a permission handler while the
-    project recomputes that entity's permissions nowhere: the platform never calls the handler
-    by itself, so an edit of the algorithm silently does not act on existing data. Kinds are
-    taken from the data (a kind with no recompute method is not judged), and the documented
-    loop form of the recomputation stands the rule down instead of producing false positives.
-  - `yaml/dynlist-row-editing` – an `OnRowEdit` handler on a list over a FLAT dynamic source:
-    the event is declared for the node rows of a hierarchy, and on a flat list the platform
-    never calls it, so a click opens the automatic form instead.
-  - `yaml/localization-ref-to-template` – a `$Dictionary.Key` reference pointing at a key of
-    the templates section: a reference resolves against the strings section alone, and the
-    apply fails with a localized-string-not-found answer. A template key nobody references is
-    left alone – code calls it legitimately.
-  - `yaml/insert-row-needs-align` – a horizontal group holding an insert and no explicit
-    vertical alignment: children are laid out on the baseline, and the element holding the
-    insert slides down against its neighbours. The nearest horizontal ancestor answers.
-  - `code/url-params-partial-encoding` (info, off) – the Url method that encodes a parameter
-    value only partially: separators inside the value survive, and an address arrives cut.
-  - `yaml/dynlist-column-sort-lost` (info, off) – a column of a table over a dynamic list
-    whose value CALLS something: the header does not sort, the platform sorts by the field.
-  - `yaml/matrix-group-max-width` (info, off) – a numeric width maximum on a group that lays
-    out as a matrix: the maximum is also the AVAILABLE width, so a phone draws the page at
-    desktop width and the content runs off the right edge.
-  - `yaml/card-literal-stretch-weight` (info, off) – a literal stretch weight on a card or on
-    a group inside one: the weight is a flex with a zero basis, which in a vertical column
-    applies to the height and collapses the card on Safari while Chrome shows nothing.
+  (142 → 150):
+  - `code/permission-handlers-need-recalc` – a permission handler is declared while nothing
+    recomputes: an edit of the algorithm silently does not act on existing data.
+  - `yaml/dynlist-row-editing` – a row-editing handler on a flat list: the platform never calls
+    that event, and a click opens the automatic form instead.
+  - `yaml/localization-ref-to-template` – a `$Dictionary.Key` reference pointing at a key of the
+    templates section: the apply fails with a localized-string-not-found answer.
+  - `yaml/insert-row-needs-align` – a horizontal group holding an insert with no explicit
+    alignment: the element with the insert slides down against its neighbours.
+  - `code/url-params-partial-encoding` (info, off) – the Url method encodes a parameter value
+    only partially, and the address arrives cut.
+  - `yaml/dynlist-column-sort-lost` (info, off) – a column whose value calls something: clicking
+    the header sorts by something else.
+  - `yaml/matrix-group-max-width` (info, off) – a numeric width maximum on a matrix group: a
+    phone draws the page at desktop width.
+  - `yaml/card-literal-stretch-weight` (info, off) – a stretch weight on a card: in a vertical
+    column it collapses on Safari.
 
 ### Fixed
-- **The metamodel reset now clears the `key_aliases` cache as well.** Pinning another data
-  root left that one answering from the previous root – the surfaces outside python (the
-  editor's metadata tree) could get the pairs of a version they were not looking at.
-- **The language guard judges untracked files under every base.** `git diff` is blind to a
-  file until it is added, so a run against a branch answered "clean" over a brand-new module
-  whose bare Cyrillic CI then found; untracked sources now enter the scan whole.
+- **The metamodel reset now clears the `key_aliases` cache as well** – after pinning another
+  data root the editor's metadata tree could show the pairs of the previous one.
+- **The language guard judges untracked files too** – a brand-new module with bare Cyrillic
+  slipped past the local run and surfaced in CI.
 
 ## 2026-08-13 – 0.63.0
 
 ### Added
-- **Rule `yaml/binding-needs-auto`: a nullable binding on a property with no empty value.**
-  "Not set" for a component property is the `Auto` value: the palette declares properties as
-  unions without the empty value, and a binding whose method is declared `(): Color?` makes
-  the client register "Неожиданное значение" on every recomputation - the records go to the
-  server log, invisible in the browser console (a live project had accumulated 1866 before
-  anyone noticed). Judged is the narrow slice with both sides known exactly: a bare local
-  call bound to a typed palette property whose union carries `Auto` and no nullable flag,
-  against the paired module's declared return types. A `?` inside a generic argument is not
-  a nullable return - caught by the corpus run.
-- **Rule `yaml/date-input-needs-plain-date`: a nullable date input is silently not rendered.**
-  `Edit<Date?>` deploys cleanly, but the platform draws neither the field nor an
-  apply-time error, and a group left without content disappears entirely - on a live project
-  two such fields read as "the change did not apply". The cure is a plain type: the attribute
-  `Type: Date`, the field `Edit<Date>`, "not set" expressed by the empty date. Only
-  `Date` is judged - the `DateTime`/`Time` siblings are left alone until verified on a live
-  stand.
+- **Rule `yaml/binding-needs-auto`: a binding with a nullable return on a property that has no
+  empty value.** The client writes "unexpected value" into the server log on every
+  recomputation - invisible in the browser; a live project had accumulated almost two thousand
+  records.
+- **Rule `yaml/date-input-needs-plain-date`: a nullable date input.** The apply passes cleanly,
+  yet the field is not drawn and the group left empty disappears entirely. The cure is a plain
+  type: "not set" is expressed by the empty date.
 
 ### Fixed
-- **`yaml/ref-needs-nullable` judges unions.** A compiler probe showed that a union carrying
-  a reference member and no nullable member fails to apply - and a MIXED union
-  (`String|Goods.Ref`) fails the same way, both in the attribute position and inside
-  `Edit<...>`. The rule used to skip unions altogether; now it flags both shapes and
-  suggests `|?`. A union with a nullable member (a trailing `?` on a member counts) or with
-  a member outside the plain-chain shape stays silent. Corpus runs: zero false findings.
+- **`yaml/ref-needs-nullable` judges unions too.** A union with a reference and no empty value
+  fails to apply - a mixed one such as `String|Goods.Ref` included; the fix is to add `|?`.
 
 ## 2026-08-11 – 0.62.0
 
 ### Added
 - **Rule `code/component-in-server-context`: an interface component in a server environment.**
-  A `Component.Member(...)` access from code compiled for the server – a `@OnServer` method
-  anywhere, or an unannotated method of a server or client-and-server module. The component's
-  type lives on the client, and the server compilation answers "Variable X is not defined" –
-  the linter said nothing while the stand silently rolled back to the previous build. A
-  namesake of the component among elements of other kinds and shadowed names are not judged;
-  verified against the live case (the finding's position matches the compiler's) and by corpus
-  runs with zero false positives.
-- **The check gained `--out`: the report is written to a UTF-8 file without BOM.** Comparing
-  findings before and after a change is an everyday scenario, and on Windows the shell
-  redirection prefixes the output with a BOM that breaks JSON parsing. Works with every
-  `--format` value (and together with `--fix`); the text-format summary stays on stderr.
+  The component's type lives on the client, so the server compilation answers "Variable X is not
+  defined" and the stand silently rolls back to the previous build.
+- **The check gained `--out`: the report is written to a UTF-8 file without BOM.** On Windows
+  the shell redirection prefixes the output with a BOM that breaks JSON parsing.
 
 ### Fixed
-- **An event-log event property gets its `Id`.** Adding a field now reconciles the `Id` line
-  with the item's metamodel class BOTH ways: a class that declares `Id` gets one written
-  (without it applying the build rejects the object, "ID required"), a class without it has
-  the line dropped, as before. The judge is the same source the `yaml/item-id-required` rule
-  uses; the hand-written section templates no longer have to know the exceptions. A sweep of
-  every kind-section pair against the metamodel found exactly two divergences: the event
-  property (the missing `Id`, this defect) and the processing attribute (a superfluous one,
-  already dropped on the fly).
+- **An event-log event property gets its `Id`.** Adding a field now reconciles the identifier
+  with the metamodel both ways: where it is needed it is written, where it is superfluous it is
+  dropped.
 
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
 
@@ -142,32 +105,26 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **The variable of a `for X in Collection` loop gets its type** from the element type of the
   collection. For that a structure now carries the type of every field in the index; a collection
   with two type parameters names no element, and there completion stays silent.
-- **The members of the kinds' singleton types reached the data: from 12 kinds of 41 to 31.** The
-  map from a documentation template page to an element kind is now derived from the serializer's
-  own kind enum instead of being hand-written; a template that cannot be named is reported.
+- **The members of the kinds' singleton types reached the data: from 12 kinds of 41 to 31.**
 - **A call of a kind's method is typed.** The result type comes from the signatures in the
   documentation (25 kinds of 31), so completion knows what `Get()` of a constants set,
   `FindByCode()` and `GetReference()` of a catalog answered with.
 - **A kind manager's properties and methods are told apart** – completion inserts the parentheses
   of a method and withholds them from a property.
 - **`code/unknown-structure-field`: a field of a project structure is checked against its
-  declaration** (139 rules now). The receiver is typed by a variable's declaration, by a
-  constructor and by the element type of a for-each loop; on any doubt the rule stays silent.
+  declaration** (139 rules now).
 - **Stale baseline entries can be seen and pruned:** `--stale-baseline` lists the entries that no
   longer suppress anything, `--prune-baseline` removes them and leaves the live ones alone.
 - **The linter finds the project's baseline by itself** – it looks for `.xbsllint-baseline` upwards
   from the checked files and names the path it found; `--no-baseline` switches the search off.
 - **Tool answers name the data they speak for.** `--version`, the MCP `version_info` and the LSP
   startup line carry the data root and where it came from.
-- **`conventions/untranslated-code-literal` – visible text left as a literal in a module.** What is
-  judged is not the literal but where it goes: an argument of a message to the user, a property of
-  an event log event, a wrapper method included. Off by default.
+- **`conventions/untranslated-code-literal` – text visible to the user left as a literal in a
+  module** (off by default).
 
 ### Changed
-- **The dot completion offers what the catalogue knows about the kind.** The generic safety net
-  stays with the rules, where a name too many is milder than a name too few; for a kind the
-  catalogue does not know, completion is now empty and the editor falls back to word completion
-  instead of inventing names.
+- **The dot completion offers what the catalogue knows about the kind** - instead of a generic
+  list that surfaced names which do not exist.
 - **`code/unused-method` judges the public API of common modules.** Only annotations naming a
   caller outside the project silence a method; visibility and environment annotations no longer do.
 - **The dictionary of element kinds is derived from the distribution:** 41 kinds instead of 35, and
@@ -183,10 +140,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the entity name table shrank from 15 entries to 4 confirmed ones.
 
 ### Fixed
-- **Types described in metadata offered nothing after the dot.** The indexer read `TabularParts`
-  and `Attributes` but neither the `Fields` of a structure nor the `Constants` of a set; it does
-  now, and a constants set reaches the index under the generated names `<Name>.Record` and
-  `<Name>.Data`.
+- **Types described in metadata offered nothing after the dot** - the indexer skipped the fields
+  of a structure and the constants of a set.
 - **`code/unknown-structure-field` crashed in the released wheel** (0.59.0): the tree walk read the
   fields of a node in a way the native build does not support. A test now keeps that walk out.
 - **The baseline summary line counts entries,** not suppressions - one entry may hold several. The

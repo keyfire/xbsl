@@ -22,24 +22,13 @@
 ## 0.60.0
 
 ### Added
-- **The form wireframe looks like the platform's own web designer.** The visual system is
-  measured on the real designer: fields with a gray caption above a rounded box with a hairline
-  border, the yellow primary button with its dark-olive text, gray regular and blue text
-  buttons, tabs as plain text with the yellow bar under the active one, grid-less tables - a
-  bare header, hairline row separators and an add-with-search strip, real checkbox squares and
-  radio circles, cards with a 16px radius and no shadow, gray image glyphs without frames,
-  dashed file-drop zones, a text editor with its formatting strip. Form commands sit where the
-  platform puts them: the main ones at the bottom right, the auxiliary ones as pills in the
-  header, a list form gets its search bar and the blue create command. The red asterisk of a
-  required field, a calendar on a date field, a chevron on a choice field.
-- **A device toolbar above the wireframe** - as in the platform's designer: presets (iPhone SE
-  ... Full HD), a custom width and height, rotation, an auto-fitted zoom; the page floats on a
-  neutral canvas at the device size. The choice is remembered along with the zoom and the theme.
-- **Project components are drawn with their own content.** A project component placed on a form
-  by its type name is no longer a dashed placeholder: the designer finds its yaml in the
-  workspace and draws the content right in the page (up to two levels deep, with its own
-  resource icons); a click on the block navigates to the use site. A site page assembled from
-  cards looks like the page, not like a fence of placeholders.
+- **The form wireframe looks like the platform's own web designer.** Fields, buttons, tabs,
+  tables and cards are drawn from measurements taken on the real designer, and form commands sit
+  where the platform puts them.
+- **A device toolbar above the wireframe** - presets from iPhone SE to Full HD, a custom size,
+  rotation and zoom; the choice is remembered.
+- **Project components are drawn with their own content** instead of a dashed placeholder; a
+  click on the block navigates to the use site.
 - **A sectioned application draws its navigation panel** - the logo, items with their icons,
   the vertical or horizontal orientation by the property and the content area, instead of
   refusing with "not a form".
@@ -79,64 +68,37 @@
 ## 0.59.1
 
 ### Added
-- **The rules panel got reference links and collapsible groups.** A rule backed by a documented
-  requirement now carries a "reference" link in its row - it opens the same page and the same
-  section the rule badge opens from "Problems", inside the editor rather than on the site. A dot of the level colour now sits next to it - red, yellow, blue, and grey for a rule switched
-  off, so the state reads without opening the list. Groups start collapsed and open on click: there are more than two hundred rules and no reason to read
-  them all at once. The search and the "changed only" filter show their hits regardless of the
-  collapsed state, otherwise searching would look broken.
+- **The rules panel got reference links and collapsible groups.** A rule backed by a standard
+  carries a "reference" link, the level shows as a coloured dot, and groups start collapsed -
+  there are more than two hundred rules.
 
 ## 0.59.0
 
 ### Added
-- **The logo says what the extension does:** the "//" tile became a deploy arrow and the ";" one
-  a breakpoint; the "@" (annotations) and the check mark (linting) stayed. An `images/icon.svg`
-  source now sits next to it - the logo used to exist as a picture only, so every touch-up meant
-  pixel work. The geometry in the source is measured off the previous file: the tile sides, their
-  rotations and the gradient colours.
+- **The logo says what the extension does:** a deploy arrow and a breakpoint next to the "@" and
+  the check mark. A vector source now sits beside it - the logo used to be a picture only.
 - **The rules panel and the migration messages are translated.** The strings went through
   `vscode.l10n.t` but had no keys in the Russian bundle, so VS Code silently fell back to the
   English source and a Russian editor opened the panel in English. A guard now refuses a
   `l10n.t` string without a translation.
-- **The rules panel: the "XBSL: rules" command.** Every rule of the engine listed by group - the
-  tier, the id, the title and the current state: its own level, one inherited from a group or a
-  tier, or the default. A dropdown changes the level, and "by default" removes the key from the
-  table instead of writing a level equal to the default one. There is a search, a "changed only"
-  filter and a reset. The scope is chosen explicitly - the user or the workspace settings: VS Code
-  decides that silently otherwise, and "why does my colleague see other findings" starts exactly
-  there. The panel writes into `xbsl.rules` and nowhere else.
-- **Rules are configured by one table, `xbsl.rules`.** The key is a rule, a group, a tier letter or
-  `*`; the value is `off` or a level; priority runs from the specific to the general:
-  rule → group → tier → `*`. A level on a RULE key also switches it on when it is off by default (on a group, a
-  tier or `*` it only recolours what already runs - otherwise "show me the group as warnings" would
-  quietly turn on everything the defaults leave off), and `{"*": "off"}` reads as "only the ones listed here" - so the table does everything that used
-  to be split between `linter.select`, `linter.enable`, `linter.ignore` and thirteen `groups.*`
-  dropdowns. The old settings keep working (they sit below the table in priority) but are marked
-  deprecated, and the *XBSL: move the rule settings into one table* command rewrites them into it
-  scope by scope - the user and the workspace values move separately, because they mean different
-  things.
+- **The rules panel: the "XBSL: rules" command.** Every rule of the engine by group with its
+  current level; a dropdown changes it, and there is a search and a "changed only" filter. The
+  scope - user or workspace settings - is chosen explicitly.
+- **Rules are configured by one table, `xbsl.rules`.** The key is a rule, a group, a tier letter
+  or `*`, the value is a level or `off`; the specific wins over the general. The table replaces the
+  old lists, which still work, and the *XBSL: move the rule settings into one table* command
+  rewrites them.
 
 ### Fixed
-- **Debugging did not see the "Env File" setting and went to the wrong stand.** `xbsl.deploy.envFile`
-  applied to the deploy only: debugging took the .env from `launch.json` and nowhere else, so a
-  filled-in setting was silently ignored and elemctl asked for the token on the stand named by the
-  neighbouring `.env` - answering "application not found" whenever that stand calls the application
-  something else. Debugging now resolves it the way it already resolved the application id: a launch
-  configuration wins over the setting. A relative path is resolved against the workspace folder, as
-  in the deploy: elemctl runs with the sources root as its working directory, and with a project
-  subfolder open those two are not the same place.
+- **Debugging did not see the "Env File" setting and went to the wrong stand** - the .env was
+  taken from `launch.json` alone. It now resolves the way the application id already did: a launch
+  configuration wins over the setting.
 
 ### Changed
-- **The settings sections are named after what they mean, not after a command:** "Stand" (elemctl,
-  the .env, the application - the deploy and debugging both use them) and "Debugger" (the adapter,
-  java, the application address). The old "Deploy" read as "this one is for the deploy only", while
-  the stand behind them is shared. The descriptions of the .env and of the application also spell
-  out how they relate: the .env picks the stand and the default application, App ID overrides the
-  application ON THAT stand and can stay empty when `ELEMENT_APP_ID` already names it.
+- **The settings sections are named after what they mean, not after a command:** "Stand" and
+  "Debugger" instead of "Deploy" - the stand behind them is shared.
 - **The "from install to debugging" diagram** on the start page: where the extension, the engine
-  and elemctl come from, and what the platform distribution hands over - the reference and the
-  types to the engine, the debug adapter to elemctl - with the working, deploy and debugging
-  picture below. The editor-and-engine diagram stays where it was, in the VS Code section.
+  and elemctl come from, and what the platform distribution hands over.
 - **The metadata tree's title bar keeps two buttons** - deploy and collapse; new project, grouping,
   refresh and hiding empty categories moved into the "..." menu. Six icons in a row read as a row
   with nothing leading.
@@ -146,17 +108,10 @@
 - **The paths to the tools are collected in "General"** - the xbsl engine, elemctl and the Python
   interpreter lived in three different sections while answering one question: where things are
   installed.
-- **The retired rule settings are gone from the forms.** The thirteen `groups.*` dropdowns and the
-  three `linter.select` / `.enable` / `.ignore` strings are no longer shown - a setting on display
-  is an invitation to use it, and the invitation now belongs to the table alone. The code still
-  READS them, so an existing setup keeps working after the update; move them with the command. The
-  "Rule groups" section went with them, and the guard that checked a description for every group in
-  the settings now checks the rules page in the documentation.
-- **Inside a section the settings go by importance, not alphabetically.** VS Code sorts them by name
-  until an explicit order is given - which sank the path to the tool between minor fields and put
-  the application id above the .env that picks it. "Stand" now starts with elemctl, then the .env
-  with the application under it; "Checking" starts with the path to the engine, and the rule groups
-  and the three deprecated strings moved to the bottom.
+- **The retired rule settings are gone from the forms** - the invitation now belongs to the table
+  alone. The code still reads them, so an existing setup keeps working; move them with the command.
+- **Inside a section the settings go by importance, not alphabetically** - the path to the tool no
+  longer sinks between minor fields.
 
 ## 0.58.1
 
@@ -198,13 +153,10 @@
 ## 0.57.0
 
 ### Added
-- **Debugging 1C:Element applications is now part of this extension.** It used to be a separate
-  one, *XBSL Debug*: breakpoints, a call stack chaining client and server frames, variable values
-  and stepping, all through the platform's own debug adapter. The split cost a double setup - the
-  elemctl path and the application id were asked for twice - so the debugger now shares the deploy
-  settings (`xbsl.deploy.elemctlPath`, `xbsl.deploy.appId`) and adds its own `xbsl.debug.*`. The
-  settings of the retired extension (`xbslDebug.*`) are still read, so an existing setup keeps
-  working. Start with *XBSL: Set up 1C:Element debugging*.
+- **Debugging 1C:Element applications is now part of this extension** - it used to be a separate
+  one, and the elemctl path with the application id were asked for twice. Breakpoints, the call
+  stack, variable values and stepping go through the platform's own debug adapter; start with
+  *XBSL: Set up 1C:Element debugging*.
 - **The status bar shows the elemctl version** next to the engine one - deploy and debugging both
   depend on it, and until now nothing answered whether it was there at all.
 
@@ -276,11 +228,8 @@
 ## 0.51.0
 
 ### Fixed
-- **The properties panel no longer offers an attribute the properties of another type.** A string
-  attribute was shown the numeric `IntegerLength` and `FractionLength`: the metamodel describes an
-  attribute with a single class holding the union of every type's properties. Engine 0.56.0+ marks
-  the per-type properties, and the panel filters them by `Type`; what is written in the yaml is
-  never hidden.
+- **The properties panel no longer offers an attribute the properties of another type** - a string
+  attribute was shown the numeric length limits. What is written in the yaml is never hidden.
 
 ## 0.50.0
 
