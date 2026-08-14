@@ -97,6 +97,55 @@ class TypeEnv:
     shadowed: frozenset[str] = frozenset()
 
 
+def method_env(method: object, *, type_names: bool = False,
+               returns: dict[str, Inferred] | None = None,
+               this_type: Inferred | None = None) -> TypeEnv:
+    """The environment of one method: every declared name, typed where the source says so.
+
+    Collecting this in one place is what keeps the type-name shortcut honest. A name DECLARED in
+    the method is never a type, even when the catalog knows a type of that name and even when the
+    declaration says nothing about its type: a live module holds `пер Список = ...`, and reading
+    that name as the stdlib type answered "not nullable" for a value that plainly is.
+    """
+    import dataclasses
+
+    variables: dict[str, Inferred] = {}
+    declared: set[str] = set()
+    env = TypeEnv(variables, returns=returns, this_type=this_type, type_names=False)
+
+    def remember(name: str, tref: object, init: object = None) -> None:
+        declared.add(name)
+        got = nominal(getattr(tref, "text", None))
+        if got is None and init is not None:
+            got = expression_type(init, env)
+        if got is not None:
+            variables[name] = got
+
+    for param in getattr(method, "params", ()) or ():
+        remember(getattr(param, "name", ""), getattr(param, "type", None))
+
+    def walk(node: object) -> None:
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, P.Node):
+            return
+        if isinstance(node, P.VarDecl):
+            remember(node.name, getattr(node, "type", None), getattr(node, "init", None))
+        elif isinstance(node, (P.ForEach, P.ForTo)):
+            declared.add(getattr(node, "var", ""))
+        elif isinstance(node, P.Lambda):
+            for param in getattr(node, "params", ()) or ():
+                declared.add(getattr(param, "name", ""))
+        for f in dataclasses.fields(node):
+            walk(getattr(node, f.name, None))
+
+    walk(getattr(method, "body", None))
+    return TypeEnv(variables, returns=returns, this_type=this_type,
+                   type_names=type_names, shadowed=frozenset(declared) - set(variables))
+
+
 def nominal(text: str | None) -> Inferred | None:
     """The declared type of a source annotation: `Goods.Ref?` -> (Goods.Ref, nullable).
 
@@ -133,8 +182,17 @@ def member_type(owner: str, member: str) -> Inferred | None:
     bases = catalog.get("bases") or {}
     for holder in (owner, *(bases.get(owner) or ())):
         declared = (types.get(holder) or {}).get(member)
-        if declared:
-            return nominal(declared)
+        if not declared:
+            continue
+        got = nominal(declared)
+        # The catalog states the result of a generic member by the TYPE PARAMETER name
+        # (a data event answers with `DataType`), and that is a variable, not a type: the
+        # answer depends on the argument the receiver was built with. Reading it as a type once
+        # made an expression look non-empty when the data it stands for plainly is - so a name the
+        # catalog does not know as a type is no answer at all.
+        if got is None or not is_type_name(got.name):
+            return None
+        return got
     return None
 
 

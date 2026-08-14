@@ -15,6 +15,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
+  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
+  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
 - **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
   its own: the platform draws a button that opens the value in a separate window next to it. That
   is usually what the author wants, so the rule answers "where did this button come from" rather

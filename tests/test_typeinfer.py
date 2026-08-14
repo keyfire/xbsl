@@ -100,3 +100,42 @@ def test_a_nominal_annotation_reads_the_nullable_marker():
 def test_an_inherited_member_resolves_through_the_base_chain():
     # a button inherits the presentation method from the object root - the catalog keeps it there
     assert ti.member_type("Кнопка", "Представление") == ti.Inferred("Строка")
+
+
+# --- the two traps the corpora exposed ------------------------------------------------------
+
+
+def _method(text: str):
+    module, errors = P.parse_text(text)
+    assert not errors, [e.message for e in errors]
+    return module.members[0]
+
+
+def test_a_declared_name_is_never_read_as_a_type():
+    """`знч Список = ...` shadows the stdlib type of that name, even with no type of its own.
+
+    A live module holds exactly this, and reading the name as the type answered "not nullable"
+    for a value that plainly is - the shortcut has to lose to any declaration.
+    """
+    method = _method("метод Ф(Ключ: Строка)\n    пер Список = Соответствие.Получить(Ключ)\n"
+                     "    возврат Список!\n;\n")
+    env = ti.method_env(method, type_names=True)
+    assert "Список" in env.shadowed and "Список" not in env.variables
+    assert ti.expression_type(method.body[-1].value, env) is None
+
+
+def test_a_parameter_of_a_loop_is_shadowed_too():
+    method = _method("метод Ф(Данные: Массив<Строка>)\n    для Строка из Данные\n"
+                     "        Сообщить(Строка)\n    ;\n;\n")
+    env = ti.method_env(method, type_names=True)
+    assert "Строка" in env.shadowed
+
+
+def test_a_type_parameter_is_not_a_type():
+    """The catalog states a generic member's result by the TYPE PARAMETER name.
+
+    A data event answers with `DataType`, which is a variable, not a type - the answer
+    depends on the argument the receiver was built with, so the module must say "unknown".
+    """
+    assert ti.member_type("СобытиеСДанными", "Данные") is None
+    assert ti.member_type("Строка", "ВВерхнийРегистр") == ti.Inferred("Строка")
