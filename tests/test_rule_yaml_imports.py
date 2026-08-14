@@ -331,6 +331,7 @@ def _module_project(module_code: str, **extra):
     return files
 
 
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
 def test_unused_import_is_reported():
     """The live case: a module imports a subsystem its code never mentions."""
     diags = _lint_unused(_module_project("импорт Б\n\nметод Т()\n;\n"))
@@ -338,6 +339,7 @@ def test_unused_import_is_reported():
     assert "Б" in diags[0].message
 
 
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
 def test_an_import_whose_element_is_used_is_silent():
     diags = _lint_unused(_module_project(
         "импорт Б\n\nметод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"
@@ -345,6 +347,7 @@ def test_an_import_whose_element_is_used_is_silent():
     assert diags == []
 
 
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
 def test_a_reference_from_the_paired_yaml_is_not_a_use():
     """The yaml has an import section of its own - a module import does not cover it, and
     that is exactly the shape the rule was written for."""
@@ -357,12 +360,14 @@ def test_a_reference_from_the_paired_yaml_is_not_a_use():
     assert [x.rule_id for x in diags] == [UNUSED]
 
 
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
 def test_an_unknown_subsystem_is_not_judged():
     """A library or a typo - the rule has nothing to check the import against."""
     diags = _lint_unused(_module_project("импорт Чужая\n\nметод Т()\n;\n"))
     assert diags == []
 
 
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
 def test_without_subsystem_files_the_rule_stands_down():
     files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
              "Модуль.xbsl": "импорт Б\n\nметод Т()\n;\n"}
