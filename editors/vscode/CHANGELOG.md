@@ -12,7 +12,7 @@
 ## Unreleased
 
 ### Fixed
-- **A changed setting reaches the LSP server.** The settings that shape a run - the sources root (`xbsl.projectRoot`), the rule set, the data directory, the templates file, the interpreter and the message language - are ARGUMENTS of the long-lived server, and a running process cannot be re-argued. The extension had a configuration listener for the CLI mode only: in LSP mode `activate` returns before that listener is registered, so a changed setting did nothing at all until the window was reloaded. That is how `xbsl.projectRoot` came to read as ignored - the root was narrowed to keep a copy of another project out of the run, and the panel stayed full of findings from it. Such a change now restarts the server; settings that do not reach the command line leave it alone, so the project index is not paid for twice.
+- **A changed setting reaches the LSP server.** The sources root, the rule set, the data directory, the templates file, the interpreter and the message language are given to the server at startup, so editing them changed nothing until the window was reloaded - hence the impression that `xbsl.projectRoot` was ignored. Such an edit now restarts the server; the other settings leave it alone.
 
 ## 0.60.1
 

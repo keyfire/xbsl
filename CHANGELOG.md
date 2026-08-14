@@ -15,78 +15,29 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
-- **Rule `style/shadow-own-property`: a local variable named like a property of its own
-  element.** Inside the method the name resolves to the variable, so an assignment meant for
-  the property never reaches it. Reconnaissance cut the slice twice: only the modules where
-  such a property IS in scope are judged (an interface component and an object module - a
-  catalog's manager module carries no record at all, and 58 of the 60 name coincidences on a
-  live project live exactly there), and a PARAMETER of that name is left alone, being the
-  ordinary way to pass a value in. Three corpora: one true finding, no false ones.
-- **Rule `code/unused-import`: a module imports a subsystem its code never mentions.** The
-  platform's own editor reports such imports; the linter did not, and they accumulate as the
-  code that needed them is rewritten. A reference from the PAIRED yaml is not a use - the
-  yaml carries an import section of its own, which is exactly the shape of the live case that
-  prompted the rule. The check errs towards silence: a local name matching an element of the
-  imported subsystem reads as a use, so an import is never reported on a doubt.
+- **`style/shadow-own-property`** - a local variable named like a property of its own element:
+  the assignment goes into the variable and the property stays as it was.
+- **`code/unused-import`** - an import of a subsystem the code never turns to.
 
 ### Fixed
-- **Three rules learned their exception.** All three were surfaced by a foreign reference
-  project, and each has evidence of its own. `code/unknown-row-field` did not know that a dynamic
-  list row has members OF ITS OWN: the key is the documented way to reach the reference behind
-  the row, while the rule knew the data member alone; the set now comes from the type catalog.
-  `yaml/ref-needs-nullable` ignored the required mark - such a field becomes a mandatory parameter
-  of the constructor even when it has an implicit initialization value (docs of the structure
-  element), so it needs no default; the same rule also stopped judging PARAMETERS, whose value
-  arrives from whoever raises the event. `yaml/item-id-required` demanded an id for a standard
-  attribute added by naming it: the published ASSEMBLY of the reference project carries that entry
-  with no id, so the build accepts it. The mark comes from the metamodel - a class dispatched by
-  name describes a built-in item of the collection rather than one the project declares.
-- **`code/unknown-member` sees the EVENTS of a type.** Binding a handler to a component built in
-  code (`Button.OnClick = &Handle`) is the documented form, and the type's page in the same
-  distribution carries a "События" section. The events were always extracted; the rule read
-  properties and methods alone and answered "the type has no member" to every such binding -
-  nine findings on the reference project, the only class of its false findings that could hit our
-  own code as well. A typo in an event name is still flagged.
-- **Parser: a newline ends the statement, parentheses group a type.** Two holes, both surfaced
-  by a foreign reference project. First: an opening parenthesis at the start of a line was read
-  as a call of the preceding expression, so a loop source swallowed the next statement - casting
-  the loop variable to write into it broke the parse. Second: parentheses around a type -
-  `var Attempt: (()->Boolean)? = Undefined` - did not parse, because a function type demands
-  the arrow right after the closing parenthesis; one such field broke the whole file (33
-  suppressed reports). Both forms are legal - the server compiles that project - and all 13
-  `code/parse-error` findings on it are gone.
-- **Annotation parsing understands the English spellings.** Element sources are bilingual and a
-  project mixes the forms freely - even within one declaration: `@OnServer` above `@InSubsystem`.
-  The judges, however, matched the Russian spellings alone, so an English annotation read as NO
-  annotation and the method was judged by the default: a run over a foreign reference project
-  answered 602 false `code/local-method-cross-module` findings and three `code/query-needs-server`
-  ones - 81% of every error in that run. Visibility, environment, the handler mark, the subsystem
-  and library scopes, the deprecation prefix and the form event keys in yaml are bilingual now
-  (`Handler`, `OnClick` and the other English names come from the component schema, never from a
-  guess). The forms are read lazily and cleared along with the platform data - such a set used to
-  freeze at module import.
-- **The README links point at something again.** Splitting the guide into five pages left thirteen
-  links per language reading `[text]((url)` - visibly broken on the Marketplace, Open VSX and PyPI
-  pages. A link check (the target exists, the anchor exists) is now part of the tests: it is
-  structural and needs no network.
+- **The English spellings of annotations.** `@OnServer` and its siblings read as no annotation
+  at all, so the method was checked by the default. Both forms are equal now - in annotations,
+  in visibility scopes and in the form event keys.
+- **Two holes in parsing.** A parenthesis starting a line no longer sticks to the preceding
+  expression, and a declaration like `var Attempt: (()->Boolean)? = Undefined` parses: it used
+  to bring the whole file down.
+- **The events of a type.** Binding a handler to a component built in code no longer looks like
+  a member that does not exist; a typo in an event name is still caught.
+- **Three rules stopped arguing with lawful code:** the key of a dynamic list row, a required
+  field and an event parameter of a reference type, a standard attribute added without an id.
+- **The README links open again:** splitting the guide left thirteen broken ones per language.
+  A test keeps them honest now.
 
 ### Changed
-- **`code/unknown-member` reads a collection literal as a type declaration.** A variable
-  initialized with `<String>[]` names its type no worse than a constructor does, yet the type
-  used to come from an annotation or a `new Type(...)` alone - a member an array does not have
-  went unnoticed after a literal. Array, map and set literals are covered, bare ones included: the
-  arguments do not matter, since the members of an array are the same whatever it holds.
-  Corpus runs over four projects: zero false findings.
-- **The linter collects the query files of virtual tables (`.xbql`).** They were the only
-  place where the query language lives outside a `Query{ ... }` block, and nothing looked at
-  them: an unknown table in such a file was found by the server compiler alone. Now the query
-  rules judge them - reconnaissance on a live project confirmed both halves of the change:
-  `query/unknown-table` reports a table that is not an object of the project, and the two
-  rules that would have been false there are exempt. A query file is not a module (the module
-  parser meets it with "a module import, method... is expected" on line 1), and the
-  ampersand parameter is the documented syntax of a virtual table's query rather than the
-  literal's mistake - the platform documentation states that such a query takes its
-  parameters the way an arbitrary query does (topics/virtual-table).
+- **A collection literal names the type.** `val Users = <String>[]` declares it no worse than a
+  constructor, and a member an array does not have is now visible after such a literal.
+- **The query files of virtual tables (`.xbql`) came under the checks.** An unknown table there
+  used to be found by the server compiler alone.
 
 ## 2026-08-14 – 0.64.0
 
