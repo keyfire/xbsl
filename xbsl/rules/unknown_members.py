@@ -113,6 +113,27 @@ def _nominal(tref: P.TypeRef | None) -> str | None:
     return head if text.startswith(f"{head}<") and text.endswith(">") else None
 
 
+#: The head type a collection literal names. The ARGUMENTS do not matter here - the members
+#: of an array are the same whatever it holds - so a bare `[...]` names its type as surely as
+#: `<Строка>[]` does. Kinds come from the parser: an ArrayLit, and a MapLit that is either a
+#: map (`{к: з}`, `{:}`) or a set (`{a, b}`, `{}`).
+_LITERAL_HEADS = {"array": "Массив", "map": "Соответствие", "set": "Множество"}
+
+
+def _collection_literal(init) -> str | None:
+    """The type a collection literal declares, or None when the initializer is not one.
+
+    `знч Пользователи = <Строка>[]` names its type no worse than a constructor does, yet the
+    type used to come from an annotation or `новый Тип(...)` alone - so a member that does not
+    exist on an array went unnoticed after a literal (found 2026-08 while sizing another rule).
+    """
+    if isinstance(init, P.ArrayLit):
+        return _LITERAL_HEADS["array"]
+    if isinstance(init, P.MapLit):
+        return _LITERAL_HEADS.get(init.kind)
+    return None
+
+
 class _Scope:
     """Per-method collection: name -> type (or None once the name is poisoned)."""
 
@@ -127,6 +148,8 @@ class _Scope:
         nominal = _nominal(tref)
         if nominal is None and isinstance(init, P.New):
             nominal = _nominal(init.type)
+        if nominal is None:
+            nominal = _collection_literal(init)
         if name in self.types and self.types[name] != nominal:
             self.types[name] = None
         else:

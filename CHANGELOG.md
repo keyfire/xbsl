@@ -15,6 +15,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Changed
+- **`code/unknown-member` reads a collection literal as a type declaration.** A variable
+  initialized with `<String>[]` names its type no worse than a constructor does, yet the type
+  used to come from an annotation or a `new Type(...)` alone - a member an array does not have
+  went unnoticed after a literal. Array, map and set literals are covered, bare ones included: the
+  arguments do not matter, since the members of an array are the same whatever it holds.
+  Corpus runs over four projects: zero false findings.
 - **The linter collects the query files of virtual tables (`.xbql`).** They were the only
   place where the query language lives outside a `Query{ ... }` block, and nothing looked at
   them: an unknown table in such a file was found by the server compiler alone. Now the query
