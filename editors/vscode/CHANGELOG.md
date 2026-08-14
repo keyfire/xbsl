@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.61.1
 
 ### Fixed
 - **Every documentation link of the rules was verified.** Three localization rules pointed at a
