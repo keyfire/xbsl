@@ -15,6 +15,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Rule `style/shadow-own-property`: a local variable named like a property of its own
+  element.** Inside the method the name resolves to the variable, so an assignment meant for
+  the property never reaches it. Reconnaissance cut the slice twice: only the modules where
+  such a property IS in scope are judged (an interface component and an object module - a
+  catalog's manager module carries no record at all, and 58 of the 60 name coincidences on a
+  live project live exactly there), and a PARAMETER of that name is left alone, being the
+  ordinary way to pass a value in. Three corpora: one true finding, no false ones.
 - **Rule `code/unused-import`: a module imports a subsystem its code never mentions.** The
   platform's own editor reports such imports; the linter did not, and they accumulate as the
   code that needed them is rewritten. A reference from the PAIRED yaml is not a use - the

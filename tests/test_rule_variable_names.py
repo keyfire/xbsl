@@ -208,3 +208,71 @@ def test_no_objects_no_shadow():
         select={"style/shadow-project-name"},
     )
     assert d == []
+
+
+# --- style/shadow-own-property ------------------------------------------------------------
+
+OWN = "style/shadow-own-property"
+
+_FORM_YAML = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Имя: Кабинет\n"
+    "Свойства:\n"
+    "    -\n"
+    "        Имя: СписокПриложений\n"
+    "        Тип: Строка\n"
+)
+
+
+def _lint_own(*files):
+    sources = [engine.load_text(name, content) for name, content in files]
+    return engine.run_sources(sources, select={OWN})
+
+
+def test_variable_shadowing_a_property_is_reported():
+    """The live case: a local list named like the form property it hides."""
+    d = _lint_own(
+        ("Кабинет.yaml", _FORM_YAML),
+        ("Кабинет.xbsl", "метод Ф()\n    пер СписокПриложений = 1\n;\n"),
+    )
+    assert [(x.rule_id, x.line) for x in d] == [(OWN, 2)]
+    assert "СписокПриложений" in d[0].message
+
+
+def test_a_parameter_of_that_name_is_left_alone():
+    """Passing a value in through a parameter named after the property is the ordinary way -
+    a corpus run found nine such parameters on one project, every one of them deliberate."""
+    d = _lint_own(
+        ("Кабинет.yaml", _FORM_YAML),
+        ("Кабинет.xbsl", "метод Ф(СписокПриложений: Строка)\n;\n"),
+    )
+    assert d == []
+
+
+def test_a_manager_module_is_not_judged():
+    """A catalog's manager module carries no record in scope: 58 of the 60 name coincidences
+    on a live project live there and are perfectly legal."""
+    d = _lint_own(
+        ("Товары.yaml", "ВидЭлемента: Справочник\nИмя: Товары\n"
+                        "Реквизиты:\n    -\n        Имя: Цена\n        Тип: Число\n"),
+        ("Товары.xbsl", "метод Ф()\n    пер Цена = 1\n;\n"),
+    )
+    assert d == []
+
+
+def test_the_object_module_is_judged():
+    """The object module carries the record attributes - there the shadowing is real."""
+    d = _lint_own(
+        ("Товары.yaml", "ВидЭлемента: Справочник\nИмя: Товары\n"
+                        "Реквизиты:\n    -\n        Имя: Цена\n        Тип: Число\n"),
+        ("Товары.Объект.xbsl", "метод Ф()\n    пер Цена = 1\n;\n"),
+    )
+    assert [(x.rule_id, x.line) for x in d] == [(OWN, 2)]
+
+
+def test_a_name_that_is_not_a_property_is_silent():
+    d = _lint_own(
+        ("Кабинет.yaml", _FORM_YAML),
+        ("Кабинет.xbsl", "метод Ф()\n    пер Итого = 1\n;\n"),
+    )
+    assert d == []

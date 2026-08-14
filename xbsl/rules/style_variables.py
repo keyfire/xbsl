@@ -37,6 +37,8 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
 from xbsl.rules._syntax import code_tokens, declarations, signatures, type_expr
 from xbsl.rules.style_naming import _structure_ranges
+from xbsl.rules.environment import _pair_stem
+from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
@@ -104,6 +106,18 @@ MESSAGES = {
               "называйте константу абстрактно: ТАЙМАУТ, а не ТАЙМАУТ_ОДНА_МИНУТА.",
         "en": "The numeral '{word}' in the constant name '{name}' spells the value – "
               "name the constant abstractly: TIMEOUT, not TIMEOUT_ONE_MINUTE.",
+    },
+    "style/shadow-own-property.title": {
+        "ru": "Переменная закрывает свойство своего элемента",
+        "en": "A variable shadows a property of its own element",
+    },
+    "style/shadow-own-property.found": {
+        "ru": "Переменная '{name}' совпадает со свойством '{name}' этого же элемента "
+              "({kind}) – в теле метода имя разрешается в переменную, и присваивание "
+              "уходит не в свойство. Назовите переменную иначе.",
+        "en": "The variable '{name}' coincides with a property of the same element "
+              "({kind}) – inside the method body the name resolves to the variable, so an "
+              "assignment does not reach the property. Pick another name.",
     },
     "style/shadow-project-name.title": {
         "ru": "Имя закрывает элемент проекта",
@@ -418,3 +432,90 @@ def shadow_project_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "style/shadow-project-name", Severity.WARNING,
                 i18n.t("style/shadow-project-name.found", name=name, kind=kind),
             )
+
+
+# --- style/shadow-own-property ------------------------------------------------------------
+
+#: Sections of the paired yaml whose entries are visible in the module body by name.
+_PROPERTY_SECTIONS = ("Свойства", "Реквизиты", "Properties", "Attributes")
+#: The module of an object carries the record's attributes; its yaml is the object's own.
+_OBJECT_MODULE_SUFFIX = ".Объект"
+_INTERFACE_KIND = "КомпонентИнтерфейса"
+
+
+def _own_property_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a yaml contributes the property names visible in its module, a module
+    the names it declares as VARIABLES (parameters are a separate, legitimate story)."""
+    if source.kind == "yaml":
+        if not _HAVE_YAML:
+            return None
+        data, err = _parsed(source)
+        if err is not None or not isinstance(data, dict):
+            return None
+        kind = object_kind(data)
+        if not kind:
+            return None
+        names: list[str] = []
+        for section in _PROPERTY_SECTIONS:
+            items = data.get(section)
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if isinstance(item, dict):
+                    name = value_of(item, "Имя")
+                    if isinstance(name, str) and name:
+                        names.append(name)
+        if not names:
+            return None
+        return {"k": "props", "stem": _pair_stem(source.rel), "kind": kind,
+                "names": sorted(set(names))}
+    if source.kind != "xbsl":
+        return None
+    # Only variables: a PARAMETER named after a property is the ordinary way to pass its
+    # value in, and a corpus run shows it everywhere (nine such parameters on one project,
+    # all deliberate). A local variable of that name is the undersight the platform reports.
+    names = [
+        (tok.value, tok.line, tok.col)
+        for category, tok in _variable_names(source) if category != "param"
+    ]
+    if not names:
+        return None
+    stem = _pair_stem(source.rel)
+    # `Х.Объект.xbsl` is the object's module - its properties live in `Х.yaml`.
+    if stem.endswith(_OBJECT_MODULE_SUFFIX):
+        stem = stem[: -len(_OBJECT_MODULE_SUFFIX)]
+    return {"k": "vars", "stem": stem, "names": names}
+
+
+@rule(
+    "style/shadow-own-property", "style/shadow-own-property.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_own_property_mapper,
+)
+def shadow_own_property(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A local variable named like a property of the element the module belongs to.
+
+    Judged are the two module shapes where such a property IS in scope: the module of an
+    interface component (the form properties) and the module of an object (the record
+    attributes). A manager module of a catalog carries no record in scope at all, and a
+    corpus run proves how much that matters - 58 of the 60 name coincidences on one project
+    live there and are perfectly legal.
+    """
+    props = {
+        f["stem"]: (f["kind"], set(f["names"]))
+        for f in facts.values() if f["k"] == "props"
+    }
+    for rel, fact in facts.items():
+        if fact["k"] != "vars":
+            continue
+        found = props.get(fact["stem"])
+        if found is None:
+            continue
+        kind, names = found
+        if kind != _INTERFACE_KIND and not rel.endswith(f"{_OBJECT_MODULE_SUFFIX}.xbsl"):
+            continue  # a manager module: the properties are not in scope here
+        for name, line, col in fact["names"]:
+            if name in names:
+                yield Diagnostic(
+                    rel, line, col, "style/shadow-own-property", Severity.WARNING,
+                    i18n.t("style/shadow-own-property.found", name=name, kind=kind),
+                )
