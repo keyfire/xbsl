@@ -574,7 +574,7 @@ function renderTabs(node: unknown, horizontalParent: boolean): string {
   return `<div ${tagAttrs(node, "tabs", growStyle(node, horizontalParent))}><div class="tabbar">${bar.join("")}</div>${bodies.join("")}</div>`;
 }
 
-function renderUnknown(node: unknown, type: string): string {
+function renderUnknown(node: unknown, type: string, layout = ""): string {
   // A PROJECT component (its yaml was handed over by the host): its own content is drawn
   // inline, so a site page assembled from cards and buttons looks like the page and not like a
   // fence of placeholders. The offsets of the nested yaml are stripped - they belong to another
@@ -592,7 +592,11 @@ function renderUnknown(node: unknown, type: string): string {
       _subStack.push(type);
       const inner = renderComponent(content, false).replace(/ data-off="\d+"/g, "");
       _subStack.pop();
-      return `<div ${tagAttrs(node, "subc")}>${inner}</div>`;
+      // The layout of the USE SITE goes onto the block: a component placed with
+      // `РастягиватьПоГоризонтали: Истина` (or with an explicit width) must take that width,
+      // exactly as any other component does. Without it a button-component in a hero row was
+      // drawn by its content while the platform stretched it.
+      return `<div ${tagAttrs(node, "subc", layout)}>${inner}</div>`;
     }
   }
   const inner = renderChildren(get(node, "Содержимое"), false);
@@ -791,7 +795,7 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
     case "КонтейнерHtml":
       return `<div ${tagAttrs(node, "htmlbox", layout)}><span class="tag">HTML${prop(node, "Имя") ? " · " + esc(prop(node, "Имя")!) : ""}</span></div>`;
     default:
-      return renderUnknown(node, type || "?");
+      return renderUnknown(node, type || "?", boxed);
   }
 }
 

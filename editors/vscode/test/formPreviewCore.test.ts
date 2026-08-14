@@ -151,6 +151,24 @@ check(
   "вложенный компонент: одно смещение - место использования",
   nested.ok && collectDataOffsets(nested.html).length === 1 && collectDataOffsets(nested.html)[0] === SUB_FORM.indexOf("Тип: КарточкаОблако")
 );
+// The layout of the USE SITE reaches the nested component: a component stretched at the place it
+// is used must take that width, exactly as any other component does.
+const STRETCHED_SUB = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        Тип: КарточкаОблако",
+  "        Имя: Карточка1",
+  "        РастягиватьПоГоризонтали: Истина",
+  "",
+].join("\n");
+const stretched = renderFormPreview(STRETCHED_SUB, {}, { КарточкаОблако: SUB_COMPONENT });
+check(
+  // in a VERTICAL parent the horizontal stretch is the cross axis, so it lands as align-self
+  "вложенный компонент: растягивание места использования",
+  stretched.ok && /class="subc"[^>]*style="[^"]*align-self:stretch/.test(stretched.html),
+);
+
 const bare = renderFormPreview(SUB_FORM);
 check("без yaml компонента - заглушка", bare.ok && bare.html.includes('class="unknown'));
 check(

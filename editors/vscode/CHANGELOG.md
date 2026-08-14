@@ -12,6 +12,8 @@
 ## Unreleased
 
 ### Changed
+- **The layout of the use site reaches a nested component** - stretching, width and alignment
+  apply to it exactly as they do to any other component.
 - **A long expression in the wireframe is cut in the middle,** the way the platform's designer
   cuts it: the head names the data, the tail names the field, and both matter. The whole text
   stays in the tooltip.
