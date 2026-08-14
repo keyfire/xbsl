@@ -72,6 +72,24 @@ MESSAGES = {
         "en": "Component '{component}' has no property '{prop}' – it is declared by {owners}. "
               "Applying the build rejects the markup node ('Неизвестное свойство').",
     },
+    "yaml/ref-input-auto-commands.title": {
+        "ru": "У ссылочного поля ввода команды по умолчанию",
+        "en": "A reference input with the default commands",
+    },
+    "yaml/ref-input-auto-commands.auto": {
+        "ru": "Поле ввода со ссылочным типом '{type}' не задаёт Команды: платформа добавит рядом "
+              "свою кнопку открытия значения в отдельном окне (у ссылочного поля Авто "
+              "разворачивается во фрагмент командного интерфейса). Кнопка не нужна – задайте "
+              "пустой фрагмент: 'Команды:' с 'Тип: ФрагментКомандногоИнтерфейса' без элементов.",
+        "en": "An input of the reference type '{type}' declares no {n[Команды]}: the platform adds "
+              "its own button that opens the value in a separate window (for a reference input "
+              "{n[Авто]} unfolds into a command-interface fragment). To do without the button, "
+              "declare an empty fragment.",
+    },
+    "yaml/ref-input-auto-commands.off": {
+        "ru": "информационное: кнопка открытия чаще всего и нужна, отличить намерение нельзя",
+        "en": "informational: the open button is usually wanted, and the intent is not tellable",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -187,3 +205,71 @@ def unknown_component_property(source: SourceFile) -> Iterable[Diagnostic]:
                     owners=", ".join(declared[:3]),
                 ),
             )
+
+
+# The reference input whose commands are left to the platform: the type argument names a
+# reference facet, and the node declares no commands of its own.
+_COMMANDS_KEYS = frozenset({"Команды", "Commands"})
+_REFERENCE_FACETS = ("Ссылка", "Ref")
+_INPUT_COMPONENTS = frozenset({"ПолеВвода", "Edit"})
+
+
+def _reference_argument(type_value: str) -> str | None:
+    """The type argument of an input when it names a reference facet, else None."""
+    start = type_value.find("<")
+    if start < 0 or not type_value.endswith(">"):
+        return None
+    argument = type_value[start + 1:-1].strip()
+    for member in argument.split("|"):
+        member = member.strip().rstrip("?").strip()
+        if any(member.endswith(f".{facet}") for facet in _REFERENCE_FACETS):
+            return argument
+    return None
+
+
+@rule(
+    "yaml/ref-input-auto-commands", "yaml/ref-input-auto-commands.title", "D",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="yaml/ref-input-auto-commands.off",
+)
+def ref_input_auto_commands(source: SourceFile) -> Iterable[Diagnostic]:
+    """A reference input that leaves its commands to the platform.
+
+    With no commands of its own the field gets the platform's own "open the value in a separate
+    window" button next to it: the documentation of the type states that for a reference input
+    the `Auto` value turns into a command-interface fragment. That is often what the author
+    wants, which is why the rule is off by default - it answers the question "where did this
+    button come from" rather than reports a mistake. An empty fragment silences the button.
+    """
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    if not any(key in source.text for key in _MARKUP_KEYS):
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    for mapping in _markup_nodes(root):
+        type_node = _type_value(mapping)
+        if type_node is None:
+            continue
+        value = type_node.value.strip()
+        component = uischema.canonical_component(value.split("<", 1)[0].strip())
+        if component not in _INPUT_COMPONENTS:
+            continue
+        argument = _reference_argument(value)
+        if argument is None:
+            continue
+        if any(key in _COMMANDS_KEYS for key in _scalar_entries(mapping)):
+            continue
+        if any(isinstance(k, yaml.ScalarNode) and k.value in _COMMANDS_KEYS
+               for k, _v in mapping.value):
+            continue  # the commands are a nested fragment, not a scalar entry
+        yield Diagnostic(
+            source.rel,
+            type_node.start_mark.line + 1, type_node.start_mark.column + 1,
+            "yaml/ref-input-auto-commands", Severity.INFO,
+            i18n.t("yaml/ref-input-auto-commands.auto", type=argument),
+        )

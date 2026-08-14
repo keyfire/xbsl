@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 152.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 153.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -175,6 +175,7 @@ sidebar:
 | `yaml/unknown-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Неизвестный тип в yaml |
 | `yaml/dynlist-missing-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Нет поля динамического списка [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/dynlist-row-editing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик `ПриРедактированииСтроки` у списка с ПЛОСКИМ динамическим источником: событие объявлено для узловых строк иерархии, у плоского списка платформа его не вызывает вовсе – по нажатию открывается автоформа объекта; дайте объекту свою форму объекта [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Lists/List_ru/) |
+| `yaml/ref-input-auto-commands` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ссылочное `ПолеВвода` без своих `Команды`: платформа рисует рядом собственную кнопку открытия значения в отдельном окне (у ссылочного поля `Авто` разворачивается во фрагмент командного интерфейса). Чаще всего кнопка и нужна, поэтому правило информационное и выключено; глушится пустым фрагментом [доки](https://1cmycloud.com/docs/help/topics/edit-component/) |
 | `yaml/dynlist-column-sort-lost` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Колонка таблицы над динамическим списком, чьё значение – ВЫЗОВ: заголовок сортировать не будет, платформа сортирует по ПОЛЮ источника, а не по отображаемому тексту. Привязывайте колонку к полю либо добавьте поле-представление в сам список. Выключено по умолчанию: нужна ли этой колонке сортировка, из файла не видно [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `code/unknown-enum-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Неизвестное значение перечисления [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |
 | `yaml/enum-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Перечисление без nullable [доки](https://1cmycloud.com/docs/help/topics/enumeration-properties/) |

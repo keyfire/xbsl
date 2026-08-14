@@ -15,6 +15,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
+  its own: the platform draws a button that opens the value in a separate window next to it. That
+  is usually what the author wants, so the rule answers "where did this button come from" rather
+  than reports a mistake.
+
 - **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
   project in the chosen language. A key with no translation keeps its default text - the same
   fallback the platform makes.
