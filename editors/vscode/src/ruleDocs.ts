@@ -69,7 +69,9 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "style/type-in-name", page: NAMING, anchor: "общие-рекомендации" },
   { match: (r) => r === "style/numeral-in-const-name", page: NAMING, anchor: "константы" },
   { match: (r) => r === "style/shadow-project-name", page: NAMING, anchor: "общие-рекомендации" },
-  { match: (r) => r === "style/shadow-own-property", page: NAMING, anchor: "общие-рекомендации" },
+  // The rule is about a name OVERRIDING another, not about how names are spelled: the naming
+  // page answers "write in CamelCase", which has nothing to do with the finding.
+  { match: (r) => r === "style/shadow-own-property", page: "topics/name-scope" },
 
   // --- recommendations: types and initialization ---
   { match: (r) => r === "style/type-colon-space", page: TYPES, anchor: "синтаксис" },

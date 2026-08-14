@@ -2,6 +2,12 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Исправлено
+- **Ссылка "справка" у `style/shadow-own-property` ведёт по делу** – в раздел про область
+  видимости имён и их перекрытие, а не в правила написания имён.
+
 ## 0.61.0
 
 ### Изменено

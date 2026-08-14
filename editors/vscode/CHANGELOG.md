@@ -9,6 +9,12 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **The "reference" link of `style/shadow-own-property` points at the right place** - the
+  section on name scopes and overriding, not the one on how names are spelled.
+
 ## 0.61.0
 
 ### Changed
