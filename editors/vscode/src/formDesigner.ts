@@ -249,8 +249,8 @@ async function resolveResources(names: string[]): Promise<Record<string, string>
   return out;
 }
 
-// The yaml texts of the PROJECT components a form uses (`Тип: КарточкаОблако` ->
-// КарточкаОблако.yaml somewhere in the workspace): with them the wireframe draws the
+// The yaml texts of the PROJECT components a form uses (`Тип: КарточкаЗадачи` ->
+// КарточкаЗадачи.yaml somewhere in the workspace): with them the wireframe draws the
 // component's content instead of a placeholder. Platform type names simply have no such file.
 // Cached for the session, like the resources: fine while editing ONE form, the refresh button
 // re-reads nothing here by design (the cache keeps misses too, or every render would search
@@ -1147,7 +1147,6 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .tag { position: absolute; top: -9px; left: 8px; z-index: 2; font-size: 9px; opacity: .65; background: var(--fp-bg); padding: 0 4px; border-radius: 3px; white-space: nowrap; }
   .ph { opacity: .45; font-style: italic; }
   .chip { font-family: var(--vscode-editor-font-family, monospace); font-size: .85em; background: var(--fp-soft); padding: 0 4px; border-radius: 3px; }
-  .sechead { font-weight: 600; font-size: 24px; line-height: 1.25; color: var(--fp-val); margin-top: 8px; }
   .lbl { color: var(--fp-val); line-height: 1.4; }
   .fld { display: inline-flex; flex-direction: column; gap: 4px; min-width: 160px; }
   .fld-cap { font-size: 14px; line-height: 20px; color: var(--fp-fg2); }

@@ -345,7 +345,7 @@ test("переход к узлу оставляет один уровень от
 // The component name behind a yaml path: the designer drops the cached text of a nested component
 // when its own file is edited, so the frame stops showing the previous version.
 test("componentNameOfPath: имя элемента из пути", () => {
-  assert.strictEqual(componentNameOfPath("/d/proj/e1c/Сайт/КарточкаОблако.yaml"), "КарточкаОблако");
+  assert.strictEqual(componentNameOfPath("/d/proj/e1c/Основное/КарточкаЗадачи.yaml"), "КарточкаЗадачи");
 });
 
 test("componentNameOfPath: путь Windows", () => {

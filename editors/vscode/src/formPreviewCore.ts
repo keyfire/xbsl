@@ -677,8 +677,6 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
       const text = prop(node, "Значение") ?? prop(node, "Заголовок");
       return `<span ${tagAttrs(node, "lbl", joinStyle(textStyle(node), layout))}>${valueHtml(text, s("label"))}</span>`;
     }
-    case "ЗаголовокСекции":
-      return `<div ${tagAttrs(node, "sechead", layout)}>${valueHtml(prop(node, "Заголовок"), s("section"))}</div>`;
     case "ПолеВвода":
     case "ПолеВыбора":
     case "ВыборЗначения": {
@@ -1065,13 +1063,13 @@ export function collectResourceImages(text: string): string[] {
 
 // Component type names the wireframe draws itself - there is no point looking for their yaml.
 const DRAWN_TYPES = new Set([
-  "ПроизвольныйШаблонФормы", "Группа", "СтандартнаяКарточка", "Надпись", "ЗаголовокСекции",
+  "ПроизвольныйШаблонФормы", "Группа", "СтандартнаяКарточка", "Надпись",
   "ПолеВвода", "ПолеВыбора", "ВыборЗначения", "Флажок", "Кнопка", "КнопкаФормы",
   "ОбычнаяКоманда", "НавигационнаяКоманда", "Картинка", "Таблица", "ПроизвольныйСписок",
   "Страницы", "РедакторHtml", "ВыборФайлов", "СписокФайлов", "КонтейнерHtml",
 ]);
 
-// The bare type names used by the form (`Тип: КарточкаОблако`) that MAY be project components:
+// The bare type names used by the form (`Тип: КарточкаЗадачи`) that MAY be project components:
 // the host looks their yaml up in the workspace (`<Имя>.yaml`) and hands the texts to
 // renderFormPreview - platform types simply have no such file and drop out on their own.
 export function collectComponentTypes(text: string): string[] {

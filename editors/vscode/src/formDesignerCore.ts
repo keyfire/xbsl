@@ -61,7 +61,7 @@ export interface FlattenOptions {
 }
 
 // The component name a yaml path stands for: the platform names the file after the element, so a
-// path of `.../КарточкаОблако.yaml` is the component `КарточкаОблако`. The designer keys its cache
+// path of `.../КарточкаЗадачи.yaml` is the component `КарточкаЗадачи`. The designer keys its cache
 // of nested components by that name and drops the entry when the file is edited - without which
 // the frame kept showing the previous version of the component until a manual refresh.
 export function componentNameOfPath(path: string): string | undefined {

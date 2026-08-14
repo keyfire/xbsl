@@ -101,24 +101,24 @@ if (result.ok) {
 const LOC_FORM = [
   "ВидЭлемента: КомпонентИнтерфейса",
   "Наследует:",
-  "    Заголовок: $ОсновноеЛокализация.ЗаголовокФормы",
+  "    Заголовок: $ОбщиеСтроки.ЗаголовокФормы",
   "    Содержимое:",
   "        Тип: ПолеВвода<Строка>",
-  "        Заголовок: $ОсновноеЛокализация.Название",
+  "        Заголовок: $ОбщиеСтроки.Название",
   "        Обязательное: Истина",
   "",
 ].join("\n");
 const loc = renderFormPreview(LOC_FORM);
-check("локализация: последний сегмент ключа", loc.ok && loc.html.includes(">Название</span>") && !loc.html.includes(">$ОсновноеЛокализация.Название<"));
-check("локализация: полный ключ в подсказке", loc.ok && loc.html.includes('title="$ОсновноеЛокализация.Название"'));
+check("локализация: последний сегмент ключа", loc.ok && loc.html.includes(">Название</span>") && !loc.html.includes(">$ОбщиеСтроки.Название<"));
+check("локализация: полный ключ в подсказке", loc.ok && loc.html.includes('title="$ОбщиеСтроки.Название"'));
 check("обязательное поле: звёздочка", loc.ok && loc.html.includes('class="req"'));
 
 // With the strings from the engine the same value is drawn as the TEXT the user will see, and the
 // key moves to the tooltip: the page used to read as a row of identifiers.
-setLocalizationStrings({ "ОсновноеЛокализация.Название": "Наименование" });
+setLocalizationStrings({ "ОбщиеСтроки.Название": "Наименование" });
 const locText = renderFormPreview(LOC_FORM);
 check("локализация: показан текст, а не ключ", locText.ok && locText.html.includes(">Наименование</span>"));
-check("локализация: ключ остался в подсказке", locText.ok && locText.html.includes('title="$ОсновноеЛокализация.Название"'));
+check("локализация: ключ остался в подсказке", locText.ok && locText.html.includes('title="$ОбщиеСтроки.Название"'));
 // A key the engine does not know (a stale reference, a translation still missing) keeps the old
 // behaviour instead of showing an empty label.
 const locPartial = renderFormPreview(LOC_FORM);
@@ -131,13 +131,13 @@ const SUB_FORM = [
   "ВидЭлемента: КомпонентИнтерфейса",
   "Наследует:",
   "    Содержимое:",
-  "        Тип: КарточкаОблако",
+  "        Тип: КарточкаЗадачи",
   "        Имя: Карточка1",
   "",
 ].join("\n");
 const SUB_COMPONENT = [
   "ВидЭлемента: КомпонентИнтерфейса",
-  "Имя: КарточкаОблако",
+  "Имя: КарточкаЗадачи",
   "Наследует:",
   "    Тип: Форма",
   "    Содержимое:",
@@ -145,11 +145,11 @@ const SUB_COMPONENT = [
   "        Значение: Текст карточки",
   "",
 ].join("\n");
-const nested = renderFormPreview(SUB_FORM, {}, { КарточкаОблако: SUB_COMPONENT });
+const nested = renderFormPreview(SUB_FORM, {}, { КарточкаЗадачи: SUB_COMPONENT });
 check("вложенный компонент: содержимое из его yaml", nested.ok && nested.html.includes("Текст карточки") && nested.html.includes('class="subc"'));
 check(
   "вложенный компонент: одно смещение - место использования",
-  nested.ok && collectDataOffsets(nested.html).length === 1 && collectDataOffsets(nested.html)[0] === SUB_FORM.indexOf("Тип: КарточкаОблако")
+  nested.ok && collectDataOffsets(nested.html).length === 1 && collectDataOffsets(nested.html)[0] === SUB_FORM.indexOf("Тип: КарточкаЗадачи")
 );
 // The layout of the USE SITE reaches the nested component: a component stretched at the place it
 // is used must take that width, exactly as any other component does.
@@ -157,12 +157,12 @@ const STRETCHED_SUB = [
   "ВидЭлемента: КомпонентИнтерфейса",
   "Наследует:",
   "    Содержимое:",
-  "        Тип: КарточкаОблако",
+  "        Тип: КарточкаЗадачи",
   "        Имя: Карточка1",
   "        РастягиватьПоГоризонтали: Истина",
   "",
 ].join("\n");
-const stretched = renderFormPreview(STRETCHED_SUB, {}, { КарточкаОблако: SUB_COMPONENT });
+const stretched = renderFormPreview(STRETCHED_SUB, {}, { КарточкаЗадачи: SUB_COMPONENT });
 check(
   // in a VERTICAL parent the horizontal stretch is the cross axis, so it lands as align-self
   "вложенный компонент: растягивание места использования",
@@ -173,7 +173,7 @@ const bare = renderFormPreview(SUB_FORM);
 check("без yaml компонента - заглушка", bare.ok && bare.html.includes('class="unknown'));
 check(
   "collectComponentTypes отдаёт кандидатов без нарисованных типов",
-  JSON.stringify(collectComponentTypes(SUB_FORM)) === JSON.stringify(["КарточкаОблако"]) &&
+  JSON.stringify(collectComponentTypes(SUB_FORM)) === JSON.stringify(["КарточкаЗадачи"]) &&
     collectComponentTypes(SUB_COMPONENT).length === 1 // Form is an inheritance type, not a drawn component
 );
 
@@ -189,7 +189,7 @@ const APP_FORM = [
   "            -",
   "                Тип: НавигационнаяКоманда",
   "                Представление: Программы",
-  "                ТипФормы: ПрограммыФормаСписка",
+  "                ТипФормы: ЗадачиФормаСписка",
   "",
 ].join("\n");
 const app = renderFormPreview(APP_FORM);

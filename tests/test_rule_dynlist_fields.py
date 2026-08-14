@@ -265,8 +265,8 @@ def test_a_computed_column_is_reported():
 
 
 def test_a_qualified_call_is_reported_too():
-    d = _lint_sort(_column_form("=СтатусПриложения.Текст(ДанныеСтроки.Данные.Статус)"))
-    assert len(d) == 1 and "СтатусПриложения.Текст" in d[0].message
+    d = _lint_sort(_column_form("=СостояниеЗадачи.Текст(ДанныеСтроки.Данные.Статус)"))
+    assert len(d) == 1 and "СостояниеЗадачи.Текст" in d[0].message
 
 
 def test_a_bare_field_binding_is_the_sortable_form():

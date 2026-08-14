@@ -1266,7 +1266,7 @@ def test_completion_offers_the_own_entries_of_an_element():
         IndexLookup(idx),
         language_id="xbsl",
         line_prefix="    знч А = ПараметрыСайта.",
-        file_stem="ГлавнаяСтраница",
+        file_stem="ГлавнаяФорма",
         stdlib_members={},
     )
 

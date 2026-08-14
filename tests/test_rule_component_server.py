@@ -2,7 +2,7 @@
 
 The fixtures repeat the live failure: a client-and-server common module called a static
 method of an interface component, the linter said nothing, and the apply refused with
-`<Сервер> Переменная ЛичныйКабинет не определена` - the component's type lives on the
+`<Сервер> Переменная КабинетПодрядчика не определена` - the component's type lives on the
 client and its name is not declared in the server environment.
 """
 
@@ -11,17 +11,17 @@ from xbsl import engine, i18n
 RULE = "code/component-in-server-context"
 
 _COMPONENT = engine.load_text(
-    "ЛичныйКабинет.yaml",
+    "КабинетПодрядчика.yaml",
     "ВидЭлемента: КомпонентИнтерфейса\n"
     "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3aa\n"
-    "Имя: ЛичныйКабинет\n",
+    "Имя: КабинетПодрядчика\n",
 )
 
 _BOTH_MODULE = engine.load_text(
-    "ПосетительСайта.yaml",
+    "СтраницаЗадач.yaml",
     "ВидЭлемента: ОбщийМодуль\n"
     "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3ab\n"
-    "Имя: ПосетительСайта\n"
+    "Имя: СтраницаЗадач\n"
     "Окружение: КлиентИСервер\n",
 )
 
@@ -41,7 +41,7 @@ _CLIENT_MODULE = engine.load_text(
     "Окружение: Клиент\n",
 )
 
-_CALL = "    возврат ЛичныйКабинет.ИмяВошедшегоПользователя()\n"
+_CALL = "    возврат КабинетПодрядчика.ИмяВошедшегоПользователя()\n"
 
 
 def _lint(*sources):
@@ -54,11 +54,11 @@ def test_component_call_in_both_environments_module_flagged():
     i18n.set_lang("ru")
     try:
         d = _lint(_COMPONENT, _BOTH_MODULE, engine.load_text(
-            "ПосетительСайта.xbsl",
+            "СтраницаЗадач.xbsl",
             "метод Сведения(): Строка\n" + _CALL + ";\n"))
         assert len(d) == 1
         assert d[0].rule_id == RULE and d[0].severity.value == "error"
-        assert "ЛичныйКабинет.ИмяВошедшегоПользователя" in d[0].message
+        assert "КабинетПодрядчика.ИмяВошедшегоПользователя" in d[0].message
         assert "не определена" in d[0].message
         assert d[0].line == 2
     finally:
@@ -109,7 +109,7 @@ def test_component_call_in_unannotated_component_method_silent():
 def test_on_client_method_in_both_module_silent():
     """@НаКлиенте pins the client side - the exact fix the message suggests."""
     assert _lint(_COMPONENT, _BOTH_MODULE, engine.load_text(
-        "ПосетительСайта.xbsl",
+        "СтраницаЗадач.xbsl",
         "@НаКлиенте\nметод Сведения(): Строка\n" + _CALL + ";\n")) == []
 
 
@@ -120,7 +120,7 @@ def test_namesake_of_another_kind_is_left_alone():
         "Тёзка.yaml",
         "ВидЭлемента: Перечисление\n"
         "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3af\n"
-        "Имя: ЛичныйКабинет\n",
+        "Имя: КабинетПодрядчика\n",
     )
     assert _lint(_COMPONENT, namesake, _SERVER_MODULE, engine.load_text(
         "СерверныеДанные.xbsl",
@@ -131,8 +131,8 @@ def test_shadowed_name_is_left_alone():
     """A local of the same name gives the identifier its own meaning."""
     assert _lint(_COMPONENT, _SERVER_MODULE, engine.load_text(
         "СерверныеДанные.xbsl",
-        "метод Прочитать(ЛичныйКабинет: Строка): Строка\n"
-        "    возврат ЛичныйКабинет.ВРег()\n;\n")) == []
+        "метод Прочитать(КабинетПодрядчика: Строка): Строка\n"
+        "    возврат КабинетПодрядчика.ВРег()\n;\n")) == []
 
 
 def test_module_without_environment_is_not_guessed():
