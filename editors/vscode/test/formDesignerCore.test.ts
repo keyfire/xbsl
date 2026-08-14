@@ -349,7 +349,7 @@ test("componentNameOfPath: имя элемента из пути", () => {
 });
 
 test("componentNameOfPath: путь Windows", () => {
-  assert.strictEqual(componentNameOfPath(String.raw`D:\Repos\site\Форма.yaml`), "Форма");
+  assert.strictEqual(componentNameOfPath(String.raw`C:\проект\Сайт\Форма.yaml`), "Форма");
 });
 
 test("componentNameOfPath: не yaml - ничего", () => {
