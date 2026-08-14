@@ -650,11 +650,12 @@ check("доступность: в подсказке видно значение
 // the data, the tail names the field, and a CSS ellipsis would keep the head alone.
 check("эллипсис: короткое выражение не трогается", middleEllipsis("=Данные.Имя") === "=Данные.Имя");
 const long = "=Объект.Размещение==РазмещениеМакета.ВПриложенииАктивныйРежим или Объект.Размещение==РазмещениеМакета.Второй";
+const ELLIPSIS = String.fromCharCode(0x2026);
 const cut = middleEllipsis(long);
 check("эллипсис: длинное укорочено", cut.length < long.length && cut.length <= 64);
 check("эллипсис: начало сохранено", cut.startsWith("=Объект.Размещение"));
 check("эллипсис: конец сохранён", cut.endsWith("Второй"));
-check("эллипсис: многоточие в середине", cut.includes("…") && !cut.endsWith("…"));
+check("эллипсис: многоточие в середине", cut.includes(ELLIPSIS) && !cut.endsWith(ELLIPSIS));
 const chip = renderFormPreview([
   "ВидЭлемента: КомпонентИнтерфейса",
   "Наследует:",
