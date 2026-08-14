@@ -1,7 +1,7 @@
 // Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
 // that serve the metadata properties panel. Run with plain node (see npm test).
 
-import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, setFormKeyAliases } from "../src/formPreviewCore";
+import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, setFormKeyAliases, setLocalizationStrings } from "../src/formPreviewCore";
 
 let failures = 0;
 
@@ -112,6 +112,18 @@ const loc = renderFormPreview(LOC_FORM);
 check("локализация: последний сегмент ключа", loc.ok && loc.html.includes(">Название</span>") && !loc.html.includes(">$ОсновноеЛокализация.Название<"));
 check("локализация: полный ключ в подсказке", loc.ok && loc.html.includes('title="$ОсновноеЛокализация.Название"'));
 check("обязательное поле: звёздочка", loc.ok && loc.html.includes('class="req"'));
+
+// With the strings from the engine the same value is drawn as the TEXT the user will see, and the
+// key moves to the tooltip: the page used to read as a row of identifiers.
+setLocalizationStrings({ "ОсновноеЛокализация.Название": "Наименование" });
+const locText = renderFormPreview(LOC_FORM);
+check("локализация: показан текст, а не ключ", locText.ok && locText.html.includes(">Наименование</span>"));
+check("локализация: ключ остался в подсказке", locText.ok && locText.html.includes('title="$ОсновноеЛокализация.Название"'));
+// A key the engine does not know (a stale reference, a translation still missing) keeps the old
+// behaviour instead of showing an empty label.
+const locPartial = renderFormPreview(LOC_FORM);
+check("локализация: незнакомый ключ – последний сегмент", locPartial.ok && locPartial.html.includes(">ЗаголовокФормы<"));
+setLocalizationStrings({});
 
 // A project component whose yaml was handed over by the host is drawn with its own content; the
 // offsets of the nested file are stripped - navigation goes to the USE site. No yaml - a placeholder.

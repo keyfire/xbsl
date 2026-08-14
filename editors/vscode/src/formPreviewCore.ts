@@ -37,6 +37,15 @@ function canonicalKey(key: string): string {
   return _keyAliases[key] ?? key;
 }
 
+// {"Dictionary.Key": text} of the project, filled from the engine (`xbsl/localizationStrings`)
+// in the editor's language. Without it a localized value was drawn as the key's last segment and
+// the page read as a row of identifiers instead of the words the user will see.
+let _locStrings: Record<string, string> = {};
+
+export function setLocalizationStrings(strings: Record<string, string>): void {
+  _locStrings = strings ?? {};
+}
+
 // -- wireframe placeholder strings -----------------------------------------------------------
 //
 // The texts the wireframe shows on its own (placeholders, the table toolbar, the search bar)
@@ -143,9 +152,10 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
 }
 
 // Property value: a binding (`=Данные.Х`) is shown as a monospaced chip, a localization
-// reference (`$Словарь.Ключ`) - as its last segment with the full key in the tooltip (the real
-// text lives in the localization files and is resolved by the platform, not by the wireframe),
-// a literal - as text.
+// reference (`$Словарь.Ключ`) - as the TEXT the user will see, with the key in the tooltip, and
+// a literal - as text. When the engine has not answered with the strings (or the key is not
+// among them - a stale reference, a translation still missing), the reference falls back to its
+// last segment, which is what the frame used to show for every such value.
 function valueHtml(v: string | undefined, placeholder = ""): string {
   if (v === undefined || v === "") {
     return `<span class="ph">${esc(placeholder)}</span>`;
@@ -154,7 +164,12 @@ function valueHtml(v: string | undefined, placeholder = ""): string {
     return `<code class="chip">${esc(v)}</code>`;
   }
   if (v.startsWith("$")) {
-    const last = v.slice(v.lastIndexOf(".") + 1) || v.slice(1);
+    const key = v.slice(1);
+    const text = _locStrings[key];
+    if (text !== undefined && text !== "") {
+      return `<span class="loc" title="${esc(v)}">${esc(text)}</span>`;
+    }
+    const last = v.slice(v.lastIndexOf(".") + 1) || key;
     return `<span class="loc" title="${esc(v)}">${esc(last)}</span>`;
   }
   return esc(v);

@@ -2619,3 +2619,35 @@ def test_routes_for_still_requires_a_template_and_a_verb():
         scaffold.routes_for("", ["GET"])
     with pytest.raises(scaffold.ScaffoldError):
         scaffold.routes_for("/orders", [])
+
+
+# --- localization_strings: the texts behind the $Dictionary.Key references ------------------
+
+
+def test_localization_strings_collects_the_default_language(tmp_path):
+    _loc_descriptor(tmp_path)
+    _loc_element(tmp_path)
+    got = scaffold.localization_strings(tmp_path)
+    assert got["strings"]["ПробаЛокализация.Привет"] == "Привет"
+    assert got["strings"]["ПробаЛокализация.Время"] == "Время: %0"  # the templates section counts too
+    assert got["default"] == "Ru"
+
+
+def test_localization_strings_layers_a_translation_on_top(tmp_path):
+    _loc_descriptor(tmp_path)
+    path = _loc_element(tmp_path)
+    folder = path.parent / "Локализация" / "En"
+    folder.mkdir(parents=True)
+    (folder / "ПробаЛокализация.yaml").write_text("Строки:\n    Привет: Hello\n", encoding="utf-8")
+
+    got = scaffold.localization_strings(tmp_path, "En")
+
+    assert got["strings"]["ПробаЛокализация.Привет"] == "Hello"
+    # a key with no translation keeps the default text - the platform falls back the same way
+    assert got["strings"]["ПробаЛокализация.Пока"] == "Пока"
+
+
+def test_localization_strings_of_a_project_without_dictionaries_is_empty(tmp_path):
+    _loc_descriptor(tmp_path)
+    (tmp_path / "Модуль.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    assert scaffold.localization_strings(tmp_path)["strings"] == {}

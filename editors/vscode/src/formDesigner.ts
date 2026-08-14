@@ -35,9 +35,10 @@ import {
   restoredTargetUri,
   selectionForCursor,
   setFormKeyAliases,
+  setLocalizationStrings,
   setPreviewStrings,
 } from "./formPreviewCore";
-import { formKeyAliases } from "./uiSchemaClient";
+import { formKeyAliases, localizationStrings } from "./uiSchemaClient";
 import { DataHost, DataSnapshot, FormDataModel } from "./formData";
 import { dataMenu, DEFAULT_LAYOUT, sanitizeLayout, structureMenu } from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
@@ -453,6 +454,9 @@ class Designer implements StructureHost, DataHost {
     // Russian key). Asked once per session and cached by the client.
     const pairs = await formKeyAliases();
     setFormKeyAliases(pairs.aliases, pairs.types);
+    // The localized texts of the project, in the editor's language: a `$Dictionary.Key` value is
+    // drawn as the words the user will see rather than as the key's last segment.
+    setLocalizationStrings(await localizationStrings(vscode.env.language.startsWith("ru") ? "Ru" : "En"));
     // Project components used by the form, with THEIR resource images: a nested card shows its
     // own icons, not placeholders.
     const components = await resolveComponents(collectComponentTypes(text), this.target);

@@ -14,6 +14,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## Unreleased
 
+### Added
+- **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
+  project in the chosen language. A key with no translation keeps its default text - the same
+  fallback the platform makes.
+
 ### Fixed
 - **A typo in a path no longer passes for a clean check.** A path that is not there is an error
   with a plain message instead of "0 files checked, 0 findings" and the exit code of success; a

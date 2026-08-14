@@ -81,6 +81,27 @@ export function formKeyAliases(): Promise<FormKeyPairs> {
   return keyAliasesPromise;
 }
 
+let locStringsPromise: Promise<Record<string, string>> | undefined;
+
+/** Every localized string of the project, in the editor's language, asked once per session.
+ *
+ * The wireframe draws a `$Dictionary.Key` value as the text the user will see; finding that text
+ * is the engine's business (the fallback to the default language, both spellings of the
+ * sections). An engine that does not know the request answers nothing, and the frame falls back
+ * to the key's last segment - exactly what it showed before.
+ */
+export function localizationStrings(language: string): Promise<Record<string, string>> {
+  if (!locStringsPromise) {
+    locStringsPromise = lspRequest<{ strings?: Record<string, string> }>(
+      "xbsl/localizationStrings",
+      { language },
+    )
+      .then((res) => res?.strings ?? {})
+      .catch(() => ({}));
+  }
+  return locStringsPromise;
+}
+
 let metaKeysPromise: Promise<Record<string, string>> | undefined;
 
 /** Pairs of the element keys (`Attributes` -> `Реквизиты`), asked once per session.

@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Changed
+- **The form wireframe shows the localized TEXT, not the key.** A `$Dictionary.Key` value is drawn
+  as the words the user will see, in the editor's language, with the key kept in the tooltip. A key
+  with no text behind it falls back to its last segment, as before.
+
 ## 0.60.2
 
 ### Changed

@@ -1345,6 +1345,24 @@ def _make_server() -> "LanguageServer":
         except (scaffold.ScaffoldError, OSError) as exc:
             return {"error": str(exc)}
 
+    @server.feature("xbsl/localizationStrings")
+    def _localization_strings(params: object) -> dict:
+        """Every localized string of the project in one language, for the form wireframe.
+
+        A `$Dictionary.Key` value used to be drawn as the key's last segment - the page read as
+        a row of identifiers. The texts live in the localization elements, and finding them is
+        the engine's business: the client would have to learn the fallback to the default
+        language and both spellings of the sections.
+        """
+        root = _param(params, "root")
+        base = Path(str(root)) if root else STATE.root
+        if base is None:
+            return {"strings": {}, "language": None, "default": None}
+        try:
+            return scaffold.localization_strings(base, str(_param(params, "language") or "") or None)
+        except (scaffold.ScaffoldError, OSError) as exc:
+            return {"error": str(exc)}
+
     @server.feature("xbsl/metaAddLocalization")
     def _meta_add_localization(params: object) -> dict:
         return _meta_op(
