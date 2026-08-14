@@ -28,6 +28,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   to bring the whole file down.
 - **The events of a type.** Binding a handler to a component built in code no longer looks like
   a member that does not exist; a typo in an event name is still caught.
+- **An id is unique within its owner.** The platform accepts the same identifier on attributes
+  of DIFFERENT objects - its own demo project is written that way; object ids are compared across
+  the project, item ids inside their own file. The rule also reads the English `Id` key now.
 - **Three rules stopped arguing with lawful code:** the key of a dynamic list row, a required
   field and an event parameter of a reference type, a standard attribute added without an id.
 - **The README links open again:** splitting the guide left thirteen broken ones per language.

@@ -91,7 +91,8 @@ MESSAGES = {
 i18n.register(MESSAGES)
 
 _UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
-_ID_LINE_RE = re.compile(r"(?m)^[ \t]*Ид:[ \t]*(\S+)")
+#: An `Ид:` line in either spelling - the platform reads the English key just as well.
+_ID_LINE_RE = re.compile(r"(?m)^[ \t]*(?:Ид|Id):[ \t]*(\S+)")
 # A line with the `Имя:` key: the indent (a list-item dash counts as indent), the value with or
 # without quotes, an optional trailing comment (per YAML it is not part of the value); `\r?` lets
 # CRLF files match (`$` anchors before `\n`). Groups: 1 – indent, 2 – quote, 3 – value.
@@ -367,23 +368,46 @@ def yaml_name_matches_file(source: SourceFile) -> Iterable[Diagnostic]:
         )
 
 
-def _id_unique_mapper(source: SourceFile) -> list[tuple[str, int, int]] | None:
-    """The map phase: every Ид value of the file with its position."""
+#: The id of the OBJECT itself - the key stands at the start of the line, with no indent.
+_TOP_ID_RE = re.compile(r"(?m)^(?:Ид|Id):[ \t]*(\S+)")
+
+
+def _id_unique_mapper(source: SourceFile) -> dict | None:
+    """The map phase: the ids of the file, the object's own told from the nested ones.
+
+    An id is unique WITHIN ITS OWNER, not across the project: the published assembly of the
+    platform's own demo project gives two different catalogs an attribute with the very same id,
+    and the build accepts it. So the ids of items are compared inside the file, and only the
+    object's own id is compared project-wide - two objects sharing one identity is what a copied
+    file really breaks.
+    """
     if source.kind != "yaml":
         return None
     ids = _id_lines(source)
-    return ids or None
+    if not ids:
+        return None
+    top = {m.group(1).strip() for m in _TOP_ID_RE.finditer(source.text)}
+    return {
+        "top": [item for item in ids if item[0] in top],
+        "nested": [item for item in ids if item[0] not in top],
+    }
 
 
 @rule(
     "yaml/id-unique", "yaml/id-unique.title", "A",
     scope="project", severity=Severity.ERROR, mapper=_id_unique_mapper,
 )
-def yaml_id_unique(facts: dict[str, list[tuple[str, int, int]]]) -> Iterable[Diagnostic]:
+def yaml_id_unique(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     occ: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
-    for rel, ids in facts.items():
-        for value, line, col in ids:
+    for rel, fact in facts.items():
+        for value, line, col in fact["top"]:  # objects share the whole project
             occ[value].append((rel, line, col))
+        by_file: dict[str, list[tuple[str, int, int]]] = defaultdict(list)
+        for value, line, col in fact["nested"]:  # items share their owner alone
+            by_file[value].append((rel, line, col))
+        for value, places in by_file.items():
+            if len(places) > 1:
+                occ[value].extend(places)
     for value, places in occ.items():
         if len(places) < 2:
             continue

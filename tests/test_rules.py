@@ -187,6 +187,41 @@ def test_yaml_structural_file_exempt():
     assert d == []
 
 
+def test_attribute_ids_may_repeat_across_owners(tmp_path):
+    """An identifier is unique within its owner, not across the whole project.
+
+    The published assembly of the platform's own demo project gives two different catalogs an
+    attribute with the very same id, and the build accepts it - so only the objects themselves
+    share the project.
+    """
+    body = (
+        "ВидЭлемента: Справочник\nИд: {obj}\nИмя: {name}\nРеквизиты:\n    -\n"
+        "        Ид: 33333333-3333-3333-3333-333333333333\n        Имя: Дата\n"
+        "        Тип: Момент\n"
+    )
+    (tmp_path / "Задачи.yaml").write_text(
+        body.format(obj="11111111-1111-1111-1111-111111111111", name="Задачи"), encoding="utf-8"
+    )
+    (tmp_path / "События.yaml").write_text(
+        body.format(obj="22222222-2222-2222-2222-222222222222", name="События"), encoding="utf-8"
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"yaml/id-unique"})
+    assert not _has(d, "yaml/id-unique"), [x.message for x in d]
+
+
+def test_two_attributes_of_one_owner_may_not_share_an_id(tmp_path):
+    (tmp_path / "Задачи.yaml").write_text(
+        "ВидЭлемента: Справочник\nИд: 11111111-1111-1111-1111-111111111111\nИмя: Задачи\n"
+        "Реквизиты:\n    -\n        Ид: 33333333-3333-3333-3333-333333333333\n"
+        "        Имя: Начало\n        Тип: Момент\n    -\n"
+        "        Ид: 33333333-3333-3333-3333-333333333333\n        Имя: Конец\n"
+        "        Тип: Момент\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={"yaml/id-unique"})
+    assert len([x for x in d if x.rule_id == "yaml/id-unique"]) == 2
+
+
 def test_id_unique_across_files(tmp_path):
     same = "ВидЭлемента: Справочник\nИд: 11111111-1111-1111-1111-111111111111\nИмя: {n}\n"
     (tmp_path / "a.yaml").write_text(same.format(n="a"), encoding="utf-8")
