@@ -750,6 +750,22 @@ def test_handler_present_not_flagged(tmp_path):
     assert not _has(d, "form/unknown-handler")
 
 
+def test_english_handler_key_flagged(tmp_path):
+    # The English event keys come from the component schema (an OnClick key is the same
+    # event as its Russian twin), so a form written in English is read the same way.
+    (tmp_path / "Ф.yaml").write_text("OnClick: НетТакого\n", encoding="utf-8")
+    (tmp_path / "Ф.xbsl").write_text("метод Другой()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert any(x.rule_id == "form/unknown-handler" and "НетТакого" in x.message for x in d)
+
+
+def test_english_handler_key_present_not_flagged(tmp_path):
+    (tmp_path / "Ф.yaml").write_text("Handler: Клик\n", encoding="utf-8")
+    (tmp_path / "Ф.xbsl").write_text("метод Клик()\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={"form/unknown-handler"})
+    assert not _has(d, "form/unknown-handler")
+
+
 def test_handler_fqn_not_flagged(tmp_path):
     # a dotted value is a reference to an external module - we do not judge it
     (tmp_path / "Ф.yaml").write_text("Обработчик: Общий.Метод\n", encoding="utf-8")

@@ -53,8 +53,10 @@ _KIND_KEYS = terms.key_forms("ВидЭлемента")
 _SCOPE_KEYS = terms.key_forms("ОбластьВидимости")
 
 # The scope written when an element is visible outside its library; anything else (the
-# default is ВПодсистеме) stays internal to the library.
-_GLOBAL_SCOPE = "Глобально"
+# default is InSubsystem) stays internal to the library. Both spellings: the key was
+# already read bilingually, the value has to be as well.
+def _global_scopes() -> frozenset[str]:
+    return frozenset(terms.key_forms("Глобально"))
 # Descriptors rather than elements: a subsystem file may sit at an element's depth.
 _NON_ELEMENT_FILES = frozenset({"Подсистема.yaml", "Subsystem.yaml"})
 # How far above the descriptor to look for the archive. The sources sit a couple of levels
@@ -150,7 +152,7 @@ def _global_types_cached(path: str, mtime: float, size: int) -> frozenset[str]:
                     continue
                 if not isinstance(values, dict) or not _first(values, _KIND_KEYS):
                     continue
-                if _first(values, _SCOPE_KEYS) != _GLOBAL_SCOPE:
+                if _first(values, _SCOPE_KEYS) not in _global_scopes():
                     continue
                 element = _first(values, _NAME_KEYS) or entry.rsplit("/", 1)[-1][: -len(".yaml")]
                 names.add(element)

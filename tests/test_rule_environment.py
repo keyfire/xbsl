@@ -10,20 +10,52 @@ def _has(diags, rule_id):
 
 # --- code/server-call-from-handler -----------------------------------------------------
 
-_ФОРМА_YAML = (
+_FORM_YAML = (
     "ВидЭлемента: КомпонентИнтерфейса\nИмя: Форма\nСодержимое:\n    -\n"
     "        Тип: Кнопка\n        Обработчик: ПриНажатии\n"
 )
 
 
-def _форма(tmp_path, module, yaml=_ФОРМА_YAML):
+def _form(tmp_path, module, yaml=_FORM_YAML):
     (tmp_path / "Форма.yaml").write_text(yaml, encoding="utf-8")
     (tmp_path / "Форма.xbsl").write_text(module, encoding="utf-8")
     return engine.run(discover([str(tmp_path)]), select={"code/server-call-from-handler"})
 
 
+def test_server_call_from_handler_flagged_in_english(tmp_path):
+    # Both spellings: while only the Russian annotation was matched, an English one read as
+    # no annotation at all and the method was judged by the default environment.
+    d = _form(
+        tmp_path,
+        "метод ПриНажатии()\n"
+        "    Сохранить()\n"
+        ";\n\n"
+        "@OnServer\n"
+        "метод Сохранить()\n"
+        "    возврат\n"
+        ";\n",
+    )
+    assert any(
+        x.rule_id == "code/server-call-from-handler" and "Сохранить" in x.message
+        for x in d
+    )
+
+
+def test_english_handler_key_is_a_handler(tmp_path):
+    d = _form(
+        tmp_path,
+        "метод ПриНажатии()\n    Сохранить()\n;\n\n"
+        "@OnServer\nметод Сохранить()\n    возврат\n;\n",
+        yaml=(
+            "ВидЭлемента: КомпонентИнтерфейса\nИмя: Форма\nСодержимое:\n    -\n"
+            "        Тип: Кнопка\n        Handler: ПриНажатии\n"
+        ),
+    )
+    assert _has(d, "code/server-call-from-handler")
+
+
 def test_server_call_from_handler_flagged(tmp_path):
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии()\n"
         "    Сохранить()\n"
@@ -41,7 +73,7 @@ def test_server_call_from_handler_flagged(tmp_path):
 
 def test_handler_with_trailing_comment_flagged(tmp_path):
     # a comment after the handler name in yaml does not take it out of the check
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии()\n"
         "    Сохранить()\n"
@@ -50,13 +82,13 @@ def test_handler_with_trailing_comment_flagged(tmp_path):
         "метод Сохранить()\n"
         "    возврат\n"
         ";\n",
-        yaml=_ФОРМА_YAML.replace("Обработчик: ПриНажатии", "Обработчик: ПриНажатии # клик"),
+        yaml=_FORM_YAML.replace("Обработчик: ПриНажатии", "Обработчик: ПриНажатии # клик"),
     )
     assert _has(d, "code/server-call-from-handler")
 
 
 def test_server_call_with_client_access_ok(tmp_path):
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии()\n"
         "    Сохранить()\n"
@@ -71,7 +103,7 @@ def test_server_call_with_client_access_ok(tmp_path):
 
 def test_server_handler_itself_ok(tmp_path):
     # the handler itself runs on the server - calling a server method is correct
-    d = _форма(
+    d = _form(
         tmp_path,
         "@НаСервере\n"
         "метод ПриНажатии()\n"
@@ -87,7 +119,7 @@ def test_server_handler_itself_ok(tmp_path):
 
 def test_annotation_handler_flagged(tmp_path):
     # the handler is declared via the @Обработчик annotation, not in yaml
-    d = _форма(
+    d = _form(
         tmp_path,
         "@Обработчик\n"
         "метод ПослеСоздания()\n"
@@ -104,7 +136,7 @@ def test_annotation_handler_flagged(tmp_path):
 
 def test_member_call_not_flagged(tmp_path):
     # 'Объект.Сохранить()' is another object's method, not a bare module-level name
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии(Объект: Структура)\n"
         "    Объект.Сохранить()\n"
@@ -119,7 +151,7 @@ def test_member_call_not_flagged(tmp_path):
 
 def test_shadowed_name_not_flagged(tmp_path):
     # a local variable shadows the server method name
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии(Данные: Структура)\n"
         "    знч Сохранить = Данные.Действие\n"
@@ -135,7 +167,7 @@ def test_shadowed_name_not_flagged(tmp_path):
 
 def test_call_outside_handler_not_flagged(tmp_path):
     # the rule does not touch a call from an ordinary (non-handler) client method
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод Вспомогательный()\n"
         "    Сохранить()\n"
@@ -151,7 +183,7 @@ def test_call_outside_handler_not_flagged(tmp_path):
 
 def test_call_in_next_method_not_attributed_to_handler(tmp_path):
     # a call in the method following the handler is not attributed to the handler body
-    d = _форма(
+    d = _form(
         tmp_path,
         "метод ПриНажатии()\n"
         "    возврат\n"

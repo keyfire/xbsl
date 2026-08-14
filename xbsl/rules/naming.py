@@ -32,7 +32,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from functools import lru_cache
 
-from xbsl import i18n, metamodel
+from xbsl import dataset, i18n, metamodel, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
@@ -154,6 +154,15 @@ MESSAGES = {
     },
 }
 i18n.register(MESSAGES)
+
+
+@lru_cache(maxsize=1)
+def _deprecated_prefixes() -> tuple[str, ...]:
+    """Both spellings of the deprecation prefix a field name may carry."""
+    return tuple(terms.key_forms("Устарело"))
+
+
+dataset.register_reset(_deprecated_prefixes.cache_clear)
 
 # --- description parsing ---------------------------------------------------------------
 
@@ -653,7 +662,7 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
         return
     if (
         ref is not None
-        and ref.name.startswith("Устарело")
+        and ref.name.startswith(_deprecated_prefixes())
         and not value.startswith("(не используется)")
         and prop.get("type") != "AttributeName"
     ):

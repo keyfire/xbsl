@@ -66,9 +66,10 @@ yaml/unknown-type, it does not run in single-file mode).
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 
-from xbsl import i18n
+from xbsl import dataset, i18n, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -107,7 +108,13 @@ i18n.register(MESSAGES)
 
 #: Both spellings: the platform accepts the English service file names too.
 _SUBSYSTEM_FILES = ("Подсистема.yaml", "Subsystem.yaml")
-_PUBLIC_SCOPES = frozenset({"ВПроекте", "Глобально"})
+@lru_cache(maxsize=1)
+def _public_scopes() -> frozenset[str]:
+    """Scopes that publish a subsystem member, both spellings."""
+    return frozenset(terms.key_forms("ВПроекте", "Глобально"))
+
+
+dataset.register_reset(_public_scopes.cache_clear)
 
 # Yaml keys that name another element. A navigation target is as much a reference as a type
 # position, so both rules below read both keys: `ТипФормы: ЗадачиФормаСписка` reaches into
@@ -227,7 +234,7 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             if not subs or my_sub in subs:
                 continue
             candidates = tuple(sorted(
-                sub for sub, vis in subs.items() if vis in _PUBLIC_SCOPES
+                sub for sub, vis in subs.items() if vis in _public_scopes()
             ))
             if not candidates or imports.intersection(candidates):
                 continue
@@ -367,7 +374,7 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             subs = placement.get(root)
             if not subs or my_sub in subs:
                 continue
-            if any(vis in _PUBLIC_SCOPES for vis in subs.values()):
+            if any(vis in _public_scopes() for vis in subs.values()):
                 continue  # a public one exists - missing import at most, the sibling's case
             owner = sorted(subs)[0]
             vis = subs[owner] or _DEFAULT_SCOPE

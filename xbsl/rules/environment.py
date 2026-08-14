@@ -69,7 +69,7 @@ from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules._syntax import code_tokens
 from xbsl.rules.enum_values import _shadowed_names
-from xbsl.rules.handlers import _HANDLER_RE, _IDENT_RE
+from xbsl.rules.handlers import _handler_re, _IDENT_RE
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
@@ -133,8 +133,22 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# The environment annotations of the platform (docs "Аннотации окружения").
-_CLIENT_SIDE_ANNS = ("ДоступноСКлиента", "НаКлиенте")
+# The environment annotations of the platform (docs "Аннотации окружения"). Both spellings
+# of every name: the sources are bilingual, and a project mixes the forms freely - while only
+# the Russian ones were matched, an English annotation read as NO annotation and the checks
+# below judged the method by the default environment.
+
+
+@lru_cache(maxsize=1)
+def _client_side_ann_forms() -> frozenset[str]:
+    """Both spellings of the annotations that put a method on the client side."""
+    return frozenset(terms.key_forms("ДоступноСКлиента")) | frozenset(terms.key_forms("НаКлиенте"))
+
+
+@lru_cache(maxsize=1)
+def _handler_ann_forms() -> frozenset[str]:
+    """Both spellings of the handler annotation."""
+    return frozenset(terms.key_forms("Обработчик"))
 
 # Declaration keywords an annotation block may precede (docs "Исполнение модуля": метод,
 # структура, исключение, перечисление, константа).
@@ -238,7 +252,7 @@ def _server_call_mapper(source: SourceFile) -> dict | None:
         if data is None or object_kind(data) != "КомпонентИнтерфейса":
             return None
         handlers = []
-        for m in _HANDLER_RE.finditer(source.text):
+        for m in _handler_re().finditer(source.text):
             value = m.group(1).strip()
             if _IDENT_RE.match(value):
                 handlers.append(value)
@@ -250,7 +264,7 @@ def _server_call_mapper(source: SourceFile) -> dict | None:
     method_anns = {name: anns for name, anns, _ in methods}
     server_only = {
         name for name, anns in method_anns.items()
-        if "НаСервере" in anns and not any(a in anns for a in _CLIENT_SIDE_ANNS)
+        if (anns & _on_server_forms()) and not (anns & _client_side_ann_forms())
     }
     if not server_only:
         return None
@@ -292,10 +306,12 @@ def server_call_from_handler(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue
         anns = fact["anns"]
         handlers = set(yaml_handlers[fact["stem"]])
-        handlers.update(name for name, a in anns.items() if "Обработчик" in a)
+        handlers.update(
+            name for name, a in anns.items() if not _handler_ann_forms().isdisjoint(a)
+        )
         for handler in sorted(handlers):
             a = anns.get(handler)
-            if a is None or "НаСервере" in a:
+            if a is None or not _on_server_forms().isdisjoint(a):
                 continue  # not found in the module, or runs on the server itself
             for name, line, col in fact["calls"].get(handler, ()):
                 yield Diagnostic(
@@ -328,7 +344,7 @@ def _client_ann_mapper(source: SourceFile) -> dict | None:
     for i, t in enumerate(toks):
         if (t.kind == "OP" and t.value == "@" and i + 1 < n
                 and toks[i + 1].kind == "IDENT"
-                and toks[i + 1].value in _CLIENT_SIDE_ANNS):
+                and toks[i + 1].value in _client_side_ann_forms()):
             a = toks[i + 1]
             anns.append((a.value, a.line, a.col))
     if not anns:
@@ -587,7 +603,7 @@ def _client_http_mapper(source: SourceFile) -> dict | None:
     return {
         "k": "x",
         "stem": _pair_stem(source.rel),
-        "server_bit": {name: "НаСервере" in anns for name, anns in decls.items()},
+        "server_bit": {name: bool(anns & _on_server_forms()) for name, anns in decls.items()},
         "accesses": accesses,
     }
 
@@ -717,7 +733,7 @@ def _query_server_mapper(source: SourceFile) -> dict | None:
     anns = {name: a for name, a, _ in methods}
     found: list[tuple[str, int, int]] = []
     for name, (start, end) in bodies.items():
-        if "НаСервере" in anns.get(name, frozenset()) or start >= len(toks):
+        if (anns.get(name, frozenset()) & _on_server_forms()) or start >= len(toks):
             continue
         lo = toks[start].start
         hi = toks[end - 1].end if end - 1 < len(toks) else len(source.text)

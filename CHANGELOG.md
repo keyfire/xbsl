@@ -29,6 +29,22 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   prompted the rule. The check errs towards silence: a local name matching an element of the
   imported subsystem reads as a use, so an import is never reported on a doubt.
 
+### Fixed
+- **Annotation parsing understands the English spellings.** Element sources are bilingual and a
+  project mixes the forms freely - even within one declaration: `@OnServer` above `@InSubsystem`.
+  The judges, however, matched the Russian spellings alone, so an English annotation read as NO
+  annotation and the method was judged by the default: a run over a foreign reference project
+  answered 602 false `code/local-method-cross-module` findings and three `code/query-needs-server`
+  ones - 81% of every error in that run. Visibility, environment, the handler mark, the subsystem
+  and library scopes, the deprecation prefix and the form event keys in yaml are bilingual now
+  (`Handler`, `OnClick` and the other English names come from the component schema, never from a
+  guess). The forms are read lazily and cleared along with the platform data - such a set used to
+  freeze at module import.
+- **The README links point at something again.** Splitting the guide into five pages left thirteen
+  links per language reading `[text]((url)` - visibly broken on the Marketplace, Open VSX and PyPI
+  pages. A link check (the target exists, the anchor exists) is now part of the tests: it is
+  structural and needs no network.
+
 ### Changed
 - **`code/unknown-member` reads a collection literal as a type declaration.** A variable
   initialized with `<String>[]` names its type no worse than a constructor does, yet the type

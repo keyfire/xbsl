@@ -50,8 +50,9 @@ target component's yaml and module next to the caller.
 from __future__ import annotations
 
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -83,8 +84,21 @@ i18n.register(MESSAGES)
 # _WIDE makes the method callable from another component's module; @ВТипе is counted as
 # wide too – the docs describe it as visible "в данном типе, его наследниках и внешних
 # объектах", so treating it as local could produce false positives.
-_VISIBILITY = frozenset({"Локально", "ВПодсистеме", "ВПроекте", "ВТипе", "Глобально"})
-_WIDE = _VISIBILITY - {"Локально"}
+#
+# BOTH spellings of every name, from the platform's own dictionary. The sources are
+# bilingual and a project mixes the forms freely - sometimes within one declaration, an
+# English annotation above a Russian one. While only the Russian spellings were listed,
+# an English annotation read as NO annotation, the default local visibility was assumed,
+# and a run over a foreign reference project answered 602 false "visible in its own
+# module only".
+@lru_cache(maxsize=1)
+def _wide_visibility() -> frozenset[str]:
+    """The visibility annotations that reach beyond the module, both spellings."""
+    wide = ("ВПодсистеме", "ВПроекте", "ВТипе", "Глобально")
+    return frozenset(terms.key_forms(*wide)) - frozenset(terms.key_forms("Локально"))
+
+
+dataset.register_reset(_wide_visibility.cache_clear)
 
 # Declaration keywords that bind a name (shadowing the components collection).
 _DECL_KW = ("VAL", "VAR", "CONST", "REQ", "CATCH", "FOR")
@@ -241,7 +255,7 @@ def local_method_cross_component(facts: dict[str, dict]) -> Iterable[Diagnostic]
             annotations = target["visibility"].get(meth)
             if annotations is None:
                 continue  # not declared in the module – a platform built-in, skip
-            if set(annotations) & _WIDE:
+            if set(annotations) & _wide_visibility():
                 continue
             yield Diagnostic(
                 rel, line, col, "code/local-method-cross-component",
@@ -399,7 +413,7 @@ def local_method_cross_module(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             annotations = target.get(method)
             if annotations is None:
                 continue  # not declared there - a platform built-in or another meaning
-            if set(annotations) & _WIDE:
+            if set(annotations) & _wide_visibility():
                 continue
             yield Diagnostic(
                 rel, line, col, "code/local-method-cross-module", Severity.ERROR,

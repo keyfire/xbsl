@@ -302,3 +302,59 @@ def test_method_declared_twice_in_the_target_is_dropped(tmp_path):
         "метод Тест()\n    Настройки.Прочитать()\n;\n",
     )
     assert not _has(diags, MODULE_RULE), [d.message for d in diags]
+
+
+# --- Both spellings ---------------------------------------------------------------
+#
+# The sources are bilingual and a project mixes the forms freely, even within one line.
+# While only the Russian annotations were listed, an English one read as NO annotation, the
+# default local visibility was assumed, and a run over a foreign reference project answered
+# 602 false "visible in its own module only".
+
+
+@pytest.mark.parametrize("annotation", ["InSubsystem", "InProject", "InType", "Global"])
+def test_english_wide_visibility_passes(tmp_path, annotation):
+    diags = _module_project(
+        tmp_path,
+        f"@{annotation}\nметод Прочитать()\n    возврат\n;\n",
+        "метод Тест()\n    Настройки.Прочитать()\n;\n",
+    )
+    assert not _has(diags, MODULE_RULE), [d.message for d in diags]
+
+
+def test_english_local_visibility_is_still_flagged(tmp_path):
+    diags = _module_project(
+        tmp_path,
+        "@Local\nметод Прочитать()\n    возврат\n;\n",
+        "метод Тест()\n    Настройки.Прочитать()\n;\n",
+    )
+    assert _has(diags, MODULE_RULE), [d.message for d in diags]
+
+
+def test_the_spellings_mix_within_one_declaration(tmp_path):
+    diags = _module_project(
+        tmp_path,
+        "@OnServer @ДоступноСКлиента\n@InSubsystem\n"
+        "статический метод Прочитать()\n    возврат\n;\n",
+        "метод Тест()\n    Настройки.Прочитать()\n;\n",
+    )
+    assert not _has(diags, MODULE_RULE), [d.message for d in diags]
+
+
+def test_english_wide_visibility_passes_across_components(tmp_path):
+    # The project is assembled here rather than through the shared helper: renaming that
+    # helper would pull the whole file into the language guard's diff.
+    (tmp_path / "Страница.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Страница\n", encoding="utf-8"
+    )
+    (tmp_path / "Страница.xbsl").write_text(
+        "@InSubsystem\nметод Загрузить()\n    возврат\n;\n", encoding="utf-8"
+    )
+    (tmp_path / "Роутер.yaml").write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Роутер\nСодержимое:\n"
+        "    -\n        Тип: Страница\n        Имя: Страница\n", encoding="utf-8"
+    )
+    (tmp_path / "Роутер.xbsl").write_text(
+        "метод Открыть()\n    Компоненты.Страница.Загрузить()\n;\n", encoding="utf-8"
+    )
+    assert not _has(engine.run(discover([str(tmp_path)]), select={RULE}))

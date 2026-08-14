@@ -39,15 +39,22 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
+from functools import lru_cache
 from pathlib import Path
 
-from xbsl import engine, formedits, uischema
+from xbsl import dataset, engine, formedits, terms, uischema
 from xbsl.formmodel import Node, _dominant_nl, get_component, parse_form
 from xbsl.parser import Method, parse_text
 from xbsl.scaffold import FileChange, ScaffoldResult, TextEdit, _cursor_at
 
-#: Visibility annotations of module members (the XBSL counterpart of "export").
-_VISIBILITY = ("Локально", "ВПодсистеме", "ВПроекте", "Глобально")
+#: Visibility annotations of module members (the XBSL counterpart of "export"), both
+#: spellings: the module being read may be written either way.
+@lru_cache(maxsize=1)
+def _visibility_forms() -> frozenset[str]:
+    return frozenset(terms.key_forms("Локально", "ВПодсистеме", "ВПроекте", "Глобально"))
+
+
+dataset.register_reset(_visibility_forms.cache_clear)
 
 _WORD = r"[\wА-Яа-яЁё]"
 #: A bare method name in an event property (anything else - an expression, a binding - is
@@ -73,7 +80,7 @@ def module_methods(text: str) -> tuple[list[dict], int]:
         if not isinstance(member, Method) or not member.name:
             continue
         annotations = [a.name for a in member.annotations if a.name]
-        visibility = next((a for a in annotations if a in _VISIBILITY), None)
+        visibility = next((a for a in annotations if a in _visibility_forms()), None)
         methods.append({
             "name": member.name,
             "static": member.is_static,

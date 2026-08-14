@@ -15,8 +15,9 @@ from __future__ import annotations
 import dataclasses
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, uischema
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -54,9 +55,27 @@ _HANDLER_KEYS = (
     "Обработчик", "ПриНажатии", "ПриИзменении", "ПриВыделенииСтроки",
     "ПослеЗагрузкиСодержимого", "ПриСменеСтраницы", "ПриВыбореЭлемента",
 )
-_HANDLER_RE = re.compile(  # a trailing comment and CRLF are allowed after the value
-    r"(?m)^[ \t]*(?:" + "|".join(_HANDLER_KEYS) + r"):[ \t]*([^\s#][^\n#]*?)[ \t]*(?:#.*)?\r?$"
-)
+
+
+@lru_cache(maxsize=1)
+def _handler_re() -> re.Pattern[str]:
+    """The event keys above in both spellings - a form may be written in English.
+
+    The English name of every key comes from the component schema, never from a guess; a
+    key the schema pairs with nothing keeps its Russian spelling alone.
+    """
+    keys: list[str] = []
+    for key in _HANDLER_KEYS:
+        for form in (key, uischema.english_property(key)):
+            if form and form not in keys:
+                keys.append(form)
+    return re.compile(  # a trailing comment and CRLF are allowed after the value
+        r"(?m)^[ \t]*(?:" + "|".join(keys) + r"):[ \t]*([^\s#][^\n#]*?)[ \t]*(?:#.*)?\r?$"
+    )
+
+
+dataset.register_reset(_handler_re.cache_clear)
+
 _IDENT_RE = re.compile(r"^[^\W\d]\w*$", re.UNICODE)
 
 
@@ -91,7 +110,7 @@ def _handler_mapper(source: SourceFile) -> dict | None:
         return None
     refs: list[tuple[str, int, int]] = []
     lm = None
-    for m in _HANDLER_RE.finditer(source.text):
+    for m in _handler_re().finditer(source.text):
         name = m.group(1).strip()
         if not _IDENT_RE.match(name):
             continue  # FQN reference to an external module or a non-identifier – skip
