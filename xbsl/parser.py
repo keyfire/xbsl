@@ -983,6 +983,18 @@ class _Parser:
             else:
                 alt = self.type_name()
                 if alt is None:
+                    grouped = self.grouped_type()
+                    if grouped is not None:
+                        names.extend(grouped.names)
+                        parts.append(grouped.text)
+                        if self.at_op("?"):
+                            self.advance()
+                            nullable = True
+                            parts.append("?")
+                        if not self.eat_op("|"):
+                            break
+                        parts.append("|")
+                        continue
                     if not names and not nullable:
                         self.error(i18n.t("parser.expected-type-name"), start_tok)
                         return None
@@ -1032,6 +1044,31 @@ class _Parser:
             else:
                 text = "".join(t.value for t in self.toks[start:self.pos])
         return (segs[0], text)
+
+    def grouped_type(self) -> TypeRef | None:
+        """`(Тип)` - parentheses around a type, so a suffix binds to the whole of it.
+
+        The form the reference corpus writes is a nullable function type:
+        `пер Попытка: (()->Булево)? = Неопределено`. The parenthesis is not the start of a
+        function type here (that one is `(Параметры)->Результат`, and func_type demands the
+        arrow right after the closing parenthesis), it groups the type the `?` applies to.
+        Without this the declaration failed at the parenthesis and the WHOLE file fell apart
+        after it - one such field cost 33 reports in a single module.
+
+        `None` when the parentheses hold no type: the caller reports the position itself.
+        """
+        if not self.at_op("("):
+            return None
+        snap = self.snapshot()
+        start = self.pos
+        self.advance()  # (
+        inner = self.compound_type()
+        if inner is None or not self.eat_op(")"):
+            self.rollback(snap)
+            return None
+        text = "".join(t.value for t in self.toks[start:self.pos])
+        return TypeRef(self.toks[start].start, self.toks[self.pos - 1].end,
+                       text, inner.names, inner.nullable)
 
     def func_type(self) -> str | None:
         start = self.pos
@@ -1537,10 +1574,27 @@ class _Parser:
             else:
                 self.rollback(snap)
                 return callee
-        if self.at_op("("):
+        if self.at_op("(") and not self.starts_a_line():
             args = self.call_args()
             return Call(callee.start, self.toks[self.pos - 1].end, callee, args, type_args)
         return callee
+
+    def starts_a_line(self) -> bool:
+        """Is the current token the first one on its line?
+
+        A newline ends the statement, so an opening parenthesis that starts a line begins a
+        NEW statement rather than a call of what came before. The reference corpus casts the
+        loop variable to write into it - a `для ... из Компоненты.Группа.Содержимое` header,
+        and under it `(Элемент как Карточка).Корзина = НоваяКорзина` on its own line -
+        and the server compiles it, so the platform reads the parenthesis that way too; the
+        style guide agrees - a wrapped line starts with an OPERATION (`+`, `или`), never with
+        the parenthesis of a call, which stays on the name's line (docs "Переносы"). While the
+        parenthesis was read as a call, the loop source swallowed the next statement and the
+        file fell apart from there.
+        """
+        cur = self.peek()
+        prev = self.toks[self.pos - 1] if self.pos else None
+        return prev is not None and cur.line > prev.end_line
 
     def generic_call_args(self) -> bool:
         self.advance()  # <

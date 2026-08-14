@@ -30,6 +30,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   imported subsystem reads as a use, so an import is never reported on a doubt.
 
 ### Fixed
+- **Parser: a newline ends the statement, parentheses group a type.** Two holes, both surfaced
+  by a foreign reference project. First: an opening parenthesis at the start of a line was read
+  as a call of the preceding expression, so a loop source swallowed the next statement - casting
+  the loop variable to write into it broke the parse. Second: parentheses around a type -
+  `пер Попытка: (()->Булево)? = Неопределено` - did not parse, because a function type demands
+  the arrow right after the closing parenthesis; one such field broke the whole file (33
+  suppressed reports). Both forms are legal - the server compiles that project - and all 13
+  `code/parse-error` findings on it are gone.
 - **Annotation parsing understands the English spellings.** Element sources are bilingual and a
   project mixes the forms freely - even within one declaration: `@OnServer` above `@InSubsystem`.
   The judges, however, matched the Russian spellings alone, so an English annotation read as NO

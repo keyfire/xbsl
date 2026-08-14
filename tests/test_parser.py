@@ -550,3 +550,75 @@ def test_statement_keyword_in_an_expression_position_says_what_to_do():
     diags = [d for d in run_sources([src], select={"code/parse-error"})]
     assert len(diags) >= 1 and diags[0].line == 2
     assert "выбор" in diags[0].message and "тернарный" in diags[0].message
+
+
+# --- statements end at the end of a line -------------------------------------------------
+
+
+def test_a_parenthesis_starting_a_line_is_a_new_statement():
+    """A newline ends the statement, so `(` at the start of a line is not a call.
+
+    The reference corpus casts the loop variable to write into it, and the server compiles
+    the module - while the parenthesis was read as a call of the loop source, the parse
+    failed at the assignment and the rest of the file went with it.
+    """
+    m = ok(
+        "метод Ф(Новая: Строка)\n"
+        "    для Элемент из Компоненты.Группа.Содержимое\n"
+        "        (Элемент как Карточка).Корзина = Новая\n"
+        "    ;\n"
+        ";\n"
+    )
+    loop = m.members[0].body[0]
+    assert isinstance(loop, P.ForEach)
+    assert len(loop.body) == 1  # the assignment belongs to the loop body, not to its source
+
+
+def test_a_call_wrapped_after_the_opening_parenthesis_still_parses():
+    # the documented way to wrap arguments keeps the parenthesis on the name's line
+    ok(
+        "метод Ф()\n"
+        "    Массив.Добавить(\n"
+        "        Свойство.Параметр1,\n"
+        "        Свойство.Параметр2)\n"
+        ";\n"
+    )
+
+
+def test_an_operation_at_the_start_of_a_wrapped_line_still_parses():
+    ok(
+        "метод Ф(А: Число, Б: Число): Число\n"
+        "    возврат А\n"
+        "        + Б\n"
+        ";\n"
+    )
+
+
+# --- parentheses group a type ------------------------------------------------------------
+
+
+def test_nullable_function_type_in_a_field_declaration():
+    """`(()->Булево)?` - the parentheses group the type the `?` applies to.
+
+    Not a function type itself: that one is `(Параметры)->Результат` and demands the arrow
+    right after the closing parenthesis. One such field used to break the whole file.
+    """
+    ok(
+        "структура Опрос\n"
+        "    пер Попытка: (()->Булево)? = Неопределено\n"
+        "    пер ПриУспехе: (()->ничто)? = Неопределено\n"
+        "    пер ПриОшибке: ((Исключение)->ничто)? = Неопределено\n"
+        ";\n"
+    )
+
+
+def test_parentheses_group_a_union_type():
+    m = ok("метод Ф()\n    пер Х: (Строка|Число)? = Неопределено\n;\n")
+    decl = m.members[0].body[0]
+    assert decl.type is not None and decl.type.nullable
+    assert "Строка" in decl.type.names and "Число" in decl.type.names
+
+
+def test_empty_parentheses_are_not_a_type():
+    errors = bad("метод Ф()\n    пер Х: () = Неопределено\n;\n")
+    assert any("тип" in e.message.lower() for e in errors)
