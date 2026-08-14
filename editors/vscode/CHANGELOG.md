@@ -9,10 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.60.2
+
+### Changed
+- **The "reference" link knows two new engine rules** (0.65.0) - the unused import and the local
+  variable shadowing a property of its own element.
 
 ### Fixed
-- **A changed setting reaches the LSP server.** The sources root, the rule set, the data directory, the templates file, the interpreter and the message language are given to the server at startup, so editing them changed nothing until the window was reloaded - hence the impression that `xbsl.projectRoot` was ignored. Such an edit now restarts the server; the other settings leave it alone.
+- **A changed setting reaches the LSP server.** The sources root, the rule set and the rest are
+  given to the server at startup, so editing them did nothing until the window was reloaded -
+  hence the impression that `xbsl.projectRoot` was ignored. Such an edit now restarts the server.
 
 ## 0.60.1
 
