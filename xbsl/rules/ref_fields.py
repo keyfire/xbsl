@@ -82,7 +82,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from xbsl import i18n
+from xbsl import i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
@@ -346,6 +346,44 @@ def _yaml_ref_shape(value: str) -> tuple[str, int, str, str] | None:
     return None
 
 
+#: The truthy spellings a yaml boolean takes: the platform's own literal and what yaml itself
+#: reads as true.
+_TRUE_VALUES = frozenset({"Истина", "True", "true"})
+
+
+#: The section of parameters, both spellings.
+_PARAMETER_KEYS = frozenset(terms.key_forms("Параметры"))
+
+
+def _parameter_mappings(root) -> set[int]:
+    """Ids of the mappings that describe a PARAMETER (the `Parameters` section of an element).
+
+    A parameter has no initialization to begin with: its value arrives from whoever raises the
+    event or calls the method, so the compiler asks for no default and a reference type needs no
+    `?` there. The reference corpus declares exactly that - a global client event with a
+    `ПрайсЛисты.Ссылка` parameter - and the server compiles it.
+    """
+    out: set[int] = set()
+    for mapping in _mapping_nodes(root):
+        for key_node, value_node in mapping.value:
+            if not isinstance(key_node, yaml.ScalarNode):
+                continue
+            if key_node.value not in _PARAMETER_KEYS:
+                continue
+            for item in getattr(value_node, "value", ()) or ():
+                if isinstance(item, yaml.MappingNode):
+                    out.add(id(item))
+    return out
+
+
+def _is_required(entries: dict) -> bool:
+    """Is this mapping a field marked `Обязательное: Истина`?"""
+    entry = entries.get("Обязательное")
+    if entry is None or not isinstance(entry[1], yaml.ScalarNode):
+        return False
+    return entry[1].value.strip().strip("'\"") in _TRUE_VALUES
+
+
 @rule("yaml/ref-needs-nullable", "yaml/ref-needs-nullable.title", "A", severity=Severity.ERROR)
 def yaml_ref_needs_nullable(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "yaml" or not _HAVE_YAML or ".Ссылка" not in source.text:
@@ -356,9 +394,19 @@ def yaml_ref_needs_nullable(source: SourceFile) -> Iterable[Diagnostic]:
     root = _composed(source)
     if root is None:  # pragma: no cover - _parsed has already vetted the syntax
         return
+    parameters = _parameter_mappings(root)
     for mapping in _mapping_nodes(root):
-        entry = _scalar_entries(mapping).get("Тип")
+        if id(mapping) in parameters:
+            continue
+        entries = _scalar_entries(mapping)
+        entry = entries.get("Тип")
         if entry is None or not isinstance(entry[1], yaml.ScalarNode):
+            continue
+        if _is_required(entries):
+            # A required field of a structure needs no default: the documentation of the
+            # structure element states that such a field becomes a mandatory parameter of the
+            # constructor even when it has an implicit initialization value - so the value
+            # comes from the caller and the compiler asks for nothing.
             continue
         value_node = entry[1]
         if value_node.style in ("|", ">"):  # a block scalar is text, not a type

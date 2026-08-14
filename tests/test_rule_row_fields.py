@@ -161,3 +161,27 @@ def test_the_constructor_walk_does_not_need_dunder_dict(monkeypatch):
     monkeypatch.setattr(builtins, "vars", _no_dict)
     d = _lint_null("Номер = Строка.НомерАбонента")
     assert len(d) == 1 and d[0].rule_id == "code/row-field-null"
+
+
+def test_the_key_of_a_row_is_a_member_of_the_row_type():
+    """The key of a row reaches the reference behind it - a property of the row TYPE.
+
+    The row is not only the list's fields: the catalog gives the row type its own data and key
+    members, and a row command casts the key to the reference type. While the rule knew the
+    data member alone, that documented shape read as a field the list does not have.
+    """
+    d = _lint(
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+        "    Форма.Открыть(Ключ = Строка.Ключ)\n"
+        ";\n"
+    )
+    assert d == [], [x.message for x in d]
+
+
+def test_an_unknown_field_is_still_reported_next_to_the_key():
+    d = _lint(
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+        "    Форма.Открыть(Ключ = Строка.Ключ, Имя = Строка.НетТакого)\n"
+        ";\n"
+    )
+    assert len(d) == 1 and "НетТакого" in d[0].message

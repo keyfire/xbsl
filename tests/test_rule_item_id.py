@@ -61,3 +61,22 @@ def test_english_spelling_is_judged():
         name="Checks.yaml",
     )
     assert len(d) == 1 and "Amount" in d[0].message
+
+
+def test_a_built_in_attribute_named_rather_than_declared_is_silent():
+    """Naming the standard attribute adds it; the platform knows such an item by its name.
+
+    The published assembly of a reference project carries that entry with no identifier (an
+    Assembly.yaml manifest sits next to the sources), so the build accepts it - only an item
+    the PROJECT declares needs one of its own.
+    """
+    d = _lint(_HEAD + "Иерархический: Истина\nРеквизиты:\n    -\n        Имя: Родитель\n")
+    assert d == [], [x.message for x in d]
+
+
+def test_an_own_attribute_next_to_a_built_in_one_is_still_reported():
+    d = _lint(
+        _HEAD + "Иерархический: Истина\nРеквизиты:\n    -\n        Имя: Родитель\n"
+        "    -\n        Имя: Сумма\n        Тип: Число\n"
+    )
+    assert len(d) == 1 and "Сумма" in d[0].message

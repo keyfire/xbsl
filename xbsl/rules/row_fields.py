@@ -25,9 +25,9 @@ import dataclasses
 import difflib
 import re
 from collections.abc import Iterable
-from functools import cache
+from functools import cache, lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -73,6 +73,27 @@ _ROW_TYPE_RE = re.compile(
     r"^\s*(?:СтрокаДинамическогоСписка|DynamicListRow)\s*<\s*([^<>]+?)\s*>\s*$"
 )
 _DATA_MEMBERS = frozenset({"Данные", "Data"})
+
+
+@lru_cache(maxsize=1)
+def _row_own_members() -> frozenset[str]:
+    """The members the row type itself carries, from the catalog rather than from a list.
+
+    A row is not only the list's fields: the type has `Data` and `Key` of its own, and the key
+    is how a row command reaches the reference behind the row - casting it to the reference type
+    is the documented shape. While the rule knew the data member alone, that shape read as a
+    field the list does not have. Taken from the data, so a member added by a platform build
+    needs no edit here; without the data the set is empty and the rule keeps its own guards.
+    """
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except Exception:  # noqa: BLE001 - no data, the rule still has _DATA_MEMBERS
+        return frozenset()
+    record = (catalog.get("type_members") or {}).get("СтрокаДинамическогоСписка") or {}
+    return frozenset(record.get("properties", ()) or ()) | frozenset(record.get("methods", ()) or ())
+
+
+dataset.register_reset(_row_own_members.cache_clear)
 
 
 def _row_of_typeref(tref: P.TypeRef | None) -> str | None:
@@ -205,7 +226,8 @@ def _row_fields_mapper(source: SourceFile) -> dict | None:
             if not isinstance(use.obj, P.Name):
                 continue
             row = scope.types.get(use.obj.name)
-            if row is None or use.name in _DATA_MEMBERS or use.name in _COMMON_MEMBERS:
+            if (row is None or use.name in _DATA_MEMBERS or use.name in _COMMON_MEMBERS
+                    or use.name in _row_own_members()):
                 continue
             line, col = lm.linecol(use.start)
             cands.append((row, use.name, line, col))

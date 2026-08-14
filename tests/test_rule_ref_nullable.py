@@ -266,3 +266,36 @@ def test_english_input_field_spelling_is_judged(tmp_path):
     diags = list(run_sources([src], select={"yaml/ref-needs-nullable"}))
     assert len(diags) == 1
     assert "Edit<Товары.Ссылка?>" in diags[0].message and "ПолеВвода" not in diags[0].message
+
+
+def test_a_required_field_needs_no_nullable(tmp_path):
+    """The required mark makes the field a constructor parameter, so it needs no default: the
+    documentation of the structure element states that such a field becomes a mandatory
+    parameter of the constructor even when it has an implicit initialization value."""
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Структура\nИд: 2c9a7e41-5b83-4d16-9f02-7a3e5c8b1d94\nИмя: Ф\nПоля:\n"
+        "    -\n        Имя: Изображение\n        Тип: ДвоичныйОбъект.Ссылка\n"
+        "        Обязательное: Истина\n",
+    )
+    assert not _has(d), [x.message for x in d]
+
+
+def test_a_field_without_the_required_mark_is_still_reported(tmp_path):
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: Структура\nИд: 2c9a7e41-5b83-4d16-9f02-7a3e5c8b1d94\nИмя: Ф\nПоля:\n"
+        "    -\n        Имя: Изображение\n        Тип: ДвоичныйОбъект.Ссылка\n",
+    )
+    assert _has(d)
+
+
+def test_a_parameter_of_an_event_needs_no_nullable(tmp_path):
+    """A parameter has no initialization at all - its value comes from whoever raises the
+    event, so the compiler asks for no default."""
+    d = _run(
+        tmp_path,
+        "ВидЭлемента: ГлобальноеКлиентскоеСобытие\nИд: 1a6b9e5c-6445-402d-97b6-b4d6921caa4b\n"
+        "Имя: Ф\nПараметры:\n    -\n        Имя: Цель\n        Тип: Цели.Ссылка\n",
+    )
+    assert not _has(d), [x.message for x in d]

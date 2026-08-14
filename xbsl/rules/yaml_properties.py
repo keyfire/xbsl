@@ -390,6 +390,14 @@ def item_id_required(source: SourceFile) -> Iterable[Diagnostic]:
             continue
         if _scalar_value(item, "Ид", "Id"):
             continue
+        if metamodel.dispatch_name(child):
+            # A BUILT-IN item of the collection, named rather than declared: a catalog adds
+            # its standard `Parent` attribute by naming it, and the platform identifies it by
+            # that name. The published assembly of a reference project carries exactly such an
+            # entry with no identifier (an Assembly.yaml manifest sits next to it), so the build
+            # accepts it - only an item the PROJECT declares needs an identifier of its own. The
+            # `Name` and `Code` attributes fall out earlier: their classes declare no id at all.
+            continue
         name = _scalar_value(item, "Имя", "Name") or "?"
         yield Diagnostic(
             source.rel, item.start_mark.line + 1, item.start_mark.column + 1,

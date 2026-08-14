@@ -337,6 +337,18 @@ def _dispatched_class(item: str, value: str) -> str | None:
 
 
 @lru_cache(maxsize=None)
+def dispatch_name(cls: str) -> str | None:
+    """The item NAME this class is dispatched by (`ParentAttributeDescriptor` -> `Parent`).
+
+    A class the platform marks with `@DescriptorPresentation` describes a BUILT-IN item of a
+    collection - a standard attribute of a catalog and the like - rather than one the project
+    declares. `None` for an ordinary class, and for an unknown one.
+    """
+    data = _data()
+    return ((data.get("classes") or {}).get(cls) or {}).get("presents") if data else None
+
+
+@lru_cache(maxsize=None)
 def dispatched_classes(item: str) -> tuple[tuple[str, str], ...]:
     """[(class, the name it is dispatched by)] of the classes a collection of `item` dispatches to."""
     data = _data()

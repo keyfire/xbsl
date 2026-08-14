@@ -30,6 +30,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   imported subsystem reads as a use, so an import is never reported on a doubt.
 
 ### Fixed
+- **Three rules learned their exception.** All three were surfaced by a foreign reference
+  project, and each has evidence of its own. `code/unknown-row-field` did not know that a dynamic
+  list row has members OF ITS OWN: the key is the documented way to reach the reference behind
+  the row, while the rule knew the data member alone; the set now comes from the type catalog.
+  `yaml/ref-needs-nullable` ignored the required mark - such a field becomes a mandatory parameter
+  of the constructor even when it has an implicit initialization value (docs of the structure
+  element), so it needs no default; the same rule also stopped judging PARAMETERS, whose value
+  arrives from whoever raises the event. `yaml/item-id-required` demanded an id for a standard
+  attribute added by naming it: the published ASSEMBLY of the reference project carries that entry
+  with no id, so the build accepts it. The mark comes from the metamodel - a class dispatched by
+  name describes a built-in item of the collection rather than one the project declares.
 - **`code/unknown-member` sees the EVENTS of a type.** Binding a handler to a component built in
   code (`Button.OnClick = &Handle`) is the documented form, and the type's page in the same
   distribution carries a "События" section. The events were always extracted; the rule read
