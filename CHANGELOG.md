@@ -12,6 +12,20 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Changed
+- **The linter collects the query files of virtual tables (`.xbql`).** They were the only
+  place where the query language lives outside a `Query{ ... }` block, and nothing looked at
+  them: an unknown table in such a file was found by the server compiler alone. Now the query
+  rules judge them - reconnaissance on a live project confirmed both halves of the change:
+  `query/unknown-table` reports a table that is not an object of the project, and the two
+  rules that would have been false there are exempt. A query file is not a module (the module
+  parser meets it with "a module import, method... is expected" on line 1), and the
+  ampersand parameter is the documented syntax of a virtual table's query rather than the
+  literal's mistake - the platform documentation states that such a query takes its
+  parameters the way an arbitrary query does (topics/virtual-table).
+
 ## 2026-08-14 – 0.64.0
 
 ### Added

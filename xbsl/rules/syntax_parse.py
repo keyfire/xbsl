@@ -17,7 +17,7 @@ from collections.abc import Iterable
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
 
@@ -39,8 +39,13 @@ _MAX_PER_FILE = 10
 
 @rule("code/parse-error", "code/parse-error.title", "C", severity=Severity.ERROR)
 def parse_error(source: SourceFile) -> Iterable[Diagnostic]:
-    """The file must parse against the platform grammar - the compiler will not take it."""
-    if source.kind != "xbsl":
+    """The file must parse against the platform grammar - the compiler will not take it.
+
+    A query file is skipped: it lexes as code and is loaded with kind `xbsl`, but it is not a
+    module - the whole file is one query expression, and the module parser meets it with
+    "a module import, method, structure, enumeration or constant is expected" on line 1.
+    """
+    if source.kind != "xbsl" or is_query_file(source.path):
         return
     _, errors = parse(source)
     if not errors:

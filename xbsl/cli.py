@@ -13,16 +13,23 @@ from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
 def discover(paths: list[str]) -> list[Path]:
-    """Collect source files (.xbsl and .yaml) under the given paths."""
+    """Collect source files (.xbsl, .yaml and .xbql) under the given paths.
+
+    The query file of a virtual table is collected too: it is the only place where the
+    query language lives outside a `Запрос{ ... }` block, and until it was collected the
+    query rules had nothing to look at there - an unknown table in such a file was found by
+    nobody but the server compiler.
+    """
     out: list[Path] = []
     for raw in paths:
         p = Path(raw)
         if p.is_file():
-            if p.suffix in (".xbsl", ".yaml"):
+            if p.suffix in (".xbsl", ".yaml") or engine.is_query_file(p):
                 out.append(p)
         elif p.is_dir():
             out.extend(engine.find_sources(p, "*.xbsl"))
             out.extend(engine.find_sources(p, "*.yaml"))
+            out.extend(engine.find_sources(p, f"*{engine.QUERY_SUFFIX}"))
     # Uniquify, preserving order
     seen: set[Path] = set()
     uniq: list[Path] = []

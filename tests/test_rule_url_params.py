@@ -64,10 +64,10 @@ def test_a_member_read_without_a_call_is_silent():
     assert d == [], [x.message for x in d]
 
 
-def test_the_rule_is_off_by_default():
-    info = next(r for r in engine.RULES if r.id == RULE)
-    assert info.enabled_by_default is False
-    assert info.off_reason
+# The default-off state is NOT asserted here: in a process with the plugin installed the
+# project profile turns these rules on, and such a test would judge the machine rather than
+# the engine. The default is guarded by tests/test_metadata_sync.py, which reads the
+# registry in a subprocess with XBSL_NO_PLUGINS=1.
 
 
 @pytest.mark.needs_data

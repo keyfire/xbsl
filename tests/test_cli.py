@@ -7,7 +7,7 @@ Depends on the Element data: main() resolves the data version before parsing the
 import io
 import json
 
-from xbsl import cli
+from xbsl import cli, engine
 
 
 def _feed_stdin(monkeypatch, data: bytes):
@@ -127,3 +127,69 @@ def test_discover_scans_root_inside_hidden_directory(tmp_path):
 
     assert f in found
 
+
+
+# --- query files of virtual tables (.xbql) ------------------------------------------------
+
+_QUERY_TABLE = """ВЫБРАТЬ
+    З.Ссылка КАК Ссылка,
+    З.Наименование КАК Наименование
+ИЗ
+    {table} КАК З
+ГДЕ
+    З.Шаг == &Шаг
+"""
+
+_CATALOG = """ВидЭлемента: Справочник
+Ид: 7a7a7a7a-1111-2222-3333-444444444444
+Имя: Задачи
+Реквизиты:
+    -
+        Имя: Шаг
+        Тип: Строка
+"""
+
+
+def _query_project(tmp_path, table: str):
+    """A project of one catalog plus a virtual table whose query names `table`."""
+    (tmp_path / "Задачи.yaml").write_text(_CATALOG, encoding="utf-8")
+    (tmp_path / "ЗадачиТаблица.yaml").write_text(
+        "ВидЭлемента: ВиртуальнаяТаблица\n"
+        "Ид: 7b7b7b7b-1111-2222-3333-444444444444\n"
+        "Имя: ЗадачиТаблица\n"
+        "Параметры:\n    -\n        Имя: Шаг\n        Тип: Строка\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "ЗадачиТаблица.xbql").write_text(
+        _QUERY_TABLE.format(table=table), encoding="utf-8"
+    )
+    return cli.discover([str(tmp_path)])
+
+
+def test_discover_collects_query_files(tmp_path):
+    """Until they were collected, an unknown table in a virtual table's query was found by
+    nobody but the server compiler."""
+    found = _query_project(tmp_path, "Задачи")
+    assert any(f.suffix == ".xbql" for f in found), [f.name for f in found]
+
+
+def test_a_single_query_file_is_accepted_as_a_path(tmp_path):
+    _query_project(tmp_path, "Задачи")
+    found = cli.discover([str(tmp_path / "ЗадачиТаблица.xbql")])
+    assert [f.name for f in found] == ["ЗадачиТаблица.xbql"]
+
+
+def test_an_unknown_table_in_a_query_file_is_reported(tmp_path):
+    paths = _query_project(tmp_path, "НетТакой")
+    found = engine.run(paths)
+    assert [x.rule_id for x in found if x.path.endswith(".xbql")] == ["query/unknown-table"]
+
+
+def test_a_query_file_is_not_judged_as_a_module(tmp_path):
+    """It lexes as code and loads with kind `xbsl`, but it is one query expression: the module
+    parser would meet it with "a module import, method... is expected" on line 1, and the
+    ampersand parameter is the documented syntax there rather than the literal's mistake."""
+    paths = _query_project(tmp_path, "Задачи")
+    found = engine.run(paths)
+    in_query = [x.rule_id for x in found if x.path.endswith(".xbql")]
+    assert in_query == [], in_query

@@ -30,7 +30,7 @@ from typing import Iterable, Iterator, Optional
 
 from xbsl import dataset, i18n, libs
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token, tokens
 from xbsl.rules._syntax import (
     query_table_intro,
@@ -520,8 +520,14 @@ def query_named_parameter(source: SourceFile) -> Iterable[Diagnostic]:
 
     Only `&` glued to a name is reported - a lone `&` is some other construct, and guessing
     is not this rule's job.
+
+    A query FILE of a virtual table is exempt, and the documentation is explicit about it
+    (topics/virtual-table): such a query takes its parameters the way an arbitrary query
+    does - `&Name` - and every one of them must be declared in the table's `Parameters`.
+    There the ampersand is the only way to take a parameter; the interpolation this rule
+    advises does not exist outside a literal.
     """
-    if source.kind != "xbsl" or "&" not in source.text:
+    if source.kind != "xbsl" or "&" not in source.text or is_query_file(source.path):
         return
     for span in query_ranges(source):
         block = query_block_tokens(source, span)

@@ -286,8 +286,7 @@ def test_a_binding_weight_is_the_cure():
     assert _lint("Ф.yaml", _form(body), select={CARD_RULE}) == []
 
 
-def test_both_mobile_rules_are_off_by_default():
-    for rule_id in (MATRIX_RULE, CARD_RULE):
-        info = next(r for r in engine.RULES if r.id == rule_id)
-        assert info.enabled_by_default is False, rule_id
-        assert info.off_reason, rule_id
+# The default-off state is NOT asserted here: in a process with the plugin installed the
+# project profile turns these rules on, and such a test would judge the machine rather than
+# the engine. The default is guarded by tests/test_metadata_sync.py, which reads the
+# registry in a subprocess with XBSL_NO_PLUGINS=1.
