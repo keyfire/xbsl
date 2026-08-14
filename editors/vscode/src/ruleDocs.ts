@@ -193,6 +193,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "topics/catalog-properties",
     anchor: "наименование",
   },
+  { match: (r) => r === "code/unused-import", page: "topics/modular-development" },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
   {

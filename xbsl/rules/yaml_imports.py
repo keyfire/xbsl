@@ -1,4 +1,21 @@
-"""Tier D: cross-subsystem references in yaml - two complementary rules.
+"""Tier D: cross-subsystem references - three rules over one placement model.
+
+The third one, code/unused-import, is the mirror of the first: a module declares
+`импорт <Подсистема>` while nothing in its CODE resolves through it. The platform's own
+editor reports such imports, the linter did not, and they accumulate - a subsystem is
+imported "just in case", the code that needed it is rewritten, the line stays.
+
+What counts as a use is deliberately narrow: a name of an element of that subsystem
+appearing as an identifier anywhere in the module - a type position, a call, a namespace
+qualifier. The rule errs towards silence by design, and both ways it can be wrong are
+harmless: a local name that happens to match an element of the imported subsystem reads as
+a use (the import is kept, no false report), and a qualified reference `Подсистема::Элемент`
+mentions the element too, though such a reference needs no import at all.
+
+The PAIRED yaml is NOT a use: its own `Импорт:` section covers its type positions, and the
+module import does not extend to it - the live case that prompted the rule is exactly this
+shape (a module importing a subsystem only its yaml refers to, with the yaml importing it
+on its own).
 
 yaml/missing-import wants a public foreign element to be imported; yaml/foreign-not-public
 wants the foreign element to be public at all (see its own docstring). Together they cover
@@ -55,11 +72,24 @@ from xbsl import i18n
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.lexer import tokens
 from xbsl.rules import semantics
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_types import _parse_type_string, _type_values, _value_positions
 
 MESSAGES = {
+    "code/unused-import.title": {
+        "ru": "Неиспользуемый импорт подсистемы",
+        "en": "Unused subsystem import",
+    },
+    "code/unused-import.unused": {
+        "ru": "Импорт подсистемы '{sub}' не используется: ни один её элемент в коде модуля "
+              "не упомянут. Ссылки ПАРНОГО yaml импорт модуля не покрывает – у yaml своя "
+              "секция Импорт. Строку можно снять.",
+        "en": "The import of subsystem '{sub}' is unused: no element of it is mentioned in "
+              "the module code. References of the PAIRED yaml are not covered by a module "
+              "import - the yaml has an {n[Импорт]} section of its own. The line can go.",
+    },
     "yaml/missing-import.title": {
         "ru": "Нет импорта подсистемы в yaml",
         "en": "Missing subsystem import in yaml",
@@ -345,4 +375,79 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "yaml/foreign-not-public", Severity.ERROR,
                 i18n.t("yaml/foreign-not-public.found", name=chain_name, sub=owner, vis=vis),
+            )
+
+
+# --- code/unused-import -------------------------------------------------------------------
+
+
+def _unused_import_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a subsystem yaml contributes its root, an element yaml its name and
+    place, a module its import lines (with positions) and the identifiers of its code."""
+    if source.kind == "yaml":
+        if not _HAVE_YAML:
+            return None
+        if source.path.name in _SUBSYSTEM_FILES:
+            data, err = _parsed(source)
+            name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
+            return {
+                "k": "sub",
+                "dir": str(source.path.parent),
+                "name": name if isinstance(name, str) else source.path.parent.name,
+            }
+        data, err = _parsed(source)
+        if err is not None or not isinstance(data, dict) or not object_kind(data):
+            return None
+        name = value_of(data, "Имя")
+        return {"k": "el", "path": str(source.path),
+                "name": name if isinstance(name, str) else source.path.stem}
+    if source.kind != "xbsl":
+        return None
+    toks = tokens(source)
+    imports: list[tuple[str, int, int]] = []
+    idents: set[str] = set()
+    for i, tok in enumerate(toks):
+        if tok.kind == "IDENT":
+            idents.add(tok.value)
+        if tok.kind == "KEYWORD" and tok.canonical == "IMPORT" and i + 1 < len(toks):
+            following = toks[i + 1]
+            if following.kind == "IDENT":
+                imports.append((following.value, tok.line, tok.col))
+    if not imports:
+        return None
+    return {"k": "mod", "path": str(source.path), "imports": imports, "idents": sorted(idents)}
+
+
+@rule(
+    "code/unused-import", "code/unused-import.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_unused_import_mapper,
+)
+def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A module imports a subsystem whose elements its code never mentions."""
+    roots = {
+        Path(f["dir"]): f["name"] for f in facts.values() if f["k"] == "sub"
+    }
+    if not roots:
+        return  # no subsystem files - the project layout is unknown, nothing to judge
+    # subsystem -> the names of its elements
+    owned: dict[str, set[str]] = {}
+    for fact in facts.values():
+        if fact["k"] != "el":
+            continue
+        sub = _subsystem_of(Path(fact["path"]), roots)
+        if sub:
+            owned.setdefault(sub, set()).add(fact["name"])
+    for rel, fact in facts.items():
+        if fact["k"] != "mod":
+            continue
+        idents = set(fact["idents"])
+        for sub, line, col in fact["imports"]:
+            elements = owned.get(sub)
+            if elements is None:
+                continue  # an unknown subsystem (a library, a typo) - not this rule's case
+            if elements & idents:
+                continue
+            yield Diagnostic(
+                rel, line, col, "code/unused-import", Severity.WARNING,
+                i18n.t("code/unused-import.unused", sub=sub),
             )

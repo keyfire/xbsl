@@ -14,6 +14,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## Unreleased
 
+### Added
+- **Rule `code/unused-import`: a module imports a subsystem its code never mentions.** The
+  platform's own editor reports such imports; the linter did not, and they accumulate as the
+  code that needed them is rewritten. A reference from the PAIRED yaml is not a use - the
+  yaml carries an import section of its own, which is exactly the shape of the live case that
+  prompted the rule. The check errs towards silence: a local name matching an element of the
+  imported subsystem reads as a use, so an import is never reported on a doubt.
+
 ### Changed
 - **`code/unknown-member` reads a collection literal as a type declaration.** A variable
   initialized with `<String>[]` names its type no worse than a constructor does, yet the type

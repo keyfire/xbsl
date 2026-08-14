@@ -2416,6 +2416,15 @@ def routes_for(template: str, methods: list[str]) -> str:
     verbs = [str(m).strip().upper() for m in methods if str(m).strip()]
     if not verbs:
         raise ScaffoldError(f"Не указан ни один HTTP-метод для шаблона {path}")
+    # A verb is checked against the list, not just upper-cased: a caller that passes the
+    # methods as a python-looking list ("['GET'", "'POST']") used to have the quotes and
+    # brackets travel all the way into the generated handler names and the yaml - the
+    # scaffolding produced code that cannot parse, and the mistake surfaced far from here.
+    unknown = [verb for verb in verbs if verb not in HTTP_METHODS]
+    if unknown:
+        raise ScaffoldError(
+            f"Не HTTP-метод: {', '.join(unknown)}. Допустимы: {', '.join(HTTP_METHODS)}"
+        )
     return ", ".join(f"{verb} {path}" for verb in verbs)
 
 

@@ -307,3 +307,63 @@ def test_visibility_no_subsystem_layout_skipped():
         "Панель.yaml": PANEL,
     }
     assert _lint_vis(files) == []
+
+
+# --- code/unused-import ---------------------------------------------------------------
+
+UNUSED = "code/unused-import"
+
+
+def _lint_unused(files):
+    sources = [engine.load_text(name, content) for name, content in files.items()]
+    return engine.run_sources(sources, select={UNUSED})
+
+
+def _module_project(module_code: str, **extra):
+    files = {
+        "А/Подсистема.yaml": SUB_A,
+        "Б/Подсистема.yaml": SUB_B,
+        "Б/Товары.yaml": GOODS,
+        "А/Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
+        "А/Модуль.xbsl": module_code,
+    }
+    files.update(extra)
+    return files
+
+
+def test_unused_import_is_reported():
+    """The live case: a module imports a subsystem its code never mentions."""
+    diags = _lint_unused(_module_project("импорт Б\n\nметод Т()\n;\n"))
+    assert [(x.rule_id, x.line, x.col) for x in diags] == [(UNUSED, 1, 1)]
+    assert "Б" in diags[0].message
+
+
+def test_an_import_whose_element_is_used_is_silent():
+    diags = _lint_unused(_module_project(
+        "импорт Б\n\nметод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"
+    ))
+    assert diags == []
+
+
+def test_a_reference_from_the_paired_yaml_is_not_a_use():
+    """The yaml has an import section of its own - a module import does not cover it, and
+    that is exactly the shape the rule was written for."""
+    diags = _lint_unused(_module_project(
+        "импорт Б\n\nметод Т()\n;\n",
+        **{"А/Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n"
+                            "Импорт:\n    - Б\nРеквизиты:\n    -\n        Имя: Т\n"
+                            "        Тип: Товары.Ссылка?\n"},
+    ))
+    assert [x.rule_id for x in diags] == [UNUSED]
+
+
+def test_an_unknown_subsystem_is_not_judged():
+    """A library or a typo - the rule has nothing to check the import against."""
+    diags = _lint_unused(_module_project("импорт Чужая\n\nметод Т()\n;\n"))
+    assert diags == []
+
+
+def test_without_subsystem_files_the_rule_stands_down():
+    files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
+             "Модуль.xbsl": "импорт Б\n\nметод Т()\n;\n"}
+    assert _lint_unused(files) == []

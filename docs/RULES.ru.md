@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 150.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 151.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -211,6 +211,7 @@ sidebar:
 | `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Литеральный `ВесПриРастягивании` у карточки или у группы внутри неё: вес – это flex с НУЛЕВОЙ базой, а в вертикальной колонке (мобильная раскладка) база относится к высоте – Safari схлопывает карточку и обрезает её скруглением, Chrome не показывает ничего. Снимайте вес на телефоне биндингом. Выключено по умолчанию: карточка, живущая только в широком ряду, носит вес законно [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Метод нигде не используется |
 | `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на публичный элемент чужой подсистемы, которой нет в секции `Импорт` [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/unused-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Модуль импортирует подсистему, ни один элемент которой в его КОДЕ не упомянут – редактор платформы такие импорты показывает, а копятся они сами: код, которому импорт был нужен, переписан, строка осталась. Ссылка из ПАРНОГО yaml употреблением не считается: у yaml своя секция импорта [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле представления объекта [доки](https://1cmycloud.com/docs/help/topics/element-view/) |
 | `yaml/unexpected-type-argument` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр типа у свойства, которое ui-схема объявляет без параметра, – это другой тип, применение сборки его отвергнет (`ДополнительныеКоманды` формы принимают `ФрагментКомандногоИнтерфейса`, а не `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>`) [доки](https://1cmycloud.com/docs/help/topics/command-interface/) |
 | `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Свойство компонента новее, чем `РежимСовместимости` проекта (версию появления несёт ui-схема) – применение отвергает его как неизвестное [доки](https://1cmycloud.com/docs/help/topics/update-server/) |

@@ -2596,3 +2596,26 @@ def test_new_object_presentation_is_a_caption_or_an_attribute_name(tmp_path):
         tmp_path, "НаборКонстант", "Настройки", presentation="Настройки приложения",
     ))
     assert "Представление: Настройки приложения" in (tmp_path / "Настройки.yaml").read_text(encoding="utf-8")
+
+
+# --- routes_for: the verbs are checked, not just upper-cased -------------------------------
+
+def test_routes_for_composes_the_routes_string():
+    assert scaffold.routes_for("/orders", ["GET", "POST"]) == "GET /orders, POST /orders"
+    # any casing and stray spaces are the caller's convenience, not a mistake
+    assert scaffold.routes_for("/orders", ["get", " post "]) == "GET /orders, POST /orders"
+
+
+def test_routes_for_refuses_a_verb_that_is_not_one():
+    """A caller passing the methods as a python-looking list used to have the quotes and
+    brackets travel into the generated handler names - code that cannot parse."""
+    with pytest.raises(scaffold.ScaffoldError) as info:
+        scaffold.routes_for("/orders", ["['GET'", "'POST']"])
+    assert "GET" in str(info.value)  # the message names what is allowed
+
+
+def test_routes_for_still_requires_a_template_and_a_verb():
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.routes_for("", ["GET"])
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.routes_for("/orders", [])
