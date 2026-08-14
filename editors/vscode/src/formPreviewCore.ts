@@ -164,6 +164,24 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   return `class="${cls}${mark}"${styleAttr}${offAttr}${titleAttr}`;
 }
 
+// The platform's designer cuts a long expression in the MIDDLE - the head names the data and the
+// tail names the field, and both matter, while a CSS ellipsis keeps the head alone. CSS cannot cut
+// a middle, so the string is cut here; the whole text stays in the tooltip. The threshold is taken
+// from the corpora: half of the expressions are under 30 characters and 90% under 55, so 64 leaves
+// the ordinary ones untouched and shortens the long tail (168 of 2518 on two projects).
+export const EXPRESSION_MAX = 64;
+
+export function middleEllipsis(text: string, max = EXPRESSION_MAX): string {
+  if (text.length <= max) {
+    return text;
+  }
+  // The head keeps a little more than the tail: it carries the data source, which is what the
+  // reader looks for first.
+  const head = Math.ceil((max - 1) * 0.6);
+  const tail = max - 1 - head;
+  return `${text.slice(0, head)}…${text.slice(text.length - tail)}`;
+}
+
 // Property value: a binding (`=Данные.Х`) is shown as a monospaced chip, a localization
 // reference (`$Словарь.Ключ`) - as the TEXT the user will see, with the key in the tooltip, and
 // a literal - as text. When the engine has not answered with the strings (or the key is not
@@ -174,7 +192,9 @@ function valueHtml(v: string | undefined, placeholder = ""): string {
     return `<span class="ph">${esc(placeholder)}</span>`;
   }
   if (v.startsWith("=")) {
-    return `<code class="chip">${esc(v)}</code>`;
+    const shown = middleEllipsis(v);
+    const tip = shown === v ? "" : ` title="${esc(v)}"`;
+    return `<code class="chip"${tip}>${esc(shown)}</code>`;
   }
   if (v.startsWith("$")) {
     const key = v.slice(1);

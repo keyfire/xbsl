@@ -1,7 +1,7 @@
 // Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
 // that serve the metadata properties panel. Run with plain node (see npm test).
 
-import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, setFormKeyAliases, setLocalizationStrings } from "../src/formPreviewCore";
+import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, middleEllipsis, setFormKeyAliases, setLocalizationStrings } from "../src/formPreviewCore";
 
 let failures = 0;
 
@@ -645,3 +645,22 @@ check("доступность: Ложь помечает поле", acc.ok && fi
 check("доступность: наследуется в содержимое группы", acc.ok && fieldClasses(accHtml, "Внутри").includes("dis"));
 check("доступность: вычисляемая тоже помечает", acc.ok && fieldClasses(accHtml, "Вычисляемое").includes("dis"));
 check("доступность: в подсказке видно значение", acc.ok && accHtml.includes("Доступность: Ложь"));
+
+// A long expression is cut in the MIDDLE, the way the platform's designer cuts it: the head names
+// the data, the tail names the field, and a CSS ellipsis would keep the head alone.
+check("эллипсис: короткое выражение не трогается", middleEllipsis("=Данные.Имя") === "=Данные.Имя");
+const long = "=Объект.Размещение==РазмещениеМакета.ВПриложенииАктивныйРежим или Объект.Размещение==РазмещениеМакета.Второй";
+const cut = middleEllipsis(long);
+check("эллипсис: длинное укорочено", cut.length < long.length && cut.length <= 64);
+check("эллипсис: начало сохранено", cut.startsWith("=Объект.Размещение"));
+check("эллипсис: конец сохранён", cut.endsWith("Второй"));
+check("эллипсис: многоточие в середине", cut.includes("…") && !cut.endsWith("…"));
+const chip = renderFormPreview([
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        Тип: Надпись",
+  `        Значение: ${long}`,
+  "",
+].join("\n"));
+check("эллипсис: полный текст в подсказке", chip.ok && chip.html.includes('title="=Объект.Размещение=='));

@@ -12,6 +12,9 @@
 ## Unreleased
 
 ### Changed
+- **A long expression in the wireframe is cut in the middle,** the way the platform's designer
+  cuts it: the head names the data, the tail names the field, and both matter. The whole text
+  stays in the tooltip.
 - **Inaccessible fields of the wireframe are drawn the way the platform draws them** - a gray
   fill with no border. An availability switched off, or computed, travels down the content until
   a node overrides it; the value shows in the tooltip.
