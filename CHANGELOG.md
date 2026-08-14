@@ -30,11 +30,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   imported subsystem reads as a use, so an import is never reported on a doubt.
 
 ### Fixed
+- **`code/unknown-member` sees the EVENTS of a type.** Binding a handler to a component built in
+  code (`Button.OnClick = &Handle`) is the documented form, and the type's page in the same
+  distribution carries a "События" section. The events were always extracted; the rule read
+  properties and methods alone and answered "the type has no member" to every such binding -
+  nine findings on the reference project, the only class of its false findings that could hit our
+  own code as well. A typo in an event name is still flagged.
 - **Parser: a newline ends the statement, parentheses group a type.** Two holes, both surfaced
   by a foreign reference project. First: an opening parenthesis at the start of a line was read
   as a call of the preceding expression, so a loop source swallowed the next statement - casting
   the loop variable to write into it broke the parse. Second: parentheses around a type -
-  `пер Попытка: (()->Булево)? = Неопределено` - did not parse, because a function type demands
+  `var Attempt: (()->Boolean)? = Undefined` - did not parse, because a function type demands
   the arrow right after the closing parenthesis; one such field broke the whole file (33
   suppressed reports). Both forms are legal - the server compiles that project - and all 13
   `code/parse-error` findings on it are gone.

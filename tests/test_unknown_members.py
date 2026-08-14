@@ -492,3 +492,39 @@ def test_a_correct_member_after_a_literal_is_silent():
         ";\n"
     )
     assert diags == []
+
+
+def test_an_event_of_the_type_is_a_member():
+    """Binding a handler to a component built in code is the documented form.
+
+    The docs of the type carry a "События" section and that very example; the extraction has
+    always kept the events, but the rule read properties and methods alone and answered
+    "no such member" to every such binding.
+    """
+    diags = _lint(
+        "метод Тест()\n"
+        "    пер Клавиша: Кнопка = новый Кнопка()\n"
+        "    Клавиша.ПриНажатии = &Обработать\n"
+        ";\n"
+    )
+    assert diags == [], [d.message for d in diags]
+
+
+def test_an_inherited_event_is_a_member_too():
+    diags = _lint(
+        "метод Тест(Страница: ВстроеннаяВебСтраница1СПредприятие)\n"
+        "    Страница.ПриОткрытии = &Открыли\n"
+        "    Страница.ПриПолученииСообщения = &Сообщение\n"
+        ";\n"
+    )
+    assert diags == [], [d.message for d in diags]
+
+
+def test_a_typo_in_an_event_name_is_still_flagged():
+    diags = _lint(
+        "метод Тест()\n"
+        "    пер Клавиша: Кнопка = новый Кнопка()\n"
+        "    Клавиша.ПриНажатие = &Обработать\n"
+        ";\n"
+    )
+    assert len(diags) == 1 and "ПриНажатие" in diags[0].message

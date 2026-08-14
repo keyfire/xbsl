@@ -11,8 +11,9 @@ been seen - a form attribute named Email is not the mail type.
 First-hop only, negatives only. A variable counts as typed when every declaration of that
 name in the method (parameters, `пер`/`знч` with an explicit type, `поймать`, or a `новый Тип(...)`
 initializer - a constructor names the type as plainly as an annotation) names the
-same single stdlib type; the member is then checked against the type's properties + methods
-from the stdlib catalog. A generic counts by its HEAD - `Массив<Строка>` and `Массив<Число>`
+same single stdlib type; the member is then checked against the type's properties, methods
+and EVENTS from the stdlib catalog (binding a handler - `Кнопка.ПриНажатии = &Обработчик` - is
+as much a member access as a call). A generic counts by its HEAD - `Массив<Строка>` and `Массив<Число>`
 carry the same member names, the arguments only type them. Entity aggregates (Пользователи,
 ДвоичныйОбъект...) keep their record and reference members on facet pages - the catalog's
 facet_members - so the aggregate name covers the union of its facets, and a facet itself
@@ -75,6 +76,14 @@ def _stdlib_members() -> dict[str, frozenset[str]]:
     on facet pages (Пользователи.Объект, ДвоичныйОбъект.Ссылка) - facet_members of the
     catalog; a variable typed with the bare aggregate name may hold any facet, so the
     aggregate's set is the union, and every facet is also usable as a nominal type."""
+    def _member_union(record: dict) -> frozenset[str]:
+        """Everything that may follow the dot: properties, methods and events."""
+        return (
+            frozenset(record.get("properties", ()) or ())
+            | frozenset(record.get("methods", ()) or ())
+            | frozenset(record.get("events", ()) or ())
+        )
+
     global _members_cache
     if _members_cache is None:
         try:
@@ -85,13 +94,17 @@ def _stdlib_members() -> dict[str, frozenset[str]]:
         facets = data.get("facet_members") or {}
         facet_union: dict[str, set[str]] = {}
         result: dict[str, frozenset[str]] = {}
+        # Events belong to the members too: `Кнопка.ПриНажатии = &Обработчик` is the documented
+        # way to bind a handler to a component built in code (docs of the type carry a "События"
+        # section and that very example). The extraction has always kept them - the rule read
+        # properties and methods alone, and answered "no such member" to nine bindings of the
+        # reference corpus, the only one of its false-finding classes that could hit our own code.
         for fname, fm in facets.items():
-            members = frozenset(fm.get("properties", ())) | frozenset(fm.get("methods", ()))
+            members = _member_union(fm)
             result[fname] = members
             facet_union.setdefault(fname.split(".", 1)[0], set()).update(members)
         for name, m in raw.items():
-            members = frozenset(m.get("properties", ())) | frozenset(m.get("methods", ()))
-            result[name] = members | frozenset(facet_union.get(name, ()))
+            result[name] = _member_union(m) | frozenset(facet_union.get(name, ()))
         _members_cache = result
     return _members_cache
 
