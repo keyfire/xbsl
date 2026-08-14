@@ -12,6 +12,7 @@ import {
 } from "vscode-languageclient/node";
 import { baselineForLint } from "./excludeAction";
 import { pipInstallCommand, runInstallTask } from "./installer";
+import { needsServerRestart } from "./lspRestartCore";
 import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
 import { resolveMessageLanguage } from "./workspaceCore";
@@ -214,6 +215,19 @@ export async function activateLsp(
           'XBSL LSP: project-wide diagnostics run on the server on every save; force them with the "XBSL: restart the linter" command.'
         )
       );
+    }),
+    // A setting that shapes the run is an ARGUMENT of the server, and a running process cannot
+    // be re-argued: without this the change did nothing at all until the window was reloaded.
+    // The CLI mode has its own listener; LSP mode returns from activate() before that one is
+    // ever registered.
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (!needsServerRestart((section) => e.affectsConfiguration(section))) {
+        return;
+      }
+      output.appendLine(
+        vscode.l10n.t("XBSL LSP: a setting of the server's command line changed – restarting.")
+      );
+      void vscode.commands.executeCommand("xbsl.restartLinter");
     })
   );
   return true;

@@ -9,6 +9,11 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **A changed setting reaches the LSP server.** The settings that shape a run - the sources root (`xbsl.projectRoot`), the rule set, the data directory, the templates file, the interpreter and the message language - are ARGUMENTS of the long-lived server, and a running process cannot be re-argued. The extension had a configuration listener for the CLI mode only: in LSP mode `activate` returns before that listener is registered, so a changed setting did nothing at all until the window was reloaded. That is how `xbsl.projectRoot` came to read as ignored - the root was narrowed to keep a copy of another project out of the run, and the panel stayed full of findings from it. Such a change now restarts the server; settings that do not reach the command line leave it alone, so the project index is not paid for twice.
+
 ## 0.60.1
 
 ### Changed

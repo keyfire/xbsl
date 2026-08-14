@@ -32,6 +32,7 @@
   "XBSL LSP: the server failed to start ({0}): {1}": "XBSL LSP: сервер не запустился ({0}): {1}",
   "XBSL: failed to start xbsl-lsp. Install the engine with the [lsp] extra (pip install \"xbsl[lsp]\") or set the command in the xbsl.lsp.command setting. The extension keeps working in the regular mode (CLI).": "XBSL: не удалось запустить xbsl-lsp. Установите движок с extra [lsp] (pip install \"xbsl[lsp]\") или укажите команду в настройке xbsl.lsp.command. Расширение продолжает работать в обычном режиме (CLI).",
   "XBSL LSP: server started ({0} {1}).": "XBSL LSP: сервер запущен ({0} {1}).",
+  "XBSL LSP: a setting of the server's command line changed – restarting.": "XBSL LSP: изменилась настройка из командной строки сервера – перезапуск.",
   "XBSL LSP: server restarted": "XBSL LSP: сервер перезапущен",
   "XBSL LSP: project-wide diagnostics run on the server on every save; force them with the \"XBSL: restart the linter\" command.": "XBSL LSP: проектная диагностика выполняется сервером при каждом сохранении; принудительно – командой \"XBSL: перезапустить линтер\".",
   "Configure rule \"{0}\"...": "Настроить правило \"{0}\"...",

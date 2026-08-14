@@ -6,6 +6,7 @@ import * as path from "path";
 import { computeRange, FixEdit, RawDiag } from "../src/report";
 import { anchorKey, fixIndex } from "../src/codeActionsCore";
 import { groupReportByFile, resolveMessageLanguage } from "../src/workspaceCore";
+import { needsServerRestart, SERVER_ARG_SETTINGS } from "../src/lspRestartCore";
 
 let failed = 0;
 let passed = 0;
@@ -95,3 +96,27 @@ console.log(`\nитого: ${passed} ok, ${failed} fail`);
 if (failed > 0) {
   process.exit(1);
 }
+
+// --- lspRestartCore: a settings change that re-arguments the server -----------------------
+
+test("a projectRoot change asks for a server restart", () => {
+  assert.ok(needsServerRestart((s) => s === "xbsl.projectRoot"));
+});
+
+test("every setting of the command line asks for a restart", () => {
+  for (const section of SERVER_ARG_SETTINGS) {
+    assert.ok(needsServerRestart((s) => s === section), section);
+  }
+});
+
+test("a setting that does not reach the command line leaves the server alone", () => {
+  // these are applied by the client (or by the server on request), so a restart would only
+  // cost the project index
+  for (const section of ["xbsl.workspaceLint", "xbsl.deploy.appId", "xbsl.docs.language"]) {
+    assert.ok(!needsServerRestart((s) => s === section), section);
+  }
+});
+
+test("an unrelated extension's settings are ignored", () => {
+  assert.ok(!needsServerRestart((s) => s.startsWith("editor.")));
+});
