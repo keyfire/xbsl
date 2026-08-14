@@ -416,6 +416,20 @@ def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict
             # snippet, a property does not; data generated before the two were told apart
             # arrives in one bucket and gets neither the snippet nor a claim about which it is.
             entries.extend(_manager_entries(obj.get("manager")))
+            # A kind whose element generates a singleton type carrying its OWN entries names
+            # them on the object itself: the parameters of a client-work-parameters element are
+            # read as `Имя.Параметр` (docs topics/client-work-parameters). They live in the index
+            # as the members of the type of the same name, and without this the dot offered the
+            # kind's methods alone - everything the code actually reads was missing.
+            own = lookup.struct_by_name(name)
+            if isinstance(own, dict):
+                types = own.get("property_types") or {}
+                for prop in own.get("properties") or ():
+                    entries.append({
+                        "label": str(prop),
+                        "kind": "property",
+                        "detail": str(types.get(prop) or "свойство"),
+                    })
             for t in obj.get("tabular", []):
                 entries.append({"label": t.get("name", ""), "kind": "tabular", "detail": "табличная часть"})
             for t in obj.get("local_types", []):

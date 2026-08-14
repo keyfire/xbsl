@@ -1207,3 +1207,68 @@ def test_loop_variable_stays_untyped_when_the_collection_names_no_single_element
     types = local_var_types(src, offset, returns=lookup.method_returns(), static_roots=set())
 
     assert "Строка" not in types
+
+
+PARAM_LOOP_MODULE = """\
+метод Построить(Карточки: Массив<Каталог.СтраницаДанные>)
+    для Карточка из Карточки
+        знч Х = Карточка.Заголовок
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_loop_variable_takes_the_element_type_of_a_parameter():
+    """A parameter typed with a collection: the loop variable takes the element out of it.
+
+    The types of locals keep the nominal head alone, and the head of `Array<...>` is `Array` -
+    the element was thrown away before the loop could ask for it, so the dot after the loop
+    variable offered nothing.
+    """
+    lookup = IndexLookup(dict(INDEX))
+    src = engine.load_text("Каталог.xbsl", PARAM_LOOP_MODULE)
+    offset = PARAM_LOOP_MODULE.index("Карточка.Заголовок") + len("Карточка.")
+    types = local_var_types(src, offset, returns=lookup.method_returns(), static_roots=set())
+
+    assert types["Карточки"] == "Массив"
+    assert types["Карточка"] == "Каталог.СтраницаДанные"
+
+
+def test_completion_offers_the_own_entries_of_an_element():
+    """An element that generates a singleton type carrying its own entries offers them by name.
+
+    The parameters of a client-work-parameters element are read as `Имя.Параметр`; they live in
+    the index as the members of the type of the same name, and the dot used to offer the kind's
+    own methods alone.
+    """
+    idx = dict(INDEX)
+    idx["objects"] = [*INDEX["objects"], {
+        "name": "ПараметрыСайта",
+        "kind": "ПараметрыРаботыКлиента",
+        "path": "Основное/ПараметрыСайта.yaml",
+        "line": 3,
+        "tabular": [],
+        "attributes": [],
+        "local_types": [],
+        "family": [],
+        "values": [],
+        "manager": {"methods": ["Обновить"]},
+    }]
+    idx["struct_members"] = {
+        "ПараметрыСайта": {
+            "properties": ["АдресСайта"],
+            "property_types": {"АдресСайта": "Строка"},
+            "kind": "ПараметрыРаботыКлиента",
+        },
+    }
+    got = resolve_completions(
+        IndexLookup(idx),
+        language_id="xbsl",
+        line_prefix="    знч А = ПараметрыСайта.",
+        file_stem="ГлавнаяСтраница",
+        stdlib_members={},
+    )
+
+    labels = {e["label"] for e in got or []}
+    assert "АдресСайта" in labels and "Обновить" in labels

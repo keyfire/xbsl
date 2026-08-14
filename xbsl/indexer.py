@@ -43,6 +43,7 @@ from pathlib import Path
 
 from xbsl import __version__
 from xbsl import parser as P
+from xbsl import terms
 from xbsl.dataset import PLACEHOLDER
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
@@ -179,18 +180,27 @@ def _section_item_lines(s: SourceFile, key: str) -> dict[str, deque[int]]:
     return queues
 
 
-def _named_items(s: SourceFile, data: dict, key: str) -> list[dict]:
-    """{name, line} of named items of a top-level list section (ТабличныеЧасти/Элементы)."""
-    items = data.get(key)
+def _named_items(s: SourceFile, data: dict, key: str, kind: str | None = None) -> list[dict]:
+    """{name, line} of named items of a top-level list section (`TabularParts`, `Elements`).
+
+    The section key and the name of an item are read in EITHER spelling: an English project is
+    legal code the platform reads the same way, and while only the Russian keys were tried such a
+    project produced an empty index - the tree, the navigation and the dot completion had nothing
+    to work with.
+    """
+    items = value_of(data, key, kind)
     if not isinstance(items, list):
         return []
     queues = _section_item_lines(s, key)
     out: list[dict] = []
     for item in items:
-        if isinstance(item, dict) and isinstance(item.get("Имя"), str):
-            name = item["Имя"]
-            q = queues.get(name)
-            out.append({"name": name, "line": q.popleft() if q else 1})
+        if not isinstance(item, dict):
+            continue
+        name = item.get("Имя") or item.get("Name")
+        if not isinstance(name, str) or not name:
+            continue
+        q = queues.get(name)
+        out.append({"name": name, "line": q.popleft() if q else 1})
     return out
 
 
@@ -434,6 +444,12 @@ _METADATA_MEMBER_SECTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     "Структура": ("Поля", (PLACEHOLDER,)),
     "ХранимаяСтруктура": ("Поля", (PLACEHOLDER,)),
     "НаборКонстант": ("Константы", (PLACEHOLDER + ".Запись", PLACEHOLDER + ".Данные")),
+    # Client work parameters: "for every parameter described in the element a property OF THE SAME
+    # NAME is generated on that object" (docs topics/client-work-parameters), and the same names
+    # fill the service type the handler returns. Without this the dot after such an element offered
+    # the kind's own methods alone - the parameters, which is what the code actually reads, were
+    # missing.
+    "ПараметрыРаботыКлиента": ("Параметры", (PLACEHOLDER, PLACEHOLDER + ".Параметры")),
 }
 
 #: The fallback for `generated_returns` when the data carries no manager_member_types section:
@@ -458,6 +474,27 @@ def _with_object_name(spelling: str, name: str) -> str:
     documentation page and may carry braces of its own.
     """
     return spelling.replace(PLACEHOLDER, name)
+
+
+def _generated_type_spellings(pattern: str, name: str, kind: str) -> tuple[str, ...]:
+    """Every spelling of a type the platform generates for an element of the kind.
+
+    A project written in English calls such a type by an English name, and the type is looked
+    up by the name the code actually writes - registering the Russian spelling alone left the
+    dot after the element with nothing in an English project. The pair of a facet
+    (`ConstantsSet.Record`) is declared by the platform; the remaining suffixes are ordinary
+    property names, where the dictionary holds the pair.
+    """
+    own = _with_object_name(pattern, name)
+    if PLACEHOLDER + "." not in pattern:
+        return (own,)
+    suffix = pattern.split(".", 1)[1]
+    spellings = [suffix]
+    faceted = terms.english(f"{kind}.{suffix}", "facets")
+    if faceted and "." in faceted:
+        spellings.append(faceted.split(".", 1)[1])
+    spellings.extend(terms.forms(suffix, "properties"))
+    return tuple(dict.fromkeys(f"{name}.{s}" for s in spellings))
 
 
 def _field_types(members) -> dict[str, str]:
@@ -636,7 +673,8 @@ def build_index(root: Path) -> dict:
             data, err = _parsed(s)
             if err is not None or not isinstance(data, dict):
                 continue
-            name, kind = data.get("Имя"), object_kind(data)
+            kind = object_kind(data)
+            name = value_of(data, "Имя", kind)
             if not isinstance(name, str) or not isinstance(kind, str):
                 continue
             entry: dict = {
@@ -644,12 +682,12 @@ def build_index(root: Path) -> dict:
                 "kind": kind,
                 "path": rel(s.path),
                 "line": _top_name_line(s, name),
-                "tabular": _named_items(s, data, "ТабличныеЧасти"),
-                "attributes": _named_items(s, data, "Реквизиты"),
+                "tabular": _named_items(s, data, "ТабличныеЧасти", kind),
+                "attributes": _named_items(s, data, "Реквизиты", kind),
                 # Register fields live in their own sections - the query completion
                 # needs them next to the attributes.
-                "dimensions": _named_items(s, data, "Измерения"),
-                "resources": _named_items(s, data, "Ресурсы"),
+                "dimensions": _named_items(s, data, "Измерения", kind),
+                "resources": _named_items(s, data, "Ресурсы", kind),
                 "local_types": local_types.get(name, []),
             }
             # What an editor OFFERS after the object name: the types the kind generates as the
@@ -674,9 +712,8 @@ def build_index(root: Path) -> dict:
             if kind in _METADATA_MEMBER_SECTIONS:
                 members, member_types = _metadata_members(data, kind)
                 for pattern in _METADATA_MEMBER_SECTIONS[kind][1]:
-                    metadata_types[_with_object_name(pattern, name)] = (
-                        kind, members, member_types,
-                    )
+                    for spelling in _generated_type_spellings(pattern, name, kind):
+                        metadata_types[spelling] = (kind, members, member_types)
             objects.append(entry)
             if kind == "КомпонентИнтерфейса":
                 components.extend(_form_components(s, data, name, entry["path"]))

@@ -695,6 +695,20 @@ def signatures(toks: list[Token]) -> list[Signature]:
 
 # --- Local variable types (completion) --------------------------------------------------
 
+def _type_written(toks: list[Token], start: int) -> str | None:
+    """A type expression AS WRITTEN: `Массив<Каталог.Карточка>` stays whole.
+
+    The head alone is enough to look members up, and that is what the callers keep - but a
+    for-each takes its ELEMENT out of the generic argument, and the head has thrown it away:
+    a parameter typed `Массив<...>` left the loop variable untyped, so the dot after it offered
+    nothing at all.
+    """
+    te = type_expr(toks, start)
+    if te is None or not te.toks:
+        return None
+    return "".join(tok.value for tok in te.toks) or None
+
+
 def _type_head(toks: list[Token], start: int) -> str | None:
     """The head of a type expression: `Массив<Строка>` -> `Массив`, `Товар.Ссылка?` -> `Товар.Ссылка`.
 
@@ -953,16 +967,29 @@ def local_var_types(
             return name
         return None
 
+    # The written types live alongside the heads: the members are looked up by the head, while a
+    # for-each needs the generic argument the head drops.
+    written_types: dict[str, str] = {}
+
     if enclosing is not None:
         for p in enclosing.params:
-            name = _type_head(toks, p.type_start) if p.type_start is not None else None
+            if p.type_start is None:
+                continue
+            name = _type_head(toks, p.type_start)
             if name:
                 out[p.name.value] = name
+            full = _type_written(toks, p.type_start)
+            if full:
+                written_types[p.name.value] = full
     for d in declarations(toks, keywords=DECL_KEYWORDS + ("USE",)):
         if not start <= d.keyword.start < offset:
             continue
         if d.type_start is not None:
             name = _type_head(toks, d.type_start)
+            full = _type_written(toks, d.type_start)
+            if full:
+                for tok in d.names:
+                    written_types[tok.value] = full
         elif d.value_start is not None:
             name = _constructed_type(toks, d.value_start, resolve_root, returns)
         else:
@@ -971,7 +998,7 @@ def local_var_types(
             continue
         for tok in d.names:
             out[tok.value] = name
-    _add_loop_var_types(toks, start, offset, out, resolve_root, returns)
+    _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types)
     return out
 
 
@@ -993,6 +1020,7 @@ def element_type(written: str | None) -> str | None:
 
 def _add_loop_var_types(
     toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
+    written_types: dict[str, str] | None = None,
 ) -> None:
     """Type the variable of a `для X из <коллекция>` loop by the element type of the collection.
 
@@ -1007,7 +1035,19 @@ def _add_loop_var_types(
         name, after = toks[i + 1], toks[i + 2]
         if name.kind != "IDENT" or not (after.kind == "KEYWORD" and after.canonical == "IN"):
             continue
-        collection = chain_type(toks, i + 3, resolve_root, returns, written=True)
+        # A bare NAME as the collection (a parameter, a local): its written type is at hand and
+        # carries the generic argument, while resolve_root would answer the head alone.
+        collection = None
+        if written_types:
+            nxt = toks[i + 3] if i + 3 < n else None
+            after_name = toks[i + 4] if i + 4 < n else None
+            bare = nxt is not None and nxt.kind == "IDENT" and (
+                after_name is None or not (after_name.kind == "OP" and after_name.value in (".", "("))
+            )
+            if bare:
+                collection = written_types.get(nxt.value)
+        if collection is None:
+            collection = chain_type(toks, i + 3, resolve_root, returns, written=True)
         element = element_type(collection)
         if element:
             out[name.value] = element

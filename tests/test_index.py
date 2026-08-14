@@ -488,9 +488,6 @@ def test_family_offers_the_catalogue_not_the_safety_net(project):
 def test_metadata_sections_are_read_in_both_spellings(tmp_path):
     """The sources are bilingual: a structure whose section is written `Fields` describes the
     same type as one written in Russian, and a field may name itself `Name`.
-
-    The object's own name is still read in Russian only - a gap of the indexer as a whole
-    (the sections of a catalog are Russian-only there too), not of this section reader.
     """
     (tmp_path / "Данные.yaml").write_text("\n".join([
         "ElementKind: StorableStructure",
@@ -506,3 +503,72 @@ def test_metadata_sections_are_read_in_both_spellings(tmp_path):
     idx = build_index(tmp_path)
 
     assert idx["struct_members"]["Данные"]["properties"] == ["Идентификатор"]
+
+
+def test_an_english_project_is_indexed_like_a_russian_one(tmp_path):
+    """A project written entirely in English yields an index, not an empty one.
+
+    Only the Russian keys were read before, so such a project indexed to nothing at all: no
+    objects, no types, and the editor had neither a tree nor a dot completion to show.
+    """
+    (tmp_path / "ClientParameters.yaml").write_text("\n".join([
+        "ElementKind: ClientWorkParameters",
+        "Id: 57b9e1c6-46dc-491b-b4e8-3d8f5ceb92d6",
+        "Name: ClientParameters",
+        "Parameters:",
+        "    -",
+        "        Name: ServiceAddress",
+        "        Type: String",
+        "",
+    ]), encoding="utf-8")
+
+    idx = build_index(tmp_path)
+
+    assert [o["name"] for o in idx["objects"]] == ["ClientParameters"]
+    assert idx["struct_members"]["ClientParameters"]["properties"] == ["ServiceAddress"]
+
+
+def test_an_english_object_lists_its_sections(tmp_path):
+    """The named sections of an object are read in either spelling too - a catalog written in
+    English carries its attributes and tabular sections into the index like a Russian one."""
+    (tmp_path / "Products.yaml").write_text("\n".join([
+        "ElementKind: Catalog",
+        "Id: 4b2d6f8a-1c3e-4d5f-9a0b-2c4e6f8a0b1d",
+        "Name: Products",
+        "Attributes:",
+        "    -",
+        "        Name: Title",
+        "        Type: String",
+        "TabularParts:",
+        "    -",
+        "        Name: Lines",
+        "",
+    ]), encoding="utf-8")
+
+    catalog = build_index(tmp_path)["objects"][0]
+
+    assert [a["name"] for a in catalog["attributes"]] == ["Title"]
+    assert [t["name"] for t in catalog["tabular"]] == ["Lines"]
+
+
+def test_a_generated_type_answers_to_either_spelling(tmp_path):
+    """The type the platform generates for an element is known by both of its names.
+
+    The name is looked up as the code writes it, and which spelling that is depends on the
+    language of the project - so both are registered, whichever language the element uses.
+    """
+    (tmp_path / "Параметры.yaml").write_text("\n".join([
+        "ВидЭлемента: ПараметрыРаботыКлиента",
+        "Ид: 3a1c5e7f-9b0d-4a2c-8e6f-1b3d5f7a9c0e",
+        "Имя: Параметры",
+        "Параметры:",
+        "    -",
+        "        Имя: АдресСервиса",
+        "        Тип: Строка",
+        "",
+    ]), encoding="utf-8")
+
+    members = build_index(tmp_path)["struct_members"]
+
+    assert members["Параметры.Параметры"]["properties"] == ["АдресСервиса"]
+    assert members["Параметры.Parameters"] == members["Параметры.Параметры"]

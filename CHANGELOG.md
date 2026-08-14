@@ -12,6 +12,18 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Fixed
+- **A project written in English is indexed** - the name of an element and its named sections
+  were read in the Russian spelling alone, so an English project indexed to nothing at all: no
+  tree, no navigation, no completion. The type an element generates is registered under both of
+  its names, and the dot answers whichever the code writes.
+- **The dot after an element offers what the element carries** - the parameters of a client work
+  parameters element were absent from the completion, which listed the methods of the kind alone.
+- **A loop over a parameter types its variable** - where the collection is a parameter typed
+  `Array<...>`, the variable of the loop stayed untyped and the dot after it offered nothing.
+
 ## 2026-08-15 – 0.66.0
 
 ### Added
