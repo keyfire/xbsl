@@ -12,8 +12,9 @@
 ## Unreleased
 
 ### Fixed
-- **The "reference" link of `style/shadow-own-property` points at the right place** - the
-  section on name scopes and overriding, not the one on how names are spelled.
+- **Every documentation link of the rules was verified.** Three localization rules pointed at a
+  page that does not exist, and `style/shadow-project-name` led to the naming conventions instead
+  of the section on name overriding. The other 99 entries check out: pages and anchors exist.
 
 ## 0.61.0
 
