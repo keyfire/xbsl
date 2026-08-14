@@ -12,39 +12,12 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-14 – 0.64.0, 0.65.0
 
 ### Added
 - **`style/shadow-own-property`** - a local variable named like a property of its own element:
   the assignment goes into the variable and the property stays as it was.
 - **`code/unused-import`** - an import of a subsystem the code never turns to.
-
-### Fixed
-- **The English spellings of annotations.** `@OnServer` and its siblings read as no annotation
-  at all, so the method was checked by the default. Both forms are equal now - in annotations,
-  in visibility scopes and in the form event keys.
-- **Two holes in parsing.** A parenthesis starting a line no longer sticks to the preceding
-  expression, and a declaration like `var Attempt: (()->Boolean)? = Undefined` parses: it used
-  to bring the whole file down.
-- **The events of a type.** Binding a handler to a component built in code no longer looks like
-  a member that does not exist; a typo in an event name is still caught.
-- **An id is unique within its owner.** The platform accepts the same identifier on attributes
-  of DIFFERENT objects - its own demo project is written that way; object ids are compared across
-  the project, item ids inside their own file. The rule also reads the English `Id` key now.
-- **Three rules stopped arguing with lawful code:** the key of a dynamic list row, a required
-  field and an event parameter of a reference type, a standard attribute added without an id.
-- **The README links open again:** splitting the guide left thirteen broken ones per language.
-  A test keeps them honest now.
-
-### Changed
-- **A collection literal names the type.** `val Users = <String>[]` declares it no worse than a
-  constructor, and a member an array does not have is now visible after such a literal.
-- **The query files of virtual tables (`.xbql`) came under the checks.** An unknown table there
-  used to be found by the server compiler alone.
-
-## 2026-08-14 – 0.64.0
-
-### Added
 - **Eight rules for platform behaviour the compiler accepts and the screen then contradicts**
   (142 → 150):
   - `code/permission-handlers-need-recalc` – a permission handler is declared while nothing
@@ -64,7 +37,28 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   - `yaml/card-literal-stretch-weight` (info, off) – a stretch weight on a card: in a vertical
     column it collapses on Safari.
 
+### Changed
+- **A collection literal names the type.** `val Users = <String>[]` declares it no worse than a
+  constructor, and a member an array does not have is now visible after such a literal.
+- **The query files of virtual tables (`.xbql`) came under the checks.** An unknown table there
+  used to be found by the server compiler alone.
+
 ### Fixed
+- **The English spellings of annotations.** `@OnServer` and its siblings read as no annotation
+  at all, so the method was checked by the default. Both forms are equal now - in annotations,
+  in visibility scopes and in the form event keys.
+- **Two holes in parsing.** A parenthesis starting a line no longer sticks to the preceding
+  expression, and a declaration like `var Attempt: (()->Boolean)? = Undefined` parses: it used
+  to bring the whole file down.
+- **The events of a type.** Binding a handler to a component built in code no longer looks like
+  a member that does not exist; a typo in an event name is still caught.
+- **An id is unique within its owner.** The platform accepts the same identifier on attributes
+  of DIFFERENT objects - its own demo project is written that way; object ids are compared across
+  the project, item ids inside their own file. The rule also reads the English `Id` key now.
+- **Three rules stopped arguing with lawful code:** the key of a dynamic list row, a required
+  field and an event parameter of a reference type, a standard attribute added without an id.
+- **The README links open again:** splitting the guide left thirteen broken ones per language.
+  A test keeps them honest now.
 - **The metamodel reset now clears the `key_aliases` cache as well** – after pinning another
   data root the editor's metadata tree could show the pairs of the previous one.
 - **The language guard judges untracked files too** – a brand-new module with bare Cyrillic
