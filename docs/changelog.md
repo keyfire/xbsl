@@ -19,31 +19,153 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
+
+### Added
+- **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
+  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
+  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
+- **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
+  its own: the platform draws a button that opens the value in a separate window next to it. That
+  is usually what the author wants, so the rule answers "where did this button come from" rather
+  than reports a mistake.
+- **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
+  project in the chosen language. A key with no translation keeps its default text - the same
+  fallback the platform makes.
+
+### Changed
+- **Completion answers where it used to stay silent.** A quarter of the dots in a live project
+  got no answer; the sweep is down by a third. The type of a variable now comes from a literal
+  (`val Key = ""` is a `String`) and from a call with no qualifier - a method of the module
+  itself, which is how a module calls its own code. A chain is no longer cut by a non-null
+  operator, a loop variable takes its element out of the written type of the collection, and a
+  declaration inside a loop leans on the loop variable. A value of an interface component
+  answers with its own properties, the methods of its module and the members of the platform
+  type it inherits. Inside `new Type(` the names of what the type carries are offered, with the
+  `Name = ` written for you. A query held by a `use` declaration carries its columns to the loop.
+- **A facet namespace answers after the dot.** A facet is named by two segments
+  (`Entity.Privilege`), and the catalogue keys it that way - the first segment alone was not a
+  type, so neither the completion nor the chain had anything to say. Now the namespace offers
+  the facets that may follow, and the chain resolves the two-segment root.
+- **The types an object generates carry its data.** `Goods.Object` answers with the attributes
+  and the tabular sections of its yaml, a tabular section is a type of its own with its own
+  attributes, and `Goods.Reference` answers what the kind gives a reference. The catalogue
+  describes these by KIND, and the object's own data is joined with that.
+- **A member of the type a module extends is addressed by a bare name.** In a module of
+  `Goods.Object` a bare `Lines` is its tabular section, not an unknown name: the completion after
+  it answers, and a loop over it takes the row type. The object type now carries the declared
+  type of every member it holds.
+- **A single-row query answers by column off the result.** The code reads such a query straight
+  off the variable, without a loop; only the loop variable used to carry the columns.
+- **A generic member resolves by the arguments the code wrote.** `Array<Catalog.Card>.First()`
+  answers `Catalog.Card`, `Map<String, Number>.Get(...)` answers `Number`: the catalogue names
+  such a result by the type PARAMETER, and the parameter lists of the types are now extracted
+  alongside it.
+
+### Fixed
+- **A generic METHOD lost its signature and its result.** The parameters are printed between
+  the name and the parenthesis (`ReadObject<ObjectType>(...)`), and the parser demanded the name
+  followed by the parenthesis - so the method kept neither. A deprecated overload made it worse:
+  its own result disagreed with the current one and the member was dropped altogether. Both are
+  read now, the current form outranks the compatibility one, and the type parameters of a method
+  are extracted - `JsonSerialization.ReadObject(Text, Type<Package>)` answers `Package`.
+- **A collection knew the type of nothing it returns.** The base types of a generic are printed
+  with their argument (`Collection<ItemType>`), and the extractor read the whole spelling as a
+  name - so `Array` kept `Object` as its only ancestor and inherited no result types at all:
+  779 types carried none. Both halves are fixed - the extractor reads the head, and the loader
+  builds the inherited result types for a type that declares none of its own.
+- **A project written in English is indexed** - the name of an element and its named sections
+  were read in the Russian spelling alone, so an English project indexed to nothing at all: no
+  tree, no navigation, no completion. The type an element generates is registered under both of
+  its names, and the dot answers whichever the code writes.
+- **The dot after an element offers what the element carries** - the parameters of a client work
+  parameters element were absent from the completion, which listed the methods of the kind alone.
+- **A loop over a parameter types its variable** - where the collection is a parameter typed
+  `Array<...>`, the variable of the loop stayed untyped and the dot after it offered nothing.
+- **A typo in a path no longer passes for a clean check.** A path that is not there is an error
+  with a plain message instead of "0 files checked, 0 findings" and the exit code of success; a
+  path that exists but holds no sources now gets a warning.
+
+## 2026-08-14 – 0.64.0, 0.65.0
+
+### Added
+- **`style/shadow-own-property`** - a local variable named like a property of its own element:
+  the assignment goes into the variable and the property stays as it was.
+- **`code/unused-import`** - an import of a subsystem the code never turns to.
+- **Eight rules for platform behaviour the compiler accepts and the screen then contradicts**
+  (142 → 150):
+  - `code/permission-handlers-need-recalc` – a permission handler is declared while nothing
+    recomputes: an edit of the algorithm silently does not act on existing data.
+  - `yaml/dynlist-row-editing` – a row-editing handler on a flat list: the platform never calls
+    that event, and a click opens the automatic form instead.
+  - `yaml/localization-ref-to-template` – a `$Dictionary.Key` reference pointing at a key of the
+    templates section: the apply fails with a localized-string-not-found answer.
+  - `yaml/insert-row-needs-align` – a horizontal group holding an insert with no explicit
+    alignment: the element with the insert slides down against its neighbours.
+  - `code/url-params-partial-encoding` (info, off) – the Url method encodes a parameter value
+    only partially, and the address arrives cut.
+  - `yaml/dynlist-column-sort-lost` (info, off) – a column whose value calls something: clicking
+    the header sorts by something else.
+  - `yaml/matrix-group-max-width` (info, off) – a numeric width maximum on a matrix group: a
+    phone draws the page at desktop width.
+  - `yaml/card-literal-stretch-weight` (info, off) – a stretch weight on a card: in a vertical
+    column it collapses on Safari.
+
+### Changed
+- **A collection literal names the type.** `val Users = <String>[]` declares it no worse than a
+  constructor, and a member an array does not have is now visible after such a literal.
+- **The query files of virtual tables (`.xbql`) came under the checks.** An unknown table there
+  used to be found by the server compiler alone.
+
+### Fixed
+- **The English spellings of annotations.** `@OnServer` and its siblings read as no annotation
+  at all, so the method was checked by the default. Both forms are equal now - in annotations,
+  in visibility scopes and in the form event keys.
+- **Two holes in parsing.** A parenthesis starting a line no longer sticks to the preceding
+  expression, and a declaration like `var Attempt: (()->Boolean)? = Undefined` parses: it used
+  to bring the whole file down.
+- **The events of a type.** Binding a handler to a component built in code no longer looks like
+  a member that does not exist; a typo in an event name is still caught.
+- **An id is unique within its owner.** The platform accepts the same identifier on attributes
+  of DIFFERENT objects - its own demo project is written that way; object ids are compared across
+  the project, item ids inside their own file. The rule also reads the English `Id` key now.
+- **Three rules stopped arguing with lawful code:** the key of a dynamic list row, a required
+  field and an event parameter of a reference type, a standard attribute added without an id.
+- **The README links open again:** splitting the guide left thirteen broken ones per language.
+  A test keeps them honest now.
+- **The metamodel reset now clears the `key_aliases` cache as well** – after pinning another
+  data root the editor's metadata tree could show the pairs of the previous one.
+- **The language guard judges untracked files too** – a brand-new module with bare Cyrillic
+  slipped past the local run and surfaced in CI.
+
+## 2026-08-13 – 0.63.0
+
+### Added
+- **Rule `yaml/binding-needs-auto`: a binding with a nullable return on a property that has no
+  empty value.** The client writes "unexpected value" into the server log on every
+  recomputation - invisible in the browser; a live project had accumulated almost two thousand
+  records.
+- **Rule `yaml/date-input-needs-plain-date`: a nullable date input.** The apply passes cleanly,
+  yet the field is not drawn and the group left empty disappears entirely. The cure is a plain
+  type: "not set" is expressed by the empty date.
+
+### Fixed
+- **`yaml/ref-needs-nullable` judges unions too.** A union with a reference and no empty value
+  fails to apply - a mixed one such as `String|Goods.Ref` included; the fix is to add `|?`.
+
 ## 2026-08-11 – 0.62.0
 
 ### Added
 - **Rule `code/component-in-server-context`: an interface component in a server environment.**
-  A `Component.Member(...)` access from code compiled for the server – a `@OnServer` method
-  anywhere, or an unannotated method of a server or client-and-server module. The component's
-  type lives on the client, and the server compilation answers "Variable X is not defined" –
-  the linter said nothing while the stand silently rolled back to the previous build. A
-  namesake of the component among elements of other kinds and shadowed names are not judged;
-  verified against the live case (the finding's position matches the compiler's) and by corpus
-  runs with zero false positives.
-- **The check gained `--out`: the report is written to a UTF-8 file without BOM.** Comparing
-  findings before and after a change is an everyday scenario, and on Windows the shell
-  redirection prefixes the output with a BOM that breaks JSON parsing. Works with every
-  `--format` value (and together with `--fix`); the text-format summary stays on stderr.
+  The component's type lives on the client, so the server compilation answers "Variable X is not
+  defined" and the stand silently rolls back to the previous build.
+- **The check gained `--out`: the report is written to a UTF-8 file without BOM.** On Windows
+  the shell redirection prefixes the output with a BOM that breaks JSON parsing.
 
 ### Fixed
-- **An event-log event property gets its `Id`.** Adding a field now reconciles the `Id` line
-  with the item's metamodel class BOTH ways: a class that declares `Id` gets one written
-  (without it applying the build rejects the object, "ID required"), a class without it has
-  the line dropped, as before. The judge is the same source the `yaml/item-id-required` rule
-  uses; the hand-written section templates no longer have to know the exceptions. A sweep of
-  every kind-section pair against the metamodel found exactly two divergences: the event
-  property (the missing `Id`, this defect) and the processing attribute (a superfluous one,
-  already dropped on the fly).
+- **An event-log event property gets its `Id`.** Adding a field now reconciles the identifier
+  with the metamodel both ways: where it is needed it is written, where it is superfluous it is
+  dropped.
 
 ## 2026-08-09 – 0.58.0, 0.59.0, 0.59.1, 0.60.0, 0.61.0
 
@@ -54,32 +176,26 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **The variable of a `for X in Collection` loop gets its type** from the element type of the
   collection. For that a structure now carries the type of every field in the index; a collection
   with two type parameters names no element, and there completion stays silent.
-- **The members of the kinds' singleton types reached the data: from 12 kinds of 41 to 31.** The
-  map from a documentation template page to an element kind is now derived from the serializer's
-  own kind enum instead of being hand-written; a template that cannot be named is reported.
+- **The members of the kinds' singleton types reached the data: from 12 kinds of 41 to 31.**
 - **A call of a kind's method is typed.** The result type comes from the signatures in the
   documentation (25 kinds of 31), so completion knows what `Get()` of a constants set,
   `FindByCode()` and `GetReference()` of a catalog answered with.
 - **A kind manager's properties and methods are told apart** – completion inserts the parentheses
   of a method and withholds them from a property.
 - **`code/unknown-structure-field`: a field of a project structure is checked against its
-  declaration** (139 rules now). The receiver is typed by a variable's declaration, by a
-  constructor and by the element type of a for-each loop; on any doubt the rule stays silent.
+  declaration** (139 rules now).
 - **Stale baseline entries can be seen and pruned:** `--stale-baseline` lists the entries that no
   longer suppress anything, `--prune-baseline` removes them and leaves the live ones alone.
 - **The linter finds the project's baseline by itself** – it looks for `.xbsllint-baseline` upwards
   from the checked files and names the path it found; `--no-baseline` switches the search off.
 - **Tool answers name the data they speak for.** `--version`, the MCP `version_info` and the LSP
   startup line carry the data root and where it came from.
-- **`conventions/untranslated-code-literal` – visible text left as a literal in a module.** What is
-  judged is not the literal but where it goes: an argument of a message to the user, a property of
-  an event log event, a wrapper method included. Off by default.
+- **`conventions/untranslated-code-literal` – text visible to the user left as a literal in a
+  module** (off by default).
 
 ### Changed
-- **The dot completion offers what the catalogue knows about the kind.** The generic safety net
-  stays with the rules, where a name too many is milder than a name too few; for a kind the
-  catalogue does not know, completion is now empty and the editor falls back to word completion
-  instead of inventing names.
+- **The dot completion offers what the catalogue knows about the kind** - instead of a generic
+  list that surfaced names which do not exist.
 - **`code/unused-method` judges the public API of common modules.** Only annotations naming a
   caller outside the project silence a method; visibility and environment annotations no longer do.
 - **The dictionary of element kinds is derived from the distribution:** 41 kinds instead of 35, and
@@ -95,10 +211,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the entity name table shrank from 15 entries to 4 confirmed ones.
 
 ### Fixed
-- **Types described in metadata offered nothing after the dot.** The indexer read `TabularParts`
-  and `Attributes` but neither the `Fields` of a structure nor the `Constants` of a set; it does
-  now, and a constants set reaches the index under the generated names `<Name>.Record` and
-  `<Name>.Data`.
+- **Types described in metadata offered nothing after the dot** - the indexer skipped the fields
+  of a structure and the constants of a set.
 - **`code/unknown-structure-field` crashed in the released wheel** (0.59.0): the tree walk read the
   fields of a node in a way the native build does not support. A test now keeps that walk out.
 - **The baseline summary line counts entries,** not suppressions - one entry may hold several. The
