@@ -1048,6 +1048,11 @@ def local_var_types(
             full = _type_written(toks, p.type_start)
             if full:
                 written_types[p.name.value] = full
+    # The loop variables FIRST: a declaration inside a loop leans on the variable the loop
+    # introduced (`исп Поток = Страница.Загрузить()...`), and typing the declarations first left
+    # such a chain rootless. The pass runs again below, for a loop whose source is declared above.
+    _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types,
+                        own_returns)
     for d in declarations(toks, keywords=DECL_KEYWORDS + ("USE",)):
         if not start <= d.keyword.start < offset:
             continue

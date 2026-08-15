@@ -1507,3 +1507,30 @@ def test_a_query_held_by_a_use_declaration_carries_its_columns():
     offset = USE_QUERY_MODULE.index("Запись.Наименование") + len("Запись.")
 
     assert query_row_columns(src, offset) == {"Запись": ["Ссылка", "Наименование"]}
+
+
+DECL_INSIDE_LOOP = """\
+метод М(Файлы: ЧитаемыйМассив<ДвоичныйОбъект.Ссылка>)
+    для Файл из Файлы
+        исп Поток = Файл.Загрузить().ОткрытьПотокЧтения()
+        Поток.ВСтроку()
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_declaration_inside_a_loop_leans_on_the_loop_variable():
+    """The loop variable is typed BEFORE the declarations now: a chain rooted in it used to
+    start from a name with no type, and everything downstream stayed unknown."""
+    src = engine.load_text("К.xbsl", DECL_INSIDE_LOOP)
+    offset = DECL_INSIDE_LOOP.index("Поток.ВСтроку") + len("Поток.")
+    returns = {
+        "ДвоичныйОбъект.Ссылка": {"Загрузить": "ДвоичныйОбъект"},
+        "ДвоичныйОбъект": {"ОткрытьПотокЧтения": "ПотокЧтения"},
+    }
+
+    types = local_var_types(src, offset, returns=returns, static_roots=set())
+
+    assert types["Файл"] == "ДвоичныйОбъект.Ссылка"
+    assert types["Поток"] == "ПотокЧтения"
