@@ -24,6 +24,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   answers with its own properties, the methods of its module and the members of the platform
   type it inherits. Inside `new Type(` the names of what the type carries are offered, with the
   `Name = ` written for you. A query held by a `use` declaration carries its columns to the loop.
+- **A facet namespace answers after the dot.** A facet is named by two segments
+  (`Entity.Privilege`), and the catalogue keys it that way - the first segment alone was not a
+  type, so neither the completion nor the chain had anything to say. Now the namespace offers
+  the facets that may follow, and the chain resolves the two-segment root.
 - **A generic member resolves by the arguments the code wrote.** `Array<Catalog.Card>.First()`
   answers `Catalog.Card`, `Map<String, Number>.Get(...)` answers `Number`: the catalogue names
   such a result by the type PARAMETER, and the parameter lists of the types are now extracted

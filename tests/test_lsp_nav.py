@@ -1657,3 +1657,36 @@ def test_a_generic_call_without_a_type_argument_stays_silent():
                             static_roots={"СериализацияJson"})
 
     assert "БезТипа" not in types
+
+
+def test_completion_after_a_facet_namespace():
+    """`Сущность.` is a namespace, not a type: the catalogue keys such a type by BOTH segments,
+    and the dot after the first one used to answer nothing - though what may follow is known."""
+    got = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    знч П = [Сущность.",
+        file_stem="Абоненты",
+        stdlib_members={"Сущность.Право": {"properties": ["Чтение"]},
+                        "Сущность.Объект": {"methods": ["Записать"]},
+                        "Массив": {"methods": ["Добавить"]}},
+    )
+
+    assert [e["label"] for e in got or []] == ["Объект", "Право"]
+
+
+FACET_CHAIN = """\
+метод М()
+    знч П = [Сущность.Право.Чтение]
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_facet_is_resolved_as_a_two_segment_root():
+    """A facet is named by two segments, and resolving the first one apart killed the chain at
+    its root: the namespace alone is not a type."""
+    src = engine.load_text("М.xbsl", FACET_CHAIN)
+    offset = FACET_CHAIN.index("Право.Чтение") + len("Право.")
+
+    got = chain_type_at(src, offset, returns={}, static_roots={"Сущность.Право"})
+
+    assert got == "Сущность.Право"

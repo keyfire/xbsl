@@ -898,11 +898,22 @@ def chain_type(
             i = _skip_balanced(toks, j, "(", ")")
         else:
             current = resolve_root(t.value)
+            consumed = i + 1
+            if current is None:
+                # A FACET is named by TWO segments (`Сущность.Право`, `Пользователи.Объект`) and
+                # the catalogue keys it that way: the first segment alone is a namespace, not a
+                # type, so resolving it apart answered nothing and the chain died at its root.
+                dot = _skip_comments(toks, i + 1)
+                tail = _skip_comments(toks, dot + 1) if dot < n else n
+                if (dot < n and toks[dot].kind == "OP" and toks[dot].value == "."
+                        and tail < n and toks[tail].kind == "IDENT"):
+                    current = resolve_root(f"{t.value}.{toks[tail].value}")
+                    consumed = tail + 1
             if current is None:
                 return None
             if resolve_written is not None:
                 current_written = resolve_written(t.value)
-            i += 1
+            i = consumed
     else:
         return None
     # the member links: .Имя(...) or .Имя - the catalog (`returns`) maps both a method

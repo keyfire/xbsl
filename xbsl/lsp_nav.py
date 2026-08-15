@@ -411,6 +411,16 @@ def _constructor_argument_entries(lookup: IndexLookup, type_name: str) -> list[d
     ]
 
 
+def _facet_entries(stdlib_members: Optional[dict], namespace: str) -> list[dict]:
+    """The facet names that may follow a namespace: `Сущность.` -> Ключ, Объект, Право..."""
+    prefix = f"{namespace}."
+    seen = sorted({
+        name[len(prefix):] for name in (stdlib_members or {})
+        if name.startswith(prefix) and "." not in name[len(prefix):]
+    })
+    return [{"label": name, "kind": "type", "detail": "тип платформы"} for name in seen]
+
+
 def _inherited_entries(
     lookup: IndexLookup, type_name: str, stdlib_members: Optional[dict],
 ) -> list[dict]:
@@ -722,7 +732,12 @@ def resolve_completions(
         # Not a project object and not a variable - so a stdlib type or a global (КонтекстДоступа.):
         # members come from the linter dataset's type_members, keyed there under both name forms.
         members = (stdlib_members or {}).get(token)
-        return _stdlib_entries(members) if members else None
+        if members:
+            return _stdlib_entries(members)
+        # A NAMESPACE of facets (`Сущность.Право`, `Сущность.Объект`): the catalogue keys such a
+        # type by both segments, and the first one alone is not a type at all - the dot after it
+        # used to answer nothing, though the names that may follow are known exactly.
+        return _facet_entries(stdlib_members, token) or None
     if language_id == "yaml" and _YAML_TYPE_RE.search(line_prefix):
         return _yaml_type_entries(lookup, stdlib_names or stdlib_members) or None
     # A bare name (no dot before it): the top-level scope - code templates, visible variables,
