@@ -43,7 +43,7 @@ from pathlib import Path
 
 from xbsl import __version__
 from xbsl import parser as P
-from xbsl import terms
+from xbsl import dataset, metamodel, terms
 from xbsl.dataset import PLACEHOLDER
 from xbsl.engine import SourceFile, find_sources, load
 from xbsl.lexer import linemap, tokens
@@ -472,6 +472,57 @@ _GENERATED_RETURNS: dict[str, dict[str, str]] = {
 }
 
 
+def _tabular_items(s: SourceFile, data: dict, kind: str) -> list[dict]:
+    """Tabular sections with the attributes each one holds.
+
+    A tabular section is a TYPE of its own (`Программы.Возможности`), and its attributes are
+    what the dot after a row offers - the plain name-and-line record could not answer that.
+    """
+    items = _named_items(s, data, "ТабличныеЧасти", kind)
+    described = value_of(data, "ТабличныеЧасти", kind)
+    by_name: dict[str, list[str]] = {}
+    if isinstance(described, list):
+        for part in described:
+            if not isinstance(part, dict):
+                continue
+            part_name = part.get("Имя") or part.get("Name")
+            rows = value_of(part, "Реквизиты", kind)
+            if not isinstance(part_name, str) or not isinstance(rows, list):
+                continue
+            names = [
+                str(r.get("Имя") or r.get("Name")) for r in rows
+                if isinstance(r, dict) and (r.get("Имя") or r.get("Name"))
+            ]
+            if names:
+                by_name[part_name] = sorted(names)
+    for item in items:
+        fields = by_name.get(item.get("name", ""))
+        if fields:
+            item["attributes"] = fields
+    return items
+
+
+def _kind_facet_members() -> dict[str, dict[str, dict[str, list[str]]]]:
+    """{kind: {facet: members}} - what the catalogue gives the types a KIND generates.
+
+    The pages describe them by kind (`Справочник.Ссылка`, `Документ.Объект`), while the code
+    names them by the object (`Программы.Ссылка`). The join happens per project object; here
+    only the kind side is collected, once per process.
+    """
+    catalog = dataset.load_json("stdlib.json")
+    facets = {**(catalog.get("facet_members") or {}), **(catalog.get("type_members") or {})}
+    out: dict[str, dict[str, dict[str, list[str]]]] = {}
+    for name, members in facets.items():
+        kind, _, facet = name.partition(".")
+        if not facet or "." in facet or not metamodel.canonical_kind(kind):
+            continue
+        out.setdefault(metamodel.canonical_kind(kind), {})[facet] = {
+            "properties": list(members.get("properties") or ()),
+            "methods": list(members.get("methods") or ()),
+        }
+    return out
+
+
 def _with_object_name(spelling: str, name: str) -> str:
     """A result type spelled for a template, with the object's own name put in.
 
@@ -704,7 +755,7 @@ def build_index(root: Path) -> dict:
                 "kind": kind,
                 "path": rel(s.path),
                 "line": _top_name_line(s, name),
-                "tabular": _named_items(s, data, "ТабличныеЧасти", kind),
+                "tabular": _tabular_items(s, data, kind),
                 "attributes": _named_items(s, data, "Реквизиты", kind),
                 # Register fields live in their own sections - the query completion
                 # needs them next to the attributes.
@@ -802,6 +853,35 @@ def build_index(root: Path) -> dict:
                 member: _with_object_name(result, o["name"])
                 for member, result in table.items()
             }
+
+    # The types an OBJECT of the project generates carry its own data: `Программы.Объект` holds
+    # the attributes and the tabular sections written in its yaml, `Программы.Ссылка` what the
+    # kind gives a reference, and a tabular section is a type of its own with its attributes.
+    # The catalogue describes these by KIND (`Справочник.Ссылка`), and their members are joined
+    # with the object's own here - without this a variable holding an object answered nothing.
+    kind_facets = _kind_facet_members()
+    for o in objects:
+        own_attrs = [a["name"] for a in o.get("attributes") or []]
+        tabular = [x["name"] for x in o.get("tabular") or []]
+        registers = [x["name"] for x in (o.get("dimensions") or []) + (o.get("resources") or [])]
+        by_facet = kind_facets.get(o["kind"]) or {}
+        for facet, members in by_facet.items():
+            name = f"{o['name']}.{facet}"
+            if name in struct_members:
+                continue
+            props = sorted(set(members.get("properties") or ()) | set(
+                own_attrs + tabular + registers if facet in ("Объект", "Данные", "Запись") else []
+            ))
+            facet_methods = sorted(set(members.get("methods") or ()))
+            record: dict = {"properties": props, "kind": o["kind"]}
+            if facet_methods:
+                record["methods"] = facet_methods
+            struct_members[name] = record
+        for part in o.get("tabular") or []:
+            name = f"{o['name']}.{part['name']}"
+            rows = part.get("attributes") or []
+            if name not in struct_members and rows:
+                struct_members[name] = {"properties": list(rows), "kind": o["kind"]}
 
     # Usages (for "find usages"): names of objects, components and methods encountered as a
     # call/member/chain root in modules, plus methods in yaml handlers. Resolving a concrete

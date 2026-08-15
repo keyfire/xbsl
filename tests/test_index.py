@@ -212,7 +212,9 @@ def test_object_tabular_and_local_types(project):
     assert obj["kind"] == "Справочник"
     assert obj["path"] == "Основное/Товары.yaml"
     assert obj["line"] == 3  # the line of the Имя key
-    assert obj["tabular"] == [{"name": "Состав", "line": 10}]
+    # A tabular section carries the attributes it holds: it is a TYPE of its own, and they are
+    # what the dot after a row offers.
+    assert obj["tabular"] == [{"name": "Состав", "line": 10, "attributes": ["Наименование"]}]
     assert obj["local_types"] == [
         {"name": "Сводка", "path": "Основное/Товары.xbsl", "line": 4},
     ]
@@ -601,3 +603,19 @@ def test_an_interface_component_describes_the_type_of_its_value(tmp_path):
     assert record["methods"] == ["Проверить"]
     # The platform type it extends - the completion adds its members to the component's own.
     assert record["base"] == "Форма"
+
+
+def test_the_types_an_object_generates_carry_its_data(project):
+    """`Товары.Объект` holds the attributes and the tabular sections written in the yaml, and
+    `Товары.Ссылка` what the kind gives a reference - the catalogue describes those by KIND.
+
+    A variable holding an object used to answer nothing after the dot: the index knew the object
+    and the family of names it generates, but not the members of any of them.
+    """
+    idx = build_index(project)["struct_members"]
+
+    assert "Наименование" in idx["Товары.Объект"]["properties"]
+    assert "Состав" in idx["Товары.Объект"]["properties"]      # the tabular section is a property too
+    assert idx["Товары.Состав"]["properties"] == ["Наименование"]
+    assert "Ид" in idx["Товары.Ссылка"]["properties"]
+    assert "ЗагрузитьОбъект" in idx["Товары.Ссылка"]["methods"]
