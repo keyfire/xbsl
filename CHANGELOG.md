@@ -14,6 +14,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## Unreleased
 
+### Added
+- **Rule `code/missing-import`** (warning, in the default set) - a module names the type of a
+  public element of another subsystem without an import line for that subsystem. Compilation
+  fails at exactly that line while the linter stayed silent: the direct check existed for yaml
+  only, and the code side had just the mirror `code/unused-import`. WRITTEN type positions are
+  judged - a parameter, a variable, a return, `new`, `as`, `is`, generic arguments - where a
+  name can be nothing else. A bare name at the head of a chain (`Module.Method()`) is left
+  alone on purpose: there a name is also a variable, an attribute of the paired yaml or an
+  implicit name of the platform, and a probe over five corpora found exactly one candidate of
+  that shape, which turned out to be false.
+
 ### Changed
 - **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
   five corpora (47 072 accesses of the shape `X.name`, counting a named receiver type) – between

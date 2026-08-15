@@ -372,3 +372,82 @@ def test_without_subsystem_files_the_rule_stands_down():
     files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
              "Модуль.xbsl": "импорт Б\n\nметод Т()\n;\n"}
     assert _lint_unused(files) == []
+
+
+# --- code/missing-import ----------------------------------------------------------------
+
+MISSING_CODE = "code/missing-import"
+
+
+def _lint_missing_code(files):
+    sources = [engine.load_text(name, content) for name, content in files.items()]
+    return engine.run_sources(sources, select={MISSING_CODE})
+
+
+def test_missing_code_import_registered_project_scope():
+    info = next(r for r in engine.active_rules() if r.id == MISSING_CODE)
+    assert info.tier == "D" and info.scope == "project" and info.enabled_by_default
+
+
+@pytest.mark.needs_data  # the mapper parses the module: the lexer needs language.json
+def test_a_foreign_type_without_an_import_is_reported():
+    """The live case: the return type names an element of another subsystem, the module
+    imports only its own, and the server compiler refuses the project."""
+    diags = _lint_missing_code(_module_project(
+        "метод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"
+    ))
+    assert [(x.rule_id, x.line) for x in diags] == [(MISSING_CODE, 1)]
+    assert "Товары.Ссылка" in diags[0].message and "Б" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_the_same_type_with_the_import_is_silent():
+    diags = _lint_missing_code(_module_project(
+        "импорт Б\n\nметод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"
+    ))
+    assert diags == []
+
+
+@pytest.mark.needs_data
+def test_a_type_argument_of_a_generic_counts():
+    diags = _lint_missing_code(_module_project(
+        "метод Т(Список: Массив<Товары.Ссылка>)\n;\n"
+    ))
+    assert [x.rule_id for x in diags] == [MISSING_CODE]
+
+
+@pytest.mark.needs_data
+def test_a_type_of_the_own_subsystem_needs_no_import():
+    diags = _lint_missing_code(_module_project(
+        "метод Т(): Свои.Ссылка?\n    возврат Неопределено\n;\n",
+        **{"А/Свои.yaml": "ВидЭлемента: Справочник\nИмя: Свои\nОбластьВидимости: ВПодсистеме\n"},
+    ))
+    assert diags == []
+
+
+@pytest.mark.needs_data
+def test_a_non_public_foreign_element_is_left_to_the_visibility_rule():
+    """No import can reach a non-public element - that is yaml/foreign-not-public's case."""
+    diags = _lint_missing_code(_module_project(
+        "метод Т(): Скрытый.Ссылка?\n    возврат Неопределено\n;\n",
+        **{"Б/Скрытый.yaml": "ВидЭлемента: Справочник\nИмя: Скрытый\n"},
+    ))
+    assert diags == []
+
+
+@pytest.mark.needs_data
+def test_a_call_of_a_foreign_module_stays_silent_by_design():
+    """A bare name at the head of a chain is also a variable, a field of the paired yaml or
+    an implicit name of the platform; a probe over five corpora found one such candidate and
+    it was false. Only written type positions are judged."""
+    diags = _lint_missing_code(_module_project(
+        "метод Т()\n    знч Х = Товары.НайтиПоКоду(\"1\")\n;\n"
+    ))
+    assert diags == []
+
+
+@pytest.mark.needs_data
+def test_a_module_without_subsystem_files_stands_down():
+    files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
+             "Модуль.xbsl": "метод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"}
+    assert _lint_missing_code(files) == []

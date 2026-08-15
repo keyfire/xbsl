@@ -66,14 +66,16 @@ yaml/unknown-type, it does not run in single-file mode).
 from __future__ import annotations
 
 from collections.abc import Iterable
+from dataclasses import fields
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, i18n, terms
+from xbsl import dataset, i18n, parser as P, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import tokens
+from xbsl.lexer import linemap, tokens
+from xbsl.parser import parse
 from xbsl.rules import semantics
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_types import _parse_type_string, _type_values, _value_positions
@@ -90,6 +92,18 @@ MESSAGES = {
         "en": "The import of subsystem '{sub}' is unused: no element of it is mentioned in "
               "the module code. References of the PAIRED yaml are not covered by a module "
               "import - the yaml has an {n[Импорт]} section of its own. The line can go.",
+    },
+    "code/missing-import.title": {
+        "ru": "Нет импорта подсистемы в модуле",
+        "en": "Missing subsystem import in a module",
+    },
+    "code/missing-import.missing": {
+        "ru": "Тип '{name}' – из подсистемы '{sub}', а модуль её не импортирует: "
+              "компиляция упадёт на этой строке. Нужна строка импорта этой подсистемы "
+              "(секция Импорт парного yaml код не покрывает).",
+        "en": "Type '{name}' comes from subsystem '{sub}' which this module does not import: "
+              "compilation fails at this line. The module needs an import line of its own "
+              "(the {n[Импорт]} section of the paired yaml does not cover the code).",
     },
     "yaml/missing-import.title": {
         "ru": "Нет импорта подсистемы в yaml",
@@ -457,4 +471,153 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "code/unused-import", Severity.WARNING,
                 i18n.t("code/unused-import.unused", sub=sub),
+            )
+
+
+# --- code/missing-import ------------------------------------------------------------------
+
+
+def _missing_import_mapper(source: SourceFile) -> dict | None:
+    """The map phase: the placement slice as above, and from a module its imports and the
+    roots of the types it WRITES DOWN - a parameter, a variable, a return, `новый`, `как`,
+    `это`, generic arguments included.
+
+    Only written types are collected, and that narrowness is the rule (see the docstring of
+    `missing_code_import`). A type position is a place where the name can be nothing but a
+    type, which is what keeps the reading of a name free of guesswork.
+    """
+    if source.kind == "yaml":
+        if not _HAVE_YAML:
+            return None
+        if source.path.name in _SUBSYSTEM_FILES:
+            data, err = _parsed(source)
+            name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
+            return {
+                "k": "sub",
+                "dir": str(source.path.parent),
+                "name": name if isinstance(name, str) else source.path.parent.name,
+            }
+        data, err = _parsed(source)
+        if err is not None or not isinstance(data, dict) or not object_kind(data):
+            return None
+        nm = value_of(data, "Имя")
+        return {
+            "k": "el",
+            "path": str(source.path),
+            "name": nm if isinstance(nm, str) else source.path.stem,
+            "vis": data.get("ОбластьВидимости"),
+        }
+    if source.kind != "xbsl":
+        return None
+    try:
+        local = sorted(semantics._file_local_types(source))
+    except DatasetError:
+        local = []  # no language data - the collision guard degrades to skipping nothing
+    module, errors = parse(source)
+    if errors:
+        # A module that does not parse has no reliable type positions; the syntax rules
+        # report it, and guessing over a broken tree would invent references.
+        return {"k": "mod", "path": str(source.path), "imports": [], "cands": [],
+                "local_types": local}
+    stdlib = semantics._stdlib_names()
+    lm = linemap(source)
+    toks = tokens(source)
+    imports = [
+        toks[i + 1].value
+        for i, tok in enumerate(toks)
+        if tok.kind == "KEYWORD" and tok.canonical == "IMPORT" and i + 1 < len(toks)
+        and toks[i + 1].kind == "IDENT"
+    ]
+    cands: list[tuple[str, str, int, int]] = []
+    for node in _nodes(module):
+        if not isinstance(node, P.TypeRef):
+            continue
+        for chain in _parse_type_string(getattr(node, "text", "") or "") or ():
+            if chain[0] in stdlib:
+                continue
+            line, col = lm.linecol(node.start)
+            cands.append((chain[0], ".".join(chain), line, col))
+    return {"k": "mod", "path": str(source.path), "imports": imports, "cands": cands,
+            "local_types": local}
+
+
+def _nodes(node: object) -> Iterable[P.Node]:
+    """Every node of a tree, list fields included."""
+    if isinstance(node, (list, tuple)):
+        for item in node:
+            yield from _nodes(item)
+        return
+    if not isinstance(node, P.Node):
+        return
+    yield node
+    for f in fields(node):
+        yield from _nodes(getattr(node, f.name, None))
+
+
+@rule(
+    "code/missing-import", "code/missing-import.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_missing_import_mapper,
+)
+def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A module names a type of ANOTHER subsystem without importing it - the compiler refuses.
+
+    The mirror of code/unused-import, and the mirror is where the care goes: there a name that
+    merely COINCIDES with an element of the imported subsystem keeps the import and costs
+    nothing, here the same coincidence would be a false report. So the two rules do not read
+    the module the same way. That one takes every identifier; this one takes only the roots of
+    types WRITTEN DOWN in a type position, where a name can be nothing else.
+
+    What that leaves out is deliberate: a call of a foreign module (`Модуль.Метод()`) is a bare
+    name at the head of a chain, and a bare name is also a local variable, a parameter, a field
+    of the paired yaml or an implicit name of the platform - a probe over five corpora found
+    exactly one candidate of that shape, and it was a false one (`Parameters` of a scheduled job,
+    which the platform hands to the module while the project happens to hold an element of that
+    name elsewhere). Until such a name can be told apart from a reference, the silence is the
+    honest answer.
+
+    The narrowings of yaml/missing-import hold here too, for the same reasons: a stdlib name is
+    skipped (without an import the foreign namespace is not in scope and the name resolves to
+    the standard one), so is a type declared inside a module of the project, and so is a
+    non-public foreign element - that one is a visibility error rather than a missing import.
+    """
+    roots = {Path(f["dir"]): f["name"] for f in facts.values() if f["k"] == "sub"}
+    if not roots:
+        return  # no subsystem files - the project layout is unknown, nothing to judge
+    local_types: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "mod":
+            local_types.update(fact["local_types"])
+    placement: dict[str, dict[str, object]] = {}
+    for fact in facts.values():
+        if fact["k"] != "el":
+            continue
+        sub = _subsystem_of(Path(fact["path"]), roots)
+        if sub:
+            placement.setdefault(fact["name"], {})[sub] = fact["vis"]
+    for rel, fact in facts.items():
+        if fact["k"] != "mod" or not fact["cands"]:
+            continue
+        my_sub = _subsystem_of(Path(fact["path"]), roots)
+        if my_sub is None:
+            continue  # a module outside any subsystem needs no import
+        imports = set(fact["imports"])
+        reported: set[tuple[str, ...]] = set()
+        for root, chain_name, line, col in fact["cands"]:
+            if root in local_types:
+                continue
+            owners = placement.get(root)
+            if not owners or my_sub in owners:
+                continue
+            candidates = tuple(sorted(
+                sub for sub, vis in owners.items() if vis in _public_scopes()
+            ))
+            if not candidates or imports.intersection(candidates):
+                continue
+            if candidates in reported:
+                continue
+            reported.add(candidates)
+            yield Diagnostic(
+                rel, line, col, "code/missing-import", Severity.WARNING,
+                i18n.t("code/missing-import.missing", name=chain_name,
+                       sub="/".join(candidates)),
             )
