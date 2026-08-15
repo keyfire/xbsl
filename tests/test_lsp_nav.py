@@ -1616,3 +1616,44 @@ def test_a_generic_member_resolves_by_the_written_arguments():
 
     assert types["Первая"] == "Строка"
     assert types["Сколько"] == "Число"
+
+
+GENERIC_CALL = """\
+структура Пакет
+    пер Ид: Строка
+;
+
+метод М(Текст: Строка)
+    знч Разбор = СериализацияJson.ПрочитатьОбъект(Текст, Тип<Пакет>)
+    знч БезТипа = СериализацияJson.ПрочитатьОбъект(Текст)
+    Разбор.Ид
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_generic_method_takes_its_result_from_the_call():
+    """A generic method names its result by a parameter of ITS OWN, and the call fixes it: the
+    code passes the type as a value (`Тип<Пакет>`)."""
+    src = engine.load_text("М.xbsl", GENERIC_CALL)
+    offset = GENERIC_CALL.index("Разбор.Ид") + len("Разбор.")
+    returns = {"СериализацияJson": {"ПрочитатьОбъект": "ТипОбъекта"}}
+
+    types = local_var_types(src, offset, returns=returns,
+                            static_roots={"СериализацияJson"})
+
+    assert types["Разбор"] == "Пакет"
+
+
+@pytest.mark.needs_data
+def test_a_generic_call_without_a_type_argument_stays_silent():
+    """The parameter names nothing then, and answering with its name would offer the members of
+    a type that does not exist."""
+    src = engine.load_text("М.xbsl", GENERIC_CALL)
+    offset = GENERIC_CALL.index("Разбор.Ид") + len("Разбор.")
+    returns = {"СериализацияJson": {"ПрочитатьОбъект": "ТипОбъекта"}}
+
+    types = local_var_types(src, offset, returns=returns,
+                            static_roots={"СериализацияJson"})
+
+    assert "БезТипа" not in types

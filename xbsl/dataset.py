@@ -235,7 +235,7 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
     for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors",
-                    "type_params"):
+                    "type_params", "member_type_params"):
         entries = data.get(section)
         if not entries:
             continue
@@ -292,6 +292,19 @@ def _expand_inherited(data: dict) -> dict:
         merged_sigs.update(own_signatures.get(name, {}))
         if merged_sigs:
             full_signatures[name] = merged_sigs
+    # The type parameters of a METHOD travel with the method: an heir that inherits
+    # `Transform` inherits the parameter that names its result.
+    own_method_params = data.get("member_type_params") or {}
+    full_method_params: dict[str, dict[str, list[str]]] = {}
+    for name in set(own_method_params) | {n for n in own_members if bases.get(n)}:
+        merged_params: dict[str, list[str]] = {}
+        for base in bases.get(name, ()):
+            merged_params.update(own_method_params.get(base, {}))
+        merged_params.update(own_method_params.get(name, {}))
+        if merged_params:
+            full_method_params[name] = merged_params
+    if own_method_params:
+        data["member_type_params"] = full_method_params
     data["type_members"] = full_members
     data["member_types"] = full_returns
     if own_signatures:
@@ -365,6 +378,12 @@ def generic_args(written: str) -> list[str]:
     if current.strip():
         args.append(current.strip())
     return [a for a in args if a]
+
+
+def method_type_params(owner: str, member: str) -> list[str]:
+    """The type parameters a METHOD of `owner` declares itself, or an empty list."""
+    by_type = load_json("stdlib.json").get("member_type_params") or {}
+    return list((by_type.get(owner) or {}).get(member) or ())
 
 
 def substitute_params(result: str, owner_head: str, owner_written: str | None) -> str:

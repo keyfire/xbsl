@@ -274,6 +274,31 @@ def page_type_params(raw: str) -> list[str]:
     return [p for p in params if _PROP_NAME_RE.match(p)]
 
 
+#: How the documentation marks a member kept for compatibility: the annotation opens its
+#: signature block.
+DEPRECATED_MARK = "@Устарело"
+
+#: A generic METHOD declares its own parameters right after the name:
+#: `ПрочитатьОбъект<ТипОбъекта>(Источник: ..., Тип: Тип<ТипОбъекта>): ТипОбъекта`.
+_METHOD_PARAMS_RE = re.compile(r"^([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)<([^>]+)>\s*\(")
+
+
+def method_type_params(signature: str) -> tuple[str, list[str]]:
+    """(method name, its type parameters) of a signature already unescaped.
+
+    A generic method names its result by a parameter of ITS OWN, not of the type it belongs to,
+    and the argument that fixes the parameter is passed at the call site (`Тип<Массив<Карточка>>`).
+    A plain signature answers with an empty list, and the name is returned either way so the
+    caller can match it against the heading.
+    """
+    m = _METHOD_PARAMS_RE.match(signature.strip())
+    if m is None:
+        head = signature.strip().split("(", 1)[0].strip()
+        return head, []
+    params = [p.strip() for p in m.group(2).split(",")]
+    return m.group(1), [p for p in params if _PROP_NAME_RE.match(p)]
+
+
 def page_bases(raw: str) -> list[str]:
     """Base types of a page, from its "Иерархия типа" section.
 
@@ -402,6 +427,11 @@ def page_member_types(raw: str) -> dict[str, str]:
     out: dict[str, str] = {}
     heads: dict[str, str] = {}
     dropped: set[str] = set()
+    # Whether a CURRENT (non-deprecated) form of the member has been seen: the overloads a page
+    # keeps for compatibility answer a result of their own, and reading both made the two
+    # disagree and dropped the member altogether. The forms sit under separate headings, so the
+    # decision cannot be made inside one of them.
+    current_of: dict[str, bool] = {}
     for section in _H2_OPEN_RE.split(ma.group(1)):
         head = _plain_text(section[:200])
         is_method = head.startswith("Методы")
@@ -415,8 +445,12 @@ def page_member_types(raw: str) -> dict[str, str]:
             if not _PROP_NAME_RE.match(name):
                 continue
             body = parts[k + 1]
-            for m in _SIG_CODE_RE.finditer(body):
-                sig = _plain_text(m.group(1))
+            # A method may carry a DEPRECATED overload with a result of its own (`ReadObject`
+            # answers the parameter of the generic form and `Object?` in the form kept for
+            # compatibility). Reading both made the two disagree and dropped the member
+            # altogether; the current forms win, and a method that has none keeps the old.
+            for sig in [_plain_text(m.group(1)) for m in _SIG_CODE_RE.finditer(body)]:
+                deprecated = sig.lstrip().startswith(DEPRECATED_MARK)
                 if is_method:
                     paren = sig.rfind("):")
                     tail = sig[paren + 2:] if paren >= 0 else ""
@@ -436,6 +470,16 @@ def page_member_types(raw: str) -> dict[str, str]:
                 root = ret.group(1)
                 mf = _RETURN_FULL_RE.match(tail)
                 full = (mf.group(1) if mf else root).strip()
+                if deprecated and name in current_of:
+                    continue  # a form kept for compatibility never outranks a current one
+                if not deprecated and name in out and not current_of.get(name):
+                    # The first current form REPLACES what a deprecated one had said - the
+                    # overloads are compared among the current ones alone from here on.
+                    out.pop(name, None)
+                    heads.pop(name, None)
+                    dropped.discard(name)
+                if not deprecated:
+                    current_of[name] = True
                 if name in dropped:
                     continue
                 if name in out:
@@ -482,6 +526,38 @@ def manager_member_types(raw: str) -> dict[str, str]:
 _TIGHT_COMMA_RE = re.compile(r",(?=\S)")
 
 
+def page_method_type_params(raw: str) -> dict[str, list[str]]:
+    """Method -> the type parameters it declares itself (`ПрочитатьОбъект<ТипОбъекта>`).
+
+    Such a result is fixed not by the owner's arguments but by the CALL: the code passes
+    `Тип<Массив<Карточка>>`, and the parameter list is what tells a consumer that the result
+    name is a parameter and not a type it failed to find.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return {}
+    out: dict[str, list[str]] = {}
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Методы"):
+            continue
+        parts = _H3_RE.split(section)
+        for k in range(1, len(parts) - 1, 2):
+            name = _plain_text(parts[k])
+            if not _PROP_NAME_RE.match(name):
+                continue
+            for m in _SIG_CODE_RE.finditer(parts[k + 1]):
+                sig = html.unescape(_plain_text(m.group(1))).strip()
+                if sig.startswith(DEPRECATED_MARK):
+                    continue
+                method, params = method_type_params(sig)
+                if method == name and params:
+                    known = out.setdefault(name, [])
+                    for param in params:
+                        if param not in known:
+                            known.append(param)
+    return out
+
+
 def page_member_signatures(raw: str) -> dict[str, list[str]]:
     """Method -> the signatures the page prints, one string per overload, in page order.
 
@@ -510,7 +586,10 @@ def page_member_signatures(raw: str) -> dict[str, list[str]]:
                 continue
             for m in _SIG_CODE_RE.finditer(parts[k + 1]):
                 text = _TIGHT_COMMA_RE.sub(", ", html.unescape(_plain_text(m.group(1))).strip())
-                if not text.startswith(name + "("):
+                # A generic method prints its parameters between the name and the parenthesis
+                # (`ПрочитатьОбъект<ТипОбъекта>(...)`), and demanding `name(` dropped the whole
+                # signature - with it the result type and the parameter list of the method.
+                if method_type_params(text)[0] != name:
                     continue
                 found = out.setdefault(name, [])
                 if text not in found:
@@ -632,6 +711,7 @@ def extract(dist: Path) -> tuple:
     signatures: dict[str, dict[str, list[str]]] = {}
     bases: dict[str, list[str]] = {}
     type_params: dict[str, list[str]] = {}
+    method_params: dict[str, dict[str, list[str]]] = {}
     ctors: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
@@ -680,6 +760,7 @@ def extract(dist: Path) -> tuple:
             if props or methods or events:
                 rets = page_member_types(raw)
                 sigs = page_member_signatures(raw)
+                mparams = page_method_type_params(raw)
                 if key:
                     slot = types.setdefault(key, _empty_member_slot())
                     slot["properties"] |= props
@@ -689,6 +770,8 @@ def extract(dist: Path) -> tuple:
                         returns.setdefault(key, {}).update(rets)
                     if sigs:
                         _merge_signatures(signatures.setdefault(key, {}), sigs)
+                    if mparams:
+                        method_params.setdefault(key, {}).update(mparams)
                 # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record
                 # and reference members go into a separate dictionary, under the Russian form.
                 facet_key = (title if _FACET_TITLE_RE.match(title) else "") or _english_facet_from_path(n)
@@ -747,7 +830,7 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, returns, signatures, bases, ctors, type_params)
+            facets, returns, signatures, bases, ctors, type_params, method_params)
 
 
 def _empty_member_slot() -> dict[str, set[str]]:
@@ -821,7 +904,7 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, returns, signatures, bases, ctors, type_params) = extract(dist)
+     facets, returns, signatures, bases, ctors, type_params, method_params) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -892,6 +975,12 @@ def main(argv=None) -> int:
         # and only this list turns that name into a real type: the consumer matches it against
         # the arguments the code writes.
         "type_params": {k: v for k, v in sorted(type_params.items())},
+        # The type parameters a METHOD declares itself (`ПрочитатьОбъект<ТипОбъекта>`): such a
+        # result is fixed by the call, not by the owner - the code passes `Тип<Массив<Карточка>>`.
+        # Without this a consumer cannot tell the result name from a type it failed to find.
+        "member_type_params": {
+            k: dict(sorted(v.items())) for k, v in sorted(method_params.items()) if v
+        },
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"

@@ -152,7 +152,10 @@ def record_build(version: str, build: str) -> None:
     into the SAME directory, and without this record nothing can tell them apart or
     name a snapshot of the previous one.
     """
-    if not build:
+    # A version whose NAME already carries the build needs no record of it: the entry
+    # would say the directory of build 11 holds build 11, and a snapshot of it would be named
+    # after itself.
+    if not build or "+" in version:
         return
     root = data_root()
     root.mkdir(parents=True, exist_ok=True)

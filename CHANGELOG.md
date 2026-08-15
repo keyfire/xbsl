@@ -30,6 +30,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   alongside it.
 
 ### Fixed
+- **A generic METHOD lost its signature and its result.** The parameters are printed between
+  the name and the parenthesis (`ReadObject<ObjectType>(...)`), and the parser demanded the name
+  followed by the parenthesis - so the method kept neither. A deprecated overload made it worse:
+  its own result disagreed with the current one and the member was dropped altogether. Both are
+  read now, the current form outranks the compatibility one, and the type parameters of a method
+  are extracted - `JsonSerialization.ReadObject(Text, Type<Package>)` answers `Package`.
 - **A collection knew the type of nothing it returns.** The base types of a generic are printed
   with their argument (`Collection<ItemType>`), and the extractor read the whole spelling as a
   name - so `Array` kept `Object` as its only ancestor and inherited no result types at all:

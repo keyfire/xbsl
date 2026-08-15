@@ -780,6 +780,52 @@ def _literal_type(toks: list[Token], i: int) -> str | None:
     return name
 
 
+#: How the code names a type as a VALUE: `Тип<Массив<Карточка>>` - the argument that fixes the
+#: result of a generic method (`СериализацияJson.ПрочитатьОбъект(Текст, Тип<...>)`).
+_TYPE_VALUE_NAMES = ("Тип", "Type")
+
+
+def _type_argument(toks: list[Token], open_paren: int) -> str | None:
+    """The type written inside a `Тип<...>` argument of the call opening at `open_paren`.
+
+    A generic method names its result by a parameter of its own, and the call is what fixes it:
+    the argument is the type itself. Only the arguments of THIS call are read - a nested call
+    keeps its own.
+    """
+    n = len(toks)
+    depth = 0
+    i = open_paren
+    while i < n:
+        tok = toks[i]
+        if tok.kind == "OP" and tok.value == "(":
+            depth += 1
+        elif tok.kind == "OP" and tok.value == ")":
+            depth -= 1
+            if depth == 0:
+                return None
+        # `Type` is a KEYWORD of the language, not an identifier - both spellings of it.
+        elif depth == 1 and tok.value in _TYPE_VALUE_NAMES:
+            j = i + 1
+            if j < n and toks[j].kind == "OP" and toks[j].value == "<":
+                inner, level, j = "", 0, j
+                while j < n:
+                    cur = toks[j]
+                    if cur.kind == "OP" and cur.value == "<":
+                        level += 1
+                        if level == 1:
+                            j += 1
+                            continue
+                    elif cur.kind == "OP" and cur.value == ">":
+                        level -= 1
+                        if level == 0:
+                            return inner.strip() or None
+                    inner += cur.value
+                    j += 1
+                return None
+        i += 1
+    return None
+
+
 def chain_type(
     toks: list[Token],
     start: int,
@@ -880,6 +926,19 @@ def chain_type(
         raw = (returns or {}).get(current, {}).get(toks[j].value)
         if raw:
             raw = dataset.substitute_params(raw, current, current_written)
+            # A result named by a parameter of the METHOD is fixed by the call itself: the code
+            # passes the type as a value (`ПрочитатьОбъект(Текст, Тип<Массив<Карточка>>)`).
+            method_params = dataset.method_type_params(current, toks[j].value)
+            if method_params and dataset.member_type_head(raw) in method_params:
+                k_open = _skip_comments(toks, j + 1)
+                if k_open < n and toks[k_open].kind == "OP" and toks[k_open].value == "(":
+                    written_arg = _type_argument(toks, k_open)
+                    if written_arg:
+                        raw = raw.replace(dataset.member_type_head(raw), written_arg, 1)
+                if dataset.member_type_head(raw) in method_params:
+                    # The call passed no type: the parameter names nothing, and answering with
+                    # its name would offer the members of a type that does not exist.
+                    return None
         current = dataset.member_type_head(raw) if raw else None
         if current is None:
             return None
