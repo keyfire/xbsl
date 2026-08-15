@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.61.2
 
 ### Fixed
 - **A project component named like a wireframe primitive is drawn from its own yaml.** One name

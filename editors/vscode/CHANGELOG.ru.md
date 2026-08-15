@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.61.2
 
 ### Исправлено
 - **Компонент проекта с именем каркасного примитива рисуется по своему yaml.** Одно имя было
