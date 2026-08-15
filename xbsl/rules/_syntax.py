@@ -746,6 +746,37 @@ def _skip_balanced(toks: list[Token], i: int, open_op: str, close_op: str) -> in
     return n
 
 
+#: The type a plain literal has, by the kind of its token. A string is by far the commonest
+#: initializer of a local, and until this was read `знч Ключ = ""` left the variable untyped -
+#: the dot after it offered nothing at all.
+_LITERAL_TYPES = {"STRING": "Строка", "NUMBER": "Число"}
+_LITERAL_KEYWORDS = {"TRUE": "Булево", "FALSE": "Булево"}
+
+
+def _literal_type(toks: list[Token], i: int) -> str | None:
+    """The type of a literal at `i`, when the expression IS that literal.
+
+    Only a lone literal answers: an expression that goes on (`"а" + Х`, `1 + Ф()`) is an
+    operation, and its result is not the literal's type to claim. The end of the expression is
+    a line break or a closer - the same boundary the rest of the walk uses.
+    """
+    t = toks[i]
+    name = _LITERAL_TYPES.get(t.kind)
+    if name is None and t.kind == "KEYWORD":
+        name = _LITERAL_KEYWORDS.get(t.canonical or "")
+    if name is None:
+        return None
+    nxt = _skip_comments(toks, i + 1)
+    if nxt < len(toks):
+        after = toks[nxt]
+        goes_on = after.line == t.end_line and not (
+            after.kind == "OP" and after.value in (")", "]", "}", ",", ";")
+        )
+        if goes_on:
+            return None
+    return name
+
+
 def chain_type(
     toks: list[Token],
     start: int,
@@ -775,6 +806,9 @@ def chain_type(
     t = toks[i]
     current: str | None = None
     last_written: str | None = None
+    literal = _literal_type(toks, i)
+    if literal is not None:
+        return literal
     if t.kind == "KEYWORD" and t.canonical == "QUERY":
         # A query literal constructs a typed query (docs topics/query-literal).
         current = "ТипизированныйЗапрос"

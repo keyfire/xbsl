@@ -1372,3 +1372,39 @@ def test_the_chain_over_an_own_call_is_typed_at_the_cursor():
     got = chain_type_at(src, offset, own_returns={"ЗаписатьЧтение": "ИтогЧтения"})
 
     assert got == "ИтогЧтения"
+
+
+LITERAL_MODULE = """\
+метод М()
+    знч Ключ = "текст"
+    пер Счётчик = 42
+    пер Включено = Истина
+    пер Сумма = 1 + 2
+    Ключ.Длина()
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_plain_literal_types_the_variable():
+    """A string literal is the commonest initializer of a local, and it names its type."""
+    src = engine.load_text("М.xbsl", LITERAL_MODULE)
+    offset = LITERAL_MODULE.index("Ключ.Длина") + len("Ключ.")
+
+    types = local_var_types(src, offset, returns={}, static_roots=set())
+
+    assert types["Ключ"] == "Строка"
+    assert types["Счётчик"] == "Число"
+    assert types["Включено"] == "Булево"
+
+
+@pytest.mark.needs_data
+def test_an_expression_over_a_literal_is_not_claimed():
+    """An expression that goes on is an operation: its result is not the literal's to claim,
+    and answering here would name a type nothing computed."""
+    src = engine.load_text("М.xbsl", LITERAL_MODULE)
+    offset = LITERAL_MODULE.index("Ключ.Длина") + len("Ключ.")
+
+    types = local_var_types(src, offset, returns={}, static_roots=set())
+
+    assert "Сумма" not in types
