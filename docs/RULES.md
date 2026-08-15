@@ -23,8 +23,12 @@ actually runs, and `XBSL_NO_PLUGINS=1` shows the set below.
 The linter works over text, the AST and the project model. Its rules know types at the first
 hop: the declared nominal type of a variable and its members, the project objects and the
 types they generate, enumeration values, the global types of the linked libraries (from the
-`.xlib` archive) - but they do not infer the type of an expression. The engine does infer
-chain types, only that feeds hover and completion in the editor, not the checks.
+`.xlib` archive).
+
+The engine DOES infer the type of an expression - `xbsl.typeinfer` answers for a receiver, a
+member, a constructor, a cast and a non-null operator, and the inference of chains and locals
+feeds hover and completion in the editor. The checks do not rest on it: the rules judge by the
+declared types - see below on what the linter does not do.
 
 Some of the findings the compiler would catch as well: an unknown type, an argument count, a
 non-exception in `catch`, a return not matching the signature. The linter's value there is
@@ -274,7 +278,7 @@ Russian equivalents.
 
 ### Project properties (the `project/` rules)
 
-Three rules from the standard "Filling in the project properties": `Vendor` and `Name` are
+Four rules from the standard "Filling in the project properties": `Vendor` and `Name` are
 identifiers built from the presentations, every word capitalized; `Presentation` and
 `VendorPresentation` are filled in - the
 official name of the project and of the company that developed it; `Version` is three numbers
@@ -304,7 +308,7 @@ navigation.
 
 ### Code style conventions (the `style/` rules)
 
-Twenty-seven rules that follow the platform documentation ("Code style conventions", "Language
+Twenty-eight rules that follow the platform documentation ("Code style conventions", "Language
 idioms") and the "Variable and constant names" development standard: layout and expression
 wrapping, naming, type descriptions and signatures, collection literals, string interpolation,
 and checks of boolean values and `Undefined`.
@@ -336,6 +340,36 @@ switches on off-by-default rules on top of the defaults.
 excluded from these checks. Not covered, and left to the author and review: indentation being a
 multiple of four, collection idioms, `Rows.Join()` for bulk concatenation, the `?.` / `??`
 idioms, and `case` instead of an `else if` chain.
+
+### Code semantics (the `code/` rules)
+
+The largest group - fifty-three rules, thirty of them errors. This is what the compiler rejects
+or what the platform does differently from how the code reads: an unknown name or member, the
+arity of a call, the environment (client code in a server method and the other way round), an
+instance reached through its type, a caught non-exception, an unclosed resource, a walk over a
+collection while it is being changed, and the platform traps whose only sign is the shape of the
+code. Some of the rules are project-scoped (`--stdin` does not run those): they need the paired
+yaml and the names of the objects.
+
+### Element descriptions (the `yaml/` rules)
+
+Thirty-nine rules over the descriptions (`.yaml`): required and unique ids, known keys and types,
+references to components, handlers and localized strings, what the platform requires of field
+types (a reference and an enumeration admit an empty value), the settings of dynamic lists and
+forms, and the layout traps that apply without an error yet draw differently from the intent.
+Five rules are `info` and off: they say "this is how the platform works", not "this is a mistake".
+
+### The small groups
+
+- `typography/` - typographic characters in prose and comments: em dash, the ellipsis character,
+  curly quotes, guillemets in comments;
+- `whitespace/` - trailing spaces and mixed newlines;
+- `encoding/` - a file that is not UTF-8;
+- `structure/` - the pairing of `Name.yaml` and `Name.xbsl`;
+- `security/` - a secret in the sources (a token, a password, a key);
+- `form/` - a form handler that the module does not have (a project-scoped rule);
+- `query/` - queries: an unknown table, `ISNULL`, a named parameter, an immediate deletion mark
+  and the standard about `IN` with a subquery (discussed above).
 
 ## Enabling and disabling
 

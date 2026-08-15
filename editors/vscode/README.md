@@ -184,17 +184,32 @@ keywords are understood in both of the spellings the language has, the English o
 - after the loop variable of a query result (`for Row in Result` → `Row.`) – the columns of the
   selection (the `SELECT ... AS` aliases; a plain field is named by its last segment);
 - after a variable of a known type (`var List = new Array<String>()` → `List.`) – the members of
-  that type. The type comes from the annotation or from `new`; method parameters count as well;
+  that type. The type comes from the annotation, from `new`, from a literal (`val Key = ""` is a
+  `String`) or from a call - both through a module (`Module.Method()`) and with no qualifier at
+  all, which is a call of a method of THIS module. Method parameters count as well;
+- after a value of a project type - its fields and methods: a structure declared in a module, a
+  type described in metadata, an interface component (for a form: its `Properties`, the methods
+  of its module and the members of the platform type in `Inherits`);
+- inside `new Type(` - the names of what the type carries: the completion writes the `Name = `
+  for you;
 - after an stdlib type or global (`AccessContext.`) – its members. Properties and methods are
   listed apart: a method carries its own icon and is inserted with parentheses.
+
+A chain is walked to its end rather than one level deep: `Parsed.File!.Read().` answers with the
+members of the result - a non-null operator does not break the chain. A loop variable takes its
+element out of the written type of the collection (`Array<Catalog.Card>` → `Catalog.Card`),
+including when the collection came from a call.
 
 The members of stdlib types come from the Element data (the `--data-dir` root), everything else
 from the project index. A name in scope beats a type of the same name: once a variable `List` is
 declared, `List.` is about its type, not about the `List` component. Requires `xbsl` >= 0.10.0.
 
-Known limits – by design: outside LSP mode the index knows declarations, not types (no completion
-after variables). Type inference for arbitrary expressions and for dotted chains deeper than one
-level is nowhere, and there is no rename. When the context is ambiguous the providers return
+Known limits: outside LSP mode the index knows declarations, not types (no completion after
+variables). A type is not inferred where there is nothing to infer it from: a generic platform
+method whose result is set by a type argument; an expression built of operations (`"a" + X` is an
+operation, not a literal); a name the platform catalogue does not carry. The members of platform
+types are offered in their Russian spelling even in an English project - the catalogue has no
+English pair for them. There is no rename. When the context is ambiguous the providers return
 nothing rather than guessing.
 
 ## Quick Fix

@@ -12,6 +12,19 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Changed
+- **Completion answers where it used to stay silent.** A quarter of the dots in a live project
+  got no answer; the sweep is down by a third. The type of a variable now comes from a literal
+  (`val Key = ""` is a `String`) and from a call with no qualifier - a method of the module
+  itself, which is how a module calls its own code. A chain is no longer cut by a non-null
+  operator, a loop variable takes its element out of the written type of the collection, and a
+  declaration inside a loop leans on the loop variable. A value of an interface component
+  answers with its own properties, the methods of its module and the members of the platform
+  type it inherits. Inside `new Type(` the names of what the type carries are offered, with the
+  `Name = ` written for you. A query held by a `use` declaration carries its columns to the loop.
+
 ## 2026-08-15 – 0.66.0, 0.66.1
 
 ### Added
