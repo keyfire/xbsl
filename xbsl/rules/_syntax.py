@@ -1126,6 +1126,7 @@ def local_var_types(
     returns: dict | None = None, static_roots=None,
     own_returns: dict[str, str] | None = None,
     written_out: dict[str, str] | None = None,
+    own_properties: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Variable name -> type head for the names visible at `offset`.
 
@@ -1172,6 +1173,14 @@ def local_var_types(
             full = _type_written(toks, p.type_start)
             if full:
                 written_types[p.name.value] = full
+    # The members of the type the module EXTENDS are addressed by bare name (`для Стр из Состав`
+    # in a module of `Товары.Объект`), so they take part in the inference like variables - before
+    # the loops, which may walk over one of them. A declaration of the same name shadows them and
+    # overwrites the entry below.
+    for prop, prop_written in (own_properties or {}).items():
+        out.setdefault(prop, dataset.member_type_head(prop_written))
+        written_types.setdefault(prop, prop_written)
+
     # The loop variables FIRST: a declaration inside a loop leans on the variable the loop
     # introduced (`исп Поток = Страница.Загрузить()...`), and typing the declarations first left
     # such a chain rootless. The pass runs again below, for a loop whose source is declared above.

@@ -502,6 +502,30 @@ def _tabular_items(s: SourceFile, data: dict, kind: str) -> list[dict]:
     return items
 
 
+def _typed_items(s: SourceFile, data: dict, key: str, kind: str) -> list[dict]:
+    """Named items of a section with the type each one declares.
+
+    The type is what a chain over the member needs: `Goods.Object.Price` answers `Number` only
+    when the attribute carries its declared type into the index.
+    """
+    items = _named_items(s, data, key, kind)
+    described = value_of(data, key, kind)
+    by_name: dict[str, str] = {}
+    if isinstance(described, list):
+        for entry in described:
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("Имя") or entry.get("Name")
+            written = entry.get("Тип") or entry.get("Type")
+            if isinstance(name, str) and isinstance(written, str):
+                by_name[name] = written
+    for item in items:
+        written = by_name.get(item.get("name", ""))
+        if written:
+            item["type"] = written
+    return items
+
+
 def _kind_facet_members() -> dict[str, dict[str, dict[str, list[str]]]]:
     """{kind: {facet: members}} - what the catalogue gives the types a KIND generates.
 
@@ -757,7 +781,7 @@ def build_index(root: Path) -> dict:
                 "path": rel(s.path),
                 "line": _top_name_line(s, name),
                 "tabular": _tabular_items(s, data, kind),
-                "attributes": _named_items(s, data, "Реквизиты", kind),
+                "attributes": _typed_items(s, data, "Реквизиты", kind),
                 # Register fields live in their own sections - the query completion
                 # needs them next to the attributes.
                 "dimensions": _named_items(s, data, "Измерения", kind),
@@ -864,6 +888,14 @@ def build_index(root: Path) -> dict:
     facet_returns: dict[str, dict[str, str]] = {}
     for o in objects:
         own_attrs = [a["name"] for a in o.get("attributes") or []]
+        # The TYPE of each own member, so a chain over it goes on: an attribute answers what its
+        # yaml declares, a tabular section answers an array of its own row type.
+        own_types = {
+            a["name"]: a["type"] for a in o.get("attributes") or [] if a.get("type")
+        }
+        own_types.update({
+            x["name"]: f"Массив<{o['name']}.{x['name']}>" for x in o.get("tabular") or []
+        })
         tabular = [x["name"] for x in o.get("tabular") or []]
         registers = [x["name"] for x in (o.get("dimensions") or []) + (o.get("resources") or [])]
         by_facet = kind_facets.get(o["kind"]) or {}
@@ -876,6 +908,8 @@ def build_index(root: Path) -> dict:
             ))
             facet_methods = sorted(set(members.get("methods") or ()))
             record: dict = {"properties": props, "kind": o["kind"]}
+            if own_types and facet in ("Объект", "Данные", "Запись"):
+                record["property_types"] = dict(sorted(own_types.items()))
             if facet_methods:
                 record["methods"] = facet_methods
             struct_members[name] = record

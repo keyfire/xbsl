@@ -1690,3 +1690,44 @@ def test_a_facet_is_resolved_as_a_two_segment_root():
     got = chain_type_at(src, offset, returns={}, static_roots={"Сущность.Право"})
 
     assert got == "Сущность.Право"
+
+
+OWN_PROPERTY_MODULE = """\
+метод Пересчитать()
+    для Строка из Состав
+        Строка.Наименование
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_member_of_the_extended_type_is_addressed_by_a_bare_name():
+    """In a module of `Товары.Объект` a bare `Состав` is a member of that type, not a variable:
+    the module extends it, and its data is addressed by name."""
+    src = engine.load_text("Товары.Объект.xbsl", OWN_PROPERTY_MODULE)
+    offset = OWN_PROPERTY_MODULE.index("Строка.Наименование") + len("Строка.")
+
+    types = local_var_types(
+        src, offset, returns={}, static_roots=set(),
+        own_properties={"Состав": "Массив<Товары.Состав>"},
+    )
+
+    assert types["Состав"] == "Массив"
+    assert types["Строка"] == "Товары.Состав"
+
+
+@pytest.mark.needs_data
+def test_a_declaration_shadows_a_member_of_the_extended_type():
+    """A variable of the same name wins: the code that declared it means its own value."""
+    text = OWN_PROPERTY_MODULE.replace("метод Пересчитать()\n",
+                                       "метод Пересчитать()\n    знч Состав = \"\"\n")
+    src = engine.load_text("Товары.Объект.xbsl", text)
+    offset = text.index("Строка.Наименование") + len("Строка.")
+
+    types = local_var_types(
+        src, offset, returns={}, static_roots=set(),
+        own_properties={"Состав": "Массив<Товары.Состав>"},
+    )
+
+    assert types["Состав"] == "Строка"

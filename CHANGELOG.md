@@ -32,6 +32,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   and the tabular sections of its yaml, a tabular section is a type of its own with its own
   attributes, and `Goods.Reference` answers what the kind gives a reference. The catalogue
   describes these by KIND, and the object's own data is joined with that.
+- **A member of the type a module extends is addressed by a bare name.** In a module of
+  `Goods.Object` a bare `Lines` is its tabular section, not an unknown name: the completion after
+  it answers, and a loop over it takes the row type. The object type now carries the declared
+  type of every member it holds.
 - **A generic member resolves by the arguments the code wrote.** `Array<Catalog.Card>.First()`
   answers `Catalog.Card`, `Map<String, Number>.Get(...)` answers `Number`: the catalogue names
   such a result by the type PARAMETER, and the parameter lists of the types are now extracted

@@ -639,6 +639,21 @@ def _make_server() -> "LanguageServer":
             if m.get("returns")
         }
 
+    def _own_type_properties(path) -> dict[str, str]:
+        """{property: its written type} of the type the module extends.
+
+        In `Товары.Объект.xbsl` a bare `Состав` is a member of `Товары.Объект`, not a variable:
+        the module extends that type, and its data is addressed by name. Without this a loop over
+        a tabular section of one's own object had no element type, and the dot after a bare
+        attribute name answered nothing.
+        """
+        if STATE.lookup is None:
+            return {}
+        stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
+        record = STATE.lookup.struct_by_name(stem)
+        types = (record or {}).get("property_types") or {}
+        return {str(name): str(written) for name, written in types.items() if written}
+
     def _inference_inputs() -> tuple[dict, dict, set]:
         """(stdlib members, return-type catalogue, static roots) for the type inference.
 
@@ -706,9 +721,11 @@ def _make_server() -> "LanguageServer":
             # The written types of the locals travel along: a generic member names its result by
             # the owner's type parameter, and only the arguments the code wrote resolve it.
             var_written: dict[str, str] = {}
+            own_properties = _own_type_properties(path)
             local_vars = local_var_types(
                 src, offset, returns=returns, static_roots=static_roots,
                 own_returns=own_returns, written_out=var_written,
+                own_properties=own_properties,
             )
             query_rows = query_row_columns(src, offset)
             # `ЗапросКБД.Выполнить().` or `Список.НастройкиСервисов.` - the dot continues

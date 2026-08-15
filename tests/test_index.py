@@ -619,3 +619,14 @@ def test_the_types_an_object_generates_carry_its_data(project):
     assert idx["Товары.Состав"]["properties"] == ["Наименование"]
     assert "Ид" in idx["Товары.Ссылка"]["properties"]
     assert "ЗагрузитьОбъект" in idx["Товары.Ссылка"]["methods"]
+
+
+def test_the_object_type_carries_the_types_of_its_members(project):
+    """A member answers what its yaml declares, and a tabular section an array of its row type.
+
+    Without the types a chain over an attribute of one's own object stopped at the first link.
+    """
+    record = build_index(project)["struct_members"]["Товары.Объект"]
+
+    assert record["property_types"]["Состав"] == "Массив<Товары.Состав>"
+    assert record["property_types"]["Наименование"] == "Строка"
