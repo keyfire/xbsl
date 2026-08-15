@@ -481,7 +481,7 @@ def test_family_offers_the_catalogue_not_the_safety_net(project):
     dictionary = next(o for o in idx["objects"] if o["name"] == "Словарь")
 
     assert "Ссылка" in catalog["family"]           # the catalogue knows the kind
-    assert "ПараметрыЗаполнения" not in catalog["family"]  # net only, no page names it
+    assert "НастройкиЗаполнения" not in catalog["family"]  # net only, no page names it
     # A kind that generates no types at all: an empty list, not somebody else's names.
     assert dictionary["family"] == []
     assert dictionary["manager"] == {}
@@ -559,10 +559,10 @@ def test_a_generated_type_answers_to_either_spelling(tmp_path):
     The name is looked up as the code writes it, and which spelling that is depends on the
     language of the project - so both are registered, whichever language the element uses.
     """
-    (tmp_path / "Параметры.yaml").write_text("\n".join([
+    (tmp_path / "Настройки.yaml").write_text("\n".join([
         "ВидЭлемента: ПараметрыРаботыКлиента",
         "Ид: 3a1c5e7f-9b0d-4a2c-8e6f-1b3d5f7a9c0e",
-        "Имя: Параметры",
+        "Имя: Настройки",
         "Параметры:",
         "    -",
         "        Имя: АдресСервиса",
@@ -572,8 +572,8 @@ def test_a_generated_type_answers_to_either_spelling(tmp_path):
 
     members = build_index(tmp_path)["struct_members"]
 
-    assert members["Параметры.Параметры"]["properties"] == ["АдресСервиса"]
-    assert members["Параметры.Parameters"] == members["Параметры.Параметры"]
+    assert members["Настройки.Параметры"]["properties"] == ["АдресСервиса"]
+    assert members["Настройки.Parameters"] == members["Настройки.Параметры"]
 
 
 def test_an_interface_component_describes_the_type_of_its_value(tmp_path):

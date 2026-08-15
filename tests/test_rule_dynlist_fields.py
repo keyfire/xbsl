@@ -154,7 +154,7 @@ def test_qualified_expression_and_alias_count_as_present():
 
 EDIT_RULE = "yaml/dynlist-row-editing"
 
-_FLAT_CATALOG = "ВидЭлемента: Справочник\nИмя: Подписки\n"
+_FLAT_CATALOG = "ВидЭлемента: Справочник\nИмя: Заявки\n"
 _HIER_CATALOG = "ВидЭлемента: Справочник\nИмя: Категории\nИерархический: Истина\n"
 
 
@@ -178,11 +178,11 @@ def _lint_edit(*files: tuple[str, str]):
 def test_row_edit_on_a_flat_dynlist_flagged():
     """The registry case: the handler looks like working code, the platform never calls it."""
     d = _lint_edit(
-        ("Подписки.yaml", _FLAT_CATALOG),
-        ("Ф.yaml", _event_form("Таблица<ДинамическийСписок<Подписки>>")),
+        ("Заявки.yaml", _FLAT_CATALOG),
+        ("Ф.yaml", _event_form("Таблица<ДинамическийСписок<Заявки>>")),
     )
     assert [x.rule_id for x in d] == [EDIT_RULE]
-    assert "Подписки" in d[0].message and "не вызывает" in d[0].message
+    assert "Заявки" in d[0].message and "не вызывает" in d[0].message
     assert (d[0].line, d[0].col) == (7, 34)  # the handler name, not the top of the file
 
 
@@ -198,7 +198,7 @@ def test_a_hierarchical_source_is_left_alone():
 def test_an_untyped_dynlist_is_not_guessed():
     """The untyped list of a list form implies its entity - resolving that would guess."""
     d = _lint_edit(
-        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Заявки.yaml", _FLAT_CATALOG),
         ("Ф.yaml", _event_form("Таблица<ДинамическийСписок>")),
     )
     assert d == []
@@ -210,14 +210,14 @@ def test_an_entity_outside_the_project_is_left_alone():
 
 
 def test_the_row_form_chain_resolves_the_entity():
-    chain = "Таблица<ДинамическийСписок<Подписки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>"
-    d = _lint_edit(("Подписки.yaml", _FLAT_CATALOG), ("Ф.yaml", _event_form(chain)))
+    chain = "Таблица<ДинамическийСписок<Заявки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>"
+    d = _lint_edit(("Заявки.yaml", _FLAT_CATALOG), ("Ф.yaml", _event_form(chain)))
     assert [x.rule_id for x in d] == [EDIT_RULE]
 
 
 def test_an_array_source_is_not_judged():
     d = _lint_edit(
-        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Заявки.yaml", _FLAT_CATALOG),
         ("Ф.yaml", _event_form("Таблица<ИсточникДанныхМассив<Строка>>")),
     )
     assert d == []
@@ -225,9 +225,9 @@ def test_an_array_source_is_not_judged():
 
 def test_other_row_events_are_legal_on_a_flat_list():
     d = _lint_edit(
-        ("Подписки.yaml", _FLAT_CATALOG),
+        ("Заявки.yaml", _FLAT_CATALOG),
         ("Ф.yaml", _event_form(
-            "Таблица<ДинамическийСписок<Подписки>>", event_key="ПриНажатииСтроки"
+            "Таблица<ДинамическийСписок<Заявки>>", event_key="ПриНажатииСтроки"
         )),
     )
     assert d == []
@@ -238,7 +238,7 @@ def test_other_row_events_are_legal_on_a_flat_list():
 SORT_RULE = "yaml/dynlist-column-sort-lost"
 
 
-def _column_form(value: str, *, table="Таблица<ДинамическийСписок<Подписки>>") -> str:
+def _column_form(value: str, *, table="Таблица<ДинамическийСписок<Заявки>>") -> str:
     return (
         "ВидЭлемента: КомпонентИнтерфейса\n"
         "Имя: Ф\n"
@@ -248,7 +248,7 @@ def _column_form(value: str, *, table="Таблица<ДинамическийС
         "        Имя: Список\n"
         "        Колонки:\n"
         "            -\n"
-        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Подписки>>\n"
+        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Заявки>>\n"
         f"                Значение: {value}\n"
     )
 
@@ -275,7 +275,7 @@ def test_a_bare_field_binding_is_the_sortable_form():
     form = _column_form("=ДанныеСтроки.Данные.Начало")
     form += (
         "            -\n"
-        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Подписки>>\n"
+        "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Заявки>>\n"
         "                Значение: =ТекстСтатуса(ДанныеСтроки.Данные.Состояние)\n"
     )
     d = _lint_sort(form)

@@ -475,7 +475,7 @@ _GENERATED_RETURNS: dict[str, dict[str, str]] = {
 def _tabular_items(s: SourceFile, data: dict, kind: str) -> list[dict]:
     """Tabular sections with the attributes each one holds.
 
-    A tabular section is a TYPE of its own (`Программы.Возможности`), and its attributes are
+    A tabular section is a TYPE of its own (`Catalog.Lines`), and its attributes are
     what the dot after a row offers - the plain name-and-line record could not answer that.
     """
     items = _named_items(s, data, "ТабличныеЧасти", kind)
@@ -506,7 +506,7 @@ def _kind_facet_members() -> dict[str, dict[str, dict[str, list[str]]]]:
     """{kind: {facet: members}} - what the catalogue gives the types a KIND generates.
 
     The pages describe them by kind (`Справочник.Ссылка`, `Документ.Объект`), while the code
-    names them by the object (`Программы.Ссылка`). The join happens per project object; here
+    names them by the object (`Catalog.Reference`). The join happens per project object; here
     only the kind side is collected, once per process.
     """
     catalog = dataset.load_json("stdlib.json")
@@ -854,8 +854,8 @@ def build_index(root: Path) -> dict:
                 for member, result in table.items()
             }
 
-    # The types an OBJECT of the project generates carry its own data: `Программы.Объект` holds
-    # the attributes and the tabular sections written in its yaml, `Программы.Ссылка` what the
+    # The types an OBJECT of the project generates carry its own data: `Catalog.Object` holds
+    # the attributes and the tabular sections written in its yaml, `Catalog.Reference` what the
     # kind gives a reference, and a tabular section is a type of its own with its attributes.
     # The catalogue describes these by KIND (`Справочник.Ссылка`), and their members are joined
     # with the object's own here - without this a variable holding an object answered nothing.
