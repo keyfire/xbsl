@@ -1317,3 +1317,58 @@ def test_completion_of_a_project_type_without_a_base_is_unchanged():
     )
 
     assert [e["label"] for e in got or []] == ["Название"]
+
+
+OWN_CALL_MODULE = """\
+структура ИтогЧтения
+    пер Создано: Число
+;
+
+метод ЗаписатьЧтение(): ИтогЧтения
+    возврат новый ИтогЧтения()
+;
+
+метод Загрузить()
+    знч Итог = ЗаписатьЧтение()
+    знч Ссылка = ЗаписатьЧтение
+    Итог.Создано
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_call_of_the_modules_own_method_types_the_variable():
+    """A call with no qualifier is how a module calls its own code - and the commonest
+    initializer there is. The variable used to stay untyped, so the dot after it was empty."""
+    src = engine.load_text("Отзывы.xbsl", OWN_CALL_MODULE)
+    offset = OWN_CALL_MODULE.index("Итог.Создано") + len("Итог.")
+
+    types = local_var_types(src, offset, returns={}, static_roots=set(),
+                            own_returns={"ЗаписатьЧтение": "ИтогЧтения"})
+
+    assert types["Итог"] == "ИтогЧтения"
+
+
+@pytest.mark.needs_data
+def test_a_bare_name_of_a_method_is_not_a_call():
+    """Only an invocation names the result: a bare name is a value, and guessing there would
+    type a variable by a method it merely mentions."""
+    src = engine.load_text("Отзывы.xbsl", OWN_CALL_MODULE)
+    offset = OWN_CALL_MODULE.index("Итог.Создано") + len("Итог.")
+
+    types = local_var_types(src, offset, returns={}, static_roots=set(),
+                            own_returns={"ЗаписатьЧтение": "ИтогЧтения"})
+
+    assert "Ссылка" not in types
+
+
+@pytest.mark.needs_data
+def test_the_chain_over_an_own_call_is_typed_at_the_cursor():
+    """The same root serves the cursor after the dot: `ЗаписатьЧтение().` knows the result."""
+    text = OWN_CALL_MODULE.replace("    Итог.Создано\n", "    ЗаписатьЧтение().Создано\n")
+    src = engine.load_text("Отзывы.xbsl", text)
+    offset = text.index("ЗаписатьЧтение().Создано") + len("ЗаписатьЧтение().")
+
+    got = chain_type_at(src, offset, own_returns={"ЗаписатьЧтение": "ИтогЧтения"})
+
+    assert got == "ИтогЧтения"

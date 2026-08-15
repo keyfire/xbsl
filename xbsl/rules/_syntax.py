@@ -753,6 +753,7 @@ def chain_type(
     returns: dict | None,
     stop_offset: int | None = None,
     written: bool = False,
+    own_returns: dict[str, str] | None = None,
 ) -> str | None:
     """The type of a call chain `Корень.Метод(...).Метод2(...)` starting at `start`.
 
@@ -795,8 +796,21 @@ def chain_type(
     elif t.kind == "IDENT":
         current = resolve_root(t.value)
         if current is None:
-            return None
-        i += 1
+            # A call with no qualifier is a method of the module itself - the everyday way a
+            # module calls its own code, and the most common start of a chain there is. Without
+            # this a variable initialized by such a call stayed untyped and the dot after it
+            # offered nothing. Only a CALL counts: a bare name is a value, not an invocation.
+            j = _skip_comments(toks, i + 1)
+            called = j < n and toks[j].kind == "OP" and toks[j].value == "("
+            raw = (own_returns or {}).get(t.value) if called else None
+            if raw:
+                current = dataset.member_type_head(raw)
+                last_written = raw
+                i = _skip_balanced(toks, j, "(", ")")
+            if current is None:
+                return None
+        else:
+            i += 1
     else:
         return None
     # the member links: .Имя(...) or .Имя - the catalog (`returns`) maps both a method
@@ -825,10 +839,13 @@ def chain_type(
 def _constructed_type(
     toks: list[Token], start: int,
     resolve_root=None, returns: dict | None = None,
+    own_returns: dict[str, str] | None = None,
 ) -> str | None:
     """The type of an initializer: `новый Массив<Строка>()`, `Запрос{...}` or a call
-    chain over a known root (`КлиентHttp.СБазовымUrl(...)`), or None."""
-    return chain_type(toks, start, resolve_root or (lambda _name: None), returns)
+    chain over a known root (`КлиентHttp.СБазовымUrl(...)`) or over a method of the module
+    itself (`ЗаписатьЧтение(...)`), or None."""
+    return chain_type(toks, start, resolve_root or (lambda _name: None), returns,
+                      own_returns=own_returns)
 
 
 def chain_type_at(
@@ -836,6 +853,7 @@ def chain_type_at(
     var_types: dict | None = None,
     returns: dict | None = None,
     static_roots=None,
+    own_returns: dict[str, str] | None = None,
 ) -> str | None:
     """The type of the call chain to the LEFT of the dot at `offset` (the cursor sits
     right after the dot, possibly with a partially typed name): the completion context
@@ -897,7 +915,8 @@ def chain_type_at(
             return name
         return None
 
-    return chain_type(toks, root_i, resolve_root, returns, stop_offset=stop)
+    return chain_type(toks, root_i, resolve_root, returns, stop_offset=stop,
+                      own_returns=own_returns)
 
 
 def local_var_names(source: SourceFile, offset: int) -> set[str]:
@@ -935,6 +954,7 @@ def local_var_names(source: SourceFile, offset: int) -> set[str]:
 def local_var_types(
     source: SourceFile, offset: int,
     returns: dict | None = None, static_roots=None,
+    own_returns: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Variable name -> type head for the names visible at `offset`.
 
@@ -991,14 +1011,16 @@ def local_var_types(
                 for tok in d.names:
                     written_types[tok.value] = full
         elif d.value_start is not None:
-            name = _constructed_type(toks, d.value_start, resolve_root, returns)
+            name = _constructed_type(toks, d.value_start, resolve_root, returns,
+                                     own_returns=own_returns)
         else:
             continue
         if not name:
             continue
         for tok in d.names:
             out[tok.value] = name
-    _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types)
+    _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types,
+                        own_returns)
     return out
 
 
@@ -1021,6 +1043,7 @@ def element_type(written: str | None) -> str | None:
 def _add_loop_var_types(
     toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
     written_types: dict[str, str] | None = None,
+    own_returns: dict[str, str] | None = None,
 ) -> None:
     """Type the variable of a `для X из <коллекция>` loop by the element type of the collection.
 
@@ -1047,7 +1070,8 @@ def _add_loop_var_types(
             if bare:
                 collection = written_types.get(nxt.value)
         if collection is None:
-            collection = chain_type(toks, i + 3, resolve_root, returns, written=True)
+            collection = chain_type(toks, i + 3, resolve_root, returns, written=True,
+                                    own_returns=own_returns)
         element = element_type(collection)
         if element:
             out[name.value] = element

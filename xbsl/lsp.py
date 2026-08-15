@@ -627,6 +627,17 @@ def _make_server() -> "LanguageServer":
         ]
         return result or None
 
+    def _own_module_returns(path) -> dict[str, str]:
+        """{method: return type} of the module the file holds - the target of a bare call."""
+        if STATE.lookup is None:
+            return {}
+        module = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
+        return {
+            m["name"]: m["returns"]
+            for m in STATE.lookup.methods_by_module(module)
+            if m.get("returns")
+        }
+
     def _inference_inputs() -> tuple[dict, dict, set]:
         """(stdlib members, return-type catalogue, static roots) for the type inference.
 
@@ -688,8 +699,12 @@ def _make_server() -> "LanguageServer":
             src = engine.load_text(path.name, doc.source)
             in_query = any(a <= offset < b for a, b in query_ranges(src))
             query_tables = query_aliases(src, offset) if in_query else {}
+            # The methods of THIS module: a call with no qualifier is how a module calls its
+            # own code, and it is the most common initializer there is.
+            own_returns = _own_module_returns(path)
             local_vars = local_var_types(
                 src, offset, returns=returns, static_roots=static_roots,
+                own_returns=own_returns,
             )
             query_rows = query_row_columns(src, offset)
             # `ЗапросКБД.Выполнить().` or `Список.НастройкиСервисов.` - the dot continues
@@ -701,6 +716,7 @@ def _make_server() -> "LanguageServer":
                 expr_type = chain_type_at(
                     src, offset, var_types=local_vars,
                     returns=returns, static_roots=static_roots,
+                    own_returns=own_returns,
                 )
         except Exception:  # noqa: BLE001 - completion must not fail because of parsing
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
