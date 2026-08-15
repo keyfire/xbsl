@@ -12,6 +12,21 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Changed
+- **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
+  five corpora (47 072 accesses of the shape `X.name`, counting a named receiver type) – between
+  3.9 and 5.3 points gained on each of them; the same measure reads the entry of 2026-08-15,
+  where two corpora gave 36%. Two places where the data could name the type and the module stayed
+  silent are closed. **The literals the lexer already tells apart:** `Query{...}` is a `Query`,
+  `'\d+'` is a `Pattern`, and `Resource{...}` is named by the identifier that opens it, and only
+  when the catalog knows that name as a type. **A loop variable is ONE ELEMENT of the
+  collection:** a generic now carries the arguments it was written with (`Array<String>` has the
+  element `String`), and the counter of `for X = A to B` is a `Number`. A map stays unknown: its
+  element is `KeyAndValue<KeyType,ValueType>`, nothing in the data pairs the two, and pairing
+  them by name would be a guess.
+
 ## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
 
 ### Added

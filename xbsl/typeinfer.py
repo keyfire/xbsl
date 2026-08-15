@@ -23,7 +23,7 @@ the empty value is impossible for a type that has none.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from xbsl import dataset
 from xbsl import parser as P
@@ -32,14 +32,20 @@ from xbsl import parser as P
 _NOMINAL_RE = re.compile(r"[А-Яа-яЁёA-Za-z0-9_]+(?:\.[А-Яа-яЁёA-Za-z0-9_]+)?")
 
 #: The type a literal names, by the lexer's own kind. The empty value is a type of its own in the
-#: platform, and it is exactly what makes an expression nullable.
+#: platform, and it is exactly what makes an expression nullable. The catalog keys types by both
+#: spellings, so the Russian name answers for an English source as it does everywhere else here.
 _LITERAL_TYPES = {
     "STRING": "Строка",
     "NUMBER": "Число",
     "TRUE": "Булево",
     "FALSE": "Булево",
+    "QUERY": "Запрос",
+    "PATTERN": "Образец",
 }
 _UNDEFINED_KIND = "UNDEFINED"
+#: A resolvable literal (`Ресурс{...}`) is not named by its kind: the identifier that OPENS it is
+#: the type, and the lexer keeps it in the literal's own text.
+_RESOLVABLE_KIND = "RESOLVABLE"
 
 #: The head type of a collection literal - the arguments type the members, they do not name them.
 _COLLECTION_TYPES = {"array": "Массив", "map": "Соответствие", "set": "Множество"}
@@ -67,13 +73,20 @@ dataset.register_reset(_reset)
 
 @dataclass(frozen=True)
 class Inferred:
-    """A type the module could name: the nominal name plus whether the empty value belongs to it."""
+    """A type the module could name: the nominal name plus whether the empty value belongs to it.
+
+    `args` carries the arguments of a generic as they were WRITTEN (`Array<String>` -> `String`),
+    because the element of a loop is not in the head alone. It stays out of the comparison on
+    purpose: the answer of this module is the nominal type, and a caller that already asks
+    `== Inferred("Массив")` must not start missing a typed array over a detail it never named.
+    """
 
     name: str
     nullable: bool = False
+    args: tuple[str, ...] = field(default=(), compare=False)
 
     def without_null(self) -> "Inferred":
-        return self if not self.nullable else Inferred(self.name, False)
+        return self if not self.nullable else Inferred(self.name, False, self.args)
 
 
 @dataclass
@@ -133,8 +146,20 @@ def method_env(method: object, *, type_names: bool = False,
             return
         if isinstance(node, P.VarDecl):
             remember(node.name, getattr(node, "type", None), getattr(node, "init", None))
-        elif isinstance(node, (P.ForEach, P.ForTo)):
-            declared.add(getattr(node, "var", ""))
+        elif isinstance(node, P.ForEach):
+            # The loop names its variable without a type: it is one ELEMENT of the collection,
+            # and the collection is typed by what stands to the left of this loop. The node is
+            # met before its body, so the body sees the variable already typed.
+            name = getattr(node, "var", "")
+            declared.add(name)
+            element = _element_type(expression_type(getattr(node, "source", None), env))
+            if element is not None:
+                variables[name] = element
+        elif isinstance(node, P.ForTo):
+            # `для Х = А по Б [шаг С]` counts, and the platform counts with numbers.
+            name = getattr(node, "var", "")
+            declared.add(name)
+            variables[name] = Inferred(_LITERAL_TYPES["NUMBER"])
         elif isinstance(node, P.Lambda):
             for param in getattr(node, "params", ()) or ():
                 declared.add(getattr(param, "name", ""))
@@ -144,6 +169,19 @@ def method_env(method: object, *, type_names: bool = False,
     walk(getattr(method, "body", None))
     return TypeEnv(variables, returns=returns, this_type=this_type,
                    type_names=type_names, shadowed=frozenset(declared) - set(variables))
+
+
+def _element_type(collection: Inferred | None) -> Inferred | None:
+    """One element of a collection: `Array<String>` -> `String`.
+
+    Answered only for a collection written with a SINGLE argument, which is what an array, a set
+    and a readable sequence are. A map has two, and its element is neither of them - the platform
+    hands out `KeyAndValue<KeyType,ValueType>` - but nothing in the data pairs a two-argument
+    collection with that type, and pairing them by name here would be a guess. So: silence.
+    """
+    if collection is None or len(collection.args) != 1:
+        return None
+    return nominal(collection.args[0])
 
 
 def nominal(text: str | None) -> Inferred | None:
@@ -162,11 +200,38 @@ def nominal(text: str | None) -> Inferred | None:
         stripped = stripped[:-1].strip()
     if _NOMINAL_RE.fullmatch(stripped):
         return Inferred(stripped, nullable)
-    # A generic counts by its HEAD: the arguments type the members, they do not name them.
+    # A generic counts by its HEAD: the arguments type the members, they do not name them. They
+    # are carried along all the same - the element of a loop over the collection is one of them.
     head = stripped.split("<", 1)[0].strip()
     if stripped.endswith(">") and _NOMINAL_RE.fullmatch(head):
-        return Inferred(head, nullable)
+        return Inferred(head, nullable, _type_arguments(stripped))
     return None
+
+
+def _type_arguments(text: str) -> tuple[str, ...]:
+    """The arguments of `Голова<А, Б>` as written, split at the TOP level only.
+
+    An argument is itself a type and may be generic, so a comma inside its own angle brackets
+    belongs to it: `Массив<Соответствие<Строка, Число>>` has ONE argument, not two.
+    """
+    inner = text[text.index("<") + 1 : -1]
+    args: list[str] = []
+    current: list[str] = []
+    depth = 0
+    for char in inner:
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+        elif char == "," and depth == 0:
+            args.append("".join(current).strip())
+            current = []
+            continue
+        current.append(char)
+    tail = "".join(current).strip()
+    if tail:
+        args.append(tail)
+    return tuple(arg for arg in args if arg)
 
 
 def is_type_name(name: str) -> bool:
@@ -218,6 +283,11 @@ def expression_type(node: object, env: TypeEnv) -> Inferred | None:
         kind = str(getattr(node, "kind", ""))
         if kind == _UNDEFINED_KIND:
             return Inferred("Неопределено", True)
+        if kind == _RESOLVABLE_KIND:
+            # The opening identifier is the type only if the catalog knows it as one: the shape
+            # `Имя{...}` is open, and a name the data is silent about is no answer.
+            opener = str(getattr(node, "text", ""))
+            return Inferred(opener) if opener and is_type_name(opener) else None
         name = _LITERAL_TYPES.get(kind)
         return Inferred(name) if name else None
     if isinstance(node, P.ArrayLit):

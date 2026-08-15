@@ -124,11 +124,17 @@ def test_a_declared_name_is_never_read_as_a_type():
     assert ti.expression_type(method.body[-1].value, env) is None
 
 
-def test_a_parameter_of_a_loop_is_shadowed_too():
-    method = _method("метод Ф(Данные: Массив<Строка>)\n    для Строка из Данные\n"
+def test_a_loop_variable_over_an_untyped_collection_is_shadowed():
+    """Nothing types the collection, so the loop variable is a name of unknown type - not a type.
+
+    The loop below names its variable with a word the catalog also knows as a stdlib type
+    (`String`): reading it as that type would answer about the type where the code speaks of
+    one element of the collection.
+    """
+    method = _method("метод Ф()\n    для Строка из Данные\n"
                      "        Сообщить(Строка)\n    ;\n;\n")
     env = ti.method_env(method, type_names=True)
-    assert "Строка" in env.shadowed
+    assert "Строка" in env.shadowed and "Строка" not in env.variables
 
 
 def test_a_type_parameter_is_not_a_type():
@@ -139,3 +145,61 @@ def test_a_type_parameter_is_not_a_type():
     """
     assert ti.member_type("СобытиеСДанными", "Данные") is None
     assert ti.member_type("Строка", "ВВерхнийРегистр") == ti.Inferred("Строка")
+
+
+# --- the arguments of a generic, and the loop that reads one element ------------------------
+
+
+def test_a_generic_carries_its_arguments_without_changing_the_answer():
+    """The head is still the answer; the arguments ride along and stay out of the comparison."""
+    assert ti.nominal("Массив<Строка>") == ti.Inferred("Массив")
+    assert ti.nominal("Массив<Строка>").args == ("Строка",)
+    assert ti.nominal("Соответствие<Строка, Число>").args == ("Строка", "Число")
+
+
+def test_an_argument_that_is_itself_generic_stays_one_argument():
+    # the comma belongs to the inner type, so splitting at the top level is the whole point
+    assert ti.nominal("Массив<Соответствие<Строка, Число>>").args == ("Соответствие<Строка, Число>",)
+
+
+def test_a_loop_variable_is_one_element_of_the_collection():
+    method = _method("метод Ф(Данные: Массив<Товары.Ссылка>)\n    для Позиция из Данные\n"
+                     "        Сообщить(Позиция)\n    ;\n;\n")
+    env = ti.method_env(method, type_names=True)
+    assert env.variables["Позиция"] == ti.Inferred("Товары.Ссылка")
+    assert "Позиция" not in env.shadowed
+
+
+def test_a_loop_over_a_map_stays_unknown():
+    """Its element is `КлючИЗначение<...>`, and no data pairs the two - a guess is not an answer."""
+    method = _method("метод Ф(Данные: Соответствие<Строка, Число>)\n    для Пара из Данные\n"
+                     "        Сообщить(Пара)\n    ;\n;\n")
+    env = ti.method_env(method, type_names=True)
+    assert "Пара" in env.shadowed and "Пара" not in env.variables
+
+
+def test_a_counting_loop_counts_with_numbers():
+    method = _method("метод Ф()\n    для Счётчик = 1 по 10\n"
+                     "        Сообщить(Счётчик)\n    ;\n;\n")
+    env = ti.method_env(method, type_names=True)
+    assert env.variables["Счётчик"] == ti.Inferred("Число")
+
+
+# --- the literals the lexer already tells apart ---------------------------------------------
+
+
+def test_a_query_and_a_pattern_literal_name_their_types():
+    assert _type_of("Запрос{выбрать 1}") == ti.Inferred("Запрос")
+    assert _type_of("'\\ц+'") == ti.Inferred("Образец")  # a pattern literal is written in quotes
+    # and the member resolves on it: the array of matches is what the catalog states
+    assert _type_of("'\\ц+'.НайтиСовпадения(Текст)") == ti.Inferred("Массив")
+
+
+def test_a_resolvable_literal_is_named_by_the_identifier_that_opens_it():
+    assert _type_of("Ресурс{картинка.png}") == ti.Inferred("Ресурс")
+    # `Ресурс{...}.Ссылка` is the shape the corpora write, and the member resolves on that type
+    assert _type_of("Ресурс{картинка.png}.Ссылка") == ti.Inferred("ДвоичныйОбъект.Ссылка")
+
+
+def test_a_resolvable_literal_the_catalog_does_not_know_stays_unknown():
+    assert _type_of("НетТакогоТипаВКаталоге{что-то}") is None
