@@ -1340,7 +1340,7 @@ OWN_CALL_MODULE = """\
 def test_a_call_of_the_modules_own_method_types_the_variable():
     """A call with no qualifier is how a module calls its own code - and the commonest
     initializer there is. The variable used to stay untyped, so the dot after it was empty."""
-    src = engine.load_text("Отзывы.xbsl", OWN_CALL_MODULE)
+    src = engine.load_text("Задачи.xbsl", OWN_CALL_MODULE)
     offset = OWN_CALL_MODULE.index("Итог.Создано") + len("Итог.")
 
     types = local_var_types(src, offset, returns={}, static_roots=set(),
@@ -1353,7 +1353,7 @@ def test_a_call_of_the_modules_own_method_types_the_variable():
 def test_a_bare_name_of_a_method_is_not_a_call():
     """Only an invocation names the result: a bare name is a value, and guessing there would
     type a variable by a method it merely mentions."""
-    src = engine.load_text("Отзывы.xbsl", OWN_CALL_MODULE)
+    src = engine.load_text("Задачи.xbsl", OWN_CALL_MODULE)
     offset = OWN_CALL_MODULE.index("Итог.Создано") + len("Итог.")
 
     types = local_var_types(src, offset, returns={}, static_roots=set(),
@@ -1366,7 +1366,7 @@ def test_a_bare_name_of_a_method_is_not_a_call():
 def test_the_chain_over_an_own_call_is_typed_at_the_cursor():
     """The same root serves the cursor after the dot: `ЗаписатьЧтение().` knows the result."""
     text = OWN_CALL_MODULE.replace("    Итог.Создано\n", "    ЗаписатьЧтение().Создано\n")
-    src = engine.load_text("Отзывы.xbsl", text)
+    src = engine.load_text("Задачи.xbsl", text)
     offset = text.index("ЗаписатьЧтение().Создано") + len("ЗаписатьЧтение().")
 
     got = chain_type_at(src, offset, own_returns={"ЗаписатьЧтение": "ИтогЧтения"})
@@ -1408,3 +1408,78 @@ def test_an_expression_over_a_literal_is_not_claimed():
     types = local_var_types(src, offset, returns={}, static_roots=set())
 
     assert "Сумма" not in types
+
+
+NONNULL_CHAIN = """\
+метод М(Разбор: Ответ)
+    знч Инфо = Разбор.file!.info!
+    знч Текст = Разбор.file!.Прочитать()
+    Инфо.Что
+;
+"""
+
+_NONNULL_RETURNS = {
+    "Ответ": {"file": "ДанныеФайла?"},
+    "ДанныеФайла": {"info": "СведенияПакета?", "Прочитать": "Строка"},
+}
+
+
+@pytest.mark.needs_data
+def test_a_non_null_operator_does_not_end_the_chain():
+    """`Разбор.file!.info` asserts the value is there and changes nothing else - the chain used
+    to stop at the operator and answer the type BEFORE it."""
+    src = engine.load_text("К.xbsl", NONNULL_CHAIN)
+    offset = NONNULL_CHAIN.index("Инфо.Что") + len("Инфо.")
+
+    types = local_var_types(src, offset, returns=_NONNULL_RETURNS, static_roots=set())
+
+    assert types["Инфо"] == "СведенияПакета"
+    assert types["Текст"] == "Строка"
+
+
+OWN_CALL_NAMESAKE = """\
+метод Реализация(): ОбработчикЗадач
+    возврат новый ОбработчикЗадач()
+;
+
+метод М()
+    знч Площадка = Реализация(Источник)
+    Площадка.Что
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_call_outranks_a_type_of_the_same_name():
+    """A method may be named like a platform type, and `Имя(...)` is then a call, not the type:
+    a type is used as `Тип.Член`, never with parentheses."""
+    src = engine.load_text("Задачи.xbsl", OWN_CALL_NAMESAKE)
+    offset = OWN_CALL_NAMESAKE.index("Площадка.Что") + len("Площадка.")
+
+    types = local_var_types(src, offset, returns={}, static_roots={"Реализация"},
+                            own_returns={"Реализация": "ОбработчикЗадач"})
+
+    assert types["Площадка"] == "ОбработчикЗадач"
+
+
+LOOP_OVER_OWN_CALL = """\
+метод М()
+    знч Старые = ПрочитатьЗадачи()
+    для Запись из Старые
+        Запись.Код
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_loop_over_a_variable_from_a_call_takes_its_element():
+    """The variable keeps the written type of its initializer, so a for-each over it has a
+    generic argument to take the element from - the nominal head alone had dropped it."""
+    src = engine.load_text("К.xbsl", LOOP_OVER_OWN_CALL)
+    offset = LOOP_OVER_OWN_CALL.index("Запись.Код") + len("Запись.")
+
+    types = local_var_types(src, offset, returns={}, static_roots=set(),
+                            own_returns={"ПрочитатьЗадачи": "Массив<Задачи.Объект>"})
+
+    assert types["Запись"] == "Задачи.Объект"

@@ -828,22 +828,23 @@ def chain_type(
             j < n and toks[j].kind == "OP" and toks[j].value == "("
         ) else j
     elif t.kind == "IDENT":
-        current = resolve_root(t.value)
-        if current is None:
-            # A call with no qualifier is a method of the module itself - the everyday way a
-            # module calls its own code, and the most common start of a chain there is. Without
-            # this a variable initialized by such a call stayed untyped and the dot after it
-            # offered nothing. Only a CALL counts: a bare name is a value, not an invocation.
-            j = _skip_comments(toks, i + 1)
-            called = j < n and toks[j].kind == "OP" and toks[j].value == "("
-            raw = (own_returns or {}).get(t.value) if called else None
-            if raw:
-                current = dataset.member_type_head(raw)
-                last_written = raw
-                i = _skip_balanced(toks, j, "(", ")")
+        # A call with no qualifier is a method of the module itself - the everyday way a module
+        # calls its own code, and the commonest start of a chain there is. It outranks a static
+        # root of the same name: a type is used as `Тип.Член`, never as `Тип(...)`, so the
+        # parenthesis settles which of the two the code means. A method whose name repeats a
+        # platform type is ordinary (`Implementation`), and reading it as the type answered a type
+        # nothing here returns.
+        j = _skip_comments(toks, i + 1)
+        called = j < n and toks[j].kind == "OP" and toks[j].value == "("
+        raw = (own_returns or {}).get(t.value) if called else None
+        if raw:
+            current = dataset.member_type_head(raw)
+            last_written = raw
+            i = _skip_balanced(toks, j, "(", ")")
+        else:
+            current = resolve_root(t.value)
             if current is None:
                 return None
-        else:
             i += 1
     else:
         return None
@@ -851,7 +852,15 @@ def chain_type(
     # and a property to its result type. The catalog may keep the FULL docs spelling
     # (М<Т>, Тип?); the chain works in nominal heads - both as the lookup key and as the
     # inferred type - so data of any vintage answers the same.
-    while i < n and toks[i].kind == "OP" and toks[i].value == ".":
+    while i < n:
+        # A non-null operator between links (`Разбор.file!.info`) asserts the value is there and
+        # changes nothing else: the chain used to stop at it and answer the type BEFORE it.
+        # `!=` is a single token, so a lone `!` here is unambiguous.
+        if toks[i].kind == "OP" and toks[i].value == "!":
+            i += 1
+            continue
+        if not (toks[i].kind == "OP" and toks[i].value == "."):
+            break
         if stop_offset is not None and toks[i].start >= stop_offset:
             break
         j = _skip_comments(toks, i + 1)
@@ -874,12 +883,13 @@ def _constructed_type(
     toks: list[Token], start: int,
     resolve_root=None, returns: dict | None = None,
     own_returns: dict[str, str] | None = None,
+    written: bool = False,
 ) -> str | None:
     """The type of an initializer: `новый Массив<Строка>()`, `Запрос{...}` or a call
     chain over a known root (`КлиентHttp.СБазовымUrl(...)`) or over a method of the module
     itself (`ЗаписатьЧтение(...)`), or None."""
     return chain_type(toks, start, resolve_root or (lambda _name: None), returns,
-                      own_returns=own_returns)
+                      own_returns=own_returns, written=written)
 
 
 def chain_type_at(
@@ -1047,6 +1057,13 @@ def local_var_types(
         elif d.value_start is not None:
             name = _constructed_type(toks, d.value_start, resolve_root, returns,
                                      own_returns=own_returns)
+            # The WRITTEN type of the initializer too: a for-each over this variable takes its
+            # element out of the generic argument, and the nominal head has dropped it.
+            full = _constructed_type(toks, d.value_start, resolve_root, returns,
+                                     own_returns=own_returns, written=True)
+            if full:
+                for tok in d.names:
+                    written_types[tok.value] = full
         else:
             continue
         if not name:
