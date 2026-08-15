@@ -23,6 +23,7 @@ from xbsl.lsp_nav import (
 )
 from xbsl.rules._syntax import (
     chain_type_at,
+    enclosing_constructor,
     local_var_names,
     local_var_types,
     query_aliases,
@@ -1534,3 +1535,58 @@ def test_a_declaration_inside_a_loop_leans_on_the_loop_variable():
 
     assert types["Файл"] == "ДвоичныйОбъект.Ссылка"
     assert types["Поток"] == "ПотокЧтения"
+
+
+CTOR_MODULE = """\
+структура ЗаписьЖурнала
+    пер Логин: Строка
+    пер Роль: Строка
+;
+
+метод М()
+    Список.Добавить(новый ЗаписьЖурнала(
+        Логин = "иванов",
+        Роль
+    ))
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_the_enclosing_constructor_is_found_across_lines_and_nesting():
+    """`новый Тип(` around the cursor, however the call is laid out: a multi-line call and one
+    nested in another call read alike."""
+    src = engine.load_text("Ж.xbsl", CTOR_MODULE)
+    offset = CTOR_MODULE.index("Роль\n") + len("Роль")
+
+    assert enclosing_constructor(src, offset) == "ЗаписьЖурнала"
+
+
+def test_completion_inside_a_constructor_offers_the_argument_names():
+    """Inside `новый Тип(` the author writes the NAMES of what the type carries: they are the
+    one thing an editor can supply there, and the snippet writes the `= ` for them."""
+    idx = dict(INDEX)
+    idx["struct_members"] = {
+        "ЗаписьЖурнала": {"properties": ["Логин", "Роль"],
+                          "property_types": {"Логин": "Строка", "Роль": "Строка"}},
+    }
+    got = resolve_completions(
+        IndexLookup(idx), language_id="xbsl", line_prefix="        ",
+        file_stem="Ж", stdlib_members={}, ctor_type="ЗаписьЖурнала",
+    )
+
+    assert [(e["label"], e.get("snippet")) for e in got or []] == [
+        ("Логин", "Логин = $0"), ("Роль", "Роль = $0"),
+    ]
+
+
+def test_completion_after_the_equals_sign_is_not_the_argument_name():
+    """After `=` the author writes the VALUE - the names of the type have no business there."""
+    idx = dict(INDEX)
+    idx["struct_members"] = {"ЗаписьЖурнала": {"properties": ["Логин"]}}
+    got = resolve_completions(
+        IndexLookup(idx), language_id="xbsl", line_prefix="        Логин = ",
+        file_stem="Ж", stdlib_members={}, ctor_type="ЗаписьЖурнала",
+    )
+
+    assert not [e for e in got or [] if e["label"] == "Логин"]

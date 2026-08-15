@@ -374,6 +374,43 @@ def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[
     return entries or None
 
 
+#: The text after the last opening parenthesis or comma - one argument of the call.
+_ARGUMENT_TAIL_RE = re.compile(r"[(,]\s*([^(,]*)$")
+
+
+def _at_argument_name(line_prefix: str) -> bool:
+    """Is the cursor where the NAME of a named argument goes?
+
+    After `=` the author writes the value, and the members of the type have no business there;
+    a dot means a member of something else. Everything else inside the call is the name itself,
+    whole or partial - including a fresh line of a multi-line call, where the argument starts at
+    the indent and there is no parenthesis or comma on the line at all.
+    """
+    m = _ARGUMENT_TAIL_RE.search(line_prefix)
+    tail = m.group(1) if m else line_prefix
+    return (
+        "=" not in tail and "." not in tail
+        and re.fullmatch(rf"\s*(?:{IDENT})?\s*", tail) is not None
+    )
+
+
+def _constructor_argument_entries(lookup: IndexLookup, type_name: str) -> list[dict]:
+    """The names a constructor of a project type takes: what the type carries."""
+    struct = lookup.struct_by_name(type_name)
+    if not struct:
+        return []
+    types = struct.get("property_types") or {}
+    return [
+        {
+            "label": str(x),
+            "kind": "field",
+            "detail": str(types.get(x) or "поле"),
+            "snippet": f"{x} = $0",
+        }
+        for x in struct.get("properties") or []
+    ]
+
+
 def _inherited_entries(
     lookup: IndexLookup, type_name: str, stdlib_members: Optional[dict],
 ) -> list[dict]:
@@ -617,6 +654,7 @@ def resolve_completions(
     query_tables: Optional[dict] = None,
     query_rows: Optional[dict] = None,
     expr_type: Optional[str] = None,
+    ctor_type: Optional[str] = None,
     stdlib_names: Optional[Any] = None,
     templates: Optional[Sequence["Template"]] = None,
 ) -> Optional[list[dict]]:
@@ -624,6 +662,13 @@ def resolve_completions(
     # A dot that continues a chain - after a call (`ЗапросКБД.Выполнить().`) or a property
     # link (`Список.НастройкиСервисов.`): the caller inferred the chain type (expr_type),
     # the identifier-before-dot paths below cannot see past the first link.
+    # Inside `новый Тип(` the author writes the NAMES of what the type carries, and those names
+    # are the one thing an editor can supply there. Before the chain paths: a name is being typed,
+    # not a member of something.
+    if ctor_type and _at_argument_name(line_prefix):
+        named = _constructor_argument_entries(lookup, ctor_type)
+        if named:
+            return named
     if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:

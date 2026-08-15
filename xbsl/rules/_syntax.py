@@ -895,6 +895,46 @@ def _constructed_type(
                       own_returns=own_returns, written=written)
 
 
+def enclosing_constructor(source: SourceFile, offset: int) -> str | None:
+    """The type whose constructor call encloses `offset`, or None.
+
+    `новый Тип(Имя = ...|` is where the author writes the NAMES of what the type carries, and
+    the names are the one thing an editor can supply there. The walk goes back over tokens
+    counting parentheses, so a multi-line call and nested calls read alike.
+    """
+    toks = code_tokens(source)
+    idx = -1
+    for k, tok in enumerate(toks):
+        if tok.start < offset:
+            idx = k
+        else:
+            break
+    depth = 0
+    j = idx
+    while j >= 0:
+        tok = toks[j]
+        if tok.kind == "OP" and tok.value == ")":
+            depth += 1
+        elif tok.kind == "OP" and tok.value == "(":
+            if depth == 0:
+                break
+            depth -= 1
+        j -= 1
+    if j < 0:
+        return None
+    # `новый <тип>(`: the type expression sits between the keyword and the parenthesis.
+    k = j - 1
+    while k >= 0 and not (toks[k].kind == "KEYWORD" and toks[k].canonical == "NEW"):
+        if toks[k].kind not in ("IDENT",) and not (
+            toks[k].kind == "OP" and toks[k].value in (".", "<", ">", ",", "?")
+        ):
+            return None
+        k -= 1
+    if k < 0:
+        return None
+    return _type_head(toks, k + 1)
+
+
 def chain_type_at(
     source: SourceFile, offset: int,
     var_types: dict | None = None,

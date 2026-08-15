@@ -57,6 +57,7 @@ from xbsl.lsp_nav import (
 )
 from xbsl.rules._syntax import (
     chain_type_at,
+    enclosing_constructor,
     local_var_names,
     local_var_types,
     pair_yaml_names,
@@ -711,6 +712,8 @@ def _make_server() -> "LanguageServer":
             # a chain, the inferred chain type gives the members (the identifier-before-dot
             # path resolves one link only). Not inside Запрос{...}: there a dotted name is
             # a table reference and belongs to the query paths.
+            # `новый Тип(` around the cursor: there the author writes argument NAMES.
+            ctor_type = None if in_query else enclosing_constructor(src, offset)
             expr_type = None
             if not in_query and CHAIN_TAIL_RE.search(prefix):
                 expr_type = chain_type_at(
@@ -720,7 +723,7 @@ def _make_server() -> "LanguageServer":
                 )
         except Exception:  # noqa: BLE001 - completion must not fail because of parsing
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
-            expr_type = None
+            expr_type = ctor_type = None
         entries = resolve_completions(
             lookup,
             language_id=language_of(path),
@@ -736,6 +739,7 @@ def _make_server() -> "LanguageServer":
             query_tables=query_tables,
             query_rows=query_rows,
             expr_type=expr_type,
+            ctor_type=ctor_type,
             templates=STATE.templates,
         )
         if entries is None:
