@@ -703,9 +703,12 @@ def _make_server() -> "LanguageServer":
             # The methods of THIS module: a call with no qualifier is how a module calls its
             # own code, and it is the most common initializer there is.
             own_returns = _own_module_returns(path)
+            # The written types of the locals travel along: a generic member names its result by
+            # the owner's type parameter, and only the arguments the code wrote resolve it.
+            var_written: dict[str, str] = {}
             local_vars = local_var_types(
                 src, offset, returns=returns, static_roots=static_roots,
-                own_returns=own_returns,
+                own_returns=own_returns, written_out=var_written,
             )
             query_rows = query_row_columns(src, offset)
             # `ЗапросКБД.Выполнить().` or `Список.НастройкиСервисов.` - the dot continues
@@ -719,10 +722,11 @@ def _make_server() -> "LanguageServer":
                 expr_type = chain_type_at(
                     src, offset, var_types=local_vars,
                     returns=returns, static_roots=static_roots,
-                    own_returns=own_returns,
+                    own_returns=own_returns, var_written=var_written,
                 )
         except Exception:  # noqa: BLE001 - completion must not fail because of parsing
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
+            var_written = {}
             expr_type = ctor_type = None
         entries = resolve_completions(
             lookup,

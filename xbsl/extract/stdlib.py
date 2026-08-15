@@ -255,6 +255,25 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
     return props, methods, events - props - methods
 
 
+#: The qualified name in the page header, with the type parameters as the docs print them:
+#: `Стд::Коллекции::Массив<ТипЭлемента>`, `Стд::Коллекции::Соответствие<ТипКлюча, ТипЗначения>`.
+_QUALIFIED_RE = re.compile(r"(?:[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*::)+([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)&lt;([^&]*)&gt;")
+
+
+def page_type_params(raw: str) -> list[str]:
+    """Names of the type parameters a page declares, in order.
+
+    A generic type names the result of its members BY THE PARAMETER (`First(): ItemType`),
+    and without the parameter list such a result cannot be turned into a real type: the
+    consumer matches the names against the arguments the code writes (`Array<Card>`).
+    """
+    m = _QUALIFIED_RE.search(raw)
+    if m is None:
+        return []
+    params = [p.strip() for p in html.unescape(m.group(2)).split(",")]
+    return [p for p in params if _PROP_NAME_RE.match(p)]
+
+
 def page_bases(raw: str) -> list[str]:
     """Base types of a page, from its "Иерархия типа" section.
 
@@ -274,8 +293,14 @@ def page_bases(raw: str) -> list[str]:
         bases: list[str] = []
         for m in _LINK_RE.finditer(head):
             name = _plain_text(m.group(1))
-            if _PROP_NAME_RE.match(name) and name not in bases:
-                bases.append(name)
+            # A generic base prints its argument in the link text (`Collection<ItemType>`,
+            # entity-escaped in the html), and the name of the base is the head. Reading the
+            # whole text as a name dropped such a base entirely: a collection kept `Object`
+            # alone as its ancestor, and the result types of everything it inherits (`First`,
+            # `Get`) were lost with it.
+            root = html.unescape(name).split("<", 1)[0].strip()
+            if _PROP_NAME_RE.match(root) and root not in bases:
+                bases.append(root)
         return bases
     return []
 
@@ -606,6 +631,7 @@ def extract(dist: Path) -> tuple:
     returns: dict[str, dict[str, str]] = {}
     signatures: dict[str, dict[str, list[str]]] = {}
     bases: dict[str, list[str]] = {}
+    type_params: dict[str, list[str]] = {}
     ctors: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
@@ -631,6 +657,9 @@ def extract(dist: Path) -> tuple:
             page_base_list = page_bases(raw)
             if page_base_list and key:
                 bases.setdefault(key, page_base_list)
+            page_params = page_type_params(raw)
+            if page_params and key:
+                type_params.setdefault(key, page_params)
             if key and title:
                 kind = page_constructors(raw, title)
                 if CTOR_RANK[kind] >= CTOR_RANK.get(ctors.get(key, CTOR_NONE), 0):
@@ -718,7 +747,7 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, returns, signatures, bases, ctors)
+            facets, returns, signatures, bases, ctors, type_params)
 
 
 def _empty_member_slot() -> dict[str, set[str]]:
@@ -792,7 +821,7 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, returns, signatures, bases, ctors) = extract(dist)
+     facets, returns, signatures, bases, ctors, type_params) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -858,6 +887,11 @@ def main(argv=None) -> int:
         # "empty" cannot be left uninitialized unless the type has a default value of its
         # own (a primitive does, a collection does not).
         "type_ctors": {k: v for k, v in sorted(ctors.items())},
+        # The type parameters a generic type declares, in the order the page prints them
+        # (`Массив<ТипЭлемента>`). A member of such a type names its result BY THE PARAMETER,
+        # and only this list turns that name into a real type: the consumer matches it against
+        # the arguments the code writes.
+        "type_params": {k: v for k, v in sorted(type_params.items())},
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"

@@ -1590,3 +1590,29 @@ def test_completion_after_the_equals_sign_is_not_the_argument_name():
     )
 
     assert not [e for e in got or [] if e["label"] == "Логин"]
+
+
+GENERIC_CHAIN = """\
+метод М(Строки: Массив<Строка>)
+    знч Первая = Строки.Первый()
+    знч Сколько = Строки.Размер()
+    Первая.Длина()
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_generic_member_resolves_by_the_written_arguments():
+    """A generic type names the result of its members BY THE PARAMETER (`Первый(): ТипЭлемента`).
+
+    The answer means nothing until the arguments the code wrote are put in: a value of
+    `Array<String>` answers `String`, and the dot after it offers the members of a string.
+    """
+    returns = {"Массив": {"Первый": "ТипЭлемента", "Размер": "Число"}}
+    src = engine.load_text("М.xbsl", GENERIC_CHAIN)
+    offset = GENERIC_CHAIN.index("Первая.Длина") + len("Первая.")
+
+    types = local_var_types(src, offset, returns=returns, static_roots=set())
+
+    assert types["Первая"] == "Строка"
+    assert types["Сколько"] == "Число"

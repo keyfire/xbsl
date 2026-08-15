@@ -395,3 +395,35 @@ def test_template_kinds_exceptions_win_over_the_rule(tmp_path, monkeypatch):
 
     assert kinds == {"ComponentName": "КомпонентИнтерфейса"}
     assert unmapped == []
+
+
+def test_a_generic_base_is_read_by_its_head():
+    """A base prints its argument in the link text (`Collection<ItemType>`), entity-escaped.
+
+    Reading the whole text as a name dropped such a base entirely: a collection kept `Object`
+    alone as its ancestor, and the result types of everything it inherits went with it.
+    """
+    page = (
+        "<article><h2>Иерархия типа</h2>"
+        "<p><em>Базовые типы:</em> "
+        '<a href="/x">Коллекция&lt;ТипЭлемента&gt;</a>, '
+        '<a href="/y">Обходимое&lt;ТипЭлемента&gt;</a>, '
+        '<a href="/z">Объект</a></p></article>'
+    )
+
+    assert _MODULE.page_bases(page) == ["Коллекция", "Обходимое", "Объект"]
+
+
+def test_the_type_parameters_are_read_from_the_page_header():
+    """A generic type names the result of its members BY THE PARAMETER, so the parameter list
+    is what turns such a result into a type."""
+    page = "<article><h1>Соответствие</h1>Стд::Коллекции::Соответствие&lt;ТипКлюча, ТипЗначения&gt;</article>"
+
+    assert _MODULE.page_type_params(page) == ["ТипКлюча", "ТипЗначения"]
+
+
+def test_a_plain_type_declares_no_parameters():
+    """Silence for a type that has none: an empty list, not a guess."""
+    page = "<article><h1>Объект</h1>Стд::Объект  Доступность: КлиентИСервер</article>"
+
+    assert _MODULE.page_type_params(page) == []

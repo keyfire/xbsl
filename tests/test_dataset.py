@@ -213,3 +213,27 @@ def test_unchanged_files_stay_cached(tmp_path):
         assert dataset.load_json("language.json") is first
     finally:
         dataset.set_data_root(None)
+
+
+def test_generic_arguments_are_split_at_the_top_level():
+    """A comma inside an inner argument does not split the outer list."""
+    assert dataset.generic_args("Соответствие<Строка, Массив<Каталог.Ссылка>>") == [
+        "Строка", "Массив<Каталог.Ссылка>",
+    ]
+    assert dataset.generic_args("Строка") == []
+
+
+def test_an_inherited_result_type_reaches_a_type_with_none_of_its_own():
+    """A collection declares no result type of its own - `First` belongs to its bases.
+
+    Walking only the types that HAVE own result types left such a type without a single one,
+    and a chain over any of its methods ended there.
+    """
+    data = dataset._expand_inherited({
+        "meta": {"members": "own"},
+        "bases": {"Массив": ["Обходимое", "Объект"]},
+        "type_members": {"Массив": {"methods": ["Первый"]}, "Обходимое": {"methods": ["Первый"]}},
+        "member_types": {"Обходимое": {"Первый": "ТипЭлемента"}},
+    })
+
+    assert data["member_types"]["Массив"]["Первый"] == "ТипЭлемента"

@@ -234,7 +234,8 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     """
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
-    for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors"):
+    for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors",
+                    "type_params"):
         entries = data.get(section)
         if not entries:
             continue
@@ -270,12 +271,16 @@ def _expand_inherited(data: dict) -> dict:
         }
     own_returns = data.get("member_types") or {}
     full_returns: dict[str, dict[str, str]] = {}
-    for name, own in own_returns.items():
+    # Every type with ancestors, not just those with own result types: a collection declares no
+    # result type of its own (`First`, `Get` belong to its bases), so walking own_returns alone
+    # left `Array` without a single one - a chain over any of its methods ended there.
+    for name in set(own_returns) | {n for n in own_members if bases.get(n)}:
         merged: dict[str, str] = {}
         for base in bases.get(name, ()):
             merged.update(own_returns.get(base, {}))
-        merged.update(own)
-        full_returns[name] = merged
+        merged.update(own_returns.get(name, {}))
+        if merged:
+            full_returns[name] = merged
     # Method signatures merge exactly like the result types - an inherited method keeps the
     # signature of the type that declares it, an overridden one its own.
     own_signatures = data.get("member_signatures") or {}
@@ -333,6 +338,56 @@ def member_type_head(type_name: str) -> str:
     and a dotted facet name (Пользователи.Объект) keeps its dot.
     """
     return type_name.split("<", 1)[0].split("|", 1)[0].strip().rstrip("?")
+
+
+def generic_args(written: str) -> list[str]:
+    """The generic arguments of a written type: `Соответствие<Строка, Массив<Ссылка>>` ->
+    ['Строка', 'Массив<Ссылка>'].
+
+    Nesting is respected - a comma inside an inner argument does not split the outer list -
+    and a type with no arguments answers with an empty list.
+    """
+    start = written.find("<")
+    if start < 0 or not written.rstrip().endswith(">"):
+        return []
+    inner = written[start + 1: written.rstrip().rindex(">")]
+    args, depth, current = [], 0, ""
+    for ch in inner:
+        if ch == "<":
+            depth += 1
+        elif ch == ">":
+            depth -= 1
+        if ch == "," and depth == 0:
+            args.append(current.strip())
+            current = ""
+            continue
+        current += ch
+    if current.strip():
+        args.append(current.strip())
+    return [a for a in args if a]
+
+
+def substitute_params(result: str, owner_head: str, owner_written: str | None) -> str:
+    """A member result spelled with the owner's TYPE PARAMETERS, resolved by its arguments.
+
+    A generic type names the result of its members by the parameter (`Array.First():
+    ItemType`), so the answer means nothing until the arguments the code wrote are put in:
+    a value of `Array<Catalog.Card>` answers `Catalog.Card`. Without the arguments,
+    or without a parameter list for the owner, the result is returned as it stands.
+    """
+    if not owner_written or not result:
+        return result
+    params = (load_json("stdlib.json").get("type_params") or {}).get(owner_head) or []
+    args = generic_args(owner_written)
+    if not params or not args:
+        return result
+    replacements = dict(zip(params, args))
+    head = member_type_head(result)
+    if head in replacements:
+        # `ТипЭлемента?` keeps the nullable marker of the member, and the argument replaces
+        # only the name itself.
+        return result.replace(head, replacements[head], 1)
+    return result
 
 
 #: Where a result type spelled for a TEMPLATE leaves the object's own name: the docs write

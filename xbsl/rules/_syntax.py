@@ -788,6 +788,7 @@ def chain_type(
     stop_offset: int | None = None,
     written: bool = False,
     own_returns: dict[str, str] | None = None,
+    resolve_written=None,
 ) -> str | None:
     """The type of a call chain `Корень.Метод(...).Метод2(...)` starting at `start`.
 
@@ -809,6 +810,10 @@ def chain_type(
     t = toks[i]
     current: str | None = None
     last_written: str | None = None
+    # The WRITTEN type of the current link: a generic member names its result by the owner's
+    # type parameter (`Массив.Первый(): ТипЭлемента`), and only the arguments the code wrote
+    # turn that name into a type.
+    current_written: str | None = None
     literal = _literal_type(toks, i)
     if literal is not None:
         return literal
@@ -827,6 +832,7 @@ def chain_type(
         # past the type expression (dots inside generics are not chain links),
         # then past the constructor parentheses
         j = te.end
+        last_written = current_written = "".join(tok.value for tok in te.toks) or None
         i = _skip_balanced(toks, j, "(", ")") if (
             j < n and toks[j].kind == "OP" and toks[j].value == "("
         ) else j
@@ -842,12 +848,14 @@ def chain_type(
         raw = (own_returns or {}).get(t.value) if called else None
         if raw:
             current = dataset.member_type_head(raw)
-            last_written = raw
+            last_written = current_written = raw
             i = _skip_balanced(toks, j, "(", ")")
         else:
             current = resolve_root(t.value)
             if current is None:
                 return None
+            if resolve_written is not None:
+                current_written = resolve_written(t.value)
             i += 1
     else:
         return None
@@ -870,10 +878,12 @@ def chain_type(
         if j >= n or toks[j].kind != "IDENT":
             break
         raw = (returns or {}).get(current, {}).get(toks[j].value)
+        if raw:
+            raw = dataset.substitute_params(raw, current, current_written)
         current = dataset.member_type_head(raw) if raw else None
         if current is None:
             return None
-        last_written = raw
+        last_written = current_written = raw
         k = _skip_comments(toks, j + 1)
         if k < n and toks[k].kind == "OP" and toks[k].value == "(":
             i = _skip_balanced(toks, k, "(", ")")
@@ -887,12 +897,14 @@ def _constructed_type(
     resolve_root=None, returns: dict | None = None,
     own_returns: dict[str, str] | None = None,
     written: bool = False,
+    resolve_written=None,
 ) -> str | None:
     """The type of an initializer: `новый Массив<Строка>()`, `Запрос{...}` or a call
     chain over a known root (`КлиентHttp.СБазовымUrl(...)`) or over a method of the module
     itself (`ЗаписатьЧтение(...)`), or None."""
     return chain_type(toks, start, resolve_root or (lambda _name: None), returns,
-                      own_returns=own_returns, written=written)
+                      own_returns=own_returns, written=written,
+                      resolve_written=resolve_written)
 
 
 def enclosing_constructor(source: SourceFile, offset: int) -> str | None:
@@ -941,6 +953,7 @@ def chain_type_at(
     returns: dict | None = None,
     static_roots=None,
     own_returns: dict[str, str] | None = None,
+    var_written: dict[str, str] | None = None,
 ) -> str | None:
     """The type of the call chain to the LEFT of the dot at `offset` (the cursor sits
     right after the dot, possibly with a partially typed name): the completion context
@@ -1003,7 +1016,7 @@ def chain_type_at(
         return None
 
     return chain_type(toks, root_i, resolve_root, returns, stop_offset=stop,
-                      own_returns=own_returns)
+                      own_returns=own_returns, resolve_written=(var_written or {}).get)
 
 
 def local_var_names(source: SourceFile, offset: int) -> set[str]:
@@ -1042,6 +1055,7 @@ def local_var_types(
     source: SourceFile, offset: int,
     returns: dict | None = None, static_roots=None,
     own_returns: dict[str, str] | None = None,
+    written_out: dict[str, str] | None = None,
 ) -> dict[str, str]:
     """Variable name -> type head for the names visible at `offset`.
 
@@ -1104,11 +1118,13 @@ def local_var_types(
                     written_types[tok.value] = full
         elif d.value_start is not None:
             name = _constructed_type(toks, d.value_start, resolve_root, returns,
-                                     own_returns=own_returns)
+                                     own_returns=own_returns,
+                                     resolve_written=written_types.get)
             # The WRITTEN type of the initializer too: a for-each over this variable takes its
             # element out of the generic argument, and the nominal head has dropped it.
             full = _constructed_type(toks, d.value_start, resolve_root, returns,
-                                     own_returns=own_returns, written=True)
+                                     own_returns=own_returns, written=True,
+                                     resolve_written=written_types.get)
             if full:
                 for tok in d.names:
                     written_types[tok.value] = full
@@ -1120,6 +1136,10 @@ def local_var_types(
             out[tok.value] = name
     _add_loop_var_types(toks, start, offset, out, resolve_root, returns, written_types,
                         own_returns)
+    # The written types travel out for the caller that continues the inference (the completion
+    # walks a chain from a variable, and a generic member needs the arguments, not the head).
+    if written_out is not None:
+        written_out.update(written_types)
     return out
 
 
@@ -1170,7 +1190,8 @@ def _add_loop_var_types(
                 collection = written_types.get(nxt.value)
         if collection is None:
             collection = chain_type(toks, i + 3, resolve_root, returns, written=True,
-                                    own_returns=own_returns)
+                                    own_returns=own_returns,
+                                    resolve_written=(written_types or {}).get)
         element = element_type(collection)
         if element:
             out[name.value] = element
