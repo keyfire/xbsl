@@ -1483,3 +1483,27 @@ def test_a_loop_over_a_variable_from_a_call_takes_its_element():
                             own_returns={"ПрочитатьЗадачи": "Массив<Задачи.Объект>"})
 
     assert types["Запись"] == "Задачи.Объект"
+
+
+USE_QUERY_MODULE = """\
+метод М()
+    исп Выборка = Запрос{
+        ВЫБРАТЬ П.Ссылка КАК Ссылка, П.Наименование КАК Наименование
+        ИЗ Задачи КАК П
+    }.Выполнить()
+    для Запись из Выборка
+        Запись.Наименование
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_query_held_by_a_use_declaration_carries_its_columns():
+    """`исп` declares a variable like `знч` does, and a query result is the everyday thing it
+    holds - the selection is disposed at the end of the block. The columns used to bind to
+    nothing, so the loop variable was completed with nothing."""
+    src = engine.load_text("Задачи.xbsl", USE_QUERY_MODULE)
+    offset = USE_QUERY_MODULE.index("Запись.Наименование") + len("Запись.")
+
+    assert query_row_columns(src, offset) == {"Запись": ["Ссылка", "Наименование"]}

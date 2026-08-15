@@ -251,7 +251,10 @@ def query_row_columns(source: SourceFile, offset: int) -> dict[str, list[str]]:
     ranges = query_ranges(source)
 
     results: dict[str, list[str]] = {}
-    for d in declarations(code):
+    # `исп` declares a variable like `знч` does, and a query result is the everyday thing it
+    # holds (the selection is disposed at the end of the block). Without it the columns bound
+    # to nothing and the loop variable was completed with nothing.
+    for d in declarations(code, keywords=DECL_KEYWORDS + ("USE",)):
         if d.value_start is None or d.value_start >= len(code):
             continue
         value = code[d.value_start]
