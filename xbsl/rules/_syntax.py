@@ -251,6 +251,7 @@ def query_row_columns(source: SourceFile, offset: int) -> dict[str, list[str]]:
     ranges = query_ranges(source)
 
     results: dict[str, list[str]] = {}
+    above_cursor: dict[str, list[str]] = {}
     # `исп` declares a variable like `знч` does, and a query result is the everyday thing it
     # holds (the selection is disposed at the end of the block). Without it the columns bound
     # to nothing and the loop variable was completed with nothing.
@@ -267,8 +268,13 @@ def query_row_columns(source: SourceFile, offset: int) -> dict[str, list[str]]:
         if columns:
             for tok in d.names:
                 results[tok.value] = columns
+                if d.keyword.start < offset:
+                    above_cursor[tok.value] = columns
 
-    out: dict[str, list[str]] = {}
+    # The RESULT itself answers by column too: the code reads a single-row query straight off
+    # the variable (`возврат Выборка.Ссылка`), and only the loop variable used to be completed.
+    # Declared BELOW the cursor it means nothing yet - the same rule the loops follow.
+    out: dict[str, list[str]] = dict(above_cursor)
     for i, t in enumerate(code[:-3]):
         if not (t.kind == "KEYWORD" and t.canonical == "FOR" and t.start < offset):
             continue

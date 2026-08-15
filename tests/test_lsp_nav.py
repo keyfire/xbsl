@@ -438,7 +438,8 @@ def test_query_row_columns_for_loop():
     # a КАК alias, an alias-free field (its last segment), a computed expression only with an alias
     src = engine.load_text("Модуль.xbsl", МОДУЛЬ_С_ЗАПРОСОМ)
     got = query_row_columns(src, МОДУЛЬ_С_ЗАПРОСОМ.index("С.Заголовок"))
-    assert got == {"С": ["Заголовок", "Слаг", "Вес"]}
+    # The result variable answers by column too - the code reads a single-row query off it.
+    assert got == {"Результат": ["Заголовок", "Слаг", "Вес"], "С": ["Заголовок", "Слаг", "Вес"]}
 
 
 @pytest.mark.needs_data
@@ -1507,7 +1508,9 @@ def test_a_query_held_by_a_use_declaration_carries_its_columns():
     src = engine.load_text("Задачи.xbsl", USE_QUERY_MODULE)
     offset = USE_QUERY_MODULE.index("Запись.Наименование") + len("Запись.")
 
-    assert query_row_columns(src, offset) == {"Запись": ["Ссылка", "Наименование"]}
+    assert query_row_columns(src, offset) == {
+        "Выборка": ["Ссылка", "Наименование"], "Запись": ["Ссылка", "Наименование"],
+    }
 
 
 DECL_INSIDE_LOOP = """\
@@ -1731,3 +1734,24 @@ def test_a_declaration_shadows_a_member_of_the_extended_type():
     )
 
     assert types["Состав"] == "Строка"
+
+
+SINGLE_ROW_QUERY = """\
+метод Иконка(): Картинка
+    исп Выборка = Запрос{
+        ВЫБРАТЬ К.Иконка КАК Иконка, К.Слаг КАК Слаг
+        ИЗ Категории КАК К
+    }.Выполнить()
+    возврат Выборка.Иконка
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_single_row_query_answers_by_column_off_the_result():
+    """The code reads a single-row query straight off the result variable, without a loop -
+    only the loop variable used to be completed, and such a dot answered nothing."""
+    src = engine.load_text("К.xbsl", SINGLE_ROW_QUERY)
+    offset = SINGLE_ROW_QUERY.index("Выборка.Иконка") + len("Выборка.")
+
+    assert query_row_columns(src, offset) == {"Выборка": ["Иконка", "Слаг"]}

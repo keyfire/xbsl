@@ -36,6 +36,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   `Goods.Object` a bare `Lines` is its tabular section, not an unknown name: the completion after
   it answers, and a loop over it takes the row type. The object type now carries the declared
   type of every member it holds.
+- **A single-row query answers by column off the result.** The code reads such a query straight
+  off the variable, without a loop; only the loop variable used to carry the columns.
 - **A generic member resolves by the arguments the code wrote.** `Array<Catalog.Card>.First()`
   answers `Catalog.Card`, `Map<String, Number>.Get(...)` answers `Number`: the catalogue names
   such a result by the type PARAMETER, and the parameter lists of the types are now extracted
