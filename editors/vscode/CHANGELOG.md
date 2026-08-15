@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.61.3
+
+### Changed
+- **The description of completion matches what the engine now does.** The page listed limits the
+  engine had already outgrown - chains are walked to the end, a variable is typed from a literal,
+  from a call of its own module and from the arguments a generic was written with.
+
 ## 0.61.2
 
 ### Fixed

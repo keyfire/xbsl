@@ -12,7 +12,19 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
+
+### Added
+- **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
+  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
+  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
+- **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
+  its own: the platform draws a button that opens the value in a separate window next to it. That
+  is usually what the author wants, so the rule answers "where did this button come from" rather
+  than reports a mistake.
+- **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
+  project in the chosen language. A key with no translation keeps its default text - the same
+  fallback the platform makes.
 
 ### Changed
 - **Completion answers where it used to stay silent.** A quarter of the dots in a live project
@@ -55,22 +67,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   name - so `Array` kept `Object` as its only ancestor and inherited no result types at all:
   779 types carried none. Both halves are fixed - the extractor reads the head, and the loader
   builds the inherited result types for a type that declares none of its own.
-
-## 2026-08-15 – 0.66.0, 0.66.1
-
-### Added
-- **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
-  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
-  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
-- **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
-  its own: the platform draws a button that opens the value in a separate window next to it. That
-  is usually what the author wants, so the rule answers "where did this button come from" rather
-  than reports a mistake.
-- **Request `xbsl/localizationStrings`:** the engine answers with every localized string of the
-  project in the chosen language. A key with no translation keeps its default text - the same
-  fallback the platform makes.
-
-### Fixed
 - **A project written in English is indexed** - the name of an element and its named sections
   were read in the Russian spelling alone, so an English project indexed to nothing at all: no
   tree, no navigation, no completion. The type an element generates is registered under both of
