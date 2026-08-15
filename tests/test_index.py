@@ -572,3 +572,32 @@ def test_a_generated_type_answers_to_either_spelling(tmp_path):
 
     assert members["Параметры.Параметры"]["properties"] == ["АдресСервиса"]
     assert members["Параметры.Parameters"] == members["Параметры.Параметры"]
+
+
+def test_an_interface_component_describes_the_type_of_its_value(tmp_path):
+    """A component names its own data in Properties, and a value of that type carries them.
+
+    A variable holding a form used to offer nothing after the dot - neither its own properties
+    nor the platform type it extends, which is where `OpenInModalWindow` lives.
+    """
+    (tmp_path / "ФормаЗаявки.yaml").write_text("\n".join([
+        "ВидЭлемента: КомпонентИнтерфейса",
+        "Ид: 8c2e4a6b-0d1f-4a3c-9e5b-7d8f0a1c2e3b",
+        "Имя: ФормаЗаявки",
+        "Наследует:",
+        "    Тип: Форма",
+        "Свойства:",
+        "    -",
+        "        Имя: Комментарий",
+        "        Тип: Строка",
+        "",
+    ]), encoding="utf-8")
+    (tmp_path / "ФормаЗаявки.xbsl").write_text("метод Проверить(): Булево\n    возврат Истина\n;\n",
+                                               encoding="utf-8")
+
+    record = build_index(tmp_path)["struct_members"]["ФормаЗаявки"]
+
+    assert record["properties"] == ["Комментарий"]
+    assert record["methods"] == ["Проверить"]
+    # The platform type it extends - the completion adds its members to the component's own.
+    assert record["base"] == "Форма"

@@ -1272,3 +1272,48 @@ def test_completion_offers_the_own_entries_of_an_element():
 
     labels = {e["label"] for e in got or []}
     assert "АдресСайта" in labels and "Обновить" in labels
+
+
+def test_completion_of_a_component_value_adds_the_inherited_members():
+    """A value of a component type answers with its own members AND those of its platform base.
+
+    Own first - they are what the author wrote; `OpenInModalWindow` comes from the base and
+    is what such a value is usually called for.
+    """
+    idx = dict(INDEX)
+    idx["struct_members"] = {
+        "ФормаЗаявки": {
+            "properties": ["Комментарий"],
+            "methods": ["Проверить"],
+            "kind": "КомпонентИнтерфейса",
+            "base": "Форма",
+        },
+    }
+    got = resolve_completions(
+        IndexLookup(idx),
+        language_id="xbsl",
+        line_prefix="    ).",
+        file_stem="ГлавнаяФорма",
+        stdlib_members={"Форма": {"methods": ["ОткрытьВМодальномОкне"], "properties": ["Заголовок"]}},
+        expr_type="ФормаЗаявки",
+    )
+
+    labels = [e["label"] for e in got or []]
+    assert labels[:2] == ["Комментарий", "Проверить"]
+    assert {"ОткрытьВМодальномОкне", "Заголовок"} <= set(labels)
+
+
+def test_completion_of_a_project_type_without_a_base_is_unchanged():
+    """A structure declared in a module has no platform base: the answer is its members alone."""
+    idx = dict(INDEX)
+    idx["struct_members"] = {"ДанныеКарточки": {"properties": ["Название"]}}
+    got = resolve_completions(
+        IndexLookup(idx),
+        language_id="xbsl",
+        line_prefix="    Товар.Загрузить(Слаг).",
+        file_stem="ГлавнаяФорма",
+        stdlib_members={"Форма": {"methods": ["ОткрытьВМодальномОкне"]}},
+        expr_type="ДанныеКарточки",
+    )
+
+    assert [e["label"] for e in got or []] == ["Название"]

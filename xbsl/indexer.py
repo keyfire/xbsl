@@ -450,6 +450,11 @@ _METADATA_MEMBER_SECTIONS: dict[str, tuple[str, tuple[str, ...]]] = {
     # the kind's own methods alone - the parameters, which is what the code actually reads, were
     # missing.
     "ПараметрыРаботыКлиента": ("Параметры", (PLACEHOLDER, PLACEHOLDER + ".Параметры")),
+    # An interface component names its own data in Properties, and a VALUE of that type - the
+    # form a constructor call returns - carries them (docs topics/component-properties). Without
+    # this a variable holding a form offered nothing after the dot: neither its own properties,
+    # nor the methods of its module, nor the members of the platform type it inherits.
+    "КомпонентИнтерфейса": ("Свойства", (PLACEHOLDER,)),
 }
 
 #: The fallback for `generated_returns` when the data carries no manager_member_types section:
@@ -513,6 +518,23 @@ def _field_types(members) -> dict[str, str]:
         if isinstance(text, str) and text.strip():
             out[f.name] = text.strip()
     return out
+
+
+def _inherited_type(data: dict, kind: str) -> str | None:
+    """The platform type an element extends (`Наследует.Тип` of a component), without arguments.
+
+    A form is a value of a PROJECT type whose members are its own; everything else it answers to
+    - `OpenInModalWindow`, `Close`, the layout properties - belongs to the platform type
+    it inherits, and only the base names it.
+    """
+    inherits = value_of(data, "Наследует", kind)
+    if not isinstance(inherits, dict):
+        return None
+    base = value_of(inherits, "Тип", kind)
+    if not isinstance(base, str) or not base.strip():
+        return None
+    head = base.split("<", 1)[0].strip()
+    return head or None
 
 
 def _metadata_members(data: dict, kind: str) -> tuple[list[str], dict[str, str]]:
@@ -667,7 +689,7 @@ def build_index(root: Path) -> dict:
     # {type name: (element kind, member names)} of the types DESCRIBED IN METADATA - collected
     # here, where the parsed yaml is at hand, and joined to struct_members once the module
     # methods are known.
-    metadata_types: dict[str, tuple[str, list[str]]] = {}
+    metadata_types: dict[str, tuple[str, list[str], dict[str, str], str | None]] = {}
     if _HAVE_YAML:
         for s in yaml_sources:
             data, err = _parsed(s)
@@ -711,9 +733,10 @@ def build_index(root: Path) -> dict:
                 entry["values"] = _named_items(s, data, "Элементы")
             if kind in _METADATA_MEMBER_SECTIONS:
                 members, member_types = _metadata_members(data, kind)
+                inherited = _inherited_type(data, kind)
                 for pattern in _METADATA_MEMBER_SECTIONS[kind][1]:
                     for spelling in _generated_type_spellings(pattern, name, kind):
-                        metadata_types[spelling] = (kind, members, member_types)
+                        metadata_types[spelling] = (kind, members, member_types, inherited)
             objects.append(entry)
             if kind == "КомпонентИнтерфейса":
                 components.extend(_form_components(s, data, name, entry["path"]))
@@ -746,8 +769,10 @@ def build_index(root: Path) -> dict:
     module_method_names: dict[str, set[str]] = defaultdict(set)
     for m in methods:
         module_method_names[m["module"]].add(m["name"])
-    for type_name, (kind, member_names, member_types) in metadata_types.items():
+    for type_name, (kind, member_names, member_types, inherited) in metadata_types.items():
         record: dict = {"properties": member_names, "kind": kind}
+        if inherited:
+            record["base"] = inherited
         if member_types:
             record["property_types"] = member_types
         own_methods = module_method_names.get(type_name)

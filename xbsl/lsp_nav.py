@@ -374,6 +374,21 @@ def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[
     return entries or None
 
 
+def _inherited_entries(
+    lookup: IndexLookup, type_name: str, stdlib_members: Optional[dict],
+) -> list[dict]:
+    """Members a project type gets from the platform type it extends.
+
+    A form is a value of a project type, yet almost everything the code calls on it -
+    `OpenInModalWindow`, `Close`, the layout properties - comes from the platform type in
+    its `Inherits`. Its own members come first: they are what the author wrote.
+    """
+    struct = lookup.struct_by_name(type_name)
+    base = (struct or {}).get("base")
+    members = (stdlib_members or {}).get(base) if isinstance(base, str) else None
+    return _stdlib_entries(members) if members else []
+
+
 #: Buckets of the `manager` field of an index object, with what a completion item says about
 #: each: the label detail, and whether the item inserts a call's parentheses.
 _MANAGER_BUCKETS = (
@@ -615,7 +630,7 @@ def resolve_completions(
             return _stdlib_entries(members)
         project = _project_type_entries(lookup, expr_type)
         if project:
-            return project
+            return project + _inherited_entries(lookup, expr_type, stdlib_members)
     m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
     if m:
         return [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
