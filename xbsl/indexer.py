@@ -519,6 +519,7 @@ def _kind_facet_members() -> dict[str, dict[str, dict[str, list[str]]]]:
         out.setdefault(metamodel.canonical_kind(kind), {})[facet] = {
             "properties": list(members.get("properties") or ()),
             "methods": list(members.get("methods") or ()),
+            "returns": dict((catalog.get("member_types") or {}).get(name) or {}),
         }
     return out
 
@@ -860,6 +861,7 @@ def build_index(root: Path) -> dict:
     # The catalogue describes these by KIND (`Справочник.Ссылка`), and their members are joined
     # with the object's own here - without this a variable holding an object answered nothing.
     kind_facets = _kind_facet_members()
+    facet_returns: dict[str, dict[str, str]] = {}
     for o in objects:
         own_attrs = [a["name"] for a in o.get("attributes") or []]
         tabular = [x["name"] for x in o.get("tabular") or []]
@@ -877,11 +879,24 @@ def build_index(root: Path) -> dict:
             if facet_methods:
                 record["methods"] = facet_methods
             struct_members[name] = record
+            # What a member of such a type ANSWERS, with the object's own name put in: the
+            # catalogue spells it by kind (`Справочник.Ссылка.ЗагрузитьОбъект: Справочник.Объект?`),
+            # and a chain over the call needs the concrete name to go on.
+            answers = {
+                member: result.replace(o["kind"], o["name"], 1)
+                for member, result in (members.get("returns") or {}).items()
+                if result
+            }
+            if answers:
+                facet_returns[name] = answers
         for part in o.get("tabular") or []:
             name = f"{o['name']}.{part['name']}"
             rows = part.get("attributes") or []
             if name not in struct_members and rows:
                 struct_members[name] = {"properties": list(rows), "kind": o["kind"]}
+
+    for type_name, answers in facet_returns.items():
+        generated_returns[type_name] = {**generated_returns.get(type_name, {}), **answers}
 
     # Usages (for "find usages"): names of objects, components and methods encountered as a
     # call/member/chain root in modules, plus methods in yaml handlers. Resolving a concrete
