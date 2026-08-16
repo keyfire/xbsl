@@ -15,109 +15,47 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Changed
-- **Completion answers after a caught exception and after the inherited members of a form.**
-  A walk over the silent dots of a live corpus showed two classes with a known cause. The type
-  of a caught exception stands right in the clause (`catch Error: Exception`), but the base type
-  is spelled with a KEYWORD while the type reader took identifiers only - so the dot after the
-  most common name in error handling stayed silent. A form module reads by a bare name not only
-  its own attributes but the members of the type the form INHERITS (`Write.Execute()` is the
-  standard command of an object form); those are in the environment now, with own attributes
-  winning over inherited ones. A member whose type the catalogue states by a type PARAMETER or
-  by a union is not offered: the name of a parameter in place of a type is worse than silence -
-  on the first attempt it shadowed the path that used to answer for the form's own object.
-  Measured: the silence on the site corpus goes from 19.5% to 18.9%.
+- **Completion answers after a caught exception and after the commands of a form.** The type of
+  an exception stands in the clause itself, and commands such as `Write` come to a form from the
+  type it inherits; the dot after such names used to stay silent.
 
 ## 2026-08-16 – 0.68.0
 
 ### Added
-- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - elements and modules
-  of a subsystem import another subsystem while the description of their own does not list it
-  under `Usage`. The platform asks for three things at once: the supplier is public, the
-  consumer imports, and the consumer's subsystem declares the usage; nothing checked the third,
-  so it was learnt at deploy time - the project fails to apply, naming the description of the
-  subsystem. The diagnostic sits on that description: one line of fix goes there, and repeating
-  it at every importing file would buy nothing.
-- **Rule `code/missing-import`** (warning, in the default set) - a module names the type of a
-  public element of another subsystem without an import line for that subsystem. Compilation
-  fails at exactly that line while the linter stayed silent: the direct check existed for yaml
-  only, and the code side had just the mirror `code/unused-import`. WRITTEN type positions are
-  judged - a parameter, a variable, a return, `new`, `as`, `is`, generic arguments - and so is
-  the root of a chain (`Module.Method()`), from which everything that explains the name on its
-  own is subtracted first: the declarations of the method and the module, the implicit names of
-  the platform, and the sections of the PAIRED yaml. That last one was the only false candidate
-  the probe found: a scheduled job reads its own parameters by the section name, and an element
-  of that name happened to live in another subsystem.
+- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - a subsystem imports
+  another one without declaring it as used in its own description. Such a project does not
+  apply, and until now that only came out at deploy time.
+- **Rule `code/missing-import`** (warning, in the default set) - a module uses a type or a module
+  of another subsystem without importing it. Compilation fails at that line while the linter
+  stayed silent: the check existed for yaml only.
 
 ### Changed
-- **The dot after a form component answers.** `Components.Table.` offered the methods of the
-  component's OWN module alone, and a group, a table or an input usually has no module of its
-  own - so the dot stayed silent, though the yaml names the component's type and the catalogue
-  describes that type in full. Both halves are offered now, and the components of a form became
-  a chain root: `Components.Table.Source.` reaches the end. Measured over the site corpus
-  (15 531 dots): the silence goes from 22.2% to 20.1%, and after components from 552 to 251.
-- **Completion in an English project names platform members in English.** After a dot on a
-  value of a platform type the list read `ToString`, `Length`, `Refresh` in Russian: the
-  catalogue keys types under both spellings but holds the members of each under the Russian
-  one, because the documentation of the distribution is Russian too. The compiler dictionary
-  carries the pair for such a name, and the spelling is taken from it at the last step, where
-  the reader is known; a name the dictionary does not know stays as the catalogue has it rather
-  than being invented (a pair exists for 90% of the Cyrillic member names, after the extractor
-  fix below). The snippet of a method inserts the spelling the list shows.
-- **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
-  five corpora (47 072 accesses of the shape `X.name`, counting a named receiver type) – between
-  3.9 and 5.3 points gained on each of them; the same measure reads the entry of 2026-08-15,
-  where two corpora gave 36%. Two places where the data could name the type and the module stayed
-  silent are closed. **The literals the lexer already tells apart:** `Query{...}` is a `Query`,
-  `'\d+'` is a `Pattern`, and `Resource{...}` is named by the identifier that opens it, and only
-  when the catalog knows that name as a type. **A loop variable is ONE ELEMENT of the
-  collection:** a generic now carries the arguments it was written with (`Array<String>` has the
-  element `String`), and the counter of `for X = A to B` is a `Number`. A map stays unknown: its
-  element is `KeyAndValue<KeyType,ValueType>`, nothing in the data pairs the two, and pairing
-  them by name would be a guess.
+- **The dot after a form component answers** - with the methods of its own module and with the
+  members of its type; a chain through a component reaches the end.
+- **In an English project completion names platform members in English.** The list after a dot
+  used to be Russian whatever the language of the project.
+- **Expression type inference answers more often.** It learnt the query, pattern and resource
+  literals, and a loop variable takes the element type of its collection.
 
 ### Fixed
-- **The index lost the nullable marker of a method's return type.** `method F(): UserId?` was
-  stored as `UserId`: the field keeps the HEAD of the type, which is the right key for a member
-  lookup but makes every value coming out of the project look non-empty. A field with the type
-  as WRITTEN now stands beside it, and the inference catalogue reads that one - as it does for
-  the platform, where the written form is kept for the same reason. Completion gained too: the
-  written form also carries the generic arguments, so a chain resolves more members (silence on
-  the site corpus 20.1% -> 19.5%).
-- **A method environment did not tell its blocks apart.** A name declared in one loop answered
-  in another, because the environment was one bag for the whole method. The platform (docs,
-  "Область видимости имен") scopes a declaration from where it stands to the end of ITS BLOCK,
-  and blocks - `if`, `for`, `scope` - nest. `method_env` now takes the place (`at`) and answers
-  by those rules: the declaration of the innermost block standing before that place wins.
-  Without a place the behaviour is unchanged - the method as one bag.
-- **The attributes of a module's own type were missing from the environment.** A form module
-  reads them by a bare name, and one such name is spelled like the stdlib `File` type, declared
-  in the paired yaml as a nullable binary-object reference, was read as that type and answered
-  "never empty" - which made the non-null operator in the code look redundant. `method_env`
-  takes them as an input of their own; a local declaration of the same name still wins.
-- **The `??` operator named the type by one side.** `A ?? B` is a value of either A or B, and
-  the inference answered with the RIGHT-hand type when the two disagreed. It went unnoticed
-  while the left side was rarely typed; feed it a project catalogue and
-  `(Parameters.Get("K") ?? "") as String` reads as a String cast over a String - a redundant
-  cast - though the parameter is of no such type and the cast is what makes the value one.
-  Disagreeing sides now answer "unknown"; only the emptiness stays settled - a non-empty
-  right-hand side makes the whole expression non-empty.
-- **The term extractor lost the names spelled in BOTH alphabets.** The platform writes
-  `HttpService`, `FtpSource`, `SeoDescription`, `AppletTags` with a Latin prefix and a Russian
-  word after it, and the extractor demanded that the Russian side of a pair start with a
-  Cyrillic letter. The pairs are in the distribution and sit right next to those names in the
-  constant pool - they simply were not picked up, leaving 354 member names without an English
-  spelling. What marks the Russian side is now a Cyrillic letter ANYWHERE in the name, the way
-  the element-kind table beside it always read them. The English side also bars the names the
-  class file format itself uses: they stand in every constant pool and used to "translate"
-  whatever followed them - that is how one type name came out as `BootstrapMethods` and one
-  more as `Deprecated`. The dictionary gains 318 pairs, loses 8 false ones, and changes none.
+- **The index lost the nullable marker of a method's return type,** so every value coming out of
+  the project looked non-empty.
+- **A method environment did not tell its blocks apart:** a name declared in one loop answered in
+  another. Visibility now follows the platform rule - from the declaration to the end of a block.
+- **The attributes of a module's own type were missing from the environment,** and an attribute
+  named like a stdlib type was read as that type.
+- **The `??` operator named the type by its right-hand side,** though the value may be the left
+  one. Disagreeing sides now answer "unknown".
+- **The term extractor lost the names spelled in two alphabets** (`FtpSource`, `SeoDescription`):
+  they ended up without an English pair though the distribution has one. A few false pairs left
+  the dictionary at the same time.
 
 ## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
 
 ### Added
 - **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
-  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
-  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
+  constructor, a cast and a non-null operator, from the platform data. Where the data cannot
+  name a type the module answers "unknown" rather than a guess.
 - **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
   its own: the platform draws a button that opens the value in a separate window next to it. That
   is usually what the author wants, so the rule answers "where did this button come from" rather
