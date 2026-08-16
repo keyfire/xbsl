@@ -89,9 +89,30 @@ _META_SUFFIX = re.compile(r"(CtMetaObject|MetaObject|BslImpl)$")
 #: Jars of the platform itself - the only ones that can hold meta objects.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
-_RU_NAME_RE = re.compile(r"^[А-ЯЁ][А-Яа-яЁё0-9_]*$")
+#: The Russian side of a pair may be MIXED: the platform spells `HttpService`, `FtpSource`,
+#: `SeoDescription` and `AppletTags` with the Latin prefix kept and only the tail in Russian,
+#: so such a name STARTS with a Latin letter. What makes it the Russian side is a Cyrillic
+#: letter somewhere in it (checked separately), not the first one; demanding a Cyrillic head
+#: cost 354 member names their English spelling, every one of this shape. The kind table below
+#: always read them this way - the member scan simply never followed.
+_RU_NAME_RE = re.compile(r"^[A-Za-zА-ЯЁ][A-Za-zА-Яа-яЁё0-9_]*$")
 #: How many times the leading spelling must beat the runner-up to be taken as unambiguous.
 _DOMINANCE = 3
+#: Names the JVM itself puts in every constant pool. They look exactly like an English name
+#: and stand wherever the class file needs them, so a Cyrillic string that happens to follow
+#: one used to be "translated" by it - that is how the html document type came out as
+#: `BootstrapMethods` and one more name as `Deprecated`. The platform never names anything this
+#: way, so the whole set is barred from the English side of a pair.
+_CLASS_FILE_NAMES = frozenset({
+    "AnnotationDefault", "BootstrapMethods", "Code", "ConstantValue", "Deprecated",
+    "EnclosingMethod", "Exceptions", "InnerClasses", "LineNumberTable", "LocalVariableTable",
+    "LocalVariableTypeTable", "MethodParameters", "Module", "ModuleMainClass",
+    "ModulePackages", "NestHost", "NestMembers", "PermittedSubclasses", "Record",
+    "RuntimeInvisibleAnnotations", "RuntimeInvisibleParameterAnnotations",
+    "RuntimeInvisibleTypeAnnotations", "RuntimeVisibleAnnotations",
+    "RuntimeVisibleParameterAnnotations", "RuntimeVisibleTypeAnnotations", "Signature",
+    "SourceDebugExtension", "SourceFile", "StackMapTable", "Synthetic",
+})
 
 
 def _constant_pool(data: bytes) -> list[str]:
@@ -151,7 +172,8 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
             strings = _constant_pool(data)
             pairs = [
                 (en, ru) for en, ru in zip(strings, strings[1:])
-                if _EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru)
+                if _EN_NAME_RE.match(en) and en not in _CLASS_FILE_NAMES
+                and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
             ]
             if not pairs:
                 continue

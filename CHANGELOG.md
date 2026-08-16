@@ -46,8 +46,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   one, because the documentation of the distribution is Russian too. The compiler dictionary
   carries the pair for such a name, and the spelling is taken from it at the last step, where
   the reader is known; a name the dictionary does not know stays as the catalogue has it rather
-  than being invented (a pair was found for 87% of the Cyrillic member names). The snippet of a
-  method inserts the spelling the list shows.
+  than being invented (a pair exists for 90% of the Cyrillic member names, after the extractor
+  fix below). The snippet of a method inserts the spelling the list shows.
 - **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
   five corpora (47 072 accesses of the shape `X.name`, counting a named receiver type) – between
   3.9 and 5.3 points gained on each of them; the same measure reads the entry of 2026-08-15,
@@ -59,6 +59,18 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   element `String`), and the counter of `for X = A to B` is a `Number`. A map stays unknown: its
   element is `KeyAndValue<KeyType,ValueType>`, nothing in the data pairs the two, and pairing
   them by name would be a guess.
+
+### Fixed
+- **The term extractor lost the names spelled in BOTH alphabets.** The platform writes
+  `HttpService`, `FtpSource`, `SeoDescription`, `AppletTags` with a Latin prefix and a Russian
+  word after it, and the extractor demanded that the Russian side of a pair start with a
+  Cyrillic letter. The pairs are in the distribution and sit right next to those names in the
+  constant pool - they simply were not picked up, leaving 354 member names without an English
+  spelling. What marks the Russian side is now a Cyrillic letter ANYWHERE in the name, the way
+  the element-kind table beside it always read them. The English side also bars the names the
+  class file format itself uses: they stand in every constant pool and used to "translate"
+  whatever followed them - that is how one type name came out as `BootstrapMethods` and one
+  more as `Deprecated`. The dictionary gains 318 pairs, loses 8 false ones, and changes none.
 
 ## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
 

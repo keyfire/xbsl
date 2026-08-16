@@ -81,11 +81,12 @@ def test_typo_is_reported_with_the_close_property():
     assert len(d) == 1 and "Многострочная" in d[0].message
 
 
-def test_english_source_is_judged_but_an_untranslated_built_in_is_tolerated():
-    """`Code` has no English spelling in the platform dictionary - see the rule's docstring.
-
-    So in an English source a key that only the built-in `Код` declares is tolerated on any
-    attribute (a missed finding), while a key no attribute class declares is still reported.
+def test_an_english_source_is_judged_exactly_as_its_russian_twin():
+    """The dictionary used to lack the English spelling of the names the built-in code
+    attribute declares, and such a key went unreported in an English source - a miss the test
+    recorded as the behaviour of the day. The term extractor reads mixed spellings now, the
+    pair is there, and both languages answer the same: the key of another class and the
+    unknown key alike.
     """
     text = (
         "ElementKind: Catalog\n"
@@ -96,8 +97,8 @@ def test_english_source_is_judged_but_an_untranslated_built_in_is_tolerated():
         "        Length: 12\n        Nonsense: 1\n"
     )
     d = _lint(text, name="Tasks.yaml")
-    assert [x.line for x in d] == [9]
-    assert "Nonsense" in d[0].message
+    assert [x.line for x in d] == [8, 9]  # exactly what the Russian twin answers
+    assert "Length" in d[0].message and "Nonsense" in d[1].message
 
 
 def test_english_built_in_name_dispatches_through_the_dictionary():
