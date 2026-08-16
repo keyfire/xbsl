@@ -1839,6 +1839,7 @@ def _locals_at(text, marker):
     return local_var_types(src, text.index(marker))
 
 
+@pytest.mark.needs_data  # the lexer needs language.json
 def test_a_caught_exception_is_typed_by_its_clause():
     """The base exception type is spelled with a KEYWORD, and the ordinary type reader answers
     nothing there - so the dot after the most common name in error handling stayed silent."""
@@ -1847,6 +1848,7 @@ def test_a_caught_exception_is_typed_by_its_clause():
     assert _locals_at(text, "Ошибка.Описание")["Ошибка"] == "Исключение"
 
 
+@pytest.mark.needs_data  # the lexer needs language.json
 def test_a_project_exception_in_a_catch_reads_as_usual():
     text = ("метод Ф()\n    попытка\n        Х()\n    поймать Сбой: МоеИсключение\n"
             "        Сообщить(Сбой.Описание)\n    ;\n;\n")
