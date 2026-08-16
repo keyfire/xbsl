@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.61.4
+
+### Changed
+- **A documentation button for the two new import rules.** Engine 0.68.0 adds
+  `code/missing-import` and `yaml/missing-subsystem-usage`; both lead into "Modular development"
+  - to the namespace import and to the usage of subsystems respectively.
+
 ## 0.61.3
 
 ### Changed

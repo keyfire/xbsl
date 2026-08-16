@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-16 – 0.68.0
 
 ### Added
 - **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - elements and modules
