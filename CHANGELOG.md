@@ -18,6 +18,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **Completion answers after a caught exception and after the commands of a form.** The type of
   an exception stands in the clause itself, and commands such as `Write` come to a form from the
   type it inherits; the dot after such names used to stay silent.
+- **Completion answers after the parameter of a lambda.** `List.Convert(E -> E.` offers the
+  members of the collection's element, and a lambda over a query result offers the columns.
+- **A tabular section in a query answers with its fields.** `FROM Goods.Lines AS L` reads the
+  section as a table of its own, so `L.` offers its attributes and the standard row fields.
 
 ## 2026-08-16 – 0.68.0
 

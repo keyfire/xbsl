@@ -1853,3 +1853,69 @@ def test_a_project_exception_in_a_catch_reads_as_usual():
     text = ("метод Ф()\n    попытка\n        Х()\n    поймать Сбой: МоеИсключение\n"
             "        Сообщить(Сбой.Описание)\n    ;\n;\n")
     assert _locals_at(text, "Сбой.Описание")["Сбой"] == "МоеИсключение"
+
+
+# --- the parameter of a lambda --------------------------------------------------------------
+
+
+@pytest.mark.needs_data  # the lexer needs language.json
+def test_a_lambda_parameter_takes_the_element_of_its_collection():
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    text = ("метод Ф(Список: Массив<Строка>)\n"
+            "    знч Длины = Список.Преобразовать(Э -> Э.Длина())\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    got = local_var_types(src, text.index("Э.Длина"))
+    assert got["Э"] == "Строка"
+
+
+@pytest.mark.needs_data
+def test_a_lambda_over_a_map_stays_unknown():
+    """Two type arguments name no single element, and guessing one is worse than silence."""
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    text = ("метод Ф(М: Соответствие<Строка, Число>)\n"
+            "    знч Н = М.Преобразовать(П -> П.Ключ)\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    assert "П" not in local_var_types(src, text.index("П.Ключ"))
+
+
+@pytest.mark.needs_data
+def test_a_lambda_over_a_query_result_reads_by_column():
+    """The everyday shape of a selection turning into structures: the parameter is a ROW."""
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import query_row_columns
+    text = ("метод Ф()\n"
+            "    знч Результат = Запрос{ВЫБРАТЬ Т.Код КАК Код ИЗ Товары КАК Т}.Выполнить()\n"
+            "    возврат Результат.Преобразовать(Э -> Э.Код)\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    assert query_row_columns(src, text.index("Э.Код"))["Э"] == ["Код"]
+
+
+# --- a tabular section as a query table -----------------------------------------------------
+
+
+def test_a_tabular_section_alias_answers_with_its_fields():
+    """`ИЗ Товары.Состав КАК С` reads a section as a table of its own, and its fields are known."""
+    entries = resolve_completions(
+        LOOKUP,
+        language_id="xbsl",
+        line_prefix="            С.",
+        file_stem="Товар",
+        in_query=True,
+        query_tables={"С": "Товар.Цены"},
+    )
+    labels = {e["label"] for e in entries or []}
+    assert "НомерСтроки" in labels and "Ссылка" in labels
+
+
+def test_a_virtual_table_alias_stays_silent():
+    entries = resolve_completions(
+        LOOKUP,
+        language_id="xbsl",
+        line_prefix="            С.",
+        file_stem="Товар",
+        in_query=True,
+        query_tables={"С": "РегистрСведений.СрезПоследних"},
+    )
+    assert not entries

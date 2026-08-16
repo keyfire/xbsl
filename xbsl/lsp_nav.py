@@ -570,6 +570,38 @@ def _name_of(item) -> str:
     return item.get("name", "") if isinstance(item, dict) else str(item)
 
 
+
+#: A row of a tabular section always answers these, whatever the section declares.
+_TABULAR_ROW_FIELDS = ("Ссылка", "НомерСтроки")
+
+
+def _tabular_query_entries(lookup: "IndexLookup", named: str) -> Optional[list[dict]]:
+    """Fields of `<Объект>.<ТабличнаяЧасть>` in a query, or None when that is not one.
+
+    A query reads a tabular section as a table of its own (`ИЗ Товары.Состав КАК С`), and its
+    fields are known exactly - the section's own attributes plus the row's standard ones. A
+    dotted name that is NOT a section (a virtual table of a register) answers None here and
+    goes on to the ordinary path, which knows no such object and stays silent as before.
+    """
+    if "." not in named:
+        return None
+    owner, _, section = named.rpartition(".")
+    table = lookup.object_by_name(owner)
+    if not table:
+        return None
+    found = next(
+        (t for t in (table.get("tabular") or []) if _name_of(t) == section), None
+    )
+    if found is None:
+        return None
+    entries = [{"label": f, "kind": "field", "detail": "стандартное поле"}
+               for f in _TABULAR_ROW_FIELDS]
+    for attribute in (found.get("attributes") or []) if isinstance(found, dict) else []:
+        name = _name_of(attribute)
+        if name:
+            entries.append({"label": name, "kind": "field", "detail": "реквизит"})
+    return entries
+
 def _query_field_entries(
     kind: str, attributes: list, tabular: list,
     dimensions: list = (), resources: list = (),
@@ -743,7 +775,11 @@ def resolve_completions(
         # (`ИЗ Акция КАК А` - that is exactly how projects address tables) are determined by
         # the caller: the query language is parsed by the lexer.
         if in_query:
-            table = lookup.object_by_name((query_tables or {}).get(token, token))
+            named = (query_tables or {}).get(token, token)
+            section = _tabular_query_entries(lookup, named)
+            if section is not None:
+                return section
+            table = lookup.object_by_name(named)
             if not table:
                 return None
             return _query_field_entries(

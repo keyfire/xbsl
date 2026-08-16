@@ -148,10 +148,12 @@ def in_query(source: SourceFile, offset: int) -> bool:
 def query_alias_pairs(block: list[Token]) -> list[tuple[str, str]]:
     """(alias, table) pairs of a query block, in order of appearance.
 
-    `ИЗ Акция КАК А` yields ("А", "Акция"). Dotted tables (virtual ones like
-    `РегистрСведений.СрезПоследних`) are skipped: their field set is not the object's field
-    set. Pairs rather than a dict: an alias may be redefined in a subquery, and whoever relies
-    on the pairs must be able to notice that.
+    `ИЗ Акция КАК А` yields ("А", "Акция"), and a dotted table keeps its dots:
+    `ИЗ Товары.Состав КАК С` yields ("С", "Товары.Состав"). What such a name means is for the
+    caller to decide - a tabular section has a field set the index knows, a virtual table
+    (`РегистрСведений.СрезПоследних`) does not, and answering nothing about the latter is what
+    an unknown name does anyway. Pairs rather than a dict: an alias may be redefined in a
+    subquery, and whoever relies on the pairs must be able to notice that.
     """
     out: list[tuple[str, str]] = []
     i, n = 0, len(block)
@@ -165,18 +167,17 @@ def query_alias_pairs(block: list[Token]) -> list[tuple[str, str]]:
             i = j  # a subquery or an interpolation in the table position
             continue
         table = block[j]
+        parts = [table.value]
         j += 1
-        dotted = False
         while j + 1 < n and block[j].kind == "OP" and block[j].value == "." and block[j + 1].kind in WORD_KINDS:
-            dotted = True
+            parts.append(block[j + 1].value)
             j += 2
         if (
-            not dotted
-            and j + 1 < n
+            j + 1 < n
             and block[j].kind in WORD_KINDS and block[j].value.upper() in query_alias_intro()
             and block[j + 1].kind in WORD_KINDS
         ):
-            out.append((block[j + 1].value, table.value))
+            out.append((block[j + 1].value, ".".join(parts)))
             j += 2
         i = j
     return out
@@ -284,7 +285,43 @@ def query_row_columns(source: SourceFile, offset: int) -> dict[str, list[str]]:
         columns = results.get(iterated.value) if iterated.kind == "IDENT" else None
         if columns:
             out[name.value] = columns
+
+    # A lambda over the same result reads a row too: `Результат.Преобразовать(Э -> Э.Автор)` is
+    # how a selection turns into structures, and the parameter carries the columns exactly as a
+    # loop variable does. The receiver is either the variable holding the result or the query
+    # call itself (`Запрос{...}.Выполнить().Преобразовать(...)`), and the columns of that block
+    # are known the same way.
+    for i, t in enumerate(code):
+        if not (t.kind == "OP" and t.value == "->" and t.start < offset):
+            continue
+        if i < 2 or code[i - 1].kind != "IDENT":
+            continue
+        if not (code[i - 2].kind == "OP" and code[i - 2].value == "("):
+            continue
+        columns = _receiver_row_columns(code, toks, ranges, results, i)
+        if columns:
+            out[code[i - 1].value] = columns
     return out
+
+
+def _receiver_row_columns(code, toks, ranges, results, arrow: int):
+    """Columns of the query row the lambda at `arrow` receives, or None."""
+    # `<Имя> . <Член> ( П ->` - the result held by a variable.
+    if arrow >= 5 and code[arrow - 4].kind == "OP" and code[arrow - 4].value == ".":
+        holder = code[arrow - 5]
+        if holder.kind == "IDENT":
+            found = results.get(holder.value)
+            if found:
+                return found
+    # `Запрос{...} . Выполнить ( ) . <Член> ( П ->` - the block stands right there.
+    for j in range(arrow - 1, max(arrow - 12, -1), -1):
+        token = code[j]
+        if token.kind == "KEYWORD" and token.canonical == "QUERY":
+            span = next((r for r in ranges if r[0] >= token.start), None)
+            if span is not None:
+                return _query_columns(toks, *span) or None
+            break
+    return None
 
 
 # `Имя: X` anywhere in a yaml - an object name, a form attribute, a component, a column. Any
@@ -1187,6 +1224,12 @@ def local_var_types(
         out.setdefault(prop, dataset.member_type_head(prop_written))
         written_types.setdefault(prop, prop_written)
 
+    # The parameter of a lambda passed to a member of a collection: `List.Convert(E -> E.Name)`
+    # hands one ELEMENT to the lambda, so the parameter is typed by the receiver exactly as a
+    # loop variable is. It is the last common shape that stayed untyped.
+    _add_lambda_param_types(toks, start, offset, out, resolve_root, returns, written_types,
+                            own_returns)
+
     # The variable of a `catch` clause: its type stands right there in the source
     # (`поймать Ошибка: Исключение`), and it was the only declaration form the walk did not read -
     # so the dot after the most common name in error handling answered nothing.
@@ -1280,6 +1323,72 @@ def element_type(written: str | None) -> str | None:
     element = match.group(1).strip().rstrip("?").strip()
     return element or None
 
+
+
+def _add_lambda_param_types(
+    toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
+    written_types: dict[str, str] | None = None,
+    own_returns: dict[str, str] | None = None,
+) -> None:
+    """Type the parameter of `<коллекция>.<Член>(Э -> ...)` by the element of the collection.
+
+    Only the one-parameter form over a receiver that is a collection of ONE element type is
+    taken: that is the shape the corpora write, and it is the only one where the element is
+    known without reading the signature of the member. A two-parameter lambda (index and
+    element) and a receiver of several arguments stay untyped rather than guessed.
+    """
+    n = len(toks)
+    for i, t in enumerate(toks):
+        if not (t.kind == "OP" and t.value == "->" and start <= t.start < offset):
+            continue
+        name = toks[i - 1] if i else None
+        opening = toks[i - 2] if i >= 2 else None
+        if name is None or name.kind != "IDENT":
+            continue
+        # `(Э ->` - the lambda opens the argument list of the call right before it.
+        if not (opening is not None and opening.kind == "OP" and opening.value == "("):
+            continue
+        # `Список . Преобразовать ( Э ->` - the RECEIVER is the chain before the dot of the
+        # member being called; walking to the parenthesis would answer the member's own result.
+        dot = toks[i - 4] if i >= 4 else None
+        if not (dot is not None and dot.kind == "OP" and dot.value == "."):
+            continue
+        start_of_chain = _chain_start(toks, i - 5)
+        collection = None
+        if written_types is not None and start_of_chain == i - 5:
+            # A bare receiver (a parameter, a local): its written type is at hand and carries
+            # the generic argument, while the chain walk answers the head alone - the same
+            # shortcut the loop variables take.
+            collection = written_types.get(toks[i - 5].value)
+        if collection is None:
+            collection = chain_type(toks, start_of_chain, resolve_root, returns,
+                                    written=True, own_returns=own_returns,
+                                    resolve_written=(written_types or {}).get,
+                                    stop_offset=dot.start)
+        element = element_type(collection)
+        # A type PARAMETER of the receiver (`ItemType`) is not a type: the catalogue names a
+        # generic result that way, and putting the parameter's own name in is worse than silence.
+        if element and element.rstrip("?") not in _own_type_params(collection):
+            out[name.value] = element
+
+
+def _chain_start(toks: list[Token], end: int) -> int:
+    """Index of the first token of the dotted chain that ENDS at `end` (inclusive)."""
+    i = end
+    while i - 2 >= 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == "."             and toks[i - 2].kind in ("IDENT", "KEYWORD"):
+        i -= 2
+    return max(i, 0)
+
+
+def _own_type_params(written: str | None) -> tuple[str, ...]:
+    """Names the catalogue uses as the TYPE PARAMETERS of the written type's head."""
+    if not written:
+        return ()
+    try:
+        params = dataset.load_json("stdlib.json").get("type_params") or {}
+    except Exception:  # noqa: BLE001 - no data, nothing to exclude
+        return ()
+    return tuple(params.get(dataset.member_type_head(written)) or ())
 
 def _add_loop_var_types(
     toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
