@@ -436,17 +436,6 @@ def test_a_non_public_foreign_element_is_left_to_the_visibility_rule():
 
 
 @pytest.mark.needs_data
-def test_a_call_of_a_foreign_module_stays_silent_by_design():
-    """A bare name at the head of a chain is also a variable, a field of the paired yaml or
-    an implicit name of the platform; a probe over five corpora found one such candidate and
-    it was false. Only written type positions are judged."""
-    diags = _lint_missing_code(_module_project(
-        "метод Т()\n    знч Х = Товары.НайтиПоКоду(\"1\")\n;\n"
-    ))
-    assert diags == []
-
-
-@pytest.mark.needs_data
 def test_a_module_without_subsystem_files_stands_down():
     files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
              "Модуль.xbsl": "метод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"}
@@ -539,3 +528,44 @@ def test_the_import_section_of_a_yaml_counts_too():
 def test_without_subsystem_files_the_usage_rule_stands_down():
     files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nИмпорт:\n    - Б\n"}
     assert _lint_usage(files) == []
+
+
+@pytest.mark.needs_data
+def test_a_call_of_a_foreign_module_is_reported_too():
+    """The other shape: the foreign subsystem is reached by a chain root, not a written type."""
+    diags = _lint_missing_code(_module_project(
+        "метод Т()\n    знч Х = Товары.НайтиПоКоду(\"1\")\n;\n"
+    ))
+    assert [(x.rule_id, x.line) for x in diags] == [(MISSING_CODE, 2)]
+    assert "Товары.НайтиПоКоду" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_a_local_name_is_not_a_reference():
+    """A variable, a parameter and a loop name explain themselves - the module says so."""
+    files = _module_project(
+        "метод Т(Товары: Строка)\n    знч Х = Товары.ВВерхнийРегистр()\n;\n"
+        "метод П()\n    знч Товары = \"\"\n    знч Х = Товары.Длина()\n;\n"
+    )
+    assert _lint_missing_code(files) == []
+
+
+@pytest.mark.needs_data
+def test_a_section_of_the_paired_yaml_is_not_a_reference():
+    """The live false one: a scheduled job reads its own parameters by the section name, and
+    the project happens to hold an element of that name in another subsystem."""
+    files = _module_project(
+        "метод Т()\n    знч Х = Товары.ХранитьДней\n;\n",
+        **{"А/Модуль.yaml": "ВидЭлемента: ЗапланированноеЗадание\nИмя: Модуль\n"
+                            "Товары:\n    -\n        Имя: ХранитьДней\n        Тип: Число\n"},
+    )
+    assert _lint_missing_code(files) == []
+
+
+@pytest.mark.needs_data
+def test_a_name_the_module_declares_is_not_a_reference():
+    files = _module_project(
+        "структура Товары\n    поле Код: Строка\n;\n\n"
+        "метод Т()\n    знч Х = новый Товары()\n    знч К = Х.Код\n;\n"
+    )
+    assert _lint_missing_code(files) == []

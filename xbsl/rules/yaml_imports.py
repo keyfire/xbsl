@@ -86,6 +86,8 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules import semantics
+from xbsl.rules.environment import _pair_stem
+from xbsl.rules.undefined_names import _IMPLICIT
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_types import _parse_type_string, _type_values, _value_positions
 
@@ -113,6 +115,14 @@ MESSAGES = {
         "en": "Type '{name}' comes from subsystem '{sub}' which this module does not import: "
               "compilation fails at this line. The module needs an import line of its own "
               "(the {n[Импорт]} section of the paired yaml does not cover the code).",
+    },
+    "code/missing-import.chain": {
+        "ru": "Обращение '{name}' – к элементу подсистемы '{sub}', а модуль её не импортирует: "
+              "компиляция упадёт на этой строке. Нужна строка импорта этой подсистемы "
+              "(секция Импорт парного yaml код не покрывает).",
+        "en": "'{name}' reaches an element of subsystem '{sub}' which this module does not "
+              "import: compilation fails at this line. The module needs an import line of its "
+              "own (the {n[Импорт]} section of the paired yaml does not cover the code).",
     },
     "yaml/missing-subsystem-usage.title": {
         "ru": "Подсистема импортируется, но не объявлена используемой",
@@ -527,8 +537,12 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
         return {
             "k": "el",
             "path": str(source.path),
+            "stem": _pair_stem(source.rel),
             "name": nm if isinstance(nm, str) else source.path.stem,
             "vis": data.get("ОбластьВидимости"),
+            # The sections of the element are what the platform hands to its module by name -
+            # see the chain roots below.
+            "keys": sorted(k for k in data if isinstance(k, str)),
         }
     if source.kind != "xbsl":
         return None
@@ -540,8 +554,8 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
     if errors:
         # A module that does not parse has no reliable type positions; the syntax rules
         # report it, and guessing over a broken tree would invent references.
-        return {"k": "mod", "path": str(source.path), "imports": [], "cands": [],
-                "local_types": local}
+        return {"k": "mod", "path": str(source.path), "stem": _pair_stem(source.rel),
+                "imports": [], "cands": [], "local_types": local}
     stdlib = semantics._stdlib_names()
     lm = linemap(source)
     toks = tokens(source)
@@ -560,8 +574,43 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
                 continue
             line, col = lm.linecol(node.start)
             cands.append((chain[0], ".".join(chain), line, col))
-    return {"k": "mod", "path": str(source.path), "imports": imports, "cands": cands,
-            "local_types": local}
+    # The other shape: the root of a chain, `Модуль.Метод()`. A bare name is many things, so
+    # everything the module itself explains is taken off the table here, in the file that has
+    # the answer: names declared in the method, names the module declares, and the implicit
+    # names of the platform. The sections of the PAIRED yaml are subtracted in the reduce -
+    # they live in another file.
+    roots: list[tuple[str, str, int, int]] = []
+    declared_here = {
+        getattr(member, "name", "") for member in module.members
+        if isinstance(member, (P.ObjectField, P.Structure, P.Enum, P.Method))
+    }
+    for method in module.members:
+        if not isinstance(method, P.Method):
+            continue
+        env = _method_names(method)
+        for node in _nodes(method.body):
+            if not isinstance(node, P.Member) or not isinstance(node.obj, P.Name):
+                continue
+            name = node.obj.name
+            if name in env or name in declared_here or name in stdlib or name in _IMPLICIT:
+                continue
+            line, col = lm.linecol(node.obj.start)
+            roots.append((name, f"{name}.{node.name}", line, col))
+    return {"k": "mod", "path": str(source.path), "stem": _pair_stem(source.rel),
+            "imports": imports, "cands": cands, "roots": roots, "local_types": local}
+
+
+def _method_names(method: P.Method) -> set[str]:
+    """Names a method introduces itself: parameters, variables, loop and lambda names."""
+    names = {getattr(p, "name", "") for p in (getattr(method, "params", ()) or ())}
+    for node in _nodes(getattr(method, "body", None)):
+        if isinstance(node, P.VarDecl):
+            names.add(node.name)
+        elif isinstance(node, (P.ForEach, P.ForTo)):
+            names.add(getattr(node, "var", ""))
+        elif isinstance(node, P.Lambda):
+            names.update(getattr(p, "name", "") for p in (getattr(node, "params", ()) or ()))
+    return names
 
 
 def _nodes(node: object) -> Iterable[P.Node]:
@@ -590,13 +639,13 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     the module the same way. That one takes every identifier; this one takes only the roots of
     types WRITTEN DOWN in a type position, where a name can be nothing else.
 
-    What that leaves out is deliberate: a call of a foreign module (`Модуль.Метод()`) is a bare
-    name at the head of a chain, and a bare name is also a local variable, a parameter, a field
-    of the paired yaml or an implicit name of the platform - a probe over five corpora found
-    exactly one candidate of that shape, and it was a false one (`Parameters` of a scheduled job,
-    which the platform hands to the module while the project happens to hold an element of that
-    name elsewhere). Until such a name can be told apart from a reference, the silence is the
-    honest answer.
+    The root of a chain (`Модуль.Метод()`) is judged too, and everything that can explain such
+    a bare name is subtracted first: the names the method introduces (parameters, variables,
+    loop and lambda names), the names the module declares, the implicit names of the platform,
+    and the SECTIONS OF THE PAIRED YAML - a scheduled job reads its own parameters as
+    `Parameters`, and a project that happens to hold an element of that name elsewhere must not
+    turn that into a report. Each of those is a fact of the file at hand rather than an entry
+    in a list, which is what makes the subtraction safe to trust.
 
     The narrowings of yaml/missing-import hold here too, for the same reasons: a stdlib name is
     skipped (without an import the foreign namespace is not in scope and the name resolves to
@@ -611,21 +660,29 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["k"] == "mod":
             local_types.update(fact["local_types"])
     placement: dict[str, dict[str, object]] = {}
+    paired_keys: dict[str, set[str]] = {}
     for fact in facts.values():
         if fact["k"] != "el":
             continue
+        paired_keys[fact["stem"]] = set(fact["keys"])
         sub = _subsystem_of(Path(fact["path"]), roots)
         if sub:
             placement.setdefault(fact["name"], {})[sub] = fact["vis"]
     for rel, fact in facts.items():
-        if fact["k"] != "mod" or not fact["cands"]:
+        if fact["k"] != "mod":
+            continue
+        own_keys = paired_keys.get(fact["stem"], frozenset())
+        candidates_here = [(*c, "missing") for c in fact["cands"]] + [
+            (*c, "chain") for c in fact.get("roots", ()) if c[0] not in own_keys
+        ]
+        if not candidates_here:
             continue
         my_sub = _subsystem_of(Path(fact["path"]), roots)
         if my_sub is None:
             continue  # a module outside any subsystem needs no import
         imports = set(fact["imports"])
         reported: set[tuple[str, ...]] = set()
-        for root, chain_name, line, col in fact["cands"]:
+        for root, chain_name, line, col, shape in candidates_here:
             if root in local_types:
                 continue
             owners = placement.get(root)
@@ -641,7 +698,7 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             reported.add(candidates)
             yield Diagnostic(
                 rel, line, col, "code/missing-import", Severity.WARNING,
-                i18n.t("code/missing-import.missing", name=chain_name,
+                i18n.t(f"code/missing-import.{shape}", name=chain_name,
                        sub="/".join(candidates)),
             )
 

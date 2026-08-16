@@ -26,11 +26,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   public element of another subsystem without an import line for that subsystem. Compilation
   fails at exactly that line while the linter stayed silent: the direct check existed for yaml
   only, and the code side had just the mirror `code/unused-import`. WRITTEN type positions are
-  judged - a parameter, a variable, a return, `new`, `as`, `is`, generic arguments - where a
-  name can be nothing else. A bare name at the head of a chain (`Module.Method()`) is left
-  alone on purpose: there a name is also a variable, an attribute of the paired yaml or an
-  implicit name of the platform, and a probe over five corpora found exactly one candidate of
-  that shape, which turned out to be false.
+  judged - a parameter, a variable, a return, `new`, `as`, `is`, generic arguments - and so is
+  the root of a chain (`Module.Method()`), from which everything that explains the name on its
+  own is subtracted first: the declarations of the method and the module, the implicit names of
+  the platform, and the sections of the PAIRED yaml. That last one was the only false candidate
+  the probe found: a scheduled job reads its own parameters by the section name, and an element
+  of that name happened to live in another subsystem.
 
 ### Changed
 - **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
