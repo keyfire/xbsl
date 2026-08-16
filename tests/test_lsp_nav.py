@@ -1827,3 +1827,27 @@ def test_a_component_without_a_known_type_stays_silent():
         stdlib_members={},
     )
     assert not entries
+
+
+# --- the variable of a catch clause ---------------------------------------------------------
+
+
+def _locals_at(text, marker):
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    src = _engine.load_text("М.xbsl", text)
+    return local_var_types(src, text.index(marker))
+
+
+def test_a_caught_exception_is_typed_by_its_clause():
+    """The base exception type is spelled with a KEYWORD, and the ordinary type reader answers
+    nothing there - so the dot after the most common name in error handling stayed silent."""
+    text = ("метод Ф()\n    попытка\n        Х()\n    поймать Ошибка: Исключение\n"
+            "        Сообщить(Ошибка.Описание)\n    ;\n;\n")
+    assert _locals_at(text, "Ошибка.Описание")["Ошибка"] == "Исключение"
+
+
+def test_a_project_exception_in_a_catch_reads_as_usual():
+    text = ("метод Ф()\n    попытка\n        Х()\n    поймать Сбой: МоеИсключение\n"
+            "        Сообщить(Сбой.Описание)\n    ;\n;\n")
+    assert _locals_at(text, "Сбой.Описание")["Сбой"] == "МоеИсключение"

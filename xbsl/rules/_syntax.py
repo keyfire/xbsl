@@ -1187,6 +1187,11 @@ def local_var_types(
         out.setdefault(prop, dataset.member_type_head(prop_written))
         written_types.setdefault(prop, prop_written)
 
+    # The variable of a `catch` clause: its type stands right there in the source
+    # (`поймать Ошибка: Исключение`), and it was the only declaration form the walk did not read -
+    # so the dot after the most common name in error handling answered nothing.
+    _add_catch_var_types(toks, start, offset, out, written_types)
+
     # The loop variables FIRST: a declaration inside a loop leans on the variable the loop
     # introduced (`исп Поток = Страница.Загрузить()...`), and typing the declarations first left
     # such a chain rootless. The pass runs again below, for a loop whose source is declared above.
@@ -1227,6 +1232,38 @@ def local_var_types(
         written_out.update(written_types)
     return out
 
+
+
+def _add_catch_var_types(
+    toks: list[Token], start: int, offset: int,
+    out: dict[str, str], written_types: dict[str, str],
+) -> None:
+    """`поймать <Имя>: <Тип>` - the caught exception, typed by what the clause declares.
+
+    The base type is spelled with a KEYWORD (`Exception` in either language), not an
+    identifier, so
+    the ordinary type reader answers nothing there - and that is the type nine catches out of
+    ten name. A project exception is an identifier and reads the usual way.
+    """
+    for i, tok in enumerate(toks):
+        if not (start <= tok.start < offset):
+            continue
+        if tok.kind != "KEYWORD" or tok.canonical != "CATCH":
+            continue
+        if i + 3 >= len(toks) or toks[i + 1].kind != "IDENT":
+            continue
+        if not (toks[i + 2].kind == "OP" and toks[i + 2].value == ":"):
+            continue
+        declared = toks[i + 3]
+        if declared.kind == "KEYWORD" and declared.canonical == "EXCEPTION":
+            head = full = declared.value  # the catalogue keys the type under both spellings
+        else:
+            head, full = _type_head(toks, i + 3), _type_written(toks, i + 3)
+        if not head:
+            continue
+        out[toks[i + 1].value] = head
+        if full:
+            written_types[toks[i + 1].value] = full
 
 #: `Массив<Каталог.Карточка>` - a collection over ONE element type; several arguments name no
 #: single element, so such a type answers nothing.

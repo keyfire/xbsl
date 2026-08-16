@@ -12,6 +12,21 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Changed
+- **Completion answers after a caught exception and after the inherited members of a form.**
+  A walk over the silent dots of a live corpus showed two classes with a known cause. The type
+  of a caught exception stands right in the clause (`catch Error: Exception`), but the base type
+  is spelled with a KEYWORD while the type reader took identifiers only - so the dot after the
+  most common name in error handling stayed silent. A form module reads by a bare name not only
+  its own attributes but the members of the type the form INHERITS (`Write.Execute()` is the
+  standard command of an object form); those are in the environment now, with own attributes
+  winning over inherited ones. A member whose type the catalogue states by a type PARAMETER or
+  by a union is not offered: the name of a parameter in place of a type is worse than silence -
+  on the first attempt it shadowed the path that used to answer for the form's own object.
+  Measured: the silence on the site corpus goes from 19.5% to 18.9%.
+
 ## 2026-08-16 – 0.68.0
 
 ### Added

@@ -654,7 +654,28 @@ def _make_server() -> "LanguageServer":
             return {}
         stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
         record = STATE.lookup.struct_by_name(stem)
-        types = (record or {}).get("property_types") or {}
+        types = dict((record or {}).get("property_types") or {})
+        # The members the type INHERITS answer to a bare name too, and they are the ones a form
+        # module writes most: `Записать.Выполнить()` is the standard command of the object form
+        # its yaml declares under `Inherits`. Own attributes win over inherited ones.
+        base = (record or {}).get("base")
+        if isinstance(base, str) and base:
+            try:
+                catalog = dataset.load_json("stdlib.json")
+            except Exception:  # noqa: BLE001 - no data, own attributes only
+                catalog = {}
+            known = set(catalog.get("names") or ())
+            # A member whose type the catalogue states by a TYPE PARAMETER of the owner
+            # (`ObjectForm.Object` answers `ObjectType`) names nothing until the argument is
+            # put in - and putting the parameter's own name in place of a type is worse than
+            # silence: it shadowed the path that used to answer for such a member. A union
+            # (`Auto|Number`) is no single type either, and its head would be read as `Auto`.
+            for name, written in ((catalog.get("member_types") or {}).get(base) or {}).items():
+                if not written or "|" in written:
+                    continue
+                if dataset.member_type_head(written) not in known:
+                    continue
+                types.setdefault(name, written)
         return {str(name): str(written) for name, written in types.items() if written}
 
     def _inference_inputs() -> tuple[dict, dict, set]:
