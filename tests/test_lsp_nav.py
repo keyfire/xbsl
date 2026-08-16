@@ -1755,3 +1755,45 @@ def test_a_single_row_query_answers_by_column_off_the_result():
     offset = SINGLE_ROW_QUERY.index("Выборка.Иконка") + len("Выборка.")
 
     assert query_row_columns(src, offset) == {"Выборка": ["Иконка", "Слаг"]}
+
+
+# --- the spelling of stdlib members follows the project language --------------------------
+
+
+_STDLIB_MEMBERS = {"Строка": {"properties": ["Длина"], "methods": ["ВСтроку", "НетТакогоЧлена"]}}
+
+
+def _member_labels(language):
+    entries = resolve_completions(
+        LOOKUP,
+        language_id="xbsl",
+        line_prefix="знч Х = Текст.",
+        file_stem="ГлавнаяФорма",
+        stdlib_members=_STDLIB_MEMBERS,
+        local_vars={"Текст": "Строка"},
+        project_language=language,
+    )
+    return {e["label"]: e for e in entries}
+
+
+def test_a_russian_project_keeps_the_catalogue_spelling():
+    assert set(_member_labels("ru")) == {"Длина", "ВСтроку", "НетТакогоЧлена"}
+
+
+@pytest.mark.needs_data  # the spelling pair lives in the compiler dictionary
+def test_an_english_project_is_offered_english_members():
+    """The catalogue keys types under both spellings but holds members in Russian only; the
+    compiler dictionary carries the pair, and the label is translated at the last step."""
+    labels = _member_labels("en")
+    assert "Length" in labels and "ToString" in labels
+    assert "Длина" not in labels and "ВСтроку" not in labels
+
+
+@pytest.mark.needs_data  # the spelling pair lives in the compiler dictionary
+def test_the_snippet_of_a_method_uses_the_same_spelling():
+    assert _member_labels("en")["ToString"]["snippet"] == "ToString($0)"
+
+
+def test_a_member_the_dictionary_does_not_know_stays_as_written():
+    # inventing a spelling would be worse than showing the one the catalogue has
+    assert "НетТакогоЧлена" in _member_labels("en")

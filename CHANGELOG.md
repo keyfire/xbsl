@@ -34,6 +34,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   of that name happened to live in another subsystem.
 
 ### Changed
+- **Completion in an English project names platform members in English.** After a dot on a
+  value of a platform type the list read `ToString`, `Length`, `Refresh` in Russian: the
+  catalogue keys types under both spellings but holds the members of each under the Russian
+  one, because the documentation of the distribution is Russian too. The compiler dictionary
+  carries the pair for such a name, and the spelling is taken from it at the last step, where
+  the reader is known; a name the dictionary does not know stays as the catalogue has it rather
+  than being invented (a pair was found for 87% of the Cyrillic member names). The snippet of a
+  method inserts the spelling the list shows.
 - **Expression type inference answers more often: 33.9% -> 38.8% of the accesses.** Measured over
   five corpora (47 072 accesses of the shape `X.name`, counting a named receiver type) – between
   3.9 and 5.3 points gained on each of them; the same measure reads the entry of 2026-08-15,

@@ -745,6 +745,7 @@ def _make_server() -> "LanguageServer":
             in_query, query_tables, local_vars, query_rows = False, {}, {}, {}
             var_written = {}
             expr_type = ctor_type = None
+        project_language = _project_language(str(STATE.root) if STATE.root else None)
         entries = resolve_completions(
             lookup,
             language_id=language_of(path),
@@ -762,10 +763,10 @@ def _make_server() -> "LanguageServer":
             expr_type=expr_type,
             ctor_type=ctor_type,
             templates=STATE.templates,
+            project_language=project_language,
         )
         if entries is None:
             return None
-        project_language = _project_language(str(STATE.root) if STATE.root else None)
         items = [
             lsp.CompletionItem(
                 label=e["label"],

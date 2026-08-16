@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 from typing import Any, Optional, Sequence
 
+from xbsl import terms
 from xbsl.templates import (
     CODE_CONTEXTS,
     OBJECT_FULL_NAME_VAR,
@@ -423,6 +424,7 @@ def _facet_entries(stdlib_members: Optional[dict], namespace: str) -> list[dict]
 
 def _inherited_entries(
     lookup: IndexLookup, type_name: str, stdlib_members: Optional[dict],
+    language: str = "ru",
 ) -> list[dict]:
     """Members a project type gets from the platform type it extends.
 
@@ -433,7 +435,7 @@ def _inherited_entries(
     struct = lookup.struct_by_name(type_name)
     base = (struct or {}).get("base")
     members = (stdlib_members or {}).get(base) if isinstance(base, str) else None
-    return _stdlib_entries(members) if members else []
+    return _stdlib_entries(members, language) if members else []
 
 
 #: Buckets of the `manager` field of an index object, with what a completion item says about
@@ -588,20 +590,39 @@ def _query_field_entries(
     return entries
 
 
-def _stdlib_entries(members) -> list[dict]:
+def _spelling(name: str, language: str) -> str:
+    """The member name in the language the project is written in.
+
+    The catalogue keys TYPES under both spellings but holds the members of each under their
+    Russian names only - the distribution documents them in Russian, and that is where the
+    catalogue comes from. An English project therefore used to be offered a Russian member
+    list after every dot. The compiler dictionary (`terms_full.json`) carries the pair for
+    each such name, so the label is translated at the last step, where the reader is known;
+    a name the dictionary does not know stays as it is rather than being invented.
+    """
+    if language != "en":
+        return name
+    return terms.common_english(name) or name
+
+
+def _stdlib_entries(members, language: str = "ru") -> list[dict]:
     """Members of a stdlib type: properties and methods apart (methods get their own kind and insert parentheses).
 
     The dataset provides {"properties": [...], "methods": [...]}; the former flat list of
     names (properties and methods mixed) is understood for compatibility with old data.
     """
     if not isinstance(members, dict):
-        return [{"label": str(x), "kind": "field", "detail": "член"} for x in members or []]
+        return [
+            {"label": _spelling(str(x), language), "kind": "field", "detail": "член"}
+            for x in members or []
+        ]
     entries = [
-        {"label": str(x), "kind": "field", "detail": "свойство"}
+        {"label": _spelling(str(x), language), "kind": "field", "detail": "свойство"}
         for x in members.get("properties") or []
     ]
     entries += [
-        {"label": str(x), "kind": "method", "detail": "метод", "snippet": f"{x}($0)"}
+        {"label": (name := _spelling(str(x), language)), "kind": "method",
+         "detail": "метод", "snippet": f"{name}($0)"}
         for x in members.get("methods") or []
     ]
     return entries
@@ -667,6 +688,7 @@ def resolve_completions(
     ctor_type: Optional[str] = None,
     stdlib_names: Optional[Any] = None,
     templates: Optional[Sequence["Template"]] = None,
+    project_language: str = "ru",
 ) -> Optional[list[dict]]:
     """Completion items [{label, kind, detail}] for the context, or None if it is unknown."""
     # A dot that continues a chain - after a call (`ЗапросКБД.Выполнить().`) or a property
@@ -682,10 +704,11 @@ def resolve_completions(
     if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:
-            return _stdlib_entries(members)
+            return _stdlib_entries(members, project_language)
         project = _project_type_entries(lookup, expr_type)
         if project:
-            return project + _inherited_entries(lookup, expr_type, stdlib_members)
+            return project + _inherited_entries(
+                lookup, expr_type, stdlib_members, project_language)
     m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
     if m:
         return [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
@@ -724,7 +747,7 @@ def resolve_completions(
             var_type = local_vars[token]
             members = (stdlib_members or {}).get(var_type)
             if members:
-                return _stdlib_entries(members)
+                return _stdlib_entries(members, project_language)
             return _project_type_entries(lookup, var_type)
         entries = _object_member_entries(lookup, token)
         if entries is not None:
@@ -733,7 +756,7 @@ def resolve_completions(
         # members come from the linter dataset's type_members, keyed there under both name forms.
         members = (stdlib_members or {}).get(token)
         if members:
-            return _stdlib_entries(members)
+            return _stdlib_entries(members, project_language)
         # A NAMESPACE of facets (`Сущность.Право`, `Сущность.Объект`): the catalogue keys such a
         # type by both segments, and the first one alone is not a type at all - the dot after it
         # used to answer nothing, though the names that may follow are known exactly.
