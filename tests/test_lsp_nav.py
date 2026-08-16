@@ -960,8 +960,12 @@ def test_hover_method_shows_signature_and_description():
 
 def test_method_returns_catalogue():
     # The shape the type inference expects of the stdlib catalogue: {module: {method: type}},
-    # methods without a declared return type left out.
-    assert LOOKUP.method_returns() == {"Товар": {"Загрузить": "ДанныеКарточки"}}
+    # methods without a declared return type left out. A VALUE of an enumeration belongs here
+    # too - it is a member whose type is the enumeration itself.
+    assert LOOKUP.method_returns() == {
+        "Товар": {"Загрузить": "ДанныеКарточки"},
+        "ВидТовара": {"Весовой": "ВидТовара"},
+    }
 
 
 def test_stdlib_member_hover_kind_and_result():
@@ -1818,6 +1822,43 @@ def test_completion_after_a_component_answers_the_members_of_its_type():
     assert {"Видимость", "Нажать"} <= labels
 
 
+def _lookup_with_component(component_type: str):
+    """An index of one form with one component of the given written type."""
+    index = dict(INDEX)
+    index["components"] = [
+        {"form": "СписокФорма", "name": "Список", "type": component_type,
+         "path": "Каталог/СписокФорма.yaml", "line": 4},
+    ]
+    return IndexLookup(index)
+
+
+def test_a_generic_component_type_is_looked_up_by_its_head():
+    """The everyday shape of a list form is a GENERIC component type, and the catalogue is
+    keyed by the nominal head - asking it with the arguments attached found nothing."""
+    entries = resolve_completions(
+        _lookup_with_component("Таблица<ДинамическийСписок>"),
+        language_id="xbsl",
+        line_prefix="    Компоненты.Список.",
+        file_stem="СписокФорма",
+        stdlib_members={"Таблица": {"properties": ["ТекущаяСтрока"], "methods": ["Обновить"]}},
+    )
+    assert {e["label"] for e in entries or []} == {"ТекущаяСтрока", "Обновить"}
+
+
+def test_a_component_branch_with_nothing_lets_the_chain_answer():
+    """The branch must not shadow the chain below it: the components are a chain ROOT of their
+    own, so a component the branch knows nothing about still has an answer there."""
+    entries = resolve_completions(
+        _lookup_with_component("НетВКаталоге"),
+        language_id="xbsl",
+        line_prefix="    Компоненты.Список.",
+        file_stem="СписокФорма",
+        stdlib_members={"Таблица": {"properties": ["ТекущаяСтрока"], "methods": []}},
+        expr_type="Таблица",
+    )
+    assert {e["label"] for e in entries or []} == {"ТекущаяСтрока"}
+
+
 def test_a_component_without_a_known_type_stays_silent():
     entries = resolve_completions(
         LOOKUP,
@@ -1919,3 +1960,111 @@ def test_a_virtual_table_alias_stays_silent():
         query_tables={"С": "РегистрСведений.СрезПоследних"},
     )
     assert not entries
+
+
+# --- the data object of an object form ------------------------------------------------------
+
+
+def _lookup_with_form_base(base_written: str):
+    """An index whose form module extends the given base type, as written in the yaml."""
+    index = dict(INDEX)
+    index["struct_members"] = {
+        "ТоварФорма": {"properties": [], "kind": "КомпонентИнтерфейса",
+                       "base": base_written.split("<", 1)[0],
+                       "base_written": base_written},
+    }
+    return IndexLookup(index)
+
+
+def test_the_data_object_of_a_form_is_named_by_the_base_argument():
+    """A form module addresses the entity it edits by a bare name, and nothing in the module
+    declares it - the argument of the base type does."""
+    lookup = _lookup_with_form_base("ФормаОбъекта<Товар.Объект>")
+    assert lookup.form_data_object("ТоварФорма") == ("Объект", "Товар.Объект")
+
+
+def test_a_base_without_an_argument_names_no_data_object():
+    assert _lookup_with_form_base("ФормаСписка").form_data_object("ТоварФорма") is None
+
+
+def test_a_facet_the_object_does_not_have_names_no_data_object():
+    """Only what the project really has: the family of the object is the list of its facets."""
+    lookup = _lookup_with_form_base("ФормаОбъекта<Товар.НетТакогоФасета>")
+    assert lookup.form_data_object("ТоварФорма") is None
+
+
+# --- a value of an enumeration --------------------------------------------------------------
+
+
+def test_a_value_of_an_enumeration_is_typed_by_its_enumeration():
+    assert LOOKUP.method_returns()["ВидТовара"]["Весовой"] == "ВидТовара"
+
+
+def test_the_dot_after_a_value_answers_with_the_methods_of_its_module():
+    """An enumeration has no record among the structures, so the dot after a variable of that
+    type used to answer nothing - though the module beside it declares what such a value does."""
+    index = dict(INDEX)
+    index["methods"] = list(INDEX["methods"]) + [
+        {"module": "ВидТовара", "name": "Представление", "path": "Каталог/ВидТовара.xbsl",
+         "line": 4, "annotations": [], "returns": "Строка"},
+    ]
+    entries = resolve_completions(
+        IndexLookup(index),
+        language_id="xbsl",
+        line_prefix="    Вариант.",
+        file_stem="Товар",
+        stdlib_members={},
+        local_vars={"Вариант": "ВидТовара"},
+    )
+    assert [e["label"] for e in entries or []] == ["Представление"]
+
+
+# --- a literal collection as the source of a loop -------------------------------------------
+
+
+@pytest.mark.needs_data  # the lexer needs language.json
+def test_a_loop_over_a_literal_of_values_types_its_variable():
+    """A method offering a choice writes exactly this shape, and the items state the element
+    type themselves - there is no generic to take it out of."""
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    text = ("метод Ф()\n    для Вариант из [Роль.Админ, Роль.Обычный]\n"
+            "        Сообщить(Вариант.Представление())\n    ;\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    got = local_var_types(src, text.index("Вариант.Представление"),
+                          returns={"Роль": {"Админ": "Роль", "Обычный": "Роль"}},
+                          static_roots={"Роль"})
+    assert got["Вариант"] == "Роль"
+
+
+@pytest.mark.needs_data  # the lexer needs language.json
+def test_a_literal_of_two_types_leaves_the_loop_variable_alone():
+    """Items of different types would need a union, and a guess is worse than silence."""
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    text = ("метод Ф()\n    для Значение из [Роль.Админ, Вид.Простой]\n"
+            "        Сообщить(Значение.Представление())\n    ;\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    got = local_var_types(src, text.index("Значение.Представление"),
+                          returns={"Роль": {"Админ": "Роль"}, "Вид": {"Простой": "Вид"}},
+                          static_roots={"Роль", "Вид"})
+    assert "Значение" not in got
+
+
+@pytest.mark.needs_data  # the lexer needs language.json
+def test_a_loop_over_a_tabular_section_of_the_form_object():
+    """The whole chain of the object form: the bare name is the data object, the section is an
+    array of its rows, and the loop variable is one row."""
+    from xbsl import engine as _engine
+    from xbsl.rules._syntax import local_var_types
+    text = ("метод Ф()\n    для Стр из Объект.Возможности\n"
+            "        Сообщить(Стр.Заголовок)\n    ;\n;\n")
+    src = _engine.load_text("М.xbsl", text)
+    got = local_var_types(
+        src, text.index("Стр.Заголовок"),
+        returns={"Товар.Объект": {"Цены": "Массив<Товар.Цены>",
+                                  "Возможности": "Массив<Товар.Возможности>"}},
+        static_roots=set(),
+        own_properties={"Объект": "Товар.Объект"},
+    )
+    assert got["Стр"] == "Товар.Возможности"

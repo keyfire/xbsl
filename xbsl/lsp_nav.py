@@ -108,6 +108,29 @@ class IndexLookup:
             found = members.get(name.rpartition(".")[2])
         return found
 
+    def form_data_object(self, stem: str) -> Optional[tuple[str, str]]:
+        """(name, written type) of the data object of a form: `("Object", "Goods.Object")`.
+
+        A form module addresses the entity it edits by a BARE name, and nothing in the module
+        declares that name - the base type of the form does, by its argument
+        (`ObjectForm<Programs.Object>`). The pair is answered only when the project really has
+        such an object with such a facet, so a base of any other shape yields nothing rather
+        than a guess. Without this a loop over a tabular section of one's own object
+        (`для Стр из Объект.Возможности`) had no element type.
+        """
+        record = self.struct_by_name(stem) or {}
+        written = record.get("base_written")
+        if not isinstance(written, str) or "<" not in written:
+            return None
+        argument = written.partition("<")[2].rstrip(">").strip()
+        owner, _, facet = argument.rpartition(".")
+        if not owner or not facet:
+            return None
+        found = self.object_by_name(owner)
+        if not found or facet not in (found.get("family") or ()):
+            return None
+        return facet, argument
+
     def method_returns(self) -> dict[str, dict[str, str]]:
         """{name: {method: result type}} - the return types the inference needs of a PROJECT
         name, in the shape it expects of the stdlib catalogue, so that a variable initialized by
@@ -139,6 +162,17 @@ class IndexLookup:
                 keys = [str(name)] + ([f"{owner}.{name}"] if owner else [])
                 for key in keys:
                     cached[key] = {**cached.get(key, {}), **types}
+            # A VALUE of an enumeration is a member whose type is the enumeration itself
+            # (`Role.Admin` is a `Role`), and that is the one member the catalogue of a
+            # project name could not state. Without it the dot after a value answered nothing,
+            # and a loop over a literal list of values had no element type.
+            for entry in self.index.get("objects") or []:
+                values = entry.get("values") or ()
+                name = entry.get("name")
+                if not values or not name:
+                    continue
+                by_value = {str(_name_of(v)): str(name) for v in values if _name_of(v)}
+                cached[str(name)] = {**cached.get(str(name), {}), **by_value}
             for module, methods in self._module_methods.items():
                 # The WRITTEN form when the index has it: the head says `UserId` where the
                 # module declares `UserId?`, and a caller judging the empty value needs the
@@ -349,6 +383,11 @@ def resolve_references(
     return uniq
 
 
+def _nominal_head(written: str) -> str:
+    """The type name without its generic arguments (`Таблица<ДинамическийСписок>` -> Таблица)."""
+    return (written or "").split("<", 1)[0].strip()
+
+
 def _method_entry(m: dict) -> dict:
     annotations = m.get("annotations") or []
     return {
@@ -358,13 +397,27 @@ def _method_entry(m: dict) -> dict:
     }
 
 
+def _enumeration_value_entries(lookup: IndexLookup, type_name: str) -> Optional[list[dict]]:
+    """Members of a VALUE of an enumeration described in metadata: the methods of its module.
+
+    An enumeration has no record among the structures - it is an object of the project - so the
+    dot after a variable of that type answered nothing, though the module beside it declares
+    exactly the methods such a value is asked for (`Вариант.Представление()`). The values
+    themselves are NOT members here: they belong to the enumeration as a static root.
+    """
+    found = lookup.object_by_name(type_name)
+    if not found or found.get("kind") != "Перечисление":
+        return None
+    return [_method_entry(m) for m in lookup.methods_by_module(type_name)] or None
+
+
 def _project_type_entries(lookup: IndexLookup, type_name: str) -> Optional[list[dict]]:
     """Members of a variable of a PROJECT type: a structure/exception/enumeration declared in
     a module or a type described in metadata (the fields of a structure, the constants of a
     set) - fields, enumeration values and the methods of the module extending the type."""
     struct = lookup.struct_by_name(type_name)
     if not struct:
-        return None
+        return _enumeration_value_entries(lookup, type_name)
     # A constant is not a field: the hint says what the author writes in the yaml of the set.
     field_detail = "константа" if struct.get("kind") == "НаборКонстант" else "поле"
     entries = [
@@ -747,12 +800,19 @@ def resolve_completions(
         # module half used to answer, so a component without a module of its own (the usual
         # case: a group, a table, an input) left the dot silent, though the yaml states its
         # type and the catalogue describes that type in full.
+        # The written type is usually GENERIC (`Таблица<ДинамическийСписок>` is the everyday
+        # shape of a list form), and the catalogue is keyed by the nominal head, so the head is
+        # what the lookup asks for. And when neither half has anything, the branch must NOT
+        # answer - the chain below knows the components as a root of its own and answers there.
         entries = [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
         component = lookup.component(file_stem, m.group(1))
-        of_type = (stdlib_members or {}).get((component or {}).get("type", ""))
+        written = (component or {}).get("type", "")
+        of_type = ((stdlib_members or {}).get(written)
+                   or (stdlib_members or {}).get(_nominal_head(written)))
         if of_type:
             entries += _stdlib_entries(of_type, project_language)
-        return entries or None
+        if entries:
+            return entries
     if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:

@@ -14,7 +14,19 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## Unreleased
 
+### Fixed
+- **The dot after a form component answers again.** The component branch shadowed the ordinary
+  chain and stayed silent whenever the component's type is written with an argument - and most
+  of them are.
+
 ### Changed
+- **Completion answers after the data object of a form.** The name `Object` is declared by the
+  argument of the form's base type; it is typed now, and with it the loops over tabular sections.
+- **Completion answers after a value of an enumeration and after a variable of that type.** A
+  value is a member of its enumeration, and the members of a value are the methods of the module
+  beside it.
+- **A loop over a literal list types its variable.** `for Option in [Role.Admin, Role.Plain]`
+  takes the type from the items themselves; items of different types leave the variable alone.
 - **Completion answers after a caught exception and after the commands of a form.** The type of
   an exception stands in the clause itself, and commands such as `Write` come to a form from the
   type it inherits; the dot after such names used to stay silent.

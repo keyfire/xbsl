@@ -1390,6 +1390,53 @@ def _own_type_params(written: str | None) -> tuple[str, ...]:
         return ()
     return tuple(params.get(dataset.member_type_head(written)) or ())
 
+def _literal_element_type(
+    toks: list[Token], at: int, resolve_root, returns,
+    own_returns: dict[str, str] | None = None,
+    written_types: dict[str, str] | None = None,
+) -> str | None:
+    """Element type of a literal collection `[A, B, C]` whose first token stands at `at`.
+
+    Answered only when EVERY item is of one type: a literal of enumeration values is the
+    everyday shape (`[Роль.Админ, Роль.Обычный]`), and there the answer is exact. Items of
+    different types would need a union, and a guess is worse than silence.
+    """
+    element: str | None = None
+    depth = 0
+    item = at
+    for pos in range(at, len(toks)):
+        t = toks[pos]
+        if t.kind == "OP" and t.value in ("[", "("):
+            depth += 1
+            continue
+        if t.kind == "OP" and t.value == ")":
+            depth -= 1
+            continue
+        if depth > 0:
+            if t.kind == "OP" and t.value == "]":
+                depth -= 1
+            continue
+        if not (t.kind == "OP" and t.value in (",", "]")):
+            continue
+        if pos == item:  # an empty literal, or a stray separator
+            return None
+        nxt = toks[item + 1] if item + 1 < len(toks) else None
+        bare = toks[item].kind == "IDENT" and (
+            nxt is None or not (nxt.kind == "OP" and nxt.value in (".", "("))
+        )
+        of_item = ((written_types or {}).get(toks[item].value) if bare
+                   else chain_type(toks, item, resolve_root, returns, written=True,
+                                   own_returns=own_returns,
+                                   resolve_written=(written_types or {}).get))
+        if not of_item or (element is not None and of_item != element):
+            return None
+        element = of_item
+        if t.value == "]":
+            return element
+        item = pos + 1
+    return None
+
+
 def _add_loop_var_types(
     toks: list[Token], start: int, offset: int, out: dict[str, str], resolve_root, returns,
     written_types: dict[str, str] | None = None,
@@ -1408,6 +1455,14 @@ def _add_loop_var_types(
         name, after = toks[i + 1], toks[i + 2]
         if name.kind != "IDENT" or not (after.kind == "KEYWORD" and after.canonical == "IN"):
             continue
+        # A LITERAL list of values: the element type is not taken out of a generic, the items
+        # state it themselves. A method offering a choice writes exactly this shape.
+        if toks[i + 3].kind == "OP" and toks[i + 3].value == "[":
+            of_items = _literal_element_type(toks, i + 4, resolve_root, returns,
+                                             own_returns, written_types)
+            if of_items:
+                out[name.value] = of_items
+                continue
         # A bare NAME as the collection (a parameter, a local): its written type is at hand and
         # carries the generic argument, while resolve_root would answer the head alone.
         collection = None

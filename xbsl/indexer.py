@@ -625,11 +625,15 @@ def _field_types(members) -> dict[str, str]:
 
 
 def _inherited_type(data: dict, kind: str) -> str | None:
-    """The platform type an element extends (`Наследует.Тип` of a component), without arguments.
+    """The platform type an element extends (`Наследует.Тип` of a component), AS WRITTEN.
 
     A form is a value of a PROJECT type whose members are its own; everything else it answers to
     - `OpenInModalWindow`, `Close`, the layout properties - belongs to the platform type
     it inherits, and only the base names it.
+
+    The arguments are kept: the base of an object form names the entity whose data the form
+    edits (`ObjectForm<Programs.Object>`), and that argument is the only place it is written
+    down. The consumer splits the head off where a lookup key is what it wants.
     """
     inherits = value_of(data, "Наследует", kind)
     if not isinstance(inherits, dict):
@@ -637,8 +641,7 @@ def _inherited_type(data: dict, kind: str) -> str | None:
     base = value_of(inherits, "Тип", kind)
     if not isinstance(base, str) or not base.strip():
         return None
-    head = base.split("<", 1)[0].strip()
-    return head or None
+    return base.strip() or None
 
 
 def _metadata_members(data: dict, kind: str) -> tuple[list[str], dict[str, str]]:
@@ -877,7 +880,11 @@ def build_index(root: Path) -> dict:
     for type_name, (kind, member_names, member_types, inherited) in metadata_types.items():
         record: dict = {"properties": member_names, "kind": kind}
         if inherited:
-            record["base"] = inherited
+            # `base` is the lookup key - the head alone, the way every catalogue is keyed. The
+            # written form is kept beside it only when it says more than the head does.
+            record["base"] = inherited.split("<", 1)[0].strip()
+            if record["base"] != inherited:
+                record["base_written"] = inherited
         if member_types:
             record["property_types"] = member_types
         own_methods = module_method_names.get(type_name)

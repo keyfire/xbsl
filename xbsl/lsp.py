@@ -676,6 +676,11 @@ def _make_server() -> "LanguageServer":
                 if dataset.member_type_head(written) not in known:
                     continue
                 types.setdefault(name, written)
+        # The data of an object form answers to a bare name too, and it is the base type that
+        # names it - by its argument, which the index keeps written out.
+        pair = STATE.lookup.form_data_object(stem)
+        if pair:
+            types.setdefault(*pair)
         return {str(name): str(written) for name, written in types.items() if written}
 
     def _inference_inputs() -> tuple[dict, dict, set]:
