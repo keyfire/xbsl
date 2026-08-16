@@ -41,6 +41,14 @@ _BARE_NAME_RE = re.compile(IDENT)
 # breaks the match instead of guessing, as in the yaml/unknown-type rule.
 _YAML_TYPE_RE = re.compile(r"(?:^|\s)Тип\s*:\s*[\w\s.,<>|?]*$")
 
+#: `новый Имя.` right before the cursor - a constructor, where only a type name may follow.
+#: Both spellings of the keyword, and the word must stand on its own (`Обновый` is a name).
+_AFTER_NEW_RE = re.compile(
+    rf"(?:^|[^A-Za-z0-9А-Яа-яЁё_])(?:новый|new)\s+{IDENT}\s*\.\s*(?:{IDENT})?$", re.IGNORECASE)
+
+#: Kinds that name a TYPE - what a constructor accepts after the dot.
+_TYPE_KINDS = frozenset({"family", "localType", "object", "enum", "tabular"})
+
 
 class IndexLookup:
     """Precomputed lookups over the index dict built by indexer.build_index."""
@@ -389,11 +397,20 @@ def _nominal_head(written: str) -> str:
 
 
 def _method_entry(m: dict) -> dict:
+    """A completion item for a project method.
+
+    The parentheses come WITH it, the way every other list of methods offers them: a method
+    accepted from here used to insert the bare name, and the author had to type the call
+    himself - the same list built elsewhere put them in, so the editor behaved differently
+    depending on which branch answered.
+    """
     annotations = m.get("annotations") or []
+    name = m.get("name", "")
     return {
-        "label": m.get("name", ""),
+        "label": name,
         "kind": "method",
         "detail": ", ".join(annotations) if annotations else "метод",
+        "snippet": f"{name}($0)",
     }
 
 
@@ -528,18 +545,38 @@ def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict
     if not obj and not methods:
         return None
     entries: list[dict] = []
+    # One name - one line. The family of an object ALREADY holds the names of its tabular
+    # sections and of the types its module declares, so listing those separately offered every
+    # one of them twice: once as a bare "тип" and once as what it really is. The specific line
+    # is built first and the family fills in only what is left.
+    seen: set[str] = set()
+
+    def add(entry: dict) -> None:
+        label = str(entry.get("label") or "")
+        if not label or label in seen:
+            return
+        seen.add(label)
+        entries.append(entry)
+
     if obj:
         if obj.get("kind") == "Перечисление":
             for v in obj.get("values", []):
-                entries.append({"label": v.get("name", ""), "kind": "enumMember", "detail": "значение перечисления"})
+                add({"label": v.get("name", ""), "kind": "enumMember", "detail": "значение перечисления"})
         else:
+            # The family names the tabular sections and the module types too, and each of those
+            # gets an exact line below - so the family yields those names to it and keeps the
+            # order it always had: the types the object generates come first.
+            exact = {str(_name_of(t)) for t in obj.get("tabular", [])}
+            exact |= {str(_name_of(t)) for t in obj.get("local_types", [])}
             for f in obj.get("family", []):
-                entries.append({"label": str(f), "kind": "family", "detail": "тип"})
+                if str(f) not in exact:
+                    add({"label": str(f), "kind": "family", "detail": "тип"})
             # Members of the kind's singleton type: what the code writes on the object name
             # itself, next to the types the object generates. A method takes the parentheses
             # snippet, a property does not; data generated before the two were told apart
             # arrives in one bucket and gets neither the snippet nor a claim about which it is.
-            entries.extend(_manager_entries(obj.get("manager")))
+            for entry in _manager_entries(obj.get("manager")):
+                add(entry)
             # A kind whose element generates a singleton type carrying its OWN entries names
             # them on the object itself: the parameters of a client-work-parameters element are
             # read as `Имя.Параметр` (docs topics/client-work-parameters). They live in the index
@@ -549,17 +586,17 @@ def _object_member_entries(lookup: IndexLookup, name: str) -> Optional[list[dict
             if isinstance(own, dict):
                 types = own.get("property_types") or {}
                 for prop in own.get("properties") or ():
-                    entries.append({
+                    add({
                         "label": str(prop),
                         "kind": "property",
                         "detail": str(types.get(prop) or "свойство"),
                     })
             for t in obj.get("tabular", []):
-                entries.append({"label": t.get("name", ""), "kind": "tabular", "detail": "табличная часть"})
+                add({"label": t.get("name", ""), "kind": "tabular", "detail": "табличная часть"})
             for t in obj.get("local_types", []):
-                entries.append({"label": t.get("name", ""), "kind": "localType", "detail": "локальный тип"})
+                add({"label": t.get("name", ""), "kind": "localType", "detail": "локальный тип"})
     for m in methods:
-        entries.append(_method_entry(m))
+        add(_method_entry(m))
     return entries
 
 
@@ -864,6 +901,11 @@ def resolve_completions(
             return _project_type_entries(lookup, var_type)
         entries = _object_member_entries(lookup, token)
         if entries is not None:
+            # After `новый Имя.` only a TYPE can stand, and the members of the object are not
+            # all types: the methods of its module and the members of its manager have no
+            # business in a constructor and only pushed the types out of sight.
+            if _AFTER_NEW_RE.search(line_prefix):
+                return [e for e in entries if e["kind"] in _TYPE_KINDS] or None
             return entries
         # Not a project object and not a variable - so a stdlib type or a global (КонтекстДоступа.):
         # members come from the linter dataset's type_members, keyed there under both name forms.

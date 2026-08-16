@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-16 – 0.68.0, 0.68.1
+## 2026-08-16 – 0.68.0, 0.68.1, 0.68.2
 
 ### Added
 - **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - a subsystem imports
@@ -23,6 +23,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   stayed silent: the check existed for yaml only.
 
 ### Changed
+- **A line of nothing but whitespace is an info.** The indent of a blank line changes nothing
+  for the compiler and nothing for the reader, and the platform states no rule about it. A tail
+  after code stays a warning: there the line does have content.
 - **Completion answers after the data object of a form.** The name `Object` is declared by the
   argument of the form's base type; it is typed now, and with it the loops over tabular sections.
 - **Completion answers after a value of an enumeration and after a variable of that type.** A
@@ -45,6 +48,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   literals, and a loop variable takes the element type of its collection.
 
 ### Fixed
+- **A method accepted from completion inserts its parentheses.** The list of methods is built
+  in two places and only one of them put them in - elsewhere a bare name was inserted.
+- **A type was offered twice.** The member list of an object named its local types and tabular
+  sections both by a generic "type" line and by an exact one; one exact line is left.
+- **After `new Name.` only types are offered.** The methods of a module and the members of a
+  manager cannot stand in a constructor and only pushed the types out of sight.
 - **In 0.68.0 the dot after a form component stayed silent** whenever the component has no
   module of its own and its type is written with an argument - and most of them are.
 - **The index lost the nullable marker of a method's return type,** so every value coming out of

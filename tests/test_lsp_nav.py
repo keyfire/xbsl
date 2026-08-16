@@ -2068,3 +2068,50 @@ def test_a_loop_over_a_tabular_section_of_the_form_object():
         own_properties={"Объект": "Товар.Объект"},
     )
     assert got["Стр"] == "Товар.Возможности"
+
+
+def test_a_project_method_offers_its_parentheses():
+    """Accepted from any branch a method inserts the call, not the bare name: the same list
+    built elsewhere already put the parentheses in, and the editor behaved differently
+    depending on which branch answered."""
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    Товар.", file_stem="Ф", stdlib_members={},
+    )
+    loader = next(e for e in entries or [] if e["label"] == "Загрузить")
+    assert loader["snippet"] == "Загрузить($0)"
+
+
+# --- one name, one line; and a constructor takes types only ---------------------------------
+
+
+def test_a_local_type_is_offered_once():
+    """The family of an object already holds the names of its tabular sections and of the
+    types its module declares - listing those separately offered each of them twice."""
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    Товар.", file_stem="Ф", stdlib_members={},
+    )
+    labels = [e["label"] for e in entries or []]
+    assert labels.count("ДанныеКарточки") == 1
+    assert labels.count("Цены") == 1
+    # and the line that survives is the exact one, not the generic "тип"
+    kind_of = {e["label"]: e["kind"] for e in entries or []}
+    assert kind_of["ДанныеКарточки"] == "localType" and kind_of["Цены"] == "tabular"
+
+
+def test_a_constructor_offers_types_only():
+    """After `новый Имя.` only a type may stand: the methods of the module and the members of
+    the manager have no business there and only pushed the types out of sight."""
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    знч Х = новый Товар.", file_stem="Ф",
+        stdlib_members={},
+    )
+    kinds = {e["kind"] for e in entries or []}
+    assert kinds and "method" not in kinds
+    assert "ДанныеКарточки" in {e["label"] for e in entries or []}
+
+
+def test_outside_a_constructor_the_methods_stay():
+    entries = resolve_completions(
+        LOOKUP, language_id="xbsl", line_prefix="    Товар.", file_stem="Ф", stdlib_members={},
+    )
+    assert "Загрузить" in {e["label"] for e in entries or []}

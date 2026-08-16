@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.61.5
+
+### Changed
+- **The metadata tree is opened by a list-tree icon.** The previous one, of linked cubes, was
+  drawn by us; the editor's own glyph stands there now - it follows the product icon theme and
+  matches the built-in icons in weight.
+
 ## 0.61.4
 
 ### Changed

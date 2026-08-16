@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.61.4",
+  "version": "0.61.5",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -85,7 +85,7 @@
         {
           "id": "xbslElement",
           "title": "%view.metadataContainer%",
-          "icon": "resources/element-tree.svg"
+          "icon": "$(list-tree)"
         }
       ],
       "secondarySidebar": [

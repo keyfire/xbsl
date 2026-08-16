@@ -53,10 +53,15 @@ def trailing_whitespace(source: SourceFile) -> Iterable[Diagnostic]:
     lm = linemap(source)
     for m in _TRAILING_RE.finditer(source.text):
         line, col = lm.linecol(m.start())
-        # col == 1 - the run starts the line, so the whole line is whitespace.
-        key = "whitespace/trailing.blank" if col == 1 else "whitespace/trailing.msg"
+        # col == 1 - the run starts the line, so the whole line is whitespace. That one is
+        # INFO, not a warning: the platform states no rule about it, the indent of a blank
+        # line changes nothing for the compiler and nothing for the reader - it only shows up
+        # in a diff. A tail after CODE stays a warning: there the line does have content.
+        blank = col == 1
+        key = "whitespace/trailing.blank" if blank else "whitespace/trailing.msg"
         yield Diagnostic(
-            source.rel, line, col, "whitespace/trailing", Severity.WARNING,
+            source.rel, line, col, "whitespace/trailing",
+            Severity.INFO if blank else Severity.WARNING,
             i18n.t(key),
             fix=TextEdit(m.start(), m.end(), ""),  # delete the trailing run
         )
