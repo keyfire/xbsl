@@ -199,7 +199,8 @@ def test_meta_and_schema(project):
         assert "\\" not in obj["path"]  # paths are POSIX, relative to meta.root
     for m in idx["methods"]:
         assert set(m) == {
-            "module", "name", "path", "line", "annotations", "params", "returns", "doc",
+            "module", "name", "path", "line", "annotations", "params", "returns",
+            "returns_written", "doc",
         }
     for c in idx["components"]:
         assert set(c) == {"form", "name", "type", "path", "line"}

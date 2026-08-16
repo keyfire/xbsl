@@ -215,3 +215,90 @@ def test_a_coalescing_of_two_different_types_stays_unknown():
     """
     env = ti.TypeEnv({"Значение": ti.Inferred("Объект", nullable=True)})
     assert _type_of('Значение ?? ""', env) is None
+
+
+# --- the scopes inside one method -----------------------------------------------------------
+
+
+_TWO_LOOPS = (
+    "метод Ф(Строки: Массив<Строка>, Числа: Массив<Число>)\n"
+    "    для Э из Строки\n"
+    "        Сообщить(Э)\n"
+    "    ;\n"
+    "    для Э из Числа\n"
+    "        Сообщить(Э)\n"
+    "    ;\n"
+    ";\n"
+)
+
+
+def test_without_a_place_the_method_is_one_bag_of_names():
+    """The old shape stays for a caller that asks about the method as a whole."""
+    env = ti.method_env(_method(_TWO_LOOPS), type_names=True)
+    assert env.variables["Э"] in (ti.Inferred("Строка"), ti.Inferred("Число"))
+
+
+def test_a_name_declared_in_two_loops_answers_by_the_place():
+    """A live module reuses one name in two loops of a long method, and the type of the first
+    used to answer for the second - where the collection is another one entirely."""
+    method = _method(_TWO_LOOPS)
+    first = _TWO_LOOPS.index("Сообщить(Э)")
+    second = _TWO_LOOPS.index("Сообщить(Э)", first + 1)
+    assert ti.method_env(method, at=first).variables["Э"] == ti.Inferred("Строка")
+    assert ti.method_env(method, at=second).variables["Э"] == ti.Inferred("Число")
+
+
+def test_a_name_is_not_visible_before_its_declaration():
+    """Visibility runs from the place of the declaration, not from the top of the block."""
+    text = ("метод Ф()\n"
+            "    Сообщить(Имя)\n"
+            "    знч Имя = \"текст\"\n"
+            "    Сообщить(Имя)\n"
+            ";\n")
+    method = _method(text)
+    before = text.index("Сообщить(Имя)")
+    after = text.index("Сообщить(Имя)", before + 1)
+    assert "Имя" not in ti.method_env(method, at=before).variables
+    assert ti.method_env(method, at=after).variables["Имя"] == ti.Inferred("Строка")
+
+
+def test_a_declaration_of_a_block_does_not_leak_out_of_it():
+    text = ("метод Ф(Флаг: Булево)\n"
+            "    если Флаг\n"
+            "        знч Имя = \"текст\"\n"
+            "        Сообщить(Имя)\n"
+            "    ;\n"
+            "    Сообщить(Имя)\n"
+            ";\n")
+    method = _method(text)
+    inside = text.index("Сообщить(Имя)")
+    outside = text.index("Сообщить(Имя)", inside + 1)
+    assert ti.method_env(method, at=inside).variables["Имя"] == ti.Inferred("Строка")
+    assert "Имя" not in ti.method_env(method, at=outside).variables
+
+
+def test_a_shadowed_name_stays_method_wide():
+    """The set answers "is this a variable here at all", and being generous with it would
+    reintroduce the guess it prevents: the name is a variable of the method, not a type."""
+    env = ti.method_env(_method(_TWO_LOOPS), type_names=True, at=0)
+    assert "Э" in env.shadowed
+
+
+def test_an_attribute_of_the_paired_yaml_is_not_a_type_name():
+    """A form module reads its own attributes by a bare name, and one of them is spelled like a
+    stdlib type. Without the attributes such a name fell through to the type-name shortcut and
+    answered "never empty" about a value the yaml declares as nullable - so the `!` the code
+    needs looked redundant."""
+    method = _method("метод Ф()\n    Сообщить(Файл!)\n;\n")
+    env = ti.method_env(method, type_names=True,
+                        own_properties={"Файл": "ДвоичныйОбъект.Ссылка?"})
+    got = env.variables["Файл"]
+    assert got == ti.Inferred("ДвоичныйОбъект.Ссылка", nullable=True)
+
+
+def test_a_local_declaration_wins_over_an_attribute_of_the_same_name():
+    text = "метод Ф()\n    знч Файл = \"текст\"\n    Сообщить(Файл)\n;\n"
+    method = _method(text)
+    env = ti.method_env(method, own_properties={"Файл": "ДвоичныйОбъект.Ссылка?"},
+                        at=text.index("Сообщить"))
+    assert env.variables["Файл"] == ti.Inferred("Строка")

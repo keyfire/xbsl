@@ -140,7 +140,14 @@ class IndexLookup:
                 for key in keys:
                     cached[key] = {**cached.get(key, {}), **types}
             for module, methods in self._module_methods.items():
-                by_name = {m["name"]: m["returns"] for m in methods if m.get("returns")}
+                # The WRITTEN form when the index has it: the head says `UserId` where the
+                # module declares `UserId?`, and a caller judging the empty value needs the
+                # marker. The platform catalogue keeps the written form for the same reason,
+                # and every consumer takes the head itself when a lookup key is what it wants.
+                by_name = {
+                    m["name"]: (m.get("returns_written") or m["returns"])
+                    for m in methods if m.get("returns")
+                }
                 if by_name:
                     cached[module] = {**cached.get(module, {}), **by_name}
             self._method_returns = cached

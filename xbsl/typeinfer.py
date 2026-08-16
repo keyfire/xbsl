@@ -112,63 +112,126 @@ class TypeEnv:
 
 def method_env(method: object, *, type_names: bool = False,
                returns: dict[str, Inferred] | None = None,
-               this_type: Inferred | None = None) -> TypeEnv:
+               this_type: Inferred | None = None,
+               own_properties: dict[str, str] | None = None,
+               at: int | None = None) -> TypeEnv:
     """The environment of one method: every declared name, typed where the source says so.
 
     Collecting this in one place is what keeps the type-name shortcut honest. A name DECLARED in
     the method is never a type, even when the catalog knows a type of that name and even when the
     declaration says nothing about its type: a live module holds `пер Список = ...`, and reading
     that name as the stdlib type answered "not nullable" for a value that plainly is.
+
+    `at` is the offset of the place being judged, and with it the names are read the way the
+    platform scopes them (docs, "Область видимости имен"): a declaration is visible from where
+    it stands to the end of ITS BLOCK, blocks nest, and the innermost declaration wins. Without
+    `at` the whole method is one bag of names, which is enough for a caller that asks about the
+    method as a whole and wrong for one that asks about a place: a live module declares one
+    name in two loops of a 160-line method, and the type of the first loop used to answer for
+    the second - where the collection is a UNION and the cast is obligatory.
+
+    `own_properties` is what the module's own type carries - the attributes of the PAIRED
+    yaml, `{name: type as written}`. A form module reads them by a bare name, and without them
+    such a name falls through to the type-name shortcut: an attribute spelled like the stdlib
+    `File` type, declared in the yaml as a nullable binary-object reference, was read as that
+    type - never empty - and the non-null operator the code needs looked redundant. They sit
+    in the method scope, so any local declaration of the same name wins over them.
+
+    `shadowed` stays method-wide either way. It answers "is this name a variable here at all",
+    and a name that any block of the method declares must not be read as a stdlib type
+    elsewhere in it - being generous there would reintroduce the very guess the set prevents.
     """
     import dataclasses
 
     variables: dict[str, Inferred] = {}
     declared: set[str] = set()
     env = TypeEnv(variables, returns=returns, this_type=this_type, type_names=False)
+    # (block start, block end, position, name) -> type; filtered by `at` at the end.
+    scoped: list[tuple[int, int, int, str, Inferred]] = []
+    method_span = (int(getattr(method, "start", 0)), int(getattr(method, "end", 0)))
 
-    def remember(name: str, tref: object, init: object = None) -> None:
+    def remember(name: str, tref: object, init: object = None,
+                 block: tuple[int, int] | None = None, pos: int | None = None) -> None:
         declared.add(name)
         got = nominal(getattr(tref, "text", None))
         if got is None and init is not None:
             got = expression_type(init, env)
+        if got is None:
+            return
+        variables[name] = got
+        span = block or method_span
+        scoped.append((span[0], span[1], pos if pos is not None else span[0], name, got))
+
+    for name, written in (own_properties or {}).items():
+        got = nominal(written)
         if got is not None:
             variables[name] = got
+            scoped.append((method_span[0], method_span[1], method_span[0], name, got))
+            declared.add(name)
 
     for param in getattr(method, "params", ()) or ():
         remember(getattr(param, "name", ""), getattr(param, "type", None))
 
-    def walk(node: object) -> None:
+    def walk(node: object, block: tuple[int, int]) -> None:
         if isinstance(node, (list, tuple)):
+            # A list of statements IS a block: that is what `если`, `для` and `область` open,
+            # and its span is the span of the statements it holds.
+            inner = _statement_block(node) or block
             for item in node:
-                walk(item)
+                walk(item, inner)
             return
         if not isinstance(node, P.Node):
             return
         if isinstance(node, P.VarDecl):
-            remember(node.name, getattr(node, "type", None), getattr(node, "init", None))
+            remember(node.name, getattr(node, "type", None), getattr(node, "init", None),
+                     block, int(getattr(node, "start", block[0])))
         elif isinstance(node, P.ForEach):
             # The loop names its variable without a type: it is one ELEMENT of the collection,
-            # and the collection is typed by what stands to the left of this loop. The node is
-            # met before its body, so the body sees the variable already typed.
+            # and the collection is typed by what stands to the left of this loop. The variable
+            # lives in the loop, so its block is the loop node, not the block around it.
             name = getattr(node, "var", "")
             declared.add(name)
             element = _element_type(expression_type(getattr(node, "source", None), env))
             if element is not None:
                 variables[name] = element
+                span = (int(getattr(node, "start", block[0])), int(getattr(node, "end", block[1])))
+                scoped.append((span[0], span[1], span[0], name, element))
         elif isinstance(node, P.ForTo):
             # `для Х = А по Б [шаг С]` counts, and the platform counts with numbers.
             name = getattr(node, "var", "")
             declared.add(name)
-            variables[name] = Inferred(_LITERAL_TYPES["NUMBER"])
+            counter = Inferred(_LITERAL_TYPES["NUMBER"])
+            variables[name] = counter
+            span = (int(getattr(node, "start", block[0])), int(getattr(node, "end", block[1])))
+            scoped.append((span[0], span[1], span[0], name, counter))
         elif isinstance(node, P.Lambda):
             for param in getattr(node, "params", ()) or ():
                 declared.add(getattr(param, "name", ""))
         for f in dataclasses.fields(node):
-            walk(getattr(node, f.name, None))
+            walk(getattr(node, f.name, None), block)
 
-    walk(getattr(method, "body", None))
+    walk(getattr(method, "body", None), method_span)
+    if at is not None:
+        # The innermost block that holds the place wins, and among its declarations the last
+        # one standing BEFORE the place: that is the platform rule read literally.
+        visible: dict[str, tuple[int, int, Inferred]] = {}
+        for start, end, pos, name, got in scoped:
+            if not (start <= at <= end and pos <= at):
+                continue
+            best = visible.get(name)
+            if best is None or (start, pos) >= (best[0], best[1]):
+                visible[name] = (start, pos, got)
+        variables = {name: got for name, (_s, _p, got) in visible.items()}
     return TypeEnv(variables, returns=returns, this_type=this_type,
                    type_names=type_names, shadowed=frozenset(declared) - set(variables))
+
+
+def _statement_block(items: object) -> tuple[int, int] | None:
+    """The span of a list of statements, or None when the list holds something else."""
+    stmts = [x for x in (items or ()) if isinstance(x, P.Stmt)]
+    if not stmts:
+        return None
+    return int(getattr(stmts[0], "start", 0)), int(getattr(stmts[-1], "end", 0))
 
 
 def _element_type(collection: Inferred | None) -> Inferred | None:

@@ -61,6 +61,24 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   them by name would be a guess.
 
 ### Fixed
+- **The index lost the nullable marker of a method's return type.** `method F(): UserId?` was
+  stored as `UserId`: the field keeps the HEAD of the type, which is the right key for a member
+  lookup but makes every value coming out of the project look non-empty. A field with the type
+  as WRITTEN now stands beside it, and the inference catalogue reads that one - as it does for
+  the platform, where the written form is kept for the same reason. Completion gained too: the
+  written form also carries the generic arguments, so a chain resolves more members (silence on
+  the site corpus 20.1% -> 19.5%).
+- **A method environment did not tell its blocks apart.** A name declared in one loop answered
+  in another, because the environment was one bag for the whole method. The platform (docs,
+  "Область видимости имен") scopes a declaration from where it stands to the end of ITS BLOCK,
+  and blocks - `if`, `for`, `scope` - nest. `method_env` now takes the place (`at`) and answers
+  by those rules: the declaration of the innermost block standing before that place wins.
+  Without a place the behaviour is unchanged - the method as one bag.
+- **The attributes of a module's own type were missing from the environment.** A form module
+  reads them by a bare name, and one such name is spelled like the stdlib `File` type, declared
+  in the paired yaml as a nullable binary-object reference, was read as that type and answered
+  "never empty" - which made the non-null operator in the code look redundant. `method_env`
+  takes them as an input of their own; a local declaration of the same name still wins.
 - **The `??` operator named the type by one side.** `A ?? B` is a value of either A or B, and
   the inference answered with the RIGHT-hand type when the two disagreed. It went unnoticed
   while the left side was rarely typed; feed it a project catalogue and

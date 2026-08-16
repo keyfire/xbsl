@@ -46,9 +46,15 @@ from xbsl import parser as P
 from xbsl import dataset, metamodel, terms
 from xbsl.dataset import PLACEHOLDER
 from xbsl.engine import SourceFile, find_sources, load
-from xbsl.lexer import linemap, tokens
+from xbsl.lexer import Token, linemap, tokens
 from xbsl.parser import parse
-from xbsl.rules._syntax import _skip_balanced, _type_head, code_tokens, signatures
+from xbsl.rules._syntax import (
+    _skip_balanced,
+    _type_head,
+    code_tokens,
+    signatures,
+    type_expr,
+)
 from xbsl.rules.semantics import (
     _file_local_type_decls,
     _manager_member_types,
@@ -152,6 +158,7 @@ def _dictionary_methods(s: SourceFile, name: str, path: str) -> list[dict]:
                 # generated method, and inventing them would put a made-up name in the hover.
                 "params": ", ".join(["Строка"] * arity),
                 "returns": "Строка",
+                "returns_written": "Строка",
                 "doc": value,
             })
     return out
@@ -252,20 +259,31 @@ _COMMENT_MARK_RE = re.compile(r"^\s*(?://+|/\*+|\*+/?)|\*+/\s*$")
 _BANNER_RE = re.compile(r"^[-=*#~]{2,}.*[-=*#~]{2,}$|^[-=*#~\s]+$")
 
 
-def _signature_info(s: SourceFile) -> dict[tuple[str, int], tuple[str, str]]:
-    """(return type head, parameter list as written) per (method name, declaration line).
+def _signature_info(s: SourceFile) -> dict[tuple[str, int], tuple[str, str, str]]:
+    """(return type head, return type as written, parameter list) per (method, declaration line).
 
     The return type is what lets the editor type `val X = Module.Method(...)`: the catalogue
     of stdlib member types has nothing to say about a project method, so its return type has
     to come from the project index. The head is nominal (`Array<String>` -> `Array`), like
-    every other inferred type. The parameter list is kept verbatim (defaults included) - the
-    hover shows the call the way the module declares it.
+    every other inferred type - it is the key a member lookup needs.
+
+    The WRITTEN form is kept beside it, and the difference is the nullable marker: a head says
+    `UserId` where the module declares `UserId?`, so every value coming out of the project
+    looked non-empty. Judging a non-null operator or a comparison with the empty value is
+    exactly a question about that marker, and the head cannot answer it - the platform
+    catalogue keeps the written form for the same reason.
+
+    The parameter list is kept verbatim (defaults included) - the hover shows the call the way
+    the module declares it.
     """
-    out: dict[tuple[str, int], tuple[str, str]] = {}
+    out: dict[tuple[str, int], tuple[str, str, str]] = {}
     toks = code_tokens(s)
     n = len(toks)
     for sig in signatures(toks):
-        head = _type_head(toks, sig.return_type_start) if sig.return_type_start is not None else None
+        head = written = None
+        if sig.return_type_start is not None:
+            head = _type_head(toks, sig.return_type_start)
+            written = _type_written(s, toks, sig.return_type_start)
         params = ""
         i = next(
             (k for k in range(n) if toks[k].start >= sig.name.end
@@ -276,8 +294,16 @@ def _signature_info(s: SourceFile) -> dict[tuple[str, int], tuple[str, str]]:
             end = _skip_balanced(toks, i, "(", ")")
             if 0 < end <= n:
                 params = _WS_RE.sub(" ", s.text[toks[i].start:toks[end - 1].end]).strip()
-        out[(sig.name.value, sig.name.line)] = (head or "", params)
+        out[(sig.name.value, sig.name.line)] = (head or "", written or "", params)
     return out
+
+
+def _type_written(s: SourceFile, toks: list[Token], start: int) -> str | None:
+    """The type expression exactly as the source spells it, `UserId?` and all."""
+    te = type_expr(toks, start)
+    if te is None or te.end <= start:
+        return None
+    return _WS_RE.sub("", s.text[toks[start].start:toks[te.end - 1].end]).strip() or None
 
 
 def _doc_above(toks: list, i: int, annotations: list[str]) -> str:
@@ -330,13 +356,15 @@ def _method_decls(s: SourceFile) -> list[dict]:
             j += 1
         if j < n and toks[j].kind == "IDENT":
             annotations = _annotations_before(toks, i)
-            returns, params = sigs.get((toks[j].value, toks[j].line), ("", ""))
+            returns, returns_written, params = sigs.get(
+                (toks[j].value, toks[j].line), ("", "", ""))
             decls.append({
                 "name": toks[j].value,
                 "line": toks[j].line,
                 "annotations": annotations,
                 "params": params,
                 "returns": returns,
+                "returns_written": returns_written,
                 "doc": _doc_above(toks, i, annotations),
             })
     return decls
@@ -832,6 +860,7 @@ def build_index(root: Path) -> dict:
                 "annotations": decl["annotations"],
                 "params": decl["params"],
                 "returns": decl["returns"],
+                "returns_written": decl["returns_written"],
                 "doc": decl["doc"],
             })
 

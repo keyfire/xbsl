@@ -637,7 +637,7 @@ def _make_server() -> "LanguageServer":
             return {}
         module = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
         return {
-            m["name"]: m["returns"]
+            m["name"]: (m.get("returns_written") or m["returns"])
             for m in STATE.lookup.methods_by_module(module)
             if m.get("returns")
         }
