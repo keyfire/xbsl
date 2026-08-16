@@ -303,12 +303,18 @@ def expression_type(node: object, env: TypeEnv) -> Inferred | None:
         inner = expression_type(getattr(node, "operand", None), env)
         return inner.without_null() if inner else None
     if isinstance(node, P.Coalesce):
-        # `А ?? Б` answers Б when А is empty, so the result cannot be empty when Б is not.
+        # `А ?? Б` answers Б when А is empty and А otherwise, so the two sides must agree for
+        # the whole to have a name: the value is of one type or the other, and naming it by the
+        # right-hand side alone is a guess the code then acts on. It stayed unnoticed while the
+        # left side was rarely typed - `(Параметры.ПолучитьПараметр("К") ?? "") как Строка` read
+        # as a String cast over a String, that is as a redundant cast, though the parameter is
+        # of no such type and the cast is exactly what makes the value one.
+        # Only the emptiness is settled here: `Б` non-empty makes the whole non-empty.
         left = expression_type(getattr(node, "left", None), env)
         right = expression_type(getattr(node, "right", None), env)
         if left is not None and right is not None and left.name == right.name:
             return Inferred(left.name, left.nullable and right.nullable)
-        return right.without_null() if right is not None and left is not None else None
+        return None
     if isinstance(node, P.Member):
         return _member_expression_type(node, env)
     if isinstance(node, P.Call):

@@ -61,6 +61,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   them by name would be a guess.
 
 ### Fixed
+- **The `??` operator named the type by one side.** `A ?? B` is a value of either A or B, and
+  the inference answered with the RIGHT-hand type when the two disagreed. It went unnoticed
+  while the left side was rarely typed; feed it a project catalogue and
+  `(Parameters.Get("K") ?? "") as String` reads as a String cast over a String - a redundant
+  cast - though the parameter is of no such type and the cast is what makes the value one.
+  Disagreeing sides now answer "unknown"; only the emptiness stays settled - a non-empty
+  right-hand side makes the whole expression non-empty.
 - **The term extractor lost the names spelled in BOTH alphabets.** The platform writes
   `HttpService`, `FtpSource`, `SeoDescription`, `AppletTags` with a Latin prefix and a Russian
   word after it, and the extractor demanded that the Russian side of a pair start with a

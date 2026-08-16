@@ -203,3 +203,15 @@ def test_a_resolvable_literal_is_named_by_the_identifier_that_opens_it():
 
 def test_a_resolvable_literal_the_catalog_does_not_know_stays_unknown():
     assert _type_of("НетТакогоТипаВКаталоге{что-то}") is None
+
+
+def test_a_coalescing_of_two_different_types_stays_unknown():
+    """`А ?? Б` is a value of one side or the other, so disagreeing sides name nothing.
+
+    Answering with the right-hand side used to look harmless while the left one was rarely
+    typed. It is not: `(Parameters.Get("K") ?? "") as String` then reads as a String cast over
+    a String - a redundant cast - while the parameter is of no such type and the cast is what
+    makes the value one.
+    """
+    env = ti.TypeEnv({"Значение": ti.Inferred("Объект", nullable=True)})
+    assert _type_of('Значение ?? ""', env) is None
