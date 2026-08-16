@@ -19,12 +19,68 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-16 – 0.68.0, 0.68.1, 0.68.2
+
+### Added
+- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - a subsystem imports
+  another one without declaring it as used in its own description. Such a project does not
+  apply, and until now that only came out at deploy time.
+- **Rule `code/missing-import`** (warning, in the default set) - a module uses a type or a module
+  of another subsystem without importing it. Compilation fails at that line while the linter
+  stayed silent: the check existed for yaml only.
+
+### Changed
+- **A line of nothing but whitespace is an info.** The indent of a blank line changes nothing
+  for the compiler and nothing for the reader, and the platform states no rule about it. A tail
+  after code stays a warning: there the line does have content.
+- **Completion answers after the data object of a form.** The name `Object` is declared by the
+  argument of the form's base type; it is typed now, and with it the loops over tabular sections.
+- **Completion answers after a value of an enumeration and after a variable of that type.** A
+  value is a member of its enumeration, and the members of a value are the methods of the module
+  beside it.
+- **A loop over a literal list types its variable.** `for Option in [Role.Admin, Role.Plain]`
+  takes the type from the items themselves; items of different types leave the variable alone.
+- **Completion answers after a caught exception and after the commands of a form.** The type of
+  an exception stands in the clause itself, and commands such as `Write` come to a form from the
+  type it inherits; the dot after such names used to stay silent.
+- **Completion answers after the parameter of a lambda.** `List.Convert(E -> E.` offers the
+  members of the collection's element, and a lambda over a query result offers the columns.
+- **A tabular section in a query answers with its fields.** `FROM Goods.Lines AS L` reads the
+  section as a table of its own, so `L.` offers its attributes and the standard row fields.
+- **The dot after a form component answers** - with the methods of its own module and with the
+  members of its type; a chain through a component reaches the end.
+- **In an English project completion names platform members in English.** The list after a dot
+  used to be Russian whatever the language of the project.
+- **Expression type inference answers more often.** It learnt the query, pattern and resource
+  literals, and a loop variable takes the element type of its collection.
+
+### Fixed
+- **A method accepted from completion inserts its parentheses.** The list of methods is built
+  in two places and only one of them put them in - elsewhere a bare name was inserted.
+- **A type was offered twice.** The member list of an object named its local types and tabular
+  sections both by a generic "type" line and by an exact one; one exact line is left.
+- **After `new Name.` only types are offered.** The methods of a module and the members of a
+  manager cannot stand in a constructor and only pushed the types out of sight.
+- **In 0.68.0 the dot after a form component stayed silent** whenever the component has no
+  module of its own and its type is written with an argument - and most of them are.
+- **The index lost the nullable marker of a method's return type,** so every value coming out of
+  the project looked non-empty.
+- **A method environment did not tell its blocks apart:** a name declared in one loop answered in
+  another. Visibility now follows the platform rule - from the declaration to the end of a block.
+- **The attributes of a module's own type were missing from the environment,** and an attribute
+  named like a stdlib type was read as that type.
+- **The `??` operator named the type by its right-hand side,** though the value may be the left
+  one. Disagreeing sides now answer "unknown".
+- **The term extractor lost the names spelled in two alphabets** (`FtpSource`, `SeoDescription`):
+  they ended up without an English pair though the distribution has one. A few false pairs left
+  the dictionary at the same time.
+
 ## 2026-08-15 – 0.66.0, 0.66.1, 0.67.0
 
 ### Added
 - **Expression type inference (`xbsl.typeinfer`)** - the type of a receiver, a member, a
-  constructor, a cast and a non-null operator, from the platform data. It answers "unknown"
-  wherever the data cannot name the type; on two corpora it types 36% of the accesses.
+  constructor, a cast and a non-null operator, from the platform data. Where the data cannot
+  name a type the module answers "unknown" rather than a guess.
 - **Rule `yaml/ref-input-auto-commands`** (info, off) - a reference input with no `Commands` of
   its own: the platform draws a button that opens the value in a separate window next to it. That
   is usually what the author wants, so the rule answers "where did this button come from" rather

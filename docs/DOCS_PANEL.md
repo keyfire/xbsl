@@ -11,8 +11,6 @@ The extension shows the platform help **inside the editor** - as its own
 documentation site, but built from **your own 1C:Element distribution**: it matches the platform
 version you actually use and works offline.
 
-![The documentation panel: the Contents tree on the left with the Std::Collections section expanded, the Array type page on the right with code samples and the Primary source link](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/docs-panel.png)
-
 ## What is inside
 
 - **The "Contents" tree** - a curated table of contents matching the site: the developer guide,

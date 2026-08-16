@@ -5,8 +5,6 @@
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
 [xbsl](https://github.com/keyfire/xbsl) linter.
 
-![XBSL at work: the metadata tree and the component palette on the left, the form designer in the middle – structure, data and frame, the properties and documentation panels on the right, the yaml source below](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/overview.png)
-
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
 
@@ -216,8 +214,6 @@ nothing rather than guessing.
 
 Findings the linter can repair mechanically carry a fix; the extension turns it into a Quick Fix:
 
-![Live diagnostics in the editor and the Problems panel; the lightbulb applies the linter's own edit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/lint-quickfix.gif)
-
 - A **lightbulb on the diagnostic** (`Ctrl+.`) – *Fix: `<rule>`* – applies the exact edit:
   trailing whitespace removed, em dash → en dash, `…` → `...`, curly quotes → straight.
 - A **fix-all source action** – *Fix all (xbsl)* – repairs every fixable finding in the
@@ -362,8 +358,6 @@ global theme and other languages stay untouched; the extension manages only its 
 
 ## Form designer
 
-![The form panel: structure on the left, data on the right, the form frame under them; the component palette is a section under the metadata tree](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-designer.png)
-
 The command **XBSL: form designer** (`xbsl.previewForm`, also a button in the editor title of form
 yamls – files whose `ElementKind` is `InterfaceComponent`) opens the form panel. A form depends on
 its own properties, so its structure and its data are edited where the form is shown: the structure
@@ -400,14 +394,10 @@ the "Properties" panel; the selected node keeps the full selection color whereve
 The way back is the same: a click on a structure node puts the cursor on its yaml, a double click
 moves the focus there too, and `Ctrl+click` on a frame block jumps to its yaml.
 
-![The cursor sits on the Description field in the yaml – the same node is selected in the structure and highlighted in the form frame](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-cursor.png)
-
 **The component palette** sits next to the metadata tree and appears while the form panel is open.
 A double click on a palette component inserts it into the selected structure node. Dragging from
 the palette into the panel is impossible - the platform does not carry a drag from its own tree
 into a webview, which is why insertion is click-driven.
-
-![The properties panel of a button: the "Set" section, the "Events" section with the OnClick handler picked, the jump and reset buttons](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-props.png)
 
 **Properties panel.** A click on an element selects it and opens a separate **Properties**
 panel (its own tab – drag it below or aside, wherever suits), like the platform web editor:
@@ -445,8 +435,6 @@ group of fields in one step.
 The collapse button in the tree title (**Collapse to the metadata kinds**) stops at the first
 level: the list of kinds stays visible while the expanded categories fold. The rest - new project,
 grouping, refresh, hiding empty categories - lives in the `...` menu of the same title bar.
-
-![Metadata explorer: the tree, the properties panel, grouping by subsystem](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/metadata-tree.gif)
 
 A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata – like the
 platform designer, but inside VS Code.
@@ -508,8 +496,6 @@ available to agents through its `meta_*` MCP tools and to any editor through the
 requests or the CLI subcommands – the tree only gathers parameters and applies the returned
 changes (regular undo works).
 
-![Creating an object from the tree: a new catalog and its attribute](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/metadata-create.gif)
-
 **Subsystems.** A **Subsystems** branch lists the subsystem folders (a click opens the subsystem
 file); **Add subsystem** creates a folder with a subsystem file. The project root has **Filter by
 subsystem** (multi-select) and **Clear filter**; the active filter is shown in grey.
@@ -563,8 +549,6 @@ catalogs and the `ProductStatus` enumeration built by the tree are then availabl
 A container of its own – **Documentation (1C:Element)** in the Activity Bar – shows the platform
 reference the way the docs site does, but built from your own distribution: it matches the platform
 version you use and works offline.
-
-![The documentation panel: the Contents tree on the left with the Std::Collections section expanded, the Array type page on the right with code samples and the Primary source link](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/docs-panel.png)
 
 > The reference shipped with the platform distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
 

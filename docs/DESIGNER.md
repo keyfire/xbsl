@@ -12,8 +12,6 @@ The extension includes a visual designer for 1C:Element interface components
 under them. Next to it live the component palette in the sidebar and the typed properties panel.
 The text editor stays the primary surface; the designer is a contextual lens over it.
 
-![The form panel: structure on the left, data on the right, the form frame under them; the component palette is a section under the metadata tree](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-designer.png)
-
 Two things to keep in mind:
 
 - **Every action is a minimal text edit.** The designer never rewrites or reformats the
@@ -113,8 +111,6 @@ The text and the panels show ONE place of the form. The yaml cursor, the structu
 frame block and the contents of the properties panel are tied together both ways, so you can
 switch between "type it" and "click it" at every step without hunting for the node again.
 
-![The cursor sits on the Description field in the yaml – the same node is selected in the structure and highlighted in the form frame](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-cursor.png)
-
 **From the yaml cursor to the panels.** Put the cursor inside a node (or just walk the file with
 the arrow keys):
 
@@ -160,8 +156,6 @@ ui schema.
 
 The **Properties** panel edits the selected component (and, from the metadata tree's
 **Properties**, metadata objects too – it is one shared panel).
-
-![The properties panel of a button: the "Set" section, the "Events" section with the OnClick handler picked, the jump and reset buttons](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/form-props.png)
 
 - **Set on top, all below.** The **Set** section lists the keys present in the yaml; below it,
   collapsible groups hold every applicable property. Search filters by property name *and* by

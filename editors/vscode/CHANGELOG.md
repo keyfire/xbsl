@@ -11,6 +11,12 @@
 
 ## 0.61.5
 
+### Removed
+- **The screenshots are gone from the pages** (the owner's decision): three animations and
+  eleven frames showed the previous panel titles and versions, and keeping them current
+  costs more than they give. The diagrams of how the extension works stay - those do not
+  go stale.
+
 ### Changed
 - **The metadata tree is opened by a list-tree icon.** The previous one, of linked cubes, was
   drawn by us; the editor's own glyph stands there now - it follows the product icon theme and
