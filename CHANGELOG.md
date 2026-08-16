@@ -12,12 +12,15 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-16 – 0.68.0, 0.68.1
 
-### Fixed
-- **The dot after a form component answers again.** The component branch shadowed the ordinary
-  chain and stayed silent whenever the component's type is written with an argument - and most
-  of them are.
+### Added
+- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - a subsystem imports
+  another one without declaring it as used in its own description. Such a project does not
+  apply, and until now that only came out at deploy time.
+- **Rule `code/missing-import`** (warning, in the default set) - a module uses a type or a module
+  of another subsystem without importing it. Compilation fails at that line while the linter
+  stayed silent: the check existed for yaml only.
 
 ### Changed
 - **Completion answers after the data object of a form.** The name `Object` is declared by the
@@ -34,18 +37,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   members of the collection's element, and a lambda over a query result offers the columns.
 - **A tabular section in a query answers with its fields.** `FROM Goods.Lines AS L` reads the
   section as a table of its own, so `L.` offers its attributes and the standard row fields.
-
-## 2026-08-16 – 0.68.0
-
-### Added
-- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - a subsystem imports
-  another one without declaring it as used in its own description. Such a project does not
-  apply, and until now that only came out at deploy time.
-- **Rule `code/missing-import`** (warning, in the default set) - a module uses a type or a module
-  of another subsystem without importing it. Compilation fails at that line while the linter
-  stayed silent: the check existed for yaml only.
-
-### Changed
 - **The dot after a form component answers** - with the methods of its own module and with the
   members of its type; a chain through a component reaches the end.
 - **In an English project completion names platform members in English.** The list after a dot
@@ -54,6 +45,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   literals, and a loop variable takes the element type of its collection.
 
 ### Fixed
+- **In 0.68.0 the dot after a form component stayed silent** whenever the component has no
+  module of its own and its type is written with an argument - and most of them are.
 - **The index lost the nullable marker of a method's return type,** so every value coming out of
   the project looked non-empty.
 - **A method environment did not tell its blocks apart:** a name declared in one loop answered in
