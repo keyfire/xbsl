@@ -15,6 +15,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **Rule `yaml/missing-subsystem-usage`** (warning, in the default set) - elements and modules
+  of a subsystem import another subsystem while the description of their own does not list it
+  under `Usage`. The platform asks for three things at once: the supplier is public, the
+  consumer imports, and the consumer's subsystem declares the usage; nothing checked the third,
+  so it was learnt at deploy time - the project fails to apply, naming the description of the
+  subsystem. The diagnostic sits on that description: one line of fix goes there, and repeating
+  it at every importing file would buy nothing.
 - **Rule `code/missing-import`** (warning, in the default set) - a module names the type of a
   public element of another subsystem without an import line for that subsystem. Compilation
   fails at exactly that line while the linter stayed silent: the direct check existed for yaml

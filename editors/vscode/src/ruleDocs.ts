@@ -204,6 +204,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: MODULAR,
     anchor: "импорт-пространств-имен",
   },
+  {
+    match: (r) => r === "yaml/missing-subsystem-usage",
+    page: MODULAR,
+    anchor: "использование-подсистем",
+  },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/ref-input-auto-commands", page: "topics/edit-component" },

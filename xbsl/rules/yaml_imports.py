@@ -1,6 +1,14 @@
-"""Tier D: cross-subsystem references - three rules over one placement model.
+"""Tier D: cross-subsystem references - five rules over one placement model.
 
-The third one, code/unused-import, is the mirror of the first: a module declares
+The platform asks for three things before an element of subsystem Б may be used in subsystem А
+(docs, "Модульная разработка"): the element is public, the consumer imports the namespace, and
+the consumer's subsystem declares Б in its `Использование`. One rule per condition per side:
+yaml/foreign-not-public for the first, yaml/missing-import and code/missing-import for the
+second (the yaml and the code of one element import separately), yaml/missing-subsystem-usage
+for the third. code/unused-import is the odd one out - it looks the other way, at an import
+nothing needs.
+
+code/unused-import is the mirror of code/missing-import: a module declares
 `импорт <Подсистема>` while nothing in its CODE resolves through it. The platform's own
 editor reports such imports, the linter did not, and they accumulate - a subsystem is
 imported "just in case", the code that needed it is rewritten, the line stays.
@@ -65,6 +73,7 @@ yaml/unknown-type, it does not run in single-file mode).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import fields
 from functools import lru_cache
@@ -104,6 +113,20 @@ MESSAGES = {
         "en": "Type '{name}' comes from subsystem '{sub}' which this module does not import: "
               "compilation fails at this line. The module needs an import line of its own "
               "(the {n[Импорт]} section of the paired yaml does not cover the code).",
+    },
+    "yaml/missing-subsystem-usage.title": {
+        "ru": "Подсистема импортируется, но не объявлена используемой",
+        "en": "A subsystem is imported but not declared as used",
+    },
+    "yaml/missing-subsystem-usage.missing": {
+        "ru": "Подсистему '{sub}' импортируют элементы и модули этой подсистемы "
+              "(файлов: {count}), а в её описании нет блока Использование с этой подсистемой – "
+              "применение проекта упадёт. Импорт даёт краткие имена, но саму подсистему "
+              "разрешает именно Использование.",
+        "en": "Subsystem '{sub}' is imported by elements and modules of this subsystem "
+              "({count} file(s)) while its description has no {n[Использование]} entry for it - "
+              "the project fails to apply. An import gives the short names, but it is "
+              "{n[Использование]} that permits the subsystem itself.",
     },
     "yaml/missing-import.title": {
         "ru": "Нет импорта подсистемы в yaml",
@@ -621,3 +644,110 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 i18n.t("code/missing-import.missing", name=chain_name,
                        sub="/".join(candidates)),
             )
+
+
+# --- yaml/missing-subsystem-usage -----------------------------------------------------------
+
+#: The key of the subsystem descriptor that permits another subsystem, both spellings.
+_USAGE_KEYS = ("Использование", "Usage")
+_USAGE_LINE_RE = re.compile(r"(?m)^[ \t]*(?:Использование|Usage):")
+
+
+def _usage_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a subsystem descriptor contributes what it declares as used, an element
+    or a module - the subsystems it imports."""
+    if source.kind == "xbsl":
+        toks = tokens(source)
+        imports = [
+            toks[i + 1].value
+            for i, tok in enumerate(toks)
+            if tok.kind == "KEYWORD" and tok.canonical == "IMPORT" and i + 1 < len(toks)
+            and toks[i + 1].kind == "IDENT"
+        ]
+        if not imports:
+            return None
+        return {"k": "imp", "path": str(source.path), "imports": imports}
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return None
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict):
+        return None
+    if source.path.name in _SUBSYSTEM_FILES:
+        name = value_of(data, "Имя")
+        used: list[str] = []
+        for key in _USAGE_KEYS:
+            raw = data.get(key)
+            if isinstance(raw, list):
+                used.extend(e for e in raw if isinstance(e, str))
+        match = _USAGE_LINE_RE.search(source.text)
+        line = linemap(source).linecol(match.start())[0] if match else 1
+        return {
+            "k": "sub",
+            "dir": str(source.path.parent),
+            "name": name if isinstance(name, str) else source.path.parent.name,
+            "used": used,
+            "line": line,
+        }
+    if not object_kind(data):
+        return None
+    raw = data.get("Импорт")
+    imports = [e for e in raw if isinstance(e, str)] if isinstance(raw, list) else []
+    if not imports:
+        return None
+    return {"k": "imp", "path": str(source.path), "imports": imports}
+
+
+@rule(
+    "yaml/missing-subsystem-usage", "yaml/missing-subsystem-usage.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_usage_mapper,
+)
+def missing_subsystem_usage(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """The third condition of a reference across a subsystem boundary, and the last one the
+    linter did not check.
+
+    The platform asks for three things (docs, "Модульная разработка"): the supplier publishes
+    the element, the consumer imports the namespace - and the consumer's SUBSYSTEM declares the
+    supplier in its `Использование`. The documentation puts the import second and in brackets
+    ("или дополнительно импортируйте"): the usage is what permits the subsystem, the import
+    only adds the short names. Miss it and the project fails to apply, with the compiler naming
+    the description of the subsystem - a message that arrives at deploy time, which is exactly
+    where a linter is supposed to save the trip.
+
+    The evidence is the import itself, not a resolved reference: a file that writes
+    `импорт Б` states its intent outright, so the check is a cross-read of two declarations
+    rather than a guess about names. An import of something that is not a subsystem of this
+    project - a library, another project (`e1c::...`), a typo - is not this rule's case, the
+    same way code/unused-import leaves it alone.
+
+    One diagnostic per missing subsystem, on the DESCRIPTOR: that is the single line to add,
+    and reporting it once there beats repeating it at every importing file.
+    """
+    roots: dict[Path, str] = {}
+    used: dict[str, set[str]] = {}
+    where: dict[str, tuple[str, int]] = {}
+    for rel, fact in facts.items():
+        if fact["k"] != "sub":
+            continue
+        roots[Path(fact["dir"])] = fact["name"]
+        used[fact["name"]] = set(fact["used"])
+        where[fact["name"]] = (rel, fact["line"])
+    if not roots:
+        return  # no subsystem files - the project layout is unknown, nothing to judge
+    known = set(roots.values())
+    counts: dict[tuple[str, str], int] = {}
+    for fact in facts.values():
+        if fact["k"] != "imp":
+            continue
+        my_sub = _subsystem_of(Path(fact["path"]), roots)
+        if my_sub is None:
+            continue  # a file outside any subsystem imports on its own behalf
+        for name in fact["imports"]:
+            if name not in known or name == my_sub or name in used.get(my_sub, ()):
+                continue
+            counts[(my_sub, name)] = counts.get((my_sub, name), 0) + 1
+    for (my_sub, name), count in sorted(counts.items()):
+        rel, line = where[my_sub]
+        yield Diagnostic(
+            rel, line, 1, "yaml/missing-subsystem-usage", Severity.WARNING,
+            i18n.t("yaml/missing-subsystem-usage.missing", sub=name, count=count),
+        )

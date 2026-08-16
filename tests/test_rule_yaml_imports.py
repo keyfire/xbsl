@@ -451,3 +451,91 @@ def test_a_module_without_subsystem_files_stands_down():
     files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
              "Модуль.xbsl": "метод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n"}
     assert _lint_missing_code(files) == []
+
+
+# --- yaml/missing-subsystem-usage ---------------------------------------------------------
+
+USAGE = "yaml/missing-subsystem-usage"
+
+
+def _lint_usage(files):
+    sources = [engine.load_text(name, content) for name, content in files.items()]
+    return engine.run_sources(sources, select={USAGE})
+
+
+def _usage_project(sub_a: str, **extra):
+    """Subsystem А imports Б from its module; what А declares as used is the variable."""
+    files = {
+        "А/Подсистема.yaml": sub_a,
+        "Б/Подсистема.yaml": SUB_B,
+        "Б/Товары.yaml": GOODS,
+        "А/Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\n",
+        "А/Модуль.xbsl": "импорт Б\n\nметод Т(): Товары.Ссылка?\n    возврат Неопределено\n;\n",
+    }
+    files.update(extra)
+    return files
+
+
+def test_missing_usage_registered_project_scope():
+    info = next(r for r in engine.active_rules() if r.id == USAGE)
+    assert info.tier == "D" and info.scope == "project" and info.enabled_by_default
+
+
+@pytest.mark.needs_data  # the mapper tokenizes the module: the lexer needs language.json
+def test_an_import_without_the_usage_declaration_is_reported():
+    """The compiler refuses to apply such a project, naming the description of the subsystem."""
+    diags = _lint_usage(_usage_project("Использование:\n    - В\n"))
+    # the descriptor is where the single missing line goes, so that is where the report sits
+    assert [(x.rule_id, x.path.replace("\\", "/")) for x in diags] == [
+        (USAGE, "А/Подсистема.yaml")
+    ]
+    assert "Б" in diags[0].message
+
+
+@pytest.mark.needs_data
+def test_the_declared_usage_is_silent():
+    assert _lint_usage(_usage_project(SUB_A)) == []
+
+
+@pytest.mark.needs_data
+def test_the_report_points_at_the_usage_block():
+    diags = _lint_usage(_usage_project("Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n"
+                                       "Использование:\n    - В\n"))
+    assert [x.line for x in diags] == [3]
+
+
+@pytest.mark.needs_data
+def test_without_a_usage_block_the_report_sits_at_the_top():
+    diags = _lint_usage(_usage_project("Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n"))
+    assert [(x.line, x.col) for x in diags] == [(1, 1)]
+
+
+@pytest.mark.needs_data
+def test_an_import_of_the_own_subsystem_needs_no_usage():
+    files = _usage_project("Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n",
+                           **{"А/Модуль.xbsl": "импорт А\n\nметод Т()\n;\n"})
+    assert _lint_usage(files) == []
+
+
+@pytest.mark.needs_data
+def test_a_library_import_is_not_judged():
+    """Another project or a typo - the rule has no subsystem of this project to check."""
+    files = _usage_project("Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n",
+                           **{"А/Модуль.xbsl": "импорт Чужая\n\nметод Т()\n;\n"})
+    assert _lint_usage(files) == []
+
+
+@pytest.mark.needs_data
+def test_the_import_section_of_a_yaml_counts_too():
+    """An element imports in its own yaml section, and it needs the usage just as the code."""
+    files = _usage_project(
+        "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n",
+        **{"А/Модуль.xbsl": "метод Т()\n;\n",
+           "А/Форма.yaml": FORM_HEAD + "Импорт:\n    - Б\n" + FORM_BODY},
+    )
+    assert [x.rule_id for x in _lint_usage(files)] == [USAGE]
+
+
+def test_without_subsystem_files_the_usage_rule_stands_down():
+    files = {"Модуль.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nИмпорт:\n    - Б\n"}
+    assert _lint_usage(files) == []
