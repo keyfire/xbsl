@@ -34,6 +34,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   of that name happened to live in another subsystem.
 
 ### Changed
+- **The dot after a form component answers.** `Components.Table.` offered the methods of the
+  component's OWN module alone, and a group, a table or an input usually has no module of its
+  own - so the dot stayed silent, though the yaml names the component's type and the catalogue
+  describes that type in full. Both halves are offered now, and the components of a form became
+  a chain root: `Components.Table.Source.` reaches the end. Measured over the site corpus
+  (15 531 dots): the silence goes from 22.2% to 20.1%, and after components from 552 to 251.
 - **Completion in an English project names platform members in English.** After a dot on a
   value of a platform type the list read `ToString`, `Length`, `Refresh` in Russian: the
   catalogue keys types under both spellings but holds the members of each under the Russian

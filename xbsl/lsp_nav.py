@@ -701,6 +701,19 @@ def resolve_completions(
         named = _constructor_argument_entries(lookup, ctor_type)
         if named:
             return named
+    m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
+    if m:
+        # The methods of the component's own module come first - they are what the form's
+        # author wrote - and after them the members of the TYPE the component has. Only the
+        # module half used to answer, so a component without a module of its own (the usual
+        # case: a group, a table, an input) left the dot silent, though the yaml states its
+        # type and the catalogue describes that type in full.
+        entries = [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
+        component = lookup.component(file_stem, m.group(1))
+        of_type = (stdlib_members or {}).get((component or {}).get("type", ""))
+        if of_type:
+            entries += _stdlib_entries(of_type, project_language)
+        return entries or None
     if expr_type and CHAIN_TAIL_RE.search(line_prefix):
         members = (stdlib_members or {}).get(expr_type)
         if members:
@@ -709,9 +722,6 @@ def resolve_completions(
         if project:
             return project + _inherited_entries(
                 lookup, expr_type, stdlib_members, project_language)
-    m = _match_end(line_prefix, rf"Компоненты\.({IDENT})\.(?:{IDENT})?")
-    if m:
-        return [_method_entry(x) for x in lookup.methods_by_module(m.group(1))]
     m = _match_end(line_prefix, rf"Компоненты\.(?:{IDENT})?")
     if m:
         return [

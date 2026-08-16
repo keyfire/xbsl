@@ -1797,3 +1797,33 @@ def test_the_snippet_of_a_method_uses_the_same_spelling():
 def test_a_member_the_dictionary_does_not_know_stays_as_written():
     # inventing a spelling would be worse than showing the one the catalogue has
     assert "НетТакогоЧлена" in _member_labels("en")
+
+
+# --- the dot after a form component -------------------------------------------------------
+
+
+def test_completion_after_a_component_answers_the_members_of_its_type():
+    """The yaml states the component's type and the catalogue describes it in full; only the
+    methods of a component's own MODULE used to answer, so a group, a table or an input - a
+    component with no module of its own - left the dot silent."""
+    entries = resolve_completions(
+        LOOKUP,
+        language_id="xbsl",
+        line_prefix="    Компоненты.Кнопка.",
+        file_stem="ГлавнаяФорма",
+        stdlib_members={"Кнопка": {"properties": ["Видимость"], "methods": ["Нажать"]}},
+    )
+    labels = {e["label"] for e in entries or []}
+    # the methods of the component's own module stay in the list too
+    assert {"Видимость", "Нажать"} <= labels
+
+
+def test_a_component_without_a_known_type_stays_silent():
+    entries = resolve_completions(
+        LOOKUP,
+        language_id="xbsl",
+        line_prefix="    Компоненты.НетТакого.",
+        file_stem="ГлавнаяФорма",
+        stdlib_members={},
+    )
+    assert not entries

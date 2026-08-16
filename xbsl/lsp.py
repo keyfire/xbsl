@@ -185,6 +185,9 @@ _SORT_REST = "1"
 _SORT_OWN_LANGUAGE = "0"
 _SORT_OTHER_LANGUAGE = "1"
 
+#: The name a form module reaches its components by; both spellings, as the parser does.
+COMPONENTS_ROOT = "Компоненты"
+
 _CYRILLIC = re.compile(r"[А-Яа-яЁё]")
 #: `ЯзыкРазработки` of Проект.yaml; the platform standard asks for Russian, so that is the
 #: default when the file says nothing.
@@ -711,6 +714,19 @@ def _make_server() -> "LanguageServer":
         # returns feed the chain-type inference of variables and dotted calls - of the
         # platform and of the project's own modules alike.
         stdlib_members, returns, static_roots = _inference_inputs()
+        # The components of THIS form are a chain root of their own - `Components.Table.Source`
+        # is how a form module reaches its data - and the catalogue shape of a root
+        # ({owner: {member: result type}}) fits them exactly, with the component name as the
+        # member and its declared type as the result. Per file, because the set of components
+        # belongs to the form the file pairs with.
+        components = {
+            c["name"]: c["type"]
+            for c in lookup.components_by_form(path.stem)
+            if c.get("name") and c.get("type")
+        }
+        if components:
+            returns = {**returns, COMPONENTS_ROOT: components}
+            static_roots = static_roots | {COMPONENTS_ROOT}
         try:
             src = engine.load_text(path.name, doc.source)
             in_query = any(a <= offset < b for a, b in query_ranges(src))
