@@ -616,7 +616,9 @@ usage: xbsl localization-info [-h] yaml_path
 ### `xbsl form-tree`
 
 ```bash
-usage: xbsl form-tree [-h] [--at OFFSET] yaml_path
+usage: xbsl form-tree [-h] [--at OFFSET] [--node NODE] [--name NAME] [--max-depth LEVELS]
+                      [--no-properties]
+                      yaml_path
 ```
 
 **Arguments**
@@ -631,6 +633,10 @@ usage: xbsl form-tree [-h] [--at OFFSET] yaml_path
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--at OFFSET` | instead of the tree, return the node at a file offset (cursor sync) |
+| `--node NODE` | the subtree of this node instead of the whole form (an id from the tree) |
+| `--name NAME` | the subtree of the component with this Name; several matches come in "roots" |
+| `--max-depth LEVELS` | how many levels to unfold (0 - no limit); a cut node gets childrenOmitted |
+| `--no-properties` | no property records - names and ids only, plus propertyCount |
 
 ### `xbsl form-edit`
 

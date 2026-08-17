@@ -666,12 +666,47 @@ def parent_component(form: Form, node: Node) -> Node | None:
     return None
 
 
-def node_dict(node: Node, *, property_spans: bool = True, deep: bool = True) -> dict:
+def find_by_name(root: Node, name: str) -> list[Node]:
+    """Components named `name`, in document order - the tree read by a human's word.
+
+    Node ids are positional paths; a person knows the component by its `Name`, which is
+    what the yaml carries. Every match is returned: a name is unique per form by
+    convention, not by the platform.
+    """
+    wanted = (name or "").strip()
+    if not wanted:
+        return []
+    found: list[Node] = []
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        if node.kind == "component" and node.name == wanted:
+            found.append(node)
+        stack.extend(reversed(node.children))
+    found.sort(key=lambda n: n.span.start)
+    return found
+
+
+def node_dict(
+    node: Node,
+    *,
+    property_spans: bool = True,
+    deep: bool = True,
+    max_depth: int | None = None,
+    properties: bool = True,
+) -> dict:
     """Serializable node for the LSP/MCP/CLI surfaces (camelCase keys for clients).
 
     "contentSpan" is the span without the leading comments attached to the node (equal
     to "span" when there are none): clients move the cursor to contentSpan.start, while
     moves/copies keep operating on the full span.
+
+    A whole tree does not always fit an answer - a real form reached a quarter of a
+    million characters, and reading ONE group meant paging through the lot. Two knobs
+    cut it without losing the way down: `max_depth` stops the descent (0 - this node
+    alone) and reports "childrenOmitted", `properties=False` drops the property records
+    and reports "propertyCount". Both leave the ids, so the next call drills straight
+    into the branch that matters.
     """
     d: dict = {
         "id": node.id,
@@ -684,14 +719,27 @@ def node_dict(node: Node, *, property_spans: bool = True, deep: bool = True) -> 
         d["typeFull"] = node.type_full
         d["name"] = node.name
         d["slot"] = node.slot
-        d["properties"] = [p.as_dict(spans=property_spans) for p in node.properties]
+        if properties:
+            d["properties"] = [p.as_dict(spans=property_spans) for p in node.properties]
+        else:
+            d["propertyCount"] = len(node.properties)
     else:
         d["name"] = node.name
         d["list"] = bool(node.list_style)
-    if deep:
-        d["children"] = [
-            node_dict(c, property_spans=property_spans, deep=True) for c in node.children
-        ]
+    if not deep:
+        return d
+    if max_depth is not None and max_depth <= 0:
+        if node.children:
+            d["childrenOmitted"] = len(node.children)
+        return d
+    d["children"] = [
+        node_dict(
+            c, property_spans=property_spans, deep=True,
+            max_depth=None if max_depth is None else max_depth - 1,
+            properties=properties,
+        )
+        for c in node.children
+    ]
     return d
 
 

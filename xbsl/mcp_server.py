@@ -802,7 +802,13 @@ def _form_write(yaml_path: str, op: str, args: dict) -> dict:
 
 
 @mcp.tool()
-def meta_component_tree(yaml_path: str) -> dict:
+def meta_component_tree(
+    yaml_path: str,
+    node_id: str = "",
+    name: str = "",
+    max_depth: int = 0,
+    properties: bool = True,
+) -> dict:
     """The node tree of an interface component (ВидЭлемента: КомпонентИнтерфейса).
 
     Returns {root} - components and slots with ids, types, names, source spans and
@@ -815,13 +821,43 @@ def meta_component_tree(yaml_path: str) -> dict:
 
     componentProperties lists the records of the top-level Свойства section (the
     component's own properties: name, type and their spans) - they are not tree nodes.
+
+    A big form does not fit one answer (a real one reached a quarter of a million
+    characters), so the tree can be asked for in parts. All four narrowings compose:
+
+    * node_id - the subtree under that node instead of the whole form;
+    * name - the subtree of the component with this `Name` (what a person knows; the
+      ids are positional). Several matches come back in "roots", not "root";
+    * max_depth - how many levels below the root to unfold (0 - no limit, 1 - the
+      root and its children); a node whose children were left out carries
+      "childrenOmitted";
+    * properties=False - names and ids only, each component reporting
+      "propertyCount". This is the biggest cut: properties are most of the bytes.
+
+    componentProperties comes back with the whole form only - it belongs to the
+    element, not to a node.
     """
     try:
         form = formedits.load_form(Path(yaml_path))
     except scaffold.ScaffoldError as exc:
         return {"error": str(exc)}
+    if node_id and name:
+        return {"error": "Укажите либо node_id, либо name – это два способа выбрать один узел"}
+    depth = None if not max_depth or max_depth < 0 else max_depth
+    shape = {"max_depth": depth, "properties": bool(properties)}
+    if name:
+        found = formmodel.find_by_name(form.root, name)
+        if not found:
+            return {"error": f"Компонент с именем \"{name}\" в форме не найден"}
+        return {"roots": [formmodel.node_dict(n, **shape) for n in found]}
+    if node_id:
+        try:
+            node = formmodel.get_node(form, node_id)
+        except scaffold.ScaffoldError as exc:
+            return {"error": str(exc)}
+        return {"root": formmodel.node_dict(node, **shape)}
     return {
-        "root": formmodel.node_dict(form.root),
+        "root": formmodel.node_dict(form.root, **shape),
         "componentProperties": formmodel.component_properties_dicts(form),
     }
 

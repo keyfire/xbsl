@@ -948,6 +948,35 @@ _CORE_MESSAGES = {
         "ru": "вместо дерева вернуть узел по смещению в файле (синхронизация курсора)",
         "en": "instead of the tree, return the node at a file offset (cursor sync)",
     },
+    "cli.help.scaf.form-tree-node": {
+        "ru": "поддерево этого узла вместо всей формы (идентификатор из дерева)",
+        "en": "the subtree of this node instead of the whole form (an id from the tree)",
+    },
+    "cli.help.scaf.form-tree-name": {
+        "ru": "поддерево компонента с этим Имя; несколько совпадений приходят в \"roots\"",
+        "en": "the subtree of the component with this Name; several matches come in \"roots\"",
+    },
+    "cli.help.scaf.form-tree-max-depth": {
+        "ru": "сколько уровней раскрывать (0 – без предела); у обрезанного узла "
+              "появляется childrenOmitted",
+        "en": "how many levels to unfold (0 - no limit); a cut node gets childrenOmitted",
+    },
+    "cli.help.scaf.form-tree-no-properties": {
+        "ru": "без записей свойств – только имена и идентификаторы плюс propertyCount",
+        "en": "no property records - names and ids only, plus propertyCount",
+    },
+    "cli.help.scaf.meta.node-id": {
+        "ru": "УЗЕЛ",
+        "en": "NODE",
+    },
+    "cli.help.scaf.meta.name": {
+        "ru": "ИМЯ",
+        "en": "NAME",
+    },
+    "cli.help.scaf.meta.levels": {
+        "ru": "УРОВНЕЙ",
+        "en": "LEVELS",
+    },
     "cli.help.scaf.meta.offset": {
         "ru": "СМЕЩЕНИЕ",
         "en": "OFFSET",

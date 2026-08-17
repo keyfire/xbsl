@@ -131,6 +131,36 @@ def test_mcp_component_tree(mcp_module, form_file):
     assert "не найден" in err["error"].lower()
 
 
+def test_mcp_component_tree_can_be_asked_for_in_parts(mcp_module, form_file):
+    """A quarter-of-a-million-character form does not fit one answer: the tool takes a
+    subtree (by id or by Name), a depth limit and a properties switch."""
+    whole = mcp_module.meta_component_tree(str(form_file))
+    shallow = mcp_module.meta_component_tree(str(form_file), max_depth=1)
+    assert "children" not in shallow["root"]["children"][0]
+    assert shallow["root"]["children"][0]["childrenOmitted"] == 1
+    assert len(json.dumps(shallow)) < len(json.dumps(whole))
+
+    by_id = mcp_module.meta_component_tree(str(form_file), node_id=BUTTON)
+    assert by_id["root"]["id"] == BUTTON and by_id["root"]["name"] == "КнопкаОбновить"
+    # a subtree is not the element: its own properties section stays with the form
+    assert "componentProperties" not in by_id
+
+    by_name = mcp_module.meta_component_tree(str(form_file), name="КнопкаОбновить")
+    assert [n["id"] for n in by_name["roots"]] == [BUTTON]
+
+    bare = mcp_module.meta_component_tree(str(form_file), node_id=BUTTON, properties=False)
+    assert "properties" not in bare["root"] and bare["root"]["propertyCount"] == 1
+
+    assert "не найден" in mcp_module.meta_component_tree(
+        str(form_file), name="Нетакого"
+    )["error"]
+    assert "Узел не найден" in mcp_module.meta_component_tree(
+        str(form_file), node_id="Наследует/Нет[9]"
+    )["error"]
+    both = mcp_module.meta_component_tree(str(form_file), node_id=BUTTON, name="Кнопка")
+    assert "либо" in both["error"]
+
+
 def test_mcp_add_component_writes_and_lints(mcp_module, form_file):
     res = mcp_module.meta_add_component(
         str(form_file), TPL, "Содержимое", type="Флажок", name="Показывать",
@@ -300,6 +330,24 @@ def test_cli_form_tree(form_file, capsys):
                          str(FORM.find("Тип: Форма")))
     assert code == 0
     assert out["node"]["id"] == "Наследует" and out["parent"] is None
+
+
+def test_cli_form_tree_narrowings(form_file, capsys):
+    """The CLI carries the same knobs as the MCP tool - one model, one shape."""
+    code, out = _run_cli(capsys, "form-tree", str(form_file), "--max-depth", "1")
+    assert code == 0 and out["root"]["children"][0]["childrenOmitted"] == 1
+
+    code, out = _run_cli(capsys, "form-tree", str(form_file), "--name", "КнопкаОбновить",
+                         "--no-properties")
+    assert code == 0
+    assert [n["id"] for n in out["roots"]] == [BUTTON]
+    assert out["roots"][0]["propertyCount"] == 1 and "properties" not in out["roots"][0]
+
+    code, out = _run_cli(capsys, "form-tree", str(form_file), "--node", BUTTON)
+    assert code == 0 and out["root"]["id"] == BUTTON
+
+    code, out = _run_cli(capsys, "form-tree", str(form_file), "--name", "Нетакого")
+    assert code != 0 and "не найден" in out["error"]
 
 
 def test_cli_form_edit_dry_run_writes_nothing(form_file, capsys):

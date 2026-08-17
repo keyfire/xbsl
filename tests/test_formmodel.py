@@ -262,6 +262,50 @@ def test_node_dict_content_span():
     assert slot["contentSpan"] == slot["span"]
 
 
+def test_node_dict_stops_at_max_depth():
+    """A big form does not fit one answer, so the descent can be stopped - and the node
+    that was cut says how many children were left out, otherwise the tree reads as
+    finished."""
+    form = parse_form(FORM)
+    root = formmodel.node_dict(form.root, max_depth=1)
+    assert [c["id"] for c in root["children"]] == ["Наследует/Содержимое"]
+    cut = root["children"][0]
+    assert "children" not in cut and cut["childrenOmitted"] == 1
+    # zero levels - the node alone, and the whole tree is still the default
+    alone = formmodel.node_dict(form.root, max_depth=0)
+    assert "children" not in alone and alone["childrenOmitted"] == 1
+    assert formmodel.node_dict(form.root)["children"][0]["children"]
+
+
+def test_node_dict_without_properties_reports_their_number():
+    """Properties are most of the bytes; dropped, they leave a count and the ids."""
+    form = parse_form(FORM)
+    button = formmodel.node_dict(form.nodes[BUTTON], deep=False, properties=False)
+    assert "properties" not in button
+    assert button["propertyCount"] == len(form.nodes[BUTTON].properties) > 0
+    # a slot has no properties of its own and gains no counter
+    assert "propertyCount" not in formmodel.node_dict(
+        form.nodes[LIST_GRP], deep=False, properties=False
+    )
+
+
+def test_find_by_name_answers_the_word_a_person_knows():
+    """Ids are positional paths; a person addresses the component by its Имя."""
+    form = parse_form(FORM)
+    assert [n.id for n in formmodel.find_by_name(form.root, "КнопкаОплатить")] == [BUTTON]
+    assert formmodel.find_by_name(form.root, "Нетакого") == []
+    assert formmodel.find_by_name(form.root, "") == []
+
+
+def test_find_by_name_returns_every_namesake_in_document_order():
+    """A name is unique per form by convention, not by the platform - so all matches."""
+    text = FORM.replace("Имя: Оплачен", "Имя: Подсказка")
+    form = parse_form(text)
+    found = formmodel.find_by_name(form.root, "Подсказка")
+    assert [n.id for n in found] == [LABEL, CHECKBOX]
+    assert found[0].span.start < found[1].span.start
+
+
 def test_parent_component_skips_slots():
     form = parse_form(FORM)
     # a slot resolves to its owner component

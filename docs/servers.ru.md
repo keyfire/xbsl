@@ -102,7 +102,7 @@ claude mcp add xbsl -- xbsl-mcp
 
 | Инструмент | Что делает |
 |---|---|
-| `meta_component_tree(yaml_path)` | дерево узлов компонента интерфейса |
+| `meta_component_tree(yaml_path, node_id, name, max_depth, properties)` | дерево узлов компонента интерфейса; большую форму можно брать частями – поддеревом (по идентификатору узла или по его `Имя`), с пределом глубины и без записей свойств |
 | `meta_add_component(yaml_path, parent_id, slot, ...)` | вставить новый компонент в слот родительского узла |
 | `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | вставить в слот готовый блок yaml одного компонента (скопированное поддерево) |
 | `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | перенести узел в другой (или тот же) слот; комментарии над ним едут следом |
