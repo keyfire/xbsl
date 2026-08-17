@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.61.6
+
+### Changed
+- **The help of three new rules points at the platform documentation** -
+  `yaml/localization-key-unique` at the application-localization page,
+  `code/module-var-not-const` and `code/use-needs-closeable` at the
+  variable-declaration page.
+
 ## 0.61.5
 
 ### Removed

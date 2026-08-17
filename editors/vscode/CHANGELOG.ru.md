@@ -2,6 +2,13 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## 0.61.6
+
+### Изменено
+- **Справка трёх новых правил ведёт в документацию платформы** - `yaml/localization-key-unique`
+  на страницу локализации приложения, `code/module-var-not-const` и `code/use-needs-closeable`
+  на страницу объявления переменной.
+
 ## 0.61.5
 
 ### Удалено
