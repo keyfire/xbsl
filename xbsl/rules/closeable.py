@@ -1,4 +1,22 @@
-"""Tier D: a closeable resource left unclosed by an early exit from the loop over it.
+"""Tier D: the closeable resources - who must be held by `исп`, and who may not be.
+
+--- code/use-needs-closeable ---
+
+The mirror of the rule below, and the one the compiler refuses over: `исп` is defined for
+a variable "тип которой является потомком типа Закрываемое"
+(topics/variable-declaration-statement), so `исп Чтение = новый ЧтениеXml(...)` is answered
+with "Type ЧтениеXml is not Закрываемое" - the apply fails and the stand rolls back.
+
+The verdict is taken from the catalog, never from the shape of the name: a finding needs
+the initializer to resolve to a type the catalog DESCRIBES (`bases` knows its ancestors)
+whose chain has no `Closeable`. Anything the chain cannot type, and any type the catalog
+does not carry, is left alone - a guess there would cost a false positive on the first
+project type. Reconnaissance: 218 `исп` declarations of two corpora resolve to closeables,
+19 resolve to nothing at all, and not one resolves to a described non-closeable.
+
+--- code/unclosed-resource ---
+
+A closeable resource left unclosed by an early exit from the loop over it.
 
 `знч Выборка = Запрос{ ... }.Выполнить()` binds a descendant of `Закрываемое` to an ordinary
 variable. Walking such a result to the END closes it - the platform releases the resource once
@@ -44,6 +62,22 @@ from xbsl.lexer import linemap
 from xbsl.parser import parse
 
 MESSAGES = {
+    "code/use-needs-closeable.title": {
+        "ru": "Модификатор исп у незакрываемого типа",
+        "en": "The use modifier on a type that is not closeable",
+    },
+    "code/use-needs-closeable.found": {
+        "ru": "'{n[исп]} {name}' объявлен типом {type}, а он не наследует {n[Закрываемое]}: "
+              "модификатор существует ради автоматического '{n[Закрыть]}()' на выходе из "
+              "области видимости, и компилятор отвечает \"Type {type} is not "
+              "{n[Закрываемое]}\" – применение сборки падает, стенд откатывается на прежнюю "
+              "сборку. Здесь достаточно '{n[знч]}'.",
+        "en": "'{n[исп]} {name}' is declared with type {type}, which does not inherit "
+              "{n[Закрываемое]}: the modifier exists for the automatic '{n[Закрыть]}()' on "
+              "leaving the scope, and the compiler answers \"Type {type} is not "
+              "{n[Закрываемое]}\" – the apply fails and the stand rolls back to the previous "
+              "build. '{n[знч]}' is enough here.",
+    },
     "code/unclosed-resource.title": {
         "ru": "Незакрытый ресурс при досрочном выходе из перебора",
         "en": "Resource left unclosed by an early exit from the loop",
@@ -92,6 +126,23 @@ def _catalog() -> tuple[frozenset[str], dict]:
 
 
 dataset.register_reset(_catalog.cache_clear)
+
+
+@lru_cache(maxsize=1)
+def _described_types() -> frozenset[str]:
+    """Types whose ancestors the catalog knows - only about these can inheritance be judged.
+
+    A name absent here is not "not a closeable": it is a type of the project, of a library
+    or one the extractor missed, and the ancestors of such a type are simply unknown.
+    """
+    try:
+        data = dataset.load_json("stdlib.json")
+    except Exception:  # noqa: BLE001 - no data, no rule
+        return frozenset()
+    return frozenset(data.get("bases") or {})
+
+
+dataset.register_reset(_described_types.cache_clear)
 
 
 def _chain_type(expr: P.Expr | None, scope: dict[str, str], returns: dict) -> str | None:
@@ -269,6 +320,64 @@ def _methods(module: P.Module) -> Iterable[P.Method]:
                     yield sub
         elif isinstance(member, P.Enum):
             yield from member.methods
+
+
+def _declared_type(decl: P.VarDecl, scope: dict[str, str], returns: dict) -> str | None:
+    """The type of a declaration: the written one wins, otherwise the chain is followed."""
+    if decl.type is not None and decl.type.names:
+        return decl.type.names[0]
+    return _chain_type(decl.init, scope, returns)
+
+
+def _use_declarations(method: P.Method, returns: dict) -> Iterable[tuple[P.VarDecl, str]]:
+    """(`исп` declaration, its type) for every declaration this method types."""
+    scope: dict[str, str] = {}
+
+    def walk(stmts: list[P.Stmt]) -> Iterable[tuple[P.VarDecl, str]]:
+        for st in stmts:
+            if isinstance(st, P.VarDecl):
+                inferred = _declared_type(st, scope, returns)
+                if inferred:
+                    scope[st.name] = inferred
+                else:
+                    scope.pop(st.name, None)
+                if st.kind == "USE" and inferred:
+                    yield st, inferred
+                continue
+            for child in _child_bodies(st):
+                yield from walk(child)
+
+    yield from walk(method.body)
+
+
+@rule("code/use-needs-closeable", "code/use-needs-closeable.title", "D",
+      severity=Severity.ERROR)
+def use_needs_closeable(source: SourceFile) -> Iterable[Diagnostic]:
+    """`исп` over a type the catalog describes and that does not inherit Закрываемое."""
+    if source.kind != "xbsl":
+        return
+    closeable, returns = _catalog()
+    if not closeable:
+        return  # without the stdlib catalog a closeable cannot be told from anything else
+    described = _described_types()
+    module, errors = parse(source)
+    if errors:
+        return
+    lm = None
+    for method in _methods(module):
+        for decl, type_name in _use_declarations(method, returns):
+            # Described and not closeable is the verdict; unknown to the catalog is a
+            # project type, and the rule has nothing to say about it.
+            if type_name in closeable or type_name not in described:
+                continue
+            if lm is None:
+                lm = linemap(source)
+            line, col = lm.linecol(decl.start)
+            yield Diagnostic(
+                source.rel, line, col, "code/use-needs-closeable", Severity.ERROR,
+                i18n.t("code/use-needs-closeable.found",
+                       name=decl.name, type=i18n.name(type_name, "types")),
+            )
 
 
 @rule("code/unclosed-resource", "code/unclosed-resource.title", "D", severity=Severity.WARNING)
