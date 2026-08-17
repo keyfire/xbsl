@@ -41,9 +41,12 @@ def test_constructor_of_a_non_closeable_is_flagged():
     assert "ЧтениеXml" in diags[0].message and "Закрываемое" in diags[0].message
 
 
-def test_a_written_type_is_judged_as_well():
-    diags = _lint(_method("    исп Чтение: ЧтениеXml = новый ЧтениеXml()\n"))
+def test_a_written_type_speaks_where_the_chain_is_silent():
+    """The initializer here resolves to nothing, so the finding can only come from the
+    written type - with `новый ЧтениеXml()` on the right the test would pass either way."""
+    diags = _lint(_method("    исп Чтение: ЧтениеXml = ПолучитьЧтение()\n"))
     assert len(diags) == 1, [d.message for d in diags]
+    assert "ЧтениеXml" in diags[0].message
 
 
 def test_a_declaration_inside_a_branch_is_reached():
