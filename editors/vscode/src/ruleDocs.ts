@@ -101,6 +101,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   // --- language: constructs ---
   { match: (r) => r === "code/parse-error", page: DESIGN },
   { match: (r) => r === "code/param-type-required", page: METHODS, anchor: "определение-метода" },
+  {
+    match: (r) => r === "code/module-var-not-const",
+    page: "topics/variable-declaration-statement",
+  },
   { match: (r) => r === "code/loop-header", page: "topics/for-in-loop", anchor: "синтаксис" },
   { match: (r) => r === "code/invalid-string-escape", page: "topics/escape-sequence" },
   { match: (r) => r === "code/ternary-and-or", page: "topics/question-mark-operation", anchor: "синтаксис" },

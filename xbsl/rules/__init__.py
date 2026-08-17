@@ -17,6 +17,7 @@ from . import (  # noqa: F401
     code_structure,
     code_syntax,
     locals_usage,
+    module_level,
     ref_fields,
     resources,
     return_mismatch,

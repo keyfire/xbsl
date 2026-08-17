@@ -42,6 +42,7 @@ _DATA_DEPENDENT = {
     "test_rule_unknown_tabular_member",
     "test_rule_variable_names",  # code rules tokenize the module
     "test_rule_url_params",  # the rule tokenizes the module
+    "test_rule_module_level",  # the rule parses the module
     "test_style_rules",
     "test_mcp",
     "test_cli",
