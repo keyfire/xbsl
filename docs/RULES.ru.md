@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 155.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 156.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -82,6 +82,7 @@ sidebar:
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ссылочный тип в позиции `Тип` без `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`) – у ссылки нет значения по умолчанию, компиляция падает `Default value initialization is not supported` [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Выражение `=...` внутри узла литерального типа (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) – платформа принимает здесь только литерал, вычислять нужно весь объект [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ, объявленный в словаре `ЛокализованныеСтроки` дважды – у секций `Строки` и `Шаблоны` одно пространство имён, файл перевода судится тоже; применение отвечает "Имя не уникально" и откатывает проект [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `project/identifier` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя или поставщик проекта не идентификатор [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/presentation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Представление проекта не заполнено [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/version` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Версия проекта не A.B.C [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |

@@ -19,6 +19,24 @@ the cause.
 The check is file-local (both the section and its entries are in one yaml) and reads the
 section names in either spelling, from the metamodel record of the kind.
 
+--- yaml/localization-key-unique ---
+
+Both sections of a dictionary share ONE namespace, and the platform refuses a name it
+sees twice: `Name "X" is not unique`. The refusal happens at apply time, so the whole
+project rolls back to the previous build - one repeated key costs a full deploy cycle,
+and a dictionary of several hundred entries does not give the duplicate away by eye.
+
+The reach was settled by the compiler rather than assumed (a throwaway project, three
+dictionaries, one run): a name repeated INSIDE a section, the same name in `Strings` and
+in `Templates`, and a repeat inside a TRANSLATION file are all refused, each named on its
+own line. So the check counts the names of both sections together, and it judges the
+translation files too - those carry no element kind and are recognised by shape, a
+top-level mapping made of section names alone.
+
+A parsed mapping cannot answer this at all: a yaml loader keeps the LAST of the repeated
+keys and the earlier one disappears without a trace, which is exactly why the defect
+survives every reader up to the apply. The check reads the composed nodes instead.
+
 --- yaml/localization-ref-to-template ---
 
 The mirror defect, and the one the apply refuses over: a `$Dictionary.Key` reference in a
@@ -124,6 +142,30 @@ MESSAGES = {
     "yaml/placeholder-key-in-strings.title": {
         "ru": "Подстановка в секции Строки, а не Шаблоны",
         "en": "A placeholder in the Strings section instead of Templates",
+    },
+    "yaml/localization-key-unique.title": {
+        "ru": "Дубль ключа в словаре локализации",
+        "en": "A duplicate key in a localization dictionary",
+    },
+    "yaml/localization-key-unique.found": {
+        "ru": "Ключ '{key}' объявлен здесь второй раз (первый – строка {line}, секция "
+              "{first}) – платформа отвечает \"Имя \"{key}\" не уникально\", применение "
+              "сборки падает и стенд откатывается на прежнюю сборку. Переименуйте один "
+              "из двух ключей.",
+        "en": "Key '{key}' is declared here a second time (the first one is on line "
+              "{line}, section {first}) – the platform answers \"Name \"{key}\" is not "
+              "unique\", the apply fails and the stand rolls back to the previous "
+              "build. Rename one of the two keys.",
+    },
+    "yaml/localization-key-unique.cross": {
+        "ru": "Ключ '{key}' объявлен и в секции {first} (строка {line}), и в секции "
+              "{second} – у секций ОДНО пространство имён, платформа отвечает \"Имя "
+              "\"{key}\" не уникально\", применение сборки падает и стенд откатывается "
+              "на прежнюю сборку. Переименуйте один из двух ключей.",
+        "en": "Key '{key}' is declared both in section {first} (line {line}) and in "
+              "section {second} – the two sections share ONE namespace, the platform "
+              "answers \"Name \"{key}\" is not unique\", the apply fails and the stand "
+              "rolls back to the previous build. Rename one of the two keys.",
     },
     "yaml/localization-ref-to-template.title": {
         "ru": "Ссылка на ключ из секции Шаблоны",
@@ -358,6 +400,70 @@ def placeholder_key_in_strings(source: SourceFile) -> Iterable[Diagnostic]:
                 "yaml/placeholder-key-in-strings", Severity.ERROR,
                 i18n.t("yaml/placeholder-key-in-strings.found",
                        key=entry_key.value, placeholder=found.group(0)),
+            )
+
+
+# --- yaml/localization-key-unique ----------------------------------------------------
+
+@lru_cache(maxsize=1)
+def _all_section_names() -> frozenset[str]:
+    """Both sections in both spellings - the namespace the platform checks as one."""
+    return _section_names() | _template_section_names()
+
+
+dataset.register_reset(_all_section_names.cache_clear)
+
+
+def _is_translation(data: dict, sections: frozenset[str]) -> bool:
+    """A translation file: section names alone at the top, no element kind of its own."""
+    return bool(data) and all(key in sections for key in data)
+
+
+@rule(
+    "yaml/localization-key-unique",
+    "yaml/localization-key-unique.title", "A",
+    severity=Severity.ERROR,
+)
+def localization_key_unique(source: SourceFile) -> Iterable[Diagnostic]:
+    """A key the dictionary declares twice - see the module docstring."""
+    if not _HAVE_YAML or source.kind != "yaml":
+        return
+    sections = _all_section_names()
+    if not any(name in source.text for name in sections):
+        return  # the cheap gate - no section of a dictionary in this file
+    data, error = _parsed(source)
+    if error is not None or not isinstance(data, dict):
+        return
+    if object_kind(data) != _KIND and not _is_translation(data, sections):
+        return
+    root = _composed(source)
+    if root is None or not isinstance(root, _yaml.MappingNode):
+        return
+    # The loader keeps the last of the repeated keys, so the count is taken off the nodes.
+    seen: dict[str, tuple[str, int]] = {}
+    for key_node, value_node in root.value:
+        if not (isinstance(key_node, _yaml.ScalarNode) and key_node.value in sections):
+            continue
+        if not isinstance(value_node, _yaml.MappingNode):
+            continue
+        section = key_node.value
+        for entry_key, _entry_value in value_node.value:
+            if not isinstance(entry_key, _yaml.ScalarNode):
+                continue
+            name = entry_key.value
+            first = seen.get(name)
+            if first is None:
+                seen[name] = (section, entry_key.start_mark.line + 1)
+                continue
+            first_section, first_line = first
+            if first_section == section:
+                key, extra = "yaml/localization-key-unique.found", {}
+            else:
+                key, extra = "yaml/localization-key-unique.cross", {"second": section}
+            yield Diagnostic(
+                source.rel, entry_key.start_mark.line + 1, entry_key.start_mark.column + 1,
+                "yaml/localization-key-unique", Severity.ERROR,
+                i18n.t(key, key=name, line=first_line, first=first_section, **extra),
             )
 
 

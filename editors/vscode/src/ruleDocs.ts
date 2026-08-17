@@ -174,6 +174,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   {
     match: (r) => r === "yaml/placeholder-key-in-strings"
       || r === "code/compare-with-localized"
+      || r === "yaml/localization-key-unique"
       || r === "yaml/localization-ref-to-template",
     page: "topics/app-localization",
   },

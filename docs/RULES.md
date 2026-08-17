@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 155 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 156 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -84,6 +84,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?` (`Goods.Reference`, `Edit<Goods.Reference>`) - a reference has no default value, the compilation fails with `Default value initialization is not supported` [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `=...` expression inside a literal-typed node (`Font: {Type: AbsoluteFont, Size: =...}`) - the platform accepts only a literal there, compute the whole object instead [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
+| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key a `LocalizedStrings` dictionary declares twice - `Strings` and `Templates` share one namespace, and a translation file is judged too; the apply answers "Name is not unique" and rolls the project back [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `project/identifier` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project name or vendor is not an identifier [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/presentation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project presentation is empty [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/version` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project version is not A.B.C [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
