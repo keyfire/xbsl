@@ -292,7 +292,7 @@ def test_an_array_backed_list_has_no_header_sorting_to_lose():
 
 def _with_flag(flag: str) -> str:
     """The same computed column, with one more property declared above the value."""
-    form = _column_form("=ОтметкаВалютныхЦен(ДанныеСтроки)")
+    form = _column_form("=ОтметкаСрочности(ДанныеСтроки)")
     return form.replace(
         "                Значение:", f"                {flag}\n                Значение:")
 
