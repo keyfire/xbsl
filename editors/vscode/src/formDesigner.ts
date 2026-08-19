@@ -563,14 +563,28 @@ class Designer implements StructureHost, DataHost {
 
   // --- selection sync -------------------------------------------------------------------------
 
-  // Bring this form's yaml to the front of its group without taking the focus - the panel and
-  // its source follow each other's tab. In a single-group layout the yaml's group IS the
-  // panel's own: revealing it there would cover the panel that was just brought forward
-  // (the bottom "Module" tab lives in exactly that layout), so the pairing steps aside.
+  // The group holding the yaml's tab, when the yaml is open anywhere.
+  private yamlTabColumn(): vscode.ViewColumn | undefined {
+    const key = this.key();
+    for (const group of vscode.window.tabGroups.all) {
+      for (const tab of group.tabs) {
+        if (tab.input instanceof vscode.TabInputText && (tab.input as vscode.TabInputText).uri.toString() === key) {
+          return group.viewColumn;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  // Bring this form's OPEN yaml to the front of its group without taking the focus - the panel
+  // and its source follow each other's tab. The pairing never adds tabs: a form opened as a
+  // panel keeps its sources closed until asked for (the bottom "Module" tab, a node click, the
+  // tree's context menu). And when the yaml lives in the panel's own group, revealing it there
+  // would cover the panel that was just brought forward - the pairing steps aside.
   private async revealYaml(): Promise<void> {
     try {
-      const column = editorColumnFor(this.target, vscode.ViewColumn.One);
-      if (column === this.panel.viewColumn) {
+      const column = this.yamlTabColumn();
+      if (column === undefined || column === this.panel.viewColumn) {
         return;
       }
       const doc = await vscode.workspace.openTextDocument(this.target);
@@ -842,7 +856,7 @@ function openPanel(context: vscode.ExtensionContext, uri?: vscode.Uri, preferred
   }
   // A new panel joins the group where the other form panels already are; the first one takes
   // the caller's preferred group (the "Form" button of a module editor keeps its own group),
-  // column One (from the tree, the yaml goes beside it) or the column next to the yaml.
+  // column One (from the tree) or the column next to the yaml.
   const column =
     active?.panel.viewColumn ?? preferredColumn ?? (uri ? vscode.ViewColumn.One : vscode.ViewColumn.Beside);
   const panel = vscode.window.createWebviewPanel(VIEW_TYPE, "XBSL", column, {

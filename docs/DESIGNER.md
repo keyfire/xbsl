@@ -47,9 +47,11 @@ The remaining panels live in side-bar containers and follow the active editor:
 
 **Every form gets a panel of its own**, living as a normal editor tab: a second form opens next to
 the first, each panel keeps its own tree, selection and expansion memory, and opening the same form
-again brings its panel forward. A panel and its `.yaml` travel as a pair - picking a tab on one
-side brings the other forward, closing the panel closes the form's yaml and its module (unless
-they have unsaved changes), and a new yaml joins the group where the sources already are.
+again brings its panel forward. A panel and its open `.yaml` travel as a pair - picking a tab on
+one side brings the other forward, and closing the panel closes the form's yaml and its module
+(unless they have unsaved changes). The pairing never adds tabs: opening a form shows just the
+panel, and the sources stay closed until asked for - the module tab below, a click on a node, or
+the metadata tree's context menu.
 
 The panel is three areas with draggable splitters (their position is remembered):
 
