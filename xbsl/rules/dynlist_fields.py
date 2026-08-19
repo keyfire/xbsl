@@ -63,7 +63,9 @@ a custom format and sorting are needed, the presentation field goes into the dyn
 itself (a `DynamicListField` with an `Expression`) instead of being computed on the client.
 
 Only a column of a table over a DYNAMIC LIST is judged - header sorting exists there; an
-array-backed list has none, and a computed column in it is not a defect at all. The rule is
+array-backed list has none, and a computed column in it is not a defect at all. A column that
+switches sorting off itself (`ОтключитьСортировку: Истина`, `DisableSorting: True`) is skipped
+as well: there is no header sorting left for the computed value to cost. The rule is
 info and OFF by default: the finding is true (the header really does not sort), but whether
 that column was ever meant to sort is not visible from the file - a status badge or a
 service column is legitimately unsortable. Enable it when a header does not react and you
@@ -359,6 +361,18 @@ def _row_edit_mapper(source: SourceFile) -> dict | None:
 _CALL_VALUE_RE = re.compile(r"^\s*=\s*(?P<call>[^\W\d][\w.]*)\s*\(", re.UNICODE)
 _COLUMNS_KEYS = ("Колонки", "Columns")
 _VALUE_KEYS = ("Значение", "Value")
+_DISABLE_SORT_KEYS = ("ОтключитьСортировку", "DisableSorting")
+_TRUE_VALUES = ("Истина", "True")
+
+
+def _sorting_disabled(column: yaml.MappingNode) -> bool:
+    """The column switches header sorting off itself - a computed value costs it nothing."""
+    for key, value in column.value:
+        if not (isinstance(key, yaml.ScalarNode) and key.value in _DISABLE_SORT_KEYS):
+            continue
+        if isinstance(value, yaml.ScalarNode) and (value.value or "").strip() in _TRUE_VALUES:
+            return True
+    return False
 
 
 @rule(
@@ -395,6 +409,8 @@ def dynlist_column_sort_lost(source: SourceFile) -> Iterable[Diagnostic]:
         for column in columns.value:
             if not isinstance(column, yaml.MappingNode):
                 continue
+            if _sorting_disabled(column):
+                continue  # the column has no header sorting to lose
             for key, value in column.value:
                 if not (isinstance(key, yaml.ScalarNode) and key.value in _VALUE_KEYS):
                     continue

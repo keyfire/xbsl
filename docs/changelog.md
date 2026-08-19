@@ -19,6 +19,41 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-19 – 0.69.1
+
+### Fixed
+- **`yaml/dynlist-column-sort-lost` leaves alone a column that switches sorting off.** The rule
+  did not read the `DisableSorting: True` property at all, so a computed status-badge column came
+  out as a finding - although such a column has no header sorting by declaration and loses
+  nothing. Found on a list of published plans.
+
+## 2026-08-17 – 0.69.0
+
+### Added
+- **Rule `yaml/localization-key-unique`** (error, in the default set) - a key a localized-strings
+  dictionary declares twice. The compiler settled the reach on a throwaway project of three
+  dictionaries: the two sections share ONE namespace and a translation file is judged too, all
+  three refusals answered "name is not unique". The refusal happens at apply time, so the whole
+  project rolls back - one repeated key costs a full deploy cycle, and a dictionary of several
+  hundred entries does not give the duplicate away by eye. A yaml loader keeps the LAST of the
+  repeated keys, which is why no reader saw it before the apply; the check reads the composed
+  nodes instead.
+- **Rule `code/module-var-not-const`** (error, in the default set) - a `var` / `val` / `use`
+  declaration at MODULE level, where only a constant may stand. A constant is initialized by an
+  expression computed at compile time, while the other modifiers need a running method to
+  evaluate their initializer in. The parser accepts all four there (the grammar rule is shared
+  with an object field), which is why nothing caught this before the deploy.
+- **Rule `code/use-needs-closeable`** (error, in the default set) - the `use` modifier over a
+  type the catalog describes and that does not inherit `Closeable`. The modifier exists for the
+  automatic `Close()` on leaving the scope, so the compiler refuses the declaration. A type the
+  inference cannot reach, and one the catalog does not carry, are left alone.
+- **The component tree can be asked for in parts** - `meta_component_tree` and the CLI
+  `form-tree` take a subtree (by node id or by the component's name), a depth limit and a switch
+  that drops the property records. A real form reached a quarter of a million characters, so
+  reading one group meant paging through the lot; the same form answers an overview call in
+  seven hundred characters. A node whose children were left out says so, and a component without
+  its properties reports how many it has.
+
 ## 2026-08-16 – 0.68.0, 0.68.1, 0.68.2
 
 ### Added

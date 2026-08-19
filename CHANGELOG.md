@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-19 – 0.69.1
+
+### Fixed
+- **`yaml/dynlist-column-sort-lost` leaves alone a column that switches sorting off.** The rule
+  did not read the `DisableSorting: True` property at all, so a computed status-badge column came
+  out as a finding - although such a column has no header sorting by declaration and loses
+  nothing. Found on a list of published plans.
+
 ## 2026-08-17 – 0.69.0
 
 ### Added

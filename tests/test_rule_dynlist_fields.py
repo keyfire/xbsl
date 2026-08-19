@@ -290,6 +290,28 @@ def test_an_array_backed_list_has_no_header_sorting_to_lose():
     assert d == []
 
 
+def _with_flag(flag: str) -> str:
+    """The same computed column, with one more property declared above the value."""
+    form = _column_form("=ОтметкаВалютныхЦен(ДанныеСтроки)")
+    return form.replace(
+        "                Значение:", f"                {flag}\n                Значение:")
+
+
+def test_a_column_that_switches_sorting_off_is_left_alone():
+    """The live case: a badge column carrying `ОтключитьСортировку: Истина` loses nothing."""
+    assert _lint_sort(_with_flag("ОтключитьСортировку: Истина")) == []
+
+
+def test_the_english_spelling_of_the_flag_counts_too():
+    assert _lint_sort(_with_flag("DisableSorting: True")) == []
+
+
+def test_the_flag_switched_off_leaves_the_finding_in_place():
+    """Negative control: the skip must hang on the value, not on the key alone."""
+    d = _lint_sort(_with_flag("ОтключитьСортировку: Ложь"))
+    assert [x.rule_id for x in d] == [SORT_RULE]
+
+
 # The default-off state is NOT asserted here: in a process with the plugin installed the
 # project profile turns these rules on, and such a test would judge the machine rather than
 # the engine. The default is guarded by tests/test_metadata_sync.py, which reads the
