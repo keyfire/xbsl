@@ -19,16 +19,10 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-19 – 0.69.1, 0.69.2, 0.69.3
 
 ### Changed
 - **The examples in the rule descriptions and the test fixtures now use the demo-project
-  vocabulary.** No effect on the engine.
-
-## 2026-08-19 – 0.69.1, 0.69.2
-
-### Changed
-- **The fixtures of the `yaml/dynlist-column-sort-lost` test now use the demo-project
   vocabulary.** No effect on the engine.
 
 ### Fixed
