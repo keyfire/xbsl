@@ -9,6 +9,10 @@ on:
     paths:
       - "docs/**"
       - "blume.config.ts"
+      # Оформление сайта: переопределения токенов и кириллические срезы шрифтов,
+      # на которые эти токены ссылаются (см. theme.css).
+      - "theme.css"
+      - "public/**"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/docs.yml"

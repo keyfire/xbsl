@@ -25,6 +25,11 @@ next to the font.
 
 The project's source code is distributed under the MIT License (see the LICENSE file).
 
+The documentation site carries the Cyrillic subsets of the Inter, Inter Tight and JetBrains Mono
+webfonts (public/fonts): the build downloads the Latin subset of them only, so without these files
+Russian pages would fall back to Arial and Courier New. The fonts are licensed under the SIL Open
+Font License 1.1 - the license texts lie next to them.
+
 --- Русский ---
 
 Проект не аффилирован с фирмой "1С" и не является её официальным продуктом.
@@ -45,3 +50,8 @@ The project's source code is distributed under the MIT License (see the LICENSE 
 по лицензии CC BY 4.0, сопровождающий код – по MIT; тексты обеих лицензий лежат рядом со шрифтом.
 
 Исходный код проекта распространяется по лицензии MIT (см. файл LICENSE).
+
+Сайт документации несёт кириллические срезы шрифтов Inter, Inter Tight и JetBrains Mono
+(public/fonts): сборка скачивает только латинский срез, и без этих файлов русские страницы
+проваливаются в Arial и Courier New. Шрифты распространяются по лицензии SIL Open Font License
+1.1 – её тексты лежат рядом с файлами.

@@ -93,5 +93,10 @@ export default defineConfig({
   // Indigo - the accent the previous Material-themed site used.
   theme: {
     accent: "indigo",
+    // Code is set in JetBrains Mono: the default IBM Plex Mono is narrower and lighter,
+    // and these pages are read mostly as code. Astro downloads its Latin subset only -
+    // the Cyrillic one comes from theme.css, which names the family variable of every
+    // role of this block, so a font changed here has to be renamed there too.
+    fonts: { mono: "jetbrains-mono" },
   },
 });
