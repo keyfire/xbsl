@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.61.7
 
 ### Исправлено
 - **В палитре команд слово XBSL больше не двоится.** Приставка стояла и в категории команды,
