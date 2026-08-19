@@ -40,7 +40,16 @@ import {
 } from "./formPreviewCore";
 import { formKeyAliases, localizationStrings } from "./uiSchemaClient";
 import { DataHost, DataSnapshot, FormDataModel } from "./formData";
-import { componentNameOfPath, dataMenu, DEFAULT_LAYOUT, sanitizeLayout, structureMenu } from "./formDesignerCore";
+import {
+  componentNameOfPath,
+  dataMenu,
+  DEFAULT_LAYOUT,
+  formPathOfModule,
+  looksLikeFormText,
+  modulePathOfForm,
+  sanitizeLayout,
+  structureMenu,
+} from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
 import { hintName } from "./metadataCore";
 import { projectWritesEnglishNames } from "./metadataTree";
@@ -113,13 +122,7 @@ export interface DesignerModels {
 
 // Whether the content looks like a form: an interface component with inheritance and content.
 function looksLikeForm(doc: vscode.TextDocument): boolean {
-  if (doc.languageId !== "yaml") {
-    return false;
-  }
-  const head = doc.getText(new vscode.Range(0, 0, Math.min(50, doc.lineCount), 0));
-  const kind = head.includes("КомпонентИнтерфейса") || head.includes("InterfaceComponent");
-  const text = doc.getText();
-  return kind && (text.includes("Наследует") || text.includes("Inherits"));
+  return doc.languageId === "yaml" && looksLikeFormText(doc.getText());
 }
 
 // -- localized strings handed to the webview ---------------------------------------------------
@@ -139,6 +142,9 @@ function labels(): Record<string, string> {
     addProperty: vscode.l10n.t("Add property"),
     readonly: vscode.l10n.t("This form is read-only – editing is disabled."),
     empty: vscode.l10n.t("Open a form yaml (InterfaceComponent)."),
+    module: vscode.l10n.t("Module"),
+    moduleOpen: vscode.l10n.t("Open the form module"),
+    moduleMissing: vscode.l10n.t("The form has no module file"),
     zoomIn: vscode.l10n.t("Zoom in"),
     zoomOut: vscode.l10n.t("Zoom out"),
     deviceAuto: vscode.l10n.t("Auto"),
@@ -314,6 +320,10 @@ class Designer implements StructureHost, DataHost {
   private lastStructure?: StructureSnapshot;
   private lastData?: DataSnapshot;
   private lastFrame?: { body: string; title: string };
+  //: The module file next to the form's yaml; the bottom "Module" tab opens it and dims
+  //: while the file is missing.
+  private readonly moduleUri: vscode.Uri | undefined;
+  private moduleAvailable = true;
 
   constructor(
     readonly panel: vscode.WebviewPanel,
@@ -327,6 +337,8 @@ class Designer implements StructureHost, DataHost {
     this.data.setHost(this);
     this.structure.setTarget(target);
     this.data.setTarget(target);
+    const modulePath = modulePathOfForm(target.path);
+    this.moduleUri = modulePath !== undefined ? target.with({ path: modulePath }) : undefined;
     panel.webview.html = shell(panel.webview, context.extensionUri, target);
     panel.onDidDispose(() => void this.dispose(), undefined, context.subscriptions);
     panel.onDidChangeViewState(
@@ -378,6 +390,7 @@ class Designer implements StructureHost, DataHost {
     void this.structure.load();
     void this.data.load();
     void this.renderFrame();
+    void this.checkModule();
   }
 
   scheduleReload(): void {
@@ -390,13 +403,51 @@ class Designer implements StructureHost, DataHost {
     }, DEBOUNCE_MS);
   }
 
+  // The working set of the panel: the form's yaml and its module file.
   matches(uri: vscode.Uri): boolean {
-    return uri.toString() === this.key();
+    const key = uri.toString();
+    return key === this.key() || key === this.moduleUri?.toString();
   }
 
-  // Closing the form closes its yaml too: the panel and the source are opened together and are
-  // one working set. A yaml with unsaved changes is LEFT alone - closing it would either lose
-  // the edits or throw a save dialog at someone who just closed a preview.
+  // Whether the module file is there decides the bottom tab's face. Checked on every reload:
+  // cheap, and the module can appear or go while the form stays open.
+  private async checkModule(): Promise<void> {
+    if (!this.moduleUri) {
+      return;
+    }
+    let available = true;
+    try {
+      await vscode.workspace.fs.stat(this.moduleUri);
+    } catch {
+      available = false;
+    }
+    this.moduleAvailable = available;
+    this.post({ type: "module", available });
+  }
+
+  // The bottom "Module" tab: the module opens as a REAL editor in the panel's own group - the
+  // area switches to the code the way the platform IDE switches its bottom tabs. A webview
+  // cannot host the actual editor, so the switch is a tab activation, not an in-panel page.
+  private async openModule(): Promise<void> {
+    if (!this.moduleUri) {
+      return;
+    }
+    try {
+      const doc = await vscode.workspace.openTextDocument(this.moduleUri);
+      await vscode.window.showTextDocument(doc, {
+        viewColumn: this.panel.viewColumn ?? vscode.ViewColumn.Active,
+        preview: false,
+      });
+    } catch {
+      // The file went away since the last check - dim the tab right away.
+      this.moduleAvailable = false;
+      this.post({ type: "module", available: false });
+    }
+  }
+
+  // Closing the form closes its sources too (the yaml and the module file): the panel and its
+  // sources are one working set. A source with unsaved changes is LEFT alone - closing it would
+  // either lose the edits or throw a save dialog at someone who just closed a preview.
   private async dispose(): Promise<void> {
     if (this.timer) {
       clearTimeout(this.timer);
@@ -513,12 +564,18 @@ class Designer implements StructureHost, DataHost {
   // --- selection sync -------------------------------------------------------------------------
 
   // Bring this form's yaml to the front of its group without taking the focus - the panel and
-  // its source follow each other's tab.
+  // its source follow each other's tab. In a single-group layout the yaml's group IS the
+  // panel's own: revealing it there would cover the panel that was just brought forward
+  // (the bottom "Module" tab lives in exactly that layout), so the pairing steps aside.
   private async revealYaml(): Promise<void> {
     try {
+      const column = editorColumnFor(this.target, vscode.ViewColumn.One);
+      if (column === this.panel.viewColumn) {
+        return;
+      }
       const doc = await vscode.workspace.openTextDocument(this.target);
       await vscode.window.showTextDocument(doc, {
-        viewColumn: editorColumnFor(this.target, vscode.ViewColumn.One),
+        viewColumn: column,
         preserveFocus: true,
         preview: false,
       });
@@ -591,6 +648,7 @@ class Designer implements StructureHost, DataHost {
       case "ready":
         // A restored (or reloaded) webview asks for everything it should be showing.
         this.post({ type: "labels", labels: labels(), layout, view });
+        this.post({ type: "module", available: this.moduleAvailable });
         if (this.lastStructure) {
           this.post({ type: "structure", snapshot: this.lastStructure });
         }
@@ -713,6 +771,9 @@ class Designer implements StructureHost, DataHost {
       case "frameDeselect":
         this.selectedOffset = undefined;
         return;
+      case "openModule":
+        await this.openModule();
+        return;
       case "undo":
       case "redo": {
         // Every designer edit lands in the yaml document's own undo stack (one WorkspaceEdit per
@@ -760,7 +821,7 @@ function isViewState(v: unknown): v is ViewState {
 // one, and a second form opens a panel of its own next to it (editor tabs, as everywhere else).
 // uri is passed when called from the metadata tree; the editor title button passes none and the
 // active yaml is taken.
-function openPanel(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
+function openPanel(context: vscode.ExtensionContext, uri?: vscode.Uri, preferredColumn?: vscode.ViewColumn): void {
   let docUri = uri;
   if (!docUri) {
     const editor = vscode.window.activeTextEditor;
@@ -780,8 +841,10 @@ function openPanel(context: vscode.ExtensionContext, uri?: vscode.Uri): void {
     return;
   }
   // A new panel joins the group where the other form panels already are; the first one takes
+  // the caller's preferred group (the "Form" button of a module editor keeps its own group),
   // column One (from the tree, the yaml goes beside it) or the column next to the yaml.
-  const column = active?.panel.viewColumn ?? (uri ? vscode.ViewColumn.One : vscode.ViewColumn.Beside);
+  const column =
+    active?.panel.viewColumn ?? preferredColumn ?? (uri ? vscode.ViewColumn.One : vscode.ViewColumn.Beside);
   const panel = vscode.window.createWebviewPanel(VIEW_TYPE, "XBSL", column, {
     enableScripts: true,
     retainContextWhenHidden: true,
@@ -805,6 +868,31 @@ function adoptPanel(context: vscode.ExtensionContext, panel: vscode.WebviewPanel
 function updateContext(editor: vscode.TextEditor | undefined): void {
   const isForm = !!editor && looksLikeForm(editor.document);
   void vscode.commands.executeCommand("setContext", "xbsl.formYaml", isForm);
+}
+
+// The "Form" title button of a MODULE editor: only the module of a form gets it, and the
+// sibling yaml decides. Reading raw bytes keeps a plain tab switch from loading a
+// TextDocument; the sequence guard keeps a slow read of a previous tab from overwriting
+// the answer for the current one.
+let moduleContextSeq = 0;
+
+async function updateModuleContext(editor: vscode.TextEditor | undefined): Promise<void> {
+  const my = ++moduleContextSeq;
+  let isFormModule = false;
+  if (editor?.document.languageId === "xbsl") {
+    const yamlPath = formPathOfModule(editor.document.uri.path);
+    if (yamlPath !== undefined) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(editor.document.uri.with({ path: yamlPath }));
+        isFormModule = looksLikeFormText(Buffer.from(bytes).toString("utf8"));
+      } catch {
+        isFormModule = false; // no sibling yaml - not a form's module
+      }
+    }
+  }
+  if (my === moduleContextSeq) {
+    void vscode.commands.executeCommand("setContext", "xbsl.formModule", isFormModule);
+  }
 }
 
 // What the rest of the extension needs from the designer: which form is in front. The palette
@@ -851,6 +939,15 @@ export function registerFormDesigner(
     vscode.commands.registerCommand("xbsl.previewForm", (arg?: unknown) =>
       openPanel(context, arg instanceof vscode.Uri ? arg : undefined)
     ),
+    // The way back from a module editor: its form panel, in the group the module sits in.
+    vscode.commands.registerCommand("xbsl.openFormForModule", (arg?: unknown) => {
+      const editor = vscode.window.activeTextEditor;
+      const uri = arg instanceof vscode.Uri ? arg : editor?.document.uri;
+      const yamlPath = uri ? formPathOfModule(uri.path) : undefined;
+      if (uri && yamlPath !== undefined) {
+        openPanel(context, uri.with({ path: yamlPath }), editor?.viewColumn);
+      }
+    }),
     // Session restore: without a serializer VS Code drops the tabs on restart and every form has
     // to be opened by hand again. Each restored panel carries the form it was showing in its own
     // webview state, so several of them come back at once.
@@ -883,6 +980,7 @@ export function registerFormDesigner(
     }),
     vscode.window.onDidChangeActiveTextEditor((editor) => {
       updateContext(editor);
+      void updateModuleContext(editor);
       // The other direction of the same pairing: a yaml tab brought forward brings its form
       // panel forward too (the focus stays in the editor).
       if (!editor || Date.now() < tabSyncUntil) {
@@ -928,6 +1026,7 @@ export function registerFormDesigner(
     })
   );
   updateContext(vscode.window.activeTextEditor);
+  void updateModuleContext(vscode.window.activeTextEditor);
   void vscode.commands.executeCommand("setContext", OPEN_CONTEXT, false);
 
   return {
@@ -1008,6 +1107,19 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .split-v:hover, .split-h:hover, .split-v.act, .split-h.act { background: var(--vscode-focusBorder); }
   .split-v { border-left: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35)); }
   .split-h { border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35)); }
+  /* --- the bottom form/module switch (the platform IDE's bottom tabs) --- */
+  /* "Form" is always the active side here: the module opens as a real editor tab of the same
+     group, so this strip is only visible while the form side is. */
+  #tabbar { display: flex; flex: none; gap: 2px; align-items: center; padding: 2px 8px;
+    border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35));
+    background: var(--vscode-sideBarSectionHeader-background, transparent); }
+  .dtab { background: transparent; border: none; color: var(--vscode-foreground); opacity: .7;
+    cursor: pointer; padding: 2px 10px; border-radius: 3px; font-size: 12px; font-family: inherit; }
+  .dtab:hover { opacity: 1; background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,.2)); }
+  .dtab.act { opacity: 1; background: var(--vscode-tab-activeBackground, rgba(128,128,128,.18));
+    outline: 1px solid var(--vscode-panel-border, rgba(128,128,128,.35)); cursor: default; }
+  .dtab.off { opacity: .35; cursor: default; }
+  .dtab.off:hover { opacity: .35; background: transparent; }
   /* --- tree rows --- */
   /* Tree rows are .trow, not .row: the wireframe below uses .row for a horizontal group
      (formPreviewCore) and both live in this one document. */
@@ -1291,6 +1403,10 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     <div id="canvas" class="theme-${view.theme}"><div id="root"></div></div>
   </div>
 </div>
+<div id="tabbar">
+  <button class="dtab act" id="tab-form" type="button"></button>
+  <button class="dtab" id="tab-module" type="button"></button>
+</div>
 <div class="ctx" id="ctx"></div>
 <script nonce="${nonce}">
 ${panelScript(target)}
@@ -1317,6 +1433,7 @@ function panelScript(target: vscode.Uri): string {
   let structure = { available: false, rows: [], selection: [], namedOnly: false, readonly: false };
   let data = { available: false, rows: [] };
   let menuFor = null;
+  let moduleOk = true;
 
   const el = (id) => document.getElementById(id);
   const structureRows = el("structure-rows");
@@ -1341,6 +1458,16 @@ function panelScript(target: vscode.Uri): string {
     el("zi").title = L.zoomIn;
     el("zo").title = L.zoomOut;
     el("rot").title = L.rotate;
+    el("tab-form").textContent = L.frame;
+    el("tab-module").textContent = L.module;
+    applyModuleTab();
+  }
+
+  // The bottom module tab dims while the form has no module file.
+  function applyModuleTab() {
+    const tab = el("tab-module");
+    tab.classList.toggle("off", !moduleOk);
+    tab.title = moduleOk ? L.moduleOpen : L.moduleMissing;
   }
 
   function applyLayout() {
@@ -1759,6 +1886,9 @@ function panelScript(target: vscode.Uri): string {
   }, { passive: false });
   // className would wipe the device canvas class - the theme swap re-applies the device state.
   el("theme").addEventListener("change", (e) => { canvas.className = "theme-" + e.target.value; applyDevice(false); });
+  // The bottom "Module" tab: the extension opens the module file as a real editor tab of this
+  // very group. The "Form" side is this panel itself, so its tab needs no handler.
+  el("tab-module").addEventListener("click", () => { if (moduleOk) { post({ type: "openModule" }); } });
 
   // Visual selection only: the class, the saved state and (optionally) the scroll. Telling the
   // extension is the caller's business - a highlight pushed FROM the extension must not echo
@@ -1875,6 +2005,9 @@ function panelScript(target: vscode.Uri): string {
       if (node) { node.scrollIntoView({ block: "nearest" }); }
     } else if (m.type === "menu") {
       showMenu(m);
+    } else if (m.type === "module") {
+      moduleOk = !!m.available;
+      applyModuleTab();
     }
   });
 

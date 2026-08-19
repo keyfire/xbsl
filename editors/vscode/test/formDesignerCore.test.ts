@@ -4,6 +4,9 @@
 import * as assert from "assert";
 import {
   componentNameOfPath,
+  formPathOfModule,
+  looksLikeFormText,
+  modulePathOfForm,
   revealStartColumn,
   DataLabels,
   DataModel,
@@ -327,11 +330,6 @@ test("sanitizeLayout clamps the splitters and survives junk", () => {
   assert.deepStrictEqual(sanitizeLayout({ left: 41.6, top: 33.2 }), { left: 42, top: 33 });
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed > 0) {
-  process.exit(1);
-}
-
 // --- горизонтальная прокрутка при переходе к узлу ---------------------------------------
 // Узел формы лежит на восьмом уровне вложенности: если прокрутить ровно к тексту, отступ
 // исчезает и вложенность становится нечитаемой. Оставляем ОДИН уровень перед текстом.
@@ -359,3 +357,72 @@ test("componentNameOfPath: не yaml - ничего", () => {
 test("componentNameOfPath: голое расширение - ничего", () => {
   assert.strictEqual(componentNameOfPath("/d/proj/.yaml"), undefined);
 });
+
+// The designer's bottom tabs pair a form with the module file of the same base name; the
+// mapping is mechanical (swap the extension), existence is the caller's business.
+test("modulePathOfForm: модуль рядом с yaml", () => {
+  assert.strictEqual(
+    modulePathOfForm("/d/proj/e1c/Основное/КарточкаЗадачи.yaml"),
+    "/d/proj/e1c/Основное/КарточкаЗадачи.xbsl"
+  );
+});
+
+test("modulePathOfForm: путь Windows и регистр расширения", () => {
+  assert.strictEqual(modulePathOfForm(String.raw`C:\проект\Сайт\Форма.YAML`), String.raw`C:\проект\Сайт\Форма.xbsl`);
+});
+
+test("modulePathOfForm: не yaml - ничего", () => {
+  assert.strictEqual(modulePathOfForm("/d/proj/Модуль.xbsl"), undefined);
+});
+
+test("modulePathOfForm: голое расширение - ничего", () => {
+  assert.strictEqual(modulePathOfForm("/d/proj/.yaml"), undefined);
+});
+
+// The way back from a module editor to its form.
+test("formPathOfModule: yaml рядом с модулем", () => {
+  assert.strictEqual(formPathOfModule("/d/proj/Дело.xbsl"), "/d/proj/Дело.yaml");
+});
+
+test("formPathOfModule: модуль объекта отображается механически", () => {
+  assert.strictEqual(formPathOfModule("/d/proj/Дело.Объект.xbsl"), "/d/proj/Дело.Объект.yaml");
+});
+
+test("formPathOfModule: не xbsl - ничего", () => {
+  assert.strictEqual(formPathOfModule("/d/proj/Дело.yaml"), undefined);
+});
+
+// Whether a yaml text is a form: the kind marker within the head lines plus inheritance
+// anywhere. Shared by the designer and the module editor's title button.
+test("looksLikeFormText: форма распознаётся", () => {
+  assert.strictEqual(looksLikeFormText("КомпонентИнтерфейса:\n  Наследует: Форма\n  Содержимое:\n"), true);
+});
+
+test("looksLikeFormText: английское написание распознаётся", () => {
+  assert.strictEqual(looksLikeFormText("InterfaceComponent:\n  Inherits: Form\n"), true);
+});
+
+test("looksLikeFormText: не компонент интерфейса - нет", () => {
+  assert.strictEqual(looksLikeFormText("Справочник:\n  Наследует: Ссылочный\n"), false);
+});
+
+test("looksLikeFormText: без наследования - нет", () => {
+  assert.strictEqual(looksLikeFormText("КомпонентИнтерфейса:\n  Имя: Черновик\n"), false);
+});
+
+test("looksLikeFormText: вид глубже шапки - нет", () => {
+  const lines = Array(60).fill("# комментарий");
+  lines.push("КомпонентИнтерфейса:", "  Наследует: Форма");
+  assert.strictEqual(looksLikeFormText(lines.join("\n")), false);
+});
+
+test("looksLikeFormText: наследование может быть глубоко", () => {
+  const lines = ["КомпонентИнтерфейса:"].concat(Array(60).fill("  # комментарий"));
+  lines.push("  Наследует: Форма");
+  assert.strictEqual(looksLikeFormText(lines.join("\n")), true);
+});
+
+console.log(`\n${passed} passed, ${failed} failed`);
+if (failed > 0) {
+  process.exit(1);
+}

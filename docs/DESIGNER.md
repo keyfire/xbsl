@@ -48,8 +48,8 @@ The remaining panels live in side-bar containers and follow the active editor:
 **Every form gets a panel of its own**, living as a normal editor tab: a second form opens next to
 the first, each panel keeps its own tree, selection and expansion memory, and opening the same form
 again brings its panel forward. A panel and its `.yaml` travel as a pair - picking a tab on one
-side brings the other forward, closing the panel closes the form's yaml (unless it has unsaved
-changes), and a new yaml joins the group where the sources already are.
+side brings the other forward, closing the panel closes the form's yaml and its module (unless
+they have unsaved changes), and a new yaml joins the group where the sources already are.
 
 The panel is three areas with draggable splitters (their position is remembered):
 
@@ -60,6 +60,17 @@ The panel is three areas with draggable splitters (their position is remembered)
 
 A form depends on its own properties, so its structure and its data are edited where the form is
 shown; the Properties panel stays separate and follows the selection.
+
+### The module tab
+
+The strip at the bottom of the panel mirrors the platform IDE's bottom tabs. **Form** is the
+panel itself; **Module** opens the form's `.xbsl` (the file next to the yaml) as a regular
+editor tab of the same group - the area switches to the code with the whole editor behind it:
+completion, hovers, diagnostics, go to definition. The tab dims while the form has no module
+file.
+
+The way back lives on the module's side: the **Open the form** button in the editor title (the
+same spot where a form yaml carries its designer button), the panel's tab itself, or `Ctrl+Tab`.
 
 ### Structure
 

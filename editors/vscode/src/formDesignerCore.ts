@@ -71,6 +71,34 @@ export function componentNameOfPath(path: string): string | undefined {
     : undefined;
 }
 
+// The last path segment when it carries the given extension (any case), or nothing.
+function fileWithExtension(path: string, extension: string): string | undefined {
+  const file = path.split(/[\\/]/).pop() ?? "";
+  return file.toLowerCase().endsWith(extension) && file.length > extension.length ? file : undefined;
+}
+
+// The module file of a form: the platform pairs the yaml with a module of the same base name in
+// the same directory, so the mapping swaps the extension and nothing else. Whether the file
+// exists is the caller's business - the designer dims its bottom tab when it does not.
+export function modulePathOfForm(path: string): string | undefined {
+  return fileWithExtension(path, ".yaml") !== undefined ? path.slice(0, -".yaml".length) + ".xbsl" : undefined;
+}
+
+// The way back: the yaml a module file belongs to. As mechanical as modulePathOfForm - whether
+// that yaml is a form is the caller's check (looksLikeFormText).
+export function formPathOfModule(path: string): string | undefined {
+  return fileWithExtension(path, ".xbsl") !== undefined ? path.slice(0, -".xbsl".length) + ".yaml" : undefined;
+}
+
+// Whether a yaml text is a form: an interface component (the kind marker sits in the head
+// lines) that inherits a base. Shared by the designer (which yamls open as a form panel) and
+// by the module editor's title button (whose sibling yaml decides if the button shows).
+export function looksLikeFormText(text: string): boolean {
+  const head = text.split(/\r?\n/, 50).join("\n");
+  const kind = head.includes("КомпонентИнтерфейса") || head.includes("InterfaceComponent");
+  return kind && (text.includes("Наследует") || text.includes("Inherits"));
+}
+
 export function isRowExpanded(node: FormNode, isRoot: boolean, options: FlattenOptions): boolean {
   if (options.collapsed.has(node.id)) {
     return false;

@@ -6,6 +6,7 @@
   "cmd.choosePalette": "Палитра кода",
   "cmd.deploy": "Деплой на стенд (elemctl)",
   "cmd.previewForm": "Конструктор формы",
+  "cmd.openFormForModule": "Открыть форму",
   "cmd.docs.search": "Поиск по документации",
   "cmd.templates.manage": "Шаблоны кода",
   "cmd.templates.import": "Импорт шаблонов кода",

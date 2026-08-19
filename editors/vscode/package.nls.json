@@ -6,6 +6,7 @@
   "cmd.choosePalette": "Code palette",
   "cmd.deploy": "Deploy the project (elemctl)",
   "cmd.previewForm": "Form designer",
+  "cmd.openFormForModule": "Open the form",
   "cmd.docs.search": "Search the documentation",
   "cmd.templates.manage": "Code templates",
   "cmd.templates.import": "Import code templates",

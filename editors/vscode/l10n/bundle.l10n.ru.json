@@ -503,5 +503,8 @@
   "the whole group": "всей группе",
   "The rule catalogue is empty - the engine did not answer `xbsl --list-rules`.": "Каталог правил пуст – движок не ответил на `xbsl --list-rules`.",
   "inherited from": "наследует от",
-  "reference": "справка"
+  "reference": "справка",
+  "Module": "Модуль",
+  "Open the form module": "Открыть модуль формы",
+  "The form has no module file": "У формы нет файла модуля"
 }

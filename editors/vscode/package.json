@@ -558,6 +558,12 @@
         "icon": "$(open-preview)"
       },
       {
+        "command": "xbsl.openFormForModule",
+        "title": "%cmd.openFormForModule%",
+        "category": "XBSL",
+        "icon": "$(open-preview)"
+      },
+      {
         "command": "xbsl.templates.manage",
         "title": "%cmd.templates.manage%",
         "category": "XBSL",
@@ -798,6 +804,10 @@
           "when": "false"
         },
         {
+          "command": "xbsl.openFormForModule",
+          "when": "xbsl.formModule"
+        },
+        {
           "command": "xbsl.formPalette.activate",
           "when": "false"
         },
@@ -817,6 +827,11 @@
         {
           "command": "xbsl.previewForm",
           "when": "xbsl.formYaml && resourceLangId == yaml",
+          "group": "navigation"
+        },
+        {
+          "command": "xbsl.openFormForModule",
+          "when": "xbsl.formModule && resourceLangId == xbsl",
           "group": "navigation"
         }
       ],
