@@ -88,7 +88,7 @@ def test_same_key_same_element_kind_flagged():
 def test_expression_value_silent():
     """Значение с '=' – выражение, а не текст: оно может звать словарь само."""
     d = _lint(_ЛОКАЛИЗОВАННЫЙ,
-              _object("Ф2", "Содержимое:\n    Заголовок: =ЗаголовокКарточки()\n"))
+              _object("Ф2", "Содержимое:\n    Заголовок: =ЗаголовокЗадачи()\n"))
     assert not d
 
 
