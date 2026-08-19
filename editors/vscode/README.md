@@ -695,23 +695,23 @@ Every command of the extension. Generated from `package.json` – do not edit by
 
 | Command | Id | Invoked from |
 | --- | --- | --- |
-| XBSL: check the whole project | `xbsl.lintProject` | Command Palette |
-| XBSL: new 1C:Element project | `xbsl.project.new` | Command Palette |
-| XBSL: search forms by structure | `xbsl.forms.search` | Command Palette |
-| XBSL: restart the linter | `xbsl.restartLinter` | Command Palette |
-| XBSL: code palette | `xbsl.choosePalette` | Command Palette |
-| XBSL: deploy the project (elemctl) | `xbsl.deploy` | Command Palette |
+| Check the whole project | `xbsl.lintProject` | Command Palette |
+| New 1C:Element project | `xbsl.project.new` | Command Palette |
+| Search forms by structure | `xbsl.forms.search` | Command Palette |
+| Restart the linter | `xbsl.restartLinter` | Command Palette |
+| Code palette | `xbsl.choosePalette` | Command Palette |
+| Deploy the project (elemctl) | `xbsl.deploy` | Command Palette |
 | Check for a newer extension | `xbsl.checkForUpdate` | Command Palette |
-| XBSL: form designer | `xbsl.previewForm` | Command Palette |
-| XBSL: go to definition, or to its documentation | `xbsl.goToDefinition` | Command Palette |
+| Form designer | `xbsl.previewForm` | Command Palette |
+| Go to definition, or to its documentation | `xbsl.goToDefinition` | Command Palette |
 
 **Code templates**
 
 | Command | Id | Invoked from |
 | --- | --- | --- |
-| XBSL: code templates | `xbsl.templates.manage` | Command Palette |
-| XBSL: import code templates | `xbsl.templates.import` | Command Palette |
-| XBSL: export code templates | `xbsl.templates.export` | Command Palette |
+| Code templates | `xbsl.templates.manage` | Command Palette |
+| Import code templates | `xbsl.templates.import` | Command Palette |
+| Export code templates | `xbsl.templates.export` | Command Palette |
 
 **Metadata tree: creating objects**
 
@@ -757,7 +757,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Command | Id | Invoked from |
 | --- | --- | --- |
 | Collapse to the metadata kinds | `xbsl.metadata.collapse` | Command Palette |
-| XBSL: refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
+| Refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
 | Open description (yaml) | `xbsl.metadata.openYaml` | Command Palette |
 | Open query (xbql) | `xbsl.metadata.openQuery` | Command Palette |
 | Open module (xbsl) | `xbsl.metadata.openModule` | Command Palette |
@@ -782,7 +782,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Add subsystem | `xbsl.metadata.addSubsystem` | Command Palette |
 | Filter by subsystem | `xbsl.metadata.filterBySubsystem` | Command Palette |
 | Clear subsystem filter | `xbsl.metadata.clearFilter` | Command Palette |
-| XBSL: tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
+| Tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
 | Hide empty categories | `xbsl.metadata.hideEmptyCategories` | Command Palette |
 | Show empty categories | `xbsl.metadata.showEmptyCategories` | Command Palette |
 
@@ -790,7 +790,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 
 | Command | Id | Invoked from |
 | --- | --- | --- |
-| XBSL: refresh the form structure | `xbsl.formStructure.refresh` | Command Palette |
+| Refresh the form structure | `xbsl.formStructure.refresh` | Command Palette |
 | Go to yaml | `xbsl.formStructure.openInEditor` | Command Palette |
 | Move up | `xbsl.formStructure.moveUp` | Command Palette |
 | Move down | `xbsl.formStructure.moveDown` | Command Palette |
@@ -804,7 +804,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Show the whole form | `xbsl.formStructure.resetFocus` | Command Palette |
 | Show only named components | `xbsl.formStructure.filterNamed` | Command Palette |
 | Show all components | `xbsl.formStructure.filterAll` | Command Palette |
-| XBSL: refresh the component palette | `xbsl.formPalette.refresh` | Command Palette |
+| Refresh the component palette | `xbsl.formPalette.refresh` | Command Palette |
 | Activate the palette component | `xbsl.formPalette.activate` | panel / context menu |
 | Insert into the form | `xbsl.formPalette.insert` | Command Palette |
 | Add to favorites | `xbsl.formPalette.addFavorite` | Command Palette |
@@ -815,7 +815,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Insert block preset... | `xbsl.formStructure.insertPreset` | Command Palette |
 | Manage block presets... | `xbsl.formStructure.managePresets` | Command Palette |
 | Edit selected together... | `xbsl.formStructure.editSelected` | Command Palette |
-| XBSL: refresh the data panel | `xbsl.formData.refresh` | Command Palette |
+| Refresh the data panel | `xbsl.formData.refresh` | Command Palette |
 | Insert into the form | `xbsl.formData.insert` | Command Palette |
 | Add property | `xbsl.formData.addProperty` | Command Palette |
 | Rename property | `xbsl.formData.renameProperty` | Command Palette |
@@ -826,10 +826,10 @@ Every command of the extension. Generated from `package.json` – do not edit by
 
 | Command | Id | Invoked from |
 | --- | --- | --- |
-| XBSL: search the documentation | `xbsl.docs.search` | Command Palette |
-| XBSL: documentation for the symbol | `xbsl.docs.showForSymbol` | Command Palette |
-| XBSL: refresh the documentation tree | `xbsl.docs.refresh` | Command Palette |
-| XBSL: open a documentation page | `xbsl.docs.open` | panel / context menu |
+| Search the documentation | `xbsl.docs.search` | Command Palette |
+| Documentation for the symbol | `xbsl.docs.showForSymbol` | Command Palette |
+| Refresh the documentation tree | `xbsl.docs.refresh` | Command Palette |
+| Open a documentation page | `xbsl.docs.open` | panel / context menu |
 
 <!-- commands:end -->
 
