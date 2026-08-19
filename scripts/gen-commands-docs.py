@@ -34,7 +34,7 @@ END = "<!-- commands:end -->"
 GROUPS: list[tuple[str, tuple[str, ...], dict[str, str]]] = [
     ("project", ("xbsl.project.", "xbsl.lintProject", "xbsl.restartLinter", "xbsl.deploy",
                  "xbsl.checkForUpdate", "xbsl.choosePalette", "xbsl.goToDefinition",
-                 "xbsl.forms.search", "xbsl.previewForm"),
+                 "xbsl.forms.search", "xbsl.previewForm", "xbsl.openFormForModule"),
      {"en": "Project-wide", "ru": "По проекту"}),
     ("templates", ("xbsl.templates.",),
      {"en": "Code templates", "ru": "Шаблоны кода"}),

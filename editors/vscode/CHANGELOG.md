@@ -9,6 +9,23 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.62.0
+
+### Added
+- **Form/Module tabs at the bottom of the form designer.** The strip mirrors the platform
+  IDE: "Module" opens the form's `.xbsl` as a regular editor tab of the panel's own group -
+  the area switches to the code with the whole editor behind it (completion, hovers,
+  diagnostics, go to definition) - and dims while the form has no module file. The way back
+  is the "Open the form" button in the module editor's title (shown only for form modules),
+  the panel's tab, or `Ctrl+Tab`. The module joins the panel's working set: closing the
+  panel closes both sources, unsaved ones are left alone.
+
+### Changed
+- **Opening a form no longer opens its sources.** The metadata tree used to put the form's
+  yaml next to the panel, and revealing the panel could open the yaml anew; now the pairing
+  only brings forward tabs that are already open, and the sources open on demand - the
+  module tab, a node click, or the tree's context menu.
+
 ## 0.61.7
 
 ### Fixed

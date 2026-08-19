@@ -703,6 +703,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Deploy the project (elemctl) | `xbsl.deploy` | Command Palette |
 | Check for a newer extension | `xbsl.checkForUpdate` | Command Palette |
 | Form designer | `xbsl.previewForm` | Command Palette |
+| Open the form | `xbsl.openFormForModule` | Command Palette |
 | Go to definition, or to its documentation | `xbsl.goToDefinition` | Command Palette |
 
 **Code templates**
