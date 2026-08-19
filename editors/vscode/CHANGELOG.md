@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **The word XBSL no longer doubles in the command palette.** The prefix stood both in the
+  command category and in the title itself, so the editor printed "XBSL: XBSL: code palette".
+  The titles of twenty-three commands now follow the common shape - no prefix, capitalized.
+
 ## 0.61.6
 
 ### Changed
