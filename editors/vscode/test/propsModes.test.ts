@@ -740,7 +740,7 @@ const MODULE_METHODS = {
   module: "file:///p/ПробныйСервис.xbsl",
   methods: [
     { name: "ОтдатьПоле", params: [{ name: "Запрос", type: "HttpСервисЗапрос" }] },
-    { name: "ОтдатьРесурс", params: [{ name: "Запрос", type: "HttpСервисЗапрос" }] },
+    { name: "ОтдатьСводку", params: [{ name: "Запрос", type: "HttpСервисЗапрос" }] },
     { name: "Абстрактный", abstract: true, params: [] },
   ],
 };
@@ -770,7 +770,7 @@ test("buildMetaPanelModel: the handler dropdown lists the methods of the paired 
   const choices = (row.editor as { choices: { rest: string[]; currentMissing: boolean } }).choices;
   // No event signature to judge compatibility by - every callable method is offered; an
   // abstract one has no body and is not a handler.
-  assert.deepStrictEqual(choices.rest, ["ОтдатьПоле", "ОтдатьРесурс"]);
+  assert.deepStrictEqual(choices.rest, ["ОтдатьПоле", "ОтдатьСводку"]);
   assert.strictEqual(choices.currentMissing, false);
 });
 

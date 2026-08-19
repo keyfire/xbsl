@@ -123,7 +123,7 @@ def test_property_with_a_real_type_member_not_flagged(tmp_path, ui_root):
 def test_binding_not_flagged(tmp_path, ui_root):
     d = _run(
         tmp_path,
-        _form("        Тип: КарточкаАкме\n        ВидОтображения: =ЭтоМобильный()?1:2\n"),
+        _form("        Тип: КарточкаАкме\n        ВидОтображения: =ЭтоУзкийЭкран()?1:2\n"),
     )
     assert not _has(d)
 

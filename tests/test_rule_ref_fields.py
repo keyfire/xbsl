@@ -31,11 +31,11 @@ def _clean(content, name="М.xbsl"):
 # --- Findings --------------------------------------------------------------------------
 
 def test_ref_field_without_req_flagged():
-    d = _lint("структура Шапка\n    пер Ссылка: Программа.Ссылка\n;\n")
+    d = _lint("структура Шапка\n    пер Ссылка: Товары.Ссылка\n;\n")
     assert len(d) == 1
     assert d[0].line == 2 and d[0].col == 9
     assert d[0].severity.value == "error"
-    assert "обз пер Ссылка: Программа.Ссылка" in d[0].message
+    assert "обз пер Ссылка: Товары.Ссылка" in d[0].message
 
 
 def test_val_ref_field_flagged():
@@ -50,7 +50,7 @@ def test_ns_qualified_ref_flagged():
 
 
 def test_two_names_shared_type_flagged_each():
-    d = _lint("структура Шапка\n    пер Первый, Второй: Программа.Ссылка\n;\n")
+    d = _lint("структура Шапка\n    пер Первый, Второй: Товары.Ссылка\n;\n")
     assert [x.message.split("'")[1] for x in d] == ["Первый", "Второй"]
 
 
@@ -72,7 +72,7 @@ def test_second_structure_after_method_with_query_flagged():
         "        возврат 2\n"
         "    ;\n"
         "\n"
-        "    пер Ссылка: Программа.Ссылка\n"
+        "    пер Ссылка: Товары.Ссылка\n"
         ";\n"
     )
     d = _lint(content)
@@ -82,23 +82,23 @@ def test_second_structure_after_method_with_query_flagged():
 # --- Correct forms - silence -----------------------------------------------------------
 
 def test_req_field_ok():
-    assert _clean("структура Шапка\n    обз пер Ссылка: Программа.Ссылка\n;\n")
+    assert _clean("структура Шапка\n    обз пер Ссылка: Товары.Ссылка\n;\n")
 
 
 def test_req_val_field_ok():
-    assert _clean("структура Шапка\n    обз знч Ссылка: Программа.Ссылка\n;\n")
+    assert _clean("структура Шапка\n    обз знч Ссылка: Товары.Ссылка\n;\n")
 
 
 def test_nullable_field_ok():
-    assert _clean("структура Шапка\n    пер Ссылка: Программа.Ссылка? = Неопределено\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылка: Товары.Ссылка? = Неопределено\n;\n")
 
 
 def test_nullable_without_initializer_ok():
-    assert _clean("структура Шапка\n    пер Ссылка: Программа.Ссылка?\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылка: Товары.Ссылка?\n;\n")
 
 
 def test_initializer_ok():
-    assert _clean("структура Шапка\n    пер Ссылка: Программа.Ссылка = НайтиПрограмму()\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылка: Товары.Ссылка = НайтиТовар()\n;\n")
 
 
 def test_non_ref_fields_ok():
@@ -113,15 +113,15 @@ def test_non_ref_fields_ok():
 # --- Narrowings and non-fields - silence -----------------------------------------------
 
 def test_union_type_skipped():
-    assert _clean("структура Шапка\n    пер Ссылка: Программа.Ссылка|Акция.Ссылка\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылка: Товары.Ссылка|Акция.Ссылка\n;\n")
 
 
 def test_union_with_nullable_skipped():
-    assert _clean("структура Шапка\n    пер Ссылка: Программа.Ссылка|?\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылка: Товары.Ссылка|?\n;\n")
 
 
 def test_generic_skipped():
-    assert _clean("структура Шапка\n    пер Ссылки: Массив<Программа.Ссылка>\n;\n")
+    assert _clean("структура Шапка\n    пер Ссылки: Массив<Товары.Ссылка>\n;\n")
 
 
 def test_bare_link_name_skipped():
@@ -133,8 +133,8 @@ def test_local_variable_in_method_ok():
     # a method variable is not a structure field, even with the same type
     assert _clean(
         "метод Ф()\n"
-        "    пер Ссылка: Программа.Ссылка = НайтиПрограмму()\n"
-        "    пер Другая: Программа.Ссылка\n"
+        "    пер Ссылка: Товары.Ссылка = НайтиТовар()\n"
+        "    пер Другая: Товары.Ссылка\n"
         ";\n"
     )
 
@@ -145,7 +145,7 @@ def test_field_in_structure_method_ok():
         "структура Шапка\n"
         "    пер Имя: Строка\n"
         "    метод Ф()\n"
-        "        пер Ссылка: Программа.Ссылка\n"
+        "        пер Ссылка: Товары.Ссылка\n"
         "    ;\n"
         ";\n"
     )

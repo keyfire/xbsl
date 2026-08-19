@@ -41,7 +41,7 @@ _CATALOG_XBSL = "\n".join([
     "",                                              # 7
     "@ВПроекте",                                     # 8
     "@НаСервере @ДоступноСКлиента",                  # 9
-    "метод ДанныеСтраницы(Слаг: Строка): Сводка",    # 10
+    "метод ДанныеКарточки(Слаг: Строка): Сводка",    # 10
     "    возврат новый Сводка()",                    # 11
     ";",                                             # 12
     "",                                              # 13
@@ -86,7 +86,7 @@ _FORM_YAML = "\n".join([
 _USAGE_XBSL = "\n".join([
     "метод Точка()",                              # 1
     "    ПодготовитьДанные()",                    # 2 - a bare call in its own module
-    "    возврат Товары.ДанныеСтраницы(\"x\")",   # 3 - the root object + a call of a method of module Товары
+    "    возврат Товары.ДанныеКарточки(\"x\")",   # 3 - the root object + a call of a method of module `Товары`
     ";",                                          # 4
     "метод ПодготовитьДанные()",                  # 5 - a declaration, not a usage
     ";",                                          # 6
@@ -241,7 +241,7 @@ def test_methods_with_annotations(project):
     idx = build_index(project)
     methods = {m["name"]: m for m in idx["methods"]}
 
-    m = methods["ДанныеСтраницы"]
+    m = methods["ДанныеКарточки"]
     assert m["module"] == "Товары"
     assert m["path"] == "Основное/Товары.xbsl"
     assert m["line"] == 10
@@ -313,7 +313,7 @@ def test_references(project):
         return any(r["name"] == name and r["qualifier"] == qualifier and r["module"] == module for r in refs)
 
     assert has("ПодготовитьДанные", "", "Использование")  # a bare call and/or the yaml handler
-    assert has("ДанныеСтраницы", "Товары", "Использование")  # Товары.ДанныеСтраницы(...)
+    assert has("ДанныеКарточки", "Товары", "Использование")  # a `Товары.ДанныеКарточки` call
     assert has("Товары", "", "Использование")  # the object as a chain root
     # a handler in yaml is a method usage too
     assert any(r["name"] == "ПодготовитьДанные" and r["path"].endswith("Использование.yaml") for r in refs)
@@ -321,8 +321,8 @@ def test_references(project):
     assert not any(
         r["name"] == "ПодготовитьДанные" and r["path"].endswith("Использование.xbsl") and r["line"] == 5 for r in refs
     )
-    # the call site of ДанныеСтраницы: line 3, col 0-based
-    site = next(r for r in refs if r["name"] == "ДанныеСтраницы")
+    # the call site of `ДанныеКарточки`: line 3, col 0-based
+    site = next(r for r in refs if r["name"] == "ДанныеКарточки")
     assert site["line"] == 3 and site["path"] == "Основное/Использование.xbsl"
     assert isinstance(site["col"], int) and site["col"] >= 0
     json.dumps(refs, ensure_ascii=False)

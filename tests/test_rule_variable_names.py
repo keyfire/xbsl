@@ -198,7 +198,7 @@ def test_shadow_project_name_method_flagged():
 
 
 def test_other_names_do_not_shadow():
-    d = _project("метод Ф()\n    знч СписокПрограмм = 1\n;\n")
+    d = _project("метод Ф()\n    знч СписокТоваров = 1\n;\n")
     assert d == []
 
 
@@ -219,7 +219,7 @@ _FORM_YAML = (
     "Имя: Кабинет\n"
     "Свойства:\n"
     "    -\n"
-    "        Имя: СписокПриложений\n"
+    "        Имя: СписокЗаявок\n"
     "        Тип: Строка\n"
 )
 
@@ -233,10 +233,10 @@ def test_variable_shadowing_a_property_is_reported():
     """The live case: a local list named like the form property it hides."""
     d = _lint_own(
         ("Кабинет.yaml", _FORM_YAML),
-        ("Кабинет.xbsl", "метод Ф()\n    пер СписокПриложений = 1\n;\n"),
+        ("Кабинет.xbsl", "метод Ф()\n    пер СписокЗаявок = 1\n;\n"),
     )
     assert [(x.rule_id, x.line) for x in d] == [(OWN, 2)]
-    assert "СписокПриложений" in d[0].message
+    assert "СписокЗаявок" in d[0].message
 
 
 def test_a_parameter_of_that_name_is_left_alone():
@@ -244,7 +244,7 @@ def test_a_parameter_of_that_name_is_left_alone():
     a corpus run found nine such parameters on one project, every one of them deliberate."""
     d = _lint_own(
         ("Кабинет.yaml", _FORM_YAML),
-        ("Кабинет.xbsl", "метод Ф(СписокПриложений: Строка)\n;\n"),
+        ("Кабинет.xbsl", "метод Ф(СписокЗаявок: Строка)\n;\n"),
     )
     assert d == []
 

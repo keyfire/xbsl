@@ -19,6 +19,12 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Changed
+- **The examples in the rule descriptions and the test fixtures now use the demo-project
+  vocabulary.** No effect on the engine.
+
 ## 2026-08-19 – 0.69.1, 0.69.2
 
 ### Changed

@@ -259,9 +259,9 @@ def _lint_sort(form: str):
 
 def test_a_computed_column_is_reported():
     """The live case: a status badge built by a form method never sorts by its header."""
-    d = _lint_sort(_column_form("=ТекстСтатуса(ДанныеСтроки.Данные.Состояние)"))
+    d = _lint_sort(_column_form("=ПодписьСостояния(ДанныеСтроки.Данные.Состояние)"))
     assert [(x.rule_id, x.line) for x in d] == [(SORT_RULE, 10)]
-    assert "ТекстСтатуса" in d[0].message
+    assert "ПодписьСостояния" in d[0].message
 
 
 def test_a_qualified_call_is_reported_too():
@@ -276,7 +276,7 @@ def test_a_bare_field_binding_is_the_sortable_form():
     form += (
         "            -\n"
         "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Заявки>>\n"
-        "                Значение: =ТекстСтатуса(ДанныеСтроки.Данные.Состояние)\n"
+        "                Значение: =ПодписьСостояния(ДанныеСтроки.Данные.Состояние)\n"
     )
     d = _lint_sort(form)
     assert [x.line for x in d] == [13], [x.message for x in d]  # only the computed one
@@ -284,7 +284,7 @@ def test_a_bare_field_binding_is_the_sortable_form():
 
 def test_an_array_backed_list_has_no_header_sorting_to_lose():
     d = _lint_sort(_column_form(
-        "=ТекстСтатуса(ДанныеСтроки.Данные.Состояние)",
+        "=ПодписьСостояния(ДанныеСтроки.Данные.Состояние)",
         table="Таблица<ИсточникДанныхМассив<Строка>>",
     ))
     assert d == []

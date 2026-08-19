@@ -1,7 +1,7 @@
 """A component property COMPUTED by an expression is not assignable from code.
 
 The platform refuses `Component.Property = value` when the yaml computes that property
-(`Height: =Common.IsMobile()?820:528`): it answers "Cannot set the value of property ...
+(`Height: =Common.IsNarrowScreen()?820:528`): it answers "Cannot set the value of property ...
 specified by expression". The refusal is easy to miss because such an assignment usually
 sits inside a `try/catch` cascade - then nothing is raised and nothing happens, and the
 symptom is a layout that quietly ignores the code.

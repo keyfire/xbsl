@@ -1445,7 +1445,7 @@ def _add_loop_var_types(
     """Type the variable of a `для X из <коллекция>` loop by the element type of the collection.
 
     Everyday shape, and until now the variable stayed untyped: the collection is usually a
-    field of a project structure (`для Материал из ДанныеСтраницы.Материалы`), so the chain
+    field of a project structure (`для Шаг из ДанныеЗадачи.Шаги`), so the chain
     has to be resolved to its WRITTEN type and the element taken out of the generic.
     """
     n = len(toks)

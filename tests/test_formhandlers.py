@@ -426,7 +426,7 @@ SERVICE_YAML = """\
         Методы:
             -
                 Метод: GET
-                Обработчик: ОтдатьРесурс
+                Обработчик: ОтдатьСводку
     -
         Имя: Поле
         Шаблон: /pic/{вид}
@@ -437,7 +437,7 @@ SERVICE_YAML = """\
 """
 
 SERVICE_MODULE = """\
-метод ОтдатьРесурс(Запрос: HttpСервисЗапрос)
+метод ОтдатьСводку(Запрос: HttpСервисЗапрос)
     // отдаёт ресурс
 ;
 """
@@ -468,11 +468,11 @@ def test_add_module_method_appends_a_stub_to_an_existing_module():
 @pytest.mark.needs_data
 def test_add_module_method_does_not_write_a_method_the_module_already_has():
     """The jump target of an existing method, and not a second copy of it."""
-    plan = formhandlers.add_module_method(SERVICE_MODULE, "ОтдатьРесурс")
+    plan = formhandlers.add_module_method(SERVICE_MODULE, "ОтдатьСводку")
     assert plan.method_added is False and plan.module_edits == []
     assert plan.new_module_text == SERVICE_MODULE
     at = plan.cursor_offset
-    assert SERVICE_MODULE[at : at + len("ОтдатьРесурс")] == "ОтдатьРесурс"
+    assert SERVICE_MODULE[at : at + len("ОтдатьСводку")] == "ОтдатьСводку"
     assert plan.notes and "уже есть" in plan.notes[0]
 
 
@@ -484,7 +484,7 @@ def test_signature_like_copies_the_neighbour_bound_to_the_same_key():
     params, returns, like = formhandlers.signature_like(
         SERVICE_YAML, "Обработчик", methods, exclude="ОтдатьПоле"
     )
-    assert like == "ОтдатьРесурс"
+    assert like == "ОтдатьСводку"
     assert params == [("Запрос", "HttpСервисЗапрос")]
     assert returns is None
 
@@ -494,7 +494,7 @@ def test_signature_like_skips_the_method_being_created_and_finds_nothing_else():
     """The only neighbour is the handler itself - a parameterless stub is the honest answer."""
     methods, _errors = formhandlers.module_methods(SERVICE_MODULE)
     params, returns, like = formhandlers.signature_like(
-        SERVICE_YAML.replace("ОтдатьРесурс", "ОтдатьПоле"), "Обработчик", methods,
+        SERVICE_YAML.replace("ОтдатьСводку", "ОтдатьПоле"), "Обработчик", methods,
         exclude="ОтдатьПоле",
     )
     assert (params, returns, like) == ([], None, "")
@@ -503,6 +503,6 @@ def test_signature_like_skips_the_method_being_created_and_finds_nothing_else():
 @pytest.mark.needs_data
 def test_signature_like_ignores_expressions_and_names_the_module_does_not_have():
     methods, _errors = formhandlers.module_methods(SERVICE_MODULE)
-    text = SERVICE_YAML.replace("Обработчик: ОтдатьРесурс", "Обработчик: =Что.То()")
+    text = SERVICE_YAML.replace("Обработчик: ОтдатьСводку", "Обработчик: =Что.То()")
     text = text.replace("Обработчик: ОтдатьПоле", "Обработчик: Отсутствует")
     assert formhandlers.signature_like(text, "Обработчик", methods) == ([], None, "")
