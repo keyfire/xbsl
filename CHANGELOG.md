@@ -12,9 +12,40 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-20 – 0.70.0
+## 2026-08-20 – 0.70.0, 0.71.0
 
 ### Added
+- **A third dictionary plane - `literals`.** The translator left string literals alone as data and
+  said nothing about them, so a translated tree kept Cyrillic messages and the names written as
+  strings (a parameter-store key, a contract field name). A team now lists such literals in the
+  `literals` plane - the key and the value are written exactly as the text stands between the
+  quotes in the source - and the engine replaces the literal as a whole. The code inside the
+  value's interpolations is translated as usual, so whoever fills the dictionary needs no English
+  spellings of names. A literal inside `Query{}`, `Pattern{}` and the other resolvable literals is
+  left alone: there it is code. What the plane does not cover is reported honestly - in the run's
+  summary, in `--gaps --kind literal`, in the MCP tools and in a `conventions/missing-translation`
+  finding - and it never spoils the dictionary's coverage: those have a count of their own.
+- **A comment is re-wrapped to the width after translation.** Translation keeps the line breaks one
+  to one, so a comment that grew longer than its original ran past the width limit - on a real
+  project that meant hundreds of `style/line-length` findings where the source tree is clean. A
+  comment block is now re-wrapped to the same width the rule uses. Frames and separators, lists,
+  tables and code samples, and lines that were long in the source already, are left untouched.
+
+### Fixed
+- **The rules judged a translated tree more harshly than its source.** The platform compiler
+  accepted the tree while the linter found errors in it that the source does not have: an object's
+  derived type, an exception name marker, a subsystem usage block, a member's nullability, an
+  enumeration value and a built-in query table were recognized in the Russian spelling alone. Both
+  spellings are now judged the same: on the six rules where the Russian and the translated tree
+  of one project disagreed, the two now give one set of findings.
+- **An enumeration value named `No` disappeared from its declaration.** The yaml reader parses the
+  document as YAML 1.1, where `No` is false, so the item was lost and every use of it came back as
+  a `code/unknown-enum-value` finding - while the platform accepted the very same file.
+- **A dictionary key carrying a quote was read wrong and duplicated on write.** A comment line that
+  cites something is an ordinary key here; the reader cut it at the first inner quote, the writer
+  did not find such an entry and added it a second time, after which the dictionary refused to load
+  over the duplicate.
+
 - **The `xbsl translate` command** - source-to-source translation of a project into English
   spellings. Platform tokens go by the metamodel and the term dictionaries of the dataset
   (keywords by case-matched form, yaml keys by the class of their node, enumeration values

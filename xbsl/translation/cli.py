@@ -49,8 +49,12 @@ MESSAGES = {
         "en": "list the dictionary entries as a table (key, value, file, line)",
     },
     "translate.help.set": {
-        "ru": "применить правки словаря из файла JSON: [{{key, value, kind}}]",
-        "en": "apply dictionary edits from a JSON file: [{{key, value, kind}}]",
+        "ru": "применить правки словаря из файла JSON: [{{key, value, kind}}]; у литерала ключ"
+              " и перевод – текст между кавычками ровно так, как он написан в исходнике"
+              " (кавычка внутри – \\\", обратный слеш – \\\\)",
+        "en": "apply dictionary edits from a JSON file: [{{key, value, kind}}]; for a literal the"
+              " key and the value are the text between the quotes exactly as the source writes"
+              " it (an inner quote is \\\", a backslash is \\\\)",
     },
     "translate.help.target": {
         "ru": "файл словаря для НОВЫХ записей (по умолчанию 090-manual.yaml)",
@@ -61,8 +65,8 @@ MESSAGES = {
         "en": "filter by a substring of the key or the value",
     },
     "translate.help.kind": {
-        "ru": "что показывать: имена, строки комментариев или всё",
-        "en": "what to list: names, comment lines or both",
+        "ru": "что показывать: имена, строки комментариев, строковые литералы или всё",
+        "en": "what to list: names, comment lines, string literals or all of them",
     },
     "translate.help.limit": {
         "ru": "сколько строк отдать (0 – все)",
@@ -75,6 +79,10 @@ MESSAGES = {
     "translate.applied": {
         "ru": "словарь обновлён: изменено {changed}, добавлено {added}, снято {removed}",
         "en": "dictionary updated: {changed} changed, {added} added, {removed} removed",
+    },
+    "translate.refused": {
+        "ru": "не записано записей: {count} – значение не годится телом строкового литерала:",
+        "en": "entries not written: {count} - the value is not a valid string-literal body:",
     },
     "translate.set-unreadable": {
         "ru": "правки не прочитаны: {error}",
@@ -116,6 +124,12 @@ MESSAGES = {
         "ru": "не переведено: токенов {tokens}, фраз {phrases}; пробелов данных платформы: {platform}",
         "en": "untranslated: {tokens} tokens, {phrases} phrases; platform data gaps: {platform}",
     },
+    "translate.summary-literals": {
+        "ru": "различных строковых литералов: переведено {done}, осталось кириллических {missing}"
+              " (вхождений переведено: {occurrences})",
+        "en": "distinct string literals: {done} translated, {missing} left in Cyrillic"
+              " ({occurrences} occurrences rewritten)",
+    },
     "translate.summary-kept": {
         "ru": "оставлено как данные (тексты): {texts}; предупреждений: {warnings}",
         "en": "kept as data (texts): {texts}; warnings: {warnings}",
@@ -133,8 +147,8 @@ MESSAGES = {
         "en": "files written: {count} -> {out}",
     },
     "translate.stub-written": {
-        "ru": "заготовка словаря: {path} (токенов {tokens}, фраз {phrases})",
-        "en": "dictionary stub: {path} ({tokens} tokens, {phrases} phrases)",
+        "ru": "заготовка словаря: {path} (токенов {tokens}, фраз {phrases}, литералов {literals})",
+        "en": "dictionary stub: {path} ({tokens} tokens, {phrases} phrases, {literals} literals)",
     },
     "translate.coverage-header": {
         "ru": "покрытие по объектам (только неполные):",
@@ -171,7 +185,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
     parser.add_argument("--target", default=None, help=i18n.t("translate.help.target"))
     parser.add_argument("--filter", default="", help=i18n.t("translate.help.filter"))
-    parser.add_argument("--kind", choices=("token", "phrase", "any"), default="any",
+    parser.add_argument("--kind", choices=("token", "phrase", "literal", "any"), default="any",
                         help=i18n.t("translate.help.kind"))
     parser.add_argument("--limit", type=int, default=0, help=i18n.t("translate.help.limit"))
     parser.add_argument("--offset", type=int, default=0, help=i18n.t("translate.help.offset"))
@@ -232,15 +246,17 @@ def cli_main(argv: list[str] | None = None) -> int:
 
     missing_tokens = report.merged_missing_tokens()
     missing_phrases = report.merged_missing_phrases()
+    missing_literals = report.merged_missing_literals()
     if args.missing:
         dictionary_module.write_stub(
             Path(args.missing), missing_tokens, missing_phrases, language=loaded.language,
+            missing_literals=missing_literals,
         )
 
     if args.format == "json":
         print(json.dumps(_as_json(report, args), ensure_ascii=False, indent=1))
     else:
-        _print_text(report, args, missing_tokens, missing_phrases)
+        _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
 
     totals = report.totals()
     if args.strict and (totals["missing"] or report.problems):
@@ -274,6 +290,7 @@ def _as_json(report, args) -> dict:
         "problems": report.problems,
         "missing_tokens": report.merged_missing_tokens(),
         "missing_phrases": report.merged_missing_phrases(),
+        "missing_literals": report.merged_missing_literals(),
         "platform_gaps": report.merged_platform_gaps(),
         "renames": report.renames,
         "warnings": {
@@ -292,7 +309,7 @@ def _as_json(report, args) -> dict:
     return out
 
 
-def _print_text(report, args, missing_tokens, missing_phrases) -> None:
+def _print_text(report, args, missing_tokens, missing_phrases, missing_literals) -> None:
     totals = report.totals()
     print(i18n.t("translate.summary", **{k: totals[k] for k in ("files", "surfaces", "translated", "coverage")}))
     print(i18n.t(
@@ -301,6 +318,12 @@ def _print_text(report, args, missing_tokens, missing_phrases) -> None:
         platform=totals["platform_gaps"],
     ))
     print(i18n.t("translate.summary-kept", texts=totals["texts_kept"], warnings=totals["warnings"]))
+    if totals["literals_translated"] or totals["missing_literals"]:
+        print(i18n.t(
+            "translate.summary-literals",
+            done=totals["literals_translated"], missing=totals["missing_literals"],
+            occurrences=totals["literal_occurrences"],
+        ))
     if totals["data_keys"]:
         print(i18n.t("translate.summary-data-keys", keys=totals["data_keys"]))
     if report.problems:
@@ -321,6 +344,7 @@ def _print_text(report, args, missing_tokens, missing_phrases) -> None:
         print(i18n.t(
             "translate.stub-written",
             path=args.missing, tokens=len(missing_tokens), phrases=len(missing_phrases),
+            literals=len(missing_literals),
         ))
     if args.out:
         print(i18n.t("translate.written", count=report.written, out=args.out))
@@ -425,11 +449,16 @@ def _apply_edits(args, root: Path, loaded) -> int:
     result = entries_module.write_entries(
         path, edits, target=args.target or entries_module.DEFAULT_TARGET,
     )
+    refused = result.get("refused") or []
     if args.format == "json":
         print(json.dumps(result, ensure_ascii=False))
     else:
         print(i18n.t("translate.applied", **result))
-    return 0
+        if refused:
+            print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)
+            for item in refused:
+                print(f"  {item['key']}: {item['reason']}", file=sys.stderr)
+    return 1 if refused else 0
 
 
 # --- the shared entry point of the tool surfaces --------------------------------------------

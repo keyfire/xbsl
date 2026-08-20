@@ -31,7 +31,7 @@ stays as written and is reported as a data gap - the translator never guesses.
 
 **The project half comes from the dictionary.** Everything the project itself named - objects,
 methods, attributes, form components, dictionary keys, resource files - and every Cyrillic
-comment line is translated by people. Two planes:
+comment line is translated by people. Three planes:
 
 ```yaml
 version: 1
@@ -51,10 +51,29 @@ The indent is four spaces, the way the tool itself writes. Your own indent survi
 writer copies it from the entries already in the section, so a file started with two spaces stays
 valid after an edit from the panel or from `--set`.
 
+The third plane - `literals` - is about the string literals of the code:
+
+```yaml
+literals:
+    "Файл не загружен": "The file was not uploaded"
+    "Не заполнено поле \"Наименование\"": "The \"Name\" field is empty"
+    "Не разобрано тело: %{Описание}": "Could not parse the body: %{Описание}"
+```
+
+A literal is data, and the translator never guesses data: it replaces exactly what the team listed.
+The key and the value are written the way the text stands BETWEEN THE QUOTES in the source, with
+the same escaping the code uses; a value that is not a valid literal body is refused when the
+dictionary loads. An interpolation inside the value is written as in the source - the engine
+translates the name inside it. A literal inside `Query{}`, `Pattern{}` and the other resolvable
+literals is left alone: there it is code, not data.
+
 Whole names, not words: the word order of an English name is the reverse of the Russian one and
 the parts of a Russian name are declined, so gluing per-word translations produces calques.
 Comments are translated line by line - an edit next to a line does not invalidate it, and one
-entry serves every repetition.
+entry serves every repetition. The finished comment block is re-wrapped to the project's width -
+the same one `style/line-length` uses - because a translation that grew longer than its original
+would otherwise run past the limit. Frames and separators, lists, tables and code samples, and
+lines that were long in the source already, stay as they were.
 
 The dictionary is a directory of yaml files (or one file) named `xbsl-translation`, discovered
 next to the project or above it. Filling it is dropping a completed stub next to the ones

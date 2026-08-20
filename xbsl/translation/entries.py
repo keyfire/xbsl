@@ -9,8 +9,8 @@ them with the gaps the translator reports, and writes new values back into a dic
 without disturbing the rest.
 
 Writing lives here rather than in the editor on purpose: the format (quoting, the
-`tokens`/`phrases` split, the scoped `<Owner>.<Name>` key) is the engine's business, and one
-implementation keeps the panel, the quick fix and any script honest.
+`tokens`/`phrases`/`literals` split, the scoped `<Owner>.<Name>` key) is the engine's
+business, and one implementation keeps the panel, the quick fix and any script honest.
 """
 
 from __future__ import annotations
@@ -40,15 +40,22 @@ i18n.register(MESSAGES)
 DEFAULT_TARGET = "090-manual.yaml"
 
 #: A key line of a dictionary section: the indent, the key (quoted or bare), the value.
+#: A quoted key may carry a quote of its own - a comment line that cites something is an
+#: ordinary key here - so the escape is part of the pattern; stopping at the first inner quote
+#: would drop the whole entry, and the writer would then add the key a second time.
 _ENTRY_RE = re.compile(
     r"^(?P<indent>[ \t]+)"
-    r"(?:(?P<q>['\"])(?P<quoted>.*?)(?P=q)|(?P<plain>[^\s:#][^:]*?))"
+    r"(?:\"(?P<dq>(?:[^\"\\]|\\.)*)\"|'(?P<sq>(?:[^']|'')*)'|(?P<plain>[^\s:#][^:]*?))"
     r":[ \t]*(?P<value>.*?)[ \t]*$"
 )
 #: The head of a section. A comment may sit on that line - yaml allows it, so a dictionary
 #: written that way loads and translates; a reader that refused it would show an empty table
 #: over a full file, and the writer would then add a key that is already there.
-_SECTION_RE = re.compile(r"^(tokens|phrases):[ \t]*(?:#.*)?$")
+_SECTION_RE = re.compile(r"^(tokens|phrases|literals):[ \t]*(?:#.*)?$")
+
+#: The section a row of each kind lives in - the table speaks of kinds, the file of sections.
+SECTION_OF_KIND = {"token": "tokens", "phrase": "phrases", "literal": "literals"}
+KIND_OF_SECTION = {section: kind for kind, section in SECTION_OF_KIND.items()}
 
 #: Suffixes of the platform's INTERNAL names. The compiler dictionary carries a few of them
 #: (the metadata class behind a built-in attribute is `CodeAttrMd`), and offering such a name
@@ -80,7 +87,7 @@ class Entry:
 
     key: str
     value: str
-    kind: str            # 'token' | 'phrase'
+    kind: str            # 'token' | 'phrase' | 'literal'
     file: str            # the dictionary file the entry lives in
     line: int            # 1-based
     scope: str = ""      # the owner of a qualified key (`<Owner>.<Name>`), empty for a plain one
@@ -94,10 +101,10 @@ class Entry:
 
 @dataclass
 class Gap:
-    """A name or a comment line the dictionary does not cover yet."""
+    """A name, a comment line or a string literal the dictionary does not cover yet."""
 
     key: str
-    kind: str                       # 'token' | 'phrase'
+    kind: str                       # 'token' | 'phrase' | 'literal'
     count: int = 0
     places: list[tuple[str, int]] = field(default_factory=list)
     #: What the platform would spell it, when it knows the word - the value to offer first.
@@ -139,16 +146,25 @@ def read_entries(dictionary_path: Path) -> list[Entry]:
             m = _ENTRY_RE.match(raw)
             if m is None:
                 continue
-            key = m.group("quoted") if m.group("quoted") is not None else (m.group("plain") or "")
+            key = _key_of(m)
             if not key:
                 continue
             scope = key.partition(".")[0] if (section == "tokens" and "." in key) else ""
             out.append(Entry(
                 key=key, value=_unquote(m.group("value")),
-                kind="token" if section == "tokens" else "phrase",
+                kind=KIND_OF_SECTION[section],
                 file=str(file), line=number, scope=scope,
             ))
     return out
+
+
+def _key_of(m: re.Match) -> str:
+    """The key of an entry line, decoded - the same string the caller asks the writer about."""
+    if m.group("dq") is not None:
+        return _unquote(f'"{m.group("dq")}"')
+    if m.group("sq") is not None:
+        return m.group("sq").replace("''", "'")
+    return m.group("plain") or ""
 
 
 def _unquote(value: str) -> str:
@@ -187,6 +203,13 @@ def gaps_of_project(root: Path, dictionary) -> list[Gap]:
             key=text, kind="phrase", count=int(info.get("count") or 0),
             places=_places(report, text, "phrase"),
         ))
+    # A literal carries no suggestion: the platform tables spell NAMES, and what stands
+    # between the quotes is as often a sentence, where a table answer would be a guess.
+    for text, info in report.merged_missing_literals().items():
+        out.append(Gap(
+            key=text, kind="literal", count=int(info.get("count") or 0),
+            places=_places(report, text, "literal"),
+        ))
     out.sort(key=lambda gap: (-gap.count, gap.key))
     return out
 
@@ -195,7 +218,11 @@ def _places(report, key: str, kind: str, limit: int = 20) -> list[tuple[str, int
     """Where the gap occurs: (file, line) pairs, capped so one row stays small."""
     places: list[tuple[str, int]] = []
     for rel, file_report in sorted(report.files.items()):
-        table = file_report.missing_tokens if kind == "token" else file_report.missing_phrases
+        table = {
+            "token": file_report.missing_tokens,
+            "phrase": file_report.missing_phrases,
+            "literal": file_report.missing_literals,
+        }[kind]
         for line, _col in table.get(key, ()):
             places.append((rel, line))
             if len(places) >= limit:
@@ -210,7 +237,7 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
         file = Path(path)
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(text, encoding="utf-8", newline="")
-    return {key: plan[key] for key in ("changed", "added", "removed")}
+    return {key: plan[key] for key in ("changed", "added", "removed", "refused")}
 
 
 def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET) -> dict:
@@ -226,10 +253,19 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     known = {(entry.kind, entry.key): entry for entry in read_entries(dictionary_path)}
     by_file: dict[Path, list[tuple[Entry, dict]]] = {}
     fresh: list[dict] = []
+    refused: list[dict] = []
     for edit in edits:
         key = str(edit.get("key") or "")
         kind = str(edit.get("kind") or "token")
         if not key:
+            continue
+        reason = ""
+        if kind == "literal":
+            reason = _literal_edit_refusal(key, str(edit.get("value") or ""))
+        if reason:
+            # Written now, refused at the next load - and the author would be a day away from
+            # the entry by then. The same check answers here, while the value is still in hand.
+            refused.append({"key": key, "kind": kind, "reason": reason})
             continue
         entry = known.get((kind, key))
         if entry is None:
@@ -262,7 +298,20 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
         target_file, new_text, added = _plan_new(dictionary_path, fresh, target)
         if added:
             files[str(target_file)] = new_text
-    return {"files": files, "changed": changed, "added": added, "removed": removed}
+    return {"files": files, "changed": changed, "added": added, "removed": removed,
+            "refused": refused}
+
+
+def _literal_edit_refusal(key: str, value: str) -> str:
+    """Why this literal edit cannot be written; "" when it can.
+
+    Both sides obey one convention - the text between the quotes as the source writes it - so
+    both are checked against it. An emptied value REMOVES the entry and is not a body at all.
+    """
+    reason = dictionary_module.literal_body_error(key)
+    if reason:
+        return reason
+    return dictionary_module.literal_body_error(value) if value else ""
 
 
 def scalar(text: str) -> str:
@@ -275,9 +324,11 @@ def scalar(text: str) -> str:
 def _plan_new(dictionary_path: Path, edits: list[dict], target: str) -> tuple[Path, str, int]:
     """(the target file, its full text with the new entries, how many were added)."""
     file = dictionary_path / target if dictionary_path.is_dir() else dictionary_path
-    tokens = {e["key"]: e["value"] for e in edits if e["kind"] == "token" and e["value"]}
-    phrases = {e["key"]: e["value"] for e in edits if e["kind"] == "phrase" and e["value"]}
-    if not tokens and not phrases:
+    sections = {
+        section: {e["key"]: e["value"] for e in edits if e["kind"] == kind and e["value"]}
+        for kind, section in SECTION_OF_KIND.items()
+    }
+    if not any(sections.values()):
         return file, "", 0
     if file.exists():
         text = file.read_text(encoding="utf-8-sig")
@@ -288,9 +339,9 @@ def _plan_new(dictionary_path: Path, edits: list[dict], target: str) -> tuple[Pa
             "\n"
             "# Записи, добавленные из редактора: панель словаря перевода и быстрые исправления.\n"
         )
-    text = _merge_section(text, "tokens", tokens)
-    text = _merge_section(text, "phrases", phrases)
-    return file, text, len(tokens) + len(phrases)
+    for section, pairs in sections.items():
+        text = _merge_section(text, section, pairs)
+    return file, text, sum(len(pairs) for pairs in sections.values())
 
 
 #: The indent new entries get when the section has none to copy.

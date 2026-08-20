@@ -25,12 +25,20 @@ class FileReport:
     phrases_missing: int = 0
     #: Platform tokens the dataset knows no English spelling for (a data gap, not the dictionary's).
     platform_missing: int = 0
+    #: OCCURRENCES of string literals the literals plane named: replaced whole / left as written.
+    literals_done: int = 0
+    literals_missing: int = 0
+    #: {literal text: how many times it was replaced}. The summary counts distinct TEXTS, the
+    #: same unit as the gaps, so both halves of one sentence measure one thing.
+    named_literals: dict[str, int] = field(default_factory=dict)
     #: {token: [(line, col), ...]} of the dictionary gaps.
     missing_tokens: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: {trimmed comment text: [(line, col), ...]} of the phrase gaps.
     missing_phrases: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: {token: [(line, col), ...]} of the dataset gaps.
     missing_platform: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    #: {literal text without the quotes: [(line, col), ...]} the literals plane does not name.
+    missing_literals: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: Cyrillic scalars left untouched as data - for a reviewer's eye, not for the coverage.
     texts_kept: list[tuple[str, int, int]] = field(default_factory=list)
     #: Suspicions worth a human look: (kind, line, col, what) - e.g. a string literal that
@@ -82,6 +90,24 @@ class FileReport:
     def note_phrase(self, text: str, line: int, col: int) -> None:
         self.phrases_missing += 1
         self.missing_phrases.setdefault(text, []).append((line, col))
+
+    def note_literal_named(self, text: str) -> None:
+        """A string literal the literals plane named and the pass replaced whole."""
+        self.literals_done += 1
+        self.named_literals[text] = self.named_literals.get(text, 0) + 1
+
+    def note_literal(self, text: str, line: int, col: int) -> None:
+        """A Cyrillic string literal the literals plane leaves as written."""
+        self.literals_missing += 1
+        self.missing_literals.setdefault(text, []).append((line, col))
+
+    def note_text_kept(self, text: str, line: int, col: int) -> None:
+        """A Cyrillic scalar left untouched as data - listed for a reviewer, counted nowhere.
+
+        The preview is capped: a report is read by a person, and a paragraph pasted into one
+        row hides the rows around it.
+        """
+        self.texts_kept.append((text if len(text) <= 60 else text[:57] + "...", line, col))
 
     def note_platform(self, name: str, line: int, col: int) -> None:
         self.platform_missing += 1

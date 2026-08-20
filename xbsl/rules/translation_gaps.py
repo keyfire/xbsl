@@ -1,9 +1,10 @@
 """Tier D: conventions/missing-translation - the translation gaps, shown in the editor.
 
 A project that translates its sources (see xbsl/translation/) keeps a dictionary of its own
-names and comment lines. This rule shows what that dictionary does not cover yet, right where
-the untranslated word stands: every project name and every Cyrillic comment line the
-translator would leave behind becomes one finding at its first occurrence in the file.
+names, comment lines and string literals. This rule shows what that dictionary does not cover
+yet, right where the untranslated word stands: every project name, every Cyrillic comment line
+and every Cyrillic string literal the translator would leave behind becomes one finding at its
+first occurrence in the file.
 
 Project-scoped on purpose. Whether a word is the PROJECT's own is a project-wide fact - the
 declaration may sit in a yaml the module never mentions - and the translator gates such words
@@ -47,6 +48,14 @@ MESSAGES = {
     "conventions/missing-translation.phrase": {
         "ru": "Комментарий не переведён в словаре проекта: '{text}'.",
         "en": "The comment line has no project-dictionary translation: '{text}'.",
+    },
+    "conventions/missing-translation.literal": {
+        "ru": "Строковый литерал не назван в плане literals словаря проекта: '{text}'. "
+              "Он остаётся кириллицей: планом называют те литералы, которые на деле имена "
+              "или сообщения.",
+        "en": "The string literal is not named in the project dictionary's literals plane: "
+              "'{text}'. It stays Cyrillic: the plane names the literals that are really "
+              "names or messages.",
     },
     "conventions/missing-translation.broken": {
         "ru": "Словарь перевода не загрузился: {error}",
@@ -125,6 +134,7 @@ def _gaps_mapper(source: SourceFile) -> dict | None:
             if not loaded.token(name)
         },
         "phrases": {text: places[:1] + [len(places)] for text, places in report.missing_phrases.items()},
+        "literals": {text: places[:1] + [len(places)] for text, places in report.missing_literals.items()},
     }
 
 
@@ -171,4 +181,15 @@ def missing_translation(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, max(line, 1), max(col, 1), "conventions/missing-translation", Severity.INFO,
                 i18n.t("conventions/missing-translation.phrase", text=preview),
                 data=_entry_data("phrase", text, ""),
+            )
+        # A literal carries no suggestion: the platform tables spell NAMES, and between the
+        # quotes stands as often a sentence, where a table answer would be a guess.
+        for text, entry in sorted((fact.get("literals") or {}).items()):
+            (line, col), count = entry[0], entry[1]
+            del count
+            preview = text if len(text) <= 60 else text[:57] + "..."
+            yield Diagnostic(
+                rel, max(line, 1), max(col, 1), "conventions/missing-translation", Severity.INFO,
+                i18n.t("conventions/missing-translation.literal", text=preview),
+                data=_entry_data("literal", text, ""),
             )

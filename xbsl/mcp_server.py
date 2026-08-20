@@ -1057,6 +1057,13 @@ def translate_status(root: str) -> dict:
 
     root – the project directory (the one with the project descriptor).
     Returns the totals only - a cheap health check before deciding what to fill.
+    Two units live here, so read the names: `missing_tokens`, `missing_phrases`,
+    `literals_translated` and `missing_literals` count DISTINCT entries - what a dictionary line
+    would cover - while `translated`, `missing` and `surfaces` count OCCURRENCES, the places the
+    pass touched. `literals_translated` and `missing_literals` are the two halves of one number:
+    how many different literal texts the plane names and how many it does not.
+    `literal_occurrences` is the odd one out and says so: it counts rewritten SPANS, the size
+    of the change rather than the size of the dictionary.
     """
     from xbsl.translation import cli as translate_cli
 
@@ -1073,6 +1080,9 @@ def translate_status(root: str) -> dict:
         "missing": totals["missing"],
         "missing_tokens": totals["missing_tokens"],
         "missing_phrases": totals["missing_phrases"],
+        "literals_translated": totals["literals_translated"],
+        "missing_literals": totals["missing_literals"],
+        "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
         "problems": report_obj.problems[:20],
         "dictionary": str(translate_cli.dictionary_path_for(project)),
@@ -1090,12 +1100,16 @@ def translate_gaps(
     """What the dictionary does not cover yet, most frequent first.
 
     root   – the project directory;
-    kind   – 'token' (names), 'phrase' (comment lines) or 'any';
+    kind   – 'token' (names), 'phrase' (comment lines), 'literal' (string literals) or 'any';
     filter – a substring of the key;
     limit/offset – the page (limit 0 means all, which can be thousands of rows).
     Every row carries the count, up to a few places to look at, and `suggestion` - the
     platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
-    the project declared may need a different word.
+    the project declared may need a different word; a literal never carries one, because
+    between the quotes stands as often a sentence as a name.
+    The key of a literal row is the text between the quotes exactly as the source writes it,
+    escaping included (an inner quote reads \\"), and that is the spelling to send back to
+    translate_set - on both sides of the entry.
     """
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
@@ -1130,7 +1144,7 @@ def translate_entries(
 
     root   – the project directory;
     filter – a substring of the key OR of the value (look up a root before inventing a word);
-    kind   – 'token', 'phrase' or 'any'.
+    kind   – 'token', 'phrase', 'literal' or 'any'.
     Every row names the file and line it lives on, so an entry can be corrected in place.
     """
     from xbsl.translation import cli as translate_cli
@@ -1158,8 +1172,14 @@ def translate_set(root: str, edits: list[dict], target: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
 
     root   – the project directory;
-    edits  – [{key, value, kind}]; `kind` is 'token' (default) or 'phrase'. An empty value
-             REMOVES the entry - a half-filled stub is not a translation.
+    edits  – [{key, value, kind}]; `kind` is 'token' (default), 'phrase' or 'literal'. The key
+             AND the value of a literal are the text between the quotes exactly as the source
+             writes it - interpolations and escaping alike: an inner quote is \\", a backslash
+             is \\\\, a line break is \\n. Escape once, the way the code already does, never
+             twice; the code inside an interpolation is translated by the ordinary pass, and a
+             value that is not a literal body comes back in `refused` instead of being
+             written. An empty value REMOVES the entry - a half-filled stub is not a
+             translation.
     target – the file NEW entries go to (default 090-manual.yaml). An entry that already
              exists is corrected where it lives, whatever the target says.
     A key may be qualified (`<Owner>.<Name>`) to hold inside one namespace only - that is how

@@ -28,7 +28,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Iterable, Iterator, Optional
 
-from xbsl import dataset, i18n, libs
+from xbsl import dataset, i18n, libs, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token, tokens
@@ -318,14 +318,24 @@ def _entity_tables() -> frozenset[str]:
     They are recognized by their facets in the catalog (`Пользователи.Объект`,
     `ДвоичныйОбъект.Ссылка`): an entity is exactly the type that generates them. Their
     structure is the platform's, so only the name is checked here, not the sections.
+
+    Both spellings: the catalog is extracted from the Russian documentation, while a query of an
+    English-spelled project reads `SELECT Reference FROM Users` - and a set that knows the
+    Russian spelling alone declares the platform's own table an object the project does not have.
     """
     try:
         catalog = dataset.load_json("stdlib.json")
     except dataset.DatasetError:
         return frozenset()
-    return frozenset(
-        key.split(".", 1)[0] for key in (catalog.get("facet_members") or {})
-    )
+    russian = {key.split(".", 1)[0] for key in (catalog.get("facet_members") or {})}
+    english = {
+        name for russian_name in russian
+        if (name := terms.english(russian_name, "types") or terms.common_english(russian_name))
+    }
+    return frozenset(russian | english)
+
+
+dataset.register_reset(_entity_tables.cache_clear)
 
 
 def _query_table_mapper(source: SourceFile) -> dict | None:

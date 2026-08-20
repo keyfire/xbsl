@@ -84,6 +84,29 @@ class ProjectReport:
                     entry["sample"] = f"{rel}:{places[0][0]}"
         return out
 
+    def merged_named_literals(self) -> dict[str, int]:
+        """{literal text: occurrences} the literals plane named across the project.
+
+        Counted by TEXT so that the summary compares like with like: what the plane covers and
+        what it does not are both entries of one dictionary, not appearances in one tree.
+        """
+        out: dict[str, int] = {}
+        for report in self.files.values():
+            for text, count in report.named_literals.items():
+                out[text] = out.get(text, 0) + count
+        return out
+
+    def merged_missing_literals(self) -> dict[str, dict]:
+        """Cyrillic string literals the literals plane does not name yet, with their places."""
+        out: dict[str, dict] = {}
+        for rel, report in sorted(self.files.items()):
+            for text, places in report.missing_literals.items():
+                entry = out.setdefault(text, {"count": 0, "sample": ""})
+                entry["count"] += len(places)
+                if not entry["sample"] and places:
+                    entry["sample"] = f"{rel}:{places[0][0]}"
+        return out
+
     def merged_platform_gaps(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for rel, report in sorted(self.files.items()):
@@ -123,6 +146,16 @@ class ProjectReport:
             "missing_tokens": len(self.merged_missing_tokens()),
             "missing_phrases": len(self.merged_missing_phrases()),
             "platform_gaps": len(self.merged_platform_gaps()),
+            # Literals are counted APART from the coverage: naming a literal is a decision
+            # about data, and a project that leaves a message in the source language is not a
+            # project with an unfinished dictionary. Both halves count distinct TEXTS - the
+            # unit of the tokens and the phrases above - so that the two numbers of one
+            # sentence can be added, compared and turned into a percentage.
+            "literals_translated": len(self.merged_named_literals()),
+            "missing_literals": len(self.merged_missing_literals()),
+            #: How many literal SPANS the pass rewrote - the size of the change, not of the
+            #: dictionary; kept apart so no summary line mixes it with the counts above.
+            "literal_occurrences": sum(r.literals_done for r in self.files.values()),
             "texts_kept": sum(len(r.texts_kept) for r in self.files.values()),
             "warnings": sum(len(r.warnings) for r in self.files.values()),
             "collisions": sum(len(r.collided()) for r in self.files.values()),

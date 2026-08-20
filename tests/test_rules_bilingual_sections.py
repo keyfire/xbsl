@@ -31,7 +31,9 @@ def _lint(files: dict[str, str], rule: str) -> list:
 _SUB_KEEPS_TO_ITSELF_RU = "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n"
 _SUB_KEEPS_TO_ITSELF_EN = "Interface:\n    IncludeInAutoInterface: False\n"
 _SUB_USES_RU = "Использование:\n    - Прочее\n"
-_SUB_USES_EN = "Usage:\n    - Other\n"
+# The platform's own word for the section is `Using` (the metamodel pairs it with
+# `Использование`); `Usage` reads like a translation but no serializer writes it.
+_SUB_USES_EN = "Using:\n    - Other\n"
 
 _GOODS_RU = "ВидЭлемента: Справочник\nИмя: Товары\nОбластьВидимости: ВПроекте\n"
 _GOODS_EN = "ElementKind: Catalog\nName: Goods\nVisibilityScope: InProject\n"

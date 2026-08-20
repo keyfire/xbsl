@@ -708,9 +708,37 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
 # --- yaml/missing-subsystem-usage -----------------------------------------------------------
 
-#: The key of the subsystem descriptor that permits another subsystem, both spellings.
-_USAGE_KEYS = ("Использование", "Usage")
-_USAGE_LINE_RE = re.compile(r"(?m)^[ \t]*(?:Использование|Usage):")
+#: The key of the subsystem descriptor that permits another subsystem, in the RUSSIAN spelling.
+#: The English one is not guessed: the metamodel of the distribution pairs this key with `Using`
+#: (class SubsystemDescriptor, annotation en=Using - the serializer's own word, the same in every
+#: shipped dataset), and `Using` is the only standalone spelling the data holds at all.
+_USAGE_KEY = "Использование"
+#: Spellings added to whatever the data pairs, the way the library manifest adds `Vendor`
+#: (libs._VENDOR_KEYS) - `extra` is what stands WITHOUT the distribution: key_forms degrades to
+#: the Russian key alone on a clean public clone, and an English project would then have its
+#: permission unread and every import through it reported.
+#:
+#: Only what the PLATFORM reads. `Usage` was named by this linter and its documentation up to
+#: 0.70, but no serializer writes it and the platform does not know it: a descriptor spelled that
+#: way permits nothing, so reporting it is the service - accepting it would hide a section that
+#: does not work.
+_USAGE_KEYS_EXTRA = ("Using",)
+
+
+@lru_cache(maxsize=1)
+def _usage_keys() -> tuple[str, ...]:
+    """Every spelling of the permission section of a subsystem descriptor, Russian first."""
+    return terms.key_forms(_USAGE_KEY, extra=_USAGE_KEYS_EXTRA)
+
+
+@lru_cache(maxsize=1)
+def _usage_line_re() -> re.Pattern[str]:
+    """The line the diagnostic points at - the section itself, in whichever spelling."""
+    return re.compile(r"(?m)^[ \t]*(?:" + "|".join(re.escape(k) for k in _usage_keys()) + r"):")
+
+
+dataset.register_reset(_usage_keys.cache_clear)
+dataset.register_reset(_usage_line_re.cache_clear)
 
 
 def _usage_mapper(source: SourceFile) -> dict | None:
@@ -735,11 +763,11 @@ def _usage_mapper(source: SourceFile) -> dict | None:
     if source.path.name in _SUBSYSTEM_FILES:
         name = value_of(data, "Имя")
         used: list[str] = []
-        for key in _USAGE_KEYS:
+        for key in _usage_keys():
             raw = data.get(key)
             if isinstance(raw, list):
                 used.extend(e for e in raw if isinstance(e, str))
-        match = _USAGE_LINE_RE.search(source.text)
+        match = _usage_line_re().search(source.text)
         line = linemap(source).linecol(match.start())[0] if match else 1
         return {
             "k": "sub",

@@ -41,7 +41,7 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, libs
+from xbsl import dataset, i18n, libs, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
@@ -191,6 +191,41 @@ _MEMBER_TYPE_TAILS_EN = frozenset({
     "WriteParameters", "DeleteParameters", "FillParameters", "Parameters",
 })
 
+
+def _english_tail(name: str) -> str | None:
+    """The English spelling of one derived-type name, or None when the platform declares none.
+
+    The facet vocabulary answers first: a member tail IS the part after the dot of a type name,
+    the role facets are named in, and it is the one role where the general dictionaries disagree
+    - the same Russian word is `Reference` as a facet and `Link` as a property.
+    """
+    return (
+        terms.facet_suffix_english(name)
+        or terms.common_english(name)
+        or terms.english(name, "types")
+    )
+
+
+@lru_cache(maxsize=None)
+def _english_tails(names: frozenset[str]) -> frozenset[str]:
+    """The English spellings of a SET of derived-type names - derived, not listed.
+
+    The hand-kept sets above cover the tails a developer meets daily; the catalog carries the
+    rest, and those are exactly the ones a hand-kept list forgets - `PermissionsComputeData`,
+    `DimensionsPermissionsKey`. Derived here instead of listed, so a catalog of any vintage is
+    covered in both spellings.
+
+    Over a SET rather than over the whole catalog, and that is the point: the two spellings have
+    to be twins. Translating the union across ALL kinds once let an English name pass on an
+    object whose Russian name the same rule reported - the English tree forgave what the Russian
+    one forbade. Each caller translates exactly the set it judges by.
+    """
+    return frozenset(english for name in names if (english := _english_tail(name)))
+
+
+dataset.register_reset(_english_tails.cache_clear)
+
+
 # Object kinds whose generated type family is known. The catalog's object_members adds
 # kinds on top; kinds outside the resulting set are skipped. Structure-only kinds
 # (ОбщийМодуль, HttpСервис) generate no member types but carry module-declared ones.
@@ -272,14 +307,21 @@ def _checked_kinds() -> frozenset[str]:
 def _member_family(kind: str) -> frozenset[str]:
     """Built-in members generated for objects of the kind: catalog data + the safety net.
 
-    Both the Russian names (catalog + _MEMBER_TYPE_TAILS) and their English aliases
-    (_MEMBER_TYPE_TAILS_EN) count as known - platform identifiers are bilingual.
+    Both spellings count as known - platform identifiers are bilingual - and the two halves are
+    built the SAME way, so that neither tree is wider than the other: the catalog entry of THIS
+    kind and its translation, then the kind-agnostic safety net and its translation next to the
+    hand-kept _MEMBER_TYPE_TAILS_EN. A translation taken across all kinds at once would forgive
+    on one spelling exactly what the rule reports on the other.
 
     This is what the rules JUDGE by, where a name too many is a tolerated false negative and a
     name too few is a false positive. What an editor OFFERS is a different question - see
     _offered_member_family.
     """
-    return _object_members().get(kind, frozenset()) | _MEMBER_TYPE_TAILS | _MEMBER_TYPE_TAILS_EN
+    generated = _object_members().get(kind, frozenset())
+    return (
+        generated | _english_tails(generated)
+        | _MEMBER_TYPE_TAILS | _MEMBER_TYPE_TAILS_EN | _english_tails(_MEMBER_TYPE_TAILS)
+    )
 
 
 def _offered_member_family(kind: str) -> frozenset[str]:

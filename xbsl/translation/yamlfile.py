@@ -170,7 +170,7 @@ def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
     if not _IDENT_CHAIN_RE.match(value):
         # Not a name after all (a label pasted into a name-typed slot): data, left alone.
         line, col = _at(node)
-        report.texts_kept.append((value if len(value) <= 60 else value[:57] + "...", line, col))
+        report.note_text_kept(value, line, col)
         return
     _set_scalar(node, translate_expression(value, resolver, report, at=_at(node), scope=scope), edits)
 
@@ -227,7 +227,7 @@ def _generic_scalar(node, resolver, report, edits) -> None:
         return
     if has_cyrillic(value):
         line, col = _at(node)
-        report.texts_kept.append((value if len(value) <= 60 else value[:57] + "...", line, col))
+        report.note_text_kept(value, line, col)
 
 
 def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:

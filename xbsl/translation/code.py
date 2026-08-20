@@ -12,13 +12,27 @@ byte-identical. What changes:
 - inside `Запрос{...}` blocks the query-language keywords use the query vocabulary (the
   flat dictionaries must not answer there: a reverse lookup over the general terms would
   pull in words that are not query keywords at all);
-- a COMMENT is translated line by line through the phrase plane of the dictionary;
-- a STRING is data and stays, except the CODE inside its `%{...}`/`${...}` interpolations,
-  which is re-tokenized and translated like any other code, and except a literal that spells a
-  RESOURCE PATH: the tree renames resource files and directories, so a path written as data
-  has to follow them (`"Языки/%Код.svg"` addresses the directory the pass just renamed). A
-  string literal that equals a renamed token is reported as a warning: a method called by its
-  name in a string breaks silently when only the declaration is renamed.
+- a COMMENT is translated line by line through the phrase plane of the dictionary, and the
+  block it belongs to is then re-split by width (rewrap.py): the English text is longer, and
+  the line breaks it inherited from the Russian one no longer hold the width limit;
+- a STRING is data and stays, except a literal the dictionary's LITERALS plane names by its
+  exact text - part of the data is names written as strings and messages meant for a person,
+  and only the project can say which literal is which - except the CODE inside its
+  `%{...}`/`${...}` interpolations, which is re-tokenized and translated like any other code,
+  and except a literal that spells a RESOURCE PATH: the tree renames resource files and
+  directories, so a path written as data has to follow them (`"Языки/%Код.svg"` addresses the
+  directory the pass just renamed). A string literal that equals a renamed token is reported
+  as a warning: a method called by its name in a string breaks silently when only the
+  declaration is renamed. A literal standing inside a QUERY block or a resolvable literal
+  (`Ресурс{...}`, `Образец{...}`) is out of the literals plane's reach: there the text between
+  the quotes is a program of another language - a path, a regular expression, a query - and
+  replacing it would rewrite code, not a message. Out of reach is not out of sight: such a
+  literal is listed as data KEPT, with its place, so the translator sees it and knows why no
+  entry moves it.
+
+An entry of the literals plane spells its key and its value the way the source spells the
+text between the quotes, escaping and all (`\\"` for an inner quote): one escaping, and the
+dictionary refuses a value that would not survive being pasted back between two quotes.
 """
 
 from __future__ import annotations
@@ -31,6 +45,7 @@ from xbsl.rules import _syntax
 from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
 from xbsl.translation.reporting import FileReport
+from xbsl.translation.rewrap import rewrap_comments
 
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
@@ -153,7 +168,11 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport) -
     toks = lexer.tokens(source)
     ranges = _syntax.query_ranges(source)
     collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits)
-    return apply_edits(source.text, edits)
+    text = apply_edits(source.text, edits)
+    # Span edits keep the author's line breaks, and an English sentence is the longer one:
+    # a comment that fitted the width limit in Russian stops fitting it here. The blocks
+    # that the translation pushed over are split again - see rewrap.py for what it spares.
+    return rewrap_comments(text, source.text)
 
 
 def collect_token_edits(
@@ -194,6 +213,8 @@ def collect_token_edits(
     #: a static call on the type - taking the type spelling there turns it into an undefined
     #: variable. The set is cleared at every method boundary.
     local_names: set[str] = set()
+    #: Bodies of the resolvable literals - a string inside one is code of another language.
+    resolvable = _resolvable_ranges(toks)
     for index, tok in enumerate(toks):
         kind = tok.kind
         if kind == "EOF":
@@ -267,7 +288,8 @@ def collect_token_edits(
         elif kind == "COMMENT":
             _comment_edits(tok, base, resolver, report, edits)
         elif kind == "STRING":
-            _string_edits(tok, base, resolver, report, edits, at)
+            _string_edits(tok, base, resolver, report, edits, at,
+                          data=not in_query and not _inside(resolvable, tok.start))
         if kind in ("IDENT", "KEYWORD"):
             if not prev_dot:
                 chain_root = tok.value
@@ -428,6 +450,35 @@ def _inside(ranges: list[tuple[int, int]], offset: int) -> bool:
     return any(start <= offset < end for start, end in ranges)
 
 
+def _resolvable_ranges(toks: list) -> list[tuple[int, int]]:
+    """[start, end) of every resolvable literal body: `Ресурс{...}`, `Образец{...}` and kin.
+
+    The body of such a literal is opaque to the language around it - the platform reads it as a
+    resource path, a regular expression, a query - so a string standing there is not the data
+    the literals plane speaks about. The brace has to TOUCH the name, which is exactly what
+    tells a resolvable literal from a block that happens to follow a word.
+    """
+    out: list[tuple[int, int]] = []
+    for index, tok in enumerate(toks):
+        if tok.kind not in ("IDENT", "KEYWORD"):
+            continue
+        nxt = toks[index + 1] if index + 1 < len(toks) else None
+        if nxt is None or nxt.kind != "OP" or nxt.value != "{" or nxt.start != tok.end:
+            continue
+        depth = 0
+        for close in toks[index + 1:]:
+            if close.kind != "OP":
+                continue
+            if close.value == "{":
+                depth += 1
+            elif close.value == "}":
+                depth -= 1
+                if depth == 0:
+                    out.append((nxt.start, close.end))
+                    break
+    return out
+
+
 # --- comments ---------------------------------------------------------------------------
 
 #: The text of one physical comment line: the marker, the payload, the trailing decoration.
@@ -465,8 +516,10 @@ def _comment_edits(tok, base, resolver, report, edits) -> None:
 # --- strings ----------------------------------------------------------------------------
 
 
-def _string_edits(tok, base, resolver, report, edits, at=None) -> None:
+def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = True) -> None:
     value = tok.value
+    if data and _literal_edit(tok, base, resolver, report, edits, at):
+        return  # the whole literal is gone, and with it every span inside it
     spans, shorts = _interpolations(value)
     for start, end in spans:
         inner = value[start:end]
@@ -489,6 +542,85 @@ def _string_edits(tok, base, resolver, report, edits, at=None) -> None:
         bare = value.strip('"')
         if "{" not in bare and resolver.dictionary.token(bare) is not None:
             report.warnings.append(("string-equals-token", tok.line, tok.col, bare))
+    _literal_left(tok, report, at, data=data)
+
+
+def _body_of(tok) -> str | None:
+    """The text between the quotes, or None when the token is not a closed string.
+
+    An unterminated literal has no known end, and a replacement spanning it would eat the
+    code that follows.
+    """
+    value = tok.value
+    if len(value) < 2 or not value.startswith('"') or not value.endswith('"'):
+        return None
+    return value[1:-1]
+
+
+def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
+    """Replace the WHOLE literal when the literals plane names it; True when it did.
+
+    The key is the text between the quotes exactly as the source writes it - interpolations
+    and escaping included - and so is the value: the person filling the dictionary writes the
+    sentence they see, leaves the `%{...}` where it belongs and spells an inner quote `\\"`
+    the one way the code already spells it. Nothing is escaped a second time here, and nothing
+    needs to be: the dictionary refused on load any value that is not a literal body
+    (`dictionary.literal_body_error`), so what arrives fits between two quotes as it stands.
+    The code INSIDE the replacement is then translated by the ordinary interpolation pass, so
+    an entry never has to spell out what the names inside it will be renamed to.
+    """
+    body = _body_of(tok)
+    if body is None:
+        return False
+    translated = resolver.dictionary.literal(body)
+    if translated is None:
+        return False
+    report.note_literal_named(body)
+    line, col = at if at is not None else (tok.line, tok.col)
+    replacement = translate_interpolations(translated, resolver, report, at=(line, col))
+    if replacement != body:
+        edits.append((base + tok.start + 1, base + tok.end - 1, replacement))
+    return True
+
+
+def _literal_left(tok, report, at=None, *, data: bool = True) -> None:
+    """Report a Cyrillic literal the pass leaves in the source language.
+
+    Two ways to leave one, and they are different facts. A literal the literals plane could
+    name but does not is a GAP: an entry would move it, so the report asks for one. A literal
+    standing inside a query or a resolvable literal is out of the plane's reach by design -
+    there the text is a program of another language - so it is listed as data KEPT instead: a
+    real project has hundreds of such blocks, the translator has to see them (invisible is the
+    one thing they must not be), and no entry and no rule should ask anything of them.
+
+    Only the PROSE counts either way. A literal whose Cyrillic sits inside its interpolations
+    alone is a template the interpolation pass has already translated, and there is nothing in
+    it left for a person to name; a resource path is likewise translated segment by segment,
+    and its untranslated segments are reported as the names they are.
+    """
+    body = _body_of(tok)
+    if body is None or not has_cyrillic(body):
+        return
+    if _looks_like_resource_path(body):
+        return
+    spans, shorts = _interpolations(tok.value)
+    masked = list(tok.value)
+    for start, end in spans:
+        for position in range(start, min(end, len(masked))):
+            masked[position] = " "
+    for start, name in shorts:
+        for position in range(start, min(start + len(name), len(masked))):
+            masked[position] = " "
+    if not has_cyrillic("".join(masked)):
+        return
+    line, col = at if at is not None else (tok.line, tok.col)
+    # A literal that spans lines cannot become an entry: a dictionary key is one line, and the
+    # loader refuses a value carrying a break. Asking for an entry that cannot be written would
+    # leave a gap open forever, so such a literal is listed as data kept instead.
+    if data and "\n" not in body and "\r" not in body:
+        report.note_literal(body, line, col)
+    else:
+        report.note_text_kept(body, line, col)
 
 
 #: Suffixes that make a literal a resource path rather than a sentence.

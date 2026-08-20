@@ -45,15 +45,26 @@ MESSAGES = {
         "ru": "Имя константы '{name}' – константы пишутся БОЛЬШИМИ_БУКВАМИ_С_ПОДЧЁРКИВАНИЯМИ.",
         "en": "Constant name '{name}' – constants are written in ALL_CAPS_WITH_UNDERSCORES.",
     },
+    # The marker of an exception type stands where the language of the name puts it: a Russian
+    # name carries it as a PREFIX, a Latin one as the `Exception` suffix - so the title names
+    # the marker, not one of its two positions.
     "style/exception-prefix.title": {
-        "ru": "Имя исключения без префикса \"{n[Исключение]}\"",
-        "en": "Exception name without the \"{n[Исключение]}\" prefix",
+        "ru": "Имя исключения без пометки \"{n[Исключение]}\"",
+        "en": "Exception name without the \"{n[Исключение]}\" marker",
     },
     "style/exception-prefix.missing": {
         "ru": "Имя исключения '{name}' – типы исключений пишутся с префиксом "
               "'{n[Исключение]}': '{n[Исключение]}{name}'.",
         "en": "Exception name '{name}' – exception types are written with the "
               "'{n[Исключение]}' prefix: '{n[Исключение]}{name}'.",
+    },
+    # A name written in Latin gets the English form of the same convention: there the marker is
+    # a SUFFIX, and offering 'ИсключениеAuthentication' would be a suggestion nobody can take.
+    "style/exception-prefix.missing-suffix": {
+        "ru": "Имя исключения '{name}' – типы исключений пишутся с суффиксом "
+              "'{suffix}': '{name}{suffix}'.",
+        "en": "Exception name '{name}' – exception types are written with the "
+              "'{suffix}' suffix: '{name}{suffix}'.",
     },
     "style/abbreviation-case.title": {
         "ru": "Аббревиатура заглавными буквами в имени",
@@ -85,7 +96,26 @@ i18n.register(MESSAGES)
 _ABBREV_RE = re.compile(r"[А-ЯЁA-Z]{2,}")
 _LOCAL_TYPE_KEYWORDS = ("STRUCTURE", "ENUMERATION", "EXCEPTION")
 _ENUM_BAD_PREFIXES = ("Тип", "Type")
+# The word that marks an exception type, in both spellings. The two languages put it on
+# opposite ends: Russian writes it as a PREFIX (`ИсключениеЧтенияФайла`), English as a SUFFIX
+# (`FileReadException`) - so a name that ends with the English word obeys the very convention
+# this rule exists for, and demanding a prefix of it produced the Cyrillic marker glued onto a
+# Latin name, a spelling no project can adopt.
 _EXCEPTION_PREFIXES = ("Исключение", "Exception")
+_EXCEPTION_SUFFIX = "Exception"
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
+def _exception_name_is_marked(name: str) -> bool:
+    """Does the name carry the exception marker NEXT TO a word of its own?
+
+    A name that is ONLY the marker, in either spelling, marks nothing - it is the whole name
+    rather than a mark on one - and such a name is reported like an unmarked one.
+    """
+    for prefix in _EXCEPTION_PREFIXES:
+        if name.startswith(prefix) and name[len(prefix):]:
+            return True
+    return name.endswith(_EXCEPTION_SUFFIX) and bool(name[: -len(_EXCEPTION_SUFFIX)])
 
 
 def _is_const_name(name: str) -> bool:
@@ -198,15 +228,24 @@ def const_case(source: SourceFile) -> Iterable[Diagnostic]:
 @rule("style/exception-prefix", "style/exception-prefix.title", "C",
       severity=Severity.WARNING)
 def exception_prefix(source: SourceFile) -> Iterable[Diagnostic]:
-    """2.4: `исключение ИсключениеЧтенияФайла`, not `исключение ЧтениеФайла`."""
+    """2.4: `исключение ИсключениеЧтенияФайла`, not `исключение ЧтениеФайла`.
+
+    The same convention in an English-spelled project reads `exception FileReadException`: the
+    marker moves to the end, the way every English exception type is named. The suggestion
+    follows the script of the NAME, not the language of the report - a Latin name is offered the
+    suffix, a Cyrillic one the prefix.
+    """
     if source.kind != "xbsl":
         return
     for tok in _local_type_names(code_tokens(source), "EXCEPTION"):
-        if tok.value.startswith(_EXCEPTION_PREFIXES):
+        if _exception_name_is_marked(tok.value):
             continue
+        key, extra = "style/exception-prefix.missing", {}
+        if not _CYRILLIC_RE.search(tok.value):
+            key, extra = "style/exception-prefix.missing-suffix", {"suffix": _EXCEPTION_SUFFIX}
         yield Diagnostic(
             source.rel, tok.line, tok.col, "style/exception-prefix", Severity.WARNING,
-            i18n.t("style/exception-prefix.missing", name=tok.value),
+            i18n.t(key, name=tok.value, **extra),
         )
 
 

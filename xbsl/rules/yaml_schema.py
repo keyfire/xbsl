@@ -115,7 +115,30 @@ _LENGTH_RE = re.compile(r"^([ \t]*(?:-[ \t]+)?)Длина:[ \t]*(\d+)[ \t]*$")
 
 # libyaml (CSafeLoader) parses 5-10x faster than the pure-Python loader and dominates the
 # whole-project run time; the pure loader stays as the fallback for builds without it.
-_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_BASE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
+#: The spellings of a boolean the platform's serializer writes. YAML 1.1 - which is what PyYAML
+#: implements - also reads `Yes`, `No`, `On`, `Off`, `y` and `n` as booleans, and those are
+#: perfectly ordinary NAMES in 1C:Element: an enumeration item spelled `Name: No` came back as
+#: the value False, so the item vanished from the declaration and every reference to it was
+#: reported unknown, while the compiler accepted the very same file. The platform types a scalar
+#: by its schema (`Multiline:` is a flag, `Name:` is a name), not by YAML 1.1 resolution, so
+#: narrowing the implicit resolver to the two words it actually writes is what matches it - the
+#: YAML 1.2 core schema does the same.
+_BOOL_SPELLINGS = re.compile(r"^(?:true|True|TRUE|false|False|FALSE)$")
+
+
+class _Loader(_BASE_LOADER):  # type: ignore[misc, valid-type]
+    """The base loader with the YAML 1.1 boolean words that are also names left as strings."""
+
+
+_Loader.yaml_implicit_resolvers = {
+    first: [(tag, regexp) for tag, regexp in pairs if tag != "tag:yaml.org,2002:bool"]
+    for first, pairs in _BASE_LOADER.yaml_implicit_resolvers.items()
+}
+_Loader.add_implicit_resolver("tag:yaml.org,2002:bool", _BOOL_SPELLINGS, list("tTfF"))
+
+_LOADER = _Loader
 
 
 def _parsed(source: SourceFile):

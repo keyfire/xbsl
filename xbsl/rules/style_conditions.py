@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, metamodel, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
@@ -66,6 +66,21 @@ def _is_kw(tok: Token, *canonicals: str) -> bool:
     return tok.kind == "KEYWORD" and tok.canonical in canonicals
 
 
+def _english_member_name(name: str) -> str | None:
+    """The English spelling of a member name, or None when the platform names none.
+
+    Three dictionaries, because no single one covers the members: `Enabled` is in the compiler's
+    own map, `Visible` only in the metamodel and the ui schema. The order is the one every
+    bilingual rule here uses.
+    """
+    return (
+        terms.common_english(name)
+        or terms.english(name, "properties")
+        or metamodel.english_name(name)
+        or uischema.english_property(name)
+    )
+
+
 def _member_type_texts() -> dict[str, frozenset[str]]:
     """Member name -> every result type the catalog declares for it, in full spelling.
 
@@ -74,6 +89,19 @@ def _member_type_texts() -> dict[str, frozenset[str]]:
     while the name alone already answers the only question asked here, whether the value
     can be a plain `Булево`. A name declared as a union anywhere in the catalog is left
     alone: a false alarm on legal code costs more than a missed style nit.
+
+    Each member is entered under BOTH spellings. The catalog is extracted from the Russian
+    documentation, so an English-spelled project asked about `Visible` got no answer at all -
+    and no answer means "not a union", which is precisely the false alarm the paragraph above
+    rules out: `Components.Hint.Visible == True` is `Авто|Булево` and cannot be written short.
+
+    Where several Russian members share one English spelling, the pooled types go to BOTH
+    spellings - to the English key and back to every Russian member of the group. Entering the
+    pool on the English side alone made the two spellings of ONE project disagree: `Enabled`
+    covers a plain-boolean member and a union member at once, so the English source was left
+    alone while its Russian twin was reported. Pooling both ways is the same over-approximation
+    the paragraph above already makes by name, one step wider, and it can only make the rule
+    quieter - which is the direction this rule is built to err in.
     """
     global _member_texts_cache
     if _member_texts_cache is None:
@@ -85,8 +113,30 @@ def _member_type_texts() -> dict[str, frozenset[str]]:
         for members in (data.get("member_types") or {}).values():
             for name, raw in members.items():
                 texts.setdefault(name, set()).add(raw)
+        groups: dict[str, list[str]] = {}
+        for name in list(texts):
+            english = _english_member_name(name)
+            if english:
+                groups.setdefault(english, []).append(name)
+        for english, russian_names in groups.items():
+            pooled = texts.get(english, set()).union(*(texts[name] for name in russian_names))
+            for key in (english, *russian_names):
+                texts[key] = pooled
         _member_texts_cache = {name: frozenset(v) for name, v in texts.items()}
     return _member_texts_cache
+
+
+def _reset_member_texts() -> None:
+    """Drop the table when the data root or version changes (dataset hook).
+
+    It is built over the catalog AND the term dictionaries now, so a switch of the Element
+    version would otherwise keep answering with the English spellings of the previous one.
+    """
+    global _member_texts_cache
+    _member_texts_cache = None
+
+
+dataset.register_reset(_reset_member_texts)
 
 
 def _plain_boolean(text: str) -> bool:

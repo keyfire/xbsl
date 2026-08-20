@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -14,14 +15,18 @@ from xbsl.translation.reporting import FileReport
 from xbsl.translation.yamlfile import translate_yaml
 
 
-def _dictionary(tokens: dict | None = None, phrases: dict | None = None) -> dict_module.Dictionary:
-    return dict_module.Dictionary(tokens=dict(tokens or {}), phrases=dict(phrases or {}))
+def _dictionary(
+    tokens: dict | None = None, phrases: dict | None = None, literals: dict | None = None,
+) -> dict_module.Dictionary:
+    return dict_module.Dictionary(
+        tokens=dict(tokens or {}), phrases=dict(phrases or {}), literals=dict(literals or {}),
+    )
 
 
-def _code(text: str, tokens=None, phrases=None) -> tuple[str, FileReport]:
+def _code(text: str, tokens=None, phrases=None, literals=None) -> tuple[str, FileReport]:
     source = engine.load_text("Модуль.xbsl", text)
     report = FileReport(path="Модуль.xbsl")
-    out = translate_code(source, Resolver(_dictionary(tokens, phrases)), report)
+    out = translate_code(source, Resolver(_dictionary(tokens, phrases, literals)), report)
     return out, report
 
 
@@ -732,3 +737,651 @@ def test_dictionary_writer_copies_the_indent_of_the_section(tmp_path: Path):
     path.write_text(merged, encoding="utf-8")
     keys = {entry.key for entry in read_entries(path.parent)}
     assert keys == {"Задачи", "Шаги"}
+
+
+def test_a_key_that_carries_a_quote_is_recognised_not_duplicated(tmp_path: Path):
+    """A comment line citing something is an ordinary key - and the writer must find it there."""
+    from xbsl.translation.entries import plan_entries, read_entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    cited_key = 'Коды через "|" с обеих сторон.'
+    (folder / "030-phrases.yaml").write_text(
+        'version: 1\nlanguage: en\nphrases:\n'
+        f'    {json.dumps(cited_key, ensure_ascii=False)}: "The codes are separated by \\"|\\"."\n',
+        encoding="utf-8",
+    )
+
+    read = {entry.key: entry.value for entry in read_entries(folder)}
+    assert cited_key in read, "ключ с кавычкой внутри не прочитался"
+
+    plan = plan_entries(folder, [{"key": cited_key, "value": "Codes on both sides.", "kind": "phrase"}])
+    assert (plan["changed"], plan["added"]) == (1, 0), "правка ушла новой записью - в словаре вырос дубль"
+    written = "".join(plan["files"].values())
+    assert written.count(json.dumps(cited_key, ensure_ascii=False)) == 1
+    assert "Codes on both sides." in written
+
+
+# --- literals: the names and the messages a project writes as strings -------------------------
+
+
+def test_the_literals_plane_merges_and_refuses_a_conflict(tmp_path: Path):
+    """The third plane loads like the other two - and a second reading is a refusal, not a guess."""
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "a.yaml").write_text(
+        "version: 1\nlanguage: en\nliterals:\n"
+        '    "Заявка не найдена": "The request was not found"\n',
+        encoding="utf-8")
+    (folder / "b.yaml").write_text("literals:\n    Обложка: Cover\n", encoding="utf-8")
+    loaded = dict_module.load(folder)
+    assert loaded.literals == {"Заявка не найдена": "The request was not found", "Обложка": "Cover"}
+    assert loaded.literal("Обложка") == "Cover"
+    assert not loaded.empty  # a plane of its own still fills the dictionary
+
+    (folder / "c.yaml").write_text("literals:\n    Обложка: Jacket\n", encoding="utf-8")
+    with pytest.raises(dict_module.DictionaryError):
+        dict_module.load(folder)
+
+
+def test_literal_is_replaced_whole():
+    """A NAME written as a string is data the project must name itself - and it goes whole."""
+    out, report = _code(
+        'метод Прочитать()\n'
+        '    возврат Параметры.Получить("ТокенЗаданияЗадач")\n'
+        ';\n',
+        tokens={"Прочитать": "Read"},
+        literals={"ТокенЗаданияЗадач": "TaskJobToken"},
+    )
+    assert '"TaskJobToken"' in out
+    assert report.literals_done == 1
+    assert not report.missing_literals
+
+
+def test_literal_with_an_interpolation_keeps_the_source_spelling_in_the_key():
+    """The author writes the sentence as they see it; the code inside moves by the usual path."""
+    out, report = _code(
+        'метод Сообщить(Описание: Строка)\n'
+        '    возврат "Не разобрано тело: %{Описание}"\n'
+        ';\n',
+        tokens={"Сообщить": "Report", "Описание": "Details"},
+        literals={"Не разобрано тело: %{Описание}": "Could not parse the body: %{Описание}"},
+    )
+    assert '"Could not parse the body: %{Details}"' in out
+    assert report.literals_done == 1
+
+
+def test_a_literal_inside_a_query_or_a_pattern_is_code_not_data():
+    """Inside `Запрос{...}` and `Образец{...}` the text is a program - the plane stays out."""
+    out, report = _code(
+        'метод Отобрать()\n'
+        '    пер Найденные = Запрос{ ВЫБРАТЬ Ссылка ИЗ Задачи КАК Т ГДЕ Т.Состояние = "Новая" }\n'
+        '    возврат Образец{"^(?<Состояние>Новая)$"}\n'
+        ';\n',
+        tokens={"Отобрать": "Select", "Задачи": "Tasks", "Найденные": "Found",
+                "Состояние": "State"},
+        literals={"Новая": "New"},
+    )
+    assert '= "Новая" }' in out, "литерал запроса заменён планом literals"
+    assert '"^(?<Состояние>Новая)$"' in out, "литерал образца заменён планом literals"
+    assert report.literals_done == 0
+    assert not report.missing_literals
+    # Out of the plane's reach, but not out of sight: a real project has hundreds of such
+    # blocks, and a literal nobody ever shows is a literal nobody ever checks.
+    kept = {text: (line, col) for text, line, col in report.texts_kept}
+    assert kept["Новая"][0] == 2
+    assert kept["^(?<Состояние>Новая)$"][0] == 3
+
+
+def test_a_cyrillic_literal_without_an_entry_is_counted_and_shown_as_a_gap(tmp_path: Path):
+    """What the plane does not name stays Russian - and says so in the report and the table."""
+    from xbsl.translation import entries
+
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl",
+           'метод Проверить()\n    возврат "Заявка не найдена"\n;\n')
+    report = translate_project(
+        root, _dictionary(tokens={"Проверить": "Check", "Модуль": "Module"}), None)
+    totals = report.totals()
+    assert totals["missing_literals"] == 1
+    assert totals["coverage"] == 1.0, "литералы испортили покрытие словаря"
+
+    gaps = {gap.key: gap for gap in entries.gaps_of_project(root, _dictionary())}
+    assert gaps["Заявка не найдена"].kind == "literal"
+    assert gaps["Заявка не найдена"].count == 1
+    assert gaps["Заявка не найдена"].suggestion == ""
+
+
+def test_a_query_literal_is_reported_as_kept_data_and_asks_for_no_entry(tmp_path: Path):
+    """The project-wide surfaces agree: such a literal is visible, but it is not a gap."""
+    from xbsl.translation import entries
+
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl",
+           'метод Отобрать()\n'
+           '    возврат Запрос{ ВЫБРАТЬ Ссылка ИЗ Задачи КАК Т ГДЕ Т.Состояние = "Новая" }\n'
+           ';\n')
+    report = translate_project(
+        root, _dictionary(tokens={"Отобрать": "Select", "Задачи": "Tasks", "Модуль": "Module"}),
+        None)
+    totals = report.totals()
+    assert totals["texts_kept"] == 1, "литерал запроса не показан нигде"
+    assert totals["missing_literals"] == 0, "литерал запроса засчитан пробелом словаря"
+    kept = report.files["Модуль.xbsl"].texts_kept
+    assert kept == [("Новая", 2, 70)]
+
+    assert not [gap for gap in entries.gaps_of_project(root, _dictionary()) if gap.kind == "literal"]
+
+
+# --- an entry writes the text the way the source writes it, and the engine checks it ----------
+
+#: The shape half the messages of a real project have: a quote inside a quoted string.
+_QUOTED = 'Не заполнено поле \\"Наименование\\"'
+
+
+def _literals_file(folder: Path, key: str, value: str) -> Path:
+    """A one-entry dictionary written the way a person writes one: single-quoted yaml scalars.
+
+    Single quotes are what keeps the convention honest - yaml passes a backslash through them
+    untouched, so the line carries exactly the characters the source carries and the author
+    escapes once, for XBSL, and never again for yaml.
+    """
+    folder.mkdir(parents=True, exist_ok=True)
+    file = folder / "a.yaml"
+    file.write_text(
+        f"version: 1\nlanguage: en\nliterals:\n    '{key}': '{value}'\n", encoding="utf-8")
+    return file
+
+
+def test_the_key_and_the_value_are_the_source_text_with_its_own_escaping(tmp_path: Path):
+    """One escaping, the one the code already carries - the dictionary asks for no second."""
+    folder = tmp_path / "xbsl-translation"
+    _literals_file(folder, _QUOTED, 'The \\"Name\\" field is empty')
+    loaded = dict_module.load(folder)
+    assert loaded.literal(_QUOTED) == 'The \\"Name\\" field is empty'
+
+
+@pytest.mark.parametrize("value, reason", [
+    ('Поле "Наименование" пустое', "кавычка"),          # a bare quote ends the literal early
+    ("Путь C:\\temp\\", "слеш"),                        # a trailing backslash eats the quote
+    ("Первая\nВторая", "перевод строки"),               # a break splits one line into two
+    ("Путь C:\\мой", "последовательность"),             # \м opens nothing the literal knows
+    ("Итого: %{Сумма", "лексер"),                       # an interpolation swallows the quote
+])
+def test_a_value_that_is_not_a_literal_body_is_refused_on_load(tmp_path, value, reason):
+    """The plane refuses a broken value the way the tokens plane refuses a broken name."""
+    folder = tmp_path / "xbsl-translation"
+    _literals_file(folder, "Ошибка", "@@")  # a valid file first, so the refusal is the value's
+    (folder / "a.yaml").write_text(
+        "version: 1\nlanguage: en\nliterals:\n"
+        + f"    Ошибка: {json.dumps(value, ensure_ascii=False)}\n",
+        encoding="utf-8")
+    with pytest.raises(dict_module.DictionaryError) as caught:
+        dict_module.load(folder)
+    assert "Ошибка" in str(caught.value)
+    assert reason in str(caught.value), str(caught.value)
+
+
+def test_a_key_that_could_never_be_a_literal_body_is_refused_too(tmp_path: Path):
+    """A key no source could carry names nothing - a silent dud, not a translation."""
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "a.yaml").write_text(
+        'version: 1\nlanguage: en\nliterals:\n    \'Поле "Имя"\': "The Name field"\n',
+        encoding="utf-8")
+    with pytest.raises(dict_module.DictionaryError):
+        dict_module.load(folder)
+
+
+def test_an_escaped_quote_survives_to_the_output_and_the_lexer_sees_one_token(tmp_path: Path):
+    """The whole point of the check: what the plane writes back still lexes as ONE literal."""
+    from xbsl import lexer
+
+    out, report = _code(
+        'метод Проверить()\n'
+        f'    возврат "{_QUOTED}"\n'
+        ';\n',
+        tokens={"Проверить": "Check"},
+        literals={_QUOTED: 'The \\"Name\\" field is empty'},
+    )
+    assert report.literals_done == 1
+    assert 'return "The \\"Name\\" field is empty"' in out, out
+    strings = [tok for tok in lexer.tokenize(out) if tok.kind == "STRING"]
+    assert len(strings) == 1, [tok.value for tok in strings]
+    assert not strings[0].flags.get("unterminated")
+    assert strings[0].value == '"The \\"Name\\" field is empty"'
+
+
+def test_the_summary_counts_literals_in_one_unit(tmp_path: Path):
+    """Translated and missing are both DISTINCT texts - the occurrences are named apart."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl",
+           'метод Проверить()\n'
+           '    Сообщить("Задача записана")\n'
+           '    Сообщить("Задача записана")\n'
+           '    возврат "Заявка не найдена"\n'
+           ';\n')
+    report = translate_project(
+        root,
+        _dictionary(tokens={"Проверить": "Check", "Модуль": "Module"},
+                    literals={"Задача записана": "The task is saved"}),
+        None)
+    totals = report.totals()
+    assert totals["literals_translated"] == 1, "переведённые считаются вхождениями"
+    assert totals["missing_literals"] == 1
+    assert totals["literal_occurrences"] == 2, "вхождения потеряны вовсе"
+
+
+def test_a_broken_literal_value_is_refused_at_the_write_too(tmp_path: Path):
+    """Refused where it is typed, not a day later when the dictionary next loads."""
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    result = entries.write_entries(folder, [
+        {"key": "Готово", "value": "Done", "kind": "literal"},
+        {"key": _QUOTED, "value": 'The "Name" field is empty', "kind": "literal"},
+    ])
+    assert (result["added"], len(result["refused"])) == (1, 1)
+    assert result["refused"][0]["key"] == _QUOTED
+    loaded = dict_module.load(folder)
+    assert loaded.literals == {"Готово": "Done"}, "негодная запись всё-таки попала в словарь"
+
+
+def test_set_with_the_literal_kind_writes_into_the_literals_plane(tmp_path: Path):
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    entries.write_entries(folder, [
+        {"key": "Заявка не найдена", "value": "The request was not found", "kind": "literal"},
+    ])
+    loaded = dict_module.load(folder)
+    assert loaded.literals == {"Заявка не найдена": "The request was not found"}
+    rows = {(e.kind, e.key): e for e in entries.read_entries(folder)}
+    assert rows[("literal", "Заявка не найдена")].value == "The request was not found"
+
+
+def test_rule_reports_an_untranslated_literal_with_its_own_kind(tmp_path: Path):
+    (tmp_path / "xbsl-translation").mkdir()
+    (tmp_path / "xbsl-translation" / "d.yaml").write_text(
+        "tokens:\n    Проверить: Check\n", encoding="utf-8")
+    module = tmp_path / "Модуль.xbsl"
+    module.write_text('метод Проверить()\n    возврат "Заявка не найдена"\n;\n', encoding="utf-8")
+
+    from xbsl.rules import translation_gaps
+
+    translation_gaps._dictionary_at.cache_clear()
+    source = engine.load(module)
+    facts = {source.rel: translation_gaps._gaps_mapper(source)}
+    payload = [d.data["translation"] for d in translation_gaps.missing_translation(facts) if d.data]
+    assert {"kind": "literal", "key": "Заявка не найдена"} in payload
+
+
+# --- comments are re-wrapped after the translation lengthened them ---------------------------
+
+#: A paragraph whose English runs longer than its Russian: line for line it no longer fits.
+_RU_PARAGRAPH = [
+    "Список задач заполняется один раз при открытии карточки, а затем обновляется точечно",
+    "по событию записи: полная перечитка на каждое изменение обходится слишком дорого",
+    "и заметна пользователю на больших наборах данных подчинённого справочника шагов",
+]
+_EN_PARAGRAPH = [
+    "The task list is filled once when the card opens and after that is refreshed point by"
+    " point on the write event",
+    "a full re-read on every change costs too much and the user notices it on large data sets"
+    " of the subordinate steps catalog",
+    "so the pass keeps the rows it already has and touches only the row the write event"
+    " actually changed in the list",
+]
+
+
+def _long_lines(text: str) -> list[int]:
+    """The lines style/line-length flags - the rule's own verdict, not a length guess."""
+    diagnostics = engine.run_sources(
+        [engine.load_text("Модуль.xbsl", text)], select={"style/line-length"})
+    return [d.line for d in diagnostics]
+
+
+def _comment_lines(text: str) -> list[str]:
+    return [line for line in text.splitlines() if line.lstrip().startswith("//")]
+
+
+def _comment_text(text: str) -> str:
+    """Everything the `//` lines say, as one string - what the re-wrap must not lose."""
+    payloads = [line.lstrip()[2:].strip() for line in _comment_lines(text)]
+    return " ".join(payload for payload in payloads if payload)
+
+
+def test_a_translated_paragraph_is_wrapped_back_under_the_limit():
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in _RU_PARAGRAPH) + ";\n"
+    assert _long_lines(module) == [], "the source itself is within the limit"
+
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert _long_lines(out) == []
+    assert _comment_text(out) == " ".join(_EN_PARAGRAPH), "the text of the paragraph survived"
+    assert all(line.startswith("    // ") for line in _comment_lines(out))
+
+
+def test_a_comment_that_still_fits_is_left_alone():
+    module = "метод Ф()\n    // Короткая строка\n    // и вторая\n;\n"
+    out, _ = _code(module, phrases={
+        "Короткая строка": "A short line", "и вторая": "and a second one"})
+    assert out == "method Ф()\n    // A short line\n    // and a second one\n;\n"
+
+
+def test_a_frame_line_keeps_its_shape():
+    frame = "─── Заголовок раздела ───"
+    module = ("метод Ф()\n"
+              f"    // {frame}\n"
+              + "".join(f"    // {line}\n" for line in _RU_PARAGRAPH) + ";\n")
+    out, _ = _code(module, phrases={
+        frame: "─── Section title ───", **dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH))})
+    assert _comment_lines(out)[0] == "    // ─── Section title ───"
+    assert _long_lines(out) == []
+    assert _comment_text(out) == "─── Section title ─── " + " ".join(_EN_PARAGRAPH)
+
+
+def test_a_list_is_not_glued_into_a_paragraph():
+    items = [
+        "- первый пункт списка",
+        "- второй пункт списка, который после перевода станет заметно длиннее",
+    ]
+    english = [
+        "- the first item of the list",
+        "- the second item of the list, which after the translation grows well past the width"
+        " limit of the project and would be re-split if the list were prose",
+    ]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in items) + ";\n"
+    out, _ = _code(module, phrases=dict(zip(items, english)))
+    assert _comment_lines(out) == [f"    // {line}" for line in english], "line for line"
+
+
+def test_a_table_row_and_a_code_sample_are_not_reflowed():
+    rows = [
+        "Поле        | Тип     | Назначение",
+        "Наименование| Строка  | заголовок задачи, который после перевода вырастет по ширине",
+    ]
+    english = [
+        "Field       | Type    | Purpose",
+        "Description | String  | the caption of the task, which after the translation grows"
+        " past the width limit of the project and must still keep its columns",
+    ]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in rows) + ";\n"
+    out, _ = _code(module, phrases=dict(zip(rows, english)))
+    assert _comment_lines(out) == [f"    // {line}" for line in english], "the columns stay"
+
+
+def test_a_line_long_in_the_source_stays_as_it_was_written():
+    long_ru = "Подробности: https://example.invalid/docs/задачи/" + "х" * 90
+    long_en = "Details: https://example.invalid/docs/tasks/" + "x" * 90
+    module = f"метод Ф()\n    // {long_ru}\n;\n"
+    assert _long_lines(module) == [2], "the author already wrote it over the limit"
+
+    out, _ = _code(module, phrases={long_ru: long_en})
+    assert _comment_lines(out) == [f"    // {long_en}"], "written that way on purpose"
+
+
+def test_a_long_source_line_does_not_drag_its_neighbours_into_a_paragraph():
+    long_ru = "Ссылка: https://example.invalid/" + "ч" * 100
+    long_en = "Link: https://example.invalid/" + "c" * 100
+    module = ("метод Ф()\n"
+              f"    // {long_ru}\n"
+              + "".join(f"    // {line}\n" for line in _RU_PARAGRAPH) + ";\n")
+    out, _ = _code(module, phrases={long_ru: long_en, **dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH))})
+    assert _comment_lines(out)[0] == f"    // {long_en}"
+    assert _long_lines(out) == [2], "only the paragraph under it needed the re-split"
+
+
+def test_a_doc_comment_is_not_reflowed():
+    ru = "Возвращает список шагов задачи в порядке их выполнения исполнителем"
+    en = ("Returns the list of the steps of the task in the order in which the performer of the"
+          " task is expected to run them, one after another and skipping none of them")
+    module = f"/** {ru} */\nметод Ф()\n;\n"
+    assert _long_lines(module) == [], "the source itself is within the limit"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert out.splitlines()[0] == f"/** {en} */", "a doc comment stays one line"
+    assert _long_lines(out) == [1], "over the limit and still not re-flowed"
+
+
+def test_a_comment_after_code_keeps_its_line():
+    ru = "пересчёт делается один раз"
+    en = ("the recalculation is done once, and every later change only touches the row that the"
+          " write event reported")
+    module = f"метод Ф()\n    знч Х = 1 // {ru}\n;\n"
+    out, _ = _code(module, phrases={ru: en})
+    assert out.splitlines()[1] == f"    val Х = 1 // {en}", "it explains the statement next to it"
+    assert _long_lines(out) == [2], "over the limit and still left where it is"
+
+
+def test_the_windows_line_ending_of_a_block_survives_the_rewrap():
+    module = "метод Ф()\r\n" + "".join(f"    // {line}\r\n" for line in _RU_PARAGRAPH) + ";\r\n"
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert "\n" not in out.replace("\r\n", ""), "every break stayed a windows one"
+    assert _long_lines(out) == []
+
+
+def test_the_width_comes_from_the_rule_and_is_not_a_second_setting(monkeypatch):
+    """The re-wrap obeys style/line-length: move the rule's limit and the pass follows."""
+    from xbsl.rules import style_layout
+
+    ru = ["Задача записана", "и список обновлён"]
+    en = ["The task has been written down by the handler", "and the list of the steps is refreshed"]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in ru) + ";\n"
+
+    wide, _ = _code(module, phrases=dict(zip(ru, en)))
+    assert _comment_lines(wide) == [f"    // {line}" for line in en], "at 120 nothing to re-split"
+
+    monkeypatch.setattr(style_layout, "MAX_LINE", 50)
+    narrow, _ = _code(module, phrases=dict(zip(ru, en)))
+    assert _long_lines(narrow) == []
+    assert _comment_text(narrow) == " ".join(en)
+    assert len(_comment_lines(narrow)) > len(_comment_lines(wide)), "re-split at the new limit"
+
+
+def test_a_line_under_a_list_item_belongs_to_the_item():
+    """A continuation of an item is not prose: an empty comment line closes the item."""
+    item = "- второй пункт списка"
+    tail = "продолжение этого пункта, которое после перевода станет заметно длиннее"
+    english = {
+        item: "- the second item of the list",
+        tail: "the continuation of that very item, which after the translation grows well past"
+              " the width limit and still belongs where its author put it",
+    }
+    module = ("метод Ф()\n"
+              f"    // {item}\n"
+              f"    // {tail}\n"
+              "    //\n"
+              + "".join(f"    // {line}\n" for line in _RU_PARAGRAPH) + ";\n")
+    out, _ = _code(module, phrases={**english, **dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH))})
+    lines = _comment_lines(out)
+    assert lines[:3] == [f"    // {english[item]}", f"    // {english[tail]}", "    //"]
+    assert _long_lines(out) == [3], "the item is left whole, the paragraph below it re-split"
+    assert " ".join(line.lstrip()[2:].strip() for line in lines[3:]) == " ".join(_EN_PARAGRAPH)
+
+
+def test_a_block_of_one_line_at_the_end_of_a_file_is_split_into_lines():
+    """A file that ends without a break is an ordinary file - and its last line is a comment."""
+    ru = "Список задач заполняется один раз при открытии карточки"
+    en = ("The task list is filled once when the card opens and after that is refreshed point by"
+          " point on the write event, never by a full re-read")
+    module = f"метод Ф()\n;\n    // {ru}"
+    assert _long_lines(module) == [], "the source itself is within the limit"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert _long_lines(out) == []
+    assert len(_comment_lines(out)) > 1, out
+    assert all(line.count("//") == 1 for line in _comment_lines(out)), "no line was glued"
+    assert _comment_text(out) == en, "the text of the paragraph survived"
+    assert not out.endswith("\n"), "the break the file did not have is not invented"
+
+
+def test_the_last_block_of_a_windows_file_is_split_with_windows_breaks():
+    """The ending the pass ADDS is the ending of the file, not the one of the platform."""
+    ru = "Список задач заполняется один раз при открытии карточки"
+    en = ("The task list is filled once when the card opens and after that is refreshed point by"
+          " point on the write event, never by a full re-read")
+    module = f"метод Ф()\r\n;\r\n    // {ru}"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert "\n" not in out.replace("\r\n", ""), "every break stayed a windows one"
+    assert _long_lines(out) == []
+
+
+def test_a_dash_that_carried_a_sentence_over_is_prose_not_an_item():
+    """A wrapped sentence often opens a line with a dash: the line above it simply did not end."""
+    ru = ["Суффикс даты в русской записи",
+          "– часть шаблона словаря, а не кода"]
+    en = ["The suffix of the Russian spelling of the date",
+          "- is part of the template of the dictionary and not of the code, where one shared"
+          " template would print it in the English spelling as well"]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in ru) + ";\n"
+    assert _long_lines(module) == [], "the source itself is within the limit"
+
+    out, _ = _code(module, phrases=dict(zip(ru, en)))
+    assert _long_lines(out) == []
+    assert _comment_text(out) == " ".join(en), "the text of the paragraph survived"
+    assert _comment_lines(out)[0] != f"    // {en[0]}", "the two lines were re-flowed as one"
+
+
+def test_a_dash_list_announced_by_a_colon_stays_a_list():
+    """Real sources open a list right under the line that announces it, with no empty line."""
+    ru = ["Правила контракта:",
+          "- имена свойств JSON совпадают с именами реквизитов",
+          "- ссылки на другие объекты адресуются их кодами"]
+    en = ["The rules of the contract:",
+          "- the names of the JSON properties are the names of the attributes of the object, and"
+          " the service ones are left out of the contract",
+          "- a reference to another object is addressed by its code, and a value of an enumeration"
+          " by the name the enumeration gives it"]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in ru) + ";\n"
+
+    out, _ = _code(module, phrases=dict(zip(ru, en)))
+    assert _comment_lines(out) == [f"    // {line}" for line in en], "line for line"
+
+
+def test_an_empty_comment_line_closes_the_item_above_it():
+    """The lines under an item belong to it - and an empty comment line is what ends the item."""
+    item = "- пункт списка"
+    module = ("метод Ф()\n"
+              f"    // {item}\n"
+              "    // \n"
+              + "".join(f"    // {line}\n" for line in _RU_PARAGRAPH) + ";\n")
+
+    out, _ = _code(module, phrases={item: "- an item of the list",
+                                    **dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH))})
+    lines = _comment_lines(out)
+    assert lines[0] == "    // - an item of the list"
+    assert lines[1].strip() == "//", "the empty line kept its place"
+    assert _long_lines(out) == [], "the paragraph under the empty line was re-split"
+    assert " ".join(line.lstrip()[2:].strip() for line in lines[2:]) == " ".join(_EN_PARAGRAPH)
+
+
+def test_a_line_of_a_literal_is_not_a_comment_even_when_it_opens_with_two_slashes():
+    """The lexer says what a line is: inside a multi-line literal the two slashes are data."""
+    name = "ДлинноеИмя"
+    english = "TheNameOfTheVariableThatTheHandlerOfTheWriteEventFillsInBeforeTheListIsRefreshed"
+    data = "// данные %{" + name + "} внутри строкового литерала, и трогать их нельзя"
+    module = ("метод Ф()\n"
+              f"    знч {name} = 1\n"
+              '    знч Текст = "начало\n'
+              f"{data}\n"
+              'конец"\n'
+              ";\n")
+
+    out, _ = _code(module, tokens={name: english})
+    assert "// данные %{" + english + "} внутри строкового литерала" in out
+    assert out.count("//") == 1, "the line of the literal was not re-split into two"
+
+
+def test_two_code_lines_are_never_taken_for_a_paragraph():
+    """Only a comment is re-flowed - and the lexer is what says which line opens with one."""
+    name = "ОченьДлинноеИмяМетода"
+    english = ("TheNameOfTheMethodThatFillsTheListOfTheStepsOfTheTaskWhenTheCardOfTheTaskIsOpened"
+               "ByThePerformerOfThatVeryTask")
+    module = ("метод Ф()\n"
+              f"    знч Первое = {name}(1)\n"
+              f"    знч Второе = {name}(2)\n"
+              ";\n")
+
+    out, _ = _code(module, tokens={name: english, "Первое": "First", "Второе": "Second"})
+    assert _long_lines(out) == [2, 3], "both statements came out over the limit"
+    assert out.splitlines()[1] == f"    val First = {english}(1)"
+    assert out.splitlines()[2] == f"    val Second = {english}(2)"
+
+
+def test_a_column_too_narrow_to_wrap_in_is_left_alone(monkeypatch):
+    """Below a readable body a re-split only shreds the paragraph, so the block is left as it is."""
+    from xbsl.rules import style_layout
+
+    monkeypatch.setattr(style_layout, "MAX_LINE", 40)
+    ru = "Шаг"
+    en = "The step of the task that the handler writes down"
+    indent = " " * 24
+    module = f"метод Ф()\n{indent}// {ru}\n;\n"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert _comment_lines(out) == [f"{indent}// {en}"], "one line, as wide as it came out"
+
+
+def test_a_long_name_and_a_hyphenated_word_are_never_broken():
+    """A word longer than the column is a name or a link: breaking it breaks what it names."""
+    url = "https://example.invalid/docs/tasks/" + "a" * 90
+    chain = "read-modify-write-" + "b" * 90
+    ru = ["Ссылка на документацию", "и правило обмена"]
+    en = [f"The details are at {url}", f"and the {chain} rule of the exchange applies to them"]
+    module = "метод Ф()\n" + "".join(f"    // {line}\n" for line in ru) + ";\n"
+
+    out, _ = _code(module, phrases=dict(zip(ru, en)))
+    assert url in out, "a link is not broken in the middle"
+    assert chain in out, "a hyphenated name is not broken at its hyphens"
+    assert _comment_text(out) == " ".join(en), "the text of the paragraph survived"
+
+
+def test_a_text_that_no_longer_lines_up_with_its_source_is_left_alone():
+    """Without the source, line for line, there is no telling which line was long on purpose."""
+    from xbsl.translation.rewrap import rewrap_comments
+
+    text = "метод Ф()\n;\n    // " + "слово " * 30 + "\n"
+    assert rewrap_comments(text, "метод Ф()\n;\n") == text
+
+
+def test_rewrap_never_changes_the_words_of_a_comment():
+    """The pass moves line breaks and nothing else - a block whose words changed is put back."""
+    from xbsl.translation import rewrap
+
+    source = (
+        "// ─── A frame that must survive ───────────────────────────────────────────────\n"
+        "// The first line of a paragraph that the translation made longer than the limit\n"
+        "// and a second line of the same paragraph.\n"
+        "//   a table cell   another cell\n"
+        "// - a list item\n"
+        "//   its continuation\n"
+        "метод Тест()\n"
+        ";\n"
+    )
+    translated = source.replace(
+        "The first line of a paragraph that the translation made longer than the limit",
+        "The first line of a paragraph that the translation made a great deal longer than the limit it is given",
+    )
+    out = rewrap.rewrap_comments(translated, source)
+
+    words = lambda t: "".join("".join(s.lstrip().lstrip("/").split()) for s in t.splitlines())
+    assert words(out) == words(translated), "перенос изменил текст комментария"
+    assert all(len(s) <= 120 for s in out.splitlines() if s.lstrip().startswith("//") and "─" not in s)
+
+
+def test_a_file_that_opens_with_a_byte_order_mark_is_re_wrapped_too():
+    """The mark stands before the indent, and it is not code: the first line keeps its paragraph."""
+    from xbsl.translation import rewrap
+
+    source = "﻿// A short first line.\n// A second line of the same paragraph.\n"
+    longer = source.replace(
+        "A short first line.",
+        "A first line that the translation made much longer than the limit allows it to be here",
+    )
+    out = rewrap.rewrap_comments(longer, source, limit=60)
+    assert out != longer, "строка под меткой порядка байтов осталась без переноса"
+    assert out.startswith("﻿//"), "метка порядка байтов потерялась"
+    assert "A second line of the same paragraph." in out.replace("\n// ", " ")
