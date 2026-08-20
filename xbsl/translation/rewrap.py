@@ -45,6 +45,8 @@ _LINE_RE = re.compile(r"[^\r\n]*(?:\r\n|\r|\n)?")
 
 #: Three of a kind - a rule, a frame, a row of arrows. A dot is deliberately not here: an
 #: ellipsis is three dots and is ordinary text.
+#: The dashes in the pattern are DATA - the characters a comment may be drawn with, the em dash
+#: among them, although this repository does not write one in its own prose.
 _DECOR_RE = re.compile(r"([-–—=*_~#+<>|/\\─━═┄╌│┃])\1\1")
 
 #: A list item wherever it stands: a bullet, or a number or a single letter with a dot or a
