@@ -146,6 +146,35 @@ def _set_scalar(node, new_value: str, edits: list[Edit]) -> None:
 # --- shared value translators -------------------------------------------------------------
 
 
+#: yaml keys whose value is a route TEMPLATE: the path is data, the `{names}` in it are not.
+_ROUTE_TEMPLATE_KEYS = frozenset({"Шаблон", "Template"})
+
+#: One parameter of a route template - the name between the braces.
+_ROUTE_PARAM_RE = re.compile(r"\{([^{}/]+)\}")
+
+
+def _route_template(node, resolver, report, edits) -> None:
+    """Translate the `{name}` parameters of a route template, leaving the path itself alone."""
+    value = node.value
+    if not isinstance(value, str) or not has_cyrillic(value):
+        return
+    start = node.start_mark.index
+    quote = 1 if node.style in ("'", '"') else 0
+    for m in _ROUTE_PARAM_RE.finditer(value):
+        name = m.group(1)
+        if not has_cyrillic(name):
+            continue
+        replacement, plane = resolver.identifier(name)
+        if plane == "user":
+            report.user_done += 1
+        if replacement is None:
+            report.note_token(name, node.start_mark.line + 1, node.start_mark.column + 1)
+            continue
+        if replacement != name:
+            at = start + quote + m.start(1)
+            edits.append((at, at + len(name), replacement))
+
+
 def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
     """A value that names things: a bare identifier, a dotted chain, a resource file.
 
@@ -364,6 +393,14 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
         # may need a spelling the same word cannot carry globally (the base type already uses
         # the global one, and the server refuses a duplicate).
         _identifier_value(vnode, resolver, report, edits, scope=owner)
+        return
+    if key in _ROUTE_TEMPLATE_KEYS:
+        # A route template names its parameters, and the handler reads them BY THAT NAME
+        # (`Query.Parameters.GetFirst("code")`). The path itself is data - a visitor types it -
+        # but the names in braces are the project's own, and left in place they part company
+        # with the code: the handler asks for a parameter the route does not declare, gets
+        # nothing, and the endpoint answers something else entirely.
+        _route_template(vnode, resolver, report, edits)
         return
     if key == "ОбластьВидимости":
         # An enumeration wherever it stands; on some kinds the record says plain string.

@@ -1385,3 +1385,31 @@ def test_a_file_that_opens_with_a_byte_order_mark_is_re_wrapped_too():
     assert out != longer, "строка под меткой порядка байтов осталась без переноса"
     assert out.startswith("﻿//"), "метка порядка байтов потерялась"
     assert "A second line of the same paragraph." in out.replace("\n// ", " ")
+
+
+def test_a_route_template_carries_its_parameter_names(tmp_path: Path):
+    """The handler reads a parameter BY NAME - the template and the code move together or not at all."""
+    out, _ = _yaml(
+        "ВидЭлемента: HttpСервис\n"
+        "ШаблоныUrl:\n"
+        "    -\n"
+        "        Имя: Задача\n"
+        "        Шаблон: /task/{слаг}/step/{номер}\n",
+        tokens={"Задача": "Task", "слаг": "slug", "номер": "number"},
+        name="Сервис.yaml",
+    )
+    assert "Template: /task/{slug}/step/{number}" in out
+    assert "/task/" in out and "/step/" in out   # the path itself is what a visitor types
+
+
+def test_a_route_template_without_names_is_left_alone():
+    out, _ = _yaml(
+        "ВидЭлемента: HttpСервис\n"
+        "ШаблоныUrl:\n"
+        "    -\n"
+        "        Имя: Пинг\n"
+        "        Шаблон: /ping\n",
+        tokens={"Пинг": "Ping"},
+        name="Сервис.yaml",
+    )
+    assert "Template: /ping" in out

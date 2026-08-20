@@ -9,6 +9,41 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.64.0
+
+### Added
+- **The dictionary's third plane - the string literals - is drawn like the other two.** The
+  engine reports a Cyrillic string literal as a gap of its own kind, and the panel showed such
+  a row as if it were a name: the same label, the same selector, no way to work through the
+  literals alone. The table now carries a "literal" kind, the selector filters by it, and the
+  header counts the literals beside the coverage - they are deliberately not part of it, so a
+  project could otherwise read 100% while every message it prints stays in Cyrillic. A literal
+  key is clamped to four lines with the whole text in the cell's tooltip: in a real project one
+  runs to some 700 characters, and drawn in full a single row is taller than the window and
+  hides the rest of the table.
+- **A refused write is shown instead of being reported as an update.** The value of a literal
+  goes back between two quotes of a module, so the engine checks that it could stand there and
+  turns away a bare quote, a dangling backslash or a line break - and it says so in the very
+  answer that reports what it DID write, because a batch is not all or nothing. The extension
+  read the counters and nothing else, so the status line congratulated the author on an updated
+  dictionary over an entry that never landed. The engine's own reason is now shown, the cell
+  keeps its old value, and the project is not re-checked over a write that did not happen.
+- **The repair on a literal finding writes a literal.** A `conventions/missing-translation`
+  finding carries the kind with the key, so the lightbulb now adds the entry to the `literals`
+  plane rather than to the names. Its input box says how the text is written between the quotes
+  (an inner quote is `\"`, a backslash is `\\`) - the rule is easy to obey and impossible to
+  guess. The one-click "Translate as ..." is not offered on a literal at all: the platform
+  tables spell NAMES, and their answer for a whole message would be a guess dressed as an
+  authority.
+
+### Changed
+- **The dictionary panel now asks for the xbsl engine 0.71.0 or newer.** The table commands
+  arrived in 0.70.0, but the literals plane only in 0.71.0, and a panel over the older engine is
+  worse than one that does not open: it draws the names and the comment lines, says nothing
+  about the literals, and so reports a dictionary that looks complete over sources that still
+  print Cyrillic. A lagging engine gets the extension's own message with the version installed
+  and the cure (`pip install -U xbsl`), as before.
+
 ## 0.63.0
 
 ### Added

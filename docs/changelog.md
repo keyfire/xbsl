@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-20 – 0.70.0, 0.71.0
+## 2026-08-20 – 0.70.0, 0.71.0, 0.71.1
 
 ### Added
 - **A third dictionary plane - `literals`.** The translator left string literals alone as data and
@@ -39,6 +39,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   tables and code samples, and lines that were long in the source already, are left untouched.
 
 ### Fixed
+- **A route template carries its parameter names.** The template `/res/{код}` is data - a visitor
+  types the path - but the name in braces DECLARES a parameter, and the handler reads it BY THAT
+  NAME. Left as written it parted company with the translated call: the handler asked for a
+  parameter the route does not declare, got nothing and answered something else - the site
+  statics arrived with a text/plain content type.
 - **The rules judged a translated tree more harshly than its source.** The platform compiler
   accepted the tree while the linter found errors in it that the source does not have: an object's
   derived type, an exception name marker, a subsystem usage block, a member's nullability, an

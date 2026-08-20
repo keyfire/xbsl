@@ -1,11 +1,11 @@
 // The translation dictionary as a table: every record of `xbsl-translation` next to everything
 // the sources still leave uncovered, with the translation editable in place.
 //
-// A project that translates its sources (`xbsl translate`) keeps its own names and comment lines
-// in a dictionary of several yaml files - thousands of records. Editing them by hand is where the
-// mistakes come from: a key in the wrong file, a scope dropped, a record added twice. So the panel
-// only draws: reading is `xbsl translate --entries` plus `--gaps`, writing is `--set`, and the
-// yaml layout stays the engine's business.
+// A project that translates its sources (`xbsl translate`) keeps its own names, comment lines and
+// string literals in a dictionary of several yaml files - thousands of records. Editing them by
+// hand is where the mistakes come from: a key in the wrong file, a scope dropped, a record added
+// twice. So the panel only draws: reading is `xbsl translate --entries` plus `--gaps`, writing is
+// `--set`, and the yaml layout stays the engine's business.
 //
 // The same data serves the light bulb: a finding of conventions/missing-translation carries the
 // exact dictionary key in its `data`, so "translate this" is one click away from the word itself.
@@ -26,6 +26,7 @@ import {
   EntryKind,
   MIN_ENGINE,
   RowFilter,
+  SetAnswer,
   SortDirection,
   SortKey,
   TranslationTarget,
@@ -40,6 +41,7 @@ import {
   parseSetResult,
   parseSummary,
   plannedActions,
+  refusalText,
   rowStats,
   setArgs,
   shortKey,
@@ -56,6 +58,11 @@ const PANEL_COMMAND = "xbsl.translate.dictionary";
 // thousands of records, and a table of that size costs seconds of DOM building for rows nobody
 // scrolls to; "show more" adds another page.
 const PAGE = 200;
+// Above this many characters the key cell is clamped to a few lines. A literal is a whole
+// message - in a real project up to some 700 characters - and drawn in full it makes one row
+// taller than the window, pushing the rest of the table out of sight; the full text stays
+// reachable as the cell's tooltip.
+const CLAMPED_KEY = 120;
 
 // How the project root is found - the same resolver the deploy and the metadata tree use, handed
 // over at registration (the extension owns the xbsl.projectRoot setting).
@@ -200,7 +207,7 @@ async function loadDictionary(folder: vscode.WorkspaceFolder): Promise<LoadedDic
 export async function writeEdits(
   folder: vscode.WorkspaceFolder,
   edits: DictionaryEdit[]
-): Promise<{ changed: number; added: number; removed: number } | undefined> {
+): Promise<SetAnswer | undefined> {
   const cfg = engineConfig(folder);
   const file = path.join(os.tmpdir(), `xbsl-translate-${process.pid}-${Date.now()}.json`);
   try {
@@ -217,7 +224,17 @@ export async function writeEdits(
       void vscode.window.showErrorMessage(vscode.l10n.t("Failed to write the translation: {0}", engineFailed(res)));
       return undefined;
     }
-    return parseSetResult(res.stdout);
+    const answer = parseSetResult(res.stdout);
+    // The engine turns an edit away when the value could not stand between the quotes of a
+    // string literal, and it says so in the same answer that reports what it DID write - the
+    // run is not a failure. Passed over, the entry would silently be missing from the
+    // dictionary while the status line congratulated the author on an update.
+    if (answer.refused.length > 0) {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t("The engine refused the translation: {0}", refusalText(answer.refused))
+      );
+    }
+    return answer;
   } catch (e) {
     void vscode.window.showErrorMessage(
       vscode.l10n.t("Failed to write the translation: {0}", e instanceof Error ? e.message : String(e))
@@ -412,14 +429,16 @@ class TranslationPanel {
   private async write(kind: EntryKind, key: string, value: string): Promise<void> {
     this.loading = true;
     this.panel.webview.postMessage({ type: "busy", on: true });
-    let result: { changed: number; added: number; removed: number } | undefined;
+    let result: SetAnswer | undefined;
     try {
       result = await writeEdits(this.folder, [{ key, value: value.trim(), kind }]);
     } finally {
       this.loading = false;
     }
-    if (!result) {
-      this.post(); // the write failed - the message is already up, the table stays as it was
+    if (!result || result.refused.length > 0) {
+      // Failed or refused: the message is already up, and the cell keeps what the author
+      // typed, so a wrong quote costs the keystroke and not the whole page.
+      this.post();
       return;
     }
     await this.reload();
@@ -430,13 +449,14 @@ class TranslationPanel {
     const t = {
       title: vscode.l10n.t("Translation dictionary"),
       lead: vscode.l10n.t(
-        "The project's own names and comment lines as `xbsl translate` sees them: what the dictionary already covers and what it does not. An edited cell is written by the engine into the dictionary yaml."
+        "The project's own names, comment lines and string literals as `xbsl translate` sees them: what the dictionary already covers and what it does not. An edited cell is written by the engine into the dictionary yaml."
       ),
       search: vscode.l10n.t("Search by key or translation"),
       gapsOnly: vscode.l10n.t("only untranslated"),
-      kindAny: vscode.l10n.t("names and comments"),
+      kindAny: vscode.l10n.t("names, comments and literals"),
       kindToken: vscode.l10n.t("names"),
       kindPhrase: vscode.l10n.t("comments"),
+      kindLiteral: vscode.l10n.t("literals"),
       reload: vscode.l10n.t("Re-read"),
       more: vscode.l10n.t("Show more"),
       colKind: vscode.l10n.t("Kind"),
@@ -447,6 +467,7 @@ class TranslationPanel {
       colFile: vscode.l10n.t("Dictionary file"),
       token: vscode.l10n.t("name"),
       phrase: vscode.l10n.t("comment"),
+      literal: vscode.l10n.t("literal"),
       busy: vscode.l10n.t("the engine is reading the project..."),
       empty: vscode.l10n.t("Nothing matches the filter."),
       noDictionary: vscode.l10n.t(
@@ -454,6 +475,10 @@ class TranslationPanel {
       ),
       stats: vscode.l10n.t("rows: {0}, untranslated: {1}, shown: {2}"),
       coverage: vscode.l10n.t("coverage {0}% ({1} of {2} surfaces)"),
+      // Counted apart from the coverage, the way the engine counts them: the coverage weighs
+      // names and comment lines, and a project whose messages are still Cyrillic must not be
+      // able to read 100% off this line.
+      literals: vscode.l10n.t("literals: {0} translated, {1} left"),
       hintTitle: vscode.l10n.t("the platform's spelling - click to insert"),
       placeTitle: vscode.l10n.t("open the source at this line"),
       fileTitle: vscode.l10n.t("open the dictionary record"),
@@ -481,6 +506,10 @@ class TranslationPanel {
        border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); }
   td.kind { color: var(--vscode-descriptionForeground); white-space: nowrap; }
   td.key { font-family: var(--vscode-editor-font-family); word-break: break-word; }
+  /* A string literal is a whole message; drawn in full its row is taller than the window and
+     hides the rest of the table. Four lines with an ellipsis, the whole text in the tooltip. */
+  td.key .clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
+    overflow: hidden; }
   td.count { text-align: right; white-space: nowrap; }
   .scope { color: var(--vscode-descriptionForeground); }
   .cell { position: relative; }
@@ -504,6 +533,7 @@ class TranslationPanel {
     <option value="any">${escapeHtml(t.kindAny)}</option>
     <option value="token">${escapeHtml(t.kindToken)}</option>
     <option value="phrase">${escapeHtml(t.kindPhrase)}</option>
+    <option value="literal">${escapeHtml(t.kindLiteral)}</option>
   </select>
   <button id="reload">${escapeHtml(t.reload)}</button>
 </div>
@@ -527,6 +557,7 @@ class TranslationPanel {
 const vsapi = acquireVsCodeApi();
 const TEXT = ${inlineJson(t)};
 const PAGE = ${PAGE};
+const CLAMPED_KEY = ${CLAMPED_KEY};
 const $ = (id) => document.getElementById(id);
 // The extension's state comes inlined (a panel opened from a finding is already filtered by its
 // key); what the webview itself remembers wins over it, which is exactly the restore after a
@@ -608,10 +639,18 @@ function render() {
     const tr = body.insertRow();
     const kind = tr.insertCell();
     kind.className = "kind";
-    kind.textContent = row.kind === "phrase" ? TEXT.phrase : TEXT.token;
+    kind.textContent = row.kind === "phrase" ? TEXT.phrase : row.kind === "literal" ? TEXT.literal : TEXT.token;
     const key = tr.insertCell();
     key.className = "key";
-    key.textContent = row.key;
+    const text = document.createElement("div");
+    text.textContent = row.key;
+    if (row.key.length > CLAMPED_KEY) {
+      // Clamped rather than trimmed: the key is what the engine is asked about, and the tooltip
+      // keeps every character of it in reach without costing the table its shape.
+      text.className = "clamp";
+      text.title = row.key;
+    }
+    key.appendChild(text);
     if (row.scope) {
       const scope = document.createElement("div");
       scope.className = "scope";
@@ -645,12 +684,19 @@ function render() {
   }
   const stats = TEXT.stats
     .replace("{0}", data.stats.total).replace("{1}", data.stats.gaps).replace("{2}", data.stats.shown);
-  const totals = data.totals
+  let totals = data.totals
     ? " \\u00b7 " + TEXT.coverage
         .replace("{0}", (data.totals.coverage * 100).toFixed(2))
         .replace("{1}", data.totals.translated)
         .replace("{2}", data.totals.surfaces)
     : "";
+  // Only when the project has literals at all: on one that does not, the clause would be a
+  // column of zeroes saying nothing.
+  if (data.totals && (data.totals.literalsTranslated || data.totals.literalsMissing)) {
+    totals += " \\u00b7 " + TEXT.literals
+      .replace("{0}", data.totals.literalsTranslated)
+      .replace("{1}", data.totals.literalsMissing);
+  }
   $("stats").textContent = busy ? TEXT.busy : stats + totals;
   $("dict").textContent = data.dictionary || "";
   $("more").style.display = data.stats.shown < data.stats.total ? "" : "none";
@@ -775,7 +821,15 @@ async function setTranslation(uri: vscode.Uri, target: TranslationTarget, value?
   if (word === undefined) {
     word = await vscode.window.showInputBox({
       title: vscode.l10n.t("Translation of \"{0}\"", shortKey(target.key, 80)),
-      prompt: vscode.l10n.t("The word is written into the project's translation dictionary."),
+      prompt:
+        target.kind === "literal"
+          // The value goes back between two quotes of the source, so it is typed the way the
+          // source writes it. Said here rather than left to the engine's refusal: the rule is
+          // easy to obey and hard to guess.
+          ? vscode.l10n.t(
+              "The text is written between the quotes of the literal: an inner quote is \\\", a backslash is \\\\."
+            )
+          : vscode.l10n.t("The word is written into the project's translation dictionary."),
       value: target.suggestion ?? "",
       ignoreFocusOut: true,
       validateInput: (v) => (v.trim() === "" ? vscode.l10n.t("A translation cannot be empty.") : undefined),
@@ -789,7 +843,9 @@ async function setTranslation(uri: vscode.Uri, target: TranslationTarget, value?
     { location: vscode.ProgressLocation.Window, title: vscode.l10n.t("XBSL: writing the translation...") },
     () => writeEdits(folder, [{ key: target.key, value: written, kind: target.kind }])
   );
-  if (!result) {
+  // A refusal is already on screen with the engine's reason; nothing was written, so there is
+  // nothing to re-check and no update to announce.
+  if (!result || result.refused.length > 0) {
     return;
   }
   void vscode.window.setStatusBarMessage(

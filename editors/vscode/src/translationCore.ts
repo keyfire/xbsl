@@ -10,10 +10,15 @@
 
 import { compareVersions } from "./updateCheckCore";
 
-export type EntryKind = "token" | "phrase";
+// The three planes of the dictionary, as the engine names them: `tokens` (project names),
+// `phrases` (whole comment lines) and `literals` (the text between the quotes of a string
+// literal). A literal is the odd one: its key and its value are written the way the SOURCE
+// writes them - an inner quote is \", a backslash is \\ - because the value goes back
+// between two quotes, and the engine refuses anything that could not stand there.
+export type EntryKind = "token" | "phrase" | "literal";
 
-// A record of the dictionary as `--entries` reports it: the key (a project name, or a whole
-// comment line), its translation and where the record lives.
+// A record of the dictionary as `--entries` reports it: the key (a project name, a whole
+// comment line, or the body of a string literal), its translation and where the record lives.
 export interface DictionaryEntry {
   key: string;
   value: string;
@@ -117,7 +122,12 @@ export function setArgs(cfg: EngineConfig, editsFile: string): string[] {
 // them in 0.70.0. An older one answers an argparse dump ("unrecognized arguments"), which names
 // neither the cause nor the cure - and the extension and the engine are installed apart, so a
 // new panel over an old engine is the ordinary state right after a release.
-export const MIN_ENGINE = "0.70.0";
+//
+// 0.71.0 rather than 0.70.0 because the LITERALS plane arrived there. On a 0.70.0 engine the
+// table would draw the names and the comment lines and say nothing about the string literals -
+// a dictionary that looks complete while the sources still carry Cyrillic messages. A panel
+// that shows part of the truth is worse than one that refuses to open and names the cure.
+export const MIN_ENGINE = "0.71.0";
 
 // The command line that asks the engine its version - the same binary the table runs, so a
 // Python interpreter is asked through `-m xbsl`.
@@ -168,10 +178,21 @@ export interface GapsAnswer {
   gaps: DictionaryGap[];
 }
 
+// An edit the engine would not write. Only a literal is ever refused: its value is pasted back
+// between two quotes, so a bare quote, a dangling backslash or a newline would end the literal
+// early and stop the module from compiling. The engine checks that WHILE the value is in hand
+// rather than at the next load, and names the reason in the reader's language.
+export interface RefusedEdit {
+  key: string;
+  kind: EntryKind;
+  reason: string;
+}
+
 export interface SetAnswer {
   changed: number;
   added: number;
   removed: number;
+  refused: RefusedEdit[];
 }
 
 function decode(stdout: string): Record<string, unknown> {
@@ -216,6 +237,12 @@ export interface TranslationTotals {
   translated: number;
   missing: number;
   coverage: number; // 0..1
+  // The literals are counted apart from the coverage, the way the engine counts them: a name
+  // has one right spelling and a sentence between quotes has not, so they are not one number.
+  // Kept out of the header a project could read "coverage 100%" with its messages still in
+  // Cyrillic - the exact blind spot the literals plane was added to end.
+  literalsTranslated: number;
+  literalsMissing: number;
 }
 
 export function parseSummary(stdout: string): TranslationTotals {
@@ -226,16 +253,30 @@ export function parseSummary(stdout: string): TranslationTotals {
     translated: Number(totals.translated ?? 0),
     missing: Number(totals.missing ?? 0),
     coverage: Number(totals.coverage ?? 0),
+    literalsTranslated: Number(totals.literals_translated ?? 0),
+    literalsMissing: Number(totals.missing_literals ?? 0),
   };
 }
 
 export function parseSetResult(stdout: string): SetAnswer {
   const data = decode(stdout);
+  const refused = Array.isArray(data.refused) ? (data.refused as RefusedEdit[]) : [];
   return {
     changed: Number(data.changed ?? 0),
     added: Number(data.added ?? 0),
     removed: Number(data.removed ?? 0),
+    // A refusal is not an engine error: the run may have written the other edits of the same
+    // file and still turned one away. Read as a plain success it would be swallowed - the
+    // status line would report "the dictionary is updated" over an entry that never landed.
+    refused: refused.filter((item) => item && typeof item.key === "string"),
   };
+}
+
+// The refusals as one line for a message box: which entry, and why the engine would not take
+// it. The key is trimmed - a literal runs to hundreds of characters and would push the reason,
+// the only actionable half, off the screen.
+export function refusalText(refused: RefusedEdit[]): string {
+  return refused.map((item) => `"${shortKey(item.key, 60)}": ${item.reason}`).join("; ");
 }
 
 // A row's identity in the table and in the messages of the panel. A name and a comment line can
@@ -394,6 +435,14 @@ export interface TranslationTarget {
   suggestion?: string;
 }
 
+// Kinds a suggestion can belong to. The platform tables spell NAMES; between the quotes of a
+// literal stands as often a whole sentence, and a table answer there would be a guess dressed
+// as an authority - so the engine offers none, and a suggestion arriving on a literal anyway
+// is dropped here rather than shown as a one-click repair.
+function suggestible(kind: EntryKind): boolean {
+  return kind !== "literal";
+}
+
 export function translationTarget(data: unknown): TranslationTarget | undefined {
   if (!data || typeof data !== "object") {
     return undefined;
@@ -403,14 +452,18 @@ export function translationTarget(data: unknown): TranslationTarget | undefined 
     return undefined;
   }
   const { kind, key, suggestion } = carried as { kind?: unknown; key?: unknown; suggestion?: unknown };
-  if ((kind !== "token" && kind !== "phrase") || typeof key !== "string" || key === "") {
+  if (!isEntryKind(kind) || typeof key !== "string" || key === "") {
     return undefined;
   }
   const target: TranslationTarget = { kind, key };
-  if (typeof suggestion === "string" && suggestion !== "") {
+  if (typeof suggestion === "string" && suggestion !== "" && suggestible(kind)) {
     target.suggestion = suggestion;
   }
   return target;
+}
+
+function isEntryKind(value: unknown): value is EntryKind {
+  return value === "token" || value === "phrase" || value === "literal";
 }
 
 // What the light bulb offers for such a finding, in the order it offers it. The suggestion is
@@ -425,7 +478,7 @@ export interface PlannedAction {
 
 export function plannedActions(target: TranslationTarget): PlannedAction[] {
   const actions: PlannedAction[] = [];
-  if (target.suggestion) {
+  if (target.suggestion && suggestible(target.kind)) {
     actions.push({ action: "apply", value: target.suggestion });
   }
   actions.push({ action: "ask" }, { action: "open" });

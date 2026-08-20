@@ -17,6 +17,7 @@ import {
   parseSetResult,
   parseSummary,
   plannedActions,
+  refusalText,
   rowKey,
   rowStats,
   setArgs,
@@ -126,13 +127,16 @@ test("an engine without the panel's commands is named by its version", () => {
   // Older than the minimum: it would answer `--entries` with an argparse dump, so the panel
   // must say so itself.
   assert.strictEqual(outdatedEngine("xbsl 0.69.3"), "0.69.3");
+  // 0.70.0 answers the table commands but knows no literals plane: the panel over it would
+  // draw a dictionary that looks complete while every string literal stays invisible.
+  assert.strictEqual(outdatedEngine("xbsl 0.70.0"), "0.70.0");
   assert.strictEqual(outdatedEngine(`xbsl ${MIN_ENGINE}`), undefined);
-  assert.strictEqual(outdatedEngine("xbsl 0.71.0"), undefined);
+  assert.strictEqual(outdatedEngine("xbsl 0.72.1"), undefined);
   // A pre-release of the minimum carries the commands, so it passes.
-  assert.strictEqual(outdatedEngine("xbsl 0.70.0-rc1"), undefined);
-  assert.strictEqual(outdatedEngine("xbsl 0.69.3-rc1"), "0.69.3-rc1");
+  assert.strictEqual(outdatedEngine("xbsl 0.71.0-rc1"), undefined);
+  assert.strictEqual(outdatedEngine("xbsl 0.70.0-rc1"), "0.70.0-rc1");
   // The tool names itself before the number: a version elsewhere in the output is not its own.
-  assert.strictEqual(outdatedEngine("warning: pymorphy3 0.9.1 is required\nxbsl 0.70.0"), undefined);
+  assert.strictEqual(outdatedEngine("warning: pymorphy3 0.9.1 is required\nxbsl 0.71.0"), undefined);
   // Output we cannot read is not a verdict: a working engine must not be locked out over it.
   assert.strictEqual(outdatedEngine("command not found"), undefined);
 });
@@ -145,7 +149,7 @@ test("entries, gaps and the write result are parsed", () => {
   assert.strictEqual(entries.dictionary, "D:\\словарь");
   assert.strictEqual(parseGaps(JSON.stringify({ total: 2, gaps: [gap()] })).gaps[0].count, 3);
   assert.deepStrictEqual(parseSetResult(JSON.stringify({ changed: 1, added: 2, removed: 0 })), {
-    changed: 1, added: 2, removed: 0,
+    changed: 1, added: 2, removed: 0, refused: [],
   });
 });
 
@@ -161,8 +165,15 @@ test("output without the expected array is rejected", () => {
 });
 
 test("the coverage totals are read for the header line", () => {
-  const totals = parseSummary(JSON.stringify({ totals: { surfaces: 100, translated: 99, missing: 1, coverage: 0.99 } }));
-  assert.deepStrictEqual(totals, { surfaces: 100, translated: 99, missing: 1, coverage: 0.99 });
+  const totals = parseSummary(JSON.stringify({
+    totals: { surfaces: 100, translated: 99, missing: 1, coverage: 0.99, literals_translated: 8, missing_literals: 3 },
+  }));
+  assert.deepStrictEqual(totals, {
+    surfaces: 100, translated: 99, missing: 1, coverage: 0.99, literalsTranslated: 8, literalsMissing: 3,
+  });
+  // The literals stand apart from the coverage on purpose: a project can be at 100% of its
+  // names and still ship Cyrillic messages, and the header must be able to say so.
+  assert.strictEqual(totals.coverage, 0.99);
   // A report without totals is not a failure: the table lives without the coverage line.
   assert.strictEqual(parseSummary(JSON.stringify({ problems: [] })).surfaces, 0);
 });
@@ -346,6 +357,127 @@ test("a long key is trimmed for the menu title", () => {
   assert.strictEqual(shortKey("Товар"), "Товар");
   // A comment line broken over the source keeps one line in the menu.
   assert.strictEqual(shortKey("две\n  строки"), "две строки");
+});
+
+// ------------------------------------------------------------------- the literals plane
+
+test("a literal record is read as its own kind, written the way the source writes it", () => {
+  // The engine's answer to `translate --entries --kind literal`: the key and the value are the
+  // text between the quotes, so an inner quote arrives as \" - and must survive untouched.
+  const answer = parseEntries(
+    JSON.stringify({
+      dictionary: "D:\\proj\\xbsl-translation",
+      total: 1,
+      entries: [entry({ key: 'Заявка \\"срочная\\" принята', value: 'A \\"rush\\" request accepted', kind: "literal" })],
+    })
+  );
+  assert.strictEqual(answer.entries[0].kind, "literal");
+  assert.strictEqual(answer.entries[0].key, 'Заявка \\"срочная\\" принята');
+  assert.strictEqual(answer.entries[0].value, 'A \\"rush\\" request accepted');
+});
+
+test("a literal gap arrives without a platform spelling", () => {
+  // The platform tables spell NAMES; between the quotes stands as often a whole message, so
+  // the engine offers nothing there and the empty cell must stay empty.
+  const answer = parseGaps(
+    JSON.stringify({ total: 1, gaps: [gap({ key: "Шаги задачи", kind: "literal", count: 2, suggestion: "" })] })
+  );
+  assert.strictEqual(answer.gaps[0].kind, "literal");
+  assert.strictEqual(answer.gaps[0].suggestion, "");
+  assert.strictEqual(mergeRows([], answer.gaps)[0].suggestion, "");
+});
+
+test("a name and a literal of the same text are two rows", () => {
+  const rows = mergeRows([], [gap({ key: "Товары", kind: "token" }), gap({ key: "Товары", kind: "literal" })]);
+  assert.strictEqual(rows.length, 2);
+  assert.notStrictEqual(rowKey("token", "Товары"), rowKey("literal", "Товары"));
+});
+
+test("the literal kind narrows the table and reaches the engine", () => {
+  const rows = [row(), row({ key: "Заявка принята", kind: "literal", value: "" })];
+  assert.deepStrictEqual(filterRows(rows, { kind: "literal" }).map((r) => r.key), ["Заявка принята"]);
+  assert.strictEqual(filterRows(rows, { kind: "any" }).length, 2);
+  assert.deepStrictEqual(translateArgs("gaps", CFG, { kind: "literal", limit: 5 }), [
+    "translate", "D:\\proj\\Acme\\Задачник", "--gaps", "--kind", "literal", "--limit", "5", "--format", "json",
+  ]);
+});
+
+test("a literal counts in the header like every other row", () => {
+  const rows = [row(), row({ key: "Заявка принята", kind: "literal", value: "" })];
+  assert.deepStrictEqual(rowStats(filterRows(rows, {}), 200), { total: 2, gaps: 1, shown: 2 });
+});
+
+// --------------------------------------------------------------- a refused literal write
+
+test("a refused edit is read out of the write answer, not swallowed as a success", () => {
+  // The engine answers with the refusal AND with what it did write - a batch is not all or
+  // nothing. Read as a plain success, the status line would report an update over an entry
+  // that never landed.
+  const answer = parseSetResult(
+    JSON.stringify({
+      changed: 0,
+      added: 1,
+      removed: 0,
+      refused: [
+        { key: "Шаги задачи", kind: "literal", reason: "обратный слеш в конце: он съест закрывающую кавычку" },
+      ],
+    })
+  );
+  assert.strictEqual(answer.added, 1);
+  assert.strictEqual(answer.refused.length, 1);
+  assert.strictEqual(answer.refused[0].kind, "literal");
+  assert.deepStrictEqual(parseSetResult(JSON.stringify({ changed: 1, added: 0, removed: 0 })).refused, []);
+});
+
+test("the refusal message names the entry and the reason the engine gave", () => {
+  const text = refusalText([
+    { key: "Заявка принята", kind: "literal", reason: "кавычка закрывает литерал раньше времени" },
+  ]);
+  assert.ok(text.includes("Заявка принята"));
+  assert.ok(text.includes("кавычка закрывает литерал раньше времени"));
+  // Several refusals of one batch read as one line.
+  assert.ok(
+    refusalText([
+      { key: "Товары", kind: "literal", reason: "перевод строки" },
+      { key: "Заявки", kind: "literal", reason: "перевод строки" },
+    ]).includes("; ")
+  );
+});
+
+test("a long literal does not push the reason out of the message", () => {
+  // In a real project a literal runs to hundreds of characters; untrimmed it would fill the
+  // message box and leave the only actionable half - the reason - off the screen.
+  const long = "Задача ".repeat(100);
+  const text = refusalText([{ key: long, kind: "literal", reason: "перевод строки" }]);
+  assert.ok(text.length < 120);
+  assert.ok(text.endsWith("перевод строки"));
+});
+
+// -------------------------------------------------- the light bulb on a literal finding
+
+test("a literal finding becomes a literal dictionary entry", () => {
+  assert.deepStrictEqual(translationTarget({ translation: { kind: "literal", key: "Заявка принята" } }), {
+    kind: "literal",
+    key: "Заявка принята",
+  });
+});
+
+test("a literal is never offered the platform's spelling in one click", () => {
+  // A table answer between the quotes would be a guess dressed as an authority, so the
+  // suggestion is dropped where the finding is read and the menu stays the dialog and the panel.
+  const target = translationTarget({ translation: { kind: "literal", key: "Товары", suggestion: "Products" } });
+  assert.deepStrictEqual(target, { kind: "literal", key: "Товары" });
+  assert.deepStrictEqual(plannedActions(target!), [{ action: "ask" }, { action: "open" }]);
+  // Even handed a suggestion outright - the menu is built from the kind, not from luck.
+  assert.deepStrictEqual(plannedActions({ kind: "literal", key: "Товары", suggestion: "Products" }), [
+    { action: "ask" },
+    { action: "open" },
+  ]);
+  // A name still gets it: only the literal is left without.
+  assert.deepStrictEqual(plannedActions({ kind: "token", key: "Товары", suggestion: "Products" })[0], {
+    action: "apply",
+    value: "Products",
+  });
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

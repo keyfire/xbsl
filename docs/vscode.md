@@ -105,10 +105,12 @@ By default the extension calls `xbsl` from `PATH`. Point it elsewhere with
 then invoked as `<python> -m xbsl`).
 
 The two are installed apart, so the engine can lag behind the extension. Most of the extension
-works with any of them; the [translation dictionary](#translation-dictionary) needs **xbsl 0.70.0
-or newer** – the `translate --entries / --gaps / --set` commands it is built on appeared there.
-With an older engine the panel does not open and says which version is installed
-(`pip install -U xbsl`).
+works with any of them; the [translation dictionary](#translation-dictionary) needs **xbsl 0.71.0
+or newer** – the `translate --entries / --gaps / --set` commands it is built on appeared in 0.70.0,
+and the third plane of the dictionary, the string **literals**, in 0.71.0. A 0.70.0 engine would
+draw the names and the comment lines and stay silent about the literals – a dictionary that looks
+complete over sources that still carry Cyrillic messages. With an older engine the panel does not
+open and says which version is installed (`pip install -U xbsl`).
 
 ## New project
 
@@ -367,24 +369,33 @@ from a shell you can work with it by the same means (`xbsl templates list / expo
 ## Translation dictionary
 
 A project that translates its sources into English spellings (`xbsl translate`) keeps its own
-names and comment lines in a dictionary – the `xbsl-translation` directory next to the project or
-above it: several yaml files, thousands of records. The **XBSL: translation dictionary** command
-(`xbsl.translate.dictionary`) opens it as a table – the kind (a name or a comment line), the key,
-the translation, how often the sources use it, the first occurrence and the dictionary file
-holding the record.
+names, comment lines and string literals in a dictionary – the `xbsl-translation` directory next to
+the project or above it: several yaml files, thousands of records. The **XBSL: translation
+dictionary** command (`xbsl.translate.dictionary`) opens it as a table – the kind (a name, a comment
+line or a literal), the key, the translation, how often the sources use it, the first occurrence and
+the dictionary file holding the record.
 
 - **The translation cell is editable.** What you type is written by the engine
   (`xbsl translate --set`) – into the right file, with the right scope; an emptied cell removes
   the record. A failed write shows the engine's message and leaves the table as it was.
+- **A literal is written the way the source writes it** – the text between the quotes, an inner
+  quote as `\"` and a backslash as `\\`. The value goes back between two quotes of a module, so
+  the engine checks that it could stand there and refuses anything that would end the literal
+  early; the refusal, with its reason, is shown and the cell keeps its old value.
 - **Two filters**: a search over keys and translations, and *only untranslated* – what the
-  dictionary does not cover yet. The selector next to them narrows the table to names or to
-  comment lines.
+  dictionary does not cover yet. The selector next to them narrows the table to names, to comment
+  lines or to literals.
 - **The platform's own spelling** stands grey in an empty cell when the engine offers one; a
-  click puts it in and writes it.
+  click puts it in and writes it. A literal gets none: the platform tables spell names, and
+  between the quotes stands as often a whole message.
 - **The occurrence is a link** – it opens the source file at that line; the dictionary file opens
   at the record itself.
 - The line above the table counts the rows, the untranslated among them and the project's
-  coverage – the very number `xbsl translate` reports and CI gates on.
+  coverage – the very number `xbsl translate` reports and CI gates on. The literals are counted
+  beside it, the way the engine counts them: they are not part of the coverage, so a project could
+  otherwise read 100% with its messages still in Cyrillic.
+- **A long literal keeps its row small.** In a real project a literal runs to hundreds of
+  characters; the key cell is clamped to four lines and the whole text is the cell's tooltip.
 
 The panel writes nothing by itself: reading is `xbsl translate --entries` plus `--gaps`, writing
 is `--set`. The layout of the dictionary – which file a new record goes to, the scopes, the
@@ -394,17 +405,19 @@ disagree.
 ### Translating from the finding
 
 The `conventions/missing-translation` rule (off by default – switch it on in the rules table)
-shows every uncovered name and comment line where it stands. Its lightbulb (`Ctrl+.`) offers:
+shows every uncovered name, comment line and string literal where it stands. Its lightbulb
+(`Ctrl+.`) offers:
 
 - **Translate as "\<spelling\>"** – the platform's own guess, written in one click (only when
-  there is one);
-- **Translate "\<key\>"...** – asks for the word, prefilled with that guess;
+  there is one, so never on a literal);
+- **Translate "\<key\>"...** – asks for the word, prefilled with that guess; on a literal the
+  prompt says how the text is written between the quotes;
 - **Open the translation dictionary** – the panel above, filtered by this very key.
 
-The finding carries the exact dictionary key in its data, so the repair never guesses it out of
-the message – neither for a name nor for a comment line elided in the text. After a write the
-project is checked again (the server re-reads the dictionary by itself, no restart), and the
-finding goes away.
+The finding carries the exact dictionary key and its kind in its data, so the repair never guesses
+either out of the message – neither for a name, nor for a comment line elided in the text, nor for
+a literal. After a write the project is checked again (the server re-reads the dictionary by
+itself, no restart), and the finding goes away.
 
 ## Code palette
 
