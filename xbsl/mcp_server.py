@@ -1040,6 +1040,146 @@ def meta_add_handler(
     return out
 
 
+
+# --- translation dictionary -----------------------------------------------------------------
+#
+# Filling a dictionary of several thousand entries by reading the files is hopeless: they are
+# megabytes, and a wrong guess about an existing spelling costs a collision the platform only
+# reports at apply time. These four tools answer in pages instead: what is missing (most
+# frequent first, with a place to look at and the platform's own spelling as a hint), what the
+# dictionary already says about a word, and a way to write entries back without touching yaml
+# by hand.
+
+
+@mcp.tool()
+def translate_status(root: str) -> dict:
+    """Coverage of the project's translation dictionary: how much is done and what is left.
+
+    root – the project directory (the one with the project descriptor).
+    Returns the totals only - a cheap health check before deciding what to fill.
+    """
+    from xbsl.translation import cli as translate_cli
+
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    from xbsl.translation import project as project_module
+
+    report_obj = project_module.translate_project(project, dictionary, None)
+    totals = report_obj.totals()
+    return {
+        "coverage": totals["coverage"],
+        "translated": totals["translated"],
+        "missing": totals["missing"],
+        "missing_tokens": totals["missing_tokens"],
+        "missing_phrases": totals["missing_phrases"],
+        "platform_gaps": totals["platform_gaps"],
+        "problems": report_obj.problems[:20],
+        "dictionary": str(translate_cli.dictionary_path_for(project)),
+    }
+
+
+@mcp.tool()
+def translate_gaps(
+    root: str,
+    kind: str = "any",
+    filter: str = "",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """What the dictionary does not cover yet, most frequent first.
+
+    root   – the project directory;
+    kind   – 'token' (names), 'phrase' (comment lines) or 'any';
+    filter – a substring of the key;
+    limit/offset – the page (limit 0 means all, which can be thousands of rows).
+    Every row carries the count, up to a few places to look at, and `suggestion` - the
+    platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
+    the project declared may need a different word.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    needle = (filter or "").casefold()
+    rows = [
+        gap for gap in entries_module.gaps_of_project(project, dictionary)
+        if (kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
+    ]
+    page = rows[offset:offset + limit] if limit else rows[offset:]
+    return {
+        "total": len(rows),
+        "gaps": [
+            {**gap.as_dict(), "places": [f"{f}:{ln}" for f, ln in gap.places[:3]]}
+            for gap in page
+        ],
+    }
+
+
+@mcp.tool()
+def translate_entries(
+    root: str,
+    filter: str = "",
+    kind: str = "any",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    """What the dictionary already says - the way to keep a new entry consistent with it.
+
+    root   – the project directory;
+    filter – a substring of the key OR of the value (look up a root before inventing a word);
+    kind   – 'token', 'phrase' or 'any'.
+    Every row names the file and line it lives on, so an entry can be corrected in place.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, _dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    if path is None:
+        return {"error": i18n.t("translate.entries.no-dictionary")}
+    needle = (filter or "").casefold()
+    rows = [
+        entry for entry in entries_module.read_entries(path)
+        if (kind in ("any", entry.kind))
+        and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
+    ]
+    page = rows[offset:offset + limit] if limit else rows[offset:]
+    return {"total": len(rows), "dictionary": str(path),
+            "entries": [entry.as_dict() for entry in page]}
+
+
+@mcp.tool()
+def translate_set(root: str, edits: list[dict], target: str = "") -> dict:
+    """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
+
+    root   – the project directory;
+    edits  – [{key, value, kind}]; `kind` is 'token' (default) or 'phrase'. An empty value
+             REMOVES the entry - a half-filled stub is not a translation.
+    target – the file NEW entries go to (default 090-manual.yaml). An entry that already
+             exists is corrected where it lives, whatever the target says.
+    A key may be qualified (`<Owner>.<Name>`) to hold inside one namespace only - that is how
+    a word gets one spelling as a dictionary key or a component property and another globally.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, _dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    if path is None:
+        return {"error": i18n.t("translate.entries.no-dictionary")}
+    result = entries_module.write_entries(
+        path, list(edits or []), target=target or entries_module.DEFAULT_TARGET,
+    )
+    return {**result, "dictionary": str(path)}
+
+
 _forbid_unknown_arguments()
 
 

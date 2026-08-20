@@ -312,11 +312,15 @@ def _to_lsp_diag(d: Diagnostic, doc_text: Optional[str]) -> "lsp.Diagnostic":
         lines = doc_text.split("\n")
         if line0 < len(lines):
             end_col = _word_end(lines[line0], col0)
-    data = None
+    data: Optional[dict] = None
     if d.fix is not None and doc_text is not None:
         sl, sc = _offset_to_position(doc_text, d.fix.start)
         el, ec = _offset_to_position(doc_text, d.fix.end)
         data = {"fix": {"startLine": sl, "startCol": sc, "endLine": el, "endCol": ec, "new": d.fix.new}}
+    if d.data:
+        # Facts a client needs for a repair the linter cannot make itself - editing another
+        # file, or asking the user for a word. Kept beside `fix`, never instead of it.
+        data = {**(data or {}), **d.data}
     return lsp.Diagnostic(
         range=lsp.Range(lsp.Position(line0, col0), lsp.Position(line0, end_col)),
         message=d.message,

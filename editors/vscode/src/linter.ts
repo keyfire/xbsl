@@ -154,6 +154,11 @@ export function makeDiagnostic(d: RawDiag, lineText: string | undefined): vscode
   const diag = new vscode.Diagnostic(range, d.message, severity);
   diag.source = "xbsl";
   diag.code = docCode(d.rule); // for a standard-backed rule the rule badge becomes a document link
+  if (d.data !== undefined) {
+    // The same place the LSP client puts the server's diagnostic data, so a code action reads
+    // one field in both modes (the translation quick fix takes its dictionary key from it).
+    (diag as vscode.Diagnostic & { data?: unknown }).data = d.data;
+  }
   return diag;
 }
 

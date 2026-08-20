@@ -79,10 +79,10 @@ _IMPLICIT = frozenset({
 })
 
 # Members that exist on the platform but are absent from the distribution docs.
-# Kept deliberately tiny.
+# Kept deliberately tiny. English spellings are NOT listed: _both_spellings derives them from
+# the compiler dictionary, the same way it does for the documented members.
 _UNDOCUMENTED = frozenset({
     "СобственнаяМодифицированность",  # a form-component property
-    "Message",                        # the English spelling of the message-reporting global
 })
 # `ВыполнитьЗаписать` and `ВыполнитьЗаписатьИЗакрыть` used to sit here as "commands of
 # ObjectForm". They are nothing of the sort: the compiler answers `Unknown method` to
@@ -121,14 +121,22 @@ _FIELD_SECTIONS = (
     "ТабличныеЧасти", "События", "Поля",
 )
 
+#: The object module of an entity, in both spellings the platform accepts: an English project
+#: writes `<Name>.Object.xbsl` where a Russian one writes `<Имя>.Объект.xbsl` (see
+#: scaffold.object_module_path), and either pairs with `<Имя>.yaml`. Recognising only the
+#: Russian tail sent the pair lookup to `<Name>.Object.yaml`, which no project has - the module
+#: was left without the attributes of its own object, and every one of them was reported
+#: undefined.
+_OBJECT_MODULE_SUFFIXES = (".Объект.xbsl", ".Object.xbsl")
+
 
 def _pair_key(rel: str) -> tuple[str, str, str]:
     """(directory, paired yaml file name, module file name): X.xbsl -> X.yaml,
-    X.Объект.xbsl -> X.yaml."""
+    X.Объект.xbsl / X.Object.xbsl -> X.yaml."""
     parts = rel.replace("\\", "/").rsplit("/", 1)
     directory = parts[0] if len(parts) == 2 else ""
     stem = parts[-1]
-    for suffix in (".Объект.xbsl", ".xbsl", ".yaml"):
+    for suffix in (*_OBJECT_MODULE_SUFFIXES, ".xbsl", ".yaml"):
         if stem.endswith(suffix):
             stem = stem[: -len(suffix)]
             break
@@ -172,12 +180,24 @@ def _both_spellings(names: set[str]) -> set[str]:
     Russian only - so a form's WriteAndClose arrives Russian even though an English
     project spells the very same property `WriteAndClose` and the compiler accepts it. The
     pairs come from the compiler dictionary; a member it does not pair stays as it is.
+
+    A name the compiler dictionary leaves unpaired is asked of the property vocabulary as
+    well: `Ссылка` is the only word of the entity protocol the dictionary does not carry,
+    and terms.json names it `Link` in that role. Only ever WIDENS a scope, so a pairing that
+    misses costs a false negative, never a false positive.
     """
     out = set(names)
     for name in names:
-        english = terms.common_english(name)
+        english = terms.common_english(name) or terms.english(name, "properties")
         if english:
             out.add(english)
+        # The entity protocol speaks the FACET language, where the same word means something
+        # else than as a property: an object module's built-in reference is `Reference`,
+        # while the property vocabulary calls that word `Link`. Both spellings are added -
+        # widening a scope can only cost a false negative, never a false positive.
+        facet = terms.facet_suffix_english(name)
+        if facet:
+            out.add(facet)
     return out
 
 
@@ -222,7 +242,8 @@ def _static_globals() -> set[str] | None:
                 catalog = None
             _static_cache = (
                 None if catalog is None
-                else set(stdlib) | set(catalog.get("globals", ())) | _IMPLICIT | _UNDOCUMENTED,
+                else set(stdlib) | set(catalog.get("globals", ()))
+                | _both_spellings(set(_IMPLICIT) | set(_UNDOCUMENTED)),
             )
     return _static_cache[0]
 
@@ -238,9 +259,9 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         data, err = _parsed(source)
         if err is not None or not isinstance(data, dict):
             data = {}
-        imports = data.get("Импорт")
-        name = value_of(data, "Имя")
         kind = object_kind(data)
+        imports = value_of(data, "Импорт", kind)
+        name = value_of(data, "Имя", kind)
         return {
             "k": "y",
             "dir": directory,
@@ -277,7 +298,7 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         "k": "x",
         "dir": directory,
         "pair": pair_file,
-        "obj": source.rel.endswith(".Объект.xbsl"),
+        "obj": source.rel.endswith(_OBJECT_MODULE_SUFFIXES),
         "cands": cands,
         "pool": hint_pool,
     }
@@ -427,14 +448,16 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             kind = pair["element_kind"]
             if fact["obj"]:
                 # an entity module: the attributes plus the standard fields and write methods
-                extras = set(pair["sections"]) | _ENTITY_COMMON
+                extras = set(pair["sections"]) | _both_spellings(set(_ENTITY_COMMON))
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
             else:
                 # a data-kind manager module / common module: the yaml fields plus the manager members
                 extras = set(pair["sections"])
-                extras |= set(object_members.get(kind, ()))
-                extras |= set(dataset.manager_member_names(manager_members.get(kind)))
+                extras |= _both_spellings(
+                    set(object_members.get(kind, ()))
+                    | set(dataset.manager_member_names(manager_members.get(kind)))
+                )
         for line, col, name, sign in fact["cands"]:
             if name in project_names or name in extras:
                 continue

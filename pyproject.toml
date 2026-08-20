@@ -33,7 +33,10 @@ Issues = "https://github.com/keyfire/xbsl/issues"
 Changelog = "https://github.com/keyfire/xbsl/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["pytest>=7", "pymorphy3>=2.0"]
+# setuptools здесь ради теста упаковки: он сверяет список packages с деревом через
+# find_packages. Сборочная зависимость из [build-system] живёт в изолированном окружении
+# сборки, в окружении тестов её может не быть – и сторож молча пропускался бы.
+dev = ["pytest>=7", "pymorphy3>=2.0", "setuptools>=77"]
 mcp = ["mcp>=1.2,<3"]
 lsp = ["pygls>=1.3,<2"]
 # Морфология русского языка: правило naming/number (справочники во множественном числе,
@@ -53,7 +56,10 @@ xbsllint-lsp = "xbsl.lsp:main"
 
 [tool.setuptools]
 # xbsllint – пакет-псевдоним: импорт xbsllint/xbsllint.X отдаёт модули xbsl (см. его __init__).
-packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsllint"]
+# Список явный, поэтому каждый новый подпакет дописывается сюда руками: не дописанный в колесо
+# не попадёт, а в разработке этого не видно – editable-установка показывает дерево целиком.
+# Сверку списка с деревом держит tests/test_packaging.py.
+packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsl.translation", "xbsllint"]
 
 [tool.setuptools.dynamic]
 version = {attr = "xbsl.__version__"}

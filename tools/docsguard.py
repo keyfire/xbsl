@@ -48,7 +48,7 @@ VSCODE = ROOT / "editors" / "vscode"
 #: A new page belongs here - otherwise what it describes reads as undocumented.
 DESCRIPTIVE_PAGES = (
     "index", "GUIDE", "start", "linting", "RULES", "scaffolding", "servers",
-    "platform-data", "CLI", "DESIGNER", "DOCS_PANEL", "vscode",
+    "platform-data", "CLI", "DESIGNER", "DOCS_PANEL", "vscode", "translation",
 )
 
 

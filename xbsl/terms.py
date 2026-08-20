@@ -93,7 +93,8 @@ def _reset() -> None:
     Without this the process would keep answering from the previously pinned dataset - a
     pinned root with no terms.json still handed out the English spellings of the old one.
     """
-    global _cache, _reverse, _common, _common_reverse, _kinds
+    global _cache, _reverse, _common, _common_reverse, _kinds, _facets
+    _facets = None
     _cache = None
     _reverse = None
     _common = None
@@ -124,6 +125,38 @@ def forms(name: str, section: str) -> tuple[str, ...]:
     """Both spellings of a name, or just the given one when the platform has no English."""
     other = english(name, section)
     return (name, other) if other else (name,)
+
+
+_facets: dict[str, str] | None = None
+
+
+def facet_suffix_english(name: str) -> str | None:
+    """The English spelling of a FACET suffix - the part after the dot of a type name.
+
+    `Ссылка` is `Reference` as a facet while the property vocabulary calls the same word
+    `Link`, and the entity protocol of an object module speaks the facet language. The table
+    is built from the facet section, whose keys carry the owner (`BinaryObject.Reference`):
+    the suffix pair holds for every owner, project types included. A suffix two facets spell
+    differently is dropped rather than guessed - today there is none.
+    """
+    global _facets
+    if _facets is None:
+        table: dict[str, str] = {}
+        dropped: set[str] = set()
+        for russian, english in _terms().get("facets", {}).items():
+            if "." not in russian or "." not in english:
+                continue
+            ru_suffix, en_suffix = russian.rsplit(".", 1)[1], english.rsplit(".", 1)[1]
+            if ru_suffix in dropped:
+                continue
+            known = table.get(ru_suffix)
+            if known is not None and known != en_suffix:
+                del table[ru_suffix]
+                dropped.add(ru_suffix)
+                continue
+            table[ru_suffix] = en_suffix
+        _facets = table
+    return _facets.get(name)
 
 
 def key_forms(*names: str, extra: tuple[str, ...] = ()) -> tuple[str, ...]:

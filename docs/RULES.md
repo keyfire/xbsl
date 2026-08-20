@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 158 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 159 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -258,6 +258,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/use-needs-closeable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The `use` modifier over a type the catalog describes and that does not inherit `Closeable` - the modifier exists for the automatic `Close()`, and the compiler refuses the declaration [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 | `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Visible text left as a Cyrillic literal where the project already references the same property into a localization dictionary - the intent is counted per element kind, so a same-named property of another kind is not judged; silent on a project whose descriptor lists fewer than two localization languages |
 | `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Visible text left as a Cyrillic literal in a MODULE - judged by the SINK it reaches (an argument of the platform message call, a property of an event-log event, or either of them one step away through a method that forwards its parameter); markup, pure interpolation and single words are skipped, and the rule is silent on a project whose descriptor lists fewer than two localization languages |
+| `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A project token or a Cyrillic comment line the project's translation dictionary does not cover yet - one finding at its first occurrence in the file; silent unless an `xbsl-translation` dictionary lives next to (or above) the project (see `xbsl translate`) |
 | `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field access on a structure declared IN THE PROJECT is checked against its declaration: rename a field and its reader in another module turns red here rather than on the server apply. The type comes from the variable's declaration (`Module.Structure`, a bare name for the declaring module), from a `new` constructor and from the element type of a `for X in List` loop; a name declared with anything else in the method, a namesake of a stdlib type, the second hop of a chain and Latin member spellings are not judged |
 
 ## Group details

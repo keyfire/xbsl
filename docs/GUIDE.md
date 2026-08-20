@@ -16,6 +16,7 @@ The guide is split by task. The [README](https://github.com/keyfire/xbsl/blob/ma
 | [Metadata scaffolding](/scaffolding) | objects, attributes, routes and forms through the engine; code templates |
 | [Servers and plugins](/servers) | the LSP server, the MCP server, the web panel, plugins of your own |
 | [Platform data](/platform-data) | the generated datasets, the documentation index, the diff between two versions |
+| [Translating a project](/translation) | rewriting the sources into English spellings: the dictionary, the coverage, the CI gate |
 | [Commands](/CLI) | every command and flag, generated from the tool itself |
 | [VS Code extension](/vscode) | the editor built on the same engine: diagnostics, the metadata tree, deploy |
 | [Visual designer](/DESIGNER) | the form panel, the palette, the properties panel |

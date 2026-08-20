@@ -364,6 +364,10 @@ _CORE_MESSAGES = {
         "ru": "сравнить две версии данных: что изменилось в платформе",
         "en": "compare two data versions: what changed in the platform",
     },
+    "cli.help.commands.translate": {
+        "ru": "перевести исходники проекта на английские написания",
+        "en": "translate the project sources into English spellings",
+    },
     "cli.help.commands.scaffold-header": {
         "ru": "создание метаданных (создание и правка исходников):",
         "en": "metadata scaffolding (create and edit sources):",

@@ -138,6 +138,7 @@ def _commands_help() -> str:
         ("templates", i18n.t("cli.help.commands.templates")),
         ("extract", i18n.t("cli.help.commands.extract")),
         ("data-diff", i18n.t("cli.help.commands.data-diff")),
+        ("translate", i18n.t("cli.help.commands.translate")),
         ("self-update", i18n.t("cli.help.commands.self-update")),
     ]
     lines = [i18n.t("cli.help.commands.header")]
@@ -974,6 +975,10 @@ def main(argv: list[str] | None = None) -> int:
         from xbsl import datadiff
 
         return datadiff.cli_main(argv[1:])
+    if argv[:1] == ["translate"]:
+        from xbsl.translation import cli as translate_cli
+
+        return translate_cli.cli_main(argv[1:])
     if argv and argv[0] in _META_COMMANDS:
         return _scaffold_main(argv)
     if argv[:1] == ["lint"]:

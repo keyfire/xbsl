@@ -12,6 +12,62 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-20 – 0.70.0
+
+### Added
+- **The `xbsl translate` command** - source-to-source translation of a project into English
+  spellings. Platform tokens go by the metamodel and the term dictionaries of the dataset
+  (keywords by case-matched form, yaml keys by the class of their node, enumeration values
+  within their enumeration, type expressions with facets, query keywords inside `Query{}`
+  blocks, the code inside string interpolations); the project's OWN names and comment lines go
+  by a project dictionary - a directory of yaml files (`xbsl-translation` next to or above the
+  project) with two planes: `tokens` (one exact identifier to one exact identifier) and
+  `phrases` (one comment line to its translation). Files and directories are renamed through
+  the same token map, `Id` values never change, and the localized-strings layout turns around:
+  the target-language section becomes the base, the original values move under
+  `Localization/<Code>/`, the project's default and development languages follow. `--coverage`
+  reports the dictionary's share per metadata object, `--missing` writes the untranslated
+  remainder as a dictionary stub to fill, `--strict` gates a CI publish, and everything the
+  dataset cannot spell honestly stays as written and is reported - never guessed.
+- **Names the project declares are gated off the platform tables.** A word the platform
+  dictionaries also know - an enumeration value, an attribute, a dictionary key - is
+  translated by the project dictionary alone, so a declaration and every use of it move
+  together or wait together. Without that gate the module already calls the English member
+  while the yaml still declares the Russian value, and the build refuses the tree.
+- **The dictionary answers as a TABLE, and the tools fill it.** `xbsl translate --gaps` lists
+  what is missing (most frequent first, with places to look at and the platform's own spelling
+  as a hint), `--entries` lists what the dictionary already says with the file and line of each
+  entry, and `--set` writes entries back - adding, correcting in place, or removing by emptying
+  a value. The same four questions are MCP tools (`translate_status`, `translate_gaps`,
+  `translate_entries`, `translate_set`), so filling a dictionary of thousands of entries never
+  means reading the files. The writer fits an entry into the file it edits, copying the indent
+  from the neighbours of the section: a dictionary started with two spaces stays valid after an
+  edit, and a comment on the section head does not hide it from the table. A finding of
+  `conventions/missing-translation` now carries the facts
+  a client needs to offer the repair - the exact key, its kind and the suggestion - in the new
+  `Diagnostic.data`, which the language server and the machine-readable report pass through.
+- **The keys of json resources follow their structure fields.** A structure reads its resource
+  by FIELD NAME, so a key of the data is the same name written a second time; rename the field,
+  leave the key, and the binding finds nothing - silently, because the reading options tolerate
+  an unknown property and initialize a missing field, so the translated project compiles,
+  applies and starts with empty data. Only keys that name a field of a project structure move;
+  values, and keys no structure declares (a map keyed by content, an external contract), stay as
+  written, and the rewrite is by span, so the file's formatting survives. The compiler has
+  nothing to say about it: a name that drifted apart is data.
+- **A resource path inside a string follows its file.** The pass renames the resource files
+  and directories, so a literal that addresses a resource (a path shaped like
+  `"<Directory>/%<Field>.svg"`) has to follow them; otherwise the platform does not find the
+  resource, and the project, having caught the exception, draws an empty space. Only literals
+  SHAPED like a path are translated - they end with a known resource suffix and every segment
+  reads as a file name - so a regular expression with its slashes and named groups stays data.
+- **Rule `conventions/missing-translation`** (info, off by default, project scope) - a name
+  or a Cyrillic comment line the project's translation dictionary does not cover yet, one
+  finding at its first occurrence in the file. Project-scoped because whether a word is the
+  PROJECT's own is a project-wide fact: a word the platform tables also know is a gap when the
+  project declares it, and a per-file check would stay silent exactly where the translated
+  tree falls apart. Silent unless a dictionary is discovered, so only a project that
+  translates its sources ever sees it.
+
 ## 2026-08-19 – 0.69.1, 0.69.2, 0.69.3
 
 ### Changed

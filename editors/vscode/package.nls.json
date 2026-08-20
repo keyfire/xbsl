@@ -11,6 +11,7 @@
   "cmd.templates.manage": "Code templates",
   "cmd.templates.import": "Import code templates",
   "cmd.templates.export": "Export code templates",
+  "cmd.translate.dictionary": "Translation dictionary",
   "cmd.docs.showForSymbol": "Documentation for the symbol",
   "cmd.docs.refresh": "Refresh the documentation tree",
   "cmd.docs.open": "Open a documentation page",

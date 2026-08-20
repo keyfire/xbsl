@@ -69,6 +69,7 @@ from . import (  # noqa: F401
     access_control,
     yaml_deletion,
     localization,
+    translation_gaps,
     yaml_imports,
     yaml_render,
     yaml_properties,

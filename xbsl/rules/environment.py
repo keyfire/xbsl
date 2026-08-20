@@ -61,7 +61,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, terms
+from xbsl import dataset, i18n, metamodel, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -329,10 +329,13 @@ def _client_ann_mapper(source: SourceFile) -> dict | None:
         return None
     if source.kind == "yaml":
         data = _parsed_object(source)
-        if (data is None or object_kind(data) != "ОбщийМодуль"
-                or data.get("Окружение") != "Сервер"):
+        kind = object_kind(data) if data is not None else None
+        if kind != "ОбщийМодуль":
             return None
-        name = value_of(data, "Имя")
+        server_env, _client_env = _environment_forms()
+        if value_of(data, "Окружение", kind) not in server_env:
+            return None
+        name = value_of(data, "Имя", kind)
         if not isinstance(name, str):
             return None
         return {"k": "y", "stem": _pair_stem(source.rel), "name": name}
@@ -463,12 +466,30 @@ def _environment_forms() -> tuple[frozenset[str], frozenset[str]]:
 
 
 @lru_cache(maxsize=1)
+def _client_side_environments() -> frozenset[str]:
+    """Both spellings of every `Environment` value whose module runs on the client.
+
+    Taken from the enumeration of the metamodel rather than matched as a substring: the two
+    values that include the client are `Client` and `ClientAndServer`, and each English
+    spelling comes from the term dictionary, never from a translation.
+    """
+    return frozenset(
+        form
+        for value in metamodel.enum_values("EEnvironmentKind")
+        if "Клиент" in value
+        for form in (value, terms.english(value, "enums"))
+        if form
+    )
+
+
+@lru_cache(maxsize=1)
 def _on_server_forms() -> frozenset[str]:
     """Both spellings of the @OnServer annotation (from terms.json)."""
     return frozenset(terms.key_forms("НаСервере"))
 
 
 dataset.register_reset(_environment_forms.cache_clear)
+dataset.register_reset(_client_side_environments.cache_clear)
 dataset.register_reset(_on_server_forms.cache_clear)
 
 
@@ -574,10 +595,12 @@ def _client_http_mapper(source: SourceFile) -> dict | None:
         if data is None:
             return None
         kind = object_kind(data)
-        if (kind == "ОбщийМодуль" and data.get("Окружение") == "Клиент"
-                and isinstance(value_of(data, "Имя"), str)):
+        _server_env, client_env = _environment_forms()
+        name = value_of(data, "Имя", kind)
+        if (kind == "ОбщийМодуль" and value_of(data, "Окружение", kind) in client_env
+                and isinstance(name, str)):
             return {"k": "y", "stem": _pair_stem(source.rel),
-                    "role": "client", "name": data["Имя"]}
+                    "role": "client", "name": name}
         if kind == "HttpСервис":
             return {"k": "y", "stem": _pair_stem(source.rel), "role": "http"}
         return None
@@ -680,8 +703,8 @@ def _client_environment(data: dict) -> str | None:
     if kind == "КомпонентИнтерфейса":
         return "Клиент"
     if kind == "ОбщийМодуль":
-        env = data.get("Окружение")
-        if isinstance(env, str) and "Клиент" in env:
+        env = value_of(data, "Окружение", kind)
+        if isinstance(env, str) and env in _client_side_environments():
             return env
     return None
 

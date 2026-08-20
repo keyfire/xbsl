@@ -296,6 +296,14 @@ def _offered_member_family(kind: str) -> frozenset[str]:
     return _object_members().get(kind, frozenset())
 
 
+def _item_name(item) -> str | None:
+    """The name of a collection item in either spelling, or None."""
+    if not isinstance(item, dict):
+        return None
+    value = value_of(item, "Имя")
+    return value if isinstance(value, str) else None
+
+
 def _row_type_names(node) -> set[str]:
     """Type names a yaml declares for itself: the row type of a dynamic list.
 
@@ -307,7 +315,7 @@ def _row_type_names(node) -> set[str]:
     """
     names: set[str] = set()
     if isinstance(node, dict):
-        value = node.get("ИмяТипаДанныхСтроки")
+        value = value_of(node, "ИмяТипаДанныхСтроки")
         if isinstance(value, str) and value:
             names.add(value)
         for v in node.values():
@@ -338,11 +346,12 @@ def _project_object_info(sources: list[SourceFile]) -> dict[str, dict]:
         if not isinstance(nm, str):
             continue
         members: set[str] = set(_row_type_names(data))
-        parts = data.get("ТабличныеЧасти")
+        parts = value_of(data, "ТабличныеЧасти", object_kind(data))
         if isinstance(parts, list):
             for p in parts:
-                if isinstance(p, dict) and isinstance(p.get("Имя"), str):
-                    members.add(p["Имя"])
+                name = _item_name(p)
+                if name:
+                    members.add(name)
         info[nm] = {"kind": object_kind(data), "members": members}
     for s in sources:
         if s.kind != "xbsl":
@@ -645,12 +654,9 @@ def _object_type_mapper(source: SourceFile) -> dict | None:
         if not isinstance(nm, str):
             return None
         members = sorted(_row_type_names(data))
-        parts = data.get("ТабличныеЧасти")
+        parts = value_of(data, "ТабличныеЧасти", object_kind(data))
         if isinstance(parts, list):
-            members += [
-                p["Имя"] for p in parts
-                if isinstance(p, dict) and isinstance(p.get("Имя"), str)
-            ]
+            members += [name for name in (_item_name(p) for p in parts) if name]
         return {"k": "y", "name": nm, "kind": object_kind(data), "tab_members": members}
     if source.kind != "xbsl":
         return None

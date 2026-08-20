@@ -34,6 +34,8 @@ def diag_dict(d: Diagnostic) -> dict:
     }
     if d.fix is not None:
         out["fix"] = {"start": d.fix.start, "end": d.fix.end, "newText": d.fix.new}
+    if d.data:
+        out["data"] = d.data
     return out
 
 

@@ -30,6 +30,21 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install build
       - run: python -m build
+      # Job test ставит пакет editable: там на sys.path лежит рабочий каталог целиком, и
+      # подпакет, не дописанный в [tool.setuptools] packages, импортируется как ни в чём не
+      # бывало. В колесе его нет – расхождение видно только на самом артефакте, поэтому
+      # ставим собранное колесо в отдельное чистое окружение и поднимаем то, ради чего пакет
+      # ставят: подпакеты, точку входа CLI и реестр правил.
+      - name: Проверить собранное колесо
+        run: |
+          python -m venv /tmp/wheelcheck
+          /tmp/wheelcheck/bin/pip install --quiet dist/*.whl
+          # Проверка идёт из /tmp, а не из каталога сборки: `python -c` кладёт текущий
+          # каталог в sys.path, а там лежат исходники xbsl – импорт достал бы их и снова
+          # показал бы подпакет, которого в колесе нет.
+          cd /tmp
+          /tmp/wheelcheck/bin/python -c "import xbsl.translation, xbsl.cli, xbsl.engine, xbsl.rules; assert xbsl.engine.RULES, 'rule registry is empty'; print('rules:', len(xbsl.engine.RULES))"
+          /tmp/wheelcheck/bin/xbsl --version
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -60,10 +75,14 @@ jobs:
           CIBW_BEFORE_BUILD: "pip install mypy setuptools wheel"
           # Дым-тест без данных Элемента: модули импортируются и они нативные
           # (полный разбор требует language.json - его в тестовом окружении нет).
+          # Реестр правил и подпакет translation проверяются здесь же: колесо ставится из
+          # артефакта, поэтому пропуск в [tool.setuptools] packages виден сразу, а не у
+          # пользователя после публикации.
           CIBW_TEST_COMMAND: >-
-            python -c "import xbsl.lexer, xbsl.parser;
+            python -c "import xbsl.lexer, xbsl.parser, xbsl.engine, xbsl.rules, xbsl.translation;
             assert not xbsl.lexer.__file__.endswith('.py'), xbsl.lexer.__file__;
-            assert not xbsl.parser.__file__.endswith('.py'), xbsl.parser.__file__"
+            assert not xbsl.parser.__file__.endswith('.py'), xbsl.parser.__file__;
+            assert xbsl.engine.RULES, 'rule registry is empty'"
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}

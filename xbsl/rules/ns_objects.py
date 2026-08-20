@@ -35,12 +35,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import replace
 
-from xbsl import i18n
+from xbsl import i18n, metamodel, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
 from xbsl.rules.semantics import (
     _file_local_types,
+    _item_name,
     _member_family,
     _row_type_names,
     _stdlib_names,
@@ -72,9 +73,10 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# Object kinds whose Russian name serves as a namespace root in type expressions.
-# Kept to the data-object kinds (cf. semantics._BASE_CHECKED_KINDS and the catalog
-# object_members keys): interface/module kinds are never referenced through a namespace.
+# Object kinds whose name serves as a namespace root in type expressions, spelled the
+# metamodel's way. Kept to the data-object kinds (cf. semantics._BASE_CHECKED_KINDS and the
+# catalog object_members keys): interface/module kinds are never referenced through a
+# namespace. A chain written in English reaches this set through metamodel.canonical_kind.
 _NS_KINDS = frozenset({
     "Справочник", "Документ", "РегистрСведений", "РегистрНакопления",
     "Перечисление", "ПланОбмена",
@@ -88,26 +90,31 @@ def _chain_problem(
 
     The stdlib guard (Справочник.Ссылка is a dotted generic, not an object reference)
     runs in the map phase - here the chain is already known to name an object.
+
+    The kind is compared as the metamodel names it, while the message quotes the spelling
+    the author wrote: `Catalog` and its Russian spelling are one kind, and the object records
+    carry the metamodel's name whichever spelling the file used.
     """
-    kind = segs[0]
+    written = segs[0]
+    kind = metamodel.canonical_kind(written)
     name = segs[1]
     rec = objects.get(name)
     if rec is None:
         return 1, i18n.t(
             "code/unknown-ns-object.object",
-            name=f"{kind}.{name}", kind=kind, seg=name,
+            name=f"{written}.{name}", kind=written, seg=name,
         )
     if rec["kind"] != kind:
         return 1, i18n.t(
             "code/unknown-ns-object.kind",
-            name=f"{kind}.{name}", kind=kind, seg=name, actual=rec["kind"],
+            name=f"{written}.{name}", kind=written, seg=name, actual=rec["kind"],
         )
     if len(segs) >= 3:
         member = segs[2]
         if member not in _member_family(kind) and member not in rec["members"]:
             return 2, i18n.t(
                 "code/unknown-ns-object.member",
-                name=f"{kind}.{name}.{member}", root=name, kind=kind, seg=member,
+                name=f"{written}.{name}.{member}", root=name, kind=written, seg=member,
             )
     return None
 
@@ -131,10 +138,16 @@ def _ns_candidate(segs: list[str], stdlib: frozenset[str]) -> list[str] | None:
     """The namespace-form chain trimmed to its meaningful head, or None.
 
     A chain qualifies when its root is a kind name and the second segment is present;
-    a dotted stdlib generic (Справочник.Ссылка) is settled right here."""
-    if len(segs) < 2 or segs[0] not in _NS_KINDS:
+    a dotted stdlib generic (`Catalog.Reference` and its Russian spelling) is settled here.
+
+    Both spellings qualify: an English project writes `Catalog.Tasks.Steps`, and its dotted
+    generic is `Catalog.Reference`, which the stdlib catalog lists under the Russian name -
+    the facet dictionary of the platform pairs the two, so the guard settles it as well.
+    """
+    if len(segs) < 2 or metamodel.canonical_kind(segs[0]) not in _NS_KINDS:
         return None
-    if f"{segs[0]}.{segs[1]}" in stdlib:
+    pair = f"{segs[0]}.{segs[1]}"
+    if pair in stdlib or terms.russian(pair, "facets") in stdlib:
         return None
     return segs[:3]
 
@@ -151,18 +164,17 @@ def _ns_mapper(source: SourceFile) -> dict | None:
         if err is not None or not isinstance(data, dict):
             return None
         fact: dict = {}
-        nm = value_of(data, "Имя")
-        if object_kind(data) and isinstance(nm, str):
+        kind = object_kind(data)
+        nm = value_of(data, "Имя", kind)
+        if kind and isinstance(nm, str):
             # A dynamic list's ИмяТипаДанныхСтроки is as much a member of the form as
             # a tabular section is (see semantics._row_type_names).
             members = sorted(_row_type_names(data))
-            if isinstance(data.get("ТабличныеЧасти"), list):
-                members += [
-                    p["Имя"] for p in data["ТабличныеЧасти"]
-                    if isinstance(p, dict) and isinstance(p.get("Имя"), str)
-                ]
-            fact["obj"] = (nm, object_kind(data), members)
-        if object_kind(data):
+            parts = value_of(data, "ТабличныеЧасти", kind)
+            if isinstance(parts, list):
+                members += [name for name in (_item_name(p) for p in parts) if name]
+            fact["obj"] = (nm, kind, members)
+        if kind:
             cands = []
             for value in dict.fromkeys(_type_values(data)):  # unique, in document order
                 chains = _parse_type_string(value)

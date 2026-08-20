@@ -245,6 +245,31 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     return data
 
 
+def _add_english_globals(data: dict, common: dict) -> dict:
+    """Add the English spelling of every global NAME the catalog lists.
+
+    `_add_english_keys` above pairs the type KEYS; `globals` is not keyed at all - it is the
+    list of names the language offers by themselves, and the catalog carries it in one
+    spelling, because the documentation it is extracted from is Russian. An English project
+    calls the very same global `GoToLink`, the compiler accepts both, and a consumer that
+    reads the list as "the global scope" (the undefined-name rule, the completion) must see
+    both. `common` is the compiler dictionary (terms_full.json); a name it does not pair
+    stays as it is, and a name already spelled in Latin is not touched.
+    """
+    if data.get("meta", {}).get("bilingual_keys") != "expand" or not common:
+        return data
+    names = data.get("globals")
+    if not isinstance(names, list):
+        return data
+    known = set(names)
+    for name in names:
+        english = common.get(name)
+        if english and english not in known:
+            known.add(english)
+    data["globals"] = sorted(known)
+    return data
+
+
 def _expand_inherited(data: dict) -> dict:
     """Re-expand the own-members form of stdlib.json into full member sets.
 
@@ -321,6 +346,20 @@ def _stdlib_pairs(root: str, version: str) -> dict:
     return {**(terms.get("types") or {}), **(terms.get("facets") or {})}
 
 
+def _stdlib_common_pairs(root: str, version: str) -> dict:
+    """terms_full.json's Russian->English pairs of every compiler name, or empty when absent.
+
+    The compact terms.json covers types, facets, yaml properties and enumeration values; the
+    globals of the language (`Message`, `GoToLink`) are only in the full dictionary.
+    Read here rather than through xbsl.terms: that module reads its data from this one.
+    """
+    try:
+        terms = _load_cached(root, version, "terms_full.json")
+    except DatasetError:
+        return {}
+    return dict(terms.get("common") or {})
+
+
 @lru_cache(maxsize=None)
 def _load_cached(root: str, version: str, name: str) -> dict:
     path = Path(root) / version / name
@@ -332,6 +371,7 @@ def _load_cached(root: str, version: str, name: str) -> dict:
         # English keys first (so the English types then inherit like the Russian ones),
         # then the inheritance expansion.
         data = _add_english_keys(data, _stdlib_pairs(root, version))
+        data = _add_english_globals(data, _stdlib_common_pairs(root, version))
         data = _expand_inherited(data)
     return data
 

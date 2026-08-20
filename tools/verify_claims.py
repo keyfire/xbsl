@@ -89,9 +89,10 @@ RECIPES: dict[tuple[str, str], tuple[str, str]] = {
     # The rights namespace lives in the permission handler, and that one sits in the plain
     # module of an entity rather than in its object module (the shape of working sources).
     ("_IMPLICIT", "Сущность"): ("rights", "    знч Право{n} = {name}.Право.Чтение"),
-    # _UNDOCUMENTED: members the documentation does not carry.
+    # _UNDOCUMENTED: members the documentation does not carry. English spellings are not
+    # claimed here: the rule derives them from the compiler dictionary, and `Message` left the
+    # table once the catalog started carrying both spellings of every global it lists.
     ("_UNDOCUMENTED", "СобственнаяМодифицированность"): ("form", _READ),
-    ("_UNDOCUMENTED", "Message"): ("common", "    {name}(\"проба\")"),
     # _ENTITY_COMMON: the names an entity module gets with nothing declared for them. The
     # standard attributes (Name/Code of a catalog, Number/Date of a document) are NOT here:
     # the probe showed they work only when the yaml declares them, so they come to the module

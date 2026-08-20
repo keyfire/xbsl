@@ -319,6 +319,17 @@ def _class_by_impl(impl: str) -> str | None:
     return None
 
 
+#: English spellings of the built-in dispatched items the term dictionary does not pair.
+#: The standard code attribute is only in the compiler dictionary as its metadata class, so a source
+#: spelling `Name: Code` looked like an ordinary attribute - and every property that only a
+#: built-in may carry (`Length`, `Uniqueness`, `Autonumbering`) came out as a finding, plus a
+#: demand for an `Id` a built-in never has. Verified with the compiler on a throwaway project:
+#: a catalog with `Name: Code`, `Length`, `Uniqueness` and `Autonumbering` applies.
+_KNOWN_ITEM_SPELLINGS: dict[str, str] = {
+    "Код": "Code",
+}
+
+
 def _dispatched_class(item: str, value: str) -> str | None:
     """The class a dispatched collection picks for an item whose key holds `value`.
 
@@ -331,7 +342,8 @@ def _dispatched_class(item: str, value: str) -> str | None:
     guess, and where the dictionary knows no pair the name simply does not dispatch.
     """
     for name, presents in dispatched_classes(item):
-        if presents == value or terms.common_english(presents) == value:
+        spellings = {presents, terms.common_english(presents), _KNOWN_ITEM_SPELLINGS.get(presents)}
+        if value in spellings:
             return name
     return None
 

@@ -38,12 +38,13 @@ from collections.abc import Iterable
 from dataclasses import replace
 from functools import lru_cache
 
-from xbsl import dataset, i18n, metamodel
+from xbsl import dataset, i18n, metamodel, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.rules._syntax import code_tokens, declarations, signatures
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_types import _key_spellings
 
 MESSAGES = {
     "code/reserved-name.title": {
@@ -181,9 +182,25 @@ _BUILTIN_COMPONENT_PROPS: dict[str, frozenset[str]] = {
 
 _BASE_ROOT_RE = re.compile(r"\s*([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)")
 
-# The top-level `Свойства:` block: from the key line (a trailing comment is allowed) to the
-# next top-level key (or EOF). `[^\n]` instead of `.` in the comment: DOTALL is on.
-_PROPS_BLOCK_RE = re.compile(r"(?ms)^Свойства:[ \t]*(?:#[^\n]*)?\r?$(.*?)(?=^\S|\Z)")
+
+@lru_cache(maxsize=None)
+def _key_alternation(key: str) -> str:
+    """Both spellings of a yaml key as a regex alternation, the metamodel's name first."""
+    return "|".join(re.escape(form) for form in _key_spellings(key))
+
+
+@lru_cache(maxsize=1)
+def _props_block_re() -> re.Pattern:
+    """The top-level `Свойства:` block: from the key line (a trailing comment is allowed) to
+    the next top-level key (or EOF). `[^\\n]` instead of `.` in the comment: DOTALL is on."""
+    return re.compile(
+        r"(?ms)^(?:" + _key_alternation("Свойства")
+        + r"):[ \t]*(?:#[^\n]*)?\r?$(.*?)(?=^\S|\Z)"
+    )
+
+
+dataset.register_reset(_key_alternation.cache_clear)
+dataset.register_reset(_props_block_re.cache_clear)
 
 
 def _base_root(type_expr: str) -> str | None:
@@ -219,11 +236,12 @@ def _builtin_props(base: str) -> frozenset[str]:
 def _prop_positions(source: SourceFile, prop: str) -> list[tuple[int, int]]:
     """(line, col) of `Имя: <prop>` lines inside the top-level `Свойства:` block."""
     pat = re.compile(  # \r?: the file may be CRLF
-        r"(?m)^[ \t]*(?:- +)?Имя:[ \t]*(['\"]?)(" + re.escape(prop) + r")\1[ \t]*(?:#.*)?\r?$"
+        r"(?m)^[ \t]*(?:- +)?(?:" + _key_alternation("Имя")
+        + r"):[ \t]*(['\"]?)(" + re.escape(prop) + r")\1[ \t]*(?:#.*)?\r?$"
     )
     lm = linemap(source)
     out: list[tuple[int, int]] = []
-    for bm in _PROPS_BLOCK_RE.finditer(source.text):
+    for bm in _props_block_re().finditer(source.text):
         for m in pat.finditer(bm.group(1)):
             out.append(lm.linecol(bm.start(1) + m.start(2)))
     return out
@@ -239,19 +257,22 @@ def builtin_property_name(source: SourceFile) -> Iterable[Diagnostic]:
     data, err = _parsed(source)
     if err is not None or not isinstance(data, dict):
         return []
-    if object_kind(data) != "КомпонентИнтерфейса":
+    kind = object_kind(data)
+    if kind != "КомпонентИнтерфейса":
         return []
-    inherits = data.get("Наследует")
+    inherits = value_of(data, "Наследует", kind)
     base_expr = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
     if not isinstance(base_expr, str):
         return []
     base = _base_root(base_expr)
     if base is None:
         return []
-    builtin = _builtin_props(base)
+    # The built-in table is keyed the platform's own way; a component type and a property
+    # written in English answer to the same entry through the ui schema.
+    builtin = _builtin_props(uischema.canonical_component(base))
     if not builtin:
         return []  # the base type is not vetted – skip, do not guess
-    props = data.get("Свойства")
+    props = value_of(data, "Свойства", kind)
     if not isinstance(props, list):
         return []
 
@@ -261,7 +282,7 @@ def builtin_property_name(source: SourceFile) -> Iterable[Diagnostic]:
     ]
     diags: list[Diagnostic] = []
     for prop in dict.fromkeys(declared):  # unique, in document order
-        if prop not in builtin:
+        if uischema.canonical_property(prop) not in builtin:
             continue
         positions = _prop_positions(source, prop) or [(1, 1)]
         diags.extend(

@@ -93,7 +93,13 @@ from xbsl.rules.yaml_schema import (
 
 if _HAVE_YAML:
     import yaml
-from xbsl.rules.yaml_types import _NAME_RE, _parse_type_string, _value_positions
+from xbsl.rules.yaml_types import (
+    _key_spellings,
+    _NAME_RE,
+    _parse_type_string,
+    _value_positions,
+)
+from xbsl.translation import platform_map
 
 MESSAGES = {
     "yaml/dynlist-missing-field.title": {
@@ -147,6 +153,23 @@ i18n.register(MESSAGES)
 # The automatic list form's row-data chain: <Объект>.АвтоматическаяФормаСписка.ДанныеСтрокиСписка.
 _AUTO_TAIL = ("АвтоматическаяФормаСписка", "ДанныеСтрокиСписка")
 
+
+@lru_cache(maxsize=1)
+def _auto_tails() -> tuple[tuple[str, ...], ...]:
+    """The row-data chain segment by segment, every spelling the platform declares.
+
+    The first segment is paired in the distribution's member dictionary; the second one is
+    not paired anywhere, so it stands alone - a name the platform does not translate is left
+    as the author wrote it rather than invented here.
+    """
+    return tuple(
+        tuple(dict.fromkeys((segment, platform_map.member_english(segment) or segment)))
+        for segment in _AUTO_TAIL
+    )
+
+
+dataset.register_reset(_auto_tails.cache_clear)
+
 # Object kinds whose declared attributes are known to make up the automatic row type.
 _OBJECT_KINDS = frozenset({"Справочник", "Документ"})
 
@@ -157,9 +180,15 @@ _EXCLUDED_ROOTS = frozenset({
 
 
 def _source_nodes(node) -> Iterator[dict]:
-    """Mapping nodes of the parsed yaml tree that carry both `Тип` and a mapping `Источник`."""
+    """Mapping nodes of the parsed yaml tree that carry both a type key and a mapping source.
+
+    Both keys count in either spelling: an English project writes `Type:` and `Source:`, and
+    a walk that knows the Russian names alone finds no dynamic list in such a project at all.
+    """
     if isinstance(node, dict):
-        if "Тип" in node and isinstance(node.get("Источник"), dict):
+        if any(key in node for key in _key_spellings("Тип")) and isinstance(
+            value_of(node, "Источник"), dict
+        ):
             yield node
         for v in node.values():
             yield from _source_nodes(v)
@@ -179,13 +208,13 @@ def _declared_names(fields: list) -> set[str] | None:
     for f in fields:
         if not isinstance(f, dict):
             return None
-        expr = f.get("Выражение")
+        expr = value_of(f, "Выражение")
         if not isinstance(expr, str):
             return None
         names.add(expr)
         if "." in expr:
             names.add(expr.rsplit(".", 1)[1])
-        alias = f.get("Псевдоним")
+        alias = value_of(f, "Псевдоним")
         if isinstance(alias, str):
             names.add(alias)
     return names
@@ -207,6 +236,7 @@ def _dynlist_mapper(source: SourceFile) -> dict | None:
     if object_kind(data):
         lists: list[tuple[str, list[str], int, int]] = []
         seen: dict[str, int] = {}  # pairing of repeated `Тип` values with their text positions
+        tails = _auto_tails()
         for node in _source_nodes(data):
             typ = value_of(node, "Тип")
             if not isinstance(typ, str):
@@ -216,13 +246,16 @@ def _dynlist_mapper(source: SourceFile) -> dict | None:
             chains = _parse_type_string(typ)
             if not chains:
                 continue
-            autos = [c for c in chains if len(c) == 3 and tuple(c[1:]) == _AUTO_TAIL]
+            autos = [
+                c for c in chains
+                if len(c) == 3 and all(seg in forms for seg, forms in zip(c[1:], tails))
+            ]
             if len(autos) != 1:
                 continue
             obj = autos[0][0]
-            src = node["Источник"]
-            main = src.get("ОсновнаяТаблица")
-            if not isinstance(main, dict) or main.get("Таблица") != obj:
+            src = value_of(node, "Источник")
+            main = value_of(src, "ОсновнаяТаблица")
+            if not isinstance(main, dict) or value_of(main, "Таблица") != obj:
                 continue
             fields = value_of(src, "Поля")
             if not isinstance(fields, list) or not fields:
@@ -245,10 +278,11 @@ def _dynlist_mapper(source: SourceFile) -> dict | None:
 
 def _own_attributes(data: dict) -> tuple[str, list[str]] | None:
     """(object name, required attribute names) of an object yaml, else None."""
-    if object_kind(data) not in _OBJECT_KINDS:
+    kind = object_kind(data)
+    if kind not in _OBJECT_KINDS:
         return None
-    name = value_of(data, "Имя")
-    parts = data.get("Реквизиты")
+    name = value_of(data, "Имя", kind)
+    parts = value_of(data, "Реквизиты", kind)
     if not isinstance(name, str) or not isinstance(parts, list):
         return None
     attrs: list[str] = []

@@ -73,6 +73,18 @@ same response – creation and validation in one round trip. The core and the CL
 
 The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](/platform-data#documentation-search)); the two schema tools read the generated language data.
 
+**Translating the sources** (see [Translating a project](/translation))
+
+| Tool | What it does |
+|---|---|
+| `translate_status(root, dictionary)` | the coverage and what is left - the cheap check before deciding anything |
+| `translate_gaps(root, kind, filter, limit, offset)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint |
+| `translate_entries(root, kind, filter, limit, offset)` | what the dictionary already says, with the file and line of each entry |
+| `translate_set(root, entries, target)` | write entries back: add, correct in place, or remove by emptying a value |
+
+The four answer in PAGES over one engine core, so filling a dictionary of thousands of
+entries never means reading the files.
+
 **The project and its objects**
 
 | Tool | What it does |

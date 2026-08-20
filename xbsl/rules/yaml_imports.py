@@ -214,10 +214,11 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
             "name": name if isinstance(name, str) else source.path.parent.name,
         }
     data, err = _parsed(source)
-    if err is not None or not isinstance(data, dict) or not object_kind(data):
+    kind = object_kind(data)
+    if err is not None or not isinstance(data, dict) or not kind:
         return None
     stdlib = semantics._stdlib_names()
-    raw = data.get("Импорт")
+    raw = value_of(data, "Импорт", kind)
     imports = [e for e in raw if isinstance(e, str)] if isinstance(raw, list) else []
     cands: list[tuple[str, str, int, int]] = []
     for key in _REFERENCE_KEYS:
@@ -233,12 +234,12 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
                 if position is None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
-    nm = value_of(data, "Имя")
+    nm = value_of(data, "Имя", kind)
     return {
         "k": "el",
         "path": str(source.path),
         "name": nm if isinstance(nm, str) else None,
-        "vis": data.get("ОбластьВидимости"),
+        "vis": value_of(data, "ОбластьВидимости", kind),
         "imports": imports,
         "cands": cands,
     }
@@ -339,7 +340,8 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
             "name": name if isinstance(name, str) else source.path.parent.name,
         }
     data, err = _parsed(source)
-    if err is not None or not isinstance(data, dict) or not object_kind(data):
+    kind = object_kind(data)
+    if err is not None or not isinstance(data, dict) or not kind:
         return None
     stdlib = semantics._stdlib_names()
     cands: list[tuple[str, str, int, int]] = []
@@ -356,12 +358,12 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
                 if position is None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
-    nm = value_of(data, "Имя")
+    nm = value_of(data, "Имя", kind)
     return {
         "k": "el",
         "path": str(source.path),
         "name": nm if isinstance(nm, str) else None,
-        "vis": data.get("ОбластьВидимости"),
+        "vis": value_of(data, "ОбластьВидимости", kind),
         "cands": cands,
     }
 
@@ -531,15 +533,16 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
                 "name": name if isinstance(name, str) else source.path.parent.name,
             }
         data, err = _parsed(source)
-        if err is not None or not isinstance(data, dict) or not object_kind(data):
+        kind = object_kind(data)
+        if err is not None or not isinstance(data, dict) or not kind:
             return None
-        nm = value_of(data, "Имя")
+        nm = value_of(data, "Имя", kind)
         return {
             "k": "el",
             "path": str(source.path),
             "stem": _pair_stem(source.rel),
             "name": nm if isinstance(nm, str) else source.path.stem,
-            "vis": data.get("ОбластьВидимости"),
+            "vis": value_of(data, "ОбластьВидимости", kind),
             # The sections of the element are what the platform hands to its module by name -
             # see the chain roots below.
             "keys": sorted(k for k in data if isinstance(k, str)),
@@ -745,9 +748,10 @@ def _usage_mapper(source: SourceFile) -> dict | None:
             "used": used,
             "line": line,
         }
-    if not object_kind(data):
+    kind = object_kind(data)
+    if not kind:
         return None
-    raw = data.get("Импорт")
+    raw = value_of(data, "Импорт", kind)
     imports = [e for e in raw if isinstance(e, str)] if isinstance(raw, list) else []
     if not imports:
         return None

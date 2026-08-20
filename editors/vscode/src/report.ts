@@ -18,6 +18,10 @@ export interface RawDiag {
   severity: string; // "error" | "warning" | "info"
   message: string;
   fix?: FixEdit; // present only for mechanically fixable findings (span fixes)
+  // Machine-readable facts about the finding, for a repair the linter cannot make itself -
+  // editing another file, or asking the user for a word (conventions/missing-translation
+  // carries the dictionary key here). The LSP server sends the same object as diagnostic data.
+  data?: unknown;
 }
 
 export interface RawReport {

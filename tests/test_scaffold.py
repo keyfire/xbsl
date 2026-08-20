@@ -327,8 +327,8 @@ def test_event_log_property_gains_the_id_its_class_declares(tmp_path):
     # the build rejects the object without one ("ID required") - the hand-written template
     # missed exactly this section. The Id is reconciled from the metamodel, the same source
     # the yaml/item-id-required rule judges by.
-    apply_result(scaffold.op_new_object(tmp_path, "СобытиеЖурналаСобытий", "ВходПользователя"))
-    yaml_path = tmp_path / "ВходПользователя.yaml"
+    apply_result(scaffold.op_new_object(tmp_path, "СобытиеЖурналаСобытий", "ЗадачаЗавершена"))
+    yaml_path = tmp_path / "ЗадачаЗавершена.yaml"
     apply_result(scaffold.op_add_field(yaml_path, "свойство", "Пользователь"))
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
     prop = parsed["Свойства"][0]

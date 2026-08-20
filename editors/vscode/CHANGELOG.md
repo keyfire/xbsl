@@ -9,6 +9,37 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.63.0
+
+### Added
+- **The translation dictionary as a table.** The command "XBSL: translation dictionary"
+  (`xbsl.translate.dictionary`) shows every record of `xbsl-translation` next to everything
+  the sources still leave uncovered: the kind, the key, the translation, the number of
+  occurrences, the first place and the dictionary file. The translation cell is edited in
+  place, a search and the "only untranslated" switch narrow the table, the platform's own
+  spelling stands grey in an empty cell and goes in with a click, the occurrence and the
+  record are links to the file and the line. Reading is `xbsl translate --entries` plus
+  `--gaps`, writing is `--set`: the yaml layout of the dictionary stays the engine's business,
+  and a failed write leaves the table where it was.
+- **A lightbulb on a missing-translation finding.** The `conventions/missing-translation`
+  rule carries the exact dictionary key with the diagnostic, so the finding offers "Translate
+  as ..." (the platform's guess, one click), "Translate ..." (asks for the word, prefilled
+  with that guess) and "Open the translation dictionary" filtered by the key. After the write
+  the project is checked again - the server re-reads the dictionary by itself, without a
+  restart.
+- **An old engine is named as old instead of spilling an argparse dump.** The panel and the
+  lightbulb are built on `translate --entries`/`--gaps`/`--set`, which the engine only learned in
+  0.70.0, and the engine and the extension are installed apart - right after a release that is
+  the ordinary state. The version is now asked before the first call, and a lagging engine gets
+  the extension's own message: the dictionary needs xbsl 0.70.0 or newer, this one is installed,
+  the cure is `pip install -U xbsl`. A yes is remembered for the session, so no engine process
+  runs before every word; output that cannot be read is not treated as a refusal.
+
+### Changed
+- **A finding's machine-readable data survives the plain (CLI) mode too.** The engine's JSON
+  report carries it beside the mechanical fix, and now the extension puts it where the LSP
+  client puts the server's, so a code action reads one field in both modes.
+
 ## 0.62.0
 
 ### Added

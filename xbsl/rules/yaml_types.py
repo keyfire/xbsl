@@ -31,13 +31,14 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, metamodel, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.rules.semantics import (
     _checked_kinds,
     _file_local_types,
+    _item_name,
     _library_type_names,
     _member_family,
     _row_type_names,
@@ -141,6 +142,22 @@ def _parse_type_string(value: str) -> list[list[str]] | None:
     return chains
 
 
+@lru_cache(maxsize=None)
+def _key_spellings(key: str) -> tuple[str, ...]:
+    """Every spelling of a yaml key the platform reads, the metamodel's name first.
+
+    The same lookup chain `value_of` walks, exposed as a tuple for the places that match a
+    key while WALKING the document (a nested node has no element kind to ask the metamodel
+    about) instead of reading it out of one mapping. A key with no English pair answers with
+    itself alone, so the caller never compares against an invented name.
+    """
+    english = metamodel.english_name(key) or uischema.english_property(key)
+    return (key, english) if english and english != key else (key,)
+
+
+dataset.register_reset(_key_spellings.cache_clear)
+
+
 def _type_values(node, key: str = "Тип") -> Iterable[str]:
     """All string values of `key` keys in the parsed yaml tree (`ТипФормы` for navigation)."""
     if isinstance(node, dict):
@@ -155,11 +172,16 @@ def _type_values(node, key: str = "Тип") -> Iterable[str]:
 
 @lru_cache(maxsize=None)
 def _positions_pattern(key: str) -> re.Pattern:
-    # \r?: the file may be CRLF, `$` in multiline mode anchors before \n
+    # \r?: the file may be CRLF, `$` in multiline mode anchors before \n. The key alternation
+    # is a non-capturing group, so the quote and the value keep groups 1 and 2.
+    spellings = "|".join(re.escape(form) for form in _key_spellings(key))
     return re.compile(
-        r"(?m)^[ \t]*(?:- +)?" + re.escape(key)
-        + r":[ \t]*(['\"]?)(.*?)\1[ \t]*(?:#.*)?\r?$"
+        r"(?m)^[ \t]*(?:- +)?(?:" + spellings
+        + r"):[ \t]*(['\"]?)(.*?)\1[ \t]*(?:#.*)?\r?$"
     )
+
+
+dataset.register_reset(_positions_pattern.cache_clear)
 
 
 def _value_positions(source: SourceFile, value: str, key: str = "Тип") -> list[tuple[int, int]]:
@@ -202,18 +224,16 @@ def _yaml_type_mapper(source: SourceFile) -> dict | None:
     if lib_names:  # the project descriptor: the types its libraries make visible
         return {"k": "lib", "names": lib_names}
     data, err = _parsed(source)
-    if err is not None or not isinstance(data, dict) or not object_kind(data):
+    kind = object_kind(data)
+    if err is not None or not isinstance(data, dict) or not kind:
         return None
-    nm = value_of(data, "Имя")
+    nm = value_of(data, "Имя", kind)
     # The row type a dynamic list names for itself (ИмяТипаДанныхСтроки) is a member of
     # the form just like a tabular section - see semantics._row_type_names.
     tab_members: list[str] = sorted(_row_type_names(data))
-    parts = data.get("ТабличныеЧасти")
+    parts = value_of(data, "ТабличныеЧасти", kind)
     if isinstance(parts, list):
-        tab_members += [
-            p["Имя"] for p in parts
-            if isinstance(p, dict) and isinstance(p.get("Имя"), str)
-        ]
+        tab_members += [name for name in (_item_name(p) for p in parts) if name]
     cands: list[tuple[list[str], list[tuple[int, int]]]] = []
     for value in dict.fromkeys(_type_values(data)):  # unique, in document order
         chains = _parse_type_string(value)
@@ -231,7 +251,7 @@ def _yaml_type_mapper(source: SourceFile) -> dict | None:
     return {
         "k": "y",
         "name": nm if isinstance(nm, str) else None,
-        "kind": object_kind(data),
+        "kind": kind,
         "tab_members": tab_members,
         "cands": cands,
     }

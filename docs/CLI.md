@@ -67,6 +67,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `templates` | code templates: list, export, import, save |
 | `extract` | generate the language data from an Element distribution (`--dist`) |
 | `data-diff` | compare two data versions: what changed in the platform |
+| `translate` | translate the project sources into English spellings |
 | `self-update` | update xbsl by unpacking the wheel from PyPI |
 
 Command options: xbsl &lt;command&gt; `--help`. The options above apply to the check mode.

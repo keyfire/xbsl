@@ -60,6 +60,7 @@ in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/start.md#language-
 ```sh
 xbsl path/to/sources        # or: python -m xbsl path/to/sources
 xbsl data-diff              # what changed in the platform between two data versions
+xbsl translate SOURCES      # rewrite a project into English spellings (a project dictionary)
 xbsl self-update            # upgrade to the latest PyPI version, safe with busy exe stubs
 ```
 
@@ -70,7 +71,7 @@ mechanics – in the [guide](https://github.com/keyfire/xbsl/blob/main/docs/lint
 
 ## What it does
 
-**Rules.** 158 rules in the base set, in four tiers: **A** – structure and yaml schema, **B** – text and
+**Rules.** 159 rules in the base set, in four tiers: **A** – structure and yaml schema, **B** – text and
 typography conventions, **C** – code structure (blocks, brackets, unused locals, the `style/`
 code conventions), **D** – semantics against the platform data and the project itself: every
 type position in code and yaml, enumeration values, `Query{...}` block tables, cross-file

@@ -1,0 +1,31 @@
+# Sources are text, whatever byte ends up inside a string literal.
+#
+# git decides "text or binary" by looking for a NUL in the first kilobytes of the file. A control
+# character used on purpose - a NUL as the separator of a composite key, say - is enough to turn
+# the whole file binary: the diff collapses to "Bin 0 -> 13641 bytes", and hundreds of lines pass
+# review, the language checks and the release notes unseen. The `diff` attribute states the type
+# outright and brings the line diff back.
+#
+# Only `diff` is set here: line endings stay as they are committed, so nothing gets renormalized
+# behind the back of a working copy.
+*.py    diff
+*.ts    diff
+*.js    diff
+*.mjs   diff
+*.json  diff
+*.md    diff
+*.txt   diff
+*.toml  diff
+*.cfg   diff
+*.yaml  diff
+*.yml   diff
+*.xbsl  diff
+*.css   diff
+*.html  diff
+*.svg   diff
+*.cmd   diff
+
+# Binaries stay binary: git must not try to read them as lines, nor touch their bytes.
+*.png   binary
+*.ttf   binary
+*.woff2 binary

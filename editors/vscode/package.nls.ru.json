@@ -11,6 +11,7 @@
   "cmd.templates.manage": "Шаблоны кода",
   "cmd.templates.import": "Импорт шаблонов кода",
   "cmd.templates.export": "Экспорт шаблонов кода",
+  "cmd.translate.dictionary": "Словарь перевода",
   "cmd.docs.showForSymbol": "Документация по символу",
   "cmd.docs.refresh": "Обновить дерево документации",
   "cmd.docs.open": "Открыть страницу документации",

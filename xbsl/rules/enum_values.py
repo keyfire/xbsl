@@ -27,7 +27,7 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
@@ -58,20 +58,29 @@ def _enum_builtin_members() -> frozenset[str]:
     `СостояниеЗаказов.ПоИмени("Открыт")` and `.Элементы()` - the docs spell them
     `<ValueType это Перечисление>`. Taken from the catalog rather than listed by hand: the
     platform grows members, and a stale list would report them as unknown values.
+
+    Each name is kept in both spellings: an English project writes `OrderState.Presentation`,
+    and a set that knows the Russian name alone would read the member as a value the
+    enumeration does not declare.
     """
     members: set[str] = set()
     try:
         catalog = dataset.load_json("stdlib.json")
     except dataset.DatasetError:
-        return frozenset({"Представление", "ВСтроку", "ПолучитьТип", "Индекс"})
-    for type_name in ("Перечисление", "Тип"):
-        entry = (catalog.get("type_members") or {}).get(type_name) or {}
-        if isinstance(entry, dict):
-            members |= {str(x) for x in entry.get("properties") or ()}
-            members |= {str(x) for x in entry.get("methods") or ()}
-        else:
-            members |= {str(x) for x in entry}
-    return frozenset(members)
+        members = {"Представление", "ВСтроку", "ПолучитьТип", "Индекс"}
+    else:
+        for type_name in ("Перечисление", "Тип"):
+            entry = (catalog.get("type_members") or {}).get(type_name) or {}
+            if isinstance(entry, dict):
+                members |= {str(x) for x in entry.get("properties") or ()}
+                members |= {str(x) for x in entry.get("methods") or ()}
+            else:
+                members |= {str(x) for x in entry}
+    return frozenset(members | {en for name in members if (en := terms.common_english(name))})
+
+
+# The set is built out of the dataset, so a switch of the Element version has to rebuild it.
+dataset.register_reset(_enum_builtin_members.cache_clear)
 
 
 def _module_member_names(s: SourceFile) -> list[str]:
@@ -90,6 +99,24 @@ def _module_member_names(s: SourceFile) -> list[str]:
 _DECL_KW = ("VAL", "VAR", "CONST", "REQ", "CATCH", "FOR")
 
 
+def _enum_declaration(data: dict) -> tuple[str, list[str]] | None:
+    """The enumeration a parsed yaml declares: its name and the names of its elements.
+
+    Every key is read through value_of, so an English project (`Name`/`Items`) is understood
+    exactly as a Russian one - the platform reads both spellings, and a rule that knows only
+    one either misses the declaration or breaks on the missing key.
+    """
+    name = value_of(data, "Имя")
+    if object_kind(data) != "Перечисление" or not isinstance(name, str):
+        return None
+    items = value_of(data, "Элементы")
+    values = [
+        item_name for item in items
+        if isinstance(item, dict) and isinstance(item_name := value_of(item, "Имя"), str)
+    ] if isinstance(items, list) else []
+    return name, values
+
+
 def _project_enums(sources: list[SourceFile]) -> dict[str, set[str]]:
     """Project enumeration name -> the names of its elements (yaml Элементы[].Имя)."""
     enums: dict[str, set[str]] = {}
@@ -99,15 +126,10 @@ def _project_enums(sources: list[SourceFile]) -> dict[str, set[str]]:
         data, err = _parsed(s)
         if err is not None or not isinstance(data, dict):
             continue
-        if object_kind(data) != "Перечисление" or not isinstance(value_of(data, "Имя"), str):
+        declared = _enum_declaration(data)
+        if declared is None:
             continue
-        values: set[str] = set()
-        items = data.get("Элементы")
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and isinstance(item.get("Имя"), str):
-                    values.add(item["Имя"])
-        enums[data["Имя"]] = values
+        enums[declared[0]] = set(declared[1])
     return enums
 
 
@@ -171,11 +193,16 @@ def _binding_values(node) -> Iterable[str]:
 
 
 def _name_values(node) -> set[str]:
-    """All string values of `Имя` keys in the parsed yaml tree (fields, properties...)."""
+    """All string values of the name key in the parsed yaml tree (fields, properties...).
+
+    An English project spells the key `Name`, and the guard has to see it too - otherwise the
+    skip it stands for silently stops working there and the rule starts reporting local names
+    as enumeration values.
+    """
     names: set[str] = set()
     if isinstance(node, dict):
         for k, v in node.items():
-            if k == "Имя" and isinstance(v, str):
+            if isinstance(k, str) and uischema.canonical_property(k) == "Имя" and isinstance(v, str):
                 names.add(v)
             names |= _name_values(v)
     elif isinstance(node, list):
@@ -186,12 +213,16 @@ def _name_values(node) -> set[str]:
 
 def _yaml_accesses(s: SourceFile, data: dict) -> dict[tuple[str, str], list[tuple[int, int]]]:
     """Dotted pairs of the binding strings with positions; roots that occur as any local
-    `Имя:` are skipped here (the file's own knowledge)."""
+    `Имя:` are skipped here (the file's own knowledge).
+
+    A root starts with a capital in either alphabet - an English project names its
+    enumerations in Latin, and a Cyrillic-only pattern never looked at its bindings.
+    """
     local_names = _name_values(data)
     pairs: set[tuple[str, str]] = set()
     for binding in _binding_values(data):
         for root, seg in re.findall(
-            r"(?<![\wА-Яа-яЁё.])([А-ЯЁ][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
+            r"(?<![\wА-Яа-яЁё.])([А-ЯЁA-Z][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
             binding,
         ):
             if root in local_names or seg in _enum_builtin_members():
@@ -228,12 +259,9 @@ def _enum_values_mapper(source: SourceFile) -> dict | None:
     if err is not None or not isinstance(data, dict):
         return None
     fact: dict = {}
-    if object_kind(data) == "Перечисление" and isinstance(value_of(data, "Имя"), str):
-        values = [
-            item["Имя"] for item in (data.get("Элементы") or [])
-            if isinstance(item, dict) and isinstance(item.get("Имя"), str)
-        ] if isinstance(data.get("Элементы"), list) else []
-        fact["enum"] = (data["Имя"], values)
+    declared = _enum_declaration(data)
+    if declared is not None:
+        fact["enum"] = declared
     if object_kind(data):
         accesses = _yaml_accesses(source, data)
         if accesses:

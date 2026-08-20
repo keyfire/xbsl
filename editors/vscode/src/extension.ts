@@ -23,6 +23,7 @@ import { registerDefinitionDocs } from "./definitionDocs";
 import { registerStatusBar } from "./statusBar";
 import { registerUpdateCheck } from "./updateCheck";
 import { registerTemplates, setTemplatesReload } from "./templatesPanel";
+import { registerTranslation } from "./translationPanel";
 import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { engineRuleArgs, primeRuleCatalogue, registerRuleConfig, ruleOverride } from "./ruleConfig";
@@ -485,6 +486,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Code templates: the management panel works in both modes (data and writes go through the
   // engine), while template suggestions on Ctrl+Space come from the LSP server.
   registerTemplates(context);
+  // The translation dictionary: the panel and the light bulb of a missing-translation finding.
+  // Both work in either mode - reading and writing go through `xbsl translate`, and the key of a
+  // finding comes with the diagnostic (the LSP `data` field, the same field of the CLI report).
+  registerTranslation(context, projectRootFor);
   // Extension/linter versions and the completion mode in the status bar (before the LSP branch -
   // visible in both modes).
   const statusBar = registerStatusBar(context, (resource) => readSettings(resource).linter);

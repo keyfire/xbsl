@@ -32,6 +32,13 @@ class Diagnostic:
 
     Line and column are 1-based (as in editors and compiler output). `fix` is present only
     for rules that can repair the finding automatically (see TextEdit).
+
+    `data` carries MACHINE-READABLE facts about the finding for a client that offers a repair
+    the linter cannot perform itself - one that edits ANOTHER file, or needs a word from the
+    user. A span fix cannot express that (TextEdit indexes the file the finding is in), and a
+    message cannot either: messages are bilingual and elide long text. The dictionary is
+    free-form per rule and travels to the editor and to the machine-readable report; it takes
+    no part in a finding's identity, so a baseline entry keeps matching.
     """
 
     path: str
@@ -41,6 +48,7 @@ class Diagnostic:
     severity: Severity
     message: str
     fix: TextEdit | None = None
+    data: dict | None = None
 
     def format(self) -> str:
         # A click-to-jump friendly format: path:line:col
