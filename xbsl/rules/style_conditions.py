@@ -85,7 +85,7 @@ def _member_type_texts() -> dict[str, frozenset[str]]:
     """Member name -> every result type the catalog declares for it, in full spelling.
 
     Keyed by the bare member name and not by its owner type on purpose: a file rule cannot
-    know what `Компоненты.КонтейнерФайл` is - the component's type lives in the paired yaml -
+    know what `Компоненты.Вставка` is - the component's type lives in the paired yaml -
     while the name alone already answers the only question asked here, whether the value
     can be a plain `Булево`. A name declared as a union anywhere in the catalog is left
     alone: a false alarm on legal code costs more than a missed style nit.
@@ -153,8 +153,8 @@ def _member_needs_comparison(name: str) -> bool:
 def _chain_tail(toks: list[Token], end: int) -> Token | None:
     """The last link of the operand ending at `end`: the called method or the property read.
 
-    `Компоненты.КонтейнерФайл.ПолучитьПеременную("dtReady")` answers `ПолучитьПеременную`,
-    `Компоненты.ЗначениеБулево.Видимость` answers `Видимость`. The links before the last one
+    `Components.HtmlBox.GetVariable("ready")` answers `GetVariable`,
+    `Components.BooleanValue.Visible` answers `Visible`. The links before the last one
     do not matter: the type of the whole operand is the type of its last link.
     """
     if end < 0:
