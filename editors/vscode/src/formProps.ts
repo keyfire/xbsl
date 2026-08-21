@@ -59,7 +59,7 @@ import { metaSchema } from "./metaSchemaClient";
 import { findAttrOffset, stringAttributeNames } from "./metadataCore";
 import { ObjectInfoResponse } from "./formDataCore";
 import { lspActive, lspRequest } from "./lspClient";
-import { revealContent } from "./reveal";
+import { neighborColumnFor, revealContent } from "./reveal";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
 
 const VIEW_TYPE = "xbslProperties";
@@ -88,6 +88,11 @@ const objectBindingsCache = new Map<string, string[]>();
 // completion. Supplied by the metadata tree; resolved once per session and reused.
 let projectEnumsFn: (() => Promise<Record<string, string[]>>) | undefined;
 let projectEnumsCache: Record<string, string[]> | undefined;
+// The column of the form's own visual-designer panel, when one is open for it (formDesigner.ts's
+// DesignerAccess.panelColumnFor) - undefined when the yaml has no panel open at all. Wired in
+// through a lazy closure because the designer registers after this panel; by the time a handler
+// is actually created, the closure sees whatever DesignerAccess ended up assigned to it.
+let panelColumnFn: ((uri: vscode.Uri) => vscode.ViewColumn | undefined) | undefined;
 let lastModel: PanelModel | null = null;
 let lastHint: string | null = null;
 // The sticky property: the focused row survives switching to another node of the same type
@@ -1605,11 +1610,20 @@ function moduleUriFor(yamlUri: vscode.Uri): vscode.Uri {
   return yamlUri.with({ path: yamlUri.path.replace(/\.[^./\\]*$/, "") + ".xbsl" });
 }
 
-async function openAtOffset(uri: vscode.Uri, offset: number): Promise<void> {
+// avoidColumn names the visual-designer panel's own column, when the caller knows one is open
+// for this yaml (handler creation - see runAddHandler/addMetaHandler): the module must land
+// NEXT to that panel, never in it, or the freshly created code opens right behind the form
+// that just asked for it. Absent for a plain "go to this method" jump (gotoHandler) - there is
+// no panel to avoid there, and the existing reuse-if-visible placement is exactly what a
+// direct navigation wants.
+async function openAtOffset(uri: vscode.Uri, offset: number, avoidColumn?: vscode.ViewColumn): Promise<void> {
   const doc = await vscode.workspace.openTextDocument(uri);
   const pos = doc.positionAt(Math.min(offset, doc.getText().length));
-  const existing = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString());
-  const editor = await vscode.window.showTextDocument(doc, { preview: false, viewColumn: existing?.viewColumn });
+  const viewColumn =
+    avoidColumn !== undefined
+      ? neighborColumnFor(uri, avoidColumn)
+      : vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString())?.viewColumn;
+  const editor = await vscode.window.showTextDocument(doc, { preview: false, viewColumn });
   editor.selection = new vscode.Selection(pos, pos);
   revealContent(editor, pos);
 }
@@ -1696,7 +1710,12 @@ async function addMetaHandler(key: string, method: string): Promise<void> {
       return;
     }
   }
-  await openAtOffset(moduleUri, plan.cursor?.offset ?? 0);
+  // A CREATE action, not a passive follow: the method just appeared in the module and the
+  // panel has no other way to show where - unlike a structure/data row click (which merely
+  // moves a selection already visible elsewhere), the result of THIS action is invisible
+  // until the module opens. So this always reveals, even from a closed module tab; only the
+  // column is negotiable - never the panel's own (see openAtOffset's avoidColumn).
+  await openAtOffset(moduleUri, plan.cursor?.offset ?? 0, panelColumnFn?.(tgt.uri));
 }
 
 // "(create a handler...)": suggest the engine's default name in an InputBox. Decision
@@ -1819,7 +1838,9 @@ async function runAddHandler(key: string, method?: string, signature?: string): 
     return;
   }
   if (plan.cursorOffset !== undefined) {
-    await openAtOffset(moduleUri, plan.cursorOffset);
+    // Same reasoning as addMetaHandler above: this reveal is the only place the new method
+    // becomes visible, so it always runs - it just keeps off the form panel's own column.
+    await openAtOffset(moduleUri, plan.cursorOffset, panelColumnFn?.(uri));
   }
   for (const note of plan.notes) {
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: {0}", note));
@@ -2055,11 +2076,13 @@ export function registerFormProps(
   context: vscode.ExtensionContext,
   typeCandidates?: () => Promise<string[]>,
   formOwner?: (yamlPath: string) => Promise<{ name: string; kind: string; yamlPath: string } | undefined>,
-  projectEnums?: () => Promise<Record<string, string[]>>
+  projectEnums?: () => Promise<Record<string, string[]>>,
+  panelColumn?: (uri: vscode.Uri) => vscode.ViewColumn | undefined
 ): void {
   typeCandidatesFn = typeCandidates;
   formOwnerFn = formOwner;
   projectEnumsFn = projectEnums;
+  panelColumnFn = panelColumn;
   // hook 7: restore the recent-color swatches persisted last session.
   colorMemento = context.globalState;
   recentColors = (context.globalState.get<string[]>(RECENT_COLORS_KEY) ?? [])

@@ -20,32 +20,42 @@ import { isXbslSource } from "./report";
 import { editorColumnFor } from "./reveal";
 import { cspMeta, escapeHtml, inlineJson, makeNonce } from "./webviewShared";
 import {
+  ColumnWidths,
+  DEFAULT_COLUMN_WIDTHS,
   DictionaryEdit,
   DictionaryRow,
   EngineConfig,
   EntryKind,
+  MIN_COLUMN_WIDTHS,
   MIN_ENGINE,
   RowFilter,
   SetAnswer,
   SortDirection,
   SortKey,
+  SuggestAnswer,
   TranslationTarget,
   TranslationTotals,
   editsPayload,
   filterRows,
+  guardConcurrent,
   mergeRows,
   outdatedEngine,
   pageOf,
   parseEntries,
   parseGaps,
   parseSetResult,
+  parseSuggest,
   parseSummary,
   plannedActions,
   refusalText,
+  rowHint,
+  rowKey,
   rowStats,
+  sanitizeColumnWidths,
   setArgs,
   shortKey,
   sortRows,
+  suggestArgs,
   translateArgs,
   translationTarget,
   versionArgs,
@@ -54,6 +64,12 @@ import {
 const VIEW_TYPE = "xbsl.translation";
 const SET_COMMAND = "xbsl.translate.set";
 const PANEL_COMMAND = "xbsl.translate.dictionary";
+const KEY_COMMAND = "xbsl.translate.setKey";
+// SecretStorage keys, named after the environment variables the engine reads them from - the
+// mapping stays obvious without a lookup table of its own.
+const SECRET_YANDEX_KEY = "XBSL_TRANSLATE_YANDEX_KEY";
+const SECRET_YANDEX_FOLDER = "XBSL_TRANSLATE_YANDEX_FOLDER";
+const SECRET_GOOGLE_KEY = "XBSL_TRANSLATE_GOOGLE_KEY";
 // How many rows the webview is handed at once. The dictionary of a real project runs to tens of
 // thousands of records, and a table of that size costs seconds of DOM building for rows nobody
 // scrolls to; "show more" adds another page.
@@ -94,14 +110,17 @@ interface RunResult {
   notFound?: boolean;
 }
 
-function run(cfg: EngineConfig, args: string[], cwd: string): Promise<RunResult> {
+function run(cfg: EngineConfig, args: string[], cwd: string, extraEnv: NodeJS.ProcessEnv = {}): Promise<RunResult> {
   return new Promise((resolve) => {
     let child;
     try {
       // PYTHONUTF8: without it Python's stdio pipes on Windows use the ANSI codepage, and every
       // key of the dictionary is Cyrillic - the table would come back as mojibake and a write
       // would fail on an encoding error instead of saying what went wrong.
-      child = spawn(cfg.command, args, { cwd, env: { ...process.env, PYTHONUTF8: "1" } });
+      // extraEnv: only the `--suggest` run passes anything here (the machine-translation keys) -
+      // every other run leaves it empty. Either way the keys travel in the spawned process's own
+      // environment and nowhere else: never a setting, never an argument on its command line.
+      child = spawn(cfg.command, args, { cwd, env: { ...process.env, PYTHONUTF8: "1", ...extraEnv } });
     } catch (e) {
       resolve({ stdout: "", error: String(e), notFound: (e as NodeJS.ErrnoException)?.code === "ENOENT" });
       return;
@@ -122,6 +141,30 @@ function engineFailed(res: RunResult): string {
   return res.notFound
     ? vscode.l10n.t("xbsl was not found. Install it to work with the translation dictionary.")
     : String(res.error ?? "");
+}
+
+// The machine-translation keys the owner put into SecretStorage, shaped as the environment the
+// engine's `--suggest` run reads them from. An empty value is dropped rather than passed as an
+// empty string: to the engine the two look identical (its own env lookup only asks "is it set"),
+// so there is nothing to gain by passing one and a reader of the spawned process's environment
+// would see a name that promises a key that is not really there.
+async function secretsEnv(context: vscode.ExtensionContext): Promise<NodeJS.ProcessEnv> {
+  const [yandexKey, yandexFolder, googleKey] = await Promise.all([
+    context.secrets.get(SECRET_YANDEX_KEY),
+    context.secrets.get(SECRET_YANDEX_FOLDER),
+    context.secrets.get(SECRET_GOOGLE_KEY),
+  ]);
+  const env: NodeJS.ProcessEnv = {};
+  if (yandexKey) {
+    env.XBSL_TRANSLATE_YANDEX_KEY = yandexKey;
+  }
+  if (yandexFolder) {
+    env.XBSL_TRANSLATE_YANDEX_FOLDER = yandexFolder;
+  }
+  if (googleKey) {
+    env.XBSL_TRANSLATE_GOOGLE_KEY = googleKey;
+  }
+  return env;
 }
 
 // True when the dictionary must not be touched at all: the engine is missing, or it is older
@@ -249,6 +292,37 @@ export async function writeEdits(
   }
 }
 
+// One `--suggest` run: the machine-translation service fills as much of the untranslated
+// remainder as its keys allow, cached entries included. Nothing is written by this call - the
+// answer is offered to the table as suggestions, and a write still goes through `writeEdits`,
+// the same path a hand-typed cell uses.
+async function runSuggest(
+  context: vscode.ExtensionContext,
+  folder: vscode.WorkspaceFolder,
+  provider: string | undefined
+): Promise<SuggestAnswer | undefined> {
+  const cfg = engineConfig(folder);
+  const extraEnv = await secretsEnv(context);
+  try {
+    const res = await run(cfg, suggestArgs(cfg, provider), folder.uri.fsPath, extraEnv);
+    if (res.error) {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t("Failed to get suggestions from the translation service: {0}", engineFailed(res))
+      );
+      return undefined;
+    }
+    return parseSuggest(res.stdout);
+  } catch (e) {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t(
+        "Failed to get suggestions from the translation service: {0}",
+        e instanceof Error ? e.message : String(e)
+      )
+    );
+    return undefined;
+  }
+}
+
 // Opens a file at a line: the occurrence of an untranslated word in the sources, or the record in
 // the dictionary yaml. The editor group is the one the sources already live in - the panel keeps
 // its own.
@@ -275,6 +349,12 @@ interface ViewState extends RowFilter {
   sortBy: SortKey;
   sortDir: SortDirection;
   shown: number;
+  // The reader's own column widths, set by dragging a header border, wider than the panel's
+  // ordinary read/sort/filter state but kept in the very same object on purpose: it already
+  // survives a panel reopen exactly the way search/sort/filter do, through the same webview
+  // state and the same round trip to the extension - a second persistence path would only be a
+  // second place for the two copies to drift apart.
+  colWidths: ColumnWidths;
 }
 
 const DEFAULT_STATE: ViewState = {
@@ -286,6 +366,7 @@ const DEFAULT_STATE: ViewState = {
   sortBy: "count",
   sortDir: "desc",
   shown: PAGE,
+  colWidths: DEFAULT_COLUMN_WIDTHS,
 };
 
 class TranslationPanel {
@@ -298,13 +379,47 @@ class TranslationPanel {
   private loading = false;
   private state: ViewState = { ...DEFAULT_STATE };
   private readonly disposables: vscode.Disposable[] = [];
+  // The machine-translation service's guesses, by rowKey - filled only after "suggest" is asked
+  // for, and offered only where the cell is still empty (`post` checks that). Kept apart from
+  // `rows` so a plain re-read of the dictionary never throws away a suggestion nobody accepted or
+  // rejected yet.
+  private readonly machineSuggestions = new Map<string, string>();
+  // The service's own report from the last "suggest" run: cached/requested/refused, and the
+  // refusal reasons already formatted (empty when there were none). Shown in the panel's summary
+  // line, not only the status-bar message the run also posts - that one is gone in five seconds,
+  // far from the panel, and these are the numbers the whole cache module exists to answer: did a
+  // click just pay twice for the same text. Kept until the NEXT suggest run replaces it - a plain
+  // reload does not touch it, and a failed run leaves the previous report standing rather than
+  // wiping it with nothing.
+  // `suggested` is the row count of the answer, counted apart from cached/requested/refused
+  // because a string literal is never one of those three: it is filled by local substitution,
+  // never by a call to the service, so it can offer a suggestion while all three service
+  // counters stand at zero. Without this field that state is indistinguishable from "nothing
+  // to ask" - a lie the summary line must not tell while a suggestion sits on screen unaccepted.
+  private lastMachine:
+    | { cached: number; requested: number; refused: number; refusalText: string; suggested: number }
+    | undefined;
+  // A click while the previous suggest run is still going must not start the engine a second
+  // time: `--suggest` reaches a paid external service, and unlike "re-read" (two cheap local
+  // reads), a repeat run here spends the service's quota again. The button is also disabled on
+  // the client for the same span (see the webview script's `busy` handling) - this is the guard
+  // that holds even if a message still gets through.
+  private readonly guardedSuggest = guardConcurrent(() => this.suggestJob());
 
-  private constructor(private readonly panel: vscode.WebviewPanel, private readonly folder: vscode.WorkspaceFolder) {
+  private constructor(
+    private readonly panel: vscode.WebviewPanel,
+    private readonly folder: vscode.WorkspaceFolder,
+    private readonly context: vscode.ExtensionContext
+  ) {
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), null, this.disposables);
   }
 
-  public static async show(filter?: Partial<ViewState>, resource?: vscode.Uri): Promise<void> {
+  public static async show(
+    context: vscode.ExtensionContext,
+    filter?: Partial<ViewState>,
+    resource?: vscode.Uri
+  ): Promise<void> {
     const folder = currentFolder(resource);
     if (!folder) {
       void vscode.window.showInformationMessage(
@@ -330,18 +445,19 @@ class TranslationPanel {
       vscode.ViewColumn.Active,
       { enableScripts: true, retainContextWhenHidden: true }
     );
-    await TranslationPanel.adopt(panel, folder, filter);
+    await TranslationPanel.adopt(context, panel, folder, filter);
   }
 
   // Take over a panel - a fresh one, or one VS Code restored after a restart. The dictionary is
   // re-read either way: it is a file on disk that anything could have changed meanwhile.
   public static async adopt(
+    context: vscode.ExtensionContext,
     panel: vscode.WebviewPanel,
     folder: vscode.WorkspaceFolder,
     filter?: Partial<ViewState>
   ): Promise<void> {
     TranslationPanel.current?.dispose();
-    const created = new TranslationPanel(panel, folder);
+    const created = new TranslationPanel(panel, folder, context);
     TranslationPanel.current = created;
     if (filter) {
       created.state = { ...created.state, ...filter };
@@ -351,7 +467,15 @@ class TranslationPanel {
   }
 
   private applyState(patch: Partial<ViewState>): void {
-    this.state = { ...this.state, ...patch };
+    const next = { ...this.state, ...patch };
+    // A width the webview sends is already clamped by the drag arithmetic that produced it, but
+    // `vsapi.getState()` is a plain JSON blob a person (or an older build of this very panel)
+    // could have left in any shape at all - sanitized here, on the one path every width re-enters
+    // through, rather than trusted because the client-side drag code usually behaves.
+    if (patch.colWidths) {
+      next.colWidths = sanitizeColumnWidths(patch.colWidths);
+    }
+    this.state = next;
     this.post();
   }
 
@@ -382,13 +506,26 @@ class TranslationPanel {
   // The page the webview draws, plus everything the header says about it.
   private post(): void {
     const filtered = sortRows(filterRows(this.rows, this.state), this.state.sortBy, this.state.sortDir);
+    // The machine suggestion is folded in only for this page, not stored back into `rows`: it is
+    // a ghost like the platform's own hint, gone the moment the cell it belongs to is no longer
+    // empty. `rowHint` then picks the one the cell actually shows - the platform's spelling and
+    // the machine service's guess used to live in separate columns and could both be on screen;
+    // now they share the one field a hand-typed answer fills, so the priority is resolved here,
+    // before either reaches the webview.
+    const page = pageOf(filtered, this.state.shown).map((row) => {
+      const guess = this.machineSuggestions.get(rowKey(row.kind, row.key));
+      const withGuess = guess && row.value === "" ? { ...row, machineSuggestion: guess } : row;
+      const hint = rowHint(withGuess);
+      return hint ? { ...withGuess, hint: hint.value, hintFromMachine: hint.fromMachine } : withGuess;
+    });
     this.panel.webview.postMessage({
       type: "rows",
-      rows: pageOf(filtered, this.state.shown),
+      rows: page,
       stats: rowStats(filtered, this.state.shown),
       loaded: this.rows.length,
       dictionary: this.dictionary,
       totals: this.totals,
+      machine: this.lastMachine,
       state: this.state,
       busy: this.loading,
     });
@@ -409,6 +546,10 @@ class TranslationPanel {
     }
     if (msg.type === "reload") {
       await this.reload();
+      return;
+    }
+    if (msg.type === "suggest") {
+      await this.guardedSuggest();
       return;
     }
     if (msg.type === "set" && msg.key !== undefined && msg.kind) {
@@ -444,6 +585,67 @@ class TranslationPanel {
     await this.reload();
   }
 
+  // Asks the machine-translation service to fill as much of the untranslated remainder as its
+  // keys allow. Nothing in the dictionary changes here - the table only grows a suggestion next
+  // to every gap the service answered, and accepting one is the same "set" message a hand-typed
+  // cell already sends. Only ever run through `guardedSuggest` - never call this directly, or the
+  // one-run-at-a-time guarantee it exists for is gone.
+  private async suggestJob(): Promise<void> {
+    const c = vscode.workspace.getConfiguration("xbsl", this.folder.uri);
+    const provider = (c.get<string>("translation.provider") || "").trim() || undefined;
+    this.loading = true;
+    this.panel.webview.postMessage({ type: "busy", on: true });
+    let answer: SuggestAnswer | undefined;
+    try {
+      answer = await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Window, title: vscode.l10n.t("XBSL: asking the translation service...") },
+        () => runSuggest(this.context, this.folder, provider)
+      );
+    } finally {
+      this.loading = false;
+    }
+    if (!answer) {
+      this.post();
+      return;
+    }
+    for (const row of answer.rows) {
+      this.machineSuggestions.set(rowKey(row.kind, row.key), row.value);
+    }
+    // The dictionary this very run resolved - normally the same one the table already shows in
+    // its footer, but it is THIS answer that says where an accepted suggestion is actually about
+    // to land, so the footer is kept in step with it rather than left to repeat a stale guess.
+    if (answer.dictionary) {
+      this.dictionary = answer.dictionary;
+    }
+    // The panel's own record of this run, read by `post()` into the summary line - the status
+    // bar message below says the same numbers once and is gone in five seconds; this is what
+    // stays put next to the table until a later suggest run overwrites it.
+    this.lastMachine = {
+      cached: answer.cached,
+      requested: answer.requested,
+      refused: answer.refused,
+      refusalText: answer.refusals.length > 0 ? refusalText(answer.refusals) : "",
+      suggested: answer.rows.length,
+    };
+    void vscode.window.setStatusBarMessage(
+      vscode.l10n.t(
+        "XBSL: translation service - {0} cached, {1} requested, {2} refused",
+        answer.cached,
+        answer.requested,
+        answer.refused
+      ),
+      5000
+    );
+    // The count alone hides WHAT did not translate; the reason is the only actionable half of
+    // a refusal - the same shape `write` already reads out of a refused --set edit.
+    if (answer.refusals.length > 0) {
+      void vscode.window.showWarningMessage(
+        vscode.l10n.t("The translation service refused some entries: {0}", refusalText(answer.refusals))
+      );
+    }
+    this.post();
+  }
+
   private html(): string {
     const nonce = makeNonce();
     const t = {
@@ -458,13 +660,22 @@ class TranslationPanel {
       kindPhrase: vscode.l10n.t("comments"),
       kindLiteral: vscode.l10n.t("literals"),
       reload: vscode.l10n.t("Re-read"),
+      suggestBtn: vscode.l10n.t("Suggest via translation service"),
       more: vscode.l10n.t("Show more"),
+      // Five columns, five one-line headers - the title floor a header used to carry above its
+      // own sort words is gone (it said nothing the words below it did not already say), so
+      // every heading below is the sort control itself, not a caption over one. Only "key and
+      // translation" still names two sort orders at once (`colKey`/`colValue`); every other
+      // column sorts by the one thing its own name already says.
       colKind: vscode.l10n.t("Kind"),
       colKey: vscode.l10n.t("Key"),
       colValue: vscode.l10n.t("Translation"),
       colCount: vscode.l10n.t("Occurrences"),
       colPlace: vscode.l10n.t("Where it occurs"),
       colFile: vscode.l10n.t("Dictionary file"),
+      // Shown on a hover over a border handle - the one thing about it that is not visible on
+      // its own (a resize cursor says "drag me", nothing says "or double-click me").
+      resetWidthTitle: vscode.l10n.t("double-click to reset this column's width"),
       token: vscode.l10n.t("name"),
       phrase: vscode.l10n.t("comment"),
       literal: vscode.l10n.t("literal"),
@@ -479,9 +690,30 @@ class TranslationPanel {
       // names and comment lines, and a project whose messages are still Cyrillic must not be
       // able to read 100% off this line.
       literals: vscode.l10n.t("literals: {0} translated, {1} left"),
-      hintTitle: vscode.l10n.t("the platform's spelling - click to insert"),
-      placeTitle: vscode.l10n.t("open the source at this line"),
-      fileTitle: vscode.l10n.t("open the dictionary record"),
+      // The machine-translation service's own report from the last "suggest" run, folded into
+      // the same summary line as coverage/literals rather than left only in the status-bar
+      // message that already carries it - that one is gone in five seconds and is nowhere near
+      // the table. cached/requested/refused are the numbers the whole point of the cache module
+      // is to answer, so they live where a person is already looking.
+      machineStats: vscode.l10n.t("machine translation: {0} cached, {1} requested, {2} refused"),
+      // What "0 cached, 0 requested, 0 refused" actually means: the run found no name or
+      // comment gap left to fill, not that the button silently failed - said in words instead
+      // of three zeroes, which read the same whether the click worked or did nothing at all.
+      // Correct only when nothing was suggested either - see `machineLocalOnly` below for the
+      // one case where it would still be a lie.
+      machineNothing: vscode.l10n.t("machine translation: nothing to ask - already in the dictionary"),
+      // The one gap `machineNothing` cannot cover: a string literal is never counted in
+      // cached/requested/refused, because it is never asked of the service at all - it is
+      // filled by local substitution. All three counters can stand at zero while a literal
+      // suggestion just appeared on screen, unaccepted; saying "nothing to ask" there would be
+      // false the moment a reader compares it to the table. This is that same zero-counter state
+      // told honestly, once a suggestion actually exists to report.
+      machineLocalOnly: vscode.l10n.t("machine translation: {0} suggested without asking the service"),
+      machineRefusalsTitle: vscode.l10n.t("the translation service refused some entries:"),
+      // The keyboard path is named in the tooltip itself, not only offered by the mouse - Enter
+      // works while the field is still empty, exactly when the ghost above is showing.
+      hintTitle: vscode.l10n.t("the platform's spelling - click the checkmark or press Enter to insert it"),
+      machineHintTitle: vscode.l10n.t("the translation service's guess - click the checkmark or press Enter to insert it"),
     };
     return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">${cspMeta(nonce)}
 <style nonce="${nonce}">
@@ -494,31 +726,133 @@ class TranslationPanel {
     color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); }
   select { background: var(--vscode-dropdown-background); color: var(--vscode-dropdown-foreground);
     border: 1px solid var(--vscode-dropdown-border, transparent); padding: 3px 6px; }
-  button { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
-    border: none; padding: 4px 12px; cursor: pointer; border-radius: 2px; }
+  /* A checkbox and its label text obey different default alignment rules - the checkbox is a
+     replaced element sitting on the text line's baseline, the text is not, and no amount of
+     centering the OUTER row fixes that by itself. Flexing this one pair and zeroing the
+     checkbox's own default margin (a few px the browser adds on its own, asked for by no rule
+     here) is the fix; the footer pair below gets the identical treatment. */
+  label.check { display: inline-flex; align-items: center; gap: 6px; }
+  label.check input[type=checkbox] { margin: 0; }
+  button {
+    background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground);
+    border: none; padding: 4px 12px; cursor: pointer; border-radius: 2px; font: inherit; margin: 0;
+    /* The actual cause of the footer button sitting off from its text, found this round: with
+       appearance left at its default "auto", the browser keeps drawing the button with the native
+       widget's own vertical metrics, which padding and line-height do not fully describe or
+       override - align-items: center on the flex row around it can only center a box it can
+       measure, and the native chrome was not fully that box. Turning appearance off leaves sizing
+       to the declared padding and border alone; box-sizing: border-box makes "4px 12px" the whole
+       height, nothing left implicit for the flex row to guess at. The earlier attempt (matching
+       font alone) is why this one checks out both the button and the checkbox at three widths in
+       the report, not just at the width it was first seen wrong. */
+    appearance: none; -webkit-appearance: none; box-sizing: border-box;
+  }
   button:hover { background: var(--vscode-button-hoverBackground); }
-  table { border-collapse: collapse; width: 100%; }
-  th { text-align: left; font-weight: 600; padding: 4px 8px; position: sticky; top: 0; cursor: pointer;
-       background: var(--vscode-editor-background); user-select: none;
+  button:disabled { opacity: 0.5; cursor: default; }
+  /* separate, not collapse: position: sticky on a <th> renders unreliably with border-collapse
+     (chunks of the header detach and paint over scrolled body rows) - border-spacing 0 keeps the
+     same seamless look, the sticky behavior is what actually needed the switch.
+     table-layout: fixed, not auto - a reader's own dragged width has to be the LAST word on a
+     column's size, never quietly reopened by its content. auto only ever treated a column's width
+     as a suggestion, which is exactly what let one unbreakable label push its column - and the
+     whole table - wider than the panel instead of being cut with an ellipsis, the defect a review
+     of the previous round caught with the very same test caption used here. Every column's actual
+     pixel width comes from its own <col> in the colgroup below, written by the script from
+     state.colWidths (or the column's default, the first time nothing is saved yet) - nothing in
+     this stylesheet sets a per-column width, on purpose, so there is exactly one place it can
+     come from. The table's OWN width is also set by that same script (applyColgroup, the sum of
+     the five columns) - measured this round: table-layout: fixed only takes a <col>'s width as
+     literal, load-bearing pixels when the table has an explicit width to anchor to; left at the
+     default auto, every column was still being sized by its own content regardless of what the
+     colgroup said, the exact defect this whole rule exists to close, reappearing through the one
+     gap left open. */
+  table { border-collapse: separate; border-spacing: 0; table-layout: fixed; }
+  colgroup col { width: 80px; } /* overwritten per-column by the script before first paint */
+  /* thead sticky too, alongside each th - redundant, not load-bearing on its own (a sticky th
+     already carries its whole box as one unit with no help needed), kept only because some
+     engines are documented to behave more reliably when both the row and its cells declare
+     position: sticky. */
+  thead { position: sticky; top: 0; z-index: 1; }
+  /* Every header is one line now by construction - the title floor a header used to carry above
+     its own sort words said nothing the words below it did not already say, so removing it also
+     removed the only thing that could ever have wrapped this row onto a second line. white-space:
+     nowrap is the safety net for the one input the CSS itself does not control - a person can
+     still drag a column narrower than its own header word - overflow: hidden with no ellipsis
+     here on purpose: a header clipped mid-word is still legible as "the same word, just tight";
+     turning it into "..." would cost the one thing a header uniquely needs, the ability to tell
+     two adjacent sort words apart without a hover. */
+  th { text-align: left; font-weight: 600; padding: 4px 10px 4px 8px; position: sticky; top: 0; z-index: 1;
+       background: var(--vscode-editor-background); user-select: none; white-space: nowrap; overflow: hidden;
        border-bottom: 1px solid var(--vscode-panel-border); }
-  th .dir { color: var(--vscode-descriptionForeground); }
+  .sortlbl { cursor: pointer; color: var(--vscode-descriptionForeground); }
+  .sortlbl:hover { color: var(--vscode-foreground); text-decoration: underline; }
+  .sortlbl.active { color: var(--vscode-foreground); text-decoration: underline; }
+  /* Between the key column's two sort words - deliberately not shaped like either of them
+     (no pointer cursor, no hover color) so it never reads as a third click target. */
+  .sep { color: var(--vscode-descriptionForeground); padding: 0 4px; }
+  .dir { color: var(--vscode-descriptionForeground); }
+  /* The drag handle: a narrow strip pinned to the header cell's OWN right edge, as a sibling of
+     the sort words next to it, never their parent or their child. A mousedown that lands here
+     cannot reach a .sortlbl's own click listener at all - there is no shared ancestor between
+     "started the drag" and "should fire the sort" for it to bubble through. That is the actual
+     separation between click-sorts and drag-resizes; the "just dragged" flag the script also sets
+     is only the second, defensive line of it, for the one case a browser still sends a synthetic
+     click after the mouseup that ended a drag. th needs no extra position rule for this to anchor
+     correctly - position: sticky above already puts th in the "positioned" category, the same one
+     position: relative would have, so an absolutely positioned child measures from th's own box. */
+  th .handle { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; }
+  th .handle:hover, th .handle.dragging { background: var(--vscode-focusBorder, var(--vscode-textLink-foreground)); opacity: 0.5; }
   td { padding: 3px 8px; vertical-align: top;
        border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); }
-  td.kind { color: var(--vscode-descriptionForeground); white-space: nowrap; }
+  /* A dictionary record fills two table rows, not one: the kind/key/count/place/file line, then
+     the translation input right under it, spanning the full row width. The pair reads as one line
+     item - tight between its own two rows, a full border only after the second.
+     line-height is shared explicitly by every top-row cell so their first lines start flush with
+     each other - vertical-align: top alone is not enough between cells of different font-family
+     (kind is the UI font, key the editor font): each font's own "normal" line height differs,
+     which is what carried the kind word a few pixels below the key beside it. */
+  tr.top td { border-bottom: none; padding-top: 6px; padding-bottom: 2px; line-height: 18px; }
+  tr.bottom td { padding-top: 0; padding-bottom: 8px; }
+  /* Every one of the five columns gets the same rule, not just the ones that looked likely to
+     overflow today: with table-layout: fixed above, a cell can no longer grow past its column's
+     set width no matter what it holds - overflow: hidden here is what turns that from a silent,
+     hard cut into nothing at all visible. Where the text itself should also get a "...", that
+     rule sits on the element that actually CONTAINS the text (a child div or the link itself),
+     never on the cell - overflow/text-overflow do not inherit, and a bare cell-level rule would
+     still clip the text, just without the mark that says there is more of it. */
+  td.kind, td.key, td.count, td.place, td.file { overflow: hidden; }
+  td.kind > div, td.count > div, td.file > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td.kind { color: var(--vscode-descriptionForeground); }
+  /* The key column keeps its own different answer, on purpose: it is the widest, most important
+     column, and hiding an untranslated key behind "..." is a worse trade than a taller row -
+     word-break: break-word lets even an unbreakable 40-character name wrap onto more lines
+     in place instead of pushing the column wider (table-layout: fixed already forbids that) or
+     bleeding into the next one. Only a literal past CLAMPED_KEY characters is capped as well, at
+     four lines - the one shape that could otherwise run taller than the window and hide the rest
+     of the table under it. */
   td.key { font-family: var(--vscode-editor-font-family); word-break: break-word; }
-  /* A string literal is a whole message; drawn in full its row is taller than the window and
-     hides the rest of the table. Four lines with an ellipsis, the whole text in the tooltip. */
-  td.key .clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical;
-    overflow: hidden; }
-  td.count { text-align: right; white-space: nowrap; }
+  td.key .clamp { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  td.count { color: var(--vscode-descriptionForeground); font-size: 0.94em; }
+  /* place: a link, not plain text - the ellipsis rule sits on the <a> itself, the element that
+     actually overflows, and display: block is what lets an ordinarily inline <a> obey
+     white-space/text-overflow at all. Truncated only VISUALLY: the link keeps the row's full
+     file and line as its href-equivalent click target regardless of how much of the text is
+     showing, and the full path is what the title attribute carries as a tooltip. */
+  td.place { color: var(--vscode-descriptionForeground); font-size: 0.94em; }
+  td.place a { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  td.file { color: var(--vscode-descriptionForeground); font-size: 0.94em; }
   .scope { color: var(--vscode-descriptionForeground); }
   .cell { position: relative; }
-  .cell input { width: 100%; box-sizing: border-box; padding: 2px 4px; font-family: inherit;
+  .cell input { width: 100%; box-sizing: border-box; padding: 4px 6px; font-family: inherit;
     background: var(--vscode-input-background); color: var(--vscode-input-foreground);
     border: 1px solid var(--vscode-input-border, transparent); }
-  .cell .ghost { position: absolute; left: 6px; top: 3px; color: var(--vscode-descriptionForeground);
-    cursor: pointer; pointer-events: auto; }
-  .cell input:focus ~ .ghost { display: none; }
+  /* The suggestion itself is the native placeholder - it takes the editor's own placeholder
+     color and vanishes by itself the moment anything is typed, no script needed for that part. */
+  .cell input::placeholder { color: var(--vscode-input-placeholderForeground, var(--vscode-descriptionForeground)); }
+  .cell input.hashint { padding-right: 26px; } /* room on the right for the accept checkmark */
+  .cell .accept { position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    cursor: pointer; color: var(--vscode-textLink-foreground); font-weight: 700; user-select: none; }
+  .cell .accept:hover { text-decoration: underline; }
   a { color: var(--vscode-textLink-foreground); text-decoration: none; cursor: pointer; }
   a:hover { text-decoration: underline; }
   .dim { color: var(--vscode-descriptionForeground); }
@@ -528,7 +862,7 @@ class TranslationPanel {
 <p class="lead">${escapeHtml(t.lead)}</p>
 <div class="bar">
   <input type="search" id="q" placeholder="${escapeHtml(t.search)}">
-  <label><input type="checkbox" id="gaps"> ${escapeHtml(t.gapsOnly)}</label>
+  <label class="check"><input type="checkbox" id="gaps">${escapeHtml(t.gapsOnly)}</label>
   <select id="kind">
     <option value="any">${escapeHtml(t.kindAny)}</option>
     <option value="token">${escapeHtml(t.kindToken)}</option>
@@ -536,16 +870,31 @@ class TranslationPanel {
     <option value="literal">${escapeHtml(t.kindLiteral)}</option>
   </select>
   <button id="reload">${escapeHtml(t.reload)}</button>
+  <button id="suggest">${escapeHtml(t.suggestBtn)}</button>
 </div>
 <div class="dim" id="stats"></div>
 <table>
+  <colgroup>
+    <col data-col="kind"><col data-col="key"><col data-col="count"><col data-col="place"><col data-col="file">
+  </colgroup>
   <thead><tr>
-    <th data-sort="kind">${escapeHtml(t.colKind)}</th>
-    <th data-sort="key">${escapeHtml(t.colKey)}</th>
-    <th data-sort="value">${escapeHtml(t.colValue)}</th>
-    <th data-sort="count">${escapeHtml(t.colCount)}</th>
-    <th data-sort="place">${escapeHtml(t.colPlace)}</th>
-    <th data-sort="file">${escapeHtml(t.colFile)}</th>
+    <th data-col="kind">${escapeHtml(t.colKind)}<span class="handle" data-col="kind" title="${escapeHtml(t.resetWidthTitle)}"></span></th>
+    <th data-col="key">
+      <span class="sortlbl" data-sort="key">${escapeHtml(t.colKey)}</span><span class="sep">&middot;</span><span class="sortlbl" data-sort="value">${escapeHtml(t.colValue)}</span>
+      <span class="handle" data-col="key" title="${escapeHtml(t.resetWidthTitle)}"></span>
+    </th>
+    <th data-col="count">
+      <span class="sortlbl" data-sort="count">${escapeHtml(t.colCount)}</span>
+      <span class="handle" data-col="count" title="${escapeHtml(t.resetWidthTitle)}"></span>
+    </th>
+    <th data-col="place">
+      <span class="sortlbl" data-sort="place">${escapeHtml(t.colPlace)}</span>
+      <span class="handle" data-col="place" title="${escapeHtml(t.resetWidthTitle)}"></span>
+    </th>
+    <th data-col="file">
+      <span class="sortlbl" data-sort="file">${escapeHtml(t.colFile)}</span>
+      <span class="handle" data-col="file" title="${escapeHtml(t.resetWidthTitle)}"></span>
+    </th>
   </tr></thead>
   <tbody id="rows"></tbody>
 </table>
@@ -558,10 +907,15 @@ const vsapi = acquireVsCodeApi();
 const TEXT = ${inlineJson(t)};
 const PAGE = ${PAGE};
 const CLAMPED_KEY = ${CLAMPED_KEY};
+const COLS = ["kind", "key", "count", "place", "file"];
+const DEFAULT_WIDTHS = ${inlineJson(DEFAULT_COLUMN_WIDTHS)};
+const MIN_WIDTHS = ${inlineJson(MIN_COLUMN_WIDTHS)};
 const $ = (id) => document.getElementById(id);
 // The extension's state comes inlined (a panel opened from a finding is already filtered by its
 // key); what the webview itself remembers wins over it, which is exactly the restore after a
-// window restart - a fresh panel has nothing remembered.
+// window restart - a fresh panel has nothing remembered. colWidths rides along inside this same
+// object, not a state of its own - it already gets everything state gets for free: the restore
+// above, and the round trip to the extension every pushState below already makes.
 let state = Object.assign(${inlineJson(this.state)}, vsapi.getState() || {});
 let busy = true;
 let last = { rows: [], stats: { total: 0, gaps: 0, shown: 0 }, loaded: 0, dictionary: "", totals: null };
@@ -572,30 +926,90 @@ function pushState(patch) {
   vsapi.postMessage({ type: "state", state: state });
 }
 
+// A column's width, read defensively: state.colWidths normally already came from a sanitized
+// state (the extension runs every incoming colWidths through the same clamp this reads with),
+// but the very first paint of a freshly restored panel draws from vsapi.getState() alone, before
+// that round trip has happened even once - a number outside [min, +inf) or missing entirely
+// falls back the same way sanitizeColumnWidths does on the extension side, so that first paint
+// can never be narrower than the floor or wider than nothing at all.
+function widthOf(col) {
+  const v = state.colWidths && state.colWidths[col];
+  return typeof v === "number" && isFinite(v) && v > 0 ? Math.max(MIN_WIDTHS[col], v) : DEFAULT_WIDTHS[col];
+}
+
+// table-layout: fixed only treats a <col>'s width as literal, load-bearing pixels when the
+// TABLE itself also has an explicit width to anchor to - left at the default "auto", measurement
+// during this round showed every column still being resized by its own content regardless of
+// what the colgroup said (a 320px key column rendering at 128px), the exact defect a table with
+// no set width reproduces even though every rule that caused the earlier auto-layout version of
+// it is gone. Setting the table's own width to the sum of the five columns, recomputed here
+// alongside them, is what makes a dragged width the actual last word on a column's size.
+function applyColgroup() {
+  let total = 0;
+  for (const col of COLS) {
+    const w = widthOf(col);
+    document.querySelector('col[data-col="' + col + '"]').style.width = w + "px";
+    total += w;
+  }
+  document.querySelector("table").style.width = total + "px";
+}
+
 function syncControls() {
   if ($("q").value !== (state.search || "")) { $("q").value = state.search || ""; }
   $("gaps").checked = Boolean(state.gapsOnly);
   $("kind").value = state.kind || "any";
-  for (const th of document.querySelectorAll("th[data-sort]")) {
-    const mark = th.querySelector(".dir");
+  // Five columns, five independent sort handles now (only "key"/"value" still share one column) -
+  // "[data-sort]" catches every one of them, header or word alike.
+  for (const el of document.querySelectorAll("[data-sort]")) {
+    const mark = el.querySelector(".dir");
     if (mark) { mark.remove(); }
-    if (th.dataset.sort === state.sortBy) {
+    el.classList.remove("active");
+    if (el.dataset.sort === state.sortBy) {
+      el.classList.add("active");
       const dir = document.createElement("span");
       dir.className = "dir";
       dir.textContent = state.sortDir === "desc" ? " \\u2193" : " \\u2191";
-      th.appendChild(dir);
+      el.appendChild(dir);
     }
   }
+  applyColgroup();
+}
+
+// A display trim, never a data change: the directory of a source path or a dictionary file is
+// almost always one of a handful of project folders, so it carries little of its own next to the
+// file name - and unlike a column's pixel width, there is no slider for how much of a path is
+// "enough", so this drops it outright rather than guessing a cutoff. The full path a caller still
+// needs (the click target, the tooltip) always reads the original string, never this trimmed one.
+function baseName(p) {
+  // Four backslashes here, not two: this text lives inside the OUTER TypeScript template
+  // literal (html()'s own return value), which collapses \\\\ to \\ the same way any string
+  // literal collapses an escape - the inner webview script that actually runs this regex needs
+  // to see \\\\/]/ as \\/]/, matching a backslash OR a forward slash. Two backslashes here
+  // reaches the browser as one, a regex that only ever matches "/" - it silently returned every
+  // Windows-style path unchanged, found only by measuring the real generated output on a real
+  // Windows path rather than a hand-typed one.
+  const parts = String(p).split(/[\\\\/]/);
+  return parts[parts.length - 1] || String(p);
 }
 
 function linkCell(td, text, title, onClick) {
   const a = document.createElement("a");
   a.textContent = text;
   a.title = title;
+  // Kept out of Tab order on purpose: this is a secondary jump-to-source action, and a person
+  // walking the table by keyboard is after the translation inputs, one per row - a stray link
+  // between two of them would cost an extra Tab for no reason.
+  a.tabIndex = -1;
   a.addEventListener("click", onClick);
   td.appendChild(a);
 }
 
+// The translation input, full width under the key. An empty cell may carry a hint - the
+// platform's own spelling or the machine service's guess, already resolved to one by rowHint on
+// the extension side (row.hint / row.hintFromMachine) - shown as the input's native placeholder
+// (the editor's own placeholder color, and gone by itself the moment anything is typed) plus a
+// checkmark on the right that accepts it. The checkmark works by mouse; Enter does the same
+// while the field is still empty, so a row is reachable end to end without the mouse.
 function valueCell(td, row) {
   const box = document.createElement("div");
   box.className = "cell";
@@ -603,30 +1017,46 @@ function valueCell(td, row) {
   input.type = "text";
   input.value = row.value;
   input.spellcheck = false;
+  const hint = row.hint || "";
+  let icon;
+  const accept = () => {
+    if (!hint) { return; }
+    input.value = hint;
+    // The row now holds what was written, so the blur that follows does not send the very same
+    // word a second time.
+    row.value = hint;
+    vsapi.postMessage({ type: "set", kind: row.kind, key: row.key, value: hint });
+    if (icon) { icon.style.display = "none"; }
+  };
   const submit = () => {
     if (input.value === row.value) { return; }
     vsapi.postMessage({ type: "set", kind: row.kind, key: row.key, value: input.value });
   };
   input.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") { input.blur(); }
+    if (e.key === "Enter") {
+      if (hint && !input.value) { accept(); }
+      input.blur();
+      return;
+    }
     if (e.key === "Escape") { input.value = row.value; input.blur(); }
   });
   input.addEventListener("blur", submit);
+  input.addEventListener("input", () => {
+    // The placeholder hides itself; the checkmark is a real element and has to be told.
+    if (icon) { icon.style.display = input.value ? "none" : ""; }
+  });
+  if (hint) {
+    input.placeholder = hint;
+    input.classList.add("hashint");
+  }
   box.appendChild(input);
-  // The platform's own spelling, grey, over the empty cell: a click puts it in and writes it.
-  if (!row.value && row.suggestion) {
-    const ghost = document.createElement("span");
-    ghost.className = "ghost";
-    ghost.textContent = row.suggestion;
-    ghost.title = TEXT.hintTitle;
-    ghost.addEventListener("click", () => {
-      input.value = row.suggestion;
-      // The row now holds what was written, so the blur that follows the click does not send
-      // the very same word a second time.
-      row.value = row.suggestion;
-      vsapi.postMessage({ type: "set", kind: row.kind, key: row.key, value: row.suggestion });
-    });
-    box.appendChild(ghost);
+  if (hint) {
+    icon = document.createElement("span");
+    icon.className = "accept";
+    icon.textContent = "\\u2713";
+    icon.title = row.hintFromMachine ? TEXT.machineHintTitle : TEXT.hintTitle;
+    icon.addEventListener("click", accept);
+    box.appendChild(icon);
   }
   td.appendChild(box);
 }
@@ -636,11 +1066,23 @@ function render() {
   const body = $("rows");
   body.textContent = "";
   for (const row of data.rows) {
-    const tr = body.insertRow();
-    const kind = tr.insertCell();
+    // A record is two table rows, not one: the top line (kind, key, occurrences, place, file)
+    // and, right under the key, the translation input at the full width of the row - the columns
+    // stay five, the record just reads over two lines instead of squeezing everything into one.
+    const top = body.insertRow();
+    top.className = "top";
+    const kind = top.insertCell();
     kind.className = "kind";
-    kind.textContent = row.kind === "phrase" ? TEXT.phrase : row.kind === "literal" ? TEXT.literal : TEXT.token;
-    const key = tr.insertCell();
+    // Wrapped in a div rather than set as the cell's bare text - a bare text node and a
+    // block-level div align differently under vertical-align: top even at an identical
+    // line-height, and that mismatch (not the row's own height) was what let the kind label
+    // drift a few pixels below the key beside it. The key cell already wraps its text the
+    // same way; this just matches it.
+    const kindText = document.createElement("div");
+    kindText.textContent = row.kind === "phrase" ? TEXT.phrase : row.kind === "literal" ? TEXT.literal : TEXT.token;
+    kind.appendChild(kindText);
+
+    const key = top.insertCell();
     key.className = "key";
     const text = document.createElement("div");
     text.textContent = row.key;
@@ -657,26 +1099,46 @@ function render() {
       scope.textContent = row.scope;
       key.appendChild(scope);
     }
-    valueCell(tr.insertCell(), row);
-    const count = tr.insertCell();
+
+    const count = top.insertCell();
     count.className = "count";
-    count.textContent = row.count ? String(row.count) : "";
-    const place = tr.insertCell();
+    if (row.count) {
+      const countText = document.createElement("div");
+      countText.textContent = String(row.count);
+      count.appendChild(countText);
+    }
+
+    const place = top.insertCell();
+    place.className = "place";
     if (row.place) {
-      linkCell(place, row.place.file + ":" + row.place.line, TEXT.placeTitle, () =>
+      // The directory is dropped on screen - almost always the same handful of project folders,
+      // so it carries little of its own next to the file name - but never from the click target
+      // or the tooltip: baseName is a display trim, not a data change, and row.place.file (the
+      // full path) is still exactly what travels in the "place" message below.
+      const shown = baseName(row.place.file) + ":" + row.place.line;
+      linkCell(place, shown, row.place.file + ":" + row.place.line, () =>
         vsapi.postMessage({ type: "place", file: row.place.file, line: row.place.line }));
     }
-    const file = tr.insertCell();
+
+    const file = top.insertCell();
+    file.className = "file";
     if (row.file) {
-      const name = row.file.split(/[\\\\/]/).pop();
-      linkCell(file, name, TEXT.fileTitle, () =>
-        vsapi.postMessage({ type: "dict", file: row.file, line: row.line }));
+      const fileText = document.createElement("div");
+      fileText.textContent = baseName(row.file);
+      fileText.title = row.file;
+      file.appendChild(fileText);
     }
+
+    const bottom = body.insertRow();
+    bottom.className = "bottom";
+    const valueTd = bottom.insertCell();
+    valueTd.colSpan = 5;
+    valueCell(valueTd, row);
   }
   if (!data.rows.length) {
     const tr = body.insertRow();
     const cell = tr.insertCell();
-    cell.colSpan = 6;
+    cell.colSpan = 5;
     cell.className = "dim";
     // While the engine walks the project an empty table must not read as "there is no
     // dictionary": that answer takes seconds to earn.
@@ -697,19 +1159,113 @@ function render() {
       .replace("{0}", data.totals.literalsTranslated)
       .replace("{1}", data.totals.literalsMissing);
   }
+  // The machine-translation service's last report, next to coverage/literals rather than only
+  // in the status-bar message that also carries it - that one is gone in five seconds. Three
+  // service counters at zero do not by themselves mean the run found nothing: a string literal
+  // is filled by local substitution and never touches cached/requested/refused, so a literal
+  // suggestion can be sitting in the table while all three read zero. m.suggested (the answer's
+  // own row count) is the one number that tells the two states apart - it is checked first.
+  if (data.machine) {
+    const m = data.machine;
+    const nothingAsked = m.cached === 0 && m.requested === 0 && m.refused === 0;
+    totals += " \\u00b7 " + (nothingAsked && m.suggested > 0
+      ? TEXT.machineLocalOnly.replace("{0}", m.suggested)
+      : nothingAsked
+        ? TEXT.machineNothing
+        : TEXT.machineStats.replace("{0}", m.cached).replace("{1}", m.requested).replace("{2}", m.refused));
+  }
   $("stats").textContent = busy ? TEXT.busy : stats + totals;
+  // The refusal reasons stay reachable after the warning notification that first announced them
+  // is dismissed - a hover on the line that already carries the count, not a second UI surface.
+  $("stats").title = (data.machine && data.machine.refusalText) ? TEXT.machineRefusalsTitle + " " + data.machine.refusalText : "";
   $("dict").textContent = data.dictionary || "";
   $("more").style.display = data.stats.shown < data.stats.total ? "" : "none";
+  // The busy flag already covers a plain re-read too (cheap, local - clicking it twice costs
+  // nothing), but "suggest" reaches a paid external service: while one run is still going the
+  // button must not be clickable at all, so a second click never even reaches the extension.
+  $("suggest").disabled = busy;
 }
 
 $("q").addEventListener("input", () => pushState({ search: $("q").value, shown: PAGE }));
 $("gaps").addEventListener("change", () => pushState({ gapsOnly: $("gaps").checked, shown: PAGE }));
 $("kind").addEventListener("change", () => pushState({ kind: $("kind").value, shown: PAGE }));
 $("reload").addEventListener("click", () => vsapi.postMessage({ type: "reload" }));
+$("suggest").addEventListener("click", () => vsapi.postMessage({ type: "suggest" }));
 $("more").addEventListener("click", () => pushState({ shown: state.shown + PAGE }));
-for (const th of document.querySelectorAll("th[data-sort]")) {
-  th.addEventListener("click", () => {
-    const by = th.dataset.sort;
+// Column-width dragging. Declared before the sort handles below because their click handler
+// reads justDragged - both only ever RUN later, on an actual mouse event, well after this whole
+// script has finished its first pass, so the order here is for a reader's sake, not the engine's.
+// Live during the drag (state.colWidths and the colgroup are both updated on every mousemove, so
+// the column visibly tracks the pointer), but pushState - the call that both persists to
+// vsapi.setState and tells the extension - fires only once, on mouseup: a mousemove firing dozens
+// of times a second is cheap to redraw locally and expensive to mail to the extension host that
+// many times for a number it has no use for mid-drag anyway.
+let dragging = null; // { col, startX, startWidth, handle } | null
+let justDragged = false;
+
+function beginDrag(handle, clientX) {
+  const col = handle.dataset.col;
+  dragging = { col: col, startX: clientX, startWidth: widthOf(col), handle: handle };
+  handle.classList.add("dragging");
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+}
+
+function dragTo(clientX) {
+  if (!dragging) { return; }
+  const next = Math.max(MIN_WIDTHS[dragging.col], dragging.startWidth + (clientX - dragging.startX));
+  state = Object.assign({}, state, {
+    colWidths: Object.assign({}, state.colWidths, { [dragging.col]: next }),
+  });
+  applyColgroup();
+}
+
+function endDrag() {
+  if (!dragging) { return; }
+  dragging.handle.classList.remove("dragging");
+  dragging = null;
+  document.body.style.cursor = "";
+  document.body.style.userSelect = "";
+  justDragged = true;
+  // Cleared on the next tick, after any synthetic click the mouseup itself produces has already
+  // had its chance to run and be swallowed by the sort handler above - a plain click starting
+  // fresh after that is a new, unrelated click and must sort normally again.
+  setTimeout(() => { justDragged = false; }, 0);
+  pushState({ colWidths: state.colWidths });
+}
+
+for (const el of document.querySelectorAll(".handle")) {
+  el.addEventListener("mousedown", (e) => {
+    // preventDefault stops a stray text selection while dragging; stopPropagation is not load-
+    // bearing here (the handle is a sibling of .sortlbl, not inside it, so this mousedown could
+    // never reach a sort click handler regardless) but costs nothing and documents the intent.
+    e.preventDefault();
+    e.stopPropagation();
+    beginDrag(el, e.clientX);
+  });
+  el.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const col = el.dataset.col;
+    pushState({ colWidths: Object.assign({}, state.colWidths, { [col]: DEFAULT_WIDTHS[col] }) });
+    applyColgroup();
+  });
+}
+document.addEventListener("mousemove", (e) => dragTo(e.clientX));
+document.addEventListener("mouseup", endDrag);
+
+// The five sort handles: two words share the key/translation header, one apiece owns the other
+// three - every one of them carries its own "[data-sort]", header word or plain header alike.
+// justDragged is checked first: a border drag ends with a mouseup over the header cell, exactly
+// where a sort word can also sit, and a browser is free to follow that mouseup with a synthetic
+// click on whatever element is under the pointer. The drag handle being a sibling of these words,
+// never their parent, already keeps a drag's OWN mousedown from ever starting a click on one -
+// this flag is the second, separate guard, for the click event a completed drag can still leave
+// behind.
+for (const el of document.querySelectorAll("[data-sort]")) {
+  el.addEventListener("click", () => {
+    if (justDragged) { return; }
+    const by = el.dataset.sort;
     const dir = state.sortBy === by && state.sortDir === "desc" ? "asc" : "desc";
     pushState({ sortBy: by, sortDir: dir, shown: PAGE });
   });
@@ -863,15 +1419,63 @@ async function setTranslation(uri: vscode.Uri, target: TranslationTarget, value?
   await TranslationPanel.current?.reload();
 }
 
+// --- the machine-translation key -------------------------------------------------------------
+
+interface KeyChoice extends vscode.QuickPickItem {
+  secret: string;
+}
+
+// What the command offers to set: the two keys and the one id Yandex Translate needs besides its
+// key. No default and no example value is offered anywhere here - the owner types the real one.
+function keyChoices(): KeyChoice[] {
+  return [
+    { label: vscode.l10n.t("Yandex Translate: API key"), secret: SECRET_YANDEX_KEY },
+    { label: vscode.l10n.t("Yandex Translate: folder ID"), secret: SECRET_YANDEX_FOLDER },
+    { label: vscode.l10n.t("Google Translate: API key"), secret: SECRET_GOOGLE_KEY },
+  ];
+}
+
+// Puts one machine-translation credential into SecretStorage - never into a setting, never onto
+// the engine's command line. The owner types it here, with the input hidden; the code that spawns
+// the engine only ever reads it back (`secretsEnv`). An empty answer clears the credential rather
+// than storing an empty string, so "forgot the key" and "cleared the key" read the same way.
+async function setMachineKey(context: vscode.ExtensionContext): Promise<void> {
+  const picked = await vscode.window.showQuickPick(keyChoices(), {
+    title: vscode.l10n.t("Which key to set?"),
+    ignoreFocusOut: true,
+  });
+  if (!picked) {
+    return;
+  }
+  const value = await vscode.window.showInputBox({
+    title: picked.label,
+    password: true,
+    ignoreFocusOut: true,
+    prompt: vscode.l10n.t("Stored in SecretStorage; never written to a setting or a command line."),
+  });
+  if (value === undefined) {
+    return; // cancelled - whatever was stored before is left untouched
+  }
+  const trimmed = value.trim();
+  if (trimmed === "") {
+    await context.secrets.delete(picked.secret);
+    void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL: the key is cleared."), 5000);
+    return;
+  }
+  await context.secrets.store(picked.secret, trimmed);
+  void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL: the key is saved."), 5000);
+}
+
 export function registerTranslation(context: vscode.ExtensionContext, rootFor: ProjectRootFor): void {
   projectRootFor = rootFor;
   context.subscriptions.push(
     vscode.commands.registerCommand(PANEL_COMMAND, (filter?: Partial<ViewState>, resource?: vscode.Uri) =>
-      TranslationPanel.show(filter, resource)
+      TranslationPanel.show(context, filter, resource)
     ),
     vscode.commands.registerCommand(SET_COMMAND, (uri: vscode.Uri, target: TranslationTarget, value?: string) =>
       setTranslation(uri, target, value)
     ),
+    vscode.commands.registerCommand(KEY_COMMAND, () => setMachineKey(context)),
     // Session restore: without a serializer VS Code drops the tab on restart. The panel holds
     // nothing but the filter (the webview keeps that itself) - the dictionary is re-read.
     vscode.window.registerWebviewPanelSerializer(VIEW_TYPE, {
@@ -883,7 +1487,7 @@ export function registerTranslation(context: vscode.ExtensionContext, rootFor: P
           restored.dispose();
           return;
         }
-        await TranslationPanel.adopt(restored, folder);
+        await TranslationPanel.adopt(context, restored, folder);
       },
     }),
     vscode.languages.registerCodeActionsProvider(

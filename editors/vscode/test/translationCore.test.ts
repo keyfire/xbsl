@@ -3,26 +3,36 @@
 
 import * as assert from "assert";
 import {
+  ColumnWidths,
+  DEFAULT_COLUMN_WIDTHS,
   DictionaryEntry,
   DictionaryGap,
   DictionaryRow,
+  MIN_COLUMN_WIDTHS,
   MIN_ENGINE,
   editsPayload,
   filterRows,
+  guardConcurrent,
   mergeRows,
   outdatedEngine,
   pageOf,
   parseEntries,
   parseGaps,
   parseSetResult,
+  parseSuggest,
   parseSummary,
   plannedActions,
   refusalText,
+  resetColumnWidth,
+  resizeColumn,
+  rowHint,
   rowKey,
   rowStats,
+  sanitizeColumnWidths,
   setArgs,
   shortKey,
   sortRows,
+  suggestArgs,
   translateArgs,
   translationTarget,
   versionArgs,
@@ -133,10 +143,10 @@ test("an engine without the panel's commands is named by its version", () => {
   assert.strictEqual(outdatedEngine(`xbsl ${MIN_ENGINE}`), undefined);
   assert.strictEqual(outdatedEngine("xbsl 0.72.1"), undefined);
   // A pre-release of the minimum carries the commands, so it passes.
-  assert.strictEqual(outdatedEngine("xbsl 0.71.0-rc1"), undefined);
-  assert.strictEqual(outdatedEngine("xbsl 0.70.0-rc1"), "0.70.0-rc1");
+  assert.strictEqual(outdatedEngine("xbsl 0.72.0-rc1"), undefined);
+  assert.strictEqual(outdatedEngine("xbsl 0.71.0-rc1"), "0.71.0-rc1");
   // The tool names itself before the number: a version elsewhere in the output is not its own.
-  assert.strictEqual(outdatedEngine("warning: pymorphy3 0.9.1 is required\nxbsl 0.71.0"), undefined);
+  assert.strictEqual(outdatedEngine("warning: pymorphy3 0.9.1 is required\nxbsl 0.72.0"), undefined);
   // Output we cannot read is not a verdict: a working engine must not be locked out over it.
   assert.strictEqual(outdatedEngine("command not found"), undefined);
 });
@@ -453,6 +463,103 @@ test("a long literal does not push the reason out of the message", () => {
   assert.ok(text.endsWith("перевод строки"));
 });
 
+// ------------------------------------------------------ machine-translation suggestions
+
+test("the suggest run passes the mode flag and the provider, never a key", () => {
+  const args = suggestArgs({ command: "xbsl", usePython: false, root: "C:/p" }, "google");
+  assert.ok(args.includes("--suggest"), "the mode flag is passed");
+  assert.ok(args.includes("--provider") && args.includes("google"), "the provider is passed");
+  // The key travels in the environment of the spawned process, never on its command line -
+  // a process list is visible to every other process on the machine.
+  assert.ok(!args.some((a) => a.includes("XBSL_TRANSLATE")), "no key ever lands in the arguments");
+});
+
+test("without a provider the engine is left to pick its own", () => {
+  assert.ok(!suggestArgs(CFG).includes("--provider"));
+});
+
+test("an explicit dictionary reaches the suggest run, like every other run", () => {
+  assert.ok(suggestArgs({ ...CFG, dictionary: "D:\\словарь" }).includes("--dictionary"));
+});
+
+test("a python interpreter runs the suggest mode through -m xbsl", () => {
+  assert.deepStrictEqual(suggestArgs({ ...CFG, command: "python", usePython: true }), [
+    "-m", "xbsl", "translate", CFG.root, "--suggest", "--format", "json",
+  ]);
+});
+
+// The engine's actual --suggest --format json answer: `rows` was the brief's placeholder name,
+// the command prints `suggestions`, and refusals live nested under `machine` with their reason -
+// the panel is written for what the engine prints, not for the brief's first draft of it.
+test("the suggest answer is read from 'suggestions', the field the engine actually prints", () => {
+  const answer = parseSuggest(JSON.stringify({
+    dictionary: "D:\\словарь",
+    machine: { cached: 3, requested: 2, refused: 1, refusals: [] },
+    suggestions: [{ key: "АдресСайта", value: "SiteAddress", kind: "token" }],
+  }));
+  assert.strictEqual(answer.dictionary, "D:\\словарь");
+  assert.strictEqual(answer.cached, 3, "counts parsed");
+  assert.strictEqual(answer.requested, 2, "counts parsed");
+  assert.strictEqual(answer.refused, 1, "counts parsed");
+  assert.strictEqual(answer.rows.length, 1);
+  assert.strictEqual(answer.rows[0].value, "SiteAddress", "the suggestion is parsed");
+  assert.strictEqual(answer.rows[0].kind, "token");
+});
+
+test("a refusal carries its reason, not just the count - it explains what the number cannot", () => {
+  const answer = parseSuggest(JSON.stringify({
+    machine: {
+      cached: 0, requested: 1, refused: 1,
+      refusals: [{ kind: "token", key: "Товар", reason: "имя уже занято другим переводом" }],
+    },
+    suggestions: [],
+  }));
+  assert.strictEqual(answer.refusals.length, 1);
+  assert.strictEqual(answer.refusals[0].key, "Товар");
+  assert.strictEqual(answer.refusals[0].reason, "имя уже занято другим переводом");
+  // The same message builder as a refused --set edit: the shape is identical, and the reader
+  // does not care which run refused the entry.
+  assert.ok(refusalText(answer.refusals).includes("имя уже занято другим переводом"));
+});
+
+test("an engine error from --suggest is raised, not read as an empty answer", () => {
+  // `_machine_refused`: no provider is configured, or the choice is ambiguous - reported
+  // before the dictionary is even touched.
+  assert.throws(() => parseSuggest(JSON.stringify({ error: "ни один сервис не настроен" })), /не настроен/);
+});
+
+test("a missing 'machine' or 'suggestions' answers as nothing found, not a crash", () => {
+  const answer = parseSuggest(JSON.stringify({}));
+  assert.deepStrictEqual(answer.rows, []);
+  assert.deepStrictEqual(answer.refusals, []);
+  assert.strictEqual(answer.cached, 0);
+  assert.strictEqual(answer.requested, 0);
+  assert.strictEqual(answer.refused, 0);
+});
+
+// ------------------------------------------------------ the one ghost the empty cell offers
+
+test("rowHint: the platform's own spelling wins when both sources have one", () => {
+  const r = row({ value: "", suggestion: "Product", machineSuggestion: "Item" });
+  assert.deepStrictEqual(rowHint(r), { value: "Product", fromMachine: false });
+});
+
+test("rowHint: the machine suggestion is offered only when the platform has none", () => {
+  const r = row({ value: "", suggestion: "", machineSuggestion: "Item" });
+  assert.deepStrictEqual(rowHint(r), { value: "Item", fromMachine: true });
+});
+
+test("rowHint: a translated row offers nothing, whatever else it still carries", () => {
+  // The two used to live in separate columns and could sit next to a real answer; now they
+  // share the one field a hand-typed value already fills, so a written row must silence both.
+  const r = row({ value: "Product", suggestion: "Product", machineSuggestion: "Item" });
+  assert.strictEqual(rowHint(r), undefined);
+});
+
+test("rowHint: nothing to offer when neither source has anything", () => {
+  assert.strictEqual(rowHint(row({ value: "", suggestion: "" })), undefined);
+});
+
 // -------------------------------------------------- the light bulb on a literal finding
 
 test("a literal finding becomes a literal dictionary entry", () => {
@@ -480,7 +587,144 @@ test("a literal is never offered the platform's spelling in one click", () => {
   });
 });
 
-console.log(`\n${passed} passed, ${failed} failed`);
-if (failed) {
-  process.exit(1);
+// --------------------------------------------------------- draggable column widths
+
+test("resizeColumn: dragging a border right widens exactly that column", () => {
+  const next = resizeColumn(DEFAULT_COLUMN_WIDTHS, "place", 40);
+  assert.strictEqual(next.place, DEFAULT_COLUMN_WIDTHS.place + 40);
+  // Every other column is untouched - not just unequal to some other value, the very same
+  // numbers the drag started from, so a person resizing one column can never see a neighbor
+  // twitch on its own.
+  const untouched: ColumnWidths = { ...next, place: DEFAULT_COLUMN_WIDTHS.place };
+  assert.deepStrictEqual(untouched, DEFAULT_COLUMN_WIDTHS);
+});
+
+test("resizeColumn: dragging left narrows it, within its own floor", () => {
+  const next = resizeColumn(DEFAULT_COLUMN_WIDTHS, "file", -30);
+  assert.strictEqual(next.file, DEFAULT_COLUMN_WIDTHS.file - 30);
+});
+
+test("resizeColumn: a drag past the minimum stops AT the minimum, not below it", () => {
+  // A reader can drag the mouse as far left as they like - the column itself must never follow
+  // past its own floor, the one thing that keeps a column from disappearing under a neighbor.
+  const next = resizeColumn(DEFAULT_COLUMN_WIDTHS, "count", -1000);
+  assert.strictEqual(next.count, MIN_COLUMN_WIDTHS.count);
+});
+
+test("resizeColumn: already sitting below its own floor, a further narrowing drag still clamps up to it", () => {
+  const cramped: ColumnWidths = { ...DEFAULT_COLUMN_WIDTHS, kind: 10 };
+  const next = resizeColumn(cramped, "kind", -5);
+  assert.strictEqual(next.kind, MIN_COLUMN_WIDTHS.kind);
+});
+
+test("resetColumnWidth: restores one column's own default, the others keep whatever the reader set", () => {
+  const dragged: ColumnWidths = { ...DEFAULT_COLUMN_WIDTHS, key: 600, file: 95 };
+  const next = resetColumnWidth(dragged, "key");
+  assert.strictEqual(next.key, DEFAULT_COLUMN_WIDTHS.key);
+  assert.strictEqual(next.file, 95, "a column nobody double-clicked keeps the reader's own width");
+});
+
+test("sanitizeColumnWidths: nothing saved yet (undefined, null, or not an object) reads back as the defaults", () => {
+  assert.deepStrictEqual(sanitizeColumnWidths(undefined), DEFAULT_COLUMN_WIDTHS);
+  assert.deepStrictEqual(sanitizeColumnWidths(null), DEFAULT_COLUMN_WIDTHS);
+  assert.deepStrictEqual(sanitizeColumnWidths("not an object"), DEFAULT_COLUMN_WIDTHS);
+  assert.deepStrictEqual(sanitizeColumnWidths(42), DEFAULT_COLUMN_WIDTHS);
+});
+
+test("sanitizeColumnWidths: a valid saved width above the floor is trusted as it is", () => {
+  const saved = { kind: 120, key: 400, count: 70, place: 300, file: 110 };
+  assert.deepStrictEqual(sanitizeColumnWidths(saved), saved);
+});
+
+test("sanitizeColumnWidths: a positive number below the floor is raised to it, not thrown away", () => {
+  // Still a real, deliberate-looking number - not garbage the way a negative or a NaN is - so it
+  // reads as "as narrow as this column goes", the same place a live drag would have stopped it,
+  // rather than snapping all the way back out to the default.
+  const next = sanitizeColumnWidths({ file: 3 });
+  assert.strictEqual(next.file, MIN_COLUMN_WIDTHS.file);
+});
+
+test("sanitizeColumnWidths: zero, negative, NaN, a string and a missing key all fall back to the default", () => {
+  const next = sanitizeColumnWidths({ kind: 0, key: -50, count: Number.NaN, place: "260" });
+  assert.strictEqual(next.kind, DEFAULT_COLUMN_WIDTHS.kind);
+  assert.strictEqual(next.key, DEFAULT_COLUMN_WIDTHS.key);
+  assert.strictEqual(next.count, DEFAULT_COLUMN_WIDTHS.count);
+  assert.strictEqual(next.place, DEFAULT_COLUMN_WIDTHS.place);
+  // "file" was never mentioned at all - a blob left over from before this column existed.
+  assert.strictEqual(next.file, DEFAULT_COLUMN_WIDTHS.file);
+});
+
+test("sanitizeColumnWidths: an unknown extra key (a newer version's column) is dropped, not carried through", () => {
+  const next = sanitizeColumnWidths({ ...DEFAULT_COLUMN_WIDTHS, futureColumn: 999 });
+  assert.deepStrictEqual(next, DEFAULT_COLUMN_WIDTHS);
+  assert.strictEqual((next as Record<string, unknown>).futureColumn, undefined);
+});
+
+test("a drag's result is already safe to persist as it stands - sanitizing it again changes nothing", () => {
+  const dragged = resizeColumn(DEFAULT_COLUMN_WIDTHS, "key", 500);
+  assert.deepStrictEqual(sanitizeColumnWidths(dragged), dragged);
+});
+
+// --------------------------------------------------------- the suggest button's own guard
+
+async function runAsyncTests(): Promise<void> {
+  // A click while the previous run is still going must not start the job again - `--suggest`
+  // reaches a paid external service, and a delayed second click is exactly the case a serial
+  // queue would still let through (just later); this guard has to drop it outright.
+  {
+    let starts = 0;
+    let release: (value: string) => void = () => undefined;
+    const pending = new Promise<string>((resolve) => {
+      release = resolve;
+    });
+    const guarded = guardConcurrent(() => {
+      starts += 1;
+      return pending;
+    });
+    const first = guarded();
+    const second = guarded(); // fired before `first` has settled
+    try {
+      assert.strictEqual(starts, 1, "the job ran only once - the second call never started it");
+      release("done");
+      assert.strictEqual(await first, "done");
+      assert.strictEqual(await second, undefined, "the dropped call resolves at once, not queued for a turn of its own");
+      passed += 1;
+      console.log("ok   guardConcurrent drops a call that arrives while the previous one is still running");
+    } catch (e) {
+      failed += 1;
+      console.error("FAIL guardConcurrent drops a call that arrives while the previous one is still running");
+      console.error(e instanceof Error ? e.message : e);
+    }
+  }
+
+  // The button must come back to life after ANY outcome, a refusal included - a failed run must
+  // not leave it stuck disabled forever.
+  {
+    let starts = 0;
+    const guarded = guardConcurrent(async () => {
+      starts += 1;
+      if (starts === 1) {
+        throw new Error("сервис отказал");
+      }
+      return "ok";
+    });
+    try {
+      await assert.rejects(guarded(), /сервис отказал/);
+      assert.strictEqual(await guarded(), "ok", "the guard is free again after the failed run");
+      assert.strictEqual(starts, 2);
+      passed += 1;
+      console.log("ok   guardConcurrent releases on a rejection too, so the next call still runs");
+    } catch (e) {
+      failed += 1;
+      console.error("FAIL guardConcurrent releases on a rejection too, so the next call still runs");
+      console.error(e instanceof Error ? e.message : e);
+    }
+  }
 }
+
+void runAsyncTests().then(() => {
+  console.log(`\n${passed} passed, ${failed} failed`);
+  if (failed) {
+    process.exit(1);
+  }
+});

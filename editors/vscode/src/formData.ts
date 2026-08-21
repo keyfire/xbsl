@@ -24,11 +24,11 @@ import {
   PROPERTY_PRIMITIVE_TYPES,
   propertyNameError,
 } from "./formDataCore";
-import { DataRow, flattenData, DataModel, propertyRowId } from "./formDesignerCore";
+import { DataRow, flattenData, DataModel, propertyRowId, shouldRevealInEditor } from "./formDesignerCore";
 import { FormStructureModel } from "./formStructure";
 import { projectWritesEnglishNames } from "./metadataTree";
 import { lspActive, lspRequest } from "./lspClient";
-import { editorColumnFor, revealContent } from "./reveal";
+import { neighborColumnFor, revealContent, tabColumnOf } from "./reveal";
 import { componentEnums } from "./uiSchemaClient";
 
 // The examples of the "enter the type manually" prompt. They name platform types, so they follow
@@ -62,6 +62,9 @@ export interface DataSnapshot {
 
 export interface DataHost {
   showData(snapshot: DataSnapshot): void;
+  //: The panel's own editor-group column, so an implicit yaml reveal (a row click, an
+  //: operation result) can tell whether the yaml tab would just cover the panel itself.
+  panelColumn(): vscode.ViewColumn | undefined;
 }
 
 // One model per open form panel, paired with that panel's structure model.
@@ -278,14 +281,24 @@ export class FormDataModel {
     await this.deps.structure.insertFragment(buildFieldFragment(payload));
   }
 
+  // preserveFocus doubles as "this is an implicit follow" (a row click, an operation result) -
+  // it must not pull a closed yaml open, or a tab already open behind the panel's own column
+  // in front of it. The data pane has no explicit "open in editor" action today (every call
+  // here is implicit), but the gate goes through the same shouldRevealInEditor as the
+  // structure and form-panel reveals, so it stays correct the day one is added. Same for the
+  // column below - neighborColumnFor excludes the panel unconditionally, no fallback tier
+  // left that could still land there.
   private async revealInEditor(offset: number, preserveFocus: boolean): Promise<void> {
     if (!this.target) {
+      return;
+    }
+    if (!shouldRevealInEditor(!preserveFocus, tabColumnOf(this.target), this.host?.panelColumn())) {
       return;
     }
     const doc = await vscode.workspace.openTextDocument(this.target);
     const pos = doc.positionAt(Math.min(offset, doc.getText().length));
     const editor = await vscode.window.showTextDocument(doc, {
-      viewColumn: editorColumnFor(this.target, vscode.ViewColumn.One),
+      viewColumn: neighborColumnFor(this.target, this.host?.panelColumn()),
       preserveFocus,
       preview: false,
     });

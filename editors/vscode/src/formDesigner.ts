@@ -48,12 +48,13 @@ import {
   looksLikeFormText,
   modulePathOfForm,
   sanitizeLayout,
+  shouldRevealInEditor,
   structureMenu,
 } from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
 import { hintName } from "./metadataCore";
 import { projectWritesEnglishNames } from "./metadataTree";
-import { editorColumnFor, revealContent } from "./reveal";
+import { neighborColumnFor, revealContent, tabColumnOf } from "./reveal";
 import { cspMeta, inlineJson, makeNonce } from "./webviewShared";
 
 const VIEW_TYPE = "xbslFormPreview";
@@ -565,15 +566,14 @@ class Designer implements StructureHost, DataHost {
 
   // The group holding the yaml's tab, when the yaml is open anywhere.
   private yamlTabColumn(): vscode.ViewColumn | undefined {
-    const key = this.key();
-    for (const group of vscode.window.tabGroups.all) {
-      for (const tab of group.tabs) {
-        if (tab.input instanceof vscode.TabInputText && (tab.input as vscode.TabInputText).uri.toString() === key) {
-          return group.viewColumn;
-        }
-      }
-    }
-    return undefined;
+    return tabColumnOf(this.target);
+  }
+
+  // The panel's own editor-group column - the structure and data models ask for it through
+  // StructureHost/DataHost, so their reveals can tell whether bringing a source tab forward
+  // would just cover this very panel (shouldRevealInEditor).
+  panelColumn(): vscode.ViewColumn | undefined {
+    return this.panel.viewColumn;
   }
 
   // Bring this form's OPEN yaml to the front of its group without taking the focus - the panel
@@ -600,11 +600,27 @@ class Designer implements StructureHost, DataHost {
 
   // Show a location in the yaml editor. On selection and edits the focus stays in the panel
   // (preserveFocus); on an explicit "Show in yaml" / Ctrl+click it moves to the editor.
+  //
+  // preserveFocus doubles as "this is an implicit follow, not something the developer asked
+  // for" (see shouldRevealInEditor): a field click in the frame must not pull the yaml in
+  // front of the panel, let alone open it from closed - the pairing never adds tabs.
+  //
+  // The panel's own column is excluded from EVERY call here, explicit or implicit, gated or
+  // not - there used to be an avoidColumn parameter a caller had to remember to pass (undo/redo
+  // needed it, the others did not), but a yaml with no visible tab anywhere and no visible
+  // source editor either still fell through editorColumnFor's last resort - the active editor,
+  // then the first visible one, then literally vscode.ViewColumn.One - and that resort IS the
+  // panel's column often enough to be the actual bug report: the yaml opens right behind the
+  // panel, a click brings the panel back forward, and the two keep trading places. Making the
+  // exclusion unconditional here removes the second way to get this wrong.
   private async revealOffsetInEditor(offset: number, preserveFocus: boolean): Promise<void> {
+    if (!shouldRevealInEditor(!preserveFocus, this.yamlTabColumn(), this.panelColumn())) {
+      return;
+    }
     const doc = await vscode.workspace.openTextDocument(this.target);
     const pos = doc.positionAt(Math.min(offset, doc.getText().length));
     const editor = await vscode.window.showTextDocument(doc, {
-      viewColumn: editorColumnFor(this.target, vscode.ViewColumn.One),
+      viewColumn: neighborColumnFor(this.target, this.panelColumn()),
       preserveFocus,
       preview: false,
     });
@@ -791,9 +807,24 @@ class Designer implements StructureHost, DataHost {
       case "undo":
       case "redo": {
         // Every designer edit lands in the yaml document's own undo stack (one WorkspaceEdit per
-        // operation), but the undo COMMAND acts on the focused editor - and the focus is here, in
-        // the panel. So the yaml editor is focused for the moment of the command and the focus
-        // comes straight back to the panel.
+        // operation), but VS Code's built-in undo/redo COMMAND has no way to target a document
+        // by URI - it acts on whichever text editor genuinely HAS FOCUS, and there is no
+        // "undo this document in the background" API to fall back on. A webview never counts as
+        // that editor, so the only way to make undo/redo reach the yaml is to steal the focus
+        // onto it for the moment of the command and hand it straight back to the panel.
+        //
+        // This is a deliberate concession to the platform, not the oversight the rest of this
+        // file spent its effort closing: `preserveFocus: false` below is explicit on purpose,
+        // and it means a yaml with no open tab genuinely opens here, however briefly. There is
+        // no lower-level edit that reproduces "undo", so gating this path would just break Undo
+        // whenever the yaml happened to be closed - worse than the flicker it would avoid.
+        //
+        // Unlike a freshly created handler (which opens beside the panel because the developer
+        // asked to SEE the new code), this open is not a request to see anything - it exists
+        // only because the platform command has nowhere else to land. The focus loss is
+        // unavoidable, but the COLUMN is not: revealOffsetInEditor keeps the panel's own column
+        // off the table on every call, so this one comes out beside the panel for free, the
+        // same as it would for a click or an explicit "Show in yaml".
         await this.revealOffsetInEditor(0, false);
         await vscode.commands.executeCommand(m.type === "undo" ? "undo" : "redo");
         this.panel.reveal(this.panel.viewColumn, false);
@@ -914,6 +945,11 @@ async function updateModuleContext(editor: vscode.TextEditor | undefined): Promi
 export interface DesignerAccess {
   activeStructure(): FormStructureModel | undefined;
   activeData(): FormDataModel | undefined;
+  //: The column of the form panel showing this yaml, when one is open for it - so an action
+  //: from elsewhere (the properties panel creating a handler) can keep its own reveal off
+  //: that column instead of landing behind the panel. undefined when the yaml has no panel
+  //: open at all (a plain text edit, not the visual designer).
+  panelColumnFor(uri: vscode.Uri): vscode.ViewColumn | undefined;
 }
 
 export function registerFormDesigner(
@@ -1046,6 +1082,7 @@ export function registerFormDesigner(
   return {
     activeStructure: () => active?.structure,
     activeData: () => active?.data,
+    panelColumnFor: (uri) => designerFor(uri)?.panel.viewColumn,
   };
 }
 

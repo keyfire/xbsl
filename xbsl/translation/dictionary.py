@@ -23,6 +23,12 @@ translated by people, and this module is where their work lives. Three planes:
   as the source spells it - the code inside it is translated by the ordinary pass, so the
   author of an entry does not have to know the English spelling of a name.
 
+A fourth section, `terms`, sits next to the three planes but is not one of them: a short
+"Russian term -> English" list that names how the project's own vocabulary is spelled. A term
+is a hint for the external translation service and a spelling rule for the name it builds from
+the service's prose - never a translation record on its own, so it feeds no plan and is never
+counted toward coverage.
+
 The dictionary is a directory of yaml files (or one file), so filling it is dropping a
 completed stub next to the existing ones; duplicate keys with different values are refused.
 Discovery walks up from the project root for a `xbsl-translation` directory or a
@@ -237,6 +243,10 @@ class Dictionary:
     tokens: dict[str, str] = field(default_factory=dict)
     phrases: dict[str, str] = field(default_factory=dict)
     literals: dict[str, str] = field(default_factory=dict)
+    #: A short list of project terms ("Russian term" -> "English"): a hint for the
+    #: translation service and a spelling rule for the name builder, never a translation
+    #: record of its own - it feeds no plan and counts toward no coverage.
+    terms: dict[str, str] = field(default_factory=dict)
     sources: tuple[Path, ...] = ()
     #: Non-fatal remarks gathered while loading (an empty value skipped, etc.).
     notes: list[str] = field(default_factory=list)
@@ -319,6 +329,7 @@ def load(path: Path) -> Dictionary:
         _merge_section(out, file, data, "tokens")
         _merge_section(out, file, data, "phrases")
         _merge_section(out, file, data, "literals")
+        _merge_section(out, file, data, "terms")
     out.language = language or "en"
     return out
 
@@ -329,7 +340,9 @@ def _merge_section(out: Dictionary, file: Path, data: dict, section: str) -> Non
         return
     if not isinstance(raw, dict):
         raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=file, section=section))
-    target = {"tokens": out.tokens, "phrases": out.phrases, "literals": out.literals}[section]
+    target = {
+        "tokens": out.tokens, "phrases": out.phrases, "literals": out.literals, "terms": out.terms,
+    }[section]
     for key, value in raw.items():
         if not isinstance(key, str) or not key:
             raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=file, section=section))

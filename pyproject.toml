@@ -59,7 +59,7 @@ xbsllint-lsp = "xbsl.lsp:main"
 # Список явный, поэтому каждый новый подпакет дописывается сюда руками: не дописанный в колесо
 # не попадёт, а в разработке этого не видно – editable-установка показывает дерево целиком.
 # Сверку списка с деревом держит tests/test_packaging.py.
-packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsl.translation", "xbsllint"]
+packages = ["xbsl", "xbsl.extract", "xbsl.rules", "xbsl.translation", "xbsl.translation.machine", "xbsllint"]
 
 [tool.setuptools.dynamic]
 version = {attr = "xbsl.__version__"}

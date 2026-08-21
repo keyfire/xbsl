@@ -69,16 +69,30 @@ def test_placeholders_are_the_same_in_every_language():
 
 
 def test_every_template_can_be_formatted():
-    """Catches a stray brace: t() always formats, so a literal brace must be doubled."""
+    """Catches a stray brace: t() always formats, so a literal brace must be doubled.
+
+    The dummy tries a string first - most fields carry prose - and only falls back to a
+    number when the template itself demands one: a numeric format spec (say `{coverage:.1%}`)
+    rejects a string outright with ValueError, and the real value such a field gets at
+    runtime is a number anyway. A field that rejects both is a genuine template defect, not a
+    type mismatch of the dummy.
+    """
     for key in i18n.registered_keys():
         entry = i18n.translations(key)
         for lang in i18n.LANGS:
             template = entry[lang]
-            dummy = dict.fromkeys(_fields(template), "X")
-            try:
-                template.format(**{"n": i18n._NAMES, **dummy})
-            except (IndexError, KeyError, ValueError) as exc:
-                pytest.fail(f"{key} [{lang}]: {type(exc).__name__}: {exc} || {template}")
+            fields = _fields(template)
+            for dummy_value in ("X", 1):
+                try:
+                    template.format(**{"n": i18n._NAMES, **dict.fromkeys(fields, dummy_value)})
+                    break
+                except ValueError:
+                    continue
+                except (IndexError, KeyError) as exc:
+                    pytest.fail(f"{key} [{lang}]: {type(exc).__name__}: {exc} || {template}")
+            else:
+                pytest.fail(f"{key} [{lang}]: fails to format with both a string and a number "
+                             f"dummy || {template}")
 
 
 def test_field_names_are_plain_ascii_identifiers():

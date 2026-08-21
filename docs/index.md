@@ -19,6 +19,8 @@ ships as a Python engine and a VS Code extension built on top of it.
 - **LSP server** – live diagnostics, go-to-definition and completion for any LSP-capable editor.
 - **Metadata scaffolding** – creating objects, attributes, routes and forms without hand-writing
   yaml.
+- **Translation into English spellings** – the project dictionary, coverage and a CI gate, with
+  an external translator (Yandex or Google) filling the remainder as suggestions.
 - **Documentation search** – a local full-text index built from your own 1C:Element
   distribution.
 - **MCP server** – linting, documentation search and every scaffolding operation exposed as
@@ -37,6 +39,8 @@ ships as a Python engine and a VS Code extension built on top of it.
 - **[Rules](/RULES)** – the full list of linter checks, with severities and scope.
 - **[Metadata scaffolding](/scaffolding)** – objects, attributes, routes and forms through the
   engine instead of hand-written yaml; the code templates.
+- **[Translating a project](/translation)** – the dictionary, coverage, machine translation of
+  what is missing, the CI gate.
 - **[Servers and plugins](/servers)** – the LSP server, the MCP server, the web panel, and
   rules, data and severities of your own.
 - **[Platform data](/platform-data)** – the generated datasets, the documentation index, the

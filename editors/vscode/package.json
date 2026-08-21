@@ -2,7 +2,7 @@
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
   "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
-  "version": "0.64.0",
+  "version": "0.65.0",
   "publisher": "keyfire",
   "license": "MIT",
   "icon": "icon.png",
@@ -582,6 +582,11 @@
       {
         "command": "xbsl.translate.dictionary",
         "title": "%cmd.translate.dictionary%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.translate.setKey",
+        "title": "%cmd.translate.setKey%",
         "category": "XBSL"
       },
       {
@@ -1563,6 +1568,28 @@
             "default": "",
             "scope": "resource",
             "markdownDescription": "%config.baseline%"
+          }
+        }
+      },
+      {
+        "title": "%config.section.translation%",
+        "order": 3,
+        "properties": {
+          "xbsl.translation.provider": {
+            "type": "string",
+            "enum": [
+              "",
+              "yandex",
+              "google"
+            ],
+            "enumDescriptions": [
+              "%config.translation.provider.enum.0%",
+              "%config.translation.provider.enum.1%",
+              "%config.translation.provider.enum.2%"
+            ],
+            "default": "",
+            "scope": "window",
+            "markdownDescription": "%config.translation.provider%"
           }
         }
       },

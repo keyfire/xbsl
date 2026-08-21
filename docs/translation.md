@@ -165,10 +165,15 @@ filtered by that key. The project is re-checked once the entry is written - no r
 
 **The dictionary table** (the "XBSL: translation dictionary" command) lists the entries next to
 what the sources do not cover yet: kind, key, translation, the number of occurrences, the first
-place and the dictionary file. The translation cell is edited in place, a search box and an "only
-empty" switch narrow the table, and the platform's own spelling stands greyed in an empty cell and
-goes in on click. The panel needs xbsl 0.70.0 or newer: the table reads `--entries`/`--gaps`
-and writes through `--set`.
+place and the dictionary file - each record over two lines, the translation field itself stretched
+under the rest at the full width of the row. The field is edited in place, a search box and an
+"only empty" switch narrow the table, and a suggestion - the platform's own spelling first, an
+external service's guess otherwise - stands grey inside an empty field and goes in on a click or
+on `Enter`. The table reads `--entries`/`--gaps` and writes through `--set`. The panel
+needs **xbsl 0.72.0 or newer** - `--suggest`, the machine-translation run behind its
+suggestions button, only arrived there. The **"Suggest via translation service"** button in
+the same panel fills empty fields with an external service's guesses - details in
+[Machine translation](#machine-translation) below.
 
 ## Filling the dictionary from the tools
 
@@ -200,3 +205,101 @@ class such as `CodeAttrMd`) is never offered at all.
 A new entry lands in `090-manual.yaml` (or the file named by `target`), while an entry that
 already exists is corrected where it lives - the writer never duplicates a key, and a
 duplicate with a different value is refused when the dictionary loads.
+
+## Machine translation
+
+Filling a large remainder by hand is slow; `--suggest` fills the untranslated remainder through
+an external translation service - as SUGGESTIONS, not writes: the dictionary does not change
+until a suggestion is accepted (from the console with `--suggest-out`, in the editor with a
+click or `Enter` on the hint in the table).
+
+```sh
+xbsl translate e1c/app --suggest                                  # report: what the service offered
+xbsl translate e1c/app --suggest --provider yandex                # pick the service explicitly
+xbsl translate e1c/app --suggest --suggest-out 080-machine.yaml   # write the plan next to the dictionary
+xbsl translate e1c/app --suggest --plans tokens                   # fill names only, not comments
+```
+
+A run always covers the whole project: nothing caps it, nothing stops it midway, its size cannot
+be estimated beforehand - and every batch it sends is a paid call to the service.
+
+`--suggest-out` names the plan file the offered records are written to: the directory part of the
+path is dropped, only the file name is kept, and the file lands inside the dictionary directory.
+When the dictionary is a single FILE there is no separate plan to make - the records go into that
+file itself.
+
+Without `--provider` the engine takes the one service that is configured. With none configured,
+the refusal names the missing environment variables. With more than one configured, the refusal
+lists the services themselves (`google`, `yandex`) and asks for a choice with `--provider` -
+neither case is a silent guess.
+
+**Two services, and they are not interchangeable.**
+
+- **Yandex Translate** - authorizes with a service-account key AND a folder id, both required;
+  the batch limit is up to 10,000 characters per request; it understands a glossary - the
+  project's term list travels with the request itself.
+- **Google Translate** - authorizes with one key alone; the batch limit is up to 5,000
+  characters; its API has no glossary at all - the term spelling is enforced afterward, when the
+  engine builds a name out of the returned prose.
+
+Whatever either service allows, one request carries at most 100 texts - the engine's own
+conservative bound. A batch turned away for its size costs exactly as much as one that is
+accepted, and the character sum alone would let six hundred one-word names ride in a single call.
+
+**Keys live in the environment, never on a command line or in a setting.** Three variables,
+named after the service each belongs to:
+
+- `XBSL_TRANSLATE_YANDEX_KEY`, `XBSL_TRANSLATE_YANDEX_FOLDER` - the Yandex key and folder, both
+  required;
+- `XBSL_TRANSLATE_GOOGLE_KEY` - the Google key, alone.
+
+The editor needs no environment variables of its own: the **XBSL: Set a machine-translation
+key** command (`xbsl.translate.setKey`) asks which of the three to set and stores the value in
+the extension's SecretStorage - it is passed to the engine in the environment of the `--suggest`
+run itself, never in a setting and never on the command line. The `xbsl.translation.provider`
+setting picks the service when both are configured; it never holds the key itself.
+
+**The cache** is a `machine-cache.json` file next to the dictionary (inside the
+`xbsl-translation` directory when the dictionary is one, otherwise next to the single dictionary
+file). It stores the service's RAW answer, keyed by (service, language, glossary fingerprint,
+text) - not the finished name, because the name-building rule and the term list still change,
+and paying the service again for the same sentence over a rule change would be absurd. The
+format is JSON, not yaml: the dictionary loader collects `*.yaml` recursively, and a yaml cache
+file would be read as another dictionary plan with duplicate keys. An entry stays in the cache
+whether or not the suggestion was ever accepted into the dictionary - a repeated `--suggest`
+never pays twice for the same text, even one nobody accepted last time.
+
+**The dictionary's `terms` section** is a short "Russian term -> English spelling" list - not a
+translation plan and not counted toward coverage. It feeds two things: the glossary pairs sent
+with the request (Yandex only), and the spelling used when a name is BUILT. The second half works
+on the ANSWER: building an identifier, the engine matches every English word the service returned
+against the term list, ignoring case, and puts the dictionary's spelling in its place wherever the
+word stands in the phrase. Russian word forms are not analyzed at all, and a term the service
+answered in another English word - a plural, a synonym - is not recognized and stays as it came.
+Comment lines (`phrases`) are not touched by terms at all - a comment stays exactly what the
+service answered.
+
+**Names are built deterministically, never by the service.** The service answers in prose
+("Site address"), and the `tokens` plan needs an identifier: the engine drops stop words (a,
+the, of...), substitutes a term's spelling where one is known, and title-cases and glues the
+rest. A name already taken by another dictionary key, or prose that yields no identifier at all,
+is refused with a named reason - the service never guesses and never overwrites.
+
+**Literals never reach the network.** `--suggest` sends the service only `tokens` and `phrases`
+gaps (whole names and whole comment lines); a string literal is filled separately, and only when
+its text matches an already-accepted name EXACTLY - locally, with no request at all.
+
+**What is sent, said plainly.** The service sees only the gap's own text: a name as the project
+wrote it, or a whole comment line. Never a file path, never the code around it, never the rest of
+the project. Without a key the command sends no request at all, to either service - it refuses
+immediately and names the variable that is missing.
+
+The report prints the same way `--set` does: `cached` is how many answers came from the cache,
+`requested` is how many were asked for again, `refused` is how many were turned down (each with
+its reason).
+
+In the editor the same three numbers stay in the panel's own summary line until the next run, not
+only in a status-bar message that closes itself in a few seconds; a hover on that line names each
+refusal's reason. When there was nothing left to ask, the line says so in words instead of three
+zeroes, and when every offer came from a local literal match without a single request, it says
+that too.

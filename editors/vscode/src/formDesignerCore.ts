@@ -464,3 +464,44 @@ export function revealStartColumn(indent: number, tabSize: number): number {
   const unit = Number.isFinite(tabSize) && tabSize > 0 ? Math.floor(tabSize) : 4;
   return Math.max(0, indent - unit);
 }
+
+/** Whether a reveal request should actually bring a paired source document forward.
+ *
+ * A form panel travels with its sources (the yaml, and separately the module), but the
+ * pairing never ADDS a tab: a closed source stays closed until the developer actually asks
+ * for it. That only matters for an IMPLICIT reveal - the cursor merely following a click on
+ * a form field, a row in a pane, or the result of an edit operation, with nothing explicitly
+ * asked of the document. An explicit request ("Show in yaml", Ctrl+click, "Open in editor")
+ * always opens, tab or no tab, any column - it is a direct ask, not a follow.
+ *
+ * For an implicit follow, the tab also has to sit somewhere other than the panel's own
+ * column: revealing it there would just cover the panel the click was aimed at, which is not
+ * what "following" means either.
+ */
+export function shouldRevealInEditor(explicit: boolean, tabColumn: number | undefined, panelColumn: number | undefined): boolean {
+  return explicit || (tabColumn !== undefined && tabColumn !== panelColumn);
+}
+
+/** The column a freshly created module opens in, next to the panel that triggered its
+ * creation - never IN the panel's own column, which would put the new code behind the very
+ * form that just asked for it. Reuses the module's own tab if one is already open elsewhere,
+ * else joins wherever yaml/xbsl sources already live, else answers `undefined` - the caller
+ * splits a new group beside the active one (there is no existing candidate to reuse).
+ *
+ * The panel's column is excluded at EVERY tier, not just the first: a source group that
+ * happens to share the panel's column is exactly as unusable as the module's own tab would be
+ * there - either way the result lands behind the panel.
+ */
+export function neighborColumn(
+  sameDocColumn: number | undefined,
+  sourceColumn: number | undefined,
+  panelColumn: number | undefined
+): number | undefined {
+  if (sameDocColumn !== undefined && sameDocColumn !== panelColumn) {
+    return sameDocColumn;
+  }
+  if (sourceColumn !== undefined && sourceColumn !== panelColumn) {
+    return sourceColumn;
+  }
+  return undefined;
+}

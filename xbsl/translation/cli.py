@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -166,6 +167,45 @@ MESSAGES = {
         "ru": "платформенные токены без английского написания в данных:",
         "en": "platform tokens with no English spelling in the data:",
     },
+    "translate.help.suggest": {
+        "ru": "добить непереведённое внешним переводчиком: предложения, а не запись в словарь",
+        "en": "fill the untranslated remainder with an external translator: suggestions, not writes",
+    },
+    "translate.help.suggest-out": {
+        "ru": "записать предложения планом словаря рядом с остальными: каталог из пути отбрасывается,"
+              " берётся только имя файла, и оно ложится внутрь каталога словаря (например 080-machine.yaml);"
+              " если словарь – это один файл, отдельного плана нет и записи ложатся в него же",
+        "en": "write the suggestions as a dictionary plan next to the others: the directory part of"
+              " the path is dropped, only the file name is kept, and it lands inside the dictionary"
+              " directory (say 080-machine.yaml); when the dictionary is a single file there is no"
+              " separate plan and the records land in that file itself",
+    },
+    "translate.help.provider": {
+        "ru": "сервис перевода: yandex или google (по умолчанию – единственный настроенный)",
+        "en": "the translation service: yandex or google (default: the only configured one)",
+    },
+    "translate.help.plans": {
+        "ru": "какие планы добивать через сервис, через запятую (по умолчанию tokens,phrases)",
+        "en": "which plans to fill through the service, comma separated (default tokens,phrases)",
+    },
+    "translate.machine-refused": {
+        "ru": "перевод недоступен: {error}",
+        "en": "translation unavailable: {error}",
+    },
+    "translate.machine-report": {
+        "ru": "сервис перевода: закэшировано {cached}, запрошено {requested}, отклонено {refused}",
+        "en": "translation service: {cached} cached, {requested} requested, {refused} refused",
+    },
+    "translate.unknown-plans": {
+        "ru": "неизвестный план в --plans: {names} (доступные: {valid})",
+        "en": "unknown --plans value: {names} (available: {valid})",
+    },
+    "translate.suggest-unread-flags": {
+        "ru": "режим предложений не читает эти флаги: {names}. Прогон идёт по всему проекту"
+              " целиком; чтобы посмотреть срез, воспользуйтесь --gaps или --entries",
+        "en": "the suggest mode does not read these flags: {names}. The run always covers the"
+              " whole project; to look at a slice use --gaps or --entries",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -183,6 +223,12 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--gaps", action="store_true", help=i18n.t("translate.help.gaps"))
     parser.add_argument("--entries", action="store_true", help=i18n.t("translate.help.entries"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
+    parser.add_argument("--suggest", action="store_true", help=i18n.t("translate.help.suggest"))
+    parser.add_argument("--suggest-out", dest="suggest_out",
+                        help=i18n.t("translate.help.suggest-out"))
+    parser.add_argument("--provider", choices=("yandex", "google"), default=None,
+                        help=i18n.t("translate.help.provider"))
+    parser.add_argument("--plans", default="tokens,phrases", help=i18n.t("translate.help.plans"))
     parser.add_argument("--target", default=None, help=i18n.t("translate.help.target"))
     parser.add_argument("--filter", default="", help=i18n.t("translate.help.filter"))
     parser.add_argument("--kind", choices=("token", "phrase", "literal", "any"), default="any",
@@ -237,6 +283,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         return _list_entries(args, root, loaded)
     if args.gaps:
         return _list_gaps(args, root, loaded)
+    if args.suggest:
+        return _suggest(args, root, loaded)
 
     report = project_module.translate_project(
         root, loaded,
@@ -459,6 +507,138 @@ def _apply_edits(args, root: Path, loaded) -> int:
             for item in refused:
                 print(f"  {item['key']}: {item['reason']}", file=sys.stderr)
     return 1 if refused else 0
+
+
+#: Flags the table modes honor and the suggest mode does not: the flag, the parsed attribute
+#: and the value that means "not given". The suggest run always covers the whole project.
+SUGGEST_IGNORES = (
+    ("--filter", "filter", ""),
+    ("--kind", "kind", "any"),
+    ("--limit", "limit", 0),
+    ("--offset", "offset", 0),
+)
+
+
+def _suggest(args, root: Path, loaded) -> int:
+    """Fill the untranslated remainder via an external service: suggestions, not writes.
+
+    A flag this mode cannot honor is refused FIRST: it is a plain usage error, and answering it
+    must not depend on whether a key happens to be exported. Then comes the provider, before the
+    project is even walked - there is no point parsing the corpus when there is nothing to
+    translate with, and the caller wants that refusal to name the environment variables, not get
+    lost behind an unrelated complaint.
+    """
+    from xbsl.translation import entries as entries_module
+    from xbsl.translation.machine.cache import Cache
+    from xbsl.translation.machine.dispatch import suggest as run_machine
+    from xbsl.translation.machine.literals import fill as fill_literals
+    from xbsl.translation.machine.provider import MachineError, select
+
+    # `--limit` is the dangerous one: it is what a person reaches for to cap a run that costs
+    # money, and honored nowhere here it would hand back a full pass over the project instead.
+    ignored = [flag for flag, attribute, absent in SUGGEST_IGNORES
+               if getattr(args, attribute) != absent]
+    if ignored:
+        return _refused(args, i18n.t("translate.suggest-unread-flags", names=", ".join(ignored)))
+
+    try:
+        provider = select(args.provider, os.environ)
+    except MachineError as exc:
+        return _machine_refused(args, exc)
+
+    # A --plans typo must not vanish into an empty, wordless run: caught here, before the
+    # dictionary or the project is even touched, so the refusal is cheap and immediate.
+    plan_names = {piece.strip() for piece in args.plans.split(",") if piece.strip()}
+    unknown_plans = sorted(plan_names - set(entries_module.KIND_OF_SECTION))
+    if unknown_plans:
+        return _unknown_plans_refused(args, unknown_plans, sorted(entries_module.KIND_OF_SECTION))
+    plan_kinds = {entries_module.KIND_OF_SECTION[name] for name in plan_names}
+
+    path = _dictionary_path(args, root)
+    if path is None:
+        print(i18n.t("translate.entries.no-dictionary"), file=sys.stderr)
+        return 2
+
+    gaps = entries_module.gaps_of_project(root, loaded)
+    # The accepted tokens serve two purposes below: exact substitution for literals, and the
+    # identifiers already taken so a fresh suggestion never collides with one already in the
+    # dictionary.
+    accepted_tokens = {
+        entry.key: entry.value for entry in entries_module.read_entries(path)
+        if entry.kind == "token" and entry.value
+    }
+    literal_edits = fill_literals(gaps, accepted_tokens)
+    service_gaps = [gap for gap in gaps if gap.kind in plan_kinds]
+
+    dictionary_dir = path if path.is_dir() else path.parent
+    cache = Cache(dictionary_dir / "machine-cache.json")
+    # The dictionary's `terms` section ("Russian term" -> "English") gives both shapes the
+    # service call needs: the pairs go to the provider as its glossary as they stand, and the
+    # name builder gets a lowercase-lookup so the spelling holds even after the prose around a
+    # term is inflected by the machine translation.
+    glossary = list(loaded.terms.items())
+    terms = {english.casefold(): english for english in loaded.terms.values()}
+    result = run_machine(
+        service_gaps, provider, cache,
+        glossary=glossary, taken=set(accepted_tokens.values()), terms=terms,
+    )
+    cache.save()
+
+    edits = [{"key": key, "value": value, "kind": "literal"} for key, value in literal_edits.items()]
+    edits.extend(
+        {"key": key, "value": value, "kind": kind}
+        for (kind, key), value in result.values.items()
+    )
+    if args.suggest_out:
+        entries_module.write_entries(path, edits, target=Path(args.suggest_out).name)
+
+    # The count alone hides WHAT did not translate; a refusal is only actionable with its
+    # reason next to it, the same way --set already reports a refused edit.
+    refusals = [
+        {"kind": kind, "key": key, "reason": reason}
+        for (kind, key), reason in result.refused.items()
+    ]
+    machine_report = {
+        "cached": result.cached, "requested": result.requested, "refused": len(result.refused),
+    }
+    if args.format == "json":
+        payload = {
+            "dictionary": str(path),
+            "machine": {**machine_report, "refusals": refusals},
+            "suggestions": edits,
+        }
+        print(json.dumps(payload, ensure_ascii=False, indent=1))
+    else:
+        print(i18n.t("translate.machine-report", **machine_report))
+        for item in refusals:
+            print(f"  {item['kind']:7} {item['key']}: {item['reason']}")
+        for edit in edits:
+            print(f"  {edit['kind']:7} {edit['key']}  ->  {edit['value']}")
+    return 0
+
+
+def _machine_refused(args, exc) -> int:
+    """No provider is configured (or the choice is ambiguous) - reported before any work."""
+    if args.format == "json":
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+    else:
+        print(i18n.t("translate.machine-refused", error=exc))
+    return 2
+
+
+def _unknown_plans_refused(args, unknown: list[str], valid: list[str]) -> int:
+    """An unrecognized --plans name is refused by name, not silently dropped from the set."""
+    return _refused(args, i18n.t(
+        "translate.unknown-plans", names=", ".join(unknown), valid=", ".join(valid)))
+
+
+def _refused(args, message: str) -> int:
+    """One refusal of the suggest mode, in whichever format the caller asked for."""
+    if args.format == "json":
+        print(json.dumps({"error": message}, ensure_ascii=False))
+    else:
+        print(message)
+    return 2
 
 
 # --- the shared entry point of the tool surfaces --------------------------------------------

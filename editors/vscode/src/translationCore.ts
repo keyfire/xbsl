@@ -52,6 +52,17 @@ export interface DictionaryRow {
   key: string;
   value: string;
   suggestion: string;
+  // The machine-translation service's own guess. Unlike `suggestion` (filled in by `mergeRows`
+  // from every `--gaps` read), this arrives only after the panel is told to ask for one and is
+  // merged in at render time - a plain read of the dictionary never spends a service call nobody
+  // asked for.
+  machineSuggestion?: string;
+  // The one ghost the translation cell actually shows, resolved by `rowHint` and attached only
+  // for the page being drawn - `suggestion` and `machineSuggestion` used to live in two separate
+  // columns and could both be on screen together; now they share the one field a hand-typed
+  // answer already fills, so a priority has to be picked before either reaches the table.
+  hint?: string;
+  hintFromMachine?: boolean;
   count: number; // occurrences in the sources; 0 when the gaps report says nothing about it
   place?: GapPlace; // the first occurrence, for the jump to the source
   file: string; // the dictionary yaml holding the record; empty for a gap
@@ -123,11 +134,11 @@ export function setArgs(cfg: EngineConfig, editsFile: string): string[] {
 // neither the cause nor the cure - and the extension and the engine are installed apart, so a
 // new panel over an old engine is the ordinary state right after a release.
 //
-// 0.71.0 rather than 0.70.0 because the LITERALS plane arrived there. On a 0.70.0 engine the
-// table would draw the names and the comment lines and say nothing about the string literals -
-// a dictionary that looks complete while the sources still carry Cyrillic messages. A panel
-// that shows part of the truth is worse than one that refuses to open and names the cure.
-export const MIN_ENGINE = "0.71.0";
+// 0.72.0 rather than 0.71.0 because `--suggest`, the machine-translation run behind the panel's
+// suggestions button, only arrived there. On an older engine the same argparse dump would answer
+// it, unreadable as ever - a panel that offers the button is worse than one that refuses to open
+// and names the cure.
+export const MIN_ENGINE = "0.72.0";
 
 // The command line that asks the engine its version - the same binary the table runs, so a
 // Python interpreter is asked through `-m xbsl`.
@@ -279,10 +290,115 @@ export function refusalText(refused: RefusedEdit[]): string {
   return refused.map((item) => `"${shortKey(item.key, 60)}": ${item.reason}`).join("; ");
 }
 
+// --- machine-translation suggestions --------------------------------------------------------
+
+// The command line of a machine-translation run: `xbsl translate <root> --suggest --provider
+// <name> --format json`. The key is NEVER an argument - it travels in the environment of the
+// spawned process instead, so a process list never carries it. `--provider` is passed only when
+// the caller chose one; left out, the engine picks the one service it finds configured (and
+// refuses when that is ambiguous or absent - `parseSuggest` reads that refusal from `error`).
+export function suggestArgs(cfg: EngineConfig, provider?: string): string[] {
+  const args = cfg.usePython ? ["-m", "xbsl"] : [];
+  args.push("translate", cfg.root, "--suggest");
+  if (cfg.dictionary) {
+    args.push("--dictionary", cfg.dictionary);
+  }
+  if (provider) {
+    args.push("--provider", provider);
+  }
+  args.push("--format", "json");
+  return args;
+}
+
+// One row of what the machine-translation run offers: a suggested value for a key still
+// missing from the dictionary. Nothing is written until the reader accepts it through the
+// panel's existing "set" message - a suggestion is a suggestion.
+export interface SuggestRow {
+  key: string;
+  value: string;
+  kind: EntryKind;
+}
+
+export interface SuggestAnswer {
+  dictionary: string;
+  rows: SuggestRow[];
+  cached: number; // answered from the dictionary's own cache, no service call spent
+  requested: number; // asked of the external service this run
+  refused: number;
+  // What the count alone cannot say: which entry, and why the service or the engine turned it
+  // away. Read with the same builder a refused --set edit uses - the shape is identical, and a
+  // reader does not care which run produced the refusal.
+  refusals: RefusedEdit[];
+}
+
+// The engine's actual `--suggest --format json` answer:
+// `{"dictionary": "...", "machine": {"cached", "requested", "refused", "refusals": [...]},
+//   "suggestions": [{"key", "value", "kind"}]}`.
+export function parseSuggest(stdout: string): SuggestAnswer {
+  const data = decode(stdout);
+  const machine = (data.machine ?? {}) as Record<string, unknown>;
+  const refusals = Array.isArray(machine.refusals)
+    ? (machine.refusals as RefusedEdit[]).filter((item) => item && typeof item.key === "string")
+    : [];
+  return {
+    dictionary: String(data.dictionary ?? ""),
+    rows: Array.isArray(data.suggestions) ? (data.suggestions as SuggestRow[]) : [],
+    cached: Number(machine.cached ?? 0),
+    requested: Number(machine.requested ?? 0),
+    refused: Number(machine.refused ?? 0),
+    refusals,
+  };
+}
+
+// Wraps an async job so a call that arrives while the PREVIOUS call is still running does
+// nothing and settles to `undefined` at once, instead of starting the job again. Unlike a serial
+// queue (every job still gets its turn, just delayed), the repeat is dropped outright - and that
+// difference is the point here: `--suggest` reaches a paid external service, so a second click
+// while the first run is still in flight must spend the service's quota zero extra times, not
+// twice with a delay. The guard releases on every outcome, success or a thrown error alike -
+// a failed run must not leave the button unusable for good.
+export function guardConcurrent<T>(job: () => Promise<T>): () => Promise<T | undefined> {
+  let running = false;
+  return async () => {
+    if (running) {
+      return undefined;
+    }
+    running = true;
+    try {
+      return await job();
+    } finally {
+      running = false;
+    }
+  };
+}
+
 // A row's identity in the table and in the messages of the panel. A name and a comment line can
 // read the same and mean different records, so the kind is part of the key.
 export function rowKey(kind: EntryKind, key: string): string {
   return `${kind}\u0000${key}`;
+}
+
+export interface RowHint {
+  value: string;
+  fromMachine: boolean;
+}
+
+// The single ghost the translation cell offers for a still-empty row: the platform's own
+// spelling first - an official term table, not a guess - and the machine-translation service's
+// guess only when the platform has none. A row that already carries a value offers nothing: the
+// hint used to live in its own column and could sit next to a real answer; now the two share the
+// one field a hand-typed answer fills, so an unwritten guess must never be mistaken for it.
+export function rowHint(row: DictionaryRow): RowHint | undefined {
+  if (row.value) {
+    return undefined;
+  }
+  if (row.suggestion) {
+    return { value: row.suggestion, fromMachine: false };
+  }
+  if (row.machineSuggestion) {
+    return { value: row.machineSuggestion, fromMachine: true };
+  }
+  return undefined;
 }
 
 // The table the panel draws: every dictionary record plus every gap. A key that is both (the
@@ -358,6 +474,70 @@ export function filterRows(rows: DictionaryRow[], filter: RowFilter = {}): Dicti
 
 export type SortKey = "kind" | "key" | "value" | "count" | "place" | "file";
 export type SortDirection = "asc" | "desc";
+
+// --- resizable columns ------------------------------------------------------------------
+
+// The five real columns of the table (kind is never sorted, but is still a column a person can
+// drag wider or narrower - "литерал" and "комментарий" are not the same width).
+export type ColumnKey = "kind" | "key" | "count" | "place" | "file";
+export type ColumnWidths = Record<ColumnKey, number>;
+
+// Where a column starts, and what "reset" (a double-click on its border) returns it to. Not a
+// ceiling for anything: a module name is one unbroken word of whatever length the project gave
+// it ("ОбновлениеПубликуемыхТарифов" and longer are real), so no default here is a promise the
+// column will ever be "enough" - only a sane place to start before the reader's own drag takes
+// over.
+export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
+  kind: 80,
+  key: 320,
+  count: 90,
+  place: 260,
+  file: 140,
+};
+
+// Below this a column's own content stops being usable at all - a floor a drag cannot cross,
+// not a comfort target.
+export const MIN_COLUMN_WIDTHS: ColumnWidths = {
+  kind: 60,
+  key: 200,
+  count: 56,
+  place: 120,
+  file: 80,
+};
+
+// One border dragged by `deltaX` pixels (positive widens). The only thing that can stop it is
+// the column's own floor - never a guess about what "should" be enough, because nothing bounds
+// how long a real module name gets.
+export function resizeColumn(widths: ColumnWidths, column: ColumnKey, deltaX: number): ColumnWidths {
+  const next = widths[column] + deltaX;
+  return { ...widths, [column]: Math.max(MIN_COLUMN_WIDTHS[column], next) };
+}
+
+// A double-click on a border: the one escape hatch when a drag went somewhere the reader did
+// not want. Touches only the one column - the others keep whatever the reader already set.
+export function resetColumnWidth(widths: ColumnWidths, column: ColumnKey): ColumnWidths {
+  return { ...widths, [column]: DEFAULT_COLUMN_WIDTHS[column] };
+}
+
+const COLUMN_KEYS: ColumnKey[] = ["kind", "key", "count", "place", "file"];
+
+// What the panel reads back out of its own persisted state on reopen. Never trusted blindly - a
+// state left over from an older version of the panel, or edited by hand, must not be able to
+// hand a column a width of zero, a negative number or NaN; every value is clamped to its own
+// minimum, and anything missing or malformed falls back to the default outright rather than
+// carrying a broken layout forward.
+export function sanitizeColumnWidths(value: unknown): ColumnWidths {
+  const source = (value && typeof value === "object" ? value : {}) as Partial<Record<ColumnKey, unknown>>;
+  const result = {} as ColumnWidths;
+  for (const column of COLUMN_KEYS) {
+    const raw = source[column];
+    result[column] =
+      typeof raw === "number" && Number.isFinite(raw) && raw > 0
+        ? Math.max(MIN_COLUMN_WIDTHS[column], raw)
+        : DEFAULT_COLUMN_WIDTHS[column];
+  }
+  return result;
+}
 
 function placeText(row: DictionaryRow): string {
   return row.place ? `${row.place.file}:${String(row.place.line).padStart(6, "0")}` : "";

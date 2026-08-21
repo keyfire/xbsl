@@ -6,7 +6,7 @@ import { registerDeploy } from "./deploy";
 import { registerDebug } from "./debug";
 import { createFormDataModel, registerFormDataCommands } from "./formData";
 import { registerFormPalette } from "./formPalette";
-import { registerFormDesigner } from "./formDesigner";
+import { DesignerAccess, registerFormDesigner } from "./formDesigner";
 import { createFormStructureModel, registerFormStructureCommands } from "./formStructure";
 import { baselineForLint, registerExcludeAction } from "./excludeAction";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
@@ -448,11 +448,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // mode shows a hint), other element yamls and modules with the metadata object (local
   // targeted edits, no server needed). The metadata tree feeds it its Тип candidates and
   // targets it via xbsl.metadata.props.
+  //
+  // panelColumnFor is a lazy closure, not `designer.panelColumnFor` directly: the designer
+  // registers AFTER this panel (below), so `designer` does not exist yet at this call - the
+  // closure only reads it once a handler is actually created, by which time it is assigned.
+  let designer: DesignerAccess | undefined;
   registerFormProps(
     context,
     metadataTree.typeCandidates,
     metadataTree.formOwnerByPath,
-    metadataTree.projectEnums
+    metadataTree.projectEnums,
+    (uri) => designer?.panelColumnFor(uri)
   );
   // Element documentation: the help tree, search and showing the page for the symbol under the
   // cursor. Data comes from the linter's LSP server; in the CLI mode (no server) the commands say so.
@@ -467,7 +473,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // inserts into the panel's structure selection.
   // Each open form panel gets a pair of models of its own (two forms side by side keep their own
   // tree, selection and expansion); the pane commands and the palette act on the panel in front.
-  const designer = registerFormDesigner(context, () => {
+  designer = registerFormDesigner(context, () => {
     const structure = createFormStructureModel(context.globalState);
     return {
       structure,

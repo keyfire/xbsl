@@ -105,12 +105,10 @@ By default the extension calls `xbsl` from `PATH`. Point it elsewhere with
 then invoked as `<python> -m xbsl`).
 
 The two are installed apart, so the engine can lag behind the extension. Most of the extension
-works with any of them; the [translation dictionary](#translation-dictionary) needs **xbsl 0.71.0
-or newer** – the `translate --entries / --gaps / --set` commands it is built on appeared in 0.70.0,
-and the third plane of the dictionary, the string **literals**, in 0.71.0. A 0.70.0 engine would
-draw the names and the comment lines and stay silent about the literals – a dictionary that looks
-complete over sources that still carry Cyrillic messages. With an older engine the panel does not
-open and says which version is installed (`pip install -U xbsl`).
+works with any of them; the [translation dictionary](#translation-dictionary) needs **xbsl 0.72.0
+or newer** – `--suggest`, the machine-translation run behind its suggestions button, only arrived
+there. With an older engine the panel does not open and says which version is installed
+(`pip install -U xbsl`).
 
 ## New project
 
@@ -371,25 +369,33 @@ from a shell you can work with it by the same means (`xbsl templates list / expo
 A project that translates its sources into English spellings (`xbsl translate`) keeps its own
 names, comment lines and string literals in a dictionary – the `xbsl-translation` directory next to
 the project or above it: several yaml files, thousands of records. The **XBSL: translation
-dictionary** command (`xbsl.translate.dictionary`) opens it as a table – the kind (a name, a comment
-line or a literal), the key, the translation, how often the sources use it, the first occurrence and
-the dictionary file holding the record.
+dictionary** command (`xbsl.translate.dictionary`) opens it as a table of five columns – **Kind**,
+**Key** / **Translation**, **Occurrences**, **Where it occurs**, **Dictionary file** – with every
+record over two lines: the key and the rest of the row on top, the translation field itself
+stretched underneath across the full width of the row, for the room a real name or a whole comment
+line needs. The column headers double as sort handles (Kind excluded – it is a plain label, though
+still a column you can resize); a border between columns drags with the mouse, the widths are
+remembered between openings of the panel, and a double click on a border resets that one column
+back to its default.
 
-- **The translation cell is editable.** What you type is written by the engine
-  (`xbsl translate --set`) – into the right file, with the right scope; an emptied cell removes
+- **The translation field is editable.** What you type is written by the engine
+  (`xbsl translate --set`) – into the right file, with the right scope; an emptied field removes
   the record. A failed write shows the engine's message and leaves the table as it was.
 - **A literal is written the way the source writes it** – the text between the quotes, an inner
   quote as `\"` and a backslash as `\\`. The value goes back between two quotes of a module, so
   the engine checks that it could stand there and refuses anything that would end the literal
-  early; the refusal, with its reason, is shown and the cell keeps its old value.
+  early; the refusal, with its reason, is shown and the field keeps its old value.
 - **Two filters**: a search over keys and translations, and *only untranslated* – what the
   dictionary does not cover yet. The selector next to them narrows the table to names, to comment
   lines or to literals.
-- **The platform's own spelling** stands grey in an empty cell when the engine offers one; a
-  click puts it in and writes it. A literal gets none: the platform tables spell names, and
-  between the quotes stands as often a whole message.
-- **The occurrence is a link** – it opens the source file at that line; the dictionary file opens
-  at the record itself.
+- **A suggestion stands grey inside the empty field itself**, as its native placeholder – the
+  platform's own spelling when the engine offers one, the machine-translation service's guess
+  otherwise (see below). A checkmark on the right accepts it, by a click or by `Enter` while the
+  field is still empty; typing anything makes the placeholder vanish on its own. A literal gets
+  one only when its text is filled locally from an already accepted name (see below) – the
+  platform tables spell names, not the whole message that stands between two quotes.
+- **The occurrence is a link** – it opens the source file at that line. The dictionary file next
+  to it is not: a short name with the full path as its tooltip, nothing to click.
 - The line above the table counts the rows, the untranslated among them and the project's
   coverage – the very number `xbsl translate` reports and CI gates on. The literals are counted
   beside it, the way the engine counts them: they are not part of the coverage, so a project could
@@ -418,6 +424,30 @@ The finding carries the exact dictionary key and its kind in its data, so the re
 either out of the message – neither for a name, nor for a comment line elided in the text, nor for
 a literal. After a write the project is checked again (the server re-reads the dictionary by
 itself, no restart), and the finding goes away.
+
+### Machine-translation suggestions
+
+Next to a name or a comment line the dictionary does not cover, the **Suggest via translation
+service** button asks an external service (Yandex Translate or Google Translate) to fill in what
+it can. The guess appears the same way the platform's own spelling always has – grey inside the
+empty translation field – and a click on the checkmark or `Enter` writes it, exactly the write a
+hand-typed field sends; nothing changes until then. A literal never reaches the service: it is
+filled locally, and only when its text matches an already accepted name in full. One press walks
+the whole project: nothing caps the run and nothing stops it midway, and every batch it sends is a
+paid call to the service.
+
+**The run's own report stays on screen.** How many answers came from the cache, how many were
+asked for, how many the service refused – the same three numbers the status-bar message gives for
+five seconds – sit in the panel's summary line too, and stay there until the next run rather than
+just until the message closes itself; a hover on that line names the reason behind each refusal.
+When there was nothing left to ask, the line says so in words instead of showing three zeroes; when
+every offer came from a local literal match and never touched the service, it says that too.
+
+Set a credential with the **XBSL: Set a machine-translation key** command
+(`xbsl.translate.setKey`) – it asks which of the three to store (the Yandex API key, the Yandex
+folder id, or the Google API key) and keeps it in SecretStorage, never in a setting and never on
+the engine's command line. With more than one service configured, the `xbsl.translation.provider`
+setting picks which one `--suggest` uses.
 
 ## Code palette
 
@@ -463,8 +493,11 @@ default), dark, or the editor theme – the choice is remembered.
 **The selection is shared by the three areas.** A click on a frame block and a cursor move in the
 yaml expand whatever collapsed groups stand in the way, land on the node in the structure and fill
 the "Properties" panel; the selected node keeps the full selection color wherever the focus is.
-The way back is the same: a click on a structure node puts the cursor on its yaml, a double click
-moves the focus there too, and `Ctrl+click` on a frame block jumps to its yaml.
+The way back only follows a yaml that is already open somewhere – it never opens a closed one on
+its own: a click on a structure node or a frame block moves the cursor there without taking focus.
+Opening a closed yaml takes an explicit ask instead – a double click on a structure node or
+`Ctrl+click` on a frame block – and it then opens beside the panel, never in the panel's own
+column, so it cannot end up hidden behind the very form it belongs to.
 
 **The component palette** sits next to the metadata tree and appears while the form panel is open.
 A double click on a palette component inserts it into the selected structure node. Dragging from

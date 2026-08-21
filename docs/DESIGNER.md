@@ -49,9 +49,13 @@ The remaining panels live in side-bar containers and follow the active editor:
 the first, each panel keeps its own tree, selection and expansion memory, and opening the same form
 again brings its panel forward. A panel and its open `.yaml` travel as a pair - picking a tab on
 one side brings the other forward, and closing the panel closes the form's yaml and its module
-(unless they have unsaved changes). The pairing never adds tabs: opening a form shows just the
-panel, and the sources stay closed until asked for - the module tab below, a click on a node, or
-the metadata tree's context menu.
+(unless they have unsaved changes). The pairing never adds tabs on its own: while a source sits
+closed, clicking a field in the frame, a row in the structure tree, a row in the data area, or the
+selection change after an edit in either of the last two leaves it closed - only the selection
+moves. Opening it takes an explicit ask - *Show in yaml*, `Ctrl+click`, a double click in the tree,
+the metadata tree's context menu, or the **Module** tab below - and it then opens beside the panel,
+never in the panel's own column, so it can never end up hidden behind the very form it belongs to;
+the **Module** tab is the one deliberate exception, taking the panel's own place on purpose.
 
 The panel is three areas with draggable splitters (their position is remembered):
 
@@ -137,11 +141,11 @@ the arrow keys):
 
 | Action | What happens |
 | --- | --- |
-| Click a structure node | the cursor lands on the node's first property line, the focus stays in the panel |
-| Double click a node | the same plus the focus moves to the yaml editor |
-| Click a frame block | the component is selected: the structure row, the properties panel, the yaml cursor |
-| `Ctrl+click` a frame block | jumps to that block's yaml |
-| *Show in yaml* in the properties panel | jumps to the property's line |
+| Click a structure node | selects the row; if the yaml is already open elsewhere its cursor follows there too, without taking focus - a closed yaml stays closed |
+| Double click a node | opens the yaml if needed (beside the panel) and moves the focus there |
+| Click a frame block | the component is selected: the structure row, the properties panel and, if the yaml is already open elsewhere, its cursor - a closed yaml is left alone |
+| `Ctrl+click` a frame block | opens that block's yaml if needed (beside the panel) and jumps to it |
+| *Show in yaml* in the properties panel | opens the yaml if needed (beside the panel) and jumps to the property's line |
 
 The selected node is shared by the three areas and keeps its **full color wherever the focus
 is** – losing focus (going to the palette, say) still leaves you looking at what you work on.
@@ -183,7 +187,9 @@ The **Properties** panel edits the selected component (and, from the metadata tr
   (`=Object.Attribute`), components and their members (`=Components.Button.Value`)
   and bindings already used in the form.
 - **Events.** An event property offers a dropdown of the module's compatible handlers;
-  "create handler" writes a stub with the right signature into the `.xbsl` and jumps to it.
+  "create handler" writes a stub with the right signature into the `.xbsl` and jumps to it, beside
+  the panel - unlike a node click, this one asked for new code and has no other way to show where
+  it landed, so it opens even from a closed module.
   Resetting an event asks what to do with the method - unbind only, or delete the handler from the
   module; the deletion takes the method with its annotations, and the yaml and the module change
   in one undo step.

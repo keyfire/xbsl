@@ -9,6 +9,56 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.65.0
+
+### Added
+- **A "Suggest via translation service" button asks a machine-translation service for the
+  dictionary's missing remainder.** Yandex Translate and Google Translate are both wired in; the
+  service is picked by whichever credential is on file. The "Machine translation" column shows
+  each guess next to the row it answers, a click away from being accepted like the platform's own
+  spelling already was; the button disables itself while a request is in flight, so a second click
+  cannot start a second run over the same table. The status line reports the request as the engine
+  saw it - how many answers came from the cache, how many were asked for, how many the service
+  refused - so a re-run that touches nothing is visibly free, not just fast.
+- **A "Set a machine-translation key" command puts a credential into SecretStorage.** The two
+  services need three values between them (an API key for each, plus the folder id Yandex
+  Translate asks besides its key); the command picks which one by name, reads it as a password
+  field, and never writes it to a setting or the command line - SecretStorage keeps it instead. An
+  empty answer clears the credential rather than storing an empty string.
+
+### Changed
+- **The dictionary panel now asks for the xbsl engine 0.72.0 or newer.** `--suggest`, the command
+  the new button runs, only arrived there; a panel over an older engine offered a button whose
+  answer would be an argparse dump no one could read. A lagging engine gets the extension's own
+  message with the version installed and the cure (`pip install -U xbsl`), as before.
+- **The dictionary panel's translation field is full width, with the suggestion inside it.** A
+  record now reads over two lines - the key and its details on top, the translation field
+  stretched underneath across all five columns - and a suggestion (the platform's own spelling,
+  or the machine-translation guess when the platform has none) shows grey inside the empty field
+  itself instead of its own column; a checkmark accepts it by a click or by `Enter` while the
+  field is still empty. The five column headers double as sort handles (Key and Translation share
+  one, sorting either way; Kind does not sort but still resizes), a border between columns drags
+  to a new width with the mouse, the widths are remembered between openings of the panel, and a
+  double click on a border resets that one column.
+- **The machine-translation report stays next to the table, not just in a message that closes
+  itself.** The panel's summary line now carries the same cached/requested/refused numbers the
+  status bar already showed for five seconds, and keeps them until the next run; a hover on the
+  line names every refusal's reason. A run that found nothing left to ask says so in words instead
+  of three zeroes, and one where every answer came from a local literal match - never touching the
+  service - says that too.
+
+### Fixed
+- **The form panel no longer pulls its yaml or module into view on its own.** Clicking a field in
+  the form frame, a row in the structure tree or the data panel, and the selection change after an
+  editing operation used to open the paired source if it was closed, and could even land it right
+  behind the panel that triggered it - a flash of a tab nobody asked for, sometimes trading places
+  with the panel on every further click. All of that now only moves the selection; opening the
+  source still takes an explicit ask (*Show in yaml*, `Ctrl+click`, a double click in the tree, a
+  menu item, or the **Module** tab), and from now on it always opens beside the panel rather than
+  in its own column, so the two can no longer end up covering each other. Creating an event
+  handler still opens the module next to the panel right away, because that action asked for new
+  code and has no other way to show where it landed.
+
 ## 0.64.0
 
 ### Added

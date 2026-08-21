@@ -7,7 +7,9 @@ import {
   formPathOfModule,
   looksLikeFormText,
   modulePathOfForm,
+  neighborColumn,
   revealStartColumn,
+  shouldRevealInEditor,
   DataLabels,
   DataModel,
   DEFAULT_LAYOUT,
@@ -338,6 +340,63 @@ test("переход к узлу оставляет один уровень от
   assert.strictEqual(revealStartColumn(0, 4), 0);
   assert.strictEqual(revealStartColumn(4, 4), 0);
   assert.strictEqual(revealStartColumn(12, NaN), 8);
+});
+
+// --- shouldRevealInEditor -------------------------------------------------------------------
+// A field click in the form frame is an IMPLICIT follow: it must never open a closed yaml, and
+// must not pull an already-open one out from behind the panel's own column - doing so covers
+// the panel the click was aimed at. An EXPLICIT request ("Show in yaml", Ctrl+click) is a
+// direct ask and always opens, exactly as before this guard existed.
+
+test("shouldRevealInEditor: explicit call, yaml tab closed - opens", () => {
+  assert.strictEqual(shouldRevealInEditor(true, undefined, 1), true);
+});
+
+test("shouldRevealInEditor: implicit follow, yaml tab closed - does not open", () => {
+  assert.strictEqual(shouldRevealInEditor(false, undefined, 1), false);
+});
+
+test("shouldRevealInEditor: implicit follow, yaml open in another column - opens", () => {
+  assert.strictEqual(shouldRevealInEditor(false, 2, 1), true);
+});
+
+test("shouldRevealInEditor: implicit follow, yaml open in the panel's own column - does not open", () => {
+  assert.strictEqual(shouldRevealInEditor(false, 1, 1), false);
+});
+
+// The explicit path is a direct ask, not a follow: it always opens, whatever column the yaml
+// tab is already in (or none) - unchanged from the behaviour before this guard existed. The
+// case where that tab happens to sit in the panel's own column is unusual (the panel would be
+// showing on top of it already) but the request still stands: an explicit "Show in yaml" must
+// bring the yaml forward, even if that means it now covers the panel that issued the request.
+test("shouldRevealInEditor: explicit call, yaml open in the panel's own column - still opens", () => {
+  assert.strictEqual(shouldRevealInEditor(true, 1, 1), true);
+});
+
+// --- neighborColumn -------------------------------------------------------------------------
+// Where a freshly created module opens: the panel's own column is excluded at every tier
+// (reusing the module's own tab, joining a source group) - landing there would put the new
+// code behind the very panel that just created it. undefined means "no existing candidate,
+// split a new group beside the active one" - the caller maps that to vscode.ViewColumn.Beside.
+
+test("neighborColumn: the module's own tab, open elsewhere - reused", () => {
+  assert.strictEqual(neighborColumn(2, 3, 1), 2);
+});
+
+test("neighborColumn: no module tab, a source group open elsewhere - joins it", () => {
+  assert.strictEqual(neighborColumn(undefined, 3, 1), 3);
+});
+
+test("neighborColumn: the module's own tab sits in the panel's column - skipped for the source group", () => {
+  assert.strictEqual(neighborColumn(1, 3, 1), 3);
+});
+
+test("neighborColumn: only the panel's own column has anything open - splits beside", () => {
+  assert.strictEqual(neighborColumn(1, 1, 1), undefined);
+});
+
+test("neighborColumn: nothing open anywhere - splits beside", () => {
+  assert.strictEqual(neighborColumn(undefined, undefined, undefined), undefined);
 });
 
 // The component name behind a yaml path: the designer drops the cached text of a nested component

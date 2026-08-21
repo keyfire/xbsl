@@ -497,3 +497,15 @@ def test_day_sections_are_named_by_the_standard(name: str):
         if kind not in _SECTION_ORDER
     ]
     assert not unknown, f"{name}: неизвестные разделы – " + "; ".join(unknown)
+
+
+def test_the_translation_provider_setting_is_the_users_choice_not_the_projects():
+    """Which paid service to call is a person's decision, so the setting stops at the window.
+
+    With a `resource` scope an opened project could name the service in its own settings file,
+    and a `.vscode/settings.json` arriving with a clone would redirect the run.
+    """
+    properties = {}
+    for section in _manifest()["contributes"]["configuration"]:
+        properties.update(section["properties"])
+    assert properties["xbsl.translation.provider"]["scope"] == "window"

@@ -19,6 +19,22 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-21 – 0.72.0
+
+### Added
+- **Machine translation fills the dictionary's missing entries with suggestions.** `xbsl
+  translate --suggest` asks an external service - Yandex Translate or Google Translate, picked by
+  whichever credentials are set - about every entry the dictionary does not cover yet, and reports
+  what came back for a human to accept rather than writing it in place. The project's own `terms`
+  section rides along as a glossary, so a term the project already settled keeps its spelling
+  inside a machine-translated sentence. An answer is cached by its source text and the glossary
+  that produced it, so asking again over the same gaps makes no request at all - the report counts
+  how many came from the cache. A key never reaches the command line: the engine reads it from the
+  environment, and the VS Code panel gained a "Suggest via translation service" button that runs
+  the same call over the open table and offers each guess a click away from being accepted, the
+  way the platform's own spelling already was; its own key lives in SecretStorage rather than a
+  setting.
+
 ## 2026-08-20 – 0.70.0, 0.71.0, 0.71.1
 
 ### Added

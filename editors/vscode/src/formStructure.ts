@@ -19,12 +19,12 @@ import {
   removePreset,
   sanitizePresets,
 } from "./blockPresetsCore";
-import { expandAncestors, flattenStructure, StructureRow } from "./formDesignerCore";
+import { expandAncestors, flattenStructure, shouldRevealInEditor, StructureRow } from "./formDesignerCore";
 import { hintName } from "./metadataCore";
 import { projectWritesEnglishNames } from "./metadataTree";
 import { lspActive, lspRequest } from "./lspClient";
 import { isReadonlyDoc } from "./readonly";
-import { editorColumnFor, revealContent } from "./reveal";
+import { neighborColumnFor, revealContent, tabColumnOf } from "./reveal";
 import {
   dropPlan,
   editsOverlap,
@@ -88,6 +88,9 @@ export interface StructureHost {
   //: Scroll the row into view and select it (a programmatic reveal - cursor sync, an
   //: operation result), without moving the focus into the panel.
   revealStructure(id: string): void;
+  //: The panel's own editor-group column, so an implicit yaml reveal (a row click, an
+  //: operation result) can tell whether the yaml tab would just cover the panel itself.
+  panelColumn(): vscode.ViewColumn | undefined;
 }
 
 interface ExpansionMemory {
@@ -410,15 +413,24 @@ export class FormStructureModel {
     return id;
   }
 
+  // preserveFocus doubles as "this is an implicit follow" (a row click, an operation result) -
+  // it must not pull a closed yaml open, or a tab already open behind the panel's own column
+  // in front of it, the way an explicit "Open in editor" / double click always does. And once
+  // it DOES reveal (explicit, or implicit with the tab already open elsewhere), the column
+  // itself must still never be the panel's - neighborColumnFor excludes it unconditionally,
+  // there is no fallback tier left that could land there the way editorColumnFor's could.
   async revealInEditor(offset: number, preserveFocus: boolean): Promise<void> {
     if (!this.target) {
+      return;
+    }
+    if (!shouldRevealInEditor(!preserveFocus, tabColumnOf(this.target), this.host?.panelColumn())) {
       return;
     }
     this.suppressCursorSyncUntil = Date.now() + 300;
     const doc = await vscode.workspace.openTextDocument(this.target);
     const pos = doc.positionAt(Math.min(offset, doc.getText().length));
     const editor = await vscode.window.showTextDocument(doc, {
-      viewColumn: editorColumnFor(this.target, vscode.ViewColumn.One),
+      viewColumn: neighborColumnFor(this.target, this.host?.panelColumn()),
       preserveFocus,
       preview: false,
     });
