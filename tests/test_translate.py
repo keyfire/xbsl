@@ -1413,3 +1413,50 @@ def test_a_route_template_without_names_is_left_alone():
         name="Сервис.yaml",
     )
     assert "Template: /ping" in out
+
+
+def test_a_new_dictionary_file_gets_a_neutral_head_line(tmp_path: Path):
+    """The writer must not sign the file for a surface it knows nothing about.
+
+    A file written from the MCP tool used to arrive announcing that it came from the editor
+    panel, and the line was corrected by hand after every such batch.
+    """
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    entries.write_entries(folder, [{"key": "Шаги", "value": "Steps", "kind": "token"}],
+                          target="046-icons.yaml")
+
+    head = (folder / "046-icons.yaml").read_text(encoding="utf-8")
+    assert entries.DEFAULT_COMMENT in head
+    assert "редактор" not in head
+
+
+def test_the_caller_names_the_head_line_of_a_new_file(tmp_path: Path):
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    entries.write_entries(folder, [{"key": "Шаги", "value": "Steps", "kind": "token"}],
+                          target="046-icons.yaml", comment="Имена значков возможностей.")
+
+    head = (folder / "046-icons.yaml").read_text(encoding="utf-8")
+    assert "# Имена значков возможностей." in head
+    assert entries.DEFAULT_COMMENT not in head
+
+
+def test_the_head_line_is_written_only_when_the_file_is_new(tmp_path: Path):
+    """An existing file keeps its own head line - a second batch must not restamp it."""
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    entries.write_entries(folder, [{"key": "Шаги", "value": "Steps", "kind": "token"}],
+                          target="046-icons.yaml", comment="Первая порция.")
+    entries.write_entries(folder, [{"key": "Отбор", "value": "Filter", "kind": "token"}],
+                          target="046-icons.yaml", comment="Вторая порция.")
+
+    head = (folder / "046-icons.yaml").read_text(encoding="utf-8")
+    assert "# Первая порция." in head
+    assert "Вторая порция" not in head

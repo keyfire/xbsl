@@ -80,7 +80,7 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 | `translate_status(root, dictionary)` | the coverage and what is left - the cheap check before deciding anything |
 | `translate_gaps(root, kind, filter, limit, offset)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint |
 | `translate_entries(root, kind, filter, limit, offset)` | what the dictionary already says, with the file and line of each entry |
-| `translate_set(root, entries, target)` | write entries back: add, correct in place, or remove by emptying a value |
+| `translate_set(root, entries, target, comment)` | write entries back: add, correct in place, or remove by emptying a value; `comment` is the head line a newly created file gets |
 
 The four answer in PAGES over one engine core, so filling a dictionary of thousands of
 entries never means reading the files.

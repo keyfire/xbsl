@@ -141,7 +141,9 @@ Cyrillic scalars left alone as data (listed so a reviewer can confirm they reall
 
 The dictionary is discovered next to the project and above it; `--dictionary` names it
 explicitly (a file or a directory), and `--target` names the file NEW entries land in
-(`090-manual.yaml` by default). `--format json` hands the whole report to a machine.
+(`090-manual.yaml` by default); `--comment` is the head line such a file is created with,
+which is the place to say what the batch is about. `--format json` hands the whole report
+to a machine.
 `--no-localization-swap` leaves the localized-strings layout as it is - for a project that
 translates its sources but keeps its language layout.
 

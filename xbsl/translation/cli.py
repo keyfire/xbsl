@@ -61,6 +61,10 @@ MESSAGES = {
         "ru": "файл словаря для НОВЫХ записей (по умолчанию 090-manual.yaml)",
         "en": "the dictionary file NEW entries go to (default 090-manual.yaml)",
     },
+    "translate.help.comment": {
+        "ru": "заголовок НОВОГО файла словаря: чему посвящена порция записей",
+        "en": "the head line of a NEW dictionary file: what this batch of entries is about",
+    },
     "translate.help.filter": {
         "ru": "отбор по подстроке ключа или перевода",
         "en": "filter by a substring of the key or the value",
@@ -230,6 +234,7 @@ def _parser() -> argparse.ArgumentParser:
                         help=i18n.t("translate.help.provider"))
     parser.add_argument("--plans", default="tokens,phrases", help=i18n.t("translate.help.plans"))
     parser.add_argument("--target", default=None, help=i18n.t("translate.help.target"))
+    parser.add_argument("--comment", default="", help=i18n.t("translate.help.comment"))
     parser.add_argument("--filter", default="", help=i18n.t("translate.help.filter"))
     parser.add_argument("--kind", choices=("token", "phrase", "literal", "any"), default="any",
                         help=i18n.t("translate.help.kind"))
@@ -496,6 +501,7 @@ def _apply_edits(args, root: Path, loaded) -> int:
         return 2
     result = entries_module.write_entries(
         path, edits, target=args.target or entries_module.DEFAULT_TARGET,
+        comment=getattr(args, "comment", "") or "",
     )
     refused = result.get("refused") or []
     if args.format == "json":
@@ -590,7 +596,8 @@ def _suggest(args, root: Path, loaded) -> int:
         for (kind, key), value in result.values.items()
     )
     if args.suggest_out:
-        entries_module.write_entries(path, edits, target=Path(args.suggest_out).name)
+        entries_module.write_entries(path, edits, target=Path(args.suggest_out).name,
+                                     comment=getattr(args, "comment", "") or "")
 
     # The count alone hides WHAT did not translate; a refusal is only actionable with its
     # reason next to it, the same way --set already reports a refused edit.

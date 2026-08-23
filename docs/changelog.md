@@ -21,6 +21,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## 2026-08-23 – 0.73.0
 
+### Changed
+- **A new dictionary file is created with a neutral head line, and the caller can name its
+  own.** Whoever wrote entries into a file that did not exist yet got a file announcing that it
+  came from the editor panel - true for one surface out of three, and corrected by hand after
+  every batch written from the MCP tool or the CLI. The line now says what the file is;
+  `translate_set(..., comment=...)` and `xbsl translate --comment` put the batch's own subject
+  there instead. An existing file keeps the head line it already has.
+
 ### Fixed
 - **The MCP server applies the project's baseline, the way the CLI does.** `lint_paths` reported
   every finding a committed `.xbsllint-baseline` freezes and had no parameter to point it at one:

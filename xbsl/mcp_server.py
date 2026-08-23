@@ -1203,7 +1203,7 @@ def translate_entries(
 
 
 @mcp.tool()
-def translate_set(root: str, edits: list[dict], target: str = "") -> dict:
+def translate_set(root: str, edits: list[dict], target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
 
     root   – the project directory;
@@ -1217,6 +1217,9 @@ def translate_set(root: str, edits: list[dict], target: str = "") -> dict:
              translation.
     target – the file NEW entries go to (default 090-manual.yaml). An entry that already
              exists is corrected where it lives, whatever the target says.
+    comment – the head line a NEWLY created file gets: say what the batch is for ("Names of
+             the feature icons"), since only the caller knows. Without it the file gets a
+             neutral line naming no author.
     A key may be qualified (`<Owner>.<Name>`) to hold inside one namespace only - that is how
     a word gets one spelling as a dictionary key or a component property and another globally.
     """
@@ -1231,6 +1234,7 @@ def translate_set(root: str, edits: list[dict], target: str = "") -> dict:
         return {"error": i18n.t("translate.entries.no-dictionary")}
     result = entries_module.write_entries(
         path, list(edits or []), target=target or entries_module.DEFAULT_TARGET,
+        comment=comment,
     )
     return {**result, "dictionary": str(path)}
 

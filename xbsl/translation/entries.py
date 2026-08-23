@@ -230,9 +230,10 @@ def _places(report, key: str, kind: str, limit: int = 20) -> list[tuple[str, int
     return places
 
 
-def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET) -> dict:
+def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
+                  comment: str = "") -> dict:
     """Apply the edits to disk and report what happened (the CLI and MCP path)."""
-    plan = plan_entries(dictionary_path, edits, target)
+    plan = plan_entries(dictionary_path, edits, target, comment)
     for path, text in plan["files"].items():
         file = Path(path)
         file.parent.mkdir(parents=True, exist_ok=True)
@@ -240,11 +241,16 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
     return {key: plan[key] for key in ("changed", "added", "removed", "refused")}
 
 
-def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET) -> dict:
+def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
+                 comment: str = "") -> dict:
     """Compute the dictionary files AFTER the edits, without touching the disk.
 
     An edit is `{key, value, kind}`. An emptied value REMOVES the entry: a half-filled stub
     is not a translation, and leaving it would claim coverage the project does not have.
+
+    `comment` is the head line a NEWLY created file gets. The caller knows what the batch is
+    for, the writer does not: a file written from the MCP tool used to arrive announcing that
+    it came from the editor panel, and the line was corrected by hand afterwards.
 
     The result is `{files: {path: the full new text}, changed, added, removed}`. Texts rather
     than writes are what an editor needs: the language server never writes to disk, so the
@@ -295,7 +301,7 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
 
     added = 0
     if fresh:
-        target_file, new_text, added = _plan_new(dictionary_path, fresh, target)
+        target_file, new_text, added = _plan_new(dictionary_path, fresh, target, comment)
         if added:
             files[str(target_file)] = new_text
     return {"files": files, "changed": changed, "added": added, "removed": removed,
@@ -321,7 +327,14 @@ def scalar(text: str) -> str:
     return json.dumps(text, ensure_ascii=False)
 
 
-def _plan_new(dictionary_path: Path, edits: list[dict], target: str) -> tuple[Path, str, int]:
+#: The head line a new dictionary file gets when the caller names none. It says what the file
+#: is rather than who wrote it: every surface writes such files, and a fixed provenance line
+#: was wrong about all of them but one.
+DEFAULT_COMMENT = "Записи словаря перевода."
+
+
+def _plan_new(dictionary_path: Path, edits: list[dict], target: str,
+              comment: str = "") -> tuple[Path, str, int]:
     """(the target file, its full text with the new entries, how many were added)."""
     file = dictionary_path / target if dictionary_path.is_dir() else dictionary_path
     sections = {
@@ -333,11 +346,12 @@ def _plan_new(dictionary_path: Path, edits: list[dict], target: str) -> tuple[Pa
     if file.exists():
         text = file.read_text(encoding="utf-8-sig")
     else:
+        head = " ".join((comment or DEFAULT_COMMENT).split())
         text = (
             "version: 1\n"
             "language: en\n"
             "\n"
-            "# Записи, добавленные из редактора: панель словаря перевода и быстрые исправления.\n"
+            f"# {head}\n"
         )
     for section, pairs in sections.items():
         text = _merge_section(text, section, pairs)
