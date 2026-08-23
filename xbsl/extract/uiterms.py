@@ -118,19 +118,44 @@ def utf8_constants(blob: bytes) -> list[str]:
 
 
 def enum_pairs(blob: bytes) -> dict[str, str]:
-    """{Russian value: its English spelling} of one enumeration class."""
+    """{Russian value: its English spelling} of one enumeration class.
+
+    Which side of the Russian value the English one sits on is not fixed: the values are
+    constructor arguments, and the class declares them in the order of its own fields. The
+    pool states that order in plain sight - the field NAMES stand in it, and whichever of
+    `ruName` / `enName` comes first is the order the values follow. Read with the English
+    always first, the enumerations declared the other way came out shifted by one value
+    (a json node kind answered its boolean with `Null` and its string with `Boolean`), and the
+    last value of such an enumeration lost its pair altogether.
+    """
     strings = utf8_constants(blob)
+    english_first = _english_first(strings)
     pairs: dict[str, str] = {}
     for idx, text in enumerate(strings):
         if not _CYRILLIC_RE.search(text) or "::" in text or " " in text or "/" in text:
             continue
-        # the English twin is the nearest identifier-shaped string before it
-        for back in range(idx - 1, max(-1, idx - 3), -1):
-            candidate = strings[back]
+        # the English twin is the nearest identifier-shaped string on the declared side
+        steps = range(idx - 1, max(-1, idx - 3), -1) if english_first else range(idx + 1, min(len(strings), idx + 3))
+        for step in steps:
+            candidate = strings[step]
             if _NAME_RE.match(candidate) and not _UUID_RE.match(candidate):
                 pairs.setdefault(text, candidate)
                 break
     return pairs
+
+
+def _english_first(strings: list[str]) -> bool:
+    """Does the English spelling of a value precede the Russian one in this class?
+
+    The two field names of the enumeration stand in the pool; the one that comes first is the
+    first constructor argument. A class naming neither keeps the historical reading.
+    """
+    for text in strings:
+        if text == "enName":
+            return True
+        if text == "ruName":
+            return False
+    return True
 
 
 def _short(name: str) -> str:

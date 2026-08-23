@@ -134,3 +134,29 @@ def test_enum_pairs_reads_the_values_of_a_pool():
         "Normal", "Обычная", "1dc2b423-5ded-4ae2-a19b-2e3f0ba883d3",
     ])
     assert ut.enum_pairs(blob) == {"Низкая": "Low", "Обычная": "Normal"}
+
+
+def test_enum_pairs_follows_the_declared_order_of_the_fields():
+    """A class whose constructor takes the Russian name first is read the other way round.
+
+    Read with the English always in front, such an enumeration came out shifted by one value
+    - a json node kind answered its boolean with `Null` - and its last value lost the pair.
+    """
+    blob = _class_blob([
+        "ruName", "enName",
+        "НеЗаписывать", "NotWrite",
+        "ЗаписыватьВсегда", "AlwaysWrite",
+    ])
+
+    assert ut.enum_pairs(blob) == {
+        "НеЗаписывать": "NotWrite", "ЗаписыватьВсегда": "AlwaysWrite",
+    }
+
+
+def test_enum_pairs_keeps_the_english_first_reading_by_default():
+    """Negative control: with `enName` in front (or neither name at all) nothing changes."""
+    values = ["Low", "Низкая", "Normal", "Обычная"]
+    assert ut.enum_pairs(_class_blob(["enName", "ruName", *values])) == {
+        "Низкая": "Low", "Обычная": "Normal",
+    }
+    assert ut.enum_pairs(_class_blob(values)) == {"Низкая": "Low", "Обычная": "Normal"}

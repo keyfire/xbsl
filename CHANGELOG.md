@@ -52,6 +52,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **Seven enumerations whose English spellings were shifted by one value.** The values of a
+  platform enumeration are constructor arguments, and the class declares them in the order of
+  its own fields - which is not always the English name first. Read as if it always were, five
+  enumerations of the current data answered one value late (a json node kind paired its boolean
+  with `Null`, the word gender paired the feminine with `m`, a compression level paired the
+  fastest with `NoCompression`) and every one of them lost the pair of its last value; two more
+  produced no pairs at all. The pool states the order in plain sight - the field names stand in
+  it - so that is what the extractor reads now.
 - **Two query keywords the extractor read wrong.** The keyword pairs come from the constant
   pool of the query parser, where a pair (`FROM`, `ИЗ`) may be followed by its own enum
   constant, and a keyword the platform has NO English spelling for is followed by a
