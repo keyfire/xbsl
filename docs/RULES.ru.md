@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 160.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 161.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -189,6 +189,7 @@ sidebar:
 | `yaml/bare-object-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Голое слово в свойстве, принимающем `Объект` (`Значение: Титул`) – платформа ждёт литерал в кавычках, выражение с `=` либо `$`-ссылку локализованной строки [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик формы не найден в модуле [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
+| `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Сигнатура обработчика не совпадает с событием [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Серверный метод недоступен клиентскому обработчику [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Клиентская аннотация в серверном общем модуле [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-module-in-http-service` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Клиентский общий модуль в HTTP-сервисе [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
@@ -361,7 +362,8 @@ xbsl путь/к/исходникам --ignore style     # без них
 - `encoding/` – файл не в UTF-8;
 - `structure/` – парность `Имя.yaml` и `Имя.xbsl`;
 - `security/` – секрет в исходниках (токен, пароль, ключ);
-- `form/` – обработчик формы, которого нет в модуле (проектное правило);
+- `form/` – обработчик формы, которого нет в модуле, и обработчик, сигнатура которого
+  противоречит событию компонента (проектные правила);
 - `query/` – запросы: неизвестная таблица, `ЕСТЬNULL`, именованный параметр, немедленная
   пометка удаления и стандарт про `В` с подзапросом (разобран выше).
 

@@ -15,6 +15,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-23 – 0.73.0
 
 ### Added
+- **A rule that judges the SIGNATURE of a form handler - `form/handler-signature`.** The yaml
+  points an event at a method, and the platform demands an exact match: a handler declaring
+  `OnChangeEvent<Boolean>` where the component passes `OnChangeEvent<Boolean?>` compiled
+  nowhere but on the server, and the answer cost a full deploy cycle with a rollback to the
+  previous build. The rule takes the delegate from the ui schema, substitutes the component's
+  own type arguments into it (`Edit<String>` passes `OnChangeEvent<String>`) and compares it
+  against the method of the paired module. Reconnaissance over four corpora (483 handlers)
+  narrowed the slice to what is certain: the arity is not judged (a standard column takes a
+  documented extra parameter), a base type is not judged (one handler serves several
+  components), and an unsubstituted type parameter is not judged either. Zero findings on
+  every corpus, 411 handlers of the largest one actually compared.
 - **A rule about the letter "ё" in the text a user reads – `typography/yo-in-text`.** `naming/yo`
   judges NAMES, so a label carrying the letter went past every check and reached the product (a
   live case: the "show deleted" command of admin lists). The new rule reads the two places such

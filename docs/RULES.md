@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 160 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 161 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -191,6 +191,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/bare-object-value` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A bare word on a property that accepts `Object` - the platform expects a quoted literal, an `=` binding or a `$` localized-string reference [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
 | `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Form handler not found in the module [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
+| `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Handler signature does not match the event [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Server method is unavailable to a client handler [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Client annotation in a server common module [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-module-in-http-service` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Client common module in an HTTP service [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
@@ -374,7 +375,8 @@ Five rules are `info` and off: they say "this is how the platform works", not "t
 - `encoding/` - a file that is not UTF-8;
 - `structure/` - the pairing of `Name.yaml` and `Name.xbsl`;
 - `security/` - a secret in the sources (a token, a password, a key);
-- `form/` - a form handler that the module does not have (a project-scoped rule);
+- `form/` - a form handler the module does not have, and a handler whose signature
+  contradicts the event of the component (project-scoped rules);
 - `query/` - queries: an unknown table, `ISNULL`, a named parameter, an immediate deletion mark
   and the standard about `IN` with a subquery (discussed above).
 

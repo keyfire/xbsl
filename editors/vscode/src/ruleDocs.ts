@@ -189,6 +189,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "code/unknown-row-field", page: "topics/dynamic-list" },
   { match: (r) => r === "code/row-field-null", page: "topics/dynamic-list" },
   { match: (r) => r === "form/unknown-handler", page: "topics/form-component", anchor: "события" },
+  { match: (r) => r === "form/handler-signature", page: "topics/form-component", anchor: "события" },
   { match: (r) => r === "yaml/enum-needs-nullable", page: ENUM, anchor: "элементы" },
   { match: (r) => r === "yaml/ref-needs-nullable", page: TYPES, anchor: "тип-неопределено" },
   { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },

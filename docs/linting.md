@@ -37,7 +37,7 @@ to the current directory – run it from the repository root and save the output
 
 ## Rules in depth
 
-**The full list of all 160 rules of the base set** (severity, default state, scope, links to
+**The full list of all 161 rules of the base set** (severity, default state, scope, links to
 platform documentation sections) is in [RULES.md](/RULES);
 at runtime – `xbsl --list-rules`, which also counts in the rules and severity overrides of the
 installed plugins. The tier overview is in the README; below is what the deeper
