@@ -1,7 +1,7 @@
 """The kind -> root class mapping of the metamodel extractor (build_vid2class).
 
 The mapping used to be hand-written, and a kind added by a new platform build joined it only
-if somebody noticed: three kinds of 10.0 did not, and their fully extracted classes stayed
+if somebody noticed: three kinds of one build did not, and their fully extracted classes stayed
 unreachable. Now it follows from the serializer's own kind table, and these tests hold both
 halves of that: the derivation rule itself and the promise that the shipped data covers every
 kind the platform declares.
@@ -76,5 +76,5 @@ def test_kinds_added_by_the_serializer_table_have_properties():
         pytest.skip("данные собраны экстрактором без таблицы видов")
     for kind in ("ЖурналДанных", "ПанельОтчетов", "ПроцессИнтеграции"):
         if kind not in set(metamodel.kinds()):
-            continue  # the kind appeared in 10.0; older data legitimately has none
+            continue  # the kind is newer than this data; an older set legitimately has none
         assert metamodel.properties(kind), f"вид {kind} без свойств"

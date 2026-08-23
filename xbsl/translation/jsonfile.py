@@ -4,7 +4,8 @@ A structure reads a resource file by FIELD NAME: the field `Языки` binds to
 of the json. Rename the field and leave the key, and the binding quietly finds nothing - the
 reading options tolerate an unknown property and initialize a missing field, so the
 translated project compiles, applies, starts, and seeds an empty catalog. The pilot found it
-exactly that way: the compiler said nothing and the site came up without a single language.
+exactly that way: the compiler said nothing and the application came up without a single
+language.
 
 So a key that names a field of a project structure goes through the same token map as the
 field itself. Everything else in the file stays byte for byte: every value is data, and a key

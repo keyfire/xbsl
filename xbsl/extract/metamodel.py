@@ -78,8 +78,9 @@ _TYPE_TYPES = {"Type", "TypeSet"}
 # enum - the same source the term dictionary reads, so the list of kinds is the platform's
 # rather than ours. The kinds whose class the rule cannot name are spelled out here.
 #
-# The mapping used to be hand-written in full, and that is exactly how three kinds of 10.0
-# went missing (DataJournal, ReportPanel, IntegrationProcess): their classes were extracted
+# The mapping used to be hand-written in full, and that is exactly how three kinds of a
+# newer build went missing (DataJournal, ReportPanel, IntegrationProcess): their classes
+# were extracted
 # with all their properties, but nothing named them, so `metadata_schema` answered
 # {"props": {}, "class": null} - indistinguishable from "the platform has no such kind".
 _KIND_CLASS_EXCEPTIONS = {

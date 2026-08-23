@@ -1,8 +1,17 @@
 """Checks of the yaml/property-since-compat rule (a property newer than the compatibility mode)."""
 
-from xbsl import engine
+from xbsl import engine, uischema
 
 _RULE = "yaml/property-since-compat"
+
+#: The property the fixtures lean on, and the version the SCHEMA says it appeared in. Read
+#: from the data rather than written out: the tests are about the comparison, not about which
+#: build introduced what, and a hard-coded number would also age with every data update.
+_NEWER_PROP = "ИспользоватьМножественнуюСортировку"
+_NEWER_SINCE = str(
+    (((uischema.component("Таблица") or {}).get("component") or {}).get("props") or {})
+    .get(_NEWER_PROP, {}).get("since") or ""
+)
 
 _PROJECT = (
     "Ид: 2c8f4a17-9b31-4d6e-8a05-3f1e7c2b9d55\n"
@@ -23,7 +32,7 @@ _FORM = """\
 """
 
 
-def _lint(mode: str, prop: str = "ИспользоватьМножественнуюСортировку", form: str | None = None):
+def _lint(mode: str, prop: str = _NEWER_PROP, form: str | None = None):
     sources = [
         engine.load_text("acme/П/Проект.yaml", _PROJECT.format(mode=mode)),
         engine.load_text("acme/П/Основное/Ф.yaml", form or _FORM.format(prop=prop)),
@@ -31,15 +40,16 @@ def _lint(mode: str, prop: str = "ИспользоватьМножественн
     return engine.run_sources(sources, select={_RULE})
 
 
-def test_property_of_10_is_reported_under_mode_9():
+def test_a_newer_property_is_reported_under_an_older_mode():
     # the compiler answers `Неизвестное свойство` for exactly this pair
     d = _lint("9.0")
     assert len(d) == 1 and d[0].rule_id == _RULE and d[0].line == 9
-    assert "10.0" in d[0].message and "9.0" in d[0].message
+    # The message names both sides: the version the property appeared in and the mode declared.
+    assert _NEWER_SINCE in d[0].message and "9.0" in d[0].message
 
 
-def test_the_same_property_is_silent_under_mode_10():
-    assert _lint("10.0") == []
+def test_the_same_property_is_silent_under_its_own_mode():
+    assert _lint(_NEWER_SINCE) == []
 
 
 def test_older_property_is_silent():

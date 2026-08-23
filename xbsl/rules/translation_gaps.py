@@ -69,7 +69,7 @@ MESSAGES = {
     },
     "conventions/missing-translation.off": {
         "ru": "имеет смысл только для проекта, который переводит исходники (см. xbsl translate), "
-              "и стоит дорого: на корпусе сайта прогон удваивается (10 с -> 20 с), потому что "
+              "и стоит дорого: на живом проекте прогон удваивается (10 с -> 20 с), потому что "
               "каждый файл проходит перевод целиком. Включайте флагом --enable (в MCP – параметр "
               "enable), когда словарь и нужен",
         "en": "only means something for a project that translates its sources (see xbsl translate), "

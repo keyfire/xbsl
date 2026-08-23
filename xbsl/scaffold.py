@@ -3071,7 +3071,7 @@ def _descriptor_languages(yaml_path: Path) -> tuple[list[str], str | None]:
     if project is None:
         return [], None
     text = _read(project)
-    # The list comes in either yaml form: inline `[Русский, Английский]` (the site project
+    # The list comes in either yaml form: inline `[Русский, Английский]` (a real project
     # writes it so) or a block of `- Русский` lines.
     flow = None
     for spelling in key_forms("ЯзыкиЛокализации"):

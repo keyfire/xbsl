@@ -22,108 +22,51 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-23 – 0.73.0
 
 ### Added
-- **A rule for a property the compatibility mode demands in writing - `yaml/property-required-since-compat`.**
-  A platform default is not always enough: a project raised to 10.0 stopped applying with a
-  refusal naming the access-key setting the sources never wrote, while the same sources under
-  9.0 applied without a word. No data answers this - the metamodel records the default and the
-  version the property appeared in, and neither says the mode refuses the default - so the rule
-  carries the measured case in a table and repeats the compiler's own answer in the message.
-- **A rule that judges the SIGNATURE of a form handler - `form/handler-signature`.** The yaml
-  points an event at a method, and the platform demands an exact match: a handler declaring
-  `OnChangeEvent<Boolean>` where the component passes `OnChangeEvent<Boolean?>` compiled
-  nowhere but on the server, and the answer cost a full deploy cycle with a rollback to the
-  previous build. The rule takes the delegate from the ui schema, substitutes the component's
-  own type arguments into it (`Edit<String>` passes `OnChangeEvent<String>`) and compares it
-  against the method of the paired module. Reconnaissance over four corpora (483 handlers)
-  narrowed the slice to what is certain: the arity is not judged (a standard column takes a
-  documented extra parameter), a base type is not judged (one handler serves several
-  components), and an unsubstituted type parameter is not judged either. Zero findings on
-  every corpus, 411 handlers of the largest one actually compared.
-- **A rule about the letter "ё" in the text a user reads – `typography/yo-in-text`.** `naming/yo`
-  judges NAMES, so a label carrying the letter went past every check and reached the product (a
-  live case: the "show deleted" command of admin lists). The new rule reads the two places such
-  text lives in a yaml: the visible properties of components and elements (title, hint,
-  presentation, placeholder, message - a curated set, since neither the schema nor the metamodel
-  marks a string as user-visible) and every entry of a localized-strings dictionary. A binding, a
-  reference to a dictionary and a technical string are left alone. The finding carries a fix,
-  except where the letter carries the meaning ("всё" against "все") - there the message says so
-  and the decision stays with a human. Like the other typography rules it is a PROJECT convention
-  rather than a platform one, so it ships off by default and a project profile turns it on.
+- **`form/handler-signature` - a handler whose signature contradicts the event of the component.**
+  The delegate comes from the ui schema with the component's own type arguments substituted, and
+  is compared against the method of the paired module. The arity, a base type and an
+  unsubstituted type parameter are not judged: reconnaissance over four corpora (483 handlers)
+  showed each of them legitimate.
+- **`typography/yo-in-text` - the letter "ё" in the text a user reads.** The visible properties
+  of components and elements plus every entry of a localized-strings dictionary; a binding, a
+  reference and a technical string are left alone. There is a fix, except where the letter
+  carries the meaning. Off by default, like the other typography rules.
 
 ### Changed
-- **A new dictionary file is created with a neutral head line, and the caller can name its
-  own.** Whoever wrote entries into a file that did not exist yet got a file announcing that it
-  came from the editor panel - true for one surface out of three, and corrected by hand after
-  every batch written from the MCP tool or the CLI. The line now says what the file is;
-  `translate_set(..., comment=...)` and `xbsl translate --comment` put the batch's own subject
-  there instead. An existing file keeps the head line it already has.
+- **A new dictionary file is created with a neutral head line.** It used to announce the editor
+  panel whoever wrote it; `translate_set(..., comment=...)` and `xbsl translate --comment` name
+  the batch's own subject. An existing file keeps its head line.
 
 ### Fixed
-- **A collision of METHOD names is now seen by the translator.** Two Russian names that English
-  spells alike collide in the module they share, and the compiler refuses such a module - but
-  the check covered the names of metadata and the locals of a method, never the methods
-  themselves. A live project passed `--strict` while its translated tree carried two handlers
-  under one name. The methods of a module are now registered in a namespace of their own, so a
-  collision lands in `problems` (which `translate_status` returns and `--strict` fails on), and
-  `translate_set` answers with `collisions` the moment a value already taken by another name of
-  the same scope is written - a warning, not a refusal: a qualified key is exactly how one word
-  is deliberately given to two owners.
-- **The value a dispatched block is chosen by now translates.** A schedule kind, a retry
-  strategy, a storage strategy - none of them is a type, a property or an enumeration value, so
-  no term dictionary pairs them and a translated project kept them Russian while the run
-  reported them as gaps of the platform data. The metamodel annotation states both spellings
-  all along; the extractor now carries the English one (72 classes of the current data), the
-  translator writes it, and the hand-written pair for the standard code attribute is gone with
-  it - the data answers that now. On a live project the platform-gap count went from three to
-  zero.
-- **Seven enumerations whose English spellings were shifted by one value.** The values of a
-  platform enumeration are constructor arguments, and the class declares them in the order of
-  its own fields - which is not always the English name first. Read as if it always were, five
-  enumerations of the current data answered one value late (a json node kind paired its boolean
-  with `Null`, the word gender paired the feminine with `m`, a compression level paired the
-  fastest with `NoCompression`) and every one of them lost the pair of its last value; two more
-  produced no pairs at all. The pool states the order in plain sight - the field names stand in
-  it - so that is what the extractor reads now.
-- **Two query keywords the extractor read wrong.** The keyword pairs come from the constant
-  pool of the query parser, where a pair (`FROM`, `ИЗ`) may be followed by its own enum
-  constant, and a keyword the platform has NO English spelling for is followed by a
-  transliteration of itself. Read by adjacency alone, one entry's constant became the next
-  entry's "English": the dictionary claimed `ОТ` answers `OTLICHAYETSYA` and `ДЛЯ` answers
-  `CREATE_INDEX`, and the translating side skipped both by a hand-written list. The pool is
-  now read pair by pair, the two wrong entries are gone from the data (67 keywords instead of
-  69, nothing else changed) and the workaround list with them - such a keyword is honestly
-  reported as a platform gap.
-- **Two rules that an English project walked straight past.** `yaml/standard-field-length` read
-  the attribute section and the length by their Russian keys alone, and `yaml/presentation-field`
-  read the attribute type the same way and compared it against the Russian spelling of the string
-  type - so on a translated project the first said nothing at all and the second called every
-  string attribute a non-string one. Both now read through the bilingual lookup, and the standard
-  field names are taken in the spelling of the FILE: `Name` is the standard field of an English
-  source and an ordinary developer name in a Russian one. Measured on a freshly translated project
-  (974 files) - the two trees now answer alike.
-- **The translation-gap rule no longer judges the dictionary itself.** `conventions/missing-translation`
-  read the files of `xbsl-translation/` as sources, and they are Russian by construction - the keys
-  are the words being translated and the head comment says what a batch is about. On a project whose
-  sources are covered to the last word the rule reported 826 "gaps", all of them its own dictionary;
-  now it reports none. The rule stays off by default and gained the measured reason for it: every
-  file goes through the whole translation pass, which doubles the run (10s to 20s on a live
-  project). Asking for it got easier - the MCP lint tool takes an `enable` parameter now, the twin
-  of the CLI `--enable`: `select` answers with one rule alone, `enable` adds it on top of the
-  defaults.
-- **The first attribute of a fresh tabular part takes the placeholder's place.** A tabular part
-  cannot be born empty, so the scaffolding creates it with a starter attribute - and every
-  `meta_add_field ... tabular=...` after that added its attribute NEXT to the stub, which was
-  then deleted by hand. The stub is now replaced by the first attribute added, and it is
-  recognized by both its name and its type, so an attribute the author has renamed or retyped
-  is left alone.
-- **The MCP server applies the project's baseline, the way the CLI does.** `lint_paths` reported
-  every finding a committed `.xbsllint-baseline` freezes and had no parameter to point it at one:
-  the same folder read as clean in a terminal and as dirty through an agent, so the CLI run had to
-  be repeated to tell a real finding from frozen debt. The file is now discovered above the checked
-  paths exactly as the CLI discovers it; `baseline` names another one, `no_baseline` asks for the
-  frozen findings as well, and a run that applied one carries `baseline`, `baselined`,
-  `baseline_unused` and `baseline_stale` in the summary. The discovery itself moved into
-  `xbsl/baseline.py`, so the two surfaces cannot drift apart again.
+- **A collision of METHOD names is seen by the translator.** Two Russian names that English
+  spells alike collide in the module they share, and the compiler refuses such a module - the
+  check covered metadata names and the locals of a method, never the methods themselves. The
+  collision now lands in `problems` (`translate_status` returns them, `--strict` fails on them),
+  and `translate_set` answers with `collisions` when a value is already taken in the same scope.
+- **The value a dispatched block is chosen by translates.** A schedule kind is neither a type,
+  nor a property, nor an enumeration value, so no term dictionary pairs it. The metamodel
+  annotation states both spellings all along - the extractor now carries the English one, and
+  the hand-written pair for the standard code attribute is gone with it.
+- **Seven enumerations whose English spellings were shifted by one value.** The values are
+  constructor arguments, and the class declares them in the order of its own fields, which is
+  not always the English name first. The pool states that order in plain sight.
+- **Two query keywords the extractor read wrong.** A keyword the platform has no English
+  spelling for is followed by a transliteration of itself, and adjacency read that as the next
+  keyword's English. The pool is now read pair by pair; the workaround list on the translating
+  side is gone.
+- **Two rules an English project walked past.** `yaml/standard-field-length` read the attribute
+  section by its Russian keys alone, and `yaml/presentation-field` compared the attribute type
+  against the Russian spelling of the string type. The standard field names are taken in the
+  spelling of the FILE, so a Russian source is unaffected.
+- **The translation-gap rule no longer judges the dictionary itself.** Its own files are Russian
+  by construction, and on a covered project the rule reported 826 "gaps", all of them the
+  dictionary. It stays off by default (every file goes through the whole translation pass, which
+  doubles the run), and the MCP lint tool takes an `enable` parameter now - the twin of `--enable`.
+- **The MCP server applies the project's baseline, the way the CLI does.** The same folder read
+  as clean in a terminal and as dirty through an agent. The file is discovered above the checked
+  paths; `baseline` names another one, `no_baseline` asks for the frozen findings.
+- **The first attribute of a fresh tabular part takes the placeholder's place.** The stub is
+  recognized by both its name and its type, so an attribute the author renamed is left alone.
 
 ## 2026-08-21 – 0.72.0
 
@@ -164,8 +107,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **A route template carries its parameter names.** The template `/res/{код}` is data - a visitor
   types the path - but the name in braces DECLARES a parameter, and the handler reads it BY THAT
   NAME. Left as written it parted company with the translated call: the handler asked for a
-  parameter the route does not declare, got nothing and answered something else - the site
-  statics arrived with a text/plain content type.
+  parameter the route does not declare, got nothing and answered something else - the static
+  files arrived with a text/plain content type.
 - **The rules judged a translated tree more harshly than its source.** The platform compiler
   accepted the tree while the linter found errors in it that the source does not have: an object's
   derived type, an exception name marker, a subsystem usage block, a member's nullability, an
