@@ -19,6 +19,18 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-23 – 0.73.0
+
+### Fixed
+- **The MCP server applies the project's baseline, the way the CLI does.** `lint_paths` reported
+  every finding a committed `.xbsllint-baseline` freezes and had no parameter to point it at one:
+  the same folder read as clean in a terminal and as dirty through an agent, so the CLI run had to
+  be repeated to tell a real finding from frozen debt. The file is now discovered above the checked
+  paths exactly as the CLI discovers it; `baseline` names another one, `no_baseline` asks for the
+  frozen findings as well, and a run that applied one carries `baseline`, `baselined`,
+  `baseline_unused` and `baseline_stale` in the summary. The discovery itself moved into
+  `xbsl/baseline.py`, so the two surfaces cannot drift apart again.
+
 ## 2026-08-21 – 0.72.0
 
 ### Added

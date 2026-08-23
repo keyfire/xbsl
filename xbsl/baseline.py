@@ -49,6 +49,35 @@ class BaselineError(RuntimeError):
     pass
 
 
+#: The baseline file a project keeps next to its sources - the same name the VS Code
+#: extension writes exclusions into and CI passes explicitly.
+DEFAULT_NAME = ".xbsllint-baseline"
+
+
+def discover(files: list[Path]) -> Path | None:
+    """The project's own baseline file, when it has one and the run did not name it.
+
+    Without this the linter reported everything the committed baseline suppresses: CI passes
+    `--baseline` explicitly, so the divergence showed up only in a local run and read as
+    "the linter has lost its mind". The search goes upwards from the checked files - the
+    baseline lives at the repository root, next to (or above) the project descriptor.
+
+    Every surface that answers "is this project clean" discovers the same way (the CLI, the
+    MCP server): an answer that depends on which surface asked is worse than no answer.
+    """
+    seen: set[Path] = set()
+    for f in files[:1] or []:
+        start = f.resolve().parent
+        for candidate in (start, *start.parents):
+            if candidate in seen:
+                break
+            seen.add(candidate)
+            path = candidate / DEFAULT_NAME
+            if path.is_file():
+                return path
+    return None
+
+
 def _identity_path(diag_path: str, base_dir: Path) -> str:
     """The diagnostic path as stored in the baseline: POSIX, relative to the baseline dir."""
     p = Path(diag_path)

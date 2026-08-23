@@ -25,8 +25,8 @@ from pathlib import Path
 
 from xbsl import __version__
 from xbsl import (
-    dataset, docs, environment, formedits, formhandlers, formmodel, i18n, metamodel, report,
-    scaffold, uischema,
+    baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
+    formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, load, load_text, run, run_sources
@@ -108,26 +108,61 @@ def version_info() -> dict:
     return environment.snapshot()
 
 
+def _through_baseline(
+    diags: list, files: list[Path], path: str | None, disabled: bool,
+) -> tuple[list, dict]:
+    """The findings the baseline leaves, plus the summary keys describing what it took.
+
+    Written as a helper rather than inline so the tool can name its parameter `baseline`
+    without shadowing the module it needs.
+    """
+    if disabled:
+        return diags, {}
+    found = Path(path) if path else baseline_data.discover(files)
+    if found is None:
+        return diags, {}
+    kept, suppressed, unused, stale = baseline_data.apply(
+        diags, baseline_data.load(found), found.parent,
+    )
+    return kept, {
+        "baseline": str(found),
+        "baselined": suppressed,
+        "baseline_unused": unused,
+        "baseline_stale": len(stale),
+    }
+
+
 @mcp.tool()
 def lint_paths(
     paths: list[str],
     select: list[str] | None = None,
     ignore: list[str] | None = None,
+    baseline: str | None = None,
+    no_baseline: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
-    paths  – list of paths (.xbsl/.yaml files or directories, traversed recursively);
-    select – limit the rule set (id or tier letter A/B/C/D);
-    ignore – exclude rules.
+    paths       – list of paths (.xbsl/.yaml files or directories, traversed recursively);
+    select      – limit the rule set (id or tier letter A/B/C/D);
+    ignore      – exclude rules;
+    baseline    – a baseline file to apply; without it the project's own `.xbsllint-baseline`
+                  is looked up above the checked files, exactly as the CLI does;
+    no_baseline – report the frozen findings too.
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
-    Returns {diagnostics: [...], summary: {...}}.
+    Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
+    carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
+    and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
     """
     files, requested = discover_with_context(paths)
     diags = _filter_requested(
         run(files, select=_as_set(select), ignore=_as_set(ignore)), requested,
     )
-    return report.report(diags, len(requested if requested is not None else files))
+    counted = requested if requested is not None else files
+    diags, extra = _through_baseline(diags, counted, baseline, no_baseline)
+    payload = report.report(diags, len(counted))
+    payload["summary"].update(extra)
+    return payload
 
 
 @mcp.tool()

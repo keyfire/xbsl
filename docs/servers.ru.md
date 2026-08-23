@@ -54,7 +54,7 @@ claude mcp add xbsl -- xbsl-mcp
 
 | Инструмент | Что делает |
 |---|---|
-| `lint_paths(paths, select, ignore)` | проверить файлы и каталоги на диске |
+| `lint_paths(paths, select, ignore, baseline, no_baseline)` | проверить файлы и каталоги на диске; базлайн проекта `.xbsllint-baseline` применяется сам, как и в CLI (`summary.baselined` – сколько погашено, `no_baseline` – показать и замороженные) |
 | `lint_source(filename, content, select, ignore)` | проверить содержимое в памяти, до записи файла |
 | `list_rules()` | доступные здесь правила: id, заголовок, тир, область, severity |
 | `version_info()` | чем отвечает окружение: движок, интерпретатор, версия данных, надстройки – различает два окружения, отвечающие на одном файле по-разному |

@@ -6,6 +6,8 @@ import types
 
 import pytest
 
+from xbsl import cli
+
 
 class _FakeMCP:
     def __init__(self, name):
@@ -41,6 +43,80 @@ def test_mcp_adapter_registers_tools_and_lints(monkeypatch):
     assert res["summary"]["diagnostics"] >= 1
 
     sys.modules.pop("xbsl.mcp_server", None)
+
+
+def _with_stub(monkeypatch):
+    """The server module imported against a stub FastMCP - its tools are plain functions."""
+    fast = types.ModuleType("mcp.server.fastmcp")
+    fast.FastMCP = _FakeMCP
+    monkeypatch.setitem(sys.modules, "mcp", types.ModuleType("mcp"))
+    monkeypatch.setitem(sys.modules, "mcp.server", types.ModuleType("mcp.server"))
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fast)
+    sys.modules.pop("xbsl.mcp_server", None)
+    return importlib.import_module("xbsl.mcp_server")
+
+
+_TRAILING = "метод Ф(): Число\n    возврат 1  \n;\n"  # trailing whitespace on line 2
+_NO_PAIR = ["structure/xbsl-pair"]  # a temporary .xbsl has no paired yaml
+
+
+def test_lint_paths_applies_the_project_baseline(tmp_path, monkeypatch):
+    """The MCP answer must match the CLI: a committed baseline suppresses its findings.
+
+    Until it did, the agent read a project with frozen debt as dirty and had to run the CLI
+    over the same folder to tell a real finding from a baselined one.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        f = project / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+        cli.main(["--write-baseline", str(tmp_path / ".xbsllint-baseline"),
+                  "--ignore", _NO_PAIR[0], str(f)])
+
+        res = m.lint_paths([str(f)], ignore=_NO_PAIR)
+
+        assert res["diagnostics"] == []
+        assert res["summary"]["baselined"] == 1
+        assert res["summary"]["baseline"].endswith(".xbsllint-baseline")
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_can_be_asked_for_the_frozen_findings(tmp_path, monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        f = project / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+        cli.main(["--write-baseline", str(tmp_path / ".xbsllint-baseline"),
+                  "--ignore", _NO_PAIR[0], str(f)])
+
+        res = m.lint_paths([str(f)], ignore=_NO_PAIR, no_baseline=True)
+
+        assert any(d["rule"] == "whitespace/trailing" for d in res["diagnostics"])
+        assert "baselined" not in res["summary"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_takes_a_named_baseline(tmp_path, monkeypatch):
+    """An explicit path wins over discovery - the same order the CLI keeps."""
+    m = _with_stub(monkeypatch)
+    try:
+        f = tmp_path / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+        named = tmp_path / "своё.json"
+        cli.main(["--write-baseline", str(named), "--ignore", _NO_PAIR[0], str(f)])
+
+        res = m.lint_paths([str(f)], ignore=_NO_PAIR, baseline=str(named))
+
+        assert res["diagnostics"] == []
+        assert res["summary"]["baseline"] == str(named)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
 
 
 def test_unknown_argument_is_rejected_not_ignored():
