@@ -59,6 +59,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **Two query keywords the extractor read wrong.** The keyword pairs come from the constant
+  pool of the query parser, where a pair (`FROM`, `ИЗ`) may be followed by its own enum
+  constant, and a keyword the platform has NO English spelling for is followed by a
+  transliteration of itself. Read by adjacency alone, one entry's constant became the next
+  entry's "English": the dictionary claimed `ОТ` answers `OTLICHAYETSYA` and `ДЛЯ` answers
+  `CREATE_INDEX`, and the translating side skipped both by a hand-written list. The pool is
+  now read pair by pair, the two wrong entries are gone from the data (67 keywords instead of
+  69, nothing else changed) and the workaround list with them - such a keyword is honestly
+  reported as a platform gap.
 - **Two rules that an English project walked straight past.** `yaml/standard-field-length` read
   the attribute section and the length by their Russian keys alone, and `yaml/presentation-field`
   read the attribute type the same way and compared it against the Russian spelling of the string

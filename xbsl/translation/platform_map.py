@@ -56,12 +56,6 @@ def keyword_english() -> dict[str, str]:
     return pairs
 
 
-#: Query pairs the extractor is known to carry wrong (a transliteration and a foreign
-#: marker instead of the English keyword). Skipped rather than corrected: a correction
-#: would be a guess, and a skipped token is honestly reported as untranslated.
-_BROKEN_QUERY_PAIRS = frozenset({"ОТ", "ДЛЯ"})
-
-
 @lru_cache(maxsize=1)
 def query_phrases() -> dict[tuple[str, ...], tuple[str, ...]]:
     """{the words of a query PHRASE: its English words}, both upper-cased.
@@ -110,7 +104,7 @@ def _query_english() -> dict[str, str]:
 
     for russian, english in section.items():
         key = russian.upper()
-        if key in _BROKEN_QUERY_PAIRS or " " in key:
+        if " " in key:
             continue
         if len(english.split()) == 1:
             put(key, english.upper())

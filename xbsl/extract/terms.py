@@ -175,6 +175,16 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
                 if _EN_NAME_RE.match(en) and en not in _CLASS_FILE_NAMES
                 and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru)
             ]
+            if inner == _QUERY_TERMS_CLASS:
+                # In the query parser's own class a keyword the platform has NO English
+                # spelling for is followed by a transliteration of itself, and adjacency reads
+                # that as the next keyword's English. The function names of the same class are
+                # paired correctly, so only the keywords named here are dropped.
+                names = [
+                    s for s in strings if _QUERY_EN_RE.match(s) or _QUERY_RU_RE.match(s)
+                ]
+                without = _query_untranslated(names)
+                pairs = [(en, ru) for en, ru in pairs if ru not in without]
             if not pairs:
                 continue
             owner = _META_SUFFIX.sub("", inner.rsplit("/", 1)[-1][:-len(".class")])
@@ -255,11 +265,59 @@ def _scan_query_terms(car: zipfile.ZipFile) -> dict[str, str]:
             s for s in _constant_pool(data)
             if _QUERY_EN_RE.match(s) or _QUERY_RU_RE.match(s)
         ]
-        return {
-            ru: en for en, ru in zip(names, names[1:])
-            if _QUERY_EN_RE.match(en) and _QUERY_RU_RE.match(ru)
-        }
+        return _query_pairs(names)
     return {}
+
+
+def _query_pairs(names: list[str]) -> dict[str, str]:
+    """{Russian keyword: English keyword} out of the filtered constant pool.
+
+    Read pair by pair rather than by every adjacency, because the pool holds three shapes and
+    only the first is a translation:
+
+    * an English keyword followed by its Russian spelling - a keyword that has both;
+    * the same, followed by the ENUM CONSTANT of that pair (`CREATE INDEX` is followed by its
+      Russian spelling and then by `CREATE_INDEX`, the English with underscores);
+    * a Russian keyword followed by a TRANSLITERATION of itself - the platform has no English
+      spelling for that word at all, and what stands next to it is its constant name.
+
+    Taken by adjacency alone, the constant of one entry became the "English" of the next, and
+    the dictionary claimed `ОТ` answers `OTLICHAYETSYA` and `ДЛЯ` answers `CREATE_INDEX` - both
+    were skipped by hand on the translating side until this read them correctly.
+    """
+    return _query_scan(names)[0]
+
+
+def _query_untranslated(names: list[str]) -> set[str]:
+    """The query keywords the platform has NO English spelling for (see _query_pairs)."""
+    return _query_scan(names)[1]
+
+
+def _query_scan(names: list[str]) -> tuple[dict[str, str], set[str]]:
+    """One pass over the filtered pool: the pairs it holds and the keywords without a pair."""
+    pairs: dict[str, str] = {}
+    without: set[str] = set()
+    previous_english: str | None = None
+    index = 0
+    while index < len(names) - 1:
+        current, following = names[index], names[index + 1]
+        english, russian = _QUERY_EN_RE.match(current), _QUERY_RU_RE.match(current)
+        if english and previous_english and current == previous_english.replace(" ", "_"):
+            index += 1  # the enum constant of the pair just read
+            continue
+        if english and _QUERY_RU_RE.match(following):
+            pairs[following] = current
+            previous_english = current
+            index += 2
+            continue
+        if russian and _QUERY_EN_RE.match(following):
+            # No English spelling: the platform transliterated the keyword into a constant.
+            without.add(current)
+            previous_english = None
+            index += 2
+            continue
+        index += 1
+    return pairs, without
 
 
 def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]:
