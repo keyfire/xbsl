@@ -510,6 +510,58 @@ def test_add_tabular_with_starter_attribute(catalog_path):
     assert new_tc["Реквизиты"][0]["Имя"] == "Реквизит1"
 
 
+def test_the_first_attribute_replaces_the_starter_of_a_fresh_tabular(catalog_path):
+    """A new tabular part is born with a placeholder; the first real attribute takes its place.
+
+    Adding NEXT to it left the stub in the file, and it was deleted by hand after every add.
+    """
+    apply_result(scaffold.op_add_field(catalog_path, "табличная-часть", "Склады"))
+
+    result = scaffold.op_add_field(
+        catalog_path, "реквизит", "Склад", type_="Справочник.Товары.Ссылка", tabular="Склады",
+    )
+    apply_result(result)
+
+    parsed = _valid_yaml(catalog_path.read_text(encoding="utf-8"))
+    attributes = parsed["ТабличныеЧасти"][1]["Реквизиты"]
+    assert [a["Имя"] for a in attributes] == ["Склад"]
+    assert attributes[0]["Тип"] == "Справочник.Товары.Ссылка"
+    assert len(attributes[0]["Ид"]) == 36
+    assert any("заглушка" in note for note in result.notes)
+
+
+def test_the_second_attribute_lands_next_to_the_first(catalog_path):
+    apply_result(scaffold.op_add_field(catalog_path, "табличная-часть", "Склады"))
+    apply_result(scaffold.op_add_field(catalog_path, "реквизит", "Склад", tabular="Склады"))
+
+    result = scaffold.op_add_field(
+        catalog_path, "реквизит", "Количество", type_="Число", tabular="Склады",
+    )
+    apply_result(result)
+
+    parsed = _valid_yaml(catalog_path.read_text(encoding="utf-8"))
+    attributes = parsed["ТабличныеЧасти"][1]["Реквизиты"]
+    assert [a["Имя"] for a in attributes] == ["Склад", "Количество"]
+    assert result.notes == []
+
+
+def test_an_attribute_the_author_owns_is_not_taken_for_the_starter(catalog_path):
+    """The stub is recognized by BOTH the name and the type: a renamed or retyped attribute
+    belongs to the author, and an add must not overwrite it."""
+    apply_result(scaffold.op_add_field(catalog_path, "табличная-часть", "Склады"))
+    apply_result(scaffold.op_set_field_property(
+        catalog_path, "реквизит", "Реквизит1", {"Тип": "Число"}, tabular="Склады",
+    ))
+
+    apply_result(scaffold.op_add_field(
+        catalog_path, "реквизит", "Количество", type_="Число", tabular="Склады",
+    ))
+
+    parsed = _valid_yaml(catalog_path.read_text(encoding="utf-8"))
+    attributes = parsed["ТабличныеЧасти"][1]["Реквизиты"]
+    assert [a["Имя"] for a in attributes] == ["Реквизит1", "Количество"]
+
+
 # --- subsystem and project ----------------------------------------------------------------
 
 
@@ -1417,10 +1469,10 @@ def test_object_info_reads_tabular_fields(tmp_path):
     info = scaffold.object_info(tmp_path, name="Приходы")
     tabular = info["tabulars"][0]
     assert tabular["name"] == "Товары"
-    # Реквизит1 is added along with the tabular part itself (the platform does not
-    # support an empty one).
-    assert [f["name"] for f in tabular["fields"]] == ["Реквизит1", "Количество"]
-    assert [f["type"] for f in tabular["fields"]] == ["Строка", "Число"]
+    # The stub attribute is added along with the tabular part itself (the platform does not
+    # support an empty one), and the first real attribute takes its place.
+    assert [f["name"] for f in tabular["fields"]] == ["Количество"]
+    assert [f["type"] for f in tabular["fields"]] == ["Число"]
     assert subsystem  # the subsystem directory is used
 
 
@@ -1433,9 +1485,9 @@ def test_tabular_table_has_columns(tmp_path):
     assert table["Тип"] == "Таблица<ИсточникДанныхМассив<Приходы.Товары>>"
     # Columns are mandatory - without them the table shows empty rows.
     columns = table["Колонки"]
-    assert [c["Заголовок"] for c in columns] == ["Реквизит1", "Количество"]
+    assert [c["Заголовок"] for c in columns] == ["Количество"]
     # ПолеЗначения also defines sorting by the column.
-    assert [c["ПолеЗначения"] for c in columns] == ["Реквизит1", "Количество"]
+    assert [c["ПолеЗначения"] for c in columns] == ["Количество"]
     assert columns[0]["Тип"] == "СтандартнаяКолонкаТаблицы<Приходы.Товары>"
 
 
@@ -1480,11 +1532,11 @@ def test_object_attribute_never_lands_in_tabular(tmp_path):
     parsed = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
     # Дата is the document's starter attribute in the object section; Контрагент is appended.
     assert [f["Имя"] for f in parsed["Реквизиты"]] == ["Дата", "Контрагент"]
-    assert [f["Имя"] for f in parsed["ТабличныеЧасти"][0]["Реквизиты"]] == ["Реквизит1", "Цена"]
+    assert [f["Имя"] for f in parsed["ТабличныеЧасти"][0]["Реквизиты"]] == ["Цена"]
 
     info = scaffold.object_info(tmp_path, name="Приходы")
     assert [f["name"] for f in info["fields"]] == ["Дата", "Контрагент"]
-    assert [f["name"] for f in info["tabulars"][0]["fields"]] == ["Реквизит1", "Цена"]
+    assert [f["name"] for f in info["tabulars"][0]["fields"]] == ["Цена"]
 
     # A name taken in the tabular part does not count as a duplicate object attribute.
     apply_result(scaffold.op_add_field(yaml_path, "реквизит", "Реквизит1", type_="Строка"))

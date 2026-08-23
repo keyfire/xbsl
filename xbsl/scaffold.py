@@ -1763,6 +1763,34 @@ def op_new_object(
     return result
 
 
+#: The attribute a newly created tabular part carries (see _SECTION_SPECS): the platform
+#: needs a non-empty `Attributes` list, so the part cannot be born empty.
+_STARTER_ATTRIBUTE = "Реквизит1"
+
+
+def _starter_attribute_span(text: str, tabular_offset: int, tabular: str) -> tuple[int, int, int] | None:
+    """(start, end, field indent) of that placeholder while it is still untouched; None if not.
+
+    Untouched means the part holds exactly ONE attribute and it is the template's own: the
+    stub name and the stub type. An author who renamed or retyped it owns it, and a real
+    attribute named the same way (with anything else beside it) is not a stub either.
+    """
+    fields = _tabular_fields(text, tabular)
+    if len(fields) != 1 or fields[0].get("name") != _STARTER_ATTRIBUTE:
+        return None
+    if fields[0].get("type") not in ("Строка", "String"):
+        return None
+    block_end, _ = _item_block_span(text, tabular_offset)
+    inner = find_section_item_offset(
+        text[tabular_offset:block_end], "Реквизиты", _STARTER_ATTRIBUTE, top_level=False,
+    )
+    if inner is None:
+        return None
+    start = tabular_offset + inner
+    end, indent = _item_block_span(text, start)
+    return start, end, indent
+
+
 def op_add_field(
     yaml_path: Path,
     field_kind: str,
@@ -1804,10 +1832,23 @@ def op_add_field(
                 kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)),
             ) + _prop_lines(extra), lang
         )
-        edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl, lang)
+        starter = _starter_attribute_span(text, offset, tabular)
+        notes: list[str] = []
+        if starter is None:
+            edit = insert_nested_item_edit(text, offset, "Реквизиты", lines, nl, lang)
+        else:
+            # The first real attribute TAKES THE PLACE of the placeholder a new tabular part
+            # is created with: adding next to it left the stub in the file, and it was deleted
+            # by hand after every such add.
+            start, end, indent = starter
+            edit = TextEdit(start, end, (nl + " " * indent).join(lines))
+            notes.append(f"Реквизит-заглушка {_STARTER_ATTRIBUTE} табличной части "
+                         f"'{tabular}' заменён на {name}")
         new_text = apply_edit(text, edit)
         cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
-        return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
+        return ScaffoldResult(
+            [FileChange(yaml_path, new_text, created=False, cursor=cursor)], notes=notes,
+        )
 
     map_spec = _MAPPING_SPECS.get(field_kind)
     if map_spec is not None:

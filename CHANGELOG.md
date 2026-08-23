@@ -23,6 +23,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **The first attribute of a fresh tabular part takes the placeholder's place.** A tabular part
+  cannot be born empty, so the scaffolding creates it with a starter attribute - and every
+  `meta_add_field ... tabular=...` after that added its attribute NEXT to the stub, which was
+  then deleted by hand. The stub is now replaced by the first attribute added, and it is
+  recognized by both its name and its type, so an attribute the author has renamed or retyped
+  is left alone.
 - **The MCP server applies the project's baseline, the way the CLI does.** `lint_paths` reported
   every finding a committed `.xbsllint-baseline` freezes and had no parameter to point it at one:
   the same folder read as clean in a terminal and as dirty through an agent, so the CLI run had to
