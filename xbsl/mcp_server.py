@@ -1225,6 +1225,10 @@ def translate_set(root: str, edits: list[dict], target: str = "", comment: str =
     comment – the head line a NEWLY created file gets: say what the batch is for ("Names of
              the feature icons"), since only the caller knows. Without it the file gets a
              neutral line naming no author.
+    The answer carries `collisions` when a value written here is ALREADY the translation of
+    another name of the same scope: two names under one word is what the platform refuses on
+    apply, and the entry is written rather than blocked - a qualified key (`<Owner>.<Name>`)
+    is exactly how one word is deliberately given to two owners.
     A key may be qualified (`<Owner>.<Name>`) to hold inside one namespace only - that is how
     a word gets one spelling as a dictionary key or a component property and another globally.
     """

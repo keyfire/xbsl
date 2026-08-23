@@ -230,6 +230,14 @@ def collect_token_edits(
                 translated, _plane = resolver.identifier(local)
                 if translated:
                     report.note_name(f"method:{method_name}", local, translated)
+            # The METHODS of one module share a namespace of their own, and the language has
+            # no overloading: two of them under one name is a module the compiler refuses.
+            # Met live - two Russian words that English spells alike, and the tree went out
+            # with two handlers named the same while every check called the translation done.
+            if method_name:
+                translated, _plane = resolver.identifier(method_name, scope=root_scope)
+                if translated:
+                    report.note_name("module", method_name, translated)
         if kind == "OP" and tok.value == "@":
             # An ANNOTATION opens the namespace of its own arguments: `@ProjectUpdate(Number =
             # 20)` names a parameter of the annotation, not a word of the project.

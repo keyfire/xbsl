@@ -1485,3 +1485,53 @@ def test_the_kind_of_a_dispatched_block_is_translated():
     assert "Ежедневно" not in out and "Интервал" not in out
     # And the run no longer reports what it has just translated.
     assert not report.platform_tokens
+
+
+def test_a_method_name_collision_is_reported_by_the_project_pass(tmp_path: Path):
+    """Two methods of one module under one English name is a module the compiler refuses.
+
+    Met live: two Russian words that English spells alike, and the translated tree went out
+    with two handlers named the same while every check called the translation complete.
+    """
+    from xbsl.translation import project as project_module
+
+    root = tmp_path / "acme" / "Проба"
+    root.mkdir(parents=True)
+    (root / "Проект.yaml").write_text(
+        "Ид: 11111111-2222-3333-4444-555555555555\nИмя: Проба\nВерсия: 1.0\nПоставщик: acme\n",
+        encoding="utf-8",
+    )
+    (root / "Форма.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИд: 66666666-2222-3333-4444-555555555555\nИмя: Форма\n",
+        encoding="utf-8",
+    )
+    (root / "Форма.xbsl").write_text(
+        "метод УслугаИзменена()\n;\n\nметод СервисИзменен()\n;\n", encoding="utf-8",
+    )
+    dictionary = _dictionary({
+        "Проба": "Trial", "Форма": "Form",
+        "УслугаИзменена": "ServiceChanged", "СервисИзменен": "ServiceChanged",
+    })
+
+    report = project_module.translate_project(root, dictionary, None)
+
+    assert any("ServiceChanged" in problem for problem in report.problems), report.problems
+
+
+def test_writing_a_value_already_taken_is_reported(tmp_path: Path):
+    """The same answer at the moment a person types the word, one lookup instead of a project pass."""
+    from xbsl.translation import entries
+
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "010.yaml").write_text(
+        "version: 1\nlanguage: en\n\ntokens:\n    Услуга: Service\n", encoding="utf-8",
+    )
+
+    taken = entries.write_entries(folder, [{"key": "Сервис", "value": "Service", "kind": "token"}])
+    free = entries.write_entries(folder, [{"key": "Прочее", "value": "Other", "kind": "token"}])
+
+    assert taken["collisions"] == [{"key": "Сервис", "value": "Service", "taken": ["Услуга"]}]
+    assert free["collisions"] == []
+    # The entry is written all the same: a qualified key is how one word serves two owners.
+    assert taken["added"] == 1

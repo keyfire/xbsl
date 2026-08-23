@@ -238,7 +238,7 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
         file = Path(path)
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(text, encoding="utf-8", newline="")
-    return {key: plan[key] for key in ("changed", "added", "removed", "refused")}
+    return {key: plan[key] for key in ("changed", "added", "removed", "refused", "collisions")}
 
 
 def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
@@ -305,7 +305,35 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
         if added:
             files[str(target_file)] = new_text
     return {"files": files, "changed": changed, "added": added, "removed": removed,
-            "refused": refused}
+            "refused": refused, "collisions": _value_collisions(known, edits)}
+
+
+def _value_collisions(known: dict, edits: list[dict]) -> list[dict]:
+    """Edits whose value is ALREADY taken by another key of the same scope and plane.
+
+    Two names translated into one word are a build breaker: the platform refuses a repeated
+    name, and the translator reports it only when the whole project is passed through. Here
+    the same answer costs one lookup, at the moment a person types the word - and it is a
+    WARNING, not a refusal: a qualified key is exactly how one word is deliberately given to
+    two owners.
+    """
+    by_value: dict[tuple[str, str, str], list[str]] = {}
+    for (kind, key), entry in known.items():
+        if kind != "token" or not entry.value:
+            continue
+        by_value.setdefault((kind, entry.scope, entry.value), []).append(key)
+    out: list[dict] = []
+    for edit in edits:
+        key = str(edit.get("key") or "")
+        value = str(edit.get("value") or "")
+        kind = str(edit.get("kind") or "token")
+        if not key or not value or kind != "token":
+            continue
+        scope = key.rsplit(".", 1)[0] if "." in key else ""
+        taken = [name for name in by_value.get((kind, scope, value), ()) if name != key]
+        if taken:
+            out.append({"key": key, "value": value, "taken": sorted(taken)})
+    return out
 
 
 def _literal_edit_refusal(key: str, value: str) -> str:

@@ -52,6 +52,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **A collision of METHOD names is now seen by the translator.** Two Russian names that English
+  spells alike collide in the module they share, and the compiler refuses such a module - but
+  the check covered the names of metadata and the locals of a method, never the methods
+  themselves. A live project passed `--strict` while its translated tree carried two handlers
+  under one name. The methods of a module are now registered in a namespace of their own, so a
+  collision lands in `problems` (which `translate_status` returns and `--strict` fails on), and
+  `translate_set` answers with `collisions` the moment a value already taken by another name of
+  the same scope is written - a warning, not a refusal: a qualified key is exactly how one word
+  is deliberately given to two owners.
 - **The value a dispatched block is chosen by now translates.** A schedule kind, a retry
   strategy, a storage strategy - none of them is a type, a property or an enumeration value, so
   no term dictionary pairs them and a translated project kept them Russian while the run
