@@ -484,7 +484,7 @@ export type ColumnWidths = Record<ColumnKey, number>;
 
 // Where a column starts, and what "reset" (a double-click on its border) returns it to. Not a
 // ceiling for anything: a module name is one unbroken word of whatever length the project gave
-// it ("ОбновлениеПубликуемыхТарифов" and longer are real), so no default here is a promise the
+// it ("ОбновлениеКарточекЗадач" and longer are real), so no default here is a promise the
 // column will ever be "enough" - only a sane place to start before the reader's own drag takes
 // over.
 export const DEFAULT_COLUMN_WIDTHS: ColumnWidths = {
