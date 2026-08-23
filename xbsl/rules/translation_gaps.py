@@ -12,10 +12,16 @@ off the platform tables so that a declaration and its uses always move together.
 check would call those words "already covered by the platform" and stay silent exactly where
 the translated tree would fall apart.
 
+The dictionary's own files are not judged. They are Russian by construction - the keys are
+the words being translated, and the head comment says what a batch of entries is about - so
+read as sources they gave 826 "gaps" on a project whose sources are covered to the last word.
+
 Off by default and silent without a dictionary: the rule only means something for a project
 that translates its sources, and an `xbsl-translation` directory (or file) next to or above
-the project is what says so. Enable it with `--enable conventions/missing-translation` (the
-editor: the Linter: Enable setting).
+the project is what says so. It is also the most expensive rule of the set - every file goes
+through the whole translation pass, which doubles the run on a live project - so it is asked
+for rather than paid for on every save: `--enable conventions/missing-translation` in the CLI,
+the `enable` parameter of the MCP lint tool, the Linter: Enable setting in the editor.
 """
 
 from __future__ import annotations
@@ -62,8 +68,14 @@ MESSAGES = {
         "en": "The translation dictionary did not load: {error}",
     },
     "conventions/missing-translation.off": {
-        "ru": "имеет смысл только для проекта, который переводит исходники (см. xbsl translate)",
-        "en": "only means something for a project that translates its sources (see xbsl translate)",
+        "ru": "имеет смысл только для проекта, который переводит исходники (см. xbsl translate), "
+              "и стоит дорого: на корпусе сайта прогон удваивается (10 с -> 20 с), потому что "
+              "каждый файл проходит перевод целиком. Включайте флагом --enable (в MCP – параметр "
+              "enable), когда словарь и нужен",
+        "en": "only means something for a project that translates its sources (see xbsl translate), "
+              "and it is expensive: on a live project the run doubles (10s -> 20s), since every "
+              "file goes through the whole translation pass. Turn it on with --enable (the MCP "
+              "tool takes an `enable` parameter) when the dictionary is what you are asking about",
     },
 }
 i18n.register(MESSAGES)
@@ -95,10 +107,23 @@ def _entry_data(kind: str, key: str, suggestion: str) -> dict:
     return data
 
 
+def _inside(path: Path, dictionary_path: Path) -> bool:
+    """Is this file the dictionary itself (or one of its files)?
+
+    The dictionary is written in Russian by construction - keys, and the comments that say
+    what a batch of entries is about. Judged as sources, its own files gave 826 "gaps" on a
+    project whose sources are covered to the last word.
+    """
+    if dictionary_path.is_file():
+        return path == dictionary_path
+    return dictionary_path in path.parents
+
+
 def _gaps_mapper(source: SourceFile) -> dict | None:
     """Per-file facts: what this file DECLARES, what it leaves untranslated, what the platform answered."""
-    found = _dictionary_at(str(source.path.resolve().parent))
-    if found is None:
+    resolved = source.path.resolve()
+    found = _dictionary_at(str(resolved.parent))
+    if found is None or _inside(resolved, found):
         return None
     # Deferred import: the translation package pulls the yaml walk and the platform maps,
     # none of which a run without this rule should pay for.

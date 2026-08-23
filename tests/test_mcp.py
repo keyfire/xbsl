@@ -208,3 +208,31 @@ def test_without_either_home_the_message_names_the_extra(monkeypatch):
     """Neither of the two - the extra is not installed, and the message says exactly that."""
     with pytest.raises(SystemExit, match=r"xbsl\[mcp\]"):
         _load_copy(monkeypatch, mcpserver=None, fastmcp=None)
+
+
+def test_lint_paths_can_add_a_rule_that_is_off_by_default(tmp_path, monkeypatch):
+    """`select` answers with one rule alone; `enable` adds it on top of the defaults - the
+    way a project asks for its translation gaps without losing everything else."""
+    from xbsl.engine import SEVERITY_OVERRIDES
+
+    off_by_default = "typography/yo-in-text"
+    if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
+        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+    m = _with_stub(monkeypatch)
+    try:
+        f = tmp_path / "Форма.yaml"
+        f.write_text(
+            "ВидЭлемента: КомпонентИнтерфейса\n"
+            "Ид: aaaaaaaa-1111-2222-3333-444444444444\n"
+            "Имя: Форма\nТип: Форма\nЗаголовок: Показать удалённые\n",
+            encoding="utf-8",
+        )
+
+        default = m.lint_paths([str(f)])
+        added = m.lint_paths([str(f)], enable=[off_by_default])
+
+        assert not any(d["rule"] == off_by_default for d in default["diagnostics"])
+        assert any(d["rule"] == off_by_default for d in added["diagnostics"])
+        assert len(added["diagnostics"]) > len(default["diagnostics"])
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)

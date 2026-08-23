@@ -137,6 +137,7 @@ def lint_paths(
     paths: list[str],
     select: list[str] | None = None,
     ignore: list[str] | None = None,
+    enable: list[str] | None = None,
     baseline: str | None = None,
     no_baseline: bool = False,
 ) -> dict:
@@ -145,6 +146,9 @@ def lint_paths(
     paths       – list of paths (.xbsl/.yaml files or directories, traversed recursively);
     select      – limit the rule set (id or tier letter A/B/C/D);
     ignore      – exclude rules;
+    enable      – add a rule that is OFF by default ON TOP of the defaults (the CLI --enable);
+                  `select` answers with that rule ALONE, this one with everything plus it -
+                  the way a project asks for its translation gaps or its typography;
     baseline    – a baseline file to apply; without it the project's own `.xbsllint-baseline`
                   is looked up above the checked files, exactly as the CLI does;
     no_baseline – report the frozen findings too.
@@ -156,7 +160,8 @@ def lint_paths(
     """
     files, requested = discover_with_context(paths)
     diags = _filter_requested(
-        run(files, select=_as_set(select), ignore=_as_set(ignore)), requested,
+        run(files, select=_as_set(select), ignore=_as_set(ignore), enable=_as_set(enable)),
+        requested,
     )
     counted = requested if requested is not None else files
     diags, extra = _through_baseline(diags, counted, baseline, no_baseline)

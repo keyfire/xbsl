@@ -55,7 +55,7 @@ same response – creation and validation in one round trip. The core and the CL
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, baseline, no_baseline)` | check files and directories on disk; the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too) |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline)` | check files and directories on disk; the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `list_rules()` | the rules available here: id, title, tier, scope, severity |
 | `version_info()` | the environment answering: engine, interpreter, data version, plugins – tells apart two environments that answer differently on the same file |

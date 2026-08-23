@@ -53,6 +53,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **The translation-gap rule no longer judges the dictionary itself.** `conventions/missing-translation`
+  read the files of `xbsl-translation/` as sources, and they are Russian by construction - the keys
+  are the words being translated and the head comment says what a batch is about. On a project whose
+  sources are covered to the last word the rule reported 826 "gaps", all of them its own dictionary;
+  now it reports none. The rule stays off by default and gained the measured reason for it: every
+  file goes through the whole translation pass, which doubles the run (10s to 20s on a live
+  project). Asking for it got easier - the MCP lint tool takes an `enable` parameter now, the twin
+  of the CLI `--enable`: `select` answers with one rule alone, `enable` adds it on top of the
+  defaults.
 - **The first attribute of a fresh tabular part takes the placeholder's place.** A tabular part
   cannot be born empty, so the scaffolding creates it with a starter attribute - and every
   `meta_add_field ... tabular=...` after that added its attribute NEXT to the stub, which was
