@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 161.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 162.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -225,6 +225,7 @@ sidebar:
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле представления объекта [доки](https://1cmycloud.com/docs/help/topics/element-view/) |
 | `yaml/unexpected-type-argument` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр типа у свойства, которое ui-схема объявляет без параметра, – это другой тип, применение сборки его отвергнет (`ДополнительныеКоманды` формы принимают `ФрагментКомандногоИнтерфейса`, а не `ФрагментКомандногоИнтерфейса<ОбычнаяКоманда>`) [доки](https://1cmycloud.com/docs/help/topics/command-interface/) |
 | `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Свойство компонента новее, чем `РежимСовместимости` проекта (версию появления несёт ui-схема) – применение отвергает его как неизвестное [доки](https://1cmycloud.com/docs/help/topics/update-server/) |
+| `yaml/property-required-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Свойство, которое режим совместимости требует задать явно, невзирая на платформенное умолчание (замерено: ключ доступа в 10.0) – применение отвергает сборку [доки](https://1cmycloud.com/docs/help/topics/update-server/) |
 | `query/deletion-mark-immediate` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Условие с пометкой удаления в запросе к объекту с `РежимУдаления: Немедленно` – поля пометки у него нет, запрос падает применением [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | `yaml/item-id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Элемент коллекции метаданных (реквизит, табличная часть, элемент перечисления, параметр ключа доступа) без `Ид`, который объявляет его класс – применение отвечает `ID required` |
 | `code/unknown-row-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Поле строки динамического списка (`СтрокаДинамическогоСписка<Форма.Тип>`), которого нет среди `Поля` списка [доки](https://1cmycloud.com/docs/help/topics/dynamic-list/) |

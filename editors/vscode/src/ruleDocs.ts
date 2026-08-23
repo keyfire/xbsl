@@ -199,6 +199,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "yaml/bare-object-value", page: "topics/label-component" },
   { match: (r) => r === "yaml/unexpected-type-argument", page: "topics/command-interface" },
   { match: (r) => r === "yaml/property-since-compat", page: "topics/update-server" },
+  { match: (r) => r === "yaml/property-required-since-compat", page: "topics/update-server" },
   {
     match: (r) => r === "yaml/unknown-component-property",
     page: "topics/system-and-interface-components",

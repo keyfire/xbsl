@@ -22,6 +22,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-23 – 0.73.0
 
 ### Added
+- **A rule for a property the compatibility mode demands in writing - `yaml/property-required-since-compat`.**
+  A platform default is not always enough: a project raised to 10.0 stopped applying with a
+  refusal naming the access-key setting the sources never wrote, while the same sources under
+  9.0 applied without a word. No data answers this - the metamodel records the default and the
+  version the property appeared in, and neither says the mode refuses the default - so the rule
+  carries the measured case in a table and repeats the compiler's own answer in the message.
 - **A rule that judges the SIGNATURE of a form handler - `form/handler-signature`.** The yaml
   points an event at a method, and the platform demands an exact match: a handler declaring
   `OnChangeEvent<Boolean>` where the component passes `OnChangeEvent<Boolean?>` compiled

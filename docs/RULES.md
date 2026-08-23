@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 161 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 162 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -227,6 +227,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The presentation field of an object [docs](https://1cmycloud.com/docs/help/topics/element-view/) |
 | `yaml/unexpected-type-argument` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A type argument on a property the ui schema declares without one - another type, rejected when the build is applied (a form's `AdditionalCommands` takes `CommandInterfaceFragment`, not `CommandInterfaceFragment<UsualCommand>`) [docs](https://1cmycloud.com/docs/help/topics/command-interface/) |
 | `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
+| `yaml/property-required-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A property the compatibility mode demands in writing, platform default or not (measured: an access key under 10.0) - apply refuses the build [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
 | `query/deletion-mark-immediate` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A deletion-mark condition in a query on an object whose `DeletionMode` is `Immediately` - such an object has no mark and the query fails on apply [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
 | `yaml/item-id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A metadata collection item (an attribute, a tabular section, an enumeration item, an access-key parameter) without the `Id` its class declares - apply answers `ID required` |
 | `code/unknown-row-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field addressed on a dynamic list row (`DynamicListRow<Form.Type>`) that the list's `Fields` do not declare [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |

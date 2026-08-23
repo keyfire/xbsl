@@ -68,6 +68,20 @@ from xbsl.rules.yaml_schema import (
 )
 
 MESSAGES = {
+    "yaml/property-required-since-compat.title": {
+        "ru": "Свойство обязано быть задано явно в этом режиме",
+        "en": "The mode demands the property explicitly",
+    },
+    "yaml/property-required-since-compat.missing": {
+        "ru": "У элемента вида '{kind}' не задано свойство '{prop}', а режим совместимости "
+              "проекта – {compat}: платформенное умолчание компилятор здесь не устраивает, "
+              "применение сборки отвечает '{message}' и проект откатывается на прежнюю сборку. "
+              "Задайте свойство явно.",
+        "en": "The element of kind '{kind}' does not set '{prop}', while the project "
+              "compatibility mode is {compat}: the platform default does not satisfy the "
+              "compiler there, applying the build answers '{message}' and the project rolls "
+              "back to the previous build. Set the property explicitly.",
+    },
     "code/per-object-permissions-need-common.title": {
         "ru": "Нет общего расчёта разрешений при per-object",
         "en": "No common permission calculation alongside the per-object one",
@@ -403,4 +417,104 @@ def permission_field_not_declared(facts: dict[str, dict]) -> Iterable[Diagnostic
                 rel, line, col,
                 "code/permission-field-not-declared", Severity.WARNING,
                 i18n.t(key, field=field, method=method, declared=", ".join(fields)),
+            )
+
+
+# --- yaml/property-required-since-compat ---------------------------------------------------
+#
+# A property with a platform DEFAULT that the compiler nevertheless demands in writing from a
+# compatibility mode on. The fact is not in any data: the metamodel records the default
+# (`ManualGrant: false`) and the version the property appeared in, and neither says that mode
+# 10.0 refuses the default. It was met live - a project raised to 10.0 stopped applying, the
+# refusal naming the very setting the sources never wrote and pointing at [1:1] (the file, not
+# a place in it), while the same sources under 9.0 applied without a word. The wording is kept
+# verbatim in the table below and repeated in the message, so a search for what the server
+# said lands here. The table is an explicit list of measured cases, extended when another one
+# is met.
+
+#: (element kind, property) -> (the mode from which it must be written, the compiler's answer).
+_REQUIRED_SINCE_COMPAT = {
+    ("КлючДоступа", "РучнаяВыдача"): (
+        (10, 0), 'Для ключей доступа должна быть задана настройка "РучнаяВыдача"',
+    ),
+}
+
+
+def _project_mode(data) -> tuple[int, ...] | None:
+    """The compatibility mode of a project description, in either spelling."""
+    if not isinstance(data, dict):
+        return None
+    raw = data.get("РежимСовместимости") or data.get("CompatibilityMode")
+    if raw is None:
+        return None
+    parts = str(raw).strip().split(".")
+    return tuple(int(part) for part in parts) if all(p.isdigit() for p in parts) and parts else None
+
+
+def _element_directory(rel: str) -> str:
+    """The directory of a source, with forward slashes and no trailing one."""
+    path = rel.replace("\\", "/")
+    return path.rsplit("/", 1)[0] if "/" in path else ""
+
+
+def _required_mapper(source: SourceFile) -> dict | None:
+    """A project contributes its mode, an element of a judged kind - the properties it omits."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return None
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict):
+        return None
+    kind = object_kind(data)
+    if kind is None:
+        mode = _project_mode(data)
+        if mode is None:
+            return None
+        return {"k": "p", "dir": _element_directory(source.rel), "compat": mode}
+    missing = []
+    for (judged_kind, prop), (since, message) in _REQUIRED_SINCE_COMPAT.items():
+        if judged_kind != kind:
+            continue
+        english = metamodel.english_name(prop) if metamodel.available() else None
+        if prop in data or (english and english in data):
+            continue
+        missing.append((prop, list(since), message))
+    if not missing:
+        return None
+    return {"k": "x", "dir": _element_directory(source.rel), "kind": kind, "missing": missing}
+
+
+@rule(
+    "yaml/property-required-since-compat", "yaml/property-required-since-compat.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_required_mapper,
+)
+def property_required_since_compat(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A property the mode demands in writing - see the block above."""
+    modes = {fact["dir"]: tuple(fact["compat"]) for fact in facts.values() if fact["k"] == "p"}
+    if not modes:
+        return  # no project description in the run - the mode is unknown, stay silent
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        directory = fact["dir"]
+        compat = None
+        while True:
+            if directory in modes:
+                compat = modes[directory]
+                break
+            if not directory:
+                break
+            directory = directory.rsplit("/", 1)[0] if "/" in directory else ""
+        if compat is None:
+            continue
+        for prop, since, message in fact["missing"]:
+            if compat < tuple(since):
+                continue
+            # The compiler names the file rather than a place inside it, and so does the rule.
+            yield Diagnostic(
+                rel, 1, 1, "yaml/property-required-since-compat", Severity.ERROR,
+                i18n.t(
+                    "yaml/property-required-since-compat.missing",
+                    kind=fact["kind"], prop=prop, message=message,
+                    compat=".".join(str(part) for part in compat),
+                ),
             )

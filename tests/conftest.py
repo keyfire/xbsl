@@ -83,6 +83,7 @@ _DATA_DEPENDENT = {
     "test_rule_yo_in_text",  # the rule reads the ui schema and the metamodel section names
     "test_rule_handler_signature",  # the rule reads the ui schema and parses the module
     "test_rule_translation_gaps",  # the translator reads the term pairs and the metamodel
+    "test_rule_required_since_compat",  # the rule reads the metamodel spellings
 }
 
 
