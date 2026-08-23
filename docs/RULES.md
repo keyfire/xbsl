@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 159 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 160 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -104,6 +104,7 @@ in the sources.
 | `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Ellipsis character in a comment |
 | `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Curly quotes |
 | `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Guillemets in a comment |
+| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Letter "ё" in interface text |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Trailing whitespace |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Mixed newlines |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | File is not UTF-8 |
@@ -368,7 +369,7 @@ Five rules are `info` and off: they say "this is how the platform works", not "t
 ### The small groups
 
 - `typography/` - typographic characters in prose and comments: em dash, the ellipsis character,
-  curly quotes, guillemets in comments;
+  curly quotes, guillemets in comments, plus the letter "ё" in the text a user reads;
 - `whitespace/` - trailing spaces and mixed newlines;
 - `encoding/` - a file that is not UTF-8;
 - `structure/` - the pairing of `Name.yaml` and `Name.xbsl`;

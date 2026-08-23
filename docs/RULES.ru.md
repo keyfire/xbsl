@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 159.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 160.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -102,6 +102,7 @@ sidebar:
 | `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Символ многоточия в комментарии |
 | `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Кудрявые кавычки |
 | `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ёлочки в комментарии |
+| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Буква "ё" в тексте интерфейса |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Хвостовые пробелы |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Смешанные переводы строк |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Файл не в UTF-8 |
@@ -354,7 +355,8 @@ xbsl путь/к/исходникам --ignore style     # без них
 ### Мелкие группы
 
 - `typography/` – типографские символы в прозе и комментариях: длинное тире, символ многоточия,
-  кудрявые кавычки, ёлочки в комментариях;
+  кудрявые кавычки, ёлочки в комментариях, а также буква "ё" в тексте, который читает
+  пользователь;
 - `whitespace/` – хвостовые пробелы и смешанные переводы строк;
 - `encoding/` – файл не в UTF-8;
 - `structure/` – парность `Имя.yaml` и `Имя.xbsl`;

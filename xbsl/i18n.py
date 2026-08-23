@@ -88,6 +88,10 @@ _CORE_MESSAGES = {
         "ru": "типографика – соглашение ПРОЕКТА, а не платформы; включается профилем проекта (точка расширения xbsl.severity)",
         "en": "typography is a PROJECT convention rather than a platform one; a project profile turns it on (the xbsl.severity entry point)",
     },
+    "typography/yo-in-text.off": {
+        "ru": "буква 'ё' в подписях – соглашение ПРОЕКТА, а не платформы: в интерфейсах 1С она не используется, а другая команда пишет её сознательно. Включается профилем проекта (точка расширения xbsl.severity)",
+        "en": "the letter 'ё' in labels is a PROJECT convention rather than a platform one: 1C interfaces do without it, while another team writes it on purpose. A project profile turns it on (the xbsl.severity entry point)",
+    },
     "cli.rule-off": {
         "ru": "выключено, потому что",
         "en": "off because",

@@ -21,6 +21,18 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## 2026-08-23 – 0.73.0
 
+### Added
+- **A rule about the letter "ё" in the text a user reads – `typography/yo-in-text`.** `naming/yo`
+  judges NAMES, so a label carrying the letter went past every check and reached the product (a
+  live case: the "show deleted" command of admin lists). The new rule reads the two places such
+  text lives in a yaml: the visible properties of components and elements (title, hint,
+  presentation, placeholder, message - a curated set, since neither the schema nor the metamodel
+  marks a string as user-visible) and every entry of a localized-strings dictionary. A binding, a
+  reference to a dictionary and a technical string are left alone. The finding carries a fix,
+  except where the letter carries the meaning ("всё" against "все") - there the message says so
+  and the decision stays with a human. Like the other typography rules it is a PROJECT convention
+  rather than a platform one, so it ships off by default and a project profile turns it on.
+
 ### Changed
 - **A new dictionary file is created with a neutral head line, and the caller can name its
   own.** Whoever wrote entries into a file that did not exist yet got a file announcing that it
