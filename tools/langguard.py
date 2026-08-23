@@ -94,6 +94,7 @@ def _translatable(text: str) -> list[tuple[str, str]]:
     except Exception:  # noqa: BLE001 - a guard must not fall over a missing dataset
         return []
     found: dict[str, str] = {}
+    del terms  # the spellings are asked through _spellings, which imports it itself
     # Backticks only. A double-quoted span is a quote of a MESSAGE or of the documentation
     # ("Свойства" - the heading a parser matches), and rewriting it in English would misreport
     # what the code looks for; backticks are how this repository cites a NAME.
@@ -108,12 +109,46 @@ def _translatable(text: str) -> list[tuple[str, str]]:
             if len(word) < 2:
                 continue
             try:
-                english = terms.common_english(word)
+                english = _spellings(word)
             except Exception:  # noqa: BLE001 - same reason
                 return []
             if english and english != word:
                 found[word] = english
     return sorted(found.items())
+
+
+#: The roles the dictionary splits its pairs by, in the order a reader should weigh them.
+_ROLES = ("types", "facets", "properties", "enums", "query", "kinds")
+
+
+def _spellings(word: str) -> str:
+    """What to write instead of the quoted name - one spelling, or the choice with its roles.
+
+    A name may answer to SEVERAL English words depending on the role it is used in, and the
+    compiler dictionary answers with the most frequent one. Handed out as the single truth,
+    that answer sends the reader the wrong way: a docstring about the localized-strings SECTION
+    was told to write the component property instead, and following the advice would have named
+    something the platform does not call that at all. So a name with more than one spelling is
+    reported as a choice - every spelling with the role it belongs to - and the decision stays
+    with whoever writes the sentence.
+    """
+    from xbsl import terms
+
+    by_role: dict[str, str] = {}
+    for role in _ROLES:
+        spelling = terms.english(word, role)
+        if spelling and spelling != word:
+            by_role.setdefault(spelling, role)
+    common = terms.common_english(word)
+    if common and common != word:
+        by_role.setdefault(common, "общий словарь")
+    if not by_role:
+        return ""
+    if len(by_role) == 1:
+        return next(iter(by_role))
+    return "выберите по смыслу: " + " / ".join(
+        f"{spelling} ({role})" for spelling, role in by_role.items()
+    )
 
 
 # -- where the comments and the identifiers are --------------------------------------------
