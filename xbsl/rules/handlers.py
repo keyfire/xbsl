@@ -284,16 +284,25 @@ def close_in_before_close(source: SourceFile) -> Iterable[Diagnostic]:
 
 #: Type expressions are compared by text, so both spellings are folded into the Russian one.
 _TYPE_WORD_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
+#: An entity facet is a QUALIFIED name, and the platform pairs it whole
+#: (`BinaryObject.Reference` answers `ДвоичныйОбъект.Ссылка`): word by word its tail resolves
+#: to nothing, and a translated project then looked as if it wrote another type.
+_QUALIFIED_RE = re.compile(r"[^\W\d_]+(?:\.[^\W\d_]+)+", re.UNICODE)
 
 
 def _folded(type_text: str) -> str:
     """A type expression in one spelling and without spaces - the comparable form."""
     text = (type_text or "").replace(" ", "")
 
+    def swap_qualified(match: re.Match) -> str:
+        name = match.group(0)
+        return terms.russian(name, "facets") or name
+
     def swap(match: re.Match) -> str:
         word = match.group(0)
         return terms.common_russian(word) or terms.russian(word, "types") or word
 
+    text = _QUALIFIED_RE.sub(swap_qualified, text)
     return _TYPE_WORD_RE.sub(swap, text)
 
 

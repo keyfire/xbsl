@@ -52,6 +52,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **Two rules that an English project walked straight past.** `yaml/standard-field-length` read
+  the attribute section and the length by their Russian keys alone, and `yaml/presentation-field`
+  read the attribute type the same way and compared it against the Russian spelling of the string
+  type - so on a translated project the first said nothing at all and the second called every
+  string attribute a non-string one. Both now read through the bilingual lookup, and the standard
+  field names are taken in the spelling of the FILE: `Name` is the standard field of an English
+  source and an ordinary developer name in a Russian one. Measured on a freshly translated project
+  (974 files) - the two trees now answer alike.
 - **The translation-gap rule no longer judges the dictionary itself.** `conventions/missing-translation`
   read the files of `xbsl-translation/` as sources, and they are Russian by construction - the keys
   are the words being translated and the head comment says what a batch is about. On a project whose

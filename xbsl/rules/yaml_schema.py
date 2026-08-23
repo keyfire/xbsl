@@ -108,9 +108,17 @@ _NAME_LINE_RE = re.compile(
 # rests on the probe. Длина belongs to the standard fields only - a developer's field carries
 # МаксимальнаяДлина instead, so the name lookup cannot collide with an ordinary field.
 _STANDARD_LENGTH_LIMITS = {"Наименование": 400, "Код": 50}
-# Lines of a field entry: the name and the Длина value (the position of a finding).
-_FIELD_NAME_RE = re.compile(r"^[ \t]*(?:-[ \t]+)?Имя:[ \t]*['\"]?([^\r\n#'\"]*?)['\"]?[ \t]*$")
-_LENGTH_RE = re.compile(r"^([ \t]*(?:-[ \t]+)?)Длина:[ \t]*(\d+)[ \t]*$")
+#: The same limits under the English spellings of those field names - a translated project
+#: writes `Name`/`Code`, and read by the Russian names alone the rule saw nothing there at all.
+_STANDARD_LENGTH_LIMITS_EN = {"Name": 400, "Code": 50}
+#: The section and the keys of a field entry, in either spelling.
+_ATTRIBUTE_SECTIONS = ("Реквизиты", "Attributes")
+_STRING_TYPES = (None, "Строка", "String")
+# Lines of a field entry: the name and the length value (the position of a finding).
+_FIELD_NAME_RE = re.compile(
+    r"^[ \t]*(?:-[ \t]+)?(?:Имя|Name):[ \t]*['\"]?([^\r\n#'\"]*?)['\"]?[ \t]*$"
+)
+_LENGTH_RE = re.compile(r"^([ \t]*(?:-[ \t]+)?)(?:Длина|Length):[ \t]*(\d+)[ \t]*$")
 
 
 # libyaml (CSafeLoader) parses 5-10x faster than the pure-Python loader and dominates the
@@ -331,19 +339,25 @@ def yaml_standard_field_length(source: SourceFile) -> Iterable[Diagnostic]:
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
         return
-    fields = data.get("Реквизиты")
+    # The spelling is taken from the FILE, not from a global map: `Name` is the English
+    # spelling of the standard field here and an ordinary developer name elsewhere, and the
+    # section key is what says which language this file speaks.
+    english = "Реквизиты" not in data
+    limits = _STANDARD_LENGTH_LIMITS_EN if english else _STANDARD_LENGTH_LIMITS
+    code_field = "Code" if english else "Код"
+    fields = value_of(data, "Реквизиты")
     if not isinstance(fields, list):
         return
     for item in fields:
         if not isinstance(item, dict):
             continue
-        name = item.get("Имя")
-        limit = _STANDARD_LENGTH_LIMITS.get(name)
-        length = item.get("Длина")
+        name = value_of(item, "Имя")
+        limit = limits.get(name)
+        length = value_of(item, "Длина")
         if limit is None or not isinstance(length, int) or isinstance(length, bool):
             continue
-        if name == "Код" and item.get("Тип") not in (None, "Строка"):
-            continue  # a numeric Код counts digits - a different limit, not measured
+        if name == code_field and value_of(item, "Тип") not in _STRING_TYPES:
+            continue  # a numeric code counts digits - a different limit, not measured
         if length <= limit:
             continue
         line, col = _length_position(source, name, length)

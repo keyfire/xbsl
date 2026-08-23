@@ -138,6 +138,10 @@ def _attribute_name_kinds() -> frozenset[str]:
 dataset.register_reset(_attribute_name_kinds.cache_clear)
 
 
+#: A type expression that IS a string, in either spelling of the platform name.
+_STRING_CHAINS = (["Строка"], ["String"])
+
+
 def _non_string_type(vid: str, name: str, item: dict) -> str | None:
     """The declared (or defaulted) type of the attribute when it is provably NOT a string,
     otherwise None. An explicit Тип is parsed as a type expression: a lone Строка chain (with
@@ -146,10 +150,12 @@ def _non_string_type(vid: str, name: str, item: dict) -> str | None:
     metamodel default of its dispatched class: the standard Код defaults to Строка, Наименование
     has no Тип property at all (always a string), a regular attribute has no default (its
     missing Тип is another rule's business)."""
-    declared = item.get("Тип")
+    declared = value_of(item, "Тип")
     if isinstance(declared, str):
         chains = _parse_type_string(declared)
-        if not chains or ["Строка"] in chains:
+        # Both spellings: a translated project writes `String`, and read by the Russian name
+        # alone the rule called every string attribute of such a project a non-string one.
+        if not chains or any(chain in _STRING_CHAINS for chain in chains):
             return None
         return declared
     if declared is not None:

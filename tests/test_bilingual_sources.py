@@ -312,3 +312,67 @@ def test_project_descriptor_is_judged_in_english(tmp_path):
     diags = engine.run(discover([str(tmp_path)]))
     found = sorted({d.rule_id for d in diags})
     assert found == ["project/identifier", "project/presentation", "project/version"]
+
+
+# -- rules that used to read the Russian key alone ------------------------------
+
+
+_STANDARD_RU = """\
+ВидЭлемента: Справочник
+Ид: 42073842-db14-41d6-a17a-7b03a5d57934
+Имя: Stores
+Реквизиты:
+    -
+        Имя: Наименование
+        Длина: 500
+"""
+
+_STANDARD_EN = """\
+ElementKind: Catalog
+Id: 42073842-db14-41d6-a17a-7b03a5d57934
+Name: Stores
+Attributes:
+    -
+        Name: Name
+        Length: 500
+"""
+
+
+def test_the_standard_field_limit_is_measured_in_an_english_source(tmp_path):
+    """The rule read `Attributes`/`Name`/`Length` by their Russian keys alone, so an
+    English project passed it by."""
+    english = [d for d in _lint(tmp_path, _STANDARD_EN, name="Stores.yaml")
+               if d.rule_id == "yaml/standard-field-length"]
+    russian = [d for d in _lint(tmp_path, _STANDARD_RU, name="Stores.yaml")
+               if d.rule_id == "yaml/standard-field-length"]
+
+    assert len(english) == 1 and len(russian) == 1
+    # The position is found by the same scan, so the finding stands on the length line.
+    assert english[0].line == russian[0].line == 7
+
+
+def test_a_developer_attribute_named_name_is_not_a_standard_field(tmp_path):
+    """The spelling is taken from the FILE: in a Russian source `Name` is an ordinary name,
+    and its length is nobody's business."""
+    russian = _STANDARD_RU.replace("Имя: Наименование\n        Длина: 500",
+                                   "Имя: Name\n        МаксимальнаяДлина: 500")
+    diags = [d for d in _lint(tmp_path, russian, name="Stores.yaml")
+             if d.rule_id == "yaml/standard-field-length"]
+
+    assert diags == []
+
+
+def test_the_presentation_type_is_judged_in_an_english_source(tmp_path):
+    """A number as the presentation field is refused by the compiler in either spelling."""
+    english = ENGLISH.replace("MaxLength: 250", "Type: Number")
+    diags = [d for d in _lint(tmp_path, english) if d.rule_id == "yaml/presentation-field"]
+
+    assert len(diags) == 1 and "Number" in diags[0].message
+
+
+def test_an_english_string_attribute_is_a_valid_presentation(tmp_path):
+    """Negative control: `String` is a string, and the rule must not read it as anything else."""
+    english = ENGLISH.replace("MaxLength: 250", "Type: String")
+    diags = [d for d in _lint(tmp_path, english) if d.rule_id == "yaml/presentation-field"]
+
+    assert diags == []
