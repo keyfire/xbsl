@@ -1535,3 +1535,19 @@ def test_writing_a_value_already_taken_is_reported(tmp_path: Path):
     assert free["collisions"] == []
     # The entry is written all the same: a qualified key is how one word serves two owners.
     assert taken["added"] == 1
+
+
+def test_query_literal_undefined_is_not_null():
+    """`!= НЕОПРЕДЕЛЕНО` of a query is `UNDEFINED`; `NULL` is a reserved word of its own.
+
+    The compiler takes both, so nothing fails at build time - a condition against `NULL` is
+    simply never true, and the query comes back empty on the running application. Met live:
+    a translated site stopped recalculating a register and stopped showing a whole page block.
+    """
+    out, _report = _code(
+        "пер Выборка = Запрос{ ВЫБРАТЬ Ссылка ИЗ Задачи КАК Т ГДЕ Т.Родитель != НЕОПРЕДЕЛЕНО }\n",
+        tokens={"Задачи": "Tasks", "Родитель": "Parent", "Выборка": "Selection"},
+    )
+
+    assert "T.Parent != UNDEFINED" in out
+    assert "NULL" not in out

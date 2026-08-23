@@ -19,6 +19,18 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-24 – 0.74.0
+
+### Fixed
+- **The query literal of an undefined value translates to `UNDEFINED`, not to `NULL`.** The
+  keyword table is extracted from the compiler data, and the literals are not in it at all, so
+  the word fell through to the flat dictionary - which pairs it with `NULL`, a reserved word of
+  its own that no Russian spelling maps to. The compiler takes both, so every check stayed
+  green; on the running application a condition against `NULL` is never true, and the query came
+  back empty. Met live on a translated site: a register stopped being recalculated, a page block
+  and a whole navigation menu went blank at once. The literals `TRUE`, `FALSE` and `UNDEFINED`
+  are now stated by the engine, along with the single-word keywords the extractor pairs wrongly.
+
 ## 2026-08-23 – 0.73.0
 
 ### Added

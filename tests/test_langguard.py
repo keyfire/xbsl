@@ -185,6 +185,7 @@ def test_the_guard_runs_over_this_repository():
     assert langguard.check_file(ROOT / "tools" / "langguard.py") == []
 
 
+@pytest.mark.needs_data
 def test_a_name_with_several_spellings_is_offered_as_a_choice():
     """The dictionary answers by role, and the most frequent answer is not always the right
     one: a docstring about the localized-strings SECTION was told to write the component
@@ -196,6 +197,7 @@ def test_a_name_with_several_spellings_is_offered_as_a_choice():
     assert "выберите по смыслу" in advice
 
 
+@pytest.mark.needs_data
 def test_a_name_with_one_spelling_is_still_answered_plainly():
     """Negative control: an unambiguous name keeps the short answer."""
     quoted = dict(langguard._translatable("# ключ `Реквизиты` объекта"))

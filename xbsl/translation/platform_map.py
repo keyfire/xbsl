@@ -78,6 +78,29 @@ def query_phrases() -> dict[tuple[str, ...], tuple[str, ...]]:
     return out
 
 
+#: Query-language words the extracted table misses or spells wrong, taken from the platform
+#: documentation ("Синтаксис текста запросов"). The table is built out of the compiler data,
+#: and the LITERALS are not in it at all: without them `!= НЕОПРЕДЕЛЕНО` fell through to the flat
+#: dictionary, which answers `NULL` for it - a reserved word of its own that no Russian
+#: spelling maps to. The compiler accepts the result, so nothing fails at build time; at run
+#: time a condition against `NULL` is never true, and the query silently returns nothing.
+_VERIFIED_QUERY_SPELLINGS: dict[str, str] = {
+    "ИСТИНА": "TRUE",
+    "ЛОЖЬ": "FALSE",
+    "НЕОПРЕДЕЛЕНО": "UNDEFINED",
+    "ВРЕМЕННУЮ": "TEMPORARY",
+    "ДЛЯ": "FOR",
+    "ИНДЕКСИРОВАТЬ": "INDEX",
+    "СОЗДАТЬ": "CREATE",
+    "ТАБЛИЦУ": "TABLE",
+}
+
+#: Words the extracted table pairs with something that is not an English keyword at all (a
+#: transliteration left by the extractor). Answering with one of these would produce a query
+#: the compiler refuses, so the word is left alone instead.
+_QUERY_SPELLINGS_TO_DROP: frozenset[str] = frozenset({"ОТ"})
+
+
 @lru_cache(maxsize=1)
 def _query_english() -> dict[str, str]:
     """{RUSSIAN query keyword, upper-cased: the English keyword} - SINGLE words only.
@@ -88,7 +111,7 @@ def _query_english() -> dict[str, str]:
     try:
         section = (dataset.load_json("terms.json") or {}).get("query") or {}
     except Exception:  # noqa: BLE001 - no data, no substitution
-        return {}
+        return dict(_VERIFIED_QUERY_SPELLINGS)
     out: dict[str, str] = {}
     dropped: set[str] = set()
 
@@ -108,6 +131,9 @@ def _query_english() -> dict[str, str]:
             continue
         if len(english.split()) == 1:
             put(key, english.upper())
+    for key in _QUERY_SPELLINGS_TO_DROP:
+        out.pop(key, None)
+    out.update(_VERIFIED_QUERY_SPELLINGS)
     return out
 
 
