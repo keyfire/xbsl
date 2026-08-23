@@ -50,6 +50,7 @@ _MM = {
             },
             "ext": ["IAcmeAttribute"],
             "presents": "Код",
+            "presentsEn": "Code",
         },
         # The same presentation in an unrelated family: a candidate must be assignable to the
         # collection's item type, otherwise `Код` of a catalog would pick this one.
@@ -222,6 +223,15 @@ def test_item_class_dispatches_by_the_item_name(mm_root):
     props = metamodel.properties_of_class("AcmeCodeAttribute")
     assert set(props) >= {"Длина", "Автонумерация"}
     assert "ЗначениеПоУмолчанию" not in props  # a built-in attribute is NOT an ordinary one
+
+
+def test_item_class_dispatches_by_the_english_spelling_too(mm_root):
+    """A source written in English names the built-in the English way, and the metamodel
+    annotation states that spelling - a hand-written pair used to stand in for it."""
+    assert metamodel.item_class("Справочник", (("Реквизиты", "Code"),)) == "AcmeCodeAttribute"
+    assert metamodel.dispatch_english("AcmeCodeAttribute") == "Code"
+    # A class the annotation names in one language only answers with nothing rather than a guess.
+    assert metamodel.dispatch_english("AcmeReportCode") is None
 
 
 def test_item_class_ignores_a_namesake_from_another_family(mm_root):

@@ -59,6 +59,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   there instead. An existing file keeps the head line it already has.
 
 ### Fixed
+- **The value a dispatched block is chosen by now translates.** A schedule kind, a retry
+  strategy, a storage strategy - none of them is a type, a property or an enumeration value, so
+  no term dictionary pairs them and a translated project kept them Russian while the run
+  reported them as gaps of the platform data. The metamodel annotation states both spellings
+  all along; the extractor now carries the English one (72 classes of the current data), the
+  translator writes it, and the hand-written pair for the standard code attribute is gone with
+  it - the data answers that now. On a live project the platform-gap count went from three to
+  zero.
 - **Seven enumerations whose English spellings were shifted by one value.** The values of a
   platform enumeration are constructor arguments, and the class declares them in the order of
   its own fields - which is not always the English name first. Read as if it always were, five

@@ -319,17 +319,6 @@ def _class_by_impl(impl: str) -> str | None:
     return None
 
 
-#: English spellings of the built-in dispatched items the term dictionary does not pair.
-#: The standard code attribute is only in the compiler dictionary as its metadata class, so a source
-#: spelling `Name: Code` looked like an ordinary attribute - and every property that only a
-#: built-in may carry (`Length`, `Uniqueness`, `Autonumbering`) came out as a finding, plus a
-#: demand for an `Id` a built-in never has. Verified with the compiler on a throwaway project:
-#: a catalog with `Name: Code`, `Length`, `Uniqueness` and `Autonumbering` applies.
-_KNOWN_ITEM_SPELLINGS: dict[str, str] = {
-    "Код": "Code",
-}
-
-
 def _dispatched_class(item: str, value: str) -> str | None:
     """The class a dispatched collection picks for an item whose key holds `value`.
 
@@ -338,14 +327,27 @@ def _dispatched_class(item: str, value: str) -> str | None:
     unrelated families, so the candidate must also be assignable to the collection's item type.
 
     A source may spell the name in English (`Name` for `Наименование`), so the English spelling
-    of the presentation is matched too - it comes from the platform dictionary, never from a
-    guess, and where the dictionary knows no pair the name simply does not dispatch.
+    of the presentation is matched too. It comes from the metamodel annotation itself, which
+    states both spellings - a hand-written pair for the standard code attribute used to stand
+    here instead, because the term dictionaries know that name only as a metadata class.
     """
     for name, presents in dispatched_classes(item):
-        spellings = {presents, terms.common_english(presents), _KNOWN_ITEM_SPELLINGS.get(presents)}
+        spellings = {presents, dispatch_english(name), terms.common_english(presents)}
         if value in spellings:
             return name
     return None
+
+
+@lru_cache(maxsize=None)
+def dispatch_english(cls: str) -> str | None:
+    """The ENGLISH spelling of the value this class is dispatched by, when the metamodel states one.
+
+    The annotation carries both spellings, and for a dispatch value nothing else in the data
+    does: a schedule kind is neither a type, nor a property, nor an enumeration value, so the
+    term dictionaries pair it with nothing at all.
+    """
+    data = _data()
+    return ((data.get("classes") or {}).get(cls) or {}).get("presentsEn") if data else None
 
 
 @lru_cache(maxsize=None)

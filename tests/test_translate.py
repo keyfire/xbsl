@@ -1460,3 +1460,28 @@ def test_the_head_line_is_written_only_when_the_file_is_new(tmp_path: Path):
     head = (folder / "046-icons.yaml").read_text(encoding="utf-8")
     assert "# Первая порция." in head
     assert "Вторая порция" not in head
+
+
+def test_the_kind_of_a_dispatched_block_is_translated():
+    """A schedule kind is neither a type, nor a property, nor an enumeration value: no term
+    dictionary pairs it, and the value used to stay Russian while the report called it a gap
+    of the platform data. The metamodel annotation states both spellings."""
+    text = (
+        "ВидЭлемента: ЗапланированноеЗадание\n"
+        "Ид: cf45e060-3049-480b-9cea-fb780a2a8ef9\n"
+        "Имя: Обновление\n"
+        "Расписание:\n"
+        "    -\n"
+        "        Вид: Ежедневно\n"
+        "        ЗапуститьВ: 04:00\n"
+        "ПовторыПриОшибке:\n"
+        "    Вид: Интервал\n"
+        "    Попытки: 3\n"
+    )
+
+    out, report = _yaml(text, tokens={"Обновление": "Refresh"}, name="Обновление.yaml")
+
+    assert "Kind: Daily" in out and "Kind: Interval" in out
+    assert "Ежедневно" not in out and "Интервал" not in out
+    # And the run no longer reports what it has just translated.
+    assert not report.platform_tokens

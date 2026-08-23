@@ -350,7 +350,10 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
             return
         inner = declared if value_kind == "block" and metamodel.has_class(declared) else None
         if inner and record.get("dispatch"):
-            inner = _dispatched_class(inner, record["dispatch"], vnode) or inner
+            resolved = _dispatched_class(inner, record["dispatch"], vnode)
+            if resolved:
+                _dispatch_value(vnode, record["dispatch"], resolved, edits)
+                inner = resolved
         if inner:
             _walk_meta_mapping(vnode, inner, metamodel.properties_of_class(inner), None,
                                resolver, report, edits, owner=owner)
@@ -361,8 +364,11 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
         item_cls = record.get("item") or ""
         for item in vnode.value:
             if isinstance(item, yaml.MappingNode):
-                name = _mapping_value(item, record.get("dispatch") or "Имя")
+                dispatch_key = record.get("dispatch") or "Имя"
+                name = _mapping_value(item, dispatch_key)
                 target = metamodel.collection_item_class(cls, key, name) if cls else None
+                if target:
+                    _dispatch_value(item, dispatch_key, target, edits)
                 # The items of one collection share a namespace: two names translated into
                 # one word is what the platform refuses on apply.
                 own_name = _mapping_value(item, "Имя")
@@ -442,13 +448,38 @@ def _mapping_value(node, key: str) -> str | None:
     return None
 
 
+def _dispatch_value(node, dispatch_key: str, target: str, edits) -> None:
+    """Spell the value a dispatched block is CHOSEN by the way the metamodel names it.
+
+    A schedule kind (`Daily`) is neither a type, nor a property, nor an enumeration value, so
+    no term dictionary pairs it and the translator used to leave it Russian and report a
+    platform gap. The metamodel annotation states both spellings - that is where this comes
+    from. The name of a built-in item is not touched here: it goes through the identifier path
+    like every other name.
+    """
+    if dispatch_key in ("Имя", "Name"):
+        return
+    english = metamodel.dispatch_english(target)
+    if not english:
+        return
+    for knode, vnode in node.value:
+        if (isinstance(knode, yaml.ScalarNode) and knode.value == dispatch_key
+                and isinstance(vnode, yaml.ScalarNode) and has_cyrillic(str(vnode.value))):
+            _set_scalar(vnode, english, edits)
+            # The walk of the block passes over this very node afterwards, and an edit alone
+            # is invisible to it: it would read the Russian value again, find no pair for it
+            # and report a platform gap the run has just closed.
+            vnode.value = english
+            return
+
+
 def _dispatched_class(item: str, dispatch_key: str, node) -> str | None:
     """The concrete class a dispatched BLOCK resolves to (`RepeatsOnError` by its `Kind` key)."""
     value = _mapping_value(node, dispatch_key)
     if not value:
         return None
     for name, presents in metamodel.dispatched_classes(item):
-        if presents == value or terms.common_english(presents) == value:
+        if value in (presents, metamodel.dispatch_english(name), terms.common_english(presents)):
             return name
     return None
 

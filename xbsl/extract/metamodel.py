@@ -427,6 +427,13 @@ def _parse_xcore(text: str, classes: dict, enums: dict, wrappers: set[str]) -> N
         presents = _arg(leading.get("DescriptorPresentation", ""), "ru")
         if presents:
             node["presents"] = presents
+            # The annotation states BOTH spellings, and for a dispatch value nothing else in
+            # the data does: a schedule kind (`Daily`) is not a type, not a property and not an
+            # enumeration value, so the term dictionaries know no pair for it and the
+            # translator honestly left it Russian.
+            presents_en = _arg(leading.get("DescriptorPresentation", ""), "en")
+            if presents_en and presents_en != presents:
+                node["presentsEn"] = presents_en
 
 
 def _fill_members(classes: dict, enums: dict, wrappers: set[str]) -> None:
@@ -518,6 +525,7 @@ def main(argv=None) -> int:
                 # the default for, or by the value its items carry (Код, Наименование, Владелец).
                 **({"implName": v["implName"]} if v.get("implName") else {}),
                 **({"presents": v["presents"]} if v.get("presents") else {}),
+                **({"presentsEn": v["presentsEn"]} if v.get("presentsEn") else {}),
             }
             for k, v in sorted(classes.items())
         },
