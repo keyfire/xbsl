@@ -78,7 +78,11 @@ export interface EngineConfig {
   dictionary?: string; // an explicit dictionary path; empty - the engine discovers it itself
 }
 
-export type TranslateMode = "entries" | "gaps" | "summary";
+// `table` is the three reads in one: the same entries, the same gaps and the same totals out of
+// a single pass over the project. Asked apart they cost two identical passes in two processes
+// and a third reading of the dictionary - seconds each on a real project, and the panel needs
+// all three every time it opens.
+export type TranslateMode = "entries" | "gaps" | "summary" | "table";
 
 export interface TranslateQuery {
   filter?: string;
@@ -241,6 +245,38 @@ export function parseGaps(stdout: string): GapsAnswer {
   };
 }
 
+export interface TableAnswer {
+  dictionary: string;
+  entries: DictionaryEntry[];
+  gaps: DictionaryGap[];
+  totals?: TranslationTotals;
+}
+
+// The whole table out of one `--table` run. The totals are read leniently, the way the separate
+// summary run was: the coverage line is a nicety, and a table must not fall with it.
+export function parseTable(stdout: string): TableAnswer {
+  const data = decode(stdout);
+  if (!Array.isArray(data.entries) || !Array.isArray(data.gaps)) {
+    throw new Error("xbsl translate --table: no 'entries' and 'gaps' arrays in the answer");
+  }
+  return {
+    dictionary: String(data.dictionary ?? ""),
+    entries: data.entries as DictionaryEntry[],
+    gaps: data.gaps as DictionaryGap[],
+    totals: data.totals ? totalsOf(data.totals as Record<string, unknown>) : undefined,
+  };
+}
+
+// True when the engine did not understand `--table` - an older one, installed apart from the
+// extension, which is the ordinary state right after a release. Told apart from a real failure
+// (an unreadable dictionary, a missing project) so that only the first falls back to asking the
+// three questions separately: a fallback on every error would hide the real reason behind a
+// second, identical failure.
+export function unknownFlag(stderr: string, flag: string): boolean {
+  const text = stderr ?? "";
+  return text.includes(flag) && /unrecognized arguments|нераспознанные аргументы|invalid choice/i.test(text);
+}
+
 // The coverage line of the panel's header: the report `xbsl translate <root>` gives without
 // any flag. It is the same number CI gates on, so the panel and the pipeline cannot disagree.
 export interface TranslationTotals {
@@ -258,7 +294,10 @@ export interface TranslationTotals {
 
 export function parseSummary(stdout: string): TranslationTotals {
   const data = decode(stdout);
-  const totals = (data.totals ?? {}) as Record<string, unknown>;
+  return totalsOf((data.totals ?? {}) as Record<string, unknown>);
+}
+
+function totalsOf(totals: Record<string, unknown>): TranslationTotals {
   return {
     surfaces: Number(totals.surfaces ?? 0),
     translated: Number(totals.translated ?? 0),
@@ -267,6 +306,40 @@ export function parseSummary(stdout: string): TranslationTotals {
     literalsTranslated: Number(totals.literals_translated ?? 0),
     literalsMissing: Number(totals.missing_literals ?? 0),
   };
+}
+
+// The header line after ONE cell was written, without asking the engine to count the project
+// again. What a written key changes is known exactly: its occurrences stop being untranslated
+// (a literal counts as one TEXT, the way the engine counts literals), and nothing else moves.
+// An emptied value is the same step backwards. The numbers stay an arithmetic echo of the last
+// real count - "Re-read" is what replaces them with a fresh one.
+export function totalsAfterWrite(
+  totals: TranslationTotals | undefined,
+  change: { kind: EntryKind; count: number; hadValue: boolean; hasValue: boolean }
+): TranslationTotals | undefined {
+  if (!totals || change.hadValue === change.hasValue) {
+    return totals;
+  }
+  const sign = change.hasValue ? 1 : -1;
+  if (change.kind === "literal") {
+    return {
+      ...totals,
+      literalsTranslated: Math.max(0, totals.literalsTranslated + sign),
+      literalsMissing: Math.max(0, totals.literalsMissing - sign),
+    };
+  }
+  const translated = clamp(totals.translated + sign * change.count, totals.surfaces);
+  const missing = clamp(totals.missing - sign * change.count, totals.surfaces);
+  return {
+    ...totals,
+    translated,
+    missing,
+    coverage: totals.surfaces ? translated / totals.surfaces : 1,
+  };
+}
+
+function clamp(value: number, top: number): number {
+  return Math.min(Math.max(value, 0), top);
 }
 
 export function parseSetResult(stdout: string): SetAnswer {

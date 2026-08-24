@@ -121,35 +121,52 @@ def structure_fields(source: SourceFile) -> set[str]:
     the declarations because only a field binds data - a method or an enumeration value of the
     same word says nothing about a key.
     """
+    return set(_module_declarations(source)[1])
+
+
+def structure_field_owners(source: SourceFile) -> dict[str, set[str]]:
+    """{field name: the structures of this module that declare it}.
+
+    The OWNER is what lets a dictionary entry speak about one structure alone
+    (`JsonRoot.Услуги: Offerings`): the fields of one structure share a namespace, so two
+    Russian words translated into one English word make a structure the compiler refuses,
+    and the only cure that does not touch the Russian source is a qualified entry.
+    """
     return _module_declarations(source)[1]
 
 
-def _module_declarations(source: SourceFile) -> tuple[set[str], set[str]]:
-    """(every name the module declares, the field names of its structures)."""
+def _module_declarations(source: SourceFile) -> tuple[set[str], dict[str, set[str]]]:
+    """(every name the module declares, {structure field: the structures declaring it})."""
     if source.kind != "xbsl":
-        return set(), set()
+        return set(), {}
     out: set[str] = set()
-    fields: set[str] = set()
+    fields: dict[str, set[str]] = {}
     toks = tokens(source)
     inside_declaration = False
     inside_structure = False
+    structure_name = ""
     for index, tok in enumerate(toks):
         if tok.kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
             inside_declaration = False
             inside_structure = False
+            structure_name = ""
             _add_next_name(toks, index, out)
         elif tok.kind == "KEYWORD" and tok.canonical in ("STRUCTURE", "ENUMERATION"):
             inside_declaration = True
             inside_structure = tok.canonical == "STRUCTURE"
+            structure_name = _next_name(toks, index) if inside_structure else ""
             _add_next_name(toks, index, out)
         elif tok.kind == "OP" and tok.value == ";":
             inside_declaration = False
             inside_structure = False
+            structure_name = ""
         elif inside_declaration and tok.kind == "KEYWORD" and tok.canonical in ("VAR", "VAL", "REQ"):
             # `req var Rows: ...` - the modifiers may stack, so the name is the next IDENT.
             _add_next_name(toks, index, out, skip_keywords=True)
             if inside_structure:
-                _add_next_name(toks, index, fields, skip_keywords=True)
+                name = _next_name(toks, index, skip_keywords=True)
+                if name:
+                    fields.setdefault(name, set()).add(structure_name)
         elif inside_declaration and tok.kind == "IDENT" and not tok.value.isascii():
             # A value of a module enumeration stands ALONE on its line, with no modifier and no
             # type after it. The line test is what keeps the TYPE of a field out: `var Rows:
@@ -165,15 +182,25 @@ def _module_declarations(source: SourceFile) -> tuple[set[str], set[str]]:
 
 def _add_next_name(toks: list, index: int, out: set[str], skip_keywords: bool = False) -> None:
     """Add the identifier that follows the token at `index`, skipping stacked modifiers."""
+    name = _next_name(toks, index, skip_keywords)
+    if name:
+        out.add(name)
+
+
+def _next_name(toks: list, index: int, skip_keywords: bool = False) -> str:
+    """The declared name after the token at `index` - "" when the next token is not one.
+
+    Only a name with Cyrillic in it counts: an English one is already written the way the
+    translated project spells it, and nothing here has anything to say about it.
+    """
     position = index + 1
     while position < len(toks):
         tok = toks[position]
         if skip_keywords and tok.kind == "KEYWORD" and tok.canonical in ("VAR", "VAL", "REQ"):
             position += 1
             continue
-        if tok.kind == "IDENT" and not tok.value.isascii():
-            out.add(tok.value)
-        return
+        return tok.value if tok.kind == "IDENT" and not tok.value.isascii() else ""
+    return ""
 
 
 def declared(source: SourceFile) -> set[str]:
@@ -242,17 +269,27 @@ def dictionary_scopes(root: Path, loader) -> frozenset[str]:
     return frozenset(out)
 
 
-def collect_structure_fields(root: Path, loader) -> frozenset[str]:
-    """Field names of every structure the project declares - the keys its json data may use."""
-    out: set[str] = set()
+def collect_structure_fields(root: Path, loader) -> dict[str, str]:
+    """{field name: its structure} for every structure the project declares.
+
+    The owner is named only where it is UNAMBIGUOUS - one structure of the whole project
+    declares a field spelled that way. Where several do, it is empty: a json key names a
+    field by text alone, and picking one of two owners for it would be a guess.
+    """
+    owners: dict[str, set[str]] = {}
     for path in sorted(root.rglob("*.xbsl")):
         if any(part.startswith(".") for part in path.relative_to(root).parts):
             continue
         try:
-            out |= structure_fields(loader(path))
+            found = structure_field_owners(loader(path))
         except OSError:
             continue
-    return frozenset(out)
+        for field, group in found.items():
+            owners.setdefault(field, set()).update(group)
+    return {
+        field: next(iter(group)) if len(group) == 1 else ""
+        for field, group in owners.items()
+    }
 
 
 def collect(root: Path, loader) -> frozenset[str]:

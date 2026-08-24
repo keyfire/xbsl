@@ -92,7 +92,7 @@ class Resolver:
         return None, "missing"
 
     def identifier(
-        self, name: str, *, after_dot: bool = False, scope: str = "",
+        self, name: str, *, after_dot: bool = False, scope: str = "", type_scope: str = "",
         static_root: bool = False,
     ) -> tuple[str | None, str]:
         """(the English spelling or None, which plane answered: user|platform|missing).
@@ -102,7 +102,9 @@ class Resolver:
         differently - one Russian word is the type `Strings` and the member `Rows`. So a root reads
         the type dictionary first and a member the compiler dictionary first. `scope` names
         a namespace of its own (a localized-strings dictionary), where the project may have
-        entered a spelling for this one namespace.
+        entered a spelling for this one namespace; `type_scope` is the second namespace of a
+        member - the TYPE the receiver was declared as, which is what a structure field
+        answers to.
         """
         if static_root:
             # `Strings.Join(...)` - a name with a dot after it that the platform knows as a
@@ -113,7 +115,7 @@ class Resolver:
             platform_type = platform_map.type_english(name)
             if platform_type:
                 return platform_type, "platform"
-        hit = self.dictionary.token(name, scope)
+        hit = self.dictionary.token(name, scope, type_scope)
         if hit is not None:
             return hit, "user"
         if name in self.project_names:
@@ -130,6 +132,12 @@ class Resolver:
             facet = platform_map.facet_suffix_english(name)
             if facet:
                 return facet, "platform"
+            if platform_map.is_member_name(name):
+                # A member the PLATFORM declares, spelled in English by no table of the data.
+                # Not the project's gap: an invented English name for a platform member is
+                # refused by the compiler, so no dictionary entry could be the right one. It
+                # is reported apart, as what it is - a hole in the platform data.
+                return None, "platform-gap"
         return None, "missing"
 
     def type_name(self, name: str, *, after_dot: bool = False) -> tuple[str | None, str]:
@@ -208,11 +216,19 @@ def collect_token_edits(
     depth = 0
     #: Words already rewritten as part of a query PHRASE - they must not be judged again.
     skip_until = 0
-    #: Names DECLARED in the current method (parameters, locals, loop variables). A local may
-    #: be named after a platform type, and then `Strings.Add(...)` is a call on the LOCAL, not
-    #: a static call on the type - taking the type spelling there turns it into an undefined
-    #: variable. The set is cleared at every method boundary.
-    local_names: set[str] = set()
+    #: Names DECLARED in the current method (parameters, locals, loop variables), each with
+    #: the type its declaration names where it names one. A local may be named after a
+    #: platform type, and then `Strings.Add(...)` is a call on the LOCAL, not a static call on
+    #: the type - taking the type spelling there turns it into an undefined variable. The
+    #: TYPE is what opens the namespace of a member: `Root.Услуги` where `Root: JsonRoot` is a
+    #: field of that structure, and the dictionary may spell it for that structure alone.
+    #: Cleared at every method boundary.
+    local_names: dict[str, str] = {}
+    #: The structure whose fields are being declared right now, and whether the next name
+    #: belongs to it. The fields of one structure share a namespace: two Russian words
+    #: translated into one English word are a structure the compiler refuses.
+    struct_name = ""
+    pending_field = False
     #: Bodies of the resolvable literals - a string inside one is code of another language.
     resolvable = _resolvable_ranges(toks)
     for index, tok in enumerate(toks):
@@ -220,6 +236,8 @@ def collect_token_edits(
         if kind == "EOF":
             break
         if kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
+            struct_name = ""
+            pending_field = False
             local_names = _method_locals(toks, index)
             method_name = _next_ident(toks, index)
             # Every declared name of one method shares a namespace: two Russian words that
@@ -247,6 +265,14 @@ def collect_token_edits(
         elif pending_ctor and kind in ("IDENT", "KEYWORD"):
             ctor_stack.append((tok.value, depth))
             pending_ctor = False
+        elif kind == "KEYWORD" and tok.canonical in ("STRUCTURE", "ENUMERATION"):
+            struct_name = _next_ident(toks, index) if tok.canonical == "STRUCTURE" else ""
+            pending_field = False
+        elif kind == "KEYWORD" and tok.canonical in ("VAR", "VAL", "REQ") and struct_name:
+            pending_field = True
+        elif kind == "OP" and tok.value == ";":
+            struct_name = ""
+            pending_field = False
         elif kind == "OP" and tok.value in "([{":
             depth += 1
         elif kind == "OP" and tok.value in ")]}":
@@ -277,8 +303,21 @@ def collect_token_edits(
             if replacement and replacement != tok.value:
                 edits.append((base + tok.start, base + tok.end, replacement))
         elif kind == "IDENT":
+            field_of = struct_name if pending_field else ""
+            pending_field = False
+            if field_of:
+                # Every field of one structure, whatever language its name is written in: a
+                # word already English collides with a Russian one translated into it just
+                # as two Russian ones collide with each other.
+                translated, _plane = resolver.identifier(tok.value, scope=field_of)
+                report.note_name(f"structure:{field_of}", tok.value, translated or tok.value)
             if not tok.value.isascii():
-                scope = prev_ident if prev_dot else root_scope
+                scope = field_of or (prev_ident if prev_dot else root_scope)
+                # The type of the receiver, when its declaration names one: the SECOND
+                # namespace a member answers to. The receiver as written stays the first -
+                # an entry qualified by the variable a project reads its json into was
+                # written about that variable, and it must keep answering.
+                type_scope = local_names.get(prev_ident, "") if prev_dot and not field_of else ""
                 if not prev_dot and ctor_stack and _is_named_argument(toks, index):
                     scope = ctor_stack[-1][0]
                 elif not prev_dot and tok.value in local_names and method_name:
@@ -292,7 +331,8 @@ def collect_token_edits(
                     and tok.value not in local_names
                 )
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
-                                 scope=scope, static_root=static_root, chain_root=chain_root)
+                                 scope=scope, type_scope=type_scope, static_root=static_root,
+                                 chain_root=chain_root)
         elif kind == "COMMENT":
             _comment_edits(tok, base, resolver, report, edits)
         elif kind == "STRING":
@@ -335,14 +375,19 @@ def _next_ident(toks: list, index: int) -> str:
     return ""
 
 
-def _method_locals(toks: list, start: int) -> set[str]:
-    """Names declared inside the method that begins at `start`: parameters, locals, loop vars.
+def _method_locals(toks: list, start: int) -> dict[str, str]:
+    """{name: the type its declaration names} for the method that begins at `start`.
 
-    Collected for ONE purpose - to tell a local named after a platform type from the type
-    itself. The method ends at the `;` that closes it; a nested declaration inside it belongs
-    to the same scope for this purpose.
+    Two things are read off one walk. The NAMES tell a local named after a platform type from
+    the type itself. The TYPE opens the namespace a member is looked up in: `Root.Услуги`
+    where `Root: JsonRoot` is a field of that structure, and one word may be spelled for that
+    structure alone. A declaration with no type written down maps to an empty string - the
+    name is known, the type is not, and the receiver then answers for itself as before.
+
+    The method ends at the `;` that closes it; a nested declaration inside it belongs to the
+    same scope for this purpose.
     """
-    out: set[str] = set()
+    out: dict[str, str] = {}
     depth = 0
     index = start + 1
     # The parameters: everything between the parentheses of the signature.
@@ -358,7 +403,7 @@ def _method_locals(toks: list, start: int) -> set[str]:
         elif depth == 1 and tok.kind == "IDENT":
             prev = toks[index - 1]
             if prev.kind == "OP" and prev.value in ("(", ","):
-                out.add(tok.value)
+                out[tok.value] = _declared_type(toks, index)
         index += 1
     # The body: declarations and loop variables, up to the closing `;` of the method.
     while index < len(toks):
@@ -372,9 +417,36 @@ def _method_locals(toks: list, start: int) -> set[str]:
             while position < len(toks) and toks[position].kind == "KEYWORD":
                 position += 1
             if position < len(toks) and toks[position].kind == "IDENT":
-                out.add(toks[position].value)
+                out[toks[position].value] = _declared_type(toks, position)
         index += 1
     return out
+
+
+def _declared_type(toks: list, index: int) -> str:
+    """The type named after `name:` at `index` - its LAST part, or "" when none is written.
+
+    The last part is the type itself (`Seeding.JsonRoot` is the structure `JsonRoot`), and
+    the parameters of a generic are not read: `Array<String>` is an Array, and what it holds
+    says nothing about the name that follows a dot.
+    """
+    position = index + 1
+    if position >= len(toks) or toks[position].kind != "OP" or toks[position].value != ":":
+        return ""
+    position += 1
+    name = ""
+    while position < len(toks):
+        tok = toks[position]
+        if tok.kind == "IDENT":
+            name = tok.value
+            position += 1
+            if (
+                position < len(toks) and toks[position].kind == "OP"
+                and toks[position].value == "."
+            ):
+                position += 1
+                continue
+        return name
+    return name
 
 
 def _query_phrase_at(toks: list, index: int) -> tuple[int, tuple[str, ...]] | None:
@@ -402,8 +474,14 @@ def _query_phrase_at(toks: list, index: int) -> tuple[int, tuple[str, ...]] | No
     return None
 
 
+def _member_by_owner(scope: str, type_scope: str, name: str) -> str | None:
+    """The owner-scoped spelling of a member: the receiver as written, then its type."""
+    return platform_map.member_of(scope, name) or platform_map.member_of(type_scope, name)
+
+
 def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at=None,
-                     scope: str = "", static_root: bool = False, chain_root: str = "") -> None:
+                     scope: str = "", type_scope: str = "", static_root: bool = False,
+                     chain_root: str = "") -> None:
     if in_query:
         keyword = platform_map.query_keyword_english(tok.value)
         if keyword:
@@ -411,10 +489,11 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
             return
     if after_dot and scope in resolver.dictionary_scopes:
         replacement, plane = resolver.dictionary_key(tok.value, scope)
-    elif after_dot and scope and platform_map.member_of(scope, tok.value):
-        # The receiver is a platform TYPE named right before the dot: its own vocabulary wins
-        # over the flat one, which keeps a single spelling for a word two types spell apart.
-        replacement, plane = platform_map.member_of(scope, tok.value), "platform"
+    elif after_dot and _member_by_owner(scope, type_scope, tok.value):
+        # The receiver is a platform TYPE - named right before the dot, or the type a local
+        # was declared as: its own vocabulary wins over the flat one, which keeps a single
+        # spelling for a word two types spell apart.
+        replacement, plane = _member_by_owner(scope, type_scope, tok.value), "platform"
     elif after_dot and platform_map.enum_value_of(scope, tok.value):
         # `InformationConnotation.Normal` - a value belongs to ITS enumeration: globally one
         # Russian word answers to several English ones, and the flat dictionary hands out
@@ -436,10 +515,13 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         if component:
             replacement, plane = component, "platform"
         else:
-            replacement, plane = resolver.identifier(tok.value, after_dot=True, scope=scope)
+            replacement, plane = resolver.identifier(
+                tok.value, after_dot=True, scope=scope, type_scope=type_scope,
+            )
     else:
         replacement, plane = resolver.identifier(
-            tok.value, after_dot=after_dot, scope=scope, static_root=static_root,
+            tok.value, after_dot=after_dot, scope=scope, type_scope=type_scope,
+            static_root=static_root,
         )
     if plane == "user":
         report.user_done += 1
@@ -449,9 +531,9 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         if replacement != tok.value:
             edits.append((base + tok.start, base + tok.end, replacement))
         return
-    if plane == "missing":
+    if plane in ("missing", "platform-gap"):
         line, col = at if at is not None else (tok.line, tok.col)
-        report.note_token(tok.value, line, col)
+        report.note_missing(tok.value, line, col, plane)
 
 
 def _inside(ranges: list[tuple[int, int]], offset: int) -> bool:

@@ -9,6 +9,25 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.66.0
+
+### Changed
+- **The dictionary panel no longer re-reads the project after every written cell.** One edited key
+  cost a full walk over the sources - about nine seconds on a live project, after every single
+  word. Now a write re-reads the dictionary alone (a read of yaml, a fraction of a second), the
+  gaps and the occurrence counts come from the last full read, and the header counters step
+  forward by what that one edit changed. The "Re-read" button is what replaces them with freshly
+  counted ones.
+- **Reading the dictionary is one engine run instead of three.** The entries, the gaps and the
+  coverage arrive from a single `translate --table` command: it used to be three processes, two of
+  which walked the sources separately, doing the same work twice. An older engine that does not
+  know the flag still answers the three questions apart - the panel recognizes that and falls back
+  to the previous way without showing an error.
+- **The table is drawn before the engine finishes its walk.** The first paint is the dictionary,
+  which reads in a fraction of a second; the gaps, the occurrence counts and the coverage line
+  join it when the pass answers. An empty panel over a working engine read as "this project has no
+  dictionary".
+
 ## 0.65.0
 
 ### Added

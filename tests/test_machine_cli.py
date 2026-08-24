@@ -186,3 +186,90 @@ def test_suggest_without_those_flags_is_not_refused_for_them(tmp_path: Path, mon
     report = json.loads(capsys.readouterr().out)
     assert "--limit" not in report["error"]
     assert "XBSL_TRANSLATE_GOOGLE_KEY" in report["error"]
+
+
+@pytest.mark.needs_data
+def test_table_mode_answers_all_three_questions_in_one_pass(tmp_path: Path, monkeypatch, capsys):
+    """The panel's read: entries, gaps and totals out of a SINGLE walk over the project."""
+    from xbsl.translation import project as project_module
+
+    root = tmp_path / "Acme" / "Demo"
+    root.mkdir(parents=True)
+    (root / "Задачи.yaml").write_text(
+        """ВидЭлемента: Справочник
+Имя: Задачи
+Реквизиты:
+    -
+        Имя: Заголовок
+        Тип: Строка
+""",
+        encoding="utf-8",
+    )
+    (root / "Модуль.xbsl").write_text(
+        """метод Подпись()
+    возврат Задачи.Заголовок
+;
+""",
+        encoding="utf-8",
+    )
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "010-objects.yaml").write_text(
+        """version: 1
+language: en
+tokens:
+    Задачи: Tasks
+""",
+        encoding="utf-8",
+    )
+
+    passes = []
+    original = project_module.translate_project
+
+    def counted(*args, **kwargs):
+        passes.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(project_module, "translate_project", counted)
+    code = cli.cli_main([str(root), "--table", "--limit", "0", "--format", "json"])
+    assert code == 0
+    data = json.loads(capsys.readouterr().out)
+
+    # One pass - the whole point of the mode. Asked as `--gaps` plus a summary run it was two
+    # passes, in two processes, over the same sources.
+    assert len(passes) == 1
+    assert any(entry["key"] == "Задачи" for entry in data["entries"])
+    assert any(gap["key"] == "Заголовок" for gap in data["gaps"])
+    assert data["entries_total"] == 1 and data["gaps_total"] >= 1
+    assert data["totals"]["surfaces"] > 0
+
+
+@pytest.mark.needs_data
+def test_table_mode_honours_the_query_of_both_lists(tmp_path: Path, capsys):
+    """`--kind` narrows the entries and the gaps alike, the way the separate modes do."""
+    root = tmp_path / "Acme" / "Demo"
+    root.mkdir(parents=True)
+    (root / "Модуль.xbsl").write_text(
+        """// пояснение
+метод Подпись()
+;
+""",
+        encoding="utf-8",
+    )
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "010-objects.yaml").write_text(
+        """version: 1
+language: en
+tokens:
+    Задачи: Tasks
+phrases:
+    "строка": "a line"
+""",
+        encoding="utf-8",
+    )
+    code = cli.cli_main([str(root), "--table", "--kind", "token", "--limit", "0", "--format", "json"])
+    assert code == 0
+    data = json.loads(capsys.readouterr().out)
+    assert [entry["key"] for entry in data["entries"]] == ["Задачи"]
+    assert all(gap["kind"] == "token" for gap in data["gaps"])

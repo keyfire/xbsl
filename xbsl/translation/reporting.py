@@ -87,6 +87,19 @@ class FileReport:
         if resource:
             self.resource_tokens.add(name)
 
+    def note_missing(self, name: str, line: int, col: int, plane: str, *,
+                     resource: bool = False) -> None:
+        """A name nothing spelled in English - written down as WHOSE gap it is.
+
+        The dictionary answers for the project's own names; a member the platform declares
+        but the data does not spell belongs to the platform's own list, where no dictionary
+        entry is expected to appear.
+        """
+        if plane == "platform-gap":
+            self.note_platform(name, line, col)
+        else:
+            self.note_token(name, line, col, resource=resource)
+
     def note_phrase(self, text: str, line: int, col: int) -> None:
         self.phrases_missing += 1
         self.missing_phrases.setdefault(text, []).append((line, col))

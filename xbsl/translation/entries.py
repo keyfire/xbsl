@@ -181,15 +181,19 @@ def _unquote(value: str) -> str:
 
 
 def gaps_of_project(root: Path, dictionary) -> list[Gap]:
-    """What the translator leaves behind on this project, ready for the table.
+    """What the translator leaves behind on this project, ready for the table."""
+    from xbsl.translation import project as project_module
+
+    return gaps_of_report(project_module.translate_project(root, dictionary, None))
+
+
+def gaps_of_report(report) -> list[Gap]:
+    """The same list out of a pass ALREADY made - the table mode reads one report twice.
 
     The suggestion is the PLATFORM's own spelling where it has one: most gaps of a real
     project are words the platform also knows, and the right value is usually exactly that
     spelling - the project simply named its own thing the same way.
     """
-    from xbsl.translation import project as project_module
-
-    report = project_module.translate_project(root, dictionary, None)
     out: list[Gap] = []
     for name, info in report.merged_missing_tokens().items():
         out.append(Gap(

@@ -204,7 +204,7 @@ def _translate_component(part: str, resolver: Resolver, report: FileReport) -> s
         if plane == "user":
             report.user_done += 1
         if replacement is None:
-            report.note_token(piece, 0, 0)
+            report.note_missing(piece, 0, 0, plane)
             pieces.append(piece)
         else:
             pieces.append(replacement)

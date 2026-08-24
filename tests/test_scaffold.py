@@ -783,6 +783,16 @@ def _make_rename_project(tmp_path) -> Path:
     (subsystem / "СтрокаСпискаСклады.yaml").write_text(
         "ВидЭлемента: КомпонентИнтерфейса\nИд: x\nИмя: СтрокаСпискаСклады\n", encoding="utf-8"
     )
+    # The virtual table the list form reads through, with its query - the pair whose file is
+    # a .xbql rather than a module.
+    (subsystem / "СкладыСписокТаблица.yaml").write_text(
+        "ВидЭлемента: ВиртуальнаяТаблица\nИд: t\nИмя: СкладыСписокТаблица\n"
+        "КлючевыеПоля:\n    - Ссылка\n",
+        encoding="utf-8",
+    )
+    (subsystem / "СкладыСписокТаблица.xbql").write_text(
+        "ВЫБРАТЬ\n    С.Ссылка КАК Ссылка\nИЗ\n    Склады КАК С\n", encoding="utf-8"
+    )
     return subsystem
 
 
@@ -800,6 +810,8 @@ def test_rename_object_files_and_references(tmp_path):
         "СкладыФормаОбъекта.yaml": "ХранилищаФормаОбъекта.yaml",
         "СкладыФормаСписка.yaml": "ХранилищаФормаСписка.yaml",
         "СтрокаСпискаСклады.yaml": "СтрокаСпискаХранилища.yaml",
+        "СкладыСписокТаблица.yaml": "ХранилищаСписокТаблица.yaml",
+        "СкладыСписокТаблица.xbql": "ХранилищаСписокТаблица.xbql",
     }
     assert "СкладыАрхив.yaml" not in renamed
 
@@ -932,6 +944,8 @@ def test_rename_object_case_only(tmp_path):
         "СкладыФормаОбъекта.yaml": "складыФормаОбъекта.yaml",
         "СкладыФормаСписка.yaml": "складыФормаСписка.yaml",
         "СтрокаСпискаСклады.yaml": "СтрокаСпискасклады.yaml",
+        "СкладыСписокТаблица.yaml": "складыСписокТаблица.yaml",
+        "СкладыСписокТаблица.xbql": "складыСписокТаблица.xbql",
     }
     assert all(r.case_only for r in result.renames)
     # The note about the two steps and about version control belongs to the filesystem that
@@ -2219,6 +2233,7 @@ def test_delete_object_removes_the_family_and_lists_references(tmp_path):
         "Склады.yaml", "Склады.Объект.xbsl",
         "СкладыФормаОбъекта.yaml", "СкладыФормаСписка.yaml",
         "СтрокаСпискаСклады.yaml",
+        "СкладыСписокТаблица.yaml", "СкладыСписокТаблица.xbql",
     }
     # Тёзка с продолжением имени - другой объект, он остаётся.
     assert "СкладыАрхив.yaml" not in removed
@@ -2703,3 +2718,48 @@ def test_localization_strings_of_a_project_without_dictionaries_is_empty(tmp_pat
     _loc_descriptor(tmp_path)
     (tmp_path / "Модуль.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
     assert scaffold.localization_strings(tmp_path)["strings"] == {}
+
+
+def test_rename_object_takes_its_list_table_and_the_query_along(tmp_path):
+    """The virtual table of a list is a pair of the object, and its query NAMES the object.
+
+    Left behind, the table keeps the old name while the form points at the new one, and the
+    query selects from an object that no longer exists - none of it visible until the build.
+    """
+    subsystem = _make_rename_project(tmp_path)
+    result = scaffold.op_rename_object(tmp_path, "Склады", "Хранилища")
+    apply_result(result)
+
+    table = (subsystem / "ХранилищаСписокТаблица.yaml").read_text(encoding="utf-8")
+    assert "Имя: ХранилищаСписокТаблица" in table
+    query = (subsystem / "ХранилищаСписокТаблица.xbql").read_text(encoding="utf-8")
+    assert "Хранилища КАК С" in query
+    assert not (subsystem / "СкладыСписокТаблица.xbql").exists()
+
+
+@pytest.mark.needs_data
+def test_rename_object_knows_the_english_spelling_of_the_list_table(tmp_path):
+    """An English-written project spells the same pair `<Name>ListTable`.
+
+    Data-dependent: an English descriptor (`ElementKind: Catalog`) is recognized through the
+    platform term pairs, so without the data there is no object to rename here.
+    """
+    subsystem = tmp_path / "Main"
+    subsystem.mkdir()
+    (subsystem / "Warehouses.yaml").write_text(
+        "ElementKind: Catalog\nId: w\nName: Warehouses\n", encoding="utf-8"
+    )
+    (subsystem / "WarehousesListTable.yaml").write_text(
+        "ElementKind: VirtualTable\nId: t\nName: WarehousesListTable\n"
+        "KeyFields:\n    - Reference\n",
+        encoding="utf-8",
+    )
+    (subsystem / "WarehousesListTable.xbql").write_text(
+        "SELECT\n    W.Reference AS Reference\nFROM\n    Warehouses AS W\n", encoding="utf-8"
+    )
+    result = scaffold.op_rename_object(tmp_path, "Warehouses", "Storages")
+    renamed = {r.old_path.name: r.new_path.name for r in result.renames}
+    assert renamed["WarehousesListTable.yaml"] == "StoragesListTable.yaml"
+    assert renamed["WarehousesListTable.xbql"] == "StoragesListTable.xbql"
+    apply_result(result)
+    assert "Storages AS W" in (subsystem / "StoragesListTable.xbql").read_text(encoding="utf-8")

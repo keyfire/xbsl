@@ -19,7 +19,41 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-24 – 0.74.0
+## 2026-08-24 – 0.74.0, 0.75.0
+
+### Added
+- **`translate --table` - the dictionary entries, the gaps and the totals out of ONE pass.** The
+  editor table asks the engine exactly those three questions, and asked apart the answer cost two
+  identical walks over the sources in two processes plus a third reading of the same dictionary:
+  about nine seconds on a live project, repeated after every written cell.
+- **A qualified dictionary entry now reaches a STRUCTURE field.** The fields of one structure
+  share a namespace, so two Russian names translated into one English word make a structure the
+  compiler refuses - and until now the only cure was renaming the Russian source. A qualified
+  entry renames the declaration, every use through a receiver whose type is declared, and the key
+  of the paired json resource together. The receiver as written still answers first: an entry
+  qualified by a variable name keeps working.
+- **The translator sees a collision between fields of one structure.** Only the compiler used to
+  say anything about it - the same class as a collision of method names, but without a message of
+  its own. It is now a reported problem, and it fails `--strict`.
+- **Renaming and deleting an object take the virtual table of its list along.** The pair
+  `<Name>ListTable` (a `.yaml` plus a `.xbql` query) belonged to no file family, and `.xbql` files
+  were not walked at all - they name the object, so a renamed catalog left behind a query
+  selecting from a table that no longer exists. Both spellings of the pair are known to the same
+  rule.
+
+### Changed
+- **A platform member with no English spelling is the PLATFORM's gap, not the dictionary's.** The
+  summary reported no platform gaps while the list of gaps named a method of the array type as a
+  missing name: the counter contradicted the list. Writing such a name into the dictionary would
+  mean inventing an English spelling for a platform member, which the compiler refuses. A name the
+  platform declares as its own member and the data does not spell now goes to the platform gaps.
+- **`--strict` fails on a platform gap too.** Such a name stays Cyrillic in the translated tree,
+  so the build refuses it - a gate must not pass it. The cure is the platform data rather than a
+  dictionary entry, which is why the report still names it apart.
+- **The translation dictionary is read with the fast yaml loader.** On the dictionary of a live
+  project (3.6 MB over 39 files) 1.4 s against 0.11 s; the pure-Python loader stays as the fallback for builds
+  without libyaml.
+
 
 ### Fixed
 - **The query literal of an undefined value translates to `UNDEFINED`, not to `NULL`.** The

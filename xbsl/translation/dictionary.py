@@ -52,6 +52,12 @@ try:
 except ImportError:  # pragma: no cover
     _HAVE_YAML = False
 
+# libyaml (CSafeLoader) reads the same YAML an order of magnitude faster, and the dictionary of
+# a real project is megabytes of it - the editor panel used to spend more than a second per run
+# on the pure-Python loader alone, once per process and three processes per refresh. The pure
+# loader stays as the fallback for builds without libyaml.
+_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader) if _HAVE_YAML else None
+
 MESSAGES = {
     "translate.dictionary.no-yaml": {
         "ru": "для чтения словаря нужен пакет pyyaml",
@@ -253,18 +259,24 @@ class Dictionary:
     #: Where each key was first seen - for the duplicate report.
     _origins: dict[str, str] = field(default_factory=dict)
 
-    def token(self, name: str, scope: str = "") -> str | None:
+    def token(self, name: str, *scopes: str) -> str | None:
         """The translation of a name, the scoped entry first.
 
         A key of a localized-strings dictionary lives in its OWN namespace, where the
         project may need a spelling the same word cannot have elsewhere: "Войти" is the
         key `SignIn` there while the bare word stays `Login` in code. Such an entry is
         written qualified - `<Dictionary>.<Key>: SignIn` - and wins over the plain one.
+
+        More than one scope may fit one place, and then they are tried IN ORDER: after a dot
+        the receiver as the source writes it comes first - `Event.Ссылка: Link` speaks about
+        that variable - and the type its declaration names second: `JsonRoot.Услуги: Offerings`
+        speaks about every field of that structure, whatever the variable holding it is called.
         """
-        if scope:
-            scoped = self.tokens.get(f"{scope}.{name}")
-            if scoped is not None:
-                return scoped
+        for scope in scopes:
+            if scope:
+                scoped = self.tokens.get(f"{scope}.{name}")
+                if scoped is not None:
+                    return scoped
         return self.tokens.get(name)
 
     def phrase(self, text: str) -> str | None:
@@ -310,7 +322,7 @@ def load(path: Path) -> Dictionary:
     language: str | None = None
     for file in files:
         try:
-            data = yaml.safe_load(file.read_text(encoding="utf-8-sig")) or {}
+            data = yaml.load(file.read_text(encoding="utf-8-sig"), Loader=_LOADER) or {}
         except (OSError, yaml.YAMLError) as exc:
             raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=file, error=exc)) from exc
         if not isinstance(data, dict):

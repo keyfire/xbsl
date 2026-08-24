@@ -200,6 +200,41 @@ def _members_by_owner() -> dict[str, dict[str, str]]:
     return {owner: dict(pairs) for owner, pairs in members.items() if isinstance(pairs, dict)}
 
 
+@lru_cache(maxsize=1)
+def _member_names() -> frozenset[str]:
+    """Every name the platform declares as a MEMBER of a type, whatever the type.
+
+    The receiver of a call is not always known - a chain of calls, a variable of an inferred
+    type - so this is a name check, not a lookup: it answers whether the word after a dot is
+    something the PLATFORM declares at all.
+    """
+    try:
+        std = dataset.load_json("stdlib.json") or {}
+    except Exception:  # noqa: BLE001 - no data, no answer
+        return frozenset()
+    out: set[str] = set()
+    for table in ("type_members", "object_members", "manager_members", "facet_members"):
+        for members in (std.get(table) or {}).values():
+            groups = members.values() if isinstance(members, dict) else ()
+            for group in groups:
+                for member in group if isinstance(group, list) else ():
+                    name = member.get("name") if isinstance(member, dict) else member
+                    if isinstance(name, str) and name:
+                        out.add(name)
+    return frozenset(out)
+
+
+def is_member_name(name: str) -> bool:
+    """True when the platform itself declares a member spelled that way.
+
+    What it answers is "whose gap is this": a word after a dot that no table spells in English
+    is the DATA's gap when the platform declares it, and the project's own only otherwise. The
+    difference matters at the dictionary: an English name invented for a platform member is
+    refused by the compiler, and no dictionary entry can be right.
+    """
+    return bool(name) and name in _member_names()
+
+
 def member_of(owner: str, name: str) -> str | None:
     """The English spelling of `name` as a member OF `owner`, or None.
 
@@ -210,6 +245,13 @@ def member_of(owner: str, name: str) -> str | None:
     """
     if not owner or not name:
         return None
+    verified = _VERIFIED_MEMBER_SPELLINGS.get(name)
+    if verified:
+        # The checked spelling answers before the owner table for the same reason it answers
+        # before the flat one: it exists because the data is wrong about this word, and the
+        # data is wrong about it under its owner too (`Символ` of a String is `CharAt`, which
+        # the compiler takes, and the table says `Symbol`, which it refuses).
+        return verified
     english_owner = terms.english(owner, "types") or owner
     return (_members_by_owner().get(english_owner) or {}).get(name)
 

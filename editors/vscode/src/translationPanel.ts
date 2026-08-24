@@ -23,6 +23,7 @@ import {
   ColumnWidths,
   DEFAULT_COLUMN_WIDTHS,
   DictionaryEdit,
+  DictionaryGap,
   DictionaryRow,
   EngineConfig,
   EntryKind,
@@ -43,9 +44,11 @@ import {
   pageOf,
   parseEntries,
   parseGaps,
+  EntriesAnswer,
   parseSetResult,
   parseSuggest,
   parseSummary,
+  parseTable,
   plannedActions,
   refusalText,
   rowHint,
@@ -56,8 +59,10 @@ import {
   shortKey,
   sortRows,
   suggestArgs,
+  totalsAfterWrite,
   translateArgs,
   translationTarget,
+  unknownFlag,
   versionArgs,
 } from "./translationCore";
 
@@ -205,13 +210,65 @@ async function engineUnfit(folder: vscode.WorkspaceFolder): Promise<boolean> {
 
 interface LoadedDictionary {
   rows: DictionaryRow[];
+  gaps: DictionaryGap[];
   dictionary: string;
   totals?: TranslationTotals;
 }
 
-// One reading of everything the table shows. The three runs are independent, so they go in
-// parallel: on a real project each of them walks the whole source tree and takes seconds.
+// One reading of everything the table shows - one engine run. The three questions the table
+// asks (the entries, the gaps, the totals) used to be three processes, and two of them walked
+// the whole source tree separately: on the site project that was nine seconds of a machine
+// doing the same pass twice. `--table` answers all three out of a single pass.
 async function loadDictionary(folder: vscode.WorkspaceFolder): Promise<LoadedDictionary | undefined> {
+  const cwd = folder.uri.fsPath;
+  if (!tableUnsupported.has(cwd)) {
+    const loaded = await loadAsTable(folder);
+    if (loaded !== "no-flag") {
+      return loaded;
+    }
+    tableUnsupported.add(cwd);
+  }
+  return loadInThreeRuns(folder);
+}
+
+// Folders whose engine does not know `--table` - the extension and the engine are installed
+// apart, so a new panel over an older engine is the ordinary state right after a release. Only
+// the NO is remembered, and only for the session: it saves one failed process per re-read, and
+// an engine updated meanwhile is picked up by the next window.
+const tableUnsupported = new Set<string>();
+
+// The one-run read. Answers "no-flag" - and nothing else - when the engine did not understand
+// the flag, so that only that case falls back to the three separate runs.
+async function loadAsTable(folder: vscode.WorkspaceFolder): Promise<LoadedDictionary | undefined | "no-flag"> {
+  const cfg = engineConfig(folder);
+  const res = await run(cfg, translateArgs("table", cfg, { limit: 0 }), folder.uri.fsPath);
+  if (res.error) {
+    if (unknownFlag(res.error, "--table")) {
+      return "no-flag";
+    }
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t("Failed to read the translation dictionary: {0}", engineFailed(res))
+    );
+    return undefined;
+  }
+  try {
+    const table = parseTable(res.stdout);
+    return {
+      rows: mergeRows(table.entries, table.gaps),
+      gaps: table.gaps,
+      dictionary: table.dictionary,
+      totals: table.totals,
+    };
+  } catch (e) {
+    void vscode.window.showErrorMessage(
+      vscode.l10n.t("Failed to read the translation dictionary: {0}", e instanceof Error ? e.message : String(e))
+    );
+    return undefined;
+  }
+}
+
+// The read an engine older than `--table` allows: three runs, independent, so in parallel.
+async function loadInThreeRuns(folder: vscode.WorkspaceFolder): Promise<LoadedDictionary | undefined> {
   const cfg = engineConfig(folder);
   const cwd = folder.uri.fsPath;
   const [entriesRun, gapsRun, summaryRun] = await Promise.all([
@@ -236,12 +293,47 @@ async function loadDictionary(folder: vscode.WorkspaceFolder): Promise<LoadedDic
     } catch {
       totals = undefined; // the coverage line is a nicety; the table must not fall with it
     }
-    return { rows: mergeRows(entries.entries, gaps.gaps), dictionary: entries.dictionary || gaps.dictionary, totals };
+    return {
+      rows: mergeRows(entries.entries, gaps.gaps),
+      gaps: gaps.gaps,
+      dictionary: entries.dictionary || gaps.dictionary,
+      totals,
+    };
   } catch (e) {
     void vscode.window.showErrorMessage(
       vscode.l10n.t("Failed to read the translation dictionary: {0}", e instanceof Error ? e.message : String(e))
     );
     return undefined;
+  }
+}
+
+// The dictionary alone, without a pass over the project: what `--set` just changed. This is the
+// read after a write - it costs a fraction of the full one, because nothing here looks at the
+// sources.
+// `quiet` is for the first paint of a reload: the full read follows it immediately and reports
+// whatever went wrong, and two message boxes about one broken dictionary say nothing the first
+// one did not.
+async function readEntries(
+  folder: vscode.WorkspaceFolder,
+  quiet = false
+): Promise<EntriesAnswer | undefined> {
+  const cfg = engineConfig(folder);
+  const res = await run(cfg, translateArgs("entries", cfg, { limit: 0 }), folder.uri.fsPath);
+  const failed = (reason: string): undefined => {
+    if (!quiet) {
+      void vscode.window.showErrorMessage(
+        vscode.l10n.t("Failed to read the translation dictionary: {0}", reason)
+      );
+    }
+    return undefined;
+  };
+  if (res.error) {
+    return failed(engineFailed(res));
+  }
+  try {
+    return parseEntries(res.stdout);
+  } catch (e) {
+    return failed(e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -372,6 +464,10 @@ const DEFAULT_STATE: ViewState = {
 class TranslationPanel {
   public static current: TranslationPanel | undefined;
   private rows: DictionaryRow[] = [];
+  // The gaps of the last full read, kept apart from the rows they were merged into: after a
+  // cell is written the dictionary half is re-read (cheap - it is yaml) and merged with these
+  // again, so a written key does not cost another pass over the project.
+  private gaps: DictionaryGap[] = [];
   private dictionary = "";
   private totals: TranslationTotals | undefined;
   // Whether the engine is running right now. The webview needs it: an empty table during the
@@ -485,6 +581,7 @@ class TranslationPanel {
     this.loading = true;
     this.panel.webview.postMessage({ type: "busy", on: true });
     try {
+      await this.paintDictionary();
       const loaded = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Window,
@@ -494,12 +591,31 @@ class TranslationPanel {
       );
       if (loaded) {
         this.rows = loaded.rows;
+        this.gaps = loaded.gaps;
         this.dictionary = loaded.dictionary;
         this.totals = loaded.totals;
       }
     } finally {
       this.loading = false;
     }
+    this.post();
+  }
+
+  // The first paint of an opening panel: the dictionary alone, which is a read of yaml files and
+  // costs a fraction of the pass. The rows are on screen while the engine still walks the
+  // project, and the gaps, the occurrences and the header line join them when it answers. Only
+  // when there is nothing on screen yet - a re-read over a full table keeps what the reader is
+  // looking at until the fresh answer replaces it.
+  private async paintDictionary(): Promise<void> {
+    if (this.rows.length > 0) {
+      return;
+    }
+    const entries = await readEntries(this.folder, true);
+    if (!entries || this.rows.length > 0) {
+      return;
+    }
+    this.rows = mergeRows(entries.entries, []);
+    this.dictionary = entries.dictionary || this.dictionary;
     this.post();
   }
 
@@ -582,7 +698,32 @@ class TranslationPanel {
       this.post();
       return;
     }
-    await this.reload();
+    await this.afterWrite(kind, key, value.trim());
+  }
+
+  // What one written cell changes, without asking the engine to walk the project again. The
+  // dictionary half IS re-read - it is a read of yaml files and takes a moment - so the row
+  // gets the record it landed in and the jump to it works at once; the gaps and the header are
+  // stepped forward arithmetically instead. A full pass after every cell cost seconds each
+  // time, for an answer that differs from this one in nothing the author typed.
+  private async afterWrite(kind: EntryKind, key: string, value: string): Promise<void> {
+    const known = this.rows.find((row) => rowKey(row.kind, row.key) === rowKey(kind, key));
+    this.totals = totalsAfterWrite(this.totals, {
+      kind,
+      count: known?.count ?? 0,
+      hadValue: Boolean(known?.value),
+      hasValue: value.length > 0,
+    });
+    const entries = await readEntries(this.folder);
+    if (entries) {
+      this.rows = mergeRows(entries.entries, this.gaps);
+      this.dictionary = entries.dictionary || this.dictionary;
+    } else if (known) {
+      // The re-read failed and said so. The table still shows what was written - the value is
+      // on disk either way, and a row snapping back to empty would read as a lost edit.
+      known.value = value;
+    }
+    this.post();
   }
 
   // Asks the machine-translation service to fill as much of the untranslated remainder as its

@@ -4483,14 +4483,21 @@ _YAML_KEY_LINE = re.compile(rf"^([ \t]*(?:-[ \t]+)?)([{_WORD}]+):([ \t]*)(.*)$")
 _IMPORT_LINE = re.compile(r"^[ \t]*импорт[ \t]+\S")
 
 
+#: The virtual table a list form reads through: `<Имя>СписокТаблица` in Russian sources,
+#: `<Name>ListTable` in English ones. Its pair is a `.xbql` query rather than a module, which
+#: is why the query suffix belongs to every walk that goes over an object's file family.
+_LIST_TABLE = "(?:СписокТаблица|ListTable)"
+
+
 class _Renamer:
-    """Object name replacements in text: the identifier and its composite form names.
+    """Object name replacements in text: the identifier and its composite element names.
 
     The identifier is replaced only in the root position (not after a dot - that is a
     member of another type, not after `@` - that is an annotation). A composite form name
     is `<Имя>Форма` with a capital letter after "Форма" (or exactly `<Имя>Форма`): a
     lowercase letter after "Форма" means an unrelated word like "Форматирование". The card
-    list row component is `СтрокаСписка<Имя>`.
+    list row component is `СтрокаСписка<Имя>`, and the virtual table a list form reads is
+    `<Имя>СписокТаблица`.
     """
 
     def __init__(self, old: str, new: str):
@@ -4501,6 +4508,7 @@ class _Renamer:
             rf"(?<![{_WORD}.]){escaped}(?=Форма(?:[А-ЯЁA-Z][{_WORD}]*)?(?![{_WORD}]))"
         )
         self._row = re.compile(rf"(?<![{_WORD}.])СтрокаСписка{escaped}(?![{_WORD}])")
+        self._table = re.compile(rf"(?<![{_WORD}.]){escaped}(?={_LIST_TABLE}(?![{_WORD}]))")
 
     def identifier(self, s: str) -> tuple[str, int]:
         return self._ident.subn(self.new, s)
@@ -4508,7 +4516,8 @@ class _Renamer:
     def composites(self, s: str) -> tuple[str, int]:
         s, n1 = self._composite.subn(self.new, s)
         s, n2 = self._row.subn(f"СтрокаСписка{self.new}", s)
-        return s, n1 + n2
+        s, n3 = self._table.subn(self.new, s)
+        return s, n1 + n2 + n3
 
     def file_base(self, base: str) -> str:
         """The new file owner name (the part before the first dot) if the file belongs to the object."""
@@ -4637,8 +4646,9 @@ def op_rename_object(
     """Rename a configuration object and update references to it across all sources.
 
     The renamed files are the object's (yaml, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl`
-    modules), its forms' (`<Имя>Форма*`) and the list row component's
-    (`СтрокаСписка<Имя>`). Edited in texts: values of yaml reference keys
+    modules), its forms' (`<Имя>Форма*`), the list row component's (`СтрокаСписка<Имя>`)
+    and the virtual table of its list (`<Имя>СписокТаблица`, whose pair is a `.xbql`
+    query). Edited in texts: values of yaml reference keys
     (Тип/Таблица/ИсточникДанных/Форма/ТипФормы), `=...` bindings, .xbsl code (except
     string literals) and composite form names; in the yaml of the object itself and its
     forms - also `Имя:` and Заголовок/Представление (the old presentation is given by
@@ -4690,7 +4700,7 @@ def op_rename_object(
     # File renames: the file owner is the name part before the first dot.
     directory = hit.path.parent
     for path in sorted(directory.iterdir()):
-        if not path.is_file() or path.suffix not in (".yaml", ".xbsl"):
+        if not path.is_file() or path.suffix not in (".yaml", ".xbsl", ".xbql"):
             continue
         base = path.name.split(".", 1)[0]
         new_base = renamer.file_base(base)
@@ -4718,7 +4728,15 @@ def op_rename_object(
 
     changed_files = 0
     total = 0
-    for path in engine.find_sources(root, "*.yaml") + engine.find_sources(root, "*.xbsl"):
+    sources = (
+        engine.find_sources(root, "*.yaml")
+        + engine.find_sources(root, "*.xbsl")
+        # A query names the object it selects FROM (`ИЗ Задачи КАК З`), so a rename that
+        # skipped it left the virtual table of the renamed object reading a table that no
+        # longer exists - and nothing said so until the build.
+        + engine.find_sources(root, "*.xbql")
+    )
+    for path in sources:
         text = (reader or _read)(path)
         if path.suffix == ".yaml":
             new_text, count = _rename_in_yaml(
@@ -4780,8 +4798,8 @@ def op_delete_object(
 
     Deleted is the object's file family in its directory, the same one op_rename_object
     renames: `<Имя>.yaml`, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the forms
-    `<Имя>Форма*` and the card-list row component `СтрокаСписка<Имя>` (both suffixes with
-    their pairs). The subsystem membership needs no separate cleanup - in 1C:Element a
+    `<Имя>Форма*`, the card-list row component `СтрокаСписка<Имя>` and the virtual table
+    of its list `<Имя>СписокТаблица` (every pair with it, the `.xbql` query included). The subsystem membership needs no separate cleanup - in 1C:Element a
     subsystem is the FOLDER the files live in, so removing the files removes the object
     from it.
 
@@ -4819,11 +4837,12 @@ def op_delete_object(
     family = re.compile(
         rf"^(?:{escaped}"
         rf"|{escaped}Форма(?:[А-ЯЁA-Z][{_WORD}]*)?"
-        rf"|СтрокаСписка{escaped})$"
+        rf"|СтрокаСписка{escaped}"
+        rf"|{escaped}{_LIST_TABLE})$"
     )
     result = ScaffoldResult()
     for path in sorted(hit.path.parent.iterdir()):
-        if not path.is_file() or path.suffix not in (".yaml", ".xbsl"):
+        if not path.is_file() or path.suffix not in (".yaml", ".xbsl", ".xbql"):
             continue
         if family.match(path.name.split(".", 1)[0]):
             result.deletes.append(path)
@@ -4838,7 +4857,11 @@ def op_delete_object(
             return str(path)
 
     references: list[str] = []
-    for path in engine.find_sources(root, "*.yaml") + engine.find_sources(root, "*.xbsl"):
+    for path in (
+        engine.find_sources(root, "*.yaml")
+        + engine.find_sources(root, "*.xbsl")
+        + engine.find_sources(root, "*.xbql")
+    ):
         if path.resolve() in deleted:
             continue
         text = (reader or _read)(path)

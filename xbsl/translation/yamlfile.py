@@ -555,14 +555,14 @@ def _typed_value(node, type_name: str, resolver, report, edits) -> None:
     if not isinstance(value, str) or not has_cyrillic(value):
         return
     replacement = platform_map.enum_value_of(type_name, value)
+    plane = "missing"
     if not replacement:
         replacement, plane = resolver.identifier(value, after_dot=True, scope=type_name)
-        del plane
     if replacement:
         _set_scalar(node, replacement, edits)
     else:
         line, col = _at(node)
-        report.note_token(value, line, col)
+        report.note_missing(value, line, col, plane)
 
 
 def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner: str = "") -> None:

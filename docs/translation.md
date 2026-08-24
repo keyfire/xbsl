@@ -171,7 +171,10 @@ place and the dictionary file - each record over two lines, the translation fiel
 under the rest at the full width of the row. The field is edited in place, a search box and an
 "only empty" switch narrow the table, and a suggestion - the platform's own spelling first, an
 external service's guess otherwise - stands grey inside an empty field and goes in on a click or
-on `Enter`. The table reads `--entries`/`--gaps` and writes through `--set`. The panel
+on `Enter`. The table reads `--table` - the entries, the gaps and the coverage out of one pass
+over the project - and writes through `--set`; a written cell does not cost another pass, only a
+re-read of the dictionary, and the header counters step forward by what that edit changed. The
+"Re-read" button is what replaces them with freshly counted ones. The panel
 needs **xbsl 0.72.0 or newer** - `--suggest`, the machine-translation run behind its
 suggestions button, only arrived there. The **"Suggest via translation service"** button in
 the same panel fills empty fields with an external service's guesses - details in
@@ -188,8 +191,11 @@ engine core.
 ```sh
 xbsl translate e1c/app --gaps --kind token --limit 20      # what is missing, most frequent first
 xbsl translate e1c/app --entries --filter Задач            # what the dictionary already says
+xbsl translate e1c/app --table --limit 0                   # all three: entries, gaps, totals
 xbsl translate e1c/app --set edits.json                    # apply [{key, value, kind}]
 ```
+
+`--table` answers all three questions in one pass, and that is what it exists for: the editor table asks exactly those three, and asked apart they are two identical walks over the sources in two processes plus a third reading of the same dictionary.
 
 `--gaps` shows the count, the first places to look at and `suggestion` - the platform's own
 spelling where it has one. A suggestion is a hint, never an answer: a name the project

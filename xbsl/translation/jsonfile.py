@@ -15,7 +15,7 @@ The rewrite is by span, so formatting, order and any duplicate keys survive unto
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterator, Mapping
 
 from xbsl.translation.dictionary import Dictionary
 from xbsl.translation.reporting import FileReport
@@ -24,16 +24,22 @@ from xbsl.translation.reporting import FileReport
 def translate_json(
     text: str,
     dictionary: Dictionary,
-    fields: frozenset[str],
+    fields: Mapping[str, str],
     report: FileReport | None = None,
 ) -> str:
-    """Rewrite the object keys that name a field of a project structure."""
+    """Rewrite the object keys that name a field of a project structure.
+
+    `fields` maps a field name to the structure that owns it (empty where more than one
+    structure declares the name). The owner is what makes a QUALIFIED entry reach the data:
+    a field renamed for its one structure alone must take the key of its resource file with
+    it, or the binding quietly finds nothing.
+    """
     pieces: list[str] = []
     cursor = 0
     for start, end, key in _key_spans(text):
         if key not in fields:
             continue
-        translated = dictionary.token(key)
+        translated = dictionary.token(key, fields.get(key) or "")
         if translated is None:
             if report is not None:
                 report.data_keys_missing += 1

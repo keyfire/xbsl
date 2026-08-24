@@ -21,6 +21,7 @@ import {
   parseSetResult,
   parseSuggest,
   parseSummary,
+  parseTable,
   plannedActions,
   refusalText,
   resetColumnWidth,
@@ -33,8 +34,10 @@ import {
   shortKey,
   sortRows,
   suggestArgs,
+  totalsAfterWrite,
   translateArgs,
   translationTarget,
+  unknownFlag,
   versionArgs,
 } from "../src/translationCore";
 
@@ -186,6 +189,89 @@ test("the coverage totals are read for the header line", () => {
   assert.strictEqual(totals.coverage, 0.99);
   // A report without totals is not a failure: the table lives without the coverage line.
   assert.strictEqual(parseSummary(JSON.stringify({ problems: [] })).surfaces, 0);
+});
+
+// ------------------------------------------------------------------- the one-run read
+
+test("the table run asks for entries, gaps and totals in one command line", () => {
+  assert.deepStrictEqual(translateArgs("table", CFG, { limit: 0 }), [
+    "translate", CFG.root, "--table", "--limit", "0", "--format", "json",
+  ]);
+});
+
+test("one --table answer carries the entries, the gaps and the header line", () => {
+  const table = parseTable(JSON.stringify({
+    dictionary: "/proj/xbsl-translation",
+    entries_total: 1,
+    entries: [{ key: "Задачи", value: "Tasks", kind: "token", file: "d.yaml", line: 3 }],
+    gaps_total: 1,
+    gaps: [{ key: "Отчёты", kind: "token", count: 4, places: [{ file: "a.xbsl", line: 7 }] }],
+    totals: { surfaces: 100, translated: 96, missing: 4, coverage: 0.96, literals_translated: 8, missing_literals: 3 },
+  }));
+  assert.strictEqual(table.entries.length, 1);
+  assert.strictEqual(table.gaps.length, 1);
+  assert.strictEqual(table.totals?.missing, 4);
+  // The same merge the three separate runs feed - the panel does not care which read filled it.
+  assert.strictEqual(mergeRows(table.entries, table.gaps).length, 2);
+});
+
+test("a --table answer without totals still gives a table", () => {
+  const table = parseTable(JSON.stringify({ dictionary: "d", entries: [], gaps: [] }));
+  assert.strictEqual(table.totals, undefined);
+  assert.strictEqual(table.entries.length, 0);
+});
+
+test("an answer missing one of the two arrays is an error, not an empty table", () => {
+  assert.throws(() => parseTable(JSON.stringify({ dictionary: "d", entries: [] })));
+});
+
+test("only an unknown flag sends the panel back to the three separate runs", () => {
+  assert.ok(unknownFlag("usage: xbsl translate ... error: unrecognized arguments: --table", "--table"));
+  // A real failure must NOT read as an old engine: falling back would run the same failure
+  // again and report it a second time, hiding the reason behind the repeat.
+  assert.ok(!unknownFlag("translate: the dictionary does not parse: d.yaml", "--table"));
+  assert.ok(!unknownFlag("", "--table"));
+});
+
+// ------------------------------------------------------- the header after one written cell
+
+const TOTALS = {
+  surfaces: 100, translated: 90, missing: 10, coverage: 0.9, literalsTranslated: 8, literalsMissing: 3,
+};
+
+test("a written name moves its occurrences from missing to translated", () => {
+  const after = totalsAfterWrite(TOTALS, { kind: "token", count: 4, hadValue: false, hasValue: true });
+  assert.strictEqual(after?.translated, 94);
+  assert.strictEqual(after?.missing, 6);
+  assert.strictEqual(after?.coverage, 0.94);
+});
+
+test("an emptied value is the same step backwards", () => {
+  const after = totalsAfterWrite(TOTALS, { kind: "token", count: 4, hadValue: true, hasValue: false });
+  assert.strictEqual(after?.translated, 86);
+  assert.strictEqual(after?.missing, 14);
+});
+
+test("a literal counts as one text, whatever its occurrences", () => {
+  const after = totalsAfterWrite(TOTALS, { kind: "literal", count: 12, hadValue: false, hasValue: true });
+  assert.strictEqual(after?.literalsTranslated, 9);
+  assert.strictEqual(after?.literalsMissing, 2);
+  // The coverage line counts names and comment lines, and a literal is neither of those.
+  assert.strictEqual(after?.translated, TOTALS.translated);
+});
+
+test("correcting a translation that was already there moves nothing", () => {
+  assert.deepStrictEqual(totalsAfterWrite(TOTALS, { kind: "token", count: 4, hadValue: true, hasValue: true }), TOTALS);
+});
+
+test("without a header line there is nothing to step forward", () => {
+  assert.strictEqual(totalsAfterWrite(undefined, { kind: "token", count: 4, hadValue: false, hasValue: true }), undefined);
+});
+
+test("the counters never run past the two ends of the scale", () => {
+  const after = totalsAfterWrite(TOTALS, { kind: "token", count: 999, hadValue: false, hasValue: true });
+  assert.strictEqual(after?.translated, 100);
+  assert.strictEqual(after?.missing, 0);
 });
 
 // ----------------------------------------------------------------------- the table

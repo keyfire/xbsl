@@ -6,8 +6,9 @@ Modes compose from flags around one pass over the project:
 - `--coverage`: plus the per-object breakdown;
 - `--missing FILE`: write the untranslated remainder as a dictionary stub to fill;
 - `--out DIR`: write the translated tree;
-- `--strict`: exit non-zero unless the coverage is complete and no problems were found -
-  what a CI gate wants ("publish only a fully translated, lint-clean configuration").
+- `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
+  name the sources use, and no problems were found - what a CI gate wants ("publish only a
+  fully translated, lint-clean configuration").
 """
 
 from __future__ import annotations
@@ -48,6 +49,10 @@ MESSAGES = {
     "translate.help.entries": {
         "ru": "показать записи словаря таблицей (ключ, перевод, файл, строка)",
         "en": "list the dictionary entries as a table (key, value, file, line)",
+    },
+    "translate.help.table": {
+        "ru": "показать всё, что нужно панели, за один проход: записи, пропуски и сводку",
+        "en": "everything the editor table shows in ONE pass: entries, gaps and the totals",
     },
     "translate.help.set": {
         "ru": "применить правки словаря из файла JSON: [{{key, value, kind}}]; у литерала ключ"
@@ -98,8 +103,8 @@ MESSAGES = {
         "en": "print the coverage of every metadata object",
     },
     "translate.help.strict": {
-        "ru": "ненулевой выход, если покрытие неполное или есть проблемы",
-        "en": "non-zero exit when the coverage is incomplete or problems were found",
+        "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные пропуски",
+        "en": "non-zero exit when the coverage is incomplete, problems or platform gaps were found",
     },
     "translate.help.no-swap": {
         "ru": "не переворачивать словари локализации (база останется на исходном языке)",
@@ -226,6 +231,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--coverage", action="store_true", help=i18n.t("translate.help.coverage"))
     parser.add_argument("--gaps", action="store_true", help=i18n.t("translate.help.gaps"))
     parser.add_argument("--entries", action="store_true", help=i18n.t("translate.help.entries"))
+    parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
     parser.add_argument("--suggest", action="store_true", help=i18n.t("translate.help.suggest"))
     parser.add_argument("--suggest-out", dest="suggest_out",
@@ -282,8 +288,13 @@ def cli_main(argv: list[str] | None = None) -> int:
 
     # The table modes answer without translating the tree twice: `--entries` reads the
     # dictionary alone, `--set` writes it, and `--gaps` is the one that needs a pass.
+    # `--table` is all three at once, and the reason it exists is that the editor panel needs
+    # exactly those three: asked apart they cost two identical passes in two processes plus a
+    # third that reads the same megabytes of dictionary a third time.
     if args.set_file:
         return _apply_edits(args, root, loaded)
+    if args.table:
+        return _list_table(args, root, loaded)
     if args.entries:
         return _list_entries(args, root, loaded)
     if args.gaps:
@@ -312,7 +323,11 @@ def cli_main(argv: list[str] | None = None) -> int:
         _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
 
     totals = report.totals()
-    if args.strict and (totals["missing"] or report.problems):
+    # A platform gap fails the gate as an untranslated name does, and for the same reason: the
+    # name stays Cyrillic in the translated tree, so the build refuses it. It is named apart in
+    # the report because the CURE is different - not a dictionary entry, which the compiler
+    # would refuse, but the platform data.
+    if args.strict and (totals["missing"] or totals["platform_gaps"] or report.problems):
         return 1
     return 0
 
@@ -430,57 +445,103 @@ def _page(rows: list, args) -> list:
     return rows[start:end]
 
 
-def _list_entries(args, root: Path, loaded) -> int:
+def _entry_rows(args, path: Path) -> list:
+    """The dictionary entries the query asks for - `--kind` and `--filter` applied."""
     from xbsl.translation import entries as entries_module
 
-    path = _dictionary_path(args, root)
-    if path is None:
-        print(i18n.t("translate.entries.no-dictionary"), file=sys.stderr)
-        return 2
     needle = args.filter.casefold()
-    rows = [
+    return [
         entry for entry in entries_module.read_entries(path)
         if (args.kind in ("any", entry.kind))
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
+
+
+def _gap_rows(args, gaps: list) -> list:
+    """The same query over the gaps - the filter matches a key, a gap has no value yet."""
+    needle = args.filter.casefold()
+    return [
+        gap for gap in gaps
+        if (args.kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
+    ]
+
+
+def _render_entries(page: list, total: int) -> None:
+    print(i18n.t("translate.entries-header", shown=len(page), total=total))
+    for entry in page:
+        print(f"  {entry.kind:6} {entry.key}  ->  {entry.value}")
+
+
+def _render_gaps(page: list, total: int) -> None:
+    print(i18n.t("translate.gaps-header", shown=len(page), total=total))
+    for gap in page:
+        place = f"{gap.places[0][0]}:{gap.places[0][1]}" if gap.places else ""
+        hint = f"  ~ {gap.suggestion}" if gap.suggestion else ""
+        print(f"  {gap.count:5}x {gap.kind:6} {gap.key}{hint}   {place}")
+
+
+def _list_entries(args, root: Path, loaded) -> int:
+    path = _dictionary_path(args, root)
+    if path is None:
+        print(i18n.t("translate.entries.no-dictionary"), file=sys.stderr)
+        return 2
+    rows = _entry_rows(args, path)
     total = len(rows)
     page = _page(rows, args)
     payload = {
         "dictionary": str(path), "total": total,
         "entries": [entry.as_dict() for entry in page],
     }
-
-    def render(_rows):
-        print(i18n.t("translate.entries-header", shown=len(page), total=total))
-        for entry in page:
-            print(f"  {entry.kind:6} {entry.key}  ->  {entry.value}")
-
-    return _emit(args, payload, page, render)
+    return _emit(args, payload, page, lambda _rows: _render_entries(page, total))
 
 
 def _list_gaps(args, root: Path, loaded) -> int:
     from xbsl.translation import entries as entries_module
 
-    needle = args.filter.casefold()
-    rows = [
-        gap for gap in entries_module.gaps_of_project(root, loaded)
-        if (args.kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
-    ]
+    rows = _gap_rows(args, entries_module.gaps_of_project(root, loaded))
     total = len(rows)
     page = _page(rows, args)
     payload = {
         "dictionary": str(_dictionary_path(args, root) or ""), "total": total,
         "gaps": [gap.as_dict() for gap in page],
     }
+    return _emit(args, payload, page, lambda _rows: _render_gaps(page, total))
+
+
+def _list_table(args, root: Path, loaded) -> int:
+    """Entries, gaps and the totals out of ONE pass over the project.
+
+    The counts are named apart (`entries_total`, `gaps_total`) rather than shared: a reader
+    that saw one `total` over two lists would have to guess which one it counted.
+    """
+    from xbsl.translation import entries as entries_module
+    from xbsl.translation import project as project_module
+
+    path = _dictionary_path(args, root)
+    if path is None:
+        print(i18n.t("translate.entries.no-dictionary"), file=sys.stderr)
+        return 2
+    report = project_module.translate_project(
+        root, loaded, None, swap_localization=not args.no_localization_swap,
+    )
+    entries = _entry_rows(args, path)
+    gaps = _gap_rows(args, entries_module.gaps_of_report(report))
+    entry_page, gap_page = _page(entries, args), _page(gaps, args)
+    payload = {
+        "dictionary": str(path),
+        "entries_total": len(entries),
+        "entries": [entry.as_dict() for entry in entry_page],
+        "gaps_total": len(gaps),
+        "gaps": [gap.as_dict() for gap in gap_page],
+        "totals": report.totals(),
+        "problems": report.problems,
+    }
 
     def render(_rows):
-        print(i18n.t("translate.gaps-header", shown=len(page), total=total))
-        for gap in page:
-            place = f"{gap.places[0][0]}:{gap.places[0][1]}" if gap.places else ""
-            hint = f"  ~ {gap.suggestion}" if gap.suggestion else ""
-            print(f"  {gap.count:5}x {gap.kind:6} {gap.key}{hint}   {place}")
+        _render_entries(entry_page, len(entries))
+        _render_gaps(gap_page, len(gaps))
 
-    return _emit(args, payload, page, render)
+    return _emit(args, payload, entry_page, render)
 
 
 def _apply_edits(args, root: Path, loaded) -> int:

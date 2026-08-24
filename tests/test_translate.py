@@ -616,7 +616,7 @@ def test_rule_finding_carries_machine_readable_data(tmp_path: Path):
 def test_json_resource_keys_follow_their_structure_fields(tmp_path: Path):
     """A field renamed in the module and a key left in the data bind nothing - and say nothing."""
     from xbsl.translation.jsonfile import translate_json
-    from xbsl.translation.names import structure_fields
+    from xbsl.translation.names import structure_field_owners
 
     source = engine.load_text("Справочники.xbsl", (
         "структура JsonКорень\n"
@@ -629,8 +629,10 @@ def test_json_resource_keys_follow_their_structure_fields(tmp_path: Path):
         "метод ПрочитатьШаги()\n"
         ";\n"
     ))
-    fields = structure_fields(source)
-    assert fields == {"Шаги", "Задачи"}
+    owners = structure_field_owners(source)
+    assert set(owners) == {"Шаги", "Задачи"}
+    assert owners["Шаги"] == {"JsonКорень"}
+    fields = {field: next(iter(group)) for field, group in owners.items()}
 
     text = (
         '{\n'
@@ -652,7 +654,7 @@ def test_json_resource_key_without_an_entry_is_counted_not_guessed(tmp_path: Pat
     from xbsl.translation.jsonfile import translate_json
 
     report = FileReport(path="Данные.json")
-    out = translate_json('{"Шаги": 1}\n', _dictionary(), frozenset({"Шаги"}), report)
+    out = translate_json('{"Шаги": 1}\n', _dictionary(), {"Шаги": "JsonКорень"}, report)
     assert out == '{"Шаги": 1}\n'
     assert (report.data_keys, report.data_keys_missing) == (0, 1)
 
@@ -1551,3 +1553,132 @@ def test_query_literal_undefined_is_not_null():
 
     assert "T.Parent != UNDEFINED" in out
     assert "NULL" not in out
+
+
+@pytest.mark.needs_data
+def test_a_platform_member_with_no_english_is_the_platform_s_gap(tmp_path: Path):
+    """`Перевернуть` is a method of `Array` that no table of the data spells in English.
+
+    Written into the dictionary it would be a guess, and a guessed English name for a platform
+    member is refused by the compiler - so it belongs to the platform gaps, where the counter
+    and the list of gaps agree about it.
+    """
+    from xbsl.translation import entries
+
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """метод Проверка()
+    пер список = Массив<Строка>{}
+    список.Перевернуть()
+;
+""")
+    report = translate_project(root, _dictionary({"Проверка": "Check", "список": "items"}), None)
+    assert "Перевернуть" in report.merged_platform_gaps()
+    assert "Перевернуть" not in report.merged_missing_tokens()
+    # And the table of the panel does not offer it either - there is nothing to type there.
+    assert all(gap.key != "Перевернуть" for gap in entries.gaps_of_report(report))
+
+
+@pytest.mark.needs_data
+def test_a_name_the_project_declares_stays_the_project_s_gap(tmp_path: Path):
+    """The gate wins: a project method spelled like a platform member is the project's own."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """метод Перевернуть()
+;
+метод Проверка()
+    Модуль.Перевернуть()
+;
+""")
+    report = translate_project(root, _dictionary({"Проверка": "Check"}), None)
+    assert "Перевернуть" in report.merged_missing_tokens()
+    assert "Перевернуть" not in report.merged_platform_gaps()
+
+
+# --- one structure is one namespace ---------------------------------------------------------
+
+
+def test_a_qualified_entry_renames_a_field_its_uses_and_its_json_key(tmp_path: Path):
+    """`<Structure>.<Field>` reaches everything the field binds - the point of a scoped entry.
+
+    Two fields of one structure whose Russian names translate into one English word is a
+    structure the compiler refuses. Renaming the Russian source is not the cure: the name is
+    right in Russian. The dictionary says which of the two takes another word, and the
+    declaration, every use through a typed receiver and the json key follow it together.
+    """
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """структура ДанныеЗаписи
+    пер Сервисы: Массив<Строка>
+    пер Услуги: Массив<Строка>
+;
+
+метод Разобрать(Корень: ДанныеЗаписи): Число
+    возврат Корень.Сервисы.Количество() + Корень.Услуги.Количество()
+;
+""")
+    _write(root / "Данные.json", '{"Сервисы": [], "Услуги": []}\n')
+    dictionary = _dictionary({
+        "Модуль": "Module", "ДанныеЗаписи": "RecordData", "Разобрать": "Parse",
+        "Корень": "Root", "Сервисы": "Services", "Услуги": "Services",
+        "ДанныеЗаписи.Услуги": "Offerings",
+    })
+    out = tmp_path / "en"
+    report = translate_project(root, dictionary, out)
+
+    module = (out / "Module.xbsl").read_text(encoding="utf-8")
+    assert "var Offerings: Array<String>" in module
+    assert "Root.Offerings.Count()" in module
+    assert (out / "Data.json").read_text(encoding="utf-8") == (
+        '{"Services": [], "Offerings": []}\n'
+    )
+    assert not report.problems
+
+
+def test_two_fields_of_one_structure_under_one_word_are_a_problem(tmp_path: Path):
+    """Without the scoped entry the collision is REPORTED - until now only the compiler saw it."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """структура ДанныеЗаписи
+    пер Сервисы: Массив<Строка>
+    пер Услуги: Массив<Строка>
+;
+""")
+    report = translate_project(root, _dictionary({
+        "Модуль": "Module", "ДанныеЗаписи": "RecordData",
+        "Сервисы": "Services", "Услуги": "Services",
+    }), None)
+    assert any("structure:ДанныеЗаписи" in problem for problem in report.problems)
+    assert any("Сервисы, Услуги" in problem for problem in report.problems)
+
+
+def test_the_receiver_as_written_answers_before_its_type(tmp_path: Path):
+    """An entry qualified by the VARIABLE keeps answering - projects already write those."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """структура ДанныеЗаписи
+    пер Ссылка: Строка
+;
+
+метод Разобрать(Событие: ДанныеЗаписи): Строка
+    возврат Событие.Ссылка
+;
+""")
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Модуль": "Module", "ДанныеЗаписи": "RecordData", "Разобрать": "Parse",
+        "Событие": "Event", "Ссылка": "Reference", "Событие.Ссылка": "Link",
+        "ДанныеЗаписи.Ссылка": "Href",
+    }), out)
+    module = (out / "Module.xbsl").read_text(encoding="utf-8")
+    # The declaration belongs to the structure, the use answers to the variable it is written on.
+    assert "var Href: String" in module
+    assert "return Event.Link" in module
+
+
+@pytest.mark.needs_data
+def test_a_verified_member_spelling_wins_over_the_owner_table(tmp_path: Path):
+    """`Символ` of a String is `CharAt`; the owner table says `Symbol`, which the compiler refuses."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """метод Разобрать(Тело: Строка): Строка
+    возврат Тело.Символ(1)
+;
+""")
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({"Модуль": "Module", "Разобрать": "Parse", "Тело": "Body"}), out)
+    assert "Body.CharAt(1)" in (out / "Module.xbsl").read_text(encoding="utf-8")
