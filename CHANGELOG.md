@@ -20,6 +20,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   nothing and only suggests the data is guarded. The finding points at the privilege:
   alone it takes the whole line with it, among others only it goes.
 
+### Fixed
+- **An enumeration value of a block the ui schema does not describe now translates.**
+  The sorting item of a list and an item of its filter are not in the schema, so the key
+  beside the value turned English while the value stayed Cyrillic and the build refused
+  it. Such a block names its property after its enumeration, and that table answers.
+
 ## 2026-08-25 – 0.76.0
 
 ### Added

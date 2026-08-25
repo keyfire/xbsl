@@ -665,6 +665,17 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
         if any(t.startswith("Событие") for t in types):
             _identifier_value(vnode, resolver, report, edits)
             return
+    # A block the ui schema does not describe at all - the sorting item of a list, an item of
+    # its filter - names its property after the ENUMERATION the value belongs to, and that
+    # table is in the schema even when the property is not. Without this the key beside the
+    # value turned English while the value itself stayed Cyrillic, and the build refuses it.
+    # The table of that one enumeration answers, never the global fallback: a data string
+    # that happens to look like some value of some enumeration stays data.
+    if has_cyrillic(value):
+        own_enum = uischema.enum_value_aliases(key).get(value)
+        if own_enum:
+            _set_scalar(vnode, own_enum, edits)
+            return
     if _boolean_scalar(vnode, edits):
         return
     _generic_scalar(vnode, resolver, report, edits)

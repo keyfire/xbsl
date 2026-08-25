@@ -215,6 +215,60 @@ def test_yaml_component_tree():
     assert report.user_missing == 0
 
 
+def test_yaml_enum_value_of_a_block_the_schema_does_not_describe():
+    """The sorting item of a list and an item of its filter are not in the ui schema.
+
+    Such a block names its property after the enumeration the value belongs to, and that
+    table is in the schema even when the property is not: without it the key beside the value
+    turned English while the value itself stayed Cyrillic, and the build refuses that.
+    """
+    text = (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: СписокЗадач\n"
+        "Наследует:\n"
+        "    Тип: Группа\n"
+        "    Содержимое:\n"
+        "        Тип: ДинамическийСписок<Задачи.Ссылка>\n"
+        "        Сортировка:\n"
+        "            -\n"
+        "                Поле: Наименование\n"
+        "                НаправлениеСортировки: ПоВозрастанию\n"
+        "        Отбор:\n"
+        "            -\n"
+        "                Поле: Готова\n"
+        "                ВидСравнения: Равно\n"
+    )
+    out, _report = _yaml(text, tokens={"СписокЗадач": "TaskList", "Задачи": "Tasks"},
+                         name="СписокЗадач.yaml")
+
+    assert "SortingDirection: Ascending" in out
+    assert "ComparisonKind: Equal" in out
+
+
+def test_yaml_value_outside_the_named_enumeration_is_left_alone():
+    """Only the table of the enumeration the KEY names answers - never a global lookup.
+
+    A word that is not a value of THAT enumeration is data: the project may name a property
+    after a platform enumeration and put its own value there, and inventing a spelling for it
+    would rename data.
+    """
+    text = (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: СписокЗадач\n"
+        "Наследует:\n"
+        "    Тип: Группа\n"
+        "    Содержимое:\n"
+        "        Тип: ДинамическийСписок<Задачи.Ссылка>\n"
+        "        Сортировка:\n"
+        "            -\n"
+        "                НаправлениеСортировки: Наискосок\n"
+    )
+    out, _report = _yaml(text, tokens={"СписокЗадач": "TaskList", "Задачи": "Tasks"},
+                         name="СписокЗадач.yaml")
+
+    assert "SortingDirection: Наискосок" in out
+
+
 def test_yaml_localized_strings_and_translation_body():
     base = (
         "ВидЭлемента: ЛокализованныеСтроки\n"
