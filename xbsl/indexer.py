@@ -52,6 +52,7 @@ from xbsl.rules._syntax import (
     _skip_balanced,
     _type_head,
     code_tokens,
+    query_ranges,
     signatures,
     type_expr,
 )
@@ -388,7 +389,8 @@ def _next_significant(toks: list, i: int, n: int) -> int:
     return j
 
 
-def _module_references(s: SourceFile, referable: set[str], module: str, path: str) -> list[dict]:
+def _module_references(s: SourceFile, referable: set[str], module: str, path: str,
+                       objects: set[str] | None = None) -> list[dict]:
     """Usages of indexable names in an .xbsl module: calls, member accesses, chain roots.
 
     For every identifier token whose value is in referable and which is a call (before `(`),
@@ -397,10 +399,17 @@ def _module_references(s: SourceFile, referable: set[str], module: str, path: st
     (otherwise ""). The name in a method/constructor declaration is skipped - that is a
     definition, not a usage; an annotation name (after `@`) is not counted as a reference.
     Positions: line 1-based, col 0-based (for the editor).
+
+    Inside a QUERY an object name counts on its own, touching neither a dot nor a parenthesis:
+    `ИЗ Товары КАК Т` names the table, and that is the very line a rename has to follow. Only
+    a name the project declares as an OBJECT is taken this way - a method name inside a query
+    is not a call - and the paired query file of a virtual table is one query from end to end,
+    so its FROM clause is covered by the same reading.
     """
     refs: list[dict] = []
     toks = tokens(s)
     n = len(toks)
+    query_spans = query_ranges(s) if objects else []
     for i, t in enumerate(toks):
         if t.kind != "IDENT" or t.value not in referable:
             continue
@@ -415,7 +424,11 @@ def _module_references(s: SourceFile, referable: set[str], module: str, path: st
         after_dot = prev is not None and prev.kind == "OP" and prev.value == "."
         before_dot = nxt is not None and nxt.kind == "OP" and nxt.value == "."
         is_call = nxt is not None and nxt.kind == "OP" and nxt.value == "("
-        if not (after_dot or before_dot or is_call):
+        in_query_table = (
+            objects is not None and t.value in objects
+            and any(start <= t.start < end for start, end in query_spans)
+        )
+        if not (after_dot or before_dot or is_call or in_query_table):
             continue
         qualifier = ""
         if after_dot:
@@ -978,15 +991,16 @@ def build_index(root: Path) -> dict:
     # call/member/chain root in modules, plus methods in yaml handlers. Resolving a concrete
     # target (a method of module X, an object, a form component) is done by the navigation
     # core against this list.
+    object_names = {o["name"] for o in objects}
     referable = (
-        {o["name"] for o in objects}
+        object_names
         | {c["name"] for c in components}
         | {m["name"] for m in methods}
     )
     references: list[dict] = []
     for s in xbsl_sources:
         module = s.path.stem
-        references.extend(_module_references(s, referable, module, rel(s.path)))
+        references.extend(_module_references(s, referable, module, rel(s.path), object_names))
     for s in yaml_sources:
         references.extend(_handler_references(s, s.path.stem, rel(s.path)))
 

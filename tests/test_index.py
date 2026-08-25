@@ -663,3 +663,45 @@ def test_query_file_usages_are_indexed(project):
     assert from_query, "запрос виртуальной таблицы не попал в индекс"
     assert any(r["name"] == "Товары" for r in from_query), "объект запроса не счёлся употреблением"
     assert all(r["module"] == "ТоварыТаблица" for r in from_query), "имя модуля с хвостом суффикса"
+
+
+def test_the_table_of_a_from_clause_is_a_usage(tmp_path):
+    """`ИЗ Товары КАК Т` names the table, and that is the line a rename has to follow.
+
+    A bare identifier touches neither a dot nor a parenthesis, so without the query reading it
+    was not a usage at all - and "find usages" of a catalog showed no query selecting from it.
+    """
+    (tmp_path / "Товары.yaml").write_text(
+        "ВидЭлемента: Справочник\nИд: 11111111-2222-3333-4444-555555555555\nИмя: Товары\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Отчёт.xbsl").write_text(
+        "метод Собрать()\n"
+        "    знч Данные = Запрос{ВЫБРАТЬ Т.Ссылка ИЗ Товары КАК Т}.Выполнить()\n"
+        ";\n",
+        encoding="utf-8",
+    )
+    refs = build_index(tmp_path)["references"]
+
+    from_clause = [r for r in refs if r["name"] == "Товары" and r["path"].endswith("Отчёт.xbsl")]
+    assert from_clause, "таблица запроса не счёлась употреблением"
+    assert from_clause[0]["line"] == 2
+
+
+def test_a_method_name_inside_a_query_is_not_a_usage(tmp_path):
+    """Only an OBJECT is taken this way: a bare word in a query is not a call of a method."""
+    (tmp_path / "Товары.yaml").write_text(
+        "ВидЭлемента: Справочник\nИд: 11111111-2222-3333-4444-555555555556\nИмя: Товары\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Товары.xbsl").write_text("метод Наименование(): Строка\n    возврат \"\"\n;\n",
+                                          encoding="utf-8")
+    (tmp_path / "Отчёт.xbsl").write_text(
+        "метод Собрать()\n"
+        "    знч Данные = Запрос{ВЫБРАТЬ Наименование ИЗ Товары КАК Т}.Выполнить()\n"
+        ";\n",
+        encoding="utf-8",
+    )
+    refs = build_index(tmp_path)["references"]
+
+    assert not [r for r in refs if r["name"] == "Наименование" and r["path"].endswith("Отчёт.xbsl")]

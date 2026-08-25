@@ -28,6 +28,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   alone it takes the whole line with it, among others only it goes.
 
 ### Fixed
+- **The table of a FROM clause counts as a usage of the object.** A bare identifier
+  touches neither a dot nor a parenthesis, so `FROM Tasks AS T` - the very line a rename
+  has to follow - was no usage at all: on a live project the index gained 374 of them.
 - **An enumeration value of a block the ui schema does not describe now translates.**
   The sorting item of a list and an item of its filter are not in the schema, so the key
   beside the value turned English while the value stayed Cyrillic and the build refused
