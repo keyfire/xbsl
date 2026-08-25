@@ -60,6 +60,10 @@ _CORE_MESSAGES = {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",
     },
+    "code/client-available-unused.off": {
+        "ru": "клиентский вызов бывает не виден статически: метод зовут строкой из HTML-вставки или обработчиком, который дописывает разметку. Проверка нарочно считает употреблением любое упоминание в клиентском окружении, в yaml и в строке, но остаток ложных возможен – включайте, когда ревизуете поверхность, открытую клиенту",
+        "en": "a client call is not always visible statically: a method may be called by name from a string of an HTML insert, or by a handler that writes markup. The check deliberately counts any mention in a client environment, in a yaml or in a string as a use, yet false positives remain - enable it when auditing the surface open to the client",
+    },
     "yaml/size-needs-no-stretch.off": {
         "ru": "у части компонентов размер без явного запрета растягивания работает законно (у родителя нет свободного места по этой оси, статически это не решается) – предупреждение дало бы ложные. Зовите точечно, когда видите симптом: пустое место или раздутые соседи",
         "en": "for some components a size without an explicit stretch ban is perfectly valid (the parent has no leftover space along that axis, which is not statically decidable) - a warning would be false. Enable it point-blank when you see the symptom: blank space or inflated neighbours",

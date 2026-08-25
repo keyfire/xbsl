@@ -58,6 +58,7 @@ a @НаСервере @ДоступноСКлиента method is found by the s
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from functools import lru_cache
 
@@ -73,6 +74,20 @@ from xbsl.rules.handlers import _handler_re, _IDENT_RE
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
+    "code/client-available-unused.title": {
+        "ru": "Метод открыт клиенту, но клиент его не зовёт",
+        "en": "A method open to the client that no client calls",
+    },
+    "code/client-available-unused.unused": {
+        "ru": "Метод '{name}' объявлен доступным с клиента, но ни одно клиентское место "
+              "проекта его не называет – ни модуль клиентского окружения, ни клиентский метод "
+              "серверного модуля, ни yaml, ни строковый литерал. Снимите аннотацию: она "
+              "открывает клиенту поверхность, которой никто не пользуется.",
+        "en": "Method '{name}' is declared available from the client, yet no client place of "
+              "the project names it - neither a module of the client environment, nor a client "
+              "method of a server module, nor a yaml, nor a string literal. Drop the "
+              "annotation: it opens a surface to the client that nobody uses.",
+    },
     "code/server-call-from-handler.title": {
         "ru": "Серверный метод недоступен клиентскому обработчику",
         "en": "Server method is unavailable to a client handler",
@@ -1143,3 +1158,101 @@ def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 i18n.t("code/component-in-server-context.call",
                        name=f"{root}.{member}", method=method, root=root),
             )
+
+
+# --- code/client-available-unused ------------------------------------------------------------
+
+#: Every word-like token of a text: a mention of a method by name, wherever it is written.
+_WORDS_RE = re.compile(r"[^\W\d]\w*", re.UNICODE)
+
+
+def _client_use_mapper(source: SourceFile) -> dict | None:
+    """The map phase: who is declared available to the client, and what the CLIENT names.
+
+    A module cannot tell whether its own pair runs on the client - that is in the other file
+    of the pair - so it hands the reduce two disjoint word sets: the ones that are a client
+    mention wherever this module runs (a string literal, the body of an `@OnClient` method)
+    and everything else. The reduce adds the second set only for a module whose pair does run
+    on the client.
+    """
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        if data is None:
+            return None
+        # A yaml wires handlers by name, and the interface it describes is client code.
+        return {"k": "y", "stem": _pair_stem(source.rel),
+                "client": bool(object_kind(data) in _CLIENT_ENV_KINDS or _client_environment(data)),
+                "words": sorted(set(_WORDS_RE.findall(source.text)))}
+    if source.kind != "xbsl":
+        return None
+    available = frozenset(terms.key_forms("ДоступноСКлиента"))
+    on_client = frozenset(terms.key_forms("НаКлиенте"))
+    toks = code_tokens(source)
+    decls: list[tuple[str, int, int]] = []
+    if any(name in source.text for name in available):
+        module, errors = parse(source)
+        if errors:
+            return None  # a broken file is code/parse-error territory
+        lm = linemap(source)
+        for member in module.members:
+            if not isinstance(member, P.Method) or member.is_static:
+                continue
+            if not {a.name for a in member.annotations} & available:
+                continue
+            line, col = lm.linecol(member.start)
+            decls.append((member.name, line, col))
+    _names, methods = _module_decls(toks)
+    bodies = _method_bodies(toks, methods, _decl_anchors(toks))
+    client_ranges = [
+        span for name, (start, end) in bodies.items()
+        for _n, anns, _i in methods
+        if _n == name and anns & on_client
+        for span in ((start, end),)
+    ]
+    client_words: set[str] = set()
+    other_words: set[str] = set()
+    for i, tok in enumerate(toks):
+        previous = toks[i - 1] if i else None
+        if previous is not None and previous.kind == "KEYWORD" \
+                and previous.canonical in ("METHOD", "CONSTRUCTOR"):
+            continue  # the declaration itself is not a use
+        words = _WORDS_RE.findall(tok.value)
+        if not words:
+            continue
+        # A string literal counts wherever it stands: an HTML container bridge calls a method
+        # by name from the browser, and that call is as client as it gets.
+        if tok.kind == "STRING" or any(start <= i < end for start, end in client_ranges):
+            client_words.update(words)
+        else:
+            other_words.update(words)
+    return {"k": "x", "stem": _pair_stem(source.rel), "decls": decls,
+            "client_words": sorted(client_words),
+            "other_words": sorted(other_words - client_words)}
+
+
+@rule(
+    "code/client-available-unused", "code/client-available-unused.title", "D",
+    scope="project", severity=Severity.WARNING, enabled_by_default=False,
+    off_reason="code/client-available-unused.off", mapper=_client_use_mapper,
+)
+def client_available_unused(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    client_stems = {f["stem"] for f in facts.values() if f["k"] == "y" and f["client"]}
+    named_by_client: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "y":
+            named_by_client.update(fact["words"])
+            continue
+        named_by_client.update(fact["client_words"])
+        if fact["stem"] in client_stems:
+            named_by_client.update(fact["other_words"])
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        for name, line, col in fact["decls"]:
+            if name not in named_by_client:
+                yield Diagnostic(
+                    rel, line, col, "code/client-available-unused", Severity.WARNING,
+                    i18n.t("code/client-available-unused.unused", name=name),
+                )

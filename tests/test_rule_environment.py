@@ -662,3 +662,89 @@ def test_variable_named_query_is_not_a_query_block(tmp_path):
         _КЛИЕНТ_И_СЕРВЕР,
     )
     assert not _has(d, RULE_QUERY)
+
+
+# --- code/client-available-unused ---------------------------------------------------------
+
+UNUSED = "code/client-available-unused"
+
+_SERVER_MODULE = (
+    "ВидЭлемента: ОбщийМодуль\nИмя: Данные\nОкружение: Сервер\n"
+)
+_CLIENT_MODULE = (
+    "ВидЭлемента: ОбщийМодуль\nИмя: Кабинет\nОкружение: Клиент\n"
+)
+_OPEN_METHOD = (
+    "@НаСервере @ДоступноСКлиента\n"
+    "метод Прочитать(): Строка\n"
+    "    возврат \"\"\n"
+    ";\n"
+)
+
+
+def _client_use(tmp_path, files: dict[str, str]):
+    files = {"Данные.yaml": _SERVER_MODULE, "Данные.xbsl": _OPEN_METHOD, **files}
+    for name, content in files.items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+    diags = engine.run(discover([str(tmp_path)]), enable={UNUSED})
+    return [d for d in diags if d.rule_id == UNUSED]
+
+
+def test_method_open_to_the_client_that_nobody_calls(tmp_path):
+    hits = _client_use(tmp_path, {})
+    assert len(hits) == 1 and "Прочитать" in hits[0].message
+
+
+def test_rule_is_off_by_default(tmp_path):
+    (tmp_path / "Данные.yaml").write_text(_SERVER_MODULE, encoding="utf-8")
+    (tmp_path / "Данные.xbsl").write_text(_OPEN_METHOD, encoding="utf-8")
+    assert not [d for d in engine.run(discover([str(tmp_path)])) if d.rule_id == UNUSED]
+
+
+def test_a_call_from_a_client_module_silences_it(tmp_path):
+    hits = _client_use(tmp_path, {
+        "Кабинет.yaml": _CLIENT_MODULE,
+        "Кабинет.xbsl": "метод Показать()\n    Данные.Прочитать()\n;\n",
+    })
+    assert not hits
+
+
+def test_a_call_from_a_server_module_does_not(tmp_path):
+    hits = _client_use(tmp_path, {
+        "Отчёт.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Отчёт\nОкружение: Сервер\n",
+        "Отчёт.xbsl": "метод Собрать()\n    Данные.Прочитать()\n;\n",
+    })
+    assert len(hits) == 1
+
+
+def test_a_call_from_a_client_method_of_a_server_module_silences_it(tmp_path):
+    hits = _client_use(tmp_path, {
+        "Отчёт.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Отчёт\nОкружение: КлиентИСервер\n",
+        "Отчёт.xbsl": "@НаКлиенте\nметод Показать()\n    Данные.Прочитать()\n;\n",
+    })
+    assert not hits
+
+
+def test_a_name_in_a_yaml_silences_it(tmp_path):
+    """A yaml wires a handler by name, and what it describes is client code."""
+    hits = _client_use(tmp_path, {
+        "Форма.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: Форма\n"
+                      "Наследует:\n    Тип: Группа\n    ПриСоздании: Прочитать\n",
+    })
+    assert not hits
+
+
+def test_a_name_inside_a_string_literal_silences_it(tmp_path):
+    """An HTML container bridge calls a method by name from the browser."""
+    hits = _client_use(tmp_path, {
+        "Отчёт.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Отчёт\nОкружение: Сервер\n",
+        "Отчёт.xbsl": "метод Разметка(): Строка\n    возврат \"вызвать Прочитать\"\n;\n",
+    })
+    assert not hits
+
+
+def test_a_method_without_the_annotation_is_not_judged(tmp_path):
+    hits = _client_use(tmp_path, {
+        "Данные.xbsl": "@НаСервере\nметод Прочитать(): Строка\n    возврат \"\"\n;\n",
+    })
+    assert not hits

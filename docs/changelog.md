@@ -22,6 +22,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`code/client-available-unused` - a method open to the client that no client calls.**
+  The annotation opens a surface nobody uses; the check counts a mention in a client
+  module, in a client method of a server module, in a yaml and in a string literal as a
+  use. Off by default, like `code/unused-method`.
 - **`code/access-context-read-noop` - a context extension that grants a read everyone
   already has.** The type's yaml says `Read: PermitEveryone`, so the call hands out
   nothing and only suggests the data is guarded. The finding points at the privilege:
