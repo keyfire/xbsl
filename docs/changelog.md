@@ -19,6 +19,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`code/query-in-loop` - a query inside a `for` / `while` loop.** Every turn is a round trip of
+  its own, so the cost of the method grows with the data and shows only under real volumes. The
+  replacement is a single query over the whole set, the values of the turns passed as an array
+  parameter of an `IN` condition.
+
 ## 2026-08-24 – 0.74.0, 0.75.0
 
 ### Added

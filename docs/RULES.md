@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 161 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 162 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -126,6 +126,7 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 | `code/brackets` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Unbalanced brackets () [] {} |
 | `code/blocks` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Unbalanced blocks and ';' [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
 | `code/ternary-and-or` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Compound ternary condition without parentheses [docs](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
+| `code/query-in-loop` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A query inside a loop |
 | `code/param-type-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Parameter without a type and without a default value [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/module-var-not-const` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `var` / `val` / `use` declaration at MODULE level - only a constant lives there, an expression outside a method body is refused by the compiler and the apply rolls the project back [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 | `code/loop-header` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Malformed 'for' loop header [docs](https://1cmycloud.com/docs/help/topics/for-in-loop/) |

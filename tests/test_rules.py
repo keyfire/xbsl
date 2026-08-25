@@ -916,6 +916,92 @@ def test_blocks_abstract_method_has_no_body():
     assert _lint("М.xbsl", content, select={"code/blocks"}) == []
 
 
+# --- code/query-in-loop ---------------------------------------------------------------
+# A query literal opened while a loop frame is still on the block stack: one round trip per
+# turn. The stack is the same one code/blocks keeps, so the guard against a false positive is
+# a loop that has already CLOSED before the query.
+
+
+@pytest.mark.needs_data
+def test_query_in_for_loop_flagged():
+    content = (
+        "метод Ф(Ключи: Массив<Строка>)\n"
+        "    для Ключ из Ключи\n"
+        "        знч Р = Запрос{\n"
+        "            ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т ГДЕ Т.Код == %Ключ\n"
+        "        }.Выполнить()\n"
+        "        Г(Р)\n"
+        "    ;\n"
+        ";\n"
+    )
+    d = _lint("М.xbsl", content, select={"code/query-in-loop"})
+    assert _has(d, "code/query-in-loop")
+    assert d[0].line == 3
+    # the message names the loop as it is written in the source and the line it opened on
+    assert "'для'" in d[0].message and "2" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_query_in_while_loop_flagged():
+    content = (
+        "метод Ф(Всего: Число)\n"
+        "    пер Индекс = 0\n"
+        "    пока Индекс < Всего\n"
+        "        знч Р = Запрос{ ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т }.Выполнить()\n"
+        "        Индекс += 1\n"
+        "    ;\n"
+        ";\n"
+    )
+    d = _lint("М.xbsl", content, select={"code/query-in-loop"})
+    assert _has(d, "code/query-in-loop")
+    assert "'пока'" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_query_deep_inside_a_loop_flagged():
+    # the loop frame does not have to be the top one: `если` inside the body sits above it
+    content = (
+        "метод Ф(Ключи: Массив<Строка>)\n"
+        "    для Ключ из Ключи\n"
+        "        если Ключ != \"\"\n"
+        "            знч Р = Запрос{ ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т }.Выполнить()\n"
+        "            Г(Р)\n"
+        "        ;\n"
+        "    ;\n"
+        ";\n"
+    )
+    assert _has(_lint("М.xbsl", content, select={"code/query-in-loop"}), "code/query-in-loop")
+
+
+@pytest.mark.needs_data
+def test_query_outside_a_loop_is_silent():
+    content = (
+        "метод Ф(): Число\n"
+        "    знч Р = Запрос{ ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т }.Выполнить()\n"
+        "    возврат Р.Количество()\n"
+        ";\n"
+    )
+    assert _lint("М.xbsl", content, select={"code/query-in-loop"}) == []
+
+
+@pytest.mark.needs_data
+def test_query_after_a_closed_loop_is_silent():
+    # the idiom the rule asks for: collect in the loop, ask the base once afterwards
+    content = (
+        "метод Ф(Строки: Массив<Строка>): Число\n"
+        "    пер Ключи = новый Массив<Строка>()\n"
+        "    для Строка из Строки\n"
+        "        Ключи.Добавить(Строка)\n"
+        "    ;\n"
+        "    знч Р = Запрос{\n"
+        "        ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т ГДЕ Т.Код В (%Ключи)\n"
+        "    }.Выполнить()\n"
+        "    возврат Р.Количество()\n"
+        ";\n"
+    )
+    assert _lint("М.xbsl", content, select={"code/query-in-loop"}) == []
+
+
 @pytest.mark.needs_data
 def test_blocks_scope_is_a_block():
     # an `область` closes with ';' on par with the other blocks

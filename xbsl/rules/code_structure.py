@@ -58,6 +58,18 @@ MESSAGES = {
         "ru": "Составное условие тернарного оператора без скобок",
         "en": "Compound ternary condition without parentheses",
     },
+    "code/query-in-loop.title": {
+        "ru": "Запрос внутри цикла",
+        "en": "A query inside a loop",
+    },
+    "code/query-in-loop.body": {
+        "ru": "Запрос внутри цикла '{word}' (строка {line}): каждый виток – отдельное обращение "
+              "к базе. Собрать значения витков в массив и выполнить один запрос с условием "
+              "'В (%Значения)'.",
+        "en": "A query inside a '{word}' loop (line {line}): every turn is a round trip of its "
+              "own to the database. Collect the values of the turns into an array and run one "
+              "query with an 'IN (%Values)' condition.",
+    },
     "code/ternary-and-or.compound": {
         "ru": "Условие тернарного оператора с '{word}' без скобок: "
               "'А {word} Б ? X : Y' парсится как 'А {word} (Б ? X : Y)'. "
@@ -82,6 +94,7 @@ _BLOCK_WORD = {
     "FOR": "для", "WHILE": "пока", "TRY": "попытка", "CASE": "выбор",
     "SCOPE": "область",
 }
+_LOOPS = {"FOR", "WHILE"}
 _PAIRS = {")": "(", "]": "[", "}": "{"}
 _OPEN_CH = "([{"
 _CLOSE_CH = ")]}"
@@ -92,7 +105,8 @@ def _compute(source: SourceFile) -> list[Diagnostic]:
         return source.cache["struct_diags"]
 
     diags: list[Diagnostic] = []
-    blocks: list[tuple[str, int, int]] = []  # (canonical, line, col)
+    loop_queries: list[Diagnostic] = []
+    blocks: list[tuple[str, int, int, str]] = []  # (canonical, line, col, word as written)
     brackets: list[tuple[str, int, int]] = []  # (char, line, col)
     prev_sig: tuple[str, str, int] | None = None  # (kind, canon|value, line)
 
@@ -114,7 +128,18 @@ def _compute(source: SourceFile) -> list[Diagnostic]:
                 and prev_sig[1] == "ABSTRACT"
             )
             if not is_else_if and not is_abstract:
-                blocks.append((t.canonical, t.line, t.col))
+                blocks.append((t.canonical, t.line, t.col, t.value))
+        elif t.kind == "KEYWORD" and t.canonical == "QUERY":
+            # The keyword itself is not part of the query range (that starts at the brace), so
+            # it reaches this walk while the contents do not - a literal opened with a loop
+            # frame still on the stack runs once per turn. code_tokens has already retagged a
+            # QUERY with no brace after it into an identifier, so there is a block here.
+            loop = next((frame for frame in reversed(blocks) if frame[0] in _LOOPS), None)
+            if loop is not None:
+                loop_queries.append(Diagnostic(
+                    source.rel, t.line, t.col, "code/query-in-loop", Severity.WARNING,
+                    i18n.t("code/query-in-loop.body", word=loop[3], line=loop[1]),
+                ))
         elif t.kind == "OP":
             v = t.value
             if v == ";":
@@ -150,13 +175,14 @@ def _compute(source: SourceFile) -> list[Diagnostic]:
             source.rel, line, col, "code/brackets", Severity.ERROR,
             i18n.t("code/brackets.unclosed", ch=ch),
         ))
-    for canon, line, col in blocks:
+    for canon, line, col, _word in blocks:
         diags.append(Diagnostic(
             source.rel, line, col, "code/blocks", Severity.ERROR,
             i18n.t("code/blocks.unclosed", word=_BLOCK_WORD.get(canon, canon)),
         ))
 
     source.cache["struct_diags"] = diags
+    source.cache["loop_queries"] = loop_queries
     return diags
 
 
@@ -172,6 +198,25 @@ def blocks_balance(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "xbsl":
         return []
     return [d for d in _compute(source) if d.rule_id == "code/blocks"]
+
+
+@rule("code/query-in-loop", "code/query-in-loop.title", "C", severity=Severity.WARNING)
+def query_in_loop(source: SourceFile) -> Iterable[Diagnostic]:
+    """A `Запрос{...}` literal inside the body of a `для`/`пока` loop.
+
+    Every turn of the loop is a round trip of its own: the cost of the method grows with the
+    data instead of staying constant, and it shows up only under real volumes. The replacement
+    is one query over the whole set - collect the values of the turns into an array and pass it
+    as a parameter of an `В` (`IN`) condition, with an early return on an empty array.
+
+    Loading an object inside a loop (`LoadObject`) is deliberately NOT questioned: writing
+    a set of objects genuinely goes one by one, and the rule would then fire on the normal way
+    to write them.
+    """
+    if source.kind != "xbsl":
+        return []
+    _compute(source)
+    return source.cache.get("loop_queries") or []
 
 
 def _new_frame(line: int | None) -> dict:

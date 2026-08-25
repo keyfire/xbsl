@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 161.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 162.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -124,6 +124,7 @@ sidebar:
 | `code/brackets` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Дисбаланс скобок () [] {} |
 | `code/blocks` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Дисбаланс блоков и ';' [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
 | `code/ternary-and-or` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Составное условие тернарного оператора без скобок [доки](https://1cmycloud.com/docs/help/topics/question-mark-operation/) |
+| `code/query-in-loop` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Запрос внутри цикла |
 | `code/param-type-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр без типа и без значения по умолчанию [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/module-var-not-const` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Объявление `пер` / `знч` / `исп` на уровне МОДУЛЯ – там живёт только константа, выражение вне тела метода компилятор отвергает, и применение откатывает проект [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
 | `code/loop-header` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Неверный заголовок цикла 'для' [доки](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
