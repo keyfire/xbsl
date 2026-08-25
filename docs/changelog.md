@@ -22,6 +22,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`yaml/unused-component` - an interface component nothing places.** `code/unused-method`
+  cannot see one in principle: its methods are called by its own yaml. A name written as the
+  KEY of a dictionary is not a use; an entry point and a globally visible component are never
+  judged, and the run has to cover a whole project.
 - **`code/query-in-loop` - a query inside a `for` / `while` loop.** Every turn is a round trip of
   its own, so the cost of the method grows with the data and shows only under real volumes. The
   replacement is a single query over the whole set, the values of the turns passed as an array

@@ -56,7 +56,12 @@ def _lint(tmp_path, text: str, name: str = "Tasks.yaml"):
         encoding="utf-8",
     )
     (tmp_path / name).write_text(text, encoding="utf-8")
-    return [d for d in engine.run(discover([str(tmp_path)])) if d.path.endswith(name)]
+    # yaml/unused-component is dropped on purpose: a probe project of ONE component has nobody
+    # to place it, so the rule is right and says nothing about the spelling under test here.
+    return [
+        d for d in engine.run(discover([str(tmp_path)]))
+        if d.path.endswith(name) and d.rule_id != "yaml/unused-component"
+    ]
 
 
 def test_english_object_is_clean(tmp_path):
