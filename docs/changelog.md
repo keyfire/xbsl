@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-25 – 0.76.0, 0.77.0
 
 ### Added
 - **`code/duplicate-method-body` - one body written twice in different files.** The
@@ -33,19 +33,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   already has.** The type's yaml says `Read: PermitEveryone`, so the call hands out
   nothing and only suggests the data is guarded. The finding points at the privilege:
   alone it takes the whole line with it, among others only it goes.
-
-### Fixed
-- **The table of a FROM clause counts as a usage of the object.** A bare identifier
-  touches neither a dot nor a parenthesis, so `FROM Tasks AS T` - the very line a rename
-  has to follow - was no usage at all: on a live project the index gained 374 of them.
-- **An enumeration value of a block the ui schema does not describe now translates.**
-  The sorting item of a list and an item of its filter are not in the schema, so the key
-  beside the value turned English while the value stayed Cyrillic and the build refused
-  it. Such a block names its property after its enumeration, and that table answers.
-
-## 2026-08-25 – 0.76.0
-
-### Added
 - **`yaml/unused-component` - an interface component nothing places.** `code/unused-method`
   cannot see one in principle: its methods are called by its own yaml. A name written as the
   KEY of a dictionary is not a use; an entry point and a globally visible component are never
@@ -56,6 +43,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   parameter of an `IN` condition.
 
 ### Fixed
+- **The table of a FROM clause counts as a usage of the object.** A bare identifier
+  touches neither a dot nor a parenthesis, so `FROM Tasks AS T` - the very line a rename
+  has to follow - was no usage at all: on a live project the index gained 374 of them.
+- **An enumeration value of a block the ui schema does not describe now translates.**
+  The sorting item of a list and an item of its filter are not in the schema, so the key
+  beside the value turned English while the value stayed Cyrillic and the build refused
+  it. Such a block names its property after its enumeration, and that table answers.
 - **The editor now reads the query files of virtual tables, as the CLI already did.**
   The whole-project pass, the open buffer and the project index all skipped `.xbql`, so
   one and the same finding was visible or not depending on who asked, and the usages a
@@ -210,7 +204,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   cites something is an ordinary key here; the reader cut it at the first inner quote, the writer
   did not find such an entry and added it a second time, after which the dictionary refused to load
   over the duplicate.
-
 - **The `xbsl translate` command** - source-to-source translation of a project into English
   spellings. Platform tokens go by the metamodel and the term dictionaries of the dataset
   (keywords by case-matched form, yaml keys by the class of their node, enumeration values
