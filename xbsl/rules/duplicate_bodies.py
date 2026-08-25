@@ -45,12 +45,12 @@ MESSAGES = {
         "en": "The method body is repeated in another file",
     },
     "code/duplicate-method-body.copy": {
-        "ru": "Тело метода '{name}' ({lines} строк) дословно повторяет '{other}' в {path}"
-              "{more}. Вынесите общий код в один метод – иначе правку придётся вносить в "
-              "каждую копию.",
-        "en": "The body of '{name}' ({lines} lines) repeats '{other}' in {path}{more} word for "
-              "word. Move the shared code into one method - otherwise every copy has to be "
-              "fixed on its own.",
+        "ru": "Тело метода '{name}' ({lines} строк) дословно повторяет '{other}' в файле "
+              "{path}{more}. Вынесите общий код в один метод – иначе правку придётся "
+              "вносить в каждую копию.",
+        "en": "The body of '{name}' ({lines} lines) repeats '{other}' in {path}{more} word "
+              "for word. Move the shared code into one method - otherwise every copy has to "
+              "be fixed on its own.",
     },
     "code/duplicate-method-body.more": {
         "ru": " и ещё в {count} местах",
@@ -71,6 +71,11 @@ def _handler_forms() -> frozenset[str]:
 
 
 dataset.register_reset(_handler_forms.cache_clear)
+
+
+def _file_name(rel: str) -> str:
+    """The file name of a path, whichever separator the run used."""
+    return rel.replace("\\", "/").rsplit("/", 1)[-1]
 
 
 def _normalized(text: str) -> list[str]:
@@ -121,7 +126,11 @@ def duplicate_method_body(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue  # a copy inside one file is visible while reading it
         for rel, name, line, count in group:
             others = [(r, n) for r, n, _l, _c in group if (r, n) != (rel, name)]
-            first_path, first_name = others[0]
+            # The FILE NAME, not the path it was reached by: a run names its files however it
+            # was invoked (an absolute path from the CLI, a relative one from the editor), and
+            # a message that carried that path would differ between two runs over one project -
+            # a baseline entry keyed by the message would stop matching on another machine.
+            first_path, first_name = _file_name(others[0][0]), others[0][1]
             more = ("" if len(others) == 1
                     else i18n.t("code/duplicate-method-body.more", count=len(others) - 1))
             yield Diagnostic(

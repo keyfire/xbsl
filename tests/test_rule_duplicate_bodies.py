@@ -87,6 +87,11 @@ def test_different_bodies_are_not_a_copy(tmp_path):
 
 
 def test_rule_is_off_by_default(tmp_path):
+    """The SHIPPED default is off - a project plugin may turn it on for its own corpus."""
+    from xbsl import plugins
+
+    if RULE in plugins.severity_overrides():
+        pytest.skip("правило включено профилем установленного плагина")
     assert not _lint(tmp_path, {"Первый.xbsl": BODY, "Второй.xbsl": BODY}, enable=False)
 
 

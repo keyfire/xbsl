@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-25 – 0.76.0, 0.77.0
+## 2026-08-25 – 0.76.0, 0.77.0, 0.78.0
 
 ### Added
 - **`code/duplicate-method-body` - one body written twice in different files.** The
@@ -43,6 +43,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   parameter of an `IN` condition.
 
 ### Fixed
+- **`code/duplicate-method-body` names the FILE of the other copy, not the path it
+  was reached by.** A run names its files however it was invoked, so the message -
+  and a baseline entry keyed by it - differed between the CLI, the editor and
+  another machine.
 - **The table of a FROM clause counts as a usage of the object.** A bare identifier
   touches neither a dot nor a parenthesis, so `FROM Tasks AS T` - the very line a rename
   has to follow - was no usage at all: on a live project the index gained 374 of them.

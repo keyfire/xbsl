@@ -696,6 +696,13 @@ def test_method_open_to_the_client_that_nobody_calls(tmp_path):
 
 
 def test_rule_is_off_by_default(tmp_path):
+    """The SHIPPED default is off - a project plugin may turn it on for its own corpus."""
+    import pytest
+
+    from xbsl import plugins
+
+    if UNUSED in plugins.severity_overrides():
+        pytest.skip("правило включено профилем установленного плагина")
     (tmp_path / "Данные.yaml").write_text(_SERVER_MODULE, encoding="utf-8")
     (tmp_path / "Данные.xbsl").write_text(_OPEN_METHOD, encoding="utf-8")
     assert not [d for d in engine.run(discover([str(tmp_path)])) if d.rule_id == UNUSED]
