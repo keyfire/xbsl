@@ -9,6 +9,25 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.66.1
+
+### Changed
+- **Closing the panel during a read no longer breaks the command.** Reading the dictionary takes
+  seconds, and a tab closed in the middle of it received the answer through a webview that no
+  longer existed - which VS Code answers with a modal "Webview is disposed", blaming the command
+  that started the read. An answer with nobody to deliver it to is now dropped silently, and a
+  command that meets a closed panel opens a new one instead of waking the old.
+- **The column widths of the dictionary table survive closing the panel.** The webview remembered
+  them, and a webview lives exactly as long as its tab: a window restart kept them (the editor
+  restores the tab), closing and reopening lost them. The widths are now kept by the extension, and
+  globally rather than per project - the table is the same table everywhere.
+- **The header of the dictionary table shows where a column border is.** The mark used to appear
+  under the pointer alone, so finding it meant running the mouse along the header. Every border
+  now carries a hairline of its own; under the pointer it still highlights and grows to the full
+  height of the header.
+- **The panel caption fits on two lines.** A width cap of 90 characters pushed four words onto a
+  third line; raised to 110, which both languages of the caption fit in two.
+
 ## 0.66.0
 
 ### Changed

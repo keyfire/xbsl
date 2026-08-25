@@ -67,6 +67,13 @@ import {
 } from "./translationCore";
 
 const VIEW_TYPE = "xbsl.translation";
+// Where the dragged column widths outlive the panel. The webview remembers them itself
+// (`vsapi.setState`), but only for as long as the webview exists: that carries a window restart,
+// where VS Code restores the tab, and loses everything the moment the tab is CLOSED - the next
+// open builds a new webview with no state at all. The widths are a setting of the reader, not of
+// one tab, so they are kept by the extension, and globally rather than per workspace: the table
+// is the same table in every project.
+const WIDTHS_KEY = "xbsl.translation.colWidths";
 const SET_COMMAND = "xbsl.translate.set";
 const PANEL_COMMAND = "xbsl.translate.dictionary";
 const KEY_COMMAND = "xbsl.translate.setKey";
@@ -473,6 +480,12 @@ class TranslationPanel {
   // Whether the engine is running right now. The webview needs it: an empty table during the
   // first read must say "the engine is working", not "there is no dictionary".
   private loading = false;
+  // Whether the tab is already gone. A read of the dictionary takes seconds and a write takes
+  // one, and the reader is free to close the panel in the middle of either: every answer that
+  // comes back after that would be delivered to a webview that no longer exists, and VS Code
+  // answers such a delivery with a thrown "Webview is disposed" - which surfaced as a modal
+  // blaming the command that had started the read.
+  private disposed = false;
   private state: ViewState = { ...DEFAULT_STATE };
   private readonly disposables: vscode.Disposable[] = [];
   // The machine-translation service's guesses, by rowKey - filled only after "suggest" is asked
@@ -507,6 +520,13 @@ class TranslationPanel {
     private readonly folder: vscode.WorkspaceFolder,
     private readonly context: vscode.ExtensionContext
   ) {
+    // Sanitized on the way IN as well as on the way out: what is stored was sanitized when it was
+    // written, but a store survives extension versions - a width saved by a build that knew other
+    // columns must not reach the table unchecked.
+    this.state = {
+      ...this.state,
+      colWidths: sanitizeColumnWidths(context.globalState.get(WIDTHS_KEY)),
+    };
     this.panel.onDidDispose(() => this.dispose(), null, this.disposables);
     this.panel.webview.onDidReceiveMessage((m) => void this.onMessage(m), null, this.disposables);
   }
@@ -523,7 +543,10 @@ class TranslationPanel {
       );
       return;
     }
-    if (TranslationPanel.current) {
+    // `disposed` is checked, not just the pointer: revealing a panel whose tab is already gone
+    // throws "Webview is disposed" at the command, and the reader sees a modal instead of the
+    // table. A panel in that state is simply not a panel any more - the command opens a new one.
+    if (TranslationPanel.current && !TranslationPanel.current.disposed) {
       TranslationPanel.current.panel.reveal(vscode.ViewColumn.Active);
       if (filter) {
         TranslationPanel.current.applyState(filter);
@@ -562,6 +585,15 @@ class TranslationPanel {
     await created.reload();
   }
 
+  // Every message to the webview goes through here. A panel that is gone silently drops what it
+  // would have said: there is nobody to say it to, and the work that produced it (a dictionary
+  // written to disk, for one) has already happened either way.
+  private send(message: unknown): void {
+    if (!this.disposed) {
+      void this.panel.webview.postMessage(message);
+    }
+  }
+
   private applyState(patch: Partial<ViewState>): void {
     const next = { ...this.state, ...patch };
     // A width the webview sends is already clamped by the drag arithmetic that produced it, but
@@ -570,6 +602,9 @@ class TranslationPanel {
     // through, rather than trusted because the client-side drag code usually behaves.
     if (patch.colWidths) {
       next.colWidths = sanitizeColumnWidths(patch.colWidths);
+      // Stored on the same path the panel itself learns about a width - the webview mails this
+      // once, on mouseup, so this is one write per finished drag and not one per mouse move.
+      void this.context.globalState.update(WIDTHS_KEY, next.colWidths);
     }
     this.state = next;
     this.post();
@@ -579,9 +614,12 @@ class TranslationPanel {
   // three runs walk the whole project and a silent panel looks stuck.
   public async reload(): Promise<void> {
     this.loading = true;
-    this.panel.webview.postMessage({ type: "busy", on: true });
+    this.send({ type: "busy", on: true });
     try {
       await this.paintDictionary();
+      if (this.disposed) {
+        return;
+      }
       const loaded = await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Window,
@@ -589,6 +627,9 @@ class TranslationPanel {
         },
         () => loadDictionary(this.folder)
       );
+      if (this.disposed) {
+        return;
+      }
       if (loaded) {
         this.rows = loaded.rows;
         this.gaps = loaded.gaps;
@@ -611,7 +652,7 @@ class TranslationPanel {
       return;
     }
     const entries = await readEntries(this.folder, true);
-    if (!entries || this.rows.length > 0) {
+    if (!entries || this.disposed || this.rows.length > 0) {
       return;
     }
     this.rows = mergeRows(entries.entries, []);
@@ -634,7 +675,7 @@ class TranslationPanel {
       const hint = rowHint(withGuess);
       return hint ? { ...withGuess, hint: hint.value, hintFromMachine: hint.fromMachine } : withGuess;
     });
-    this.panel.webview.postMessage({
+    this.send({
       type: "rows",
       rows: page,
       stats: rowStats(filtered, this.state.shown),
@@ -685,7 +726,7 @@ class TranslationPanel {
   // the row is redrawn from the data still in hand, so a typo in one cell does not cost the page.
   private async write(kind: EntryKind, key: string, value: string): Promise<void> {
     this.loading = true;
-    this.panel.webview.postMessage({ type: "busy", on: true });
+    this.send({ type: "busy", on: true });
     let result: SetAnswer | undefined;
     try {
       result = await writeEdits(this.folder, [{ key, value: value.trim(), kind }]);
@@ -715,6 +756,9 @@ class TranslationPanel {
       hasValue: value.length > 0,
     });
     const entries = await readEntries(this.folder);
+    if (this.disposed) {
+      return;
+    }
     if (entries) {
       this.rows = mergeRows(entries.entries, this.gaps);
       this.dictionary = entries.dictionary || this.dictionary;
@@ -735,7 +779,7 @@ class TranslationPanel {
     const c = vscode.workspace.getConfiguration("xbsl", this.folder.uri);
     const provider = (c.get<string>("translation.provider") || "").trim() || undefined;
     this.loading = true;
-    this.panel.webview.postMessage({ type: "busy", on: true });
+    this.send({ type: "busy", on: true });
     let answer: SuggestAnswer | undefined;
     try {
       answer = await vscode.window.withProgress(
@@ -861,7 +905,11 @@ class TranslationPanel {
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px 16px;
          font-size: var(--vscode-font-size); }
   h1 { font-size: 15px; margin: 0 0 4px; }
-  p.lead { color: var(--vscode-descriptionForeground); margin: 0 0 12px; max-width: 90ch; }
+  /* 110ch, not 90: the line is there so a wide panel does not stretch one sentence across a
+     whole monitor, and the cap only has to be wider than half the text for it to settle on two
+     lines. The Russian caption is 201 characters, the English one 209, and at 90ch both took a
+     third line carrying four words. */
+  p.lead { color: var(--vscode-descriptionForeground); margin: 0 0 12px; max-width: 110ch; }
   .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   input[type=search] { flex: 1 1 240px; padding: 4px 6px; background: var(--vscode-input-background);
     color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); }
@@ -942,6 +990,16 @@ class TranslationPanel {
      correctly - position: sticky above already puts th in the "positioned" category, the same one
      position: relative would have, so an absolutely positioned child measures from th's own box. */
   th .handle { position: absolute; top: 0; right: -4px; bottom: 0; width: 8px; cursor: col-resize; z-index: 2; }
+  /* The mark that says "here": a hairline down the middle of the grab strip, drawn ALWAYS and not
+     only under the pointer. A handle visible on hover alone is a control nobody finds - the widths
+     are draggable, and the reader has to run the mouse along the header to discover where. Inset
+     from both ends so it reads as a grip of the header rather than as a border of the cell, and
+     painted in the panel border colour, which is what the row of headers is already separated
+     from the body by. */
+  th .handle::after { content: ""; position: absolute; left: 3px; top: 5px; bottom: 5px; width: 1px;
+       background: var(--vscode-widget-border, rgba(128,128,128,.35)); }
+  th .handle:hover::after, th .handle.dragging::after { top: 0; bottom: 0;
+       background: var(--vscode-focusBorder, var(--vscode-textLink-foreground)); }
   th .handle:hover, th .handle.dragging { background: var(--vscode-focusBorder, var(--vscode-textLink-foreground)); opacity: 0.5; }
   td { padding: 3px 8px; vertical-align: top;
        border-bottom: 1px solid var(--vscode-widget-border, rgba(128,128,128,.25)); }
@@ -1439,7 +1497,13 @@ vsapi.postMessage({ type: "state", state: state });
   }
 
   private dispose(): void {
-    TranslationPanel.current = undefined;
+    this.disposed = true;
+    // Only when the pointer still names THIS panel: `adopt` disposes the previous one before
+    // putting the new one in place, and the old panel's own dispose event arrives after that -
+    // clearing the pointer then would orphan the panel the reader is looking at.
+    if (TranslationPanel.current === this) {
+      TranslationPanel.current = undefined;
+    }
     this.panel.dispose();
     while (this.disposables.length) {
       this.disposables.pop()?.dispose();

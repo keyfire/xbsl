@@ -235,7 +235,12 @@ export class RulesPanel {
 <style nonce="${nonce}">
   body { font-family: var(--vscode-font-family); color: var(--vscode-foreground); padding: 12px 16px; }
   h1 { font-size: 15px; margin: 0 0 4px; }
-  p.lead { color: var(--vscode-descriptionForeground); margin: 0 0 12px; max-width: 78ch; }
+  /* 90ch, not 78: the cap is there so one sentence does not stretch across a whole monitor, and
+     it only has to be wider than half the text for the line to settle on two. This caption is 168
+     characters in Russian and 148 in English, and at 78ch both took a third line. Not the 110ch
+     of the dictionary panel either - that one carries a longer caption, and a cap far wider than
+     half of this text would leave a ragged short second line. */
+  p.lead { color: var(--vscode-descriptionForeground); margin: 0 0 12px; max-width: 90ch; }
   .bar { display: flex; gap: 12px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
   input[type=search] { flex: 1 1 220px; padding: 4px 6px; background: var(--vscode-input-background);
     color: var(--vscode-input-foreground); border: 1px solid var(--vscode-input-border, transparent); }
