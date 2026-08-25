@@ -215,3 +215,88 @@ def test_recalc_rule_speaks_both_spellings(tmp_path):
     )
     d = engine.run(discover([str(tmp_path)]), select={RECALC})
     assert not _has(d, RECALC)
+
+
+# --- code/access-context-read-noop ------------------------------------------------------------
+
+NOOP = "code/access-context-read-noop"
+
+_EVERYONE_YAML = """ВидЭлемента: Справочник
+Ид: 34343434-3434-3434-3434-343434343434
+Имя: Заметки
+КонтрольДоступа:
+    Разрешения:
+        Чтение: {read}
+"""
+
+
+def _noop(tmp_path, module: str, read: str = "РазрешеноВсем"):
+    (tmp_path / "Заметки.yaml").write_text(_EVERYONE_YAML.format(read=read), encoding="utf-8")
+    (tmp_path / "Работа.xbsl").write_text(module, encoding="utf-8")
+    return [d for d in engine.run(discover([str(tmp_path)]), select={NOOP}) if d.rule_id == NOOP]
+
+
+_ONLY_READ = """метод Прочитать()
+    исп КонтекстДоступа.Дополнить(Тип<Заметки.Объект>, [Сущность.Право.Чтение])
+;
+"""
+
+_READ_AND_WRITE = """метод Записать()
+    исп КонтекстДоступа.Дополнить(Тип<Заметки.Объект>,
+        [Сущность.Право.Чтение, Сущность.Право.Изменение])
+;
+"""
+
+
+def test_read_extension_of_an_open_type_is_flagged(tmp_path):
+    hits = _noop(tmp_path, _ONLY_READ)
+    assert len(hits) == 1 and "Заметки" in hits[0].message
+    assert (hits[0].line, hits[0].col) == (2, 72)  # the right itself, not the call
+
+
+def test_a_call_carrying_only_that_right_is_called_dead(tmp_path):
+    assert "снять" in _noop(tmp_path, _ONLY_READ)[0].message
+
+
+def test_a_call_carrying_other_rights_names_the_right_alone(tmp_path):
+    hits = _noop(tmp_path, _READ_AND_WRITE)
+    assert len(hits) == 1 and "только Чтение" in hits[0].message
+
+
+def test_a_type_that_does_not_open_reading_is_left_alone(tmp_path):
+    assert not _noop(tmp_path, _ONLY_READ, read="РазрешеноАутентифицированным")
+
+
+def test_computed_permissions_are_left_alone(tmp_path):
+    assert not _noop(tmp_path, _ONLY_READ, read="РазрешенияВычисляютсяДляКаждогоОбъекта")
+
+
+def test_an_extension_without_the_read_right_is_left_alone(tmp_path):
+    module = """метод Записать()
+    исп КонтекстДоступа.Дополнить(Тип<Заметки.Объект>, [Сущность.Право.Изменение])
+;
+"""
+    assert not _noop(tmp_path, module)
+
+
+def test_a_type_of_another_project_is_left_alone(tmp_path):
+    """The judged name has to be an object of THIS project - the yaml is what decides."""
+    module = """метод Прочитать()
+    исп КонтекстДоступа.Дополнить(Тип<Чужой.Объект>, [Сущность.Право.Чтение])
+;
+"""
+    assert not _noop(tmp_path, module)
+
+
+def test_english_sources_are_judged_too(tmp_path):
+    (tmp_path / "Notes.yaml").write_text(
+        "ElementKind: Catalog\nId: 34343434-3434-3434-3434-343434343435\nName: Notes\n"
+        "AccessControl:\n    Permissions:\n        Read: PermitEveryone\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "Work.xbsl").write_text(
+        "method Read()\n    use AccessContext.Append(Type<Notes.Object>, [Entity.Privilege.Read])\n;\n",
+        encoding="utf-8",
+    )
+    hits = [d for d in engine.run(discover([str(tmp_path)]), select={NOOP}) if d.rule_id == NOOP]
+    assert len(hits) == 1 and "Notes" in hits[0].message

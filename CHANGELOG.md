@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`code/access-context-read-noop` - a context extension that grants a read everyone
+  already has.** The type's yaml says `Read: PermitEveryone`, so the call hands out
+  nothing and only suggests the data is guarded. The finding points at the privilege:
+  alone it takes the whole line with it, among others only it goes.
+
 ## 2026-08-25 – 0.76.0
 
 ### Added

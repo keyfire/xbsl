@@ -176,7 +176,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   {
     match: (r) => r === "code/per-object-permissions-need-common"
-      || r === "code/permission-field-not-declared",
+      || r === "code/permission-field-not-declared"
+      || r === "code/access-context-read-noop",
     page: "topics/project-element-permissions",
   },
   {

@@ -101,6 +101,27 @@ MESSAGES = {
               "Entity is not defined\"). {n[Сущность]} itself stays the namespace of "
               "{n[Сущность]}.{n[Право]}.",
     },
+    "code/access-context-read-noop.title": {
+        "ru": "Холостое расширение контекста доступа чтением",
+        "en": "A context extension that grants a read everyone already has",
+    },
+    "code/access-context-read-noop.alone": {
+        "ru": "Расширение контекста доступа правом Чтения для '{name}': чтение у этого типа "
+              "разрешено всем (Чтение: РазрешеноВсем), выдавать нечего. Вызов холост – он "
+              "только создаёт впечатление защищённости; строку можно снять.",
+        "en": "Extending the access context with the {n[Чтение]} privilege for '{name}': the "
+              "type permits reading to everyone ({n[Чтение]}: {n[РазрешеноВсем]}), so there is "
+              "nothing to grant. The call does nothing but suggest the data is guarded – drop "
+              "the line.",
+    },
+    "code/access-context-read-noop.among": {
+        "ru": "Право Чтения в расширении контекста доступа для '{name}' холостое: чтение у "
+              "этого типа разрешено всем (Чтение: РазрешеноВсем). Остальные права списка "
+              "нужны – снять надо только Чтение.",
+        "en": "The {n[Чтение]} privilege of the context extension for '{name}' grants nothing: "
+              "the type permits reading to everyone ({n[Чтение]}: {n[РазрешеноВсем]}). The "
+              "other privileges of the list are needed – drop this one alone.",
+    },
     "code/permission-handlers-need-recalc.title": {
         "ru": "Обработчик разрешений без пересчёта",
         "en": "A permission handler with no recomputation",
@@ -403,4 +424,119 @@ def permission_field_not_declared(facts: dict[str, dict]) -> Iterable[Diagnostic
                 rel, line, col,
                 "code/permission-field-not-declared", Severity.WARNING,
                 i18n.t(key, field=field, method=method, declared=", ".join(fields)),
+            )
+
+
+# --- code/access-context-read-noop -----------------------------------------------------------
+
+_CONTEXT = "КонтекстДоступа"
+_APPEND = "Дополнить"
+_TYPE = "Тип"
+_PRIVILEGE = "Право"
+_READ = "Чтение"
+_EVERYONE = "РазрешеноВсем"
+
+
+@lru_cache(maxsize=1)
+def _noop_names() -> tuple[frozenset[str], ...]:
+    """Both spellings of every name the no-op check matches by text."""
+    return (
+        _forms(_CONTEXT), _forms(_APPEND), _forms(_TYPE), _forms(_PRIVILEGE),
+        _forms(_READ), _forms(_EVERYONE), _forms("КонтрольДоступа"), _forms("Разрешения"),
+    )
+
+
+dataset.register_reset(_noop_names.cache_clear)
+
+
+def _read_rights_of(source: SourceFile) -> list[tuple[str, int, int, int]]:
+    """(type name, line, col of the Read right, count of rights) of every context extension.
+
+    Only a call that HANDS OUT the read right is returned; the position is that of the right
+    itself, because that is what has to go - the call may carry others that are needed.
+    """
+    context, append, type_kw, privilege, read, *_rest = _noop_names()
+    toks = code_tokens(source)
+    n = len(toks)
+    out: list[tuple[str, int, int, int]] = []
+    for i, t in enumerate(toks):
+        if not (t.kind == "IDENT" and t.value in context):
+            continue
+        if not (i + 3 < n and toks[i + 1].value == "." and toks[i + 2].value in append
+                and toks[i + 3].value == "("):
+            continue
+        # The first argument names the entity: `Type<X.Object>`. `Type` is a keyword of the
+        # language, not an identifier, so the kind is not checked here.
+        name = None
+        j = i + 4
+        while j < n and toks[j].value != ")":
+            if toks[j].value in type_kw and j + 2 < n and toks[j + 1].value == "<":
+                name = toks[j + 2].value
+                break
+            j += 1
+        if name is None:
+            continue
+        rights: list = []
+        depth = 0
+        k = j
+        while k < n:
+            value = toks[k].value
+            if value == "(":
+                depth += 1
+            elif value == ")":
+                if depth == 0:
+                    break
+                depth -= 1
+            elif (toks[k].kind == "IDENT" and k >= 2 and toks[k - 1].value == "."
+                  and toks[k - 2].value in privilege):
+                rights.append(toks[k])
+            k += 1
+        granted = next((r for r in rights if r.value in read), None)
+        if granted is not None:
+            out.append((name, granted.line, granted.col, len(rights)))
+    return out
+
+
+def _read_noop_mapper(source: SourceFile) -> dict | None:
+    """The map phase: what each object declares about READING, and who extends the context."""
+    if not _HAVE_YAML:
+        return None
+    *_head, everyone, control_keys, perm_keys = _noop_names()
+    read = _noop_names()[4]
+    if source.kind == "yaml":
+        data, error = _parsed(source)
+        if error is not None or not isinstance(data, dict) or not object_kind(data):
+            return None
+        control = _first_of(data, control_keys)
+        perms = _first_of(control, perm_keys) if isinstance(control, dict) else None
+        value = _first_of(perms, read) if isinstance(perms, dict) else None
+        name = data.get("Имя") or data.get("Name")
+        if not isinstance(name, str) or not isinstance(value, str) or value not in everyone:
+            return None
+        return {"k": "e", "name": name}  # reading is open to everyone
+    if source.kind != "xbsl":
+        return None
+    calls = _read_rights_of(source)
+    return {"k": "c", "calls": calls} if calls else None
+
+
+@rule(
+    "code/access-context-read-noop", "code/access-context-read-noop.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_read_noop_mapper,
+)
+def access_context_read_noop(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    everyone = {f["name"] for f in facts.values() if f["k"] == "e"}
+    if not everyone:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "c":
+            continue
+        for name, line, col, rights in fact["calls"]:
+            if name not in everyone:
+                continue
+            key = ("code/access-context-read-noop.alone" if rights == 1
+                   else "code/access-context-read-noop.among")
+            yield Diagnostic(
+                rel, line, col, "code/access-context-read-noop", Severity.WARNING,
+                i18n.t(key, name=name),
             )
