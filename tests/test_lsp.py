@@ -317,8 +317,7 @@ _QUERY_FILE = """\
 @pytest.mark.needs_data
 def test_completion_in_a_query_file_over_the_wire(tmp_path):
     """The paired file of a virtual table is all query: the dot after a table alias must
-    answer with the fields of that table, and the file must get NO diagnostics of its own -
-    the module rules would paint a query red from end to end."""
+    answer with the fields of that table."""
     from types import SimpleNamespace
 
     from pygls import uris
@@ -341,3 +340,22 @@ def test_completion_in_a_query_file_over_the_wire(tmp_path):
         assert "Наименование" in labels, "a standard field of the kind"
     finally:
         lsp.STATE.root, lsp.STATE.lookup = root, lookup
+
+
+def test_project_sources_match_what_the_cli_collects(tmp_path):
+    """The editor's whole-project pass reads the same set of files as the CLI.
+
+    The query file of a virtual table used to be missing from the editor's set alone, so one
+    and the same finding was visible or not depending on who asked.
+    """
+    from xbsl.cli import discover
+
+    (tmp_path / "Товары.yaml").write_text("ВидЭлемента: Справочник\nИмя: Товары\n", encoding="utf-8")
+    (tmp_path / "Товары.xbsl").write_text("метод Ф()\n;\n", encoding="utf-8")
+    (tmp_path / "ТоварыТаблица.xbql").write_text("ВЫБРАТЬ\n    Т.Ссылка\nИЗ\n    Товары КАК Т\n",
+                                                 encoding="utf-8")
+
+    got = {p.name for p in lsp.project_sources(tmp_path)}
+
+    assert "ТоварыТаблица.xbql" in got
+    assert got == {p.name for p in discover([str(tmp_path)])}

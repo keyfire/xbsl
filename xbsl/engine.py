@@ -69,7 +69,9 @@ def _detect_newline(data: bytes) -> str:
 #: The paired file of a virtual table is not a module but a QUERY: the whole file is one query
 #: expression, where a module carries it inside a `Запрос{ ... }` block. It lexes as code (the
 #: query language is lexed by the same lexer), so it is loaded with kind `xbsl`; what tells the
-#: two apart is `is_query_file`, and the linter does not collect such files at all.
+#: two apart is `is_query_file`. Such files ARE collected - by the CLI, by the LSP (the whole
+#: project pass and the open buffer) and by the project index - and the rules that only make
+#: sense for a module check `is_query_file` themselves.
 QUERY_SUFFIX = ".xbql"
 
 

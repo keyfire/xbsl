@@ -631,3 +631,35 @@ def test_the_object_type_carries_the_types_of_its_members(project):
 
     assert record["property_types"]["Состав"] == "Массив<Товары.Состав>"
     assert record["property_types"]["Наименование"] == "Строка"
+
+
+
+
+def test_query_file_usages_are_indexed(project):
+    """The query of a virtual table names project objects - those are usages too.
+
+    Left out of the index, exactly those usages were missing from "find usages" and from the
+    editor's rename, while the CLI has been linting the same files since 14.08.
+    """
+    sub = project / "Основное"
+    (sub / "ТоварыТаблица.yaml").write_text(
+        "ВидЭлемента: ВиртуальнаяТаблица\n"
+        "Ид: 7c1c9a80-5b26-4d7e-9a13-6c2b8e4d0f31\n"
+        "Имя: ТоварыТаблица\n",
+        encoding="utf-8",
+    )
+    (sub / "ТоварыТаблица.xbql").write_text(
+        "ВЫБРАТЬ\n"
+        "    Т.Наименование КАК Наименование\n"
+        "ИЗ\n"
+        "    Товары КАК Т\n"
+        "ГДЕ\n"
+        "    Т.Ссылка != Товары.ПустаяСсылка\n",
+        encoding="utf-8",
+    )
+    refs = build_index(project)["references"]
+    from_query = [r for r in refs if r["path"].endswith("ТоварыТаблица.xbql")]
+
+    assert from_query, "запрос виртуальной таблицы не попал в индекс"
+    assert any(r["name"] == "Товары" for r in from_query), "объект запроса не счёлся употреблением"
+    assert all(r["module"] == "ТоварыТаблица" for r in from_query), "имя модуля с хвостом суффикса"

@@ -357,6 +357,18 @@ def _resolve_templates_path(arg: Optional[str], folder: Optional[Path]) -> Optio
     return folder / templates.DEFAULT_FILE if folder else None
 
 
+def project_sources(root: Path) -> list[Path]:
+    """The files of a whole-project pass: modules, element descriptions and query files.
+
+    The same set the CLI collects (`discover` in cli.py). A set of its own would make one and
+    the same finding visible or not depending on who asks - the CLI has been reading the query
+    file of a virtual table since 14.08, while the editor kept skipping it.
+    """
+    return (engine.find_sources(root, "*.xbsl")
+            + engine.find_sources(root, "*.yaml")
+            + engine.find_sources(root, f"*{engine.QUERY_SUFFIX}"))
+
+
 def _make_server() -> "LanguageServer":
     server = LanguageServer("xbsl-lsp", f"v{__version__}")
 
@@ -394,13 +406,10 @@ def _make_server() -> "LanguageServer":
         path = uri_to_path(uri)
         if path is None:
             return
-        if engine.is_query_file(path):
-            # A standalone query is not judged by any rule yet, and running the module rules
-            # over it would paint the whole file with syntax errors. The document is served
-            # for completion only; publishing an empty list keeps a stale set from lingering.
-            server.publish_diagnostics(uri, [])
-            STATE.published[uri_key(uri)] = uri
-            return
+        # A standalone query is judged like any other source: the rules that would paint it
+        # with syntax errors (the parse of a module, the query rules of a module) step aside
+        # by `is_query_file` themselves, and what remains - whitespace, typography, line
+        # length - is about the file as text and holds for a query too.
         # Full path, not just the name: findings are matched against baseline entries
         # by it, and structure/xbsl-pair sees the module's real neighbor.
         src = engine.load_text(str(path), doc.source)
@@ -458,7 +467,7 @@ def _make_server() -> "LanguageServer":
             return
         build_project_index()  # navigation comes alive before the lint of the whole project
         try:
-            files = engine.find_sources(root, "*.xbsl") + engine.find_sources(root, "*.yaml")
+            files = project_sources(root)
             sources = [engine.load(p) for p in files]
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
             diags, problem = apply_baseline_file(diags, STATE.baseline)

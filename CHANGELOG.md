@@ -24,6 +24,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   replacement is a single query over the whole set, the values of the turns passed as an array
   parameter of an `IN` condition.
 
+### Fixed
+- **The editor now reads the query files of virtual tables, as the CLI already did.**
+  The whole-project pass, the open buffer and the project index all skipped `.xbql`, so
+  one and the same finding was visible or not depending on who asked, and the usages a
+  query makes of an object stayed out of "find usages".
+
 ## 2026-08-24 – 0.74.0, 0.75.0
 
 ### Added

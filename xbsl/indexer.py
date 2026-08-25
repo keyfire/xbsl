@@ -45,7 +45,7 @@ from xbsl import __version__
 from xbsl import parser as P
 from xbsl import dataset, metamodel, terms
 from xbsl.dataset import PLACEHOLDER
-from xbsl.engine import SourceFile, find_sources, load
+from xbsl.engine import QUERY_SUFFIX, SourceFile, find_sources, load
 from xbsl.lexer import Token, linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules._syntax import (
@@ -711,10 +711,16 @@ def _form_components(s: SourceFile, data: dict, form: str, path: str) -> list[di
 # --- index ----------------------------------------------------------------------------------
 
 def _discover(root: Path) -> list[Path]:
-    """Source files under the root (or the root itself if it is a file), sorted."""
+    """Source files under the root (or the root itself if it is a file), sorted.
+
+    The query file of a virtual table counts as a source: it names project objects and their
+    fields, so leaving it out kept exactly those usages out of "find usages" - and out of the
+    editor's rename, while the CLI has been reading the same files since 14.08.
+    """
     if root.is_file():
-        return [root] if root.suffix in (".xbsl", ".yaml") else []
-    return find_sources(root, "*.yaml") + find_sources(root, "*.xbsl")
+        return [root] if root.suffix in (".xbsl", ".yaml", QUERY_SUFFIX) else []
+    return (find_sources(root, "*.yaml") + find_sources(root, "*.xbsl")
+            + find_sources(root, f"*{QUERY_SUFFIX}"))
 
 
 def build_index(root: Path) -> dict:
@@ -736,7 +742,7 @@ def build_index(root: Path) -> dict:
     # _project_object_info).
     local_types: dict[str, list[dict]] = defaultdict(list)
     for s in xbsl_sources:
-        owner = s.path.name[: -len(".xbsl")].split(".", 1)[0]
+        owner = s.path.stem.split(".", 1)[0]
         module_path = rel(s.path)
         for name, line in _file_local_type_decls(s):
             local_types[owner].append({"name": name, "path": module_path, "line": line})
@@ -752,7 +758,7 @@ def build_index(root: Path) -> dict:
         # The module that DECLARES the type: another module names it qualified
         # (`Каталог.Карточка`), and the type inference has to find the same record by either
         # spelling. The record is kept under the bare name; the qualified one is derived.
-        owner = s.path.name[: -len(".xbsl")].split(".", 1)[0]
+        owner = s.path.stem.split(".", 1)[0]
         for m in module.members:
             if isinstance(m, P.Structure):
                 rec = {
@@ -852,7 +858,7 @@ def build_index(root: Path) -> dict:
 
     methods: list[dict] = dictionary_methods
     for s in xbsl_sources:
-        module = s.path.name[: -len(".xbsl")]
+        module = s.path.stem
         module_path = rel(s.path)
         for decl in _method_decls(s):
             methods.append({
@@ -979,7 +985,7 @@ def build_index(root: Path) -> dict:
     )
     references: list[dict] = []
     for s in xbsl_sources:
-        module = s.path.name[: -len(".xbsl")]
+        module = s.path.stem
         references.extend(_module_references(s, referable, module, rel(s.path)))
     for s in yaml_sources:
         references.extend(_handler_references(s, s.path.stem, rel(s.path)))
