@@ -63,6 +63,7 @@ from . import (  # noqa: F401
     structure_fields,
     tabular_members,
     type_defaults,
+    duplicate_bodies,
     unknown_members,
     unused_methods,
     url_params,

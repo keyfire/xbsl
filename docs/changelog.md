@@ -22,6 +22,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`code/duplicate-method-body` - one body written twice in different files.** The
+  normalized body of at least five lines is compared, so a reformatted copy is still a
+  copy; a platform hook is told apart by its `@Handler` annotation. Off by default.
 - **`code/client-available-unused` - a method open to the client that no client calls.**
   The annotation opens a surface nobody uses; the check counts a mention in a client
   module, in a client method of a server module, in a yaml and in a string literal as a
