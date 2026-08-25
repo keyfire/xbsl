@@ -431,7 +431,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Getting-started wizard: scaffold a new 1C:Element project through the engine (native prompts,
   // no webview). Available in both modes, so it is registered before the LSP early return.
   registerProjectWizard(context);
-  const metadataTree = registerMetadataTree(context, projectRootFor);
+  // panelColumnFor is a lazy closure, not `designer.panelColumnFor` directly: the designer
+  // registers AFTER the tree and this panel (below), so `designer` does not exist yet at these
+  // calls - the closure only reads it once a click actually happens, by which time it is
+  // assigned. The tree needs it to keep a source out of the group its form panel occupies.
+  let designer: DesignerAccess | undefined;
+  const metadataTree = registerMetadataTree(context, projectRootFor, (uri) => designer?.panelColumnFor(uri));
   // The element keys the platform spells two ways (`Attributes` / `Реквизиты`): asked once and
   // handed to the yaml reader, otherwise an English project shows empty branches in the tree.
   // Failure is not fatal - without the pairs the reader keeps working on Russian keys.
@@ -448,11 +453,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // mode shows a hint), other element yamls and modules with the metadata object (local
   // targeted edits, no server needed). The metadata tree feeds it its Тип candidates and
   // targets it via xbsl.metadata.props.
-  //
-  // panelColumnFor is a lazy closure, not `designer.panelColumnFor` directly: the designer
-  // registers AFTER this panel (below), so `designer` does not exist yet at this call - the
-  // closure only reads it once a handler is actually created, by which time it is assigned.
-  let designer: DesignerAccess | undefined;
   registerFormProps(
     context,
     metadataTree.typeCandidates,

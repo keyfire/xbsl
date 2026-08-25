@@ -482,6 +482,22 @@ export function shouldRevealInEditor(explicit: boolean, tabColumn: number | unde
   return explicit || (tabColumn !== undefined && tabColumn !== panelColumn);
 }
 
+/** Whether activating a form's yaml should bring that form's panel forward.
+ *
+ * The other direction of the same pairing, and it needs the mirror image of the guard
+ * revealYaml already carries: the panel is worth bringing forward only while it sits in a
+ * group OTHER than the one the yaml was just activated in. Sharing a group, `reveal` makes the
+ * panel that group's front tab - covering the very yaml the developer just picked, and picking
+ * its tab again only repeats the move, so the source becomes unreachable.
+ *
+ * Either column unknown answers `false` for the same reason: VS Code reports a column for every
+ * panel that has a tab in an editor group, so an absent one is not a group to come forward
+ * from, and revealing blind is exactly what hides the source.
+ */
+export function shouldRevealPanel(editorColumn: number | undefined, panelColumn: number | undefined): boolean {
+  return editorColumn !== undefined && panelColumn !== undefined && editorColumn !== panelColumn;
+}
+
 /** The column a freshly created module opens in, next to the panel that triggered its
  * creation - never IN the panel's own column, which would put the new code behind the very
  * form that just asked for it. Reuses the module's own tab if one is already open elsewhere,

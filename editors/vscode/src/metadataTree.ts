@@ -23,6 +23,7 @@ import {
   standardAttrNames,
   translationRef,
 } from "./metadataCore";
+import { formPathOfModule } from "./formDesignerCore";
 import { updatePropsFromSelection } from "./formProps";
 import { revealContent } from "./reveal";
 
@@ -1156,6 +1157,11 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
 // language of the project through it.
 let sessionProvider: XbslMetadataProvider | undefined;
 
+// The column of the form-designer panel open for a yaml, when there is one (formDesigner.ts's
+// DesignerAccess.panelColumnFor). Wired in by registerMetadataTree through a lazy closure - the
+// designer registers after the tree, so the value exists only by the time a click happens.
+let panelColumnFn: ((uri: vscode.Uri) => vscode.ViewColumn | undefined) | undefined;
+
 /** Does the project of this workspace write its metadata names in English?
  *
  * The answer decides the spelling of every name a hint shows: the name goes to the user (and
@@ -1476,9 +1482,29 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
 
 // --- commands and registration ----------------------------------------------------------
 
+// The group a form-designer panel holds this file's form in, when one is open: its own panel for
+// a form yaml, the panel of the paired form for a module. Nothing to avoid without a panel.
+function designerColumnOf(uri?: vscode.Uri): vscode.ViewColumn | undefined {
+  if (!uri || !panelColumnFn) {
+    return undefined;
+  }
+  const own = panelColumnFn(uri);
+  if (own !== undefined) {
+    return own;
+  }
+  const formPath = formPathOfModule(uri.path);
+  return formPath === undefined ? undefined : panelColumnFn(uri.with({ path: formPath }));
+}
+
 // Editor column for sources (yaml/xbsl): where this file is already open, otherwise where any
 // source is open, otherwise - the left one. This keeps descriptions/modules on the left while the
 // preview/properties panels go right (Beside), and repeated clicks do not multiply columns.
+//
+// A form-designer panel makes its own group unusable for the form's sources: opening one there
+// puts it behind the very form it belongs to, and the pairing then brings the panel forward over
+// it on every click (docs/DESIGNER.md - a source opens BESIDE the panel, never in its column).
+// A tab that already exists is left where it is: bringing it forward beats a duplicate of the
+// same document in a second group.
 function sourceColumn(uri?: vscode.Uri): vscode.ViewColumn {
   const editors = vscode.window.visibleTextEditors;
   if (uri) {
@@ -1487,6 +1513,7 @@ function sourceColumn(uri?: vscode.Uri): vscode.ViewColumn {
       return same.viewColumn;
     }
   }
+  const panel = designerColumnOf(uri);
   const source = editors
     .filter((e) => {
       if (e.document.uri.scheme !== "file") {
@@ -1495,8 +1522,12 @@ function sourceColumn(uri?: vscode.Uri): vscode.ViewColumn {
       const p = e.document.uri.fsPath.toLowerCase();
       return p.endsWith(".yaml") || p.endsWith(".xbsl");
     })
-    .sort((a, b) => (a.viewColumn ?? 1) - (b.viewColumn ?? 1))[0];
-  return source?.viewColumn ?? vscode.ViewColumn.One;
+    .sort((a, b) => (a.viewColumn ?? 1) - (b.viewColumn ?? 1))
+    .find((e) => e.viewColumn !== panel);
+  if (source?.viewColumn) {
+    return source.viewColumn;
+  }
+  return panel === vscode.ViewColumn.One ? vscode.ViewColumn.Beside : vscode.ViewColumn.One;
 }
 
 async function openFile(fsPath?: string, preserveFocus = false): Promise<vscode.TextEditor | undefined> {
@@ -2074,7 +2105,8 @@ async function pickGroupMode(provider: XbslMetadataProvider, context: vscode.Ext
 
 export function registerMetadataTree(
   context: vscode.ExtensionContext,
-  projectRootFor: (folder: vscode.WorkspaceFolder) => string
+  projectRootFor: (folder: vscode.WorkspaceFolder) => string,
+  panelColumnFor?: (uri: vscode.Uri) => vscode.ViewColumn | undefined
 ): {
   typeCandidates: () => Promise<string[]>;
   interfaceComponents: () => Promise<Array<{ name: string; yamlPath: string }>>;
@@ -2083,6 +2115,7 @@ export function registerMetadataTree(
 } {
   const provider = new XbslMetadataProvider(projectRootFor);
   sessionProvider = provider; // the panels ask the project language through it
+  panelColumnFn = panelColumnFor; // where a form's own designer panel sits, when one is open
   const view = vscode.window.createTreeView("xbslMetadata", {
     treeDataProvider: provider,
     // A button of our own instead of the built-in one: that collapses the project root too,

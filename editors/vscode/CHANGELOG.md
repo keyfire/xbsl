@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **A form panel no longer covers the yaml it belongs to.** Sharing an editor group with the
+  source, the panel came forward on every click on that source - so the yaml could not be seen at
+  all. The pair now steps aside while both sit in one group.
+- **The metadata tree opens a source beside the form panel, not underneath it.** A click on a tree
+  row used to put the file in the panel's own group, where the pairing immediately hid it.
+
 ## 0.66.1
 
 ### Changed

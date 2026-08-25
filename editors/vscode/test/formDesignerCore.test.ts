@@ -10,6 +10,7 @@ import {
   neighborColumn,
   revealStartColumn,
   shouldRevealInEditor,
+  shouldRevealPanel,
   DataLabels,
   DataModel,
   DEFAULT_LAYOUT,
@@ -371,6 +372,31 @@ test("shouldRevealInEditor: implicit follow, yaml open in the panel's own column
 // bring the yaml forward, even if that means it now covers the panel that issued the request.
 test("shouldRevealInEditor: explicit call, yaml open in the panel's own column - still opens", () => {
   assert.strictEqual(shouldRevealInEditor(true, 1, 1), true);
+});
+
+// --- shouldRevealPanel ----------------------------------------------------------------------
+// The other direction of the same pairing: a yaml tab brought forward brings its form panel
+// forward too - but only while the two sit in DIFFERENT groups. Sharing one group, the reveal
+// would make the panel that group's front tab, covering the very yaml just activated, and the
+// developer could never see the source at all.
+
+test("shouldRevealPanel: the panel sits in another group - brought forward", () => {
+  assert.strictEqual(shouldRevealPanel(2, 1), true);
+});
+
+test("shouldRevealPanel: the yaml sits in the panel's own group - stays put", () => {
+  assert.strictEqual(shouldRevealPanel(1, 1), false);
+});
+
+// Either column unknown means the pairing cannot prove the two are apart, and the answer is the
+// safe one: a panel whose column VS Code does not report is not in an editor group of its own to
+// be brought forward, and revealing it blind is exactly the move that hides the source.
+test("shouldRevealPanel: the editor's group unknown - stays put", () => {
+  assert.strictEqual(shouldRevealPanel(undefined, 1), false);
+});
+
+test("shouldRevealPanel: the panel's group unknown - stays put", () => {
+  assert.strictEqual(shouldRevealPanel(2, undefined), false);
 });
 
 // --- neighborColumn -------------------------------------------------------------------------

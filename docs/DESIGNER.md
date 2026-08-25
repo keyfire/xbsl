@@ -48,8 +48,10 @@ The remaining panels live in side-bar containers and follow the active editor:
 **Every form gets a panel of its own**, living as a normal editor tab: a second form opens next to
 the first, each panel keeps its own tree, selection and expansion memory, and opening the same form
 again brings its panel forward. A panel and its open `.yaml` travel as a pair - picking a tab on
-one side brings the other forward, and closing the panel closes the form's yaml and its module
-(unless they have unsaved changes). The pairing never adds tabs on its own: while a source sits
+one side brings the other forward, as long as the two sit in different groups: sharing one (a tab
+dragged over, `Ctrl+P`), the pairing steps aside and the picked tab stays in front - otherwise the
+panel would cover the source just brought forward, and there would be no way to reach it at all.
+Closing the panel closes the form's yaml and its module (unless they have unsaved changes). The pairing never adds tabs on its own: while a source sits
 closed, clicking a field in the frame, a row in the structure tree, a row in the data area, or the
 selection change after an edit in either of the last two leaves it closed - only the selection
 moves. Opening it takes an explicit ask - *Show in yaml*, `Ctrl+click`, a double click in the tree,

@@ -49,6 +49,7 @@ import {
   modulePathOfForm,
   sanitizeLayout,
   shouldRevealInEditor,
+  shouldRevealPanel,
   structureMenu,
 } from "./formDesignerCore";
 import { FormStructureModel, StructureHost, StructureSnapshot } from "./formStructure";
@@ -1037,11 +1038,19 @@ export function registerFormDesigner(
         return;
       }
       const designer = designerFor(editor.document.uri);
-      if (designer) {
-        tabSyncUntil = Date.now() + TAB_SYNC_MS;
-        active = designer;
-        designer.panel.reveal(designer.panel.viewColumn, true);
+      if (!designer) {
+        return;
       }
+      active = designer;
+      // Only while the panel has a group of its OWN to come forward from: sharing the group
+      // with the yaml, the reveal would make the panel that group's front tab and cover the
+      // very source just activated - and picking its tab again would only repeat the move, so
+      // the yaml could never be seen at all. revealYaml steps aside the same way.
+      if (!shouldRevealPanel(editor.viewColumn, designer.panel.viewColumn)) {
+        return;
+      }
+      tabSyncUntil = Date.now() + TAB_SYNC_MS;
+      designer.panel.reveal(designer.panel.viewColumn, true);
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       const own = designerFor(e.document.uri);
