@@ -9,9 +9,9 @@ in principle: its methods are called by its OWN yaml, so every one of them looks
 What counts as a use, and why the two sides are counted differently:
 
 - in a YAML, only a scalar VALUE counts. A key does not (the localization dictionary and the
-  translation dictionary both write names as KEYS - `ЛичныйКабинет: "Личный кабинет"` - and
-  counting those would silence every component of a bilingual project), and neither does a
-  comment naming the component in prose;
+  translation dictionary both write names as KEYS - `Задачи: Tasks` - and counting those would
+  silence every component of a bilingual project), and neither does a comment naming the
+  component in prose;
 - in a MODULE, any word of the text counts, a comment and a string literal included. That is
   deliberately lax, exactly as in `code/unused-method`: a component may be created by name
   from a string (an HTML container bridge), and doubt has to silence the finding.
