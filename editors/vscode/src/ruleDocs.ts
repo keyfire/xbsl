@@ -225,6 +225,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/ref-input-auto-commands", page: "topics/edit-component" },
   {
+    match: (r) => r === "yaml/toggle-command-pair",
+    page: "stdlib/element/xbsl/Std/Interface/Commands/SwitchableCommand_ru",
+  },
+  {
     match: (r) => r === "yaml/dynlist-row-editing",
     page: "stdlib/element/xbsl/Std/Interface/Lists/List_ru",
     anchor: "приредактированиистроки",

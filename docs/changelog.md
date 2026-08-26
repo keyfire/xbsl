@@ -21,6 +21,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ## 2026-08-26
 
+### Added
+- **`yaml/toggle-command-pair` - a pair of usual commands with mirrored `Visible`.** Two
+  adjacent commands of which exactly one is shown (`=X` against `=not X`) emulate one
+  command with two states - the platform has the real thing: a `SwitchableCommand` carries
+  the representations and images of both states, and the platform owns the state itself. A
+  shared handler strengthens the case but is not required.
+
 ### Fixed
 - **`code/duplicate-method-body`: which of the other places the message names no longer
   depends on the file walk order.** The CLI and the editor could name different places of

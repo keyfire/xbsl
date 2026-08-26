@@ -46,10 +46,11 @@ Zero-false-positive guards beyond that:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, uischema
+from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.yaml_schema import (
@@ -89,6 +90,23 @@ MESSAGES = {
     "yaml/ref-input-auto-commands.off": {
         "ru": "информационное: кнопка открытия чаще всего и нужна, отличить намерение нельзя",
         "en": "informational: the open button is usually wanted, and the intent is not tellable",
+    },
+    "yaml/toggle-command-pair.title": {
+        "ru": "Пара команд с зеркальной видимостью",
+        "en": "A pair of commands with mirrored visibility",
+    },
+    "yaml/toggle-command-pair.pair": {
+        "ru": "Две соседние {n[ОбычнаяКоманда]} с зеркальной {n[Видимость]} ('{first}' и "
+              "'{second}') изображают одну команду с двумя состояниями. У платформы она есть: "
+              "{n[ПереключаемаяКоманда]} несёт представления и изображения обоих состояний, "
+              "начальное {n[Активна]} задаётся литералом (состоянием владеет платформа, биндинг "
+              "запрещён), а обработчик читает состояние из свойства команды.",
+        "en": "Two adjacent {n[ОбычнаяКоманда]} commands with mirrored {n[Видимость]} "
+              "('{first}' and '{second}') emulate one command with two states. The platform "
+              "has the real thing: a {n[ПереключаемаяКоманда]} carries the representations and "
+              "images of both states, the initial {n[Активна]} is a literal (the platform owns "
+              "the state, a binding is forbidden), and the handler reads the state off the "
+              "command.",
     },
 }
 i18n.register(MESSAGES)
@@ -273,3 +291,137 @@ def ref_input_auto_commands(source: SourceFile) -> Iterable[Diagnostic]:
             "yaml/ref-input-auto-commands", Severity.INFO,
             i18n.t("yaml/ref-input-auto-commands.auto", type=argument),
         )
+
+
+# The handmade toggle: two adjacent usual commands whose visibility bindings negate each
+# other - one is shown exactly when the other is hidden.
+_USUAL_COMMAND = "ОбычнаяКоманда"
+_VISIBILITY = "Видимость"
+
+#: The negation head of a binding: the keyword, not an identifier that merely starts with it.
+_NEGATION_RE = re.compile(r"^(?:не|not)(?=[\s(])\s*(.+)$", re.DOTALL)
+
+
+@lru_cache(maxsize=1)
+def _toggle_names() -> tuple[frozenset[str], frozenset[str]]:
+    """Both spellings of the usual-command kind and of the visibility key, from the data.
+
+    The kind comes from the serializer's own vocabulary (`terms.kinds_table`) - the type
+    dictionary spells the KIND of an English project differently from the stdlib type. With
+    no data only the Russian spelling matches, which is the usual degradation.
+    """
+    spelled_kind = terms.kinds_table().get(_USUAL_COMMAND)
+    kinds = frozenset(name for name in (_USUAL_COMMAND, spelled_kind) if name)
+    visibility = frozenset(
+        name for name in (
+            _VISIBILITY,
+            *(en for en, ru in uischema.property_aliases().items() if ru == _VISIBILITY),
+        ) if name
+    )
+    return kinds, visibility
+
+
+dataset.register_reset(_toggle_names.cache_clear)
+
+
+def _whole_parens_stripped(expression: str) -> str:
+    """The expression without a parenthesis pair that wraps the whole of it, repeatedly."""
+    expression = expression.strip()
+    while expression.startswith("(") and expression.endswith(")"):
+        depth = 0
+        for position, char in enumerate(expression):
+            if char == "(":
+                depth += 1
+            elif char == ")":
+                depth -= 1
+                if depth == 0 and position < len(expression) - 1:
+                    return expression  # the pair closes before the end - not a wrapper
+        expression = expression[1:-1].strip()
+    return expression
+
+
+def _mirrored(first: str, second: str) -> bool:
+    """Whether one visibility binding negates the other (`=X` against `=не X`)."""
+    if not (first.startswith("=") and second.startswith("=")):
+        return False
+    left = _whole_parens_stripped(first[1:])
+    right = _whole_parens_stripped(second[1:])
+    for negated, plain in ((left, right), (right, left)):
+        match = _NEGATION_RE.match(negated)
+        if match is None:
+            continue
+        stripped = _whole_parens_stripped(match.group(1))
+        if re.sub(r"\s+", "", stripped) == re.sub(r"\s+", "", plain):
+            return True
+    return False
+
+
+def _visibility_binding(mapping, names: frozenset[str]):
+    """The scalar (key, value) nodes of the visibility property, either spelling."""
+    for key_node, value_node in mapping.value:
+        if not (
+            isinstance(key_node, yaml.ScalarNode) and isinstance(value_node, yaml.ScalarNode)
+        ):
+            continue
+        if key_node.value in names:
+            return key_node, value_node
+    return None
+
+
+@rule(
+    "yaml/toggle-command-pair", "yaml/toggle-command-pair.title", "D",
+    severity=Severity.WARNING,
+)
+def toggle_command_pair(source: SourceFile) -> Iterable[Diagnostic]:
+    """A pair of usual commands whose visibilities negate each other - a handmade toggle.
+
+    One command is shown exactly when the other is hidden: together they emulate a command
+    with two states, and the platform declares that command itself (`SwitchableCommand` -
+    the representations and images of both states, the `Active` flag the platform owns).
+    A shared handler strengthens the case but is not required: the pair with two handlers
+    is the same toggle written apart.
+
+    Adjacency is judged among the mapping items of one sequence: a scalar reference between
+    them (`- =Обновить`) does not break the pair, another command node does.
+    """
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    if not any(key in source.text for key in _MARKUP_KEYS):
+        return
+    kinds, visibility_names = _toggle_names()
+    if not any(name in source.text for name in visibility_names):
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    for mapping in _markup_nodes(root):
+        for _key, value in mapping.value:
+            if not isinstance(value, yaml.SequenceNode):
+                continue
+            items = [item for item in value.value if isinstance(item, yaml.MappingNode)]
+            for first, second in zip(items, items[1:]):
+                first_type = _type_value(first)
+                second_type = _type_value(second)
+                if first_type is None or first_type.value.strip() not in kinds:
+                    continue
+                if second_type is None or second_type.value.strip() not in kinds:
+                    continue
+                first_vis = _visibility_binding(first, visibility_names)
+                second_vis = _visibility_binding(second, visibility_names)
+                if first_vis is None or second_vis is None:
+                    continue
+                if not _mirrored(first_vis[1].value, second_vis[1].value):
+                    continue
+                key_node = first_vis[0]
+                yield Diagnostic(
+                    source.rel,
+                    key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+                    "yaml/toggle-command-pair", Severity.WARNING,
+                    i18n.t(
+                        "yaml/toggle-command-pair.pair",
+                        first=first_vis[1].value, second=second_vis[1].value,
+                    ),
+                )
