@@ -373,6 +373,22 @@ types (a reference and an enumeration admit an empty value), the settings of dyn
 forms, and the layout traps that apply without an error yet draw differently from the intent.
 Five rules are `info` and off: they say "this is how the platform works", not "this is a mistake".
 
+### Project conventions (the `conventions/` rules)
+
+Rules about what the PROJECT agreed on rather than what the platform demands. The base set
+carries the bilingual-project family: `conventions/untranslated-visible-literal` (on by
+default) reports visible text left as a Cyrillic literal where the project already routes the
+same property through the localization dictionary, and `conventions/untranslated-code-literal`
+with `conventions/missing-translation` (both off) extend that to module literals and to the
+translation dictionary - whether every human-readable string must come from the dictionary is
+a per-project decision, so the base set does not impose it.
+
+The group is also the extension point by design: a project plugin registers its own house
+rules under `conventions/` (a ban on task numbers in comments, internal references and the
+like) and decides their severity and defaults for that project - see
+[Extending](/servers#extending-your-own-rules-data-and-severities). Runtime truth is
+`xbsl --list-rules`; the table above lists the base set only.
+
 ### The small groups
 
 - `typography/` - typographic characters in prose and comments: em dash, the ellipsis character,
