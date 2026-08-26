@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.1
+
+### Fixed
+- **An svg resource opens in the extension's own preview instead of an invisible pane.** The
+  site's icons are `fill="currentColor"`, and a standalone viewer paints them black - on a
+  dark canvas the picture "did not show". The preview inlines the svg with the editor theme
+  color, on a checkered backdrop, captioned by its `Ресурс{...}` key; other images open the
+  regular way.
+
 ## 0.67.0
 
 ### Added

@@ -27,6 +27,7 @@ import {
   translationRef,
 } from "./metadataCore";
 import { formPathOfModule } from "./formDesignerCore";
+import { resourcePreviewHtml } from "./resourcePreviewCore";
 import { updatePropsFromSelection } from "./formProps";
 import { revealContent } from "./reveal";
 
@@ -769,9 +770,12 @@ function resourceFileNode(file: ResourceFile): XbslNode {
   node.resourceUri = vscode.Uri.file(file.filePath); // git statuses; the icon stays ours
   node.tooltip = `Ресурс{${file.key}}`;
   node.contextValue = "xbslResource";
-  node.command = {
-    command: "vscode.open", title: "", arguments: [vscode.Uri.file(file.filePath)],
-  };
+  // An svg goes to our own preview: the project's icons are fill="currentColor", and a
+  // standalone viewer paints them black - invisible on a dark canvas. Other images open
+  // with the editor's own viewers.
+  node.command = file.key.toLowerCase().endsWith(".svg")
+    ? { command: "xbsl.metadata.previewResource", title: "", arguments: [file.filePath, file.key] }
+    : { command: "vscode.open", title: "", arguments: [vscode.Uri.file(file.filePath)] };
   return node;
 }
 
@@ -1652,6 +1656,40 @@ async function openFile(fsPath?: string, preserveFocus = false): Promise<vscode.
   return vscode.window.showTextDocument(doc, { viewColumn: sourceColumn(uri), preview: false, preserveFocus });
 }
 
+// One preview panel for all resources: a click swaps its content, closing drops the handle.
+let resourcePanel: vscode.WebviewPanel | undefined;
+
+async function openResourcePreview(filePath?: string, key?: string): Promise<void> {
+  if (!filePath || !key) {
+    return;
+  }
+  if (!fs.existsSync(filePath)) {
+    void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: the file is not found: {0}", filePath));
+    return;
+  }
+  let svgText: string;
+  try {
+    svgText = await fs.promises.readFile(filePath, "utf8");
+  } catch {
+    return;
+  }
+  if (!resourcePanel) {
+    resourcePanel = vscode.window.createWebviewPanel(
+      "xbslResourcePreview", key, vscode.ViewColumn.Active,
+      { enableScripts: false }
+    );
+    resourcePanel.onDidDispose(() => {
+      resourcePanel = undefined;
+    });
+  } else {
+    resourcePanel.title = key;
+    resourcePanel.reveal(vscode.ViewColumn.Active, true);
+  }
+  resourcePanel.webview.html = resourcePreviewHtml(
+    svgText, key, vscode.l10n.t("currentColor follows the editor theme")
+  );
+}
+
 async function reveal(node?: XbslNode): Promise<void> {
   const editor = await openFile(node?.yamlPath);
   if (editor && node?.offset !== undefined) {
@@ -2282,6 +2320,10 @@ export function registerMetadataTree(
       }
     }),
     vscode.commands.registerCommand("xbsl.metadata.refresh", () => provider.refresh()),
+    vscode.commands.registerCommand(
+      "xbsl.metadata.previewResource",
+      (filePath?: string, key?: string) => openResourcePreview(filePath, key)
+    ),
     vscode.commands.registerCommand("xbsl.metadata.openYaml", (n?: XbslNode) => openFile(n?.yamlPath)),
     vscode.commands.registerCommand("xbsl.metadata.openModule", (n?: XbslNode) => openFile(n?.modulePath)),
     vscode.commands.registerCommand("xbsl.metadata.openQuery", (n?: XbslNode) => openFile(n?.queryPath)),

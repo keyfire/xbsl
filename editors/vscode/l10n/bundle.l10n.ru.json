@@ -75,6 +75,7 @@
   "No form content here ({0} → {1}) – open a form yaml.": "Здесь нет содержимого формы ({0} → {1}) – откройте yaml формы.",
   "XBSL: open a form yaml (InterfaceComponent) to preview it.": "XBSL: для предпросмотра откройте yaml формы (КомпонентИнтерфейса).",
   "XBSL: the file is not found: {0}": "XBSL: файл не найден: {0}",
+  "currentColor follows the editor theme": "currentColor следует теме редактора",
   "Project": "Проект",
   "Name of the new {0}": "Имя нового {0}",
   "attribute": "реквизит",
