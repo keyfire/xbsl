@@ -22,6 +22,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-08-26 – 0.79.0, 0.79.1, 0.79.2
 
 ### Added
+- **`yaml/duplicate-subtree` - a markup subtree copied into another file.** The shape is
+  compared and the names and texts are left out: a new form is started by copying the
+  neighbouring one, and the copy is renamed. The 40-node threshold and both exclusions are
+  measured rather than chosen; off by default - how much sameness is too much is a decision of
+  the project.
 - **`yaml/toggle-command-pair` - a pair of usual commands with mirrored `Visible`.** Two
   adjacent commands of which exactly one is shown (`=X` against `=not X`) emulate one
   command with two states - the platform has the real thing: a `SwitchableCommand` carries

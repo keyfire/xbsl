@@ -68,6 +68,15 @@ _CORE_MESSAGES = {
         "ru": "две одинаковых обвязки не всегда обязаны стать одним методом: общий код формы объекта иногда дешевле повторить, чем связать модули зависимостью. Включайте, когда собираетесь выносить общее",
         "en": "two identical wrappers do not always have to become one method: shared object-form code is sometimes cheaper repeated than tied into a dependency. Enable it when you are about to extract the shared part",
     },
+    "yaml/duplicate-subtree.off": {
+        "ru": "мера одинаковости - решение проекта: две формы списка одного вида похожи "
+              "законно, и порог, с которого похожесть становится копией, задаёт не линтер. "
+              "Включайте, когда собираетесь выносить общий компонент",
+        "en": "how much sameness is too much is a decision of the project: two list forms of "
+              "one kind are legitimately alike, and the threshold at which likeness becomes a "
+              "copy is not the linter's to set. Enable it when you are about to extract a "
+              "shared component",
+    },
     "yaml/size-needs-no-stretch.off": {
         "ru": "у части компонентов размер без явного запрета растягивания работает законно (у родителя нет свободного места по этой оси, статически это не решается) – предупреждение дало бы ложные. Зовите точечно, когда видите симптом: пустое место или раздутые соседи",
         "en": "for some components a size without an explicit stretch ban is perfectly valid (the parent has no leftover space along that axis, which is not statically decidable) - a warning would be false. Enable it point-blank when you see the symptom: blank space or inflated neighbours",
