@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-26
+## 2026-08-26 – 0.79.0
 
 ### Added
 - **`yaml/toggle-command-pair` - a pair of usual commands with mirrored `Visible`.** Two
