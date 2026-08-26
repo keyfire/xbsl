@@ -22,6 +22,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   shared handler strengthens the case but is not required.
 
 ### Fixed
+- **The project's translation dictionary is no longer judged by the yaml schema rules.** A
+  line of a dictionary file is a name and its translation, not a property of an object, and
+  the one that translates a name into `Id` was read by `yaml/id-uuid` as a malformed id. A
+  dictionary file is recognised by its own content - the format version and a translation
+  plane - so the check stays file-scoped and does not walk the tree on every keystroke. The
+  other rules of the module were already silent on a dictionary: it carries no ElementKind.
 - **`code/duplicate-method-body`: which of the other places the message names no longer
   depends on the file walk order.** The CLI and the editor could name different places of
   one and the same copy, and a baseline entry keyed by the message stopped matching.

@@ -10,6 +10,9 @@
 Structural files (Проект/Подсистема/Ресурсы) are recognised by the absence of ВидЭлемента and
 are exempt from the Имя/required-Ид rules; the Ид checks (format/uniqueness) apply to every Ид
 in every file.
+
+A translation dictionary is not a description at all and no rule of this module judges it - see
+`is_translation_dictionary`.
 """
 
 from __future__ import annotations
@@ -215,6 +218,44 @@ def _is_object(data) -> bool:
     return object_kind(data) is not None
 
 
+#: The planes a translation dictionary carries (xbsl/translation/dictionary.py).
+_DICTIONARY_SECTIONS = ("tokens", "phrases", "literals", "terms")
+
+#: The cheap gate before the parse: the dictionary format writes its version at the top level,
+#: and the loader takes only the integer 1 - a quoted value is already rejected there.
+_DICTIONARY_HEAD_RE = re.compile(r"(?m)^version:[ \t]*\d")
+
+
+def is_translation_dictionary(source: SourceFile) -> bool:
+    """Whether the file is a translation dictionary rather than a description of an element.
+
+    A dictionary (`xbsl-translation`, see xbsl/translation/dictionary.py) writes platform names
+    as ordinary map KEYS: the pair `Ид: Id` is the translation of a name, not the id of an
+    object, and a schema rule reading that line judges a thing that is not there. The other
+    rules of this module are already silent on such a file - it carries no element kind - so
+    the gate is needed by the id checks, which read every file.
+
+    Recognised by its own content and not by the path discovery of
+    `conventions/missing-translation`: these are file-scope rules the editor runs on every
+    keystroke, a buffer checked through `--stdin` has no real path, and walking up the tree per
+    file is the wrong price for them.
+    """
+    key = "translation_dictionary"
+    if key not in source.cache:
+        verdict = False
+        if _HAVE_YAML and source.kind == "yaml" and _DICTIONARY_HEAD_RE.search(source.text):
+            data, err = _parsed(source)
+            verdict = (
+                err is None
+                and isinstance(data, dict)
+                and object_kind(data) is None
+                and "version" in data
+                and ("language" in data or any(s in data for s in _DICTIONARY_SECTIONS))
+            )
+        source.cache[key] = verdict
+    return source.cache[key]
+
+
 def value_of(data, key: str, kind: str | None = None):
     """The value of a property named the metamodel's way, whichever spelling the file uses.
 
@@ -305,7 +346,7 @@ def yaml_valid(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("yaml/id-uuid", "yaml/id-uuid.title", "A", severity=Severity.ERROR)
 def yaml_id_uuid(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "yaml":
+    if source.kind != "yaml" or is_translation_dictionary(source):
         return
     for value, line, col in _id_lines(source):
         if not _UUID_RE.match(value):
