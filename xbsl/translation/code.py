@@ -38,8 +38,9 @@ dictionary refuses a value that would not survive being pasted back between two 
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 
-from xbsl import lexer
+from xbsl import lexer, terms
 from xbsl.engine import SourceFile
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
@@ -333,11 +334,16 @@ def collect_token_edits(
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
                                  chain_root=chain_root)
+        elif kind == "PATTERN":
+            # A pattern literal is a program of another language and nothing here reads it as
+            # text - except the names of its named groups, which the code reads back by name.
+            _named_group_edits(tok, base, resolver, report, edits, at)
         elif kind == "COMMENT":
             _comment_edits(tok, base, resolver, report, edits)
         elif kind == "STRING":
             _string_edits(tok, base, resolver, report, edits, at,
-                          data=not in_query and not _inside(resolvable, tok.start))
+                          data=not in_query and not _inside(resolvable, tok.start),
+                          group_argument=is_group_argument(toks, index))
         if kind in ("IDENT", "KEYWORD"):
             if not prev_dot:
                 chain_root = tok.value
@@ -606,10 +612,85 @@ def _comment_edits(tok, base, resolver, report, edits) -> None:
 # --- strings ----------------------------------------------------------------------------
 
 
-def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = True) -> None:
+#: A named group of a regular expression: a name of the PROJECT, written inside a pattern.
+_NAMED_GROUP_RE = re.compile(r"\(\?<([^\W\d][\w]*)>")
+
+
+@lru_cache(maxsize=1)
+def _group_call_forms() -> frozenset[str]:
+    """Both spellings of the method whose string argument is a group NAME, not a text."""
+    return frozenset(terms.key_forms("Группа"))
+
+
+def is_group_argument(toks: list, index: int) -> bool:
+    """Whether the string at `index` is the first argument of `<match>.Group(...)`."""
+    if index < 3:
+        return False
+    opening, method, dot = toks[index - 1], toks[index - 2], toks[index - 3]
+    return (
+        opening.kind == "OP" and opening.value == "("
+        and method.kind in ("IDENT", "KEYWORD") and method.value in _group_call_forms()
+        and dot.kind == "OP" and dot.value == "."
+    )
+
+
+def _name_edit(text: str, start: int, resolver, report, edits, at) -> None:
+    """Translate one NAME standing inside a literal, reporting it when nothing names it.
+
+    The literals plane is asked FIRST, and that is not a stray: a project that already spells
+    a pattern by hand named its group there, and the two sides of a group name have to answer
+    alike or the call asks for a group the pattern never declared. One order for both sides is
+    what keeps them together - which spelling wins matters less than that one wins for both.
+    """
+    named = resolver.dictionary.literal(text)
+    if named is not None:
+        report.note_literal_named(text)
+        if named != text:
+            edits.append((start, start + len(text), named))
+        return
+    replacement, plane = resolver.identifier(text)
+    if plane == "user":
+        report.user_done += 1
+    if replacement:
+        if replacement != text:
+            edits.append((start, start + len(text), replacement))
+        return
+    line, col = at
+    report.note_token(text, line, col)
+
+
+def _named_group_edits(tok, base, resolver, report, edits, at=None) -> None:
+    """Translate the names of the named groups declared inside a pattern literal.
+
+    A group name is read back by that name (`Match.Group("Name")`), and the two sides used to
+    move apart: the call is a string the literals plane could name, the declaration inside the
+    pattern nothing looked at. The tree then went out with a pattern declaring one name and a
+    call asking for another, and the platform answered "no capture group with that name".
+    Both sides are resolved by the SAME map now, so one entry moves them together.
+    """
+    position = at if at is not None else (tok.line, tok.col)
+    for match in _NAMED_GROUP_RE.finditer(tok.value):
+        name = match.group(1)
+        if name.isascii():
+            continue
+        _name_edit(name, base + tok.start + match.start(1), resolver, report, edits, position)
+
+
+def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = True,
+                  group_argument: bool = False) -> None:
     value = tok.value
+    if group_argument:
+        # The argument of Group() is a NAME, not prose: the literals plane must not answer for
+        # it, or the call would take a spelling the pattern never got.
+        body = _body_of(tok)
+        if body is not None and not body.isascii():
+            _name_edit(body, base + tok.start + 1, resolver, report, edits,
+                       at if at is not None else (tok.line, tok.col))
+        return
     if data and _literal_edit(tok, base, resolver, report, edits, at):
-        return  # the whole literal is gone, and with it every span inside it
+        # The whole literal is gone, and with it every span inside it - a group name included:
+        # an entry that names a pattern spells its groups the way it wants them.
+        return
     spans, shorts = _interpolations(value)
     for start, end in spans:
         inner = value[start:end]
@@ -627,6 +708,7 @@ def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = T
         else:
             line, col = at if at is not None else (tok.line, tok.col)
             report.note_token(name, line, col)
+    _named_group_edits(tok, base, resolver, report, edits, at)
     _resource_path_edits(tok, base, resolver, report, edits, at)
     if has_cyrillic(value):
         bare = value.strip('"')
@@ -673,6 +755,23 @@ def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
     return True
 
 
+def prose_of(text: str) -> str:
+    """The text with its interpolations blanked out - what a person actually reads in it.
+
+    A template whose Cyrillic sits inside `%{...}` alone is already translated by the
+    interpolation pass, and asking a person to name it would ask for nothing.
+    """
+    spans, shorts = _interpolations(text)
+    masked = list(text)
+    for start, end in spans:
+        for position in range(start, min(end, len(masked))):
+            masked[position] = " "
+    for start, name in shorts:
+        for position in range(start, min(start + len(name), len(masked))):
+            masked[position] = " "
+    return "".join(masked)
+
+
 def _literal_left(tok, report, at=None, *, data: bool = True) -> None:
     """Report a Cyrillic literal the pass leaves in the source language.
 
@@ -693,15 +792,7 @@ def _literal_left(tok, report, at=None, *, data: bool = True) -> None:
         return
     if _looks_like_resource_path(body):
         return
-    spans, shorts = _interpolations(tok.value)
-    masked = list(tok.value)
-    for start, end in spans:
-        for position in range(start, min(end, len(masked))):
-            masked[position] = " "
-    for start, name in shorts:
-        for position in range(start, min(start + len(name), len(masked))):
-            masked[position] = " "
-    if not has_cyrillic("".join(masked)):
+    if not has_cyrillic(prose_of(tok.value)):
         return
     line, col = at if at is not None else (tok.line, tok.col)
     # A literal that spans lines cannot become an entry: a dictionary key is one line, and the

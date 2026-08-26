@@ -38,6 +38,7 @@ from xbsl.translation.code import (
     Resolver,
     apply_edits,
     has_cyrillic,
+    prose_of,
     translate_expression,
     translate_interpolations,
     translate_type_expression,
@@ -234,15 +235,70 @@ def _dollar_ref(node, resolver, report, edits) -> bool:
     return True
 
 
+def _scalar_body(node) -> str | None:
+    """The body of a scalar the way the SOURCE writes it - escaping included, quotes off.
+
+    That is the key the literals plane already uses for the string literals of the code, so a
+    template broken by `\n` into two lines is still one key: what the person sees between the
+    quotes is what they write in the dictionary. Rebuilt from the value and the style rather
+    than read out of the file, so it matches, character for character, what `_set_scalar`
+    would write back.
+    """
+    value = node.value
+    if not isinstance(value, str):
+        return None
+    if node.style == '"':
+        return json.dumps(value, ensure_ascii=False)[1:-1]
+    if node.style == "'":
+        return value.replace("'", "''")
+    if node.style in ("|", ">"):
+        return None
+    return value
+
+
+def _set_body(node, body: str, edits: list[Edit]) -> None:
+    """Write a body back in the style the scalar already has (no second escaping)."""
+    if node.style == '"':
+        text = '"' + body + '"'
+    elif node.style == "'":
+        text = "'" + body + "'"
+    else:
+        text = body
+    edits.append((node.start_mark.index, node.end_mark.index, text))
+
+
+def _template_scalar(node, resolver, report, edits) -> None:
+    """A text with expressions inside it: the presentation template of an event kind.
+
+    Two halves, and until 0.79.2 only one of them moved. The expressions name properties that
+    have just been renamed, so they are translated; the PROSE around them is what a person
+    reads in the event log, and it was left in the source language silently - not translated,
+    not reported, invisible to the strict coverage gate. It is now taken from the literals
+    plane by the whole body, exactly like a string literal of the code, and what the plane
+    does not name is reported as a gap.
+    """
+    value = node.value
+    body = _scalar_body(node)
+    named = resolver.dictionary.literal(body) if body is not None else None
+    if named is not None:
+        report.note_literal_named(body)
+        _set_body(node, translate_interpolations(named, resolver, report, at=_at(node)), edits)
+        return
+    _set_scalar(node, translate_interpolations(value, resolver, report, at=_at(node)), edits)
+    # Only the prose counts: a template whose Cyrillic sits inside the expressions alone has
+    # already been translated whole, and there is nothing in it left for a person to name.
+    if body is not None and has_cyrillic(prose_of(value)):
+        line, col = _at(node)
+        report.note_literal(body, line, col)
+
+
 def _generic_scalar(node, resolver, report, edits) -> None:
     """A value nothing typed: expressions, references and resource files translate, data stays."""
     value = node.value
     if not isinstance(value, str) or not value:
         return
     if "%{" in value or "${" in value:
-        # A presentation template is prose with EXPRESSIONS inside: `%{Interface}` names a
-        # property of the event, and left in Russian it names one that no longer exists.
-        _set_scalar(node, translate_interpolations(value, resolver, report, at=_at(node)), edits)
+        _template_scalar(node, resolver, report, edits)
         return
     if _RESOURCE_VALUE_RE.match(value) and has_cyrillic(value):
         # A resource file is named by the same map that renames the file itself; a reference

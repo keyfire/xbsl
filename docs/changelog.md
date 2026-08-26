@@ -29,6 +29,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   shared handler strengthens the case but is not required.
 
 ### Fixed
+- **The presentation template of an event kind is translated whole, not by its expressions
+  alone.** The prose a person reads in the log stayed in the source language silently; it now
+  comes from the literals plane by the whole value, and what the plane does not name goes into
+  the gap report.
+- **The name of a named group and the call that reads it move together.** Both sides take the
+  spelling from one source; the declaration inside the pattern used to be looked at by nobody
+  while the argument of `Group("Name")` was translated, and the platform answered that no
+  capture group carries that name.
 - **Only the entries of the rules a run carried count as stale.** A rule left out of the set
   (a narrowing `--select`, off by default, unknown to the installed plugin) produces no
   findings by construction - and its entries were called stale, as if the debt had been paid.

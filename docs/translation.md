@@ -67,6 +67,15 @@ dictionary loads. An interpolation inside the value is written as in the source 
 translates the name inside it. A literal inside `Query{}`, `Pattern{}` and the other resolvable
 literals is left alone: there it is code, not data.
 
+Two places mix text and code, and the literals plane serves them apart. **The name of a named
+group** of a pattern (`(?<Name>...)`) is a name of the project: the code reads the group back by it
+(`Group("Name")`), and both sides take the spelling from ONE source - the literals plane first, the
+ordinary name resolution after. Let them part, and the call asks for a group the pattern never
+declared. **The presentation template** of an event kind is prose with expressions inside it: the
+expressions are renamed as names, while the text itself comes from the literals plane by the whole
+value; what the plane does not name goes into the gap report instead of staying in the source
+language silently.
+
 Whole names, not words: the word order of an English name is the reverse of the Russian one and
 the parts of a Russian name are declined, so gluing per-word translations produces calques.
 Comments are translated line by line - an edit next to a line does not invalidate it, and one

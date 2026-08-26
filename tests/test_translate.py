@@ -765,14 +765,16 @@ def test_a_sentence_with_a_slash_is_not_a_resource_path():
 
 
 def test_a_regular_expression_is_not_a_resource_path():
-    """A pattern has slashes and named groups; its groups are code, not files."""
+    """A pattern has slashes; the slashes are syntax, not a path to a resource file."""
     out, _ = _code(
         'метод Разобрать()\n'
         '    возврат Образец{"<a[^>]*>(?<Заголовок>.*?)</a>"}\n'
         ';\n',
         tokens={"Разобрать": "Parse", "Заголовок": "Title"},
     )
-    assert '"<a[^>]*>(?<Заголовок>.*?)</a>"' in out
+    # The group NAME is the project's own and moves by the token map (see the group
+    # tests below); the pattern around it is untouched - nothing is read as a file name.
+    assert '"<a[^>]*>(?<Title>.*?)</a>"' in out
 
 
 def test_dictionary_writer_copies_the_indent_of_the_section(tmp_path: Path):
@@ -879,7 +881,9 @@ def test_a_literal_inside_a_query_or_a_pattern_is_code_not_data():
         literals={"Новая": "New"},
     )
     assert '= "Новая" }' in out, "литерал запроса заменён планом literals"
-    assert '"^(?<Состояние>Новая)$"' in out, "литерал образца заменён планом literals"
+    # The TEXT of the pattern is a program and the plane stays out of it; only the name
+    # of the named group moves, and by the token map - the code reads the group by it.
+    assert '"^(?<State>Новая)$"' in out, "литерал образца заменён планом literals"
     assert report.literals_done == 0
     assert not report.missing_literals
     # Out of the plane's reach, but not out of sight: a real project has hundreds of such
