@@ -15,7 +15,7 @@
 - **An svg resource opens in the extension's own preview instead of an invisible pane.** The
   site's icons are `fill="currentColor"`, and a standalone viewer paints them black - on a
   dark canvas the picture "did not show". The preview inlines the svg with the editor theme
-  color, on a checkered backdrop, captioned by its `Ресурс{...}` key; other images open the
+  color, on a checkered backdrop, captioned by its `Resource{...}` key; other images open the
   regular way.
 
 ## 0.67.0
