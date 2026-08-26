@@ -558,3 +558,44 @@ export function insertItemEdit(text: string, section: string, itemLines: string[
   const { item, field } = detectIndent(text.slice(headerLineEnd, bodyEnd), headerIndentLen);
   return { start: insertAt, end: insertAt, newText: `\n${body(item, field)}` };
 }
+
+// -- resource files (the Resources section of the metadata tree) ---------------------------
+
+// Both spellings of the resources folder. The platform resolves a `Ресурс{...}` key relative
+// to the TOPMOST such folder of a subsystem (probed on a live server, see the engine's
+// resources rules), so a nested namesake folder stays inside the key.
+export const RESOURCE_DIR_NAMES: ReadonlyArray<string> = ["Ресурсы", "Resources"];
+
+export interface ResourceFile {
+  key: string; // path relative to the resources folder, POSIX - the `Ресурс{...}` spelling
+  filePath: string;
+}
+
+export interface ResourceScope {
+  scope: string; // the folder that owns the resources dir - a subsystem or the project root
+  dir: string; // the resources dir itself, in the separators of the input path
+  files: ResourceFile[];
+}
+
+// Group resource files by their owning resources folder. The tree shows each file under its
+// scope by the KEY - the exact spelling a `Ресурс{...}` reference takes, which is the whole
+// point: the section teaches the correct addressing, not just lists files.
+export function groupResources(paths: string[]): ResourceScope[] {
+  const byDir = new Map<string, ResourceScope>();
+  for (const filePath of paths) {
+    const parts = filePath.split(/[\\/]/);
+    const index = parts.findIndex((part) => RESOURCE_DIR_NAMES.includes(part));
+    if (index <= 0 || index >= parts.length - 1) {
+      continue; // not under a resources folder, or the folder entry itself
+    }
+    const sep = filePath.includes("\\") ? "\\" : "/";
+    const dir = parts.slice(0, index + 1).join(sep);
+    const entry = byDir.get(dir) ?? { scope: parts[index - 1], dir, files: [] };
+    entry.files.push({ key: parts.slice(index + 1).join("/"), filePath });
+    byDir.set(dir, entry);
+  }
+  const scopes = [...byDir.values()];
+  scopes.forEach((scope) => scope.files.sort((a, b) => a.key.localeCompare(b.key, "ru")));
+  scopes.sort((a, b) => a.scope.localeCompare(b.scope, "ru"));
+  return scopes;
+}

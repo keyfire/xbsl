@@ -16,9 +16,12 @@ import { applyScaffold, callMeta, ensureSavedForCli, ScaffoldResult } from "./en
 import { lspActive, lspRequest } from "./lspClient";
 import { docsCommandUri } from "./hoverDocs";
 import {
+  groupResources,
   MetaField,
   MetaInternals,
   parseInternals,
+  ResourceFile,
+  ResourceScope,
   SERIALIZER_KIND_SPELLINGS,
   standardAttrNames,
   translationRef,
@@ -122,6 +125,10 @@ const LANGUAGE_NAMES: Record<string, string> = { Ru: "Russian", En: "English" };
 // English label keys (see the comment at KIND_ROWS): displayed via l10n.t.
 const OTHER_GROUP = "Other";
 const COMMON_FORMS_GROUP = "Common forms";
+// Resource FILES (svg, png, css under a Resources folder, either spelling) are not yaml
+// elements, so no kind row lists them - the section is a pseudo-category like Common forms.
+const RESOURCES_GROUP = "Resources";
+const RESOURCES_ORDER = 7500;
 const COMMON_FORMS_ORDER = 8000;
 const OTHER_ORDER = 9000;
 
@@ -402,6 +409,17 @@ interface Model {
   elements: Element[];
   projects: Project[];
   subsystems: Subsystem[];
+  resources: string[]; // resource FILE paths - grouped into the Resources section lazily
+}
+
+// Resource files: anything under a Resources folder (either spelling). They are not yaml
+// elements, which is exactly why the tree used to miss them.
+async function collectResourceFiles(root: string): Promise<string[]> {
+  const pattern = new vscode.RelativePattern(
+    vscode.Uri.file(root), "**/{Ресурсы,Resources}/**/*"
+  );
+  const uris = await vscode.workspace.findFiles(pattern, "**/node_modules/**");
+  return uris.map((u) => u.fsPath);
 }
 
 async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => string): Promise<Model> {
@@ -411,14 +429,17 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
   // that file to exist and to hold a query. Collected next to the modules so that the tree can
   // open it the same way.
   const xbqlPaths: string[] = [];
+  const resourcePaths: string[] = [];
   for (const folder of vscode.workspace.workspaceFolders ?? []) {
     const root = projectRootFor(folder);
-    const [y, x, q] = await Promise.all([
+    const [y, x, q, r] = await Promise.all([
       collectFiles(root, "yaml"), collectFiles(root, "xbsl"), collectFiles(root, "xbql"),
+      collectResourceFiles(root),
     ]);
     yamlPaths.push(...y);
     xbslPaths.push(...x);
     xbqlPaths.push(...q);
+    resourcePaths.push(...r);
   }
   const xbslSet = new Set(xbslPaths.map((p) => p.toLowerCase()));
   const xbqlSet = new Set(xbqlPaths.map((p) => p.toLowerCase()));
@@ -517,7 +538,7 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
     }
     owner.translations = [...(owner.translations ?? []), { lang, yamlPath }];
   }
-  return { elements, projects, subsystems };
+  return { elements, projects, subsystems, resources: resourcePaths };
 }
 
 // --- tree node --------------------------------------------------------------------------
@@ -622,7 +643,9 @@ function subsystemGroupNode(sub: Subsystem, children: XbslNode[]): XbslNode {
 // Project children in the "By subsystems" mode: the subsystem tree (by folder nesting), under each -
 // its objects by classes; objects outside subsystems - as categories at the project root. Membership
 // is by folder: an object belongs to the DEEPEST subsystem whose folder is a prefix of its path.
-function subsystemModeChildren(subsystems: Subsystem[], elements: Element[]): XbslNode[] {
+function subsystemModeChildren(
+  subsystems: Subsystem[], elements: Element[], resources: string[] = []
+): XbslNode[] {
   const under = (child: string, dir: string): boolean => child.toLowerCase().startsWith(dir.toLowerCase() + path.sep);
   const deepest = (p: string, among: Subsystem[]): Subsystem | undefined => {
     let best: Subsystem | undefined;
@@ -650,6 +673,22 @@ function subsystemModeChildren(subsystems: Subsystem[], elements: Element[]): Xb
       elemsBySub.set(s.dir, [el]);
     }
   }
+  // Resource files join their subsystem the same way the objects do - by folder.
+  const resBySub = new Map<string, string[]>();
+  const rootRes: string[] = [];
+  for (const filePath of resources) {
+    const s = deepest(filePath, subsystems);
+    if (!s) {
+      rootRes.push(filePath);
+      continue;
+    }
+    const list = resBySub.get(s.dir);
+    if (list) {
+      list.push(filePath);
+    } else {
+      resBySub.set(s.dir, [filePath]);
+    }
+  }
   const childSubs = new Map<string, Subsystem[]>();
   const topSubs: Subsystem[] = [];
   for (const s of subsystems) {
@@ -671,9 +710,12 @@ function subsystemModeChildren(subsystems: Subsystem[], elements: Element[]): Xb
   const buildSub = (s: Subsystem): XbslNode =>
     subsystemGroupNode(s, [
       ...(childSubs.get(s.dir) ?? []).sort(byName).map(buildSub),
-      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false),
+      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false, resBySub.get(s.dir) ?? []),
     ]);
-  return [...topSubs.sort(byName).map(buildSub), ...categoriesOf(rootElems, false, false)];
+  return [
+    ...topSubs.sort(byName).map(buildSub),
+    ...categoriesOf(rootElems, false, false, rootRes),
+  ];
 }
 
 function projectNode(project: Project, children: XbslNode[], filterNames: string[]): XbslNode {
@@ -716,6 +758,47 @@ function categoryNode(group: string, icon: string, children: XbslNode[], createK
     .filter(Boolean)
     .join(" ");
   node.children = children;
+  return node;
+}
+
+// A resource file is shown by its KEY - the exact spelling a `Ресурс{...}` reference takes,
+// so the section teaches the correct addressing rather than just lists files.
+function resourceFileNode(file: ResourceFile): XbslNode {
+  const node = new XbslNode(file.key, vscode.TreeItemCollapsibleState.None);
+  node.iconPath = neutralIcon("file-media");
+  node.resourceUri = vscode.Uri.file(file.filePath); // git statuses; the icon stays ours
+  node.tooltip = `Ресурс{${file.key}}`;
+  node.contextValue = "xbslResource";
+  node.command = {
+    command: "vscode.open", title: "", arguments: [vscode.Uri.file(file.filePath)],
+  };
+  return node;
+}
+
+// The folder that owns a Resources dir - a subsystem or the project root.
+function resourceScopeNode(scope: ResourceScope): XbslNode {
+  const node = new XbslNode(scope.scope, vscode.TreeItemCollapsibleState.Collapsed);
+  node.iconPath = neutralIcon("symbol-namespace");
+  node.description = String(scope.files.length);
+  node.contextValue = "xbslResourceScope";
+  node.children = scope.files.map(resourceFileNode);
+  return node;
+}
+
+function resourcesCategoryNode(paths: string[]): XbslNode {
+  const scopes = groupResources(paths);
+  const total = scopes.reduce((sum, scope) => sum + scope.files.length, 0);
+  const node = new XbslNode(
+    vscode.l10n.t(RESOURCES_GROUP),
+    total ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+  );
+  node.iconPath = neutralIcon("file-media");
+  node.description = String(total);
+  node.contextValue = "xbslCategory xbslResources";
+  // A single scope loses the extra level: a small project has one Resources folder, and the
+  // scope node would repeat what the project root already says.
+  node.children =
+    scopes.length === 1 ? scopes[0].files.map(resourceFileNode) : scopes.map(resourceScopeNode);
   return node;
 }
 
@@ -1006,7 +1089,9 @@ function formOwnerResolver(objects: Element[]): (form: Element) => string | unde
 
 // Categories (by kind) for a set of elements, including the "Common forms" section. Empty creatable
 // categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
-function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean): XbslNode[] {
+function categoriesOf(
+  elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean, resources: string[] = []
+): XbslNode[] {
   const forms = elements.filter((e) => e.kind === FORM_KIND);
   const objects = elements.filter((e) => e.kind !== FORM_KIND);
 
@@ -1091,6 +1176,12 @@ function categoriesOf(elements: Element[], showEmptyCreatable: boolean, hideEmpt
     });
   }
 
+  // Resource files follow the Common forms pattern: shown when there are files, or empty
+  // when empty categories are shown at all.
+  if (resources.length || showEmpties) {
+    roots.push({ order: RESOURCES_ORDER, node: resourcesCategoryNode(resources) });
+  }
+
   roots.sort((a, b) => a.order - b.order || String(a.node.label).localeCompare(String(b.node.label), "ru"));
   return roots.map((r) => r.node);
 }
@@ -1102,18 +1193,21 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
   const underFilter = (p: string): boolean =>
     [...filterDirs].some((d) => p.toLowerCase().startsWith(d.toLowerCase() + path.sep));
   const elements = filterActive ? model.elements.filter((el) => underFilter(el.yamlPath)) : model.elements;
+  const resources = filterActive ? model.resources.filter(underFilter) : model.resources;
   const showEmpty = !filterActive;
 
   // Project children: "By object classes" - the Subsystems branch + categories by kind;
   // "By subsystems" - the subsystem tree with the objects under it.
-  const childrenOf = (elems: Element[], subs: Subsystem[]): XbslNode[] =>
+  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[]): XbslNode[] =>
     mode === "subsystem"
-      ? subsystemModeChildren(subs, elems)
-      : [subsystemsBranchNode(subs), ...categoriesOf(elems, showEmpty, hideEmpty)];
+      ? subsystemModeChildren(subs, elems, res)
+      : [subsystemsBranchNode(subs), ...categoriesOf(elems, showEmpty, hideEmpty, res)];
 
   if (model.projects.length === 0) {
     // No Проект.yaml found - go without a project root.
-    return mode === "subsystem" ? subsystemModeChildren(model.subsystems, elements) : categoriesOf(elements, showEmpty, hideEmpty);
+    return mode === "subsystem"
+      ? subsystemModeChildren(model.subsystems, elements, resources)
+      : categoriesOf(elements, showEmpty, hideEmpty, resources);
   }
   const projects = [...model.projects].sort(byName);
   const projectOf = (targetPath: string): Project => {
@@ -1142,11 +1236,26 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
     list.push(s);
     subsystemsByProject.set(p, list);
   }
+  const resourcesByProject = new Map<Project, string[]>();
+  for (const filePath of resources) {
+    const p = projectOf(filePath);
+    const list = resourcesByProject.get(p) ?? [];
+    list.push(filePath);
+    resourcesByProject.set(p, list);
+  }
   const filterNamesOf = (p: Project): string[] =>
     model.subsystems.filter((s) => filterDirs.has(s.dir) && projectOf(s.dir) === p).map((s) => s.name);
 
   return projects.map((p) =>
-    projectNode(p, childrenOf(elementsByProject.get(p) ?? [], subsystemsByProject.get(p) ?? []), filterNamesOf(p))
+    projectNode(
+      p,
+      childrenOf(
+        elementsByProject.get(p) ?? [],
+        subsystemsByProject.get(p) ?? [],
+        resourcesByProject.get(p) ?? []
+      ),
+      filterNamesOf(p)
+    )
   );
 }
 
@@ -2140,6 +2249,8 @@ export function registerMetadataTree(
   void vscode.commands.executeCommand("setContext", HIDE_EMPTY_CONTEXT, savedHide);
 
   const watcher = vscode.workspace.createFileSystemWatcher("**/*.{yaml,xbsl}");
+  // Resource files carry arbitrary extensions - watched by their folder, not by type.
+  const resourceWatcher = vscode.workspace.createFileSystemWatcher("**/{Ресурсы,Resources}/**");
   let timer: NodeJS.Timeout | undefined;
   const bump = () => {
     if (timer) {
@@ -2153,10 +2264,14 @@ export function registerMetadataTree(
   watcher.onDidCreate(bump);
   watcher.onDidDelete(bump);
   watcher.onDidChange(bump);
+  // A changed file keeps its node; only appearing and disappearing files reshape the tree.
+  resourceWatcher.onDidCreate(bump);
+  resourceWatcher.onDidDelete(bump);
 
   context.subscriptions.push(
     view,
     watcher,
+    resourceWatcher,
     // The properties panel follows the tree selection (mouse, arrows, programmatic reveal)
     // if it is already open; it is still opened by a click or the "Properties" menu item.
     view.onDidChangeSelection((e) => updatePropsFromSelection(e.selection[0])),

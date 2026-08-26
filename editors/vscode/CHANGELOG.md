@@ -9,7 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.67.0
+
+### Added
+- **The Resources section of the metadata tree.** Files of the Resources folders show up next
+  to the other kinds: grouped by subsystem and captioned by the KEY - the very path a
+  `Ресурс{...}` reference takes. A click opens the file; the section works in the by-subsystem
+  grouping and under a filter too.
 
 ### Fixed
 - **A form panel no longer covers the yaml it belongs to.** Sharing an editor group with the
