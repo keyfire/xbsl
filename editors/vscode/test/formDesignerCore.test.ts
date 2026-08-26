@@ -432,7 +432,7 @@ test("componentNameOfPath: имя элемента из пути", () => {
 });
 
 test("componentNameOfPath: путь Windows", () => {
-  assert.strictEqual(componentNameOfPath(String.raw`C:\проект\Сайт\Форма.yaml`), "Форма");
+  assert.strictEqual(componentNameOfPath(String.raw`C:\проект\Задачи\Форма.yaml`), "Форма");
 });
 
 test("componentNameOfPath: не yaml - ничего", () => {
@@ -453,7 +453,7 @@ test("modulePathOfForm: модуль рядом с yaml", () => {
 });
 
 test("modulePathOfForm: путь Windows и регистр расширения", () => {
-  assert.strictEqual(modulePathOfForm(String.raw`C:\проект\Сайт\Форма.YAML`), String.raw`C:\проект\Сайт\Форма.xbsl`);
+  assert.strictEqual(modulePathOfForm(String.raw`C:\проект\Задачи\Форма.YAML`), String.raw`C:\проект\Задачи\Форма.xbsl`);
 });
 
 test("modulePathOfForm: не yaml - ничего", () => {

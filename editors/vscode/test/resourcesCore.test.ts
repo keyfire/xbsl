@@ -17,16 +17,16 @@ function keysOf(scopes: ReturnType<typeof groupResources>): Record<string, strin
 // separators the walk produced.
 {
   const scopes = groupResources([
-    "D:\\repo\\e1c\\site\\Сайт\\Ресурсы\\Валюты\\EUR.svg",
-    "D:\\repo\\e1c\\site\\Сайт\\Ресурсы\\Обновить.svg",
-    "D:\\repo\\e1c\\site\\Основное\\Ресурсы\\nav-queries.svg",
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Значки\\Флаг.svg",
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Обложка.svg",
+    "D:\\repo\\app\\Шаги\\Ресурсы\\schema.svg",
   ]);
   assert.deepStrictEqual(keysOf(scopes), {
-    "Основное": ["nav-queries.svg"],
-    "Сайт": ["Валюты/EUR.svg", "Обновить.svg"],
+    "Задачи": ["Значки/Флаг.svg", "Обложка.svg"],
+    "Шаги": ["schema.svg"],
   });
-  assert.strictEqual(scopes[0].scope, "Основное");
-  assert.ok(scopes[1].dir.endsWith("Ресурсы"));
+  assert.strictEqual(scopes[0].scope, "Задачи");
+  assert.ok(scopes[0].dir.endsWith("Ресурсы"));
 }
 
 // The English spelling of the folder is the same section.
