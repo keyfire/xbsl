@@ -20,6 +20,14 @@ the rewrite.
 The message text is part of the identity, so the baseline must be written and checked
 under the same output language (--lang / XBSL_LANG); a language switch surfaces
 every frozen finding and marks the whole file's entries as unused.
+
+Unused and stale are counted only over the entries whose RULE the run actually had: a rule
+left out of the selection (or off by default, or unknown to the installed plugins) produces
+no findings by construction, and calling its entries stale would say the debt is paid when
+nobody looked. That is what made two environments disagree about one baseline - an MCP
+server on an older plugin called 48 entries stale while CI, running the same tree with the
+rules enabled, called none. Such entries are reported apart, as not checked, and `--prune-
+baseline` never touches them.
 """
 
 from __future__ import annotations
@@ -187,28 +195,55 @@ def load(path: Path) -> dict:
     return data
 
 
-def stale_entries(data: dict, used: dict[tuple[str, str, str], int]) -> list[dict]:
-    """The baseline entries this run did not spend, as records ready to print.
+def _entries(data: dict, rules: set[str] | None, wanted: bool) -> list[tuple[str, str, str, object]]:
+    """Entries of the baseline, split by whether the run had their rule.
 
-    `used` counts how many occurrences of each identity the run actually suppressed. An
-    entry nobody spent means the finding is gone (the code was fixed, the rule changed, the
-    file moved) - the count is what the baseline still allows for it.
+    `rules` is the set of rule ids the run actually carried (engine.active_rules); without
+    it every entry counts, which is what a caller that does not know its selection gets.
     """
-    out: list[dict] = []
+    out: list[tuple[str, str, str, object]] = []
     for path, per_rule in sorted(data.get("files", {}).items()):
         if not isinstance(per_rule, dict):
             continue
         for rule_id, per_message in sorted(per_rule.items()):
             if not isinstance(per_message, dict):
                 continue
+            if rules is not None and (rule_id in rules) is not wanted:
+                continue
             for message, value in sorted(per_message.items()):
-                count = _entry_count(value)
-                left = count - used.get((path, rule_id, message), 0)
-                if count > 0 and left > 0:
-                    out.append({
-                        "path": path, "rule": rule_id, "message": message,
-                        "count": left, "reason": _entry_reason(value),
-                    })
+                out.append((path, rule_id, message, value))
+    return out
+
+
+def not_checked_entries(data: dict, rules: set[str] | None) -> list[dict]:
+    """Entries whose rule the run did not carry - not stale, simply not looked at."""
+    return [
+        {"path": path, "rule": rule_id, "message": message,
+         "count": _entry_count(value), "reason": _entry_reason(value)}
+        for path, rule_id, message, value in _entries(data, rules, wanted=False)
+        if _entry_count(value) > 0
+    ]
+
+
+def stale_entries(
+    data: dict, used: dict[tuple[str, str, str], int], rules: set[str] | None = None,
+) -> list[dict]:
+    """The baseline entries this run did not spend, as records ready to print.
+
+    `used` counts how many occurrences of each identity the run actually suppressed. An
+    entry nobody spent means the finding is gone (the code was fixed, the rule changed, the
+    file moved) - the count is what the baseline still allows for it. Entries of rules the
+    run did not carry are not here: they belong to `not_checked_entries`.
+    """
+    out: list[dict] = []
+    for path, rule_id, message, value in _entries(data, rules, wanted=True):
+        count = _entry_count(value)
+        left = count - used.get((path, rule_id, message), 0)
+        if count > 0 and left > 0:
+            out.append({
+                "path": path, "rule": rule_id, "message": message,
+                "count": left, "reason": _entry_reason(value),
+            })
     return out
 
 
@@ -240,7 +275,7 @@ def without_entries(data: dict, entries: list[dict]) -> dict:
 
 
 def apply(
-    diags: list[Diagnostic], data: dict, base_dir: Path,
+    diags: list[Diagnostic], data: dict, base_dir: Path, rules: set[str] | None = None,
 ) -> tuple[list[Diagnostic], int, int, list[dict]]:
     """Filter the findings through the baseline.
 
@@ -248,8 +283,14 @@ def apply(
     identity the first N occurrences in line order are suppressed; the extras are kept.
     Stale entries are frozen findings that no longer occur - they are both counted and
     listed, so a rewrite can name them instead of announcing a number.
+
+    `rules` is the set of rule ids the run carried (engine.active_rules). Entries of the
+    other rules still suppress - a finding cannot occur without its rule anyway - but they
+    are left out of the unused count and out of the stale list; `not_checked_entries` names
+    them. Without the argument the counts stay as they were: every entry judged.
     """
     budgets: dict[tuple[str, str, str], int] = {}
+    total_budget = 0
     for path, per_rule in data.get("files", {}).items():
         if not isinstance(per_rule, dict):
             continue
@@ -260,7 +301,8 @@ def apply(
                 count = _entry_count(value)
                 if count > 0:
                     budgets[(path, rule_id, message)] = count
-    total_budget = sum(budgets.values())
+                    if rules is None or rule_id in rules:
+                        total_budget += count
     kept: list[Diagnostic] = []
     used: dict[tuple[str, str, str], int] = {}
     suppressed = 0
@@ -273,4 +315,4 @@ def apply(
             suppressed += 1
         else:
             kept.append(d)
-    return kept, suppressed, total_budget - suppressed, stale_entries(data, used)
+    return kept, suppressed, total_budget - suppressed, stale_entries(data, used, rules)

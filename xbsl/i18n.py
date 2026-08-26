@@ -146,6 +146,12 @@ _CORE_MESSAGES = {
         "ru": "Погашено базлайном: {suppressed}; устаревших записей базлайна: {unused}",
         "en": "Suppressed by the baseline: {suppressed}; stale baseline entries: {unused}",
     },
+    "cli.baseline-not-checked": {
+        "ru": "Записей базлайна не проверено: {count} – их правил не было в наборе этого "
+              "прогона (устаревшими они не считаются и при чистке не снимаются)",
+        "en": "Baseline entries not checked: {count} - their rules were not in this run's "
+              "set (they do not count as stale and pruning leaves them alone)",
+    },
     "cli.baseline-written": {
         "ru": "Базлайн записан: {path} ({diags} замечаний в {files} файлах)",
         "en": "Baseline written: {path} ({diags} findings in {files} files)",

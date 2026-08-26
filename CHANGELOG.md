@@ -22,6 +22,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   shared handler strengthens the case but is not required.
 
 ### Fixed
+- **Only the entries of the rules a run carried count as stale.** A rule left out of the set
+  (a narrowing `--select`, off by default, unknown to the installed plugin) produces no
+  findings by construction - and its entries were called stale, as if the debt had been paid.
+  Two environments disagreed about one baseline because of it: an MCP server on an older
+  plugin counted 48 stale entries on a tree CI called clean with the same rules. Such entries
+  are counted apart ("baseline entries not checked", the `baseline_not_checked` key in json),
+  and `--prune-baseline` no longer removes them.
 - **The project's translation dictionary is no longer judged by the yaml schema rules.** A
   line of a dictionary file is a name and its translation, not a property of an object, and
   the one that translates a name into `Id` was read by `yaml/id-uuid` as a malformed id. A

@@ -29,7 +29,7 @@ from xbsl import (
     formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
-from xbsl.engine import RULES, load, load_text, run, run_sources
+from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
 
 _TAGS_RE = re.compile(r"<[^>]+>")
 
@@ -109,27 +109,34 @@ def version_info() -> dict:
 
 
 def _through_baseline(
-    diags: list, files: list[Path], path: str | None, disabled: bool,
+    diags: list, files: list[Path], path: str | None, disabled: bool, rules: set[str],
 ) -> tuple[list, dict]:
     """The findings the baseline leaves, plus the summary keys describing what it took.
 
     Written as a helper rather than inline so the tool can name its parameter `baseline`
     without shadowing the module it needs.
+
+    `rules` is what this server actually carries: a plugin older than the one CI runs knows
+    fewer rules, and without the set their entries were reported as stale - the two answered
+    differently about one baseline.
     """
     if disabled:
         return diags, {}
     found = Path(path) if path else baseline_data.discover(files)
     if found is None:
         return diags, {}
-    kept, suppressed, unused, stale = baseline_data.apply(
-        diags, baseline_data.load(found), found.parent,
-    )
-    return kept, {
+    data = baseline_data.load(found)
+    kept, suppressed, unused, stale = baseline_data.apply(diags, data, found.parent, rules)
+    summary = {
         "baseline": str(found),
         "baselined": suppressed,
         "baseline_unused": unused,
         "baseline_stale": len(stale),
     }
+    not_checked = baseline_data.not_checked_entries(data, rules)
+    if not_checked:
+        summary["baseline_not_checked"] = len(not_checked)
+    return kept, summary
 
 
 @mcp.tool()
@@ -157,14 +164,17 @@ def lint_paths(
     Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
+    Entries this server could not judge - their rule is not in its set, an older plugin or a
+    narrower selection - are counted apart as `baseline_not_checked` and are NOT called stale.
     """
     files, requested = discover_with_context(paths)
+    chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     diags = _filter_requested(
-        run(files, select=_as_set(select), ignore=_as_set(ignore), enable=_as_set(enable)),
-        requested,
+        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
     )
     counted = requested if requested is not None else files
-    diags, extra = _through_baseline(diags, counted, baseline, no_baseline)
+    carried = {r.id for r in active_rules(*chosen)}
+    diags, extra = _through_baseline(diags, counted, baseline, no_baseline, carried)
     payload = report.report(diags, len(counted))
     payload["summary"].update(extra)
     return payload

@@ -349,3 +349,55 @@ def test_explicit_baseline_wins_over_discovery(tmp_path, capsys):
     out, err = capsys.readouterr()
     # the named (empty) baseline suppresses nothing, and the discovery message never appears
     assert "Найден базлайн" not in err and "whitespace/trailing" in out
+
+
+def _seed_other_rule(bl):
+    """An entry of a rule that a narrower run will not carry."""
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    data["files"]["Ч.xbsl"]["typography/em-dash"] = {
+        "Длинное тире (em dash) - в этом проекте пишут среднее.": {"count": 3},
+    }
+    bl.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def test_entry_of_a_rule_the_run_skipped_is_not_stale(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_other_rule(bl)
+
+    _, payload = _run_json(["--baseline", str(bl), "--ignore", "typography/em-dash", str(f)],
+                           capsys)
+    summary = payload["summary"]
+    # the rule was not carried, so its three suppressions are neither spent nor stale
+    assert summary["baseline_stale"] == 0 and summary["baseline_unused"] == 0
+    assert summary["baseline_not_checked"] == 1
+
+
+def test_prune_leaves_the_entries_it_could_not_check(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_other_rule(bl)
+
+    code = cli.main(["--baseline", str(bl), "--prune-baseline",
+                     "--ignore", "typography/em-dash", *_NO_PAIR, str(f)])
+    assert code == 0 and "удалено записей: 0" in capsys.readouterr().err
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    assert "typography/em-dash" in data["files"]["Ч.xbsl"]
+
+
+def test_not_checked_line_is_silent_on_a_full_run(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+
+    cli.main(["--baseline", str(bl), *_NO_PAIR, str(f)])
+    err = capsys.readouterr().err
+    assert "не проверено" not in err

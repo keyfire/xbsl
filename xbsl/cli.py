@@ -1092,6 +1092,7 @@ def main(argv: list[str] | None = None) -> int:
 
     suppressed = unused = None
     stale: list[dict] = []
+    not_checked: list[dict] = []
     if not args.baseline and not args.no_baseline:
         found = baseline.discover(files)
         if found is not None:
@@ -1104,9 +1105,15 @@ def main(argv: list[str] | None = None) -> int:
         except baseline.BaselineError as exc:
             print(str(exc), file=sys.stderr)
             return 2
+        # The rule set the run carried: an entry of a rule nobody ran is not stale debt,
+        # it is debt nobody looked at, and pruning it would drop the record silently.
+        from xbsl.engine import active_rules
+
+        carried = {r.id for r in active_rules(select, ignore, enable)}
         diagnostics, suppressed, unused, stale = baseline.apply(
-            diagnostics, data, Path(args.baseline).parent,
+            diagnostics, data, Path(args.baseline).parent, carried,
         )
+        not_checked = baseline.not_checked_entries(data, carried)
         # The stale entries are named, not just counted: without the list the only way to
         # find them was to rewrite the whole baseline and diff it.
         if (args.stale_baseline or args.prune_baseline) and args.format == "text":
@@ -1132,6 +1139,10 @@ def main(argv: list[str] | None = None) -> int:
             payload["summary"]["baseline_unused"] = unused
             payload["summary"]["baseline_stale"] = len(stale)
             payload["summary"]["baseline_stale_entries"] = stale
+            # Entries the run could not judge: their rule was not in the selection. Named
+            # apart so two environments with different rule sets stop contradicting each
+            # other about one and the same baseline.
+            payload["summary"]["baseline_not_checked"] = len(not_checked)
         _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
@@ -1159,6 +1170,13 @@ def main(argv: list[str] | None = None) -> int:
                 i18n.t("cli.baseline-summary", suppressed=suppressed, unused=len(stale)),
                 file=sys.stderr,
             )
+            # Said out loud only when there is something to say: a full run has nothing
+            # here, and a line of zeros in every report teaches nobody anything.
+            if not_checked:
+                print(
+                    i18n.t("cli.baseline-not-checked", count=len(not_checked)),
+                    file=sys.stderr,
+                )
 
     return 1 if any(d.severity.value == "error" for d in diagnostics) else 0
 

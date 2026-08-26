@@ -1,6 +1,7 @@
 """MCP adapter check via a stub FastMCP (does not require mcp to be installed)."""
 
 import importlib
+import json
 import sys
 import types
 
@@ -80,6 +81,35 @@ def test_lint_paths_applies_the_project_baseline(tmp_path, monkeypatch):
         assert res["diagnostics"] == []
         assert res["summary"]["baselined"] == 1
         assert res["summary"]["baseline"].endswith(".xbsllint-baseline")
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_does_not_call_an_unchecked_entry_stale(tmp_path, monkeypatch):
+    """A rule this server does not carry leaves its entries not checked, never stale.
+
+    A server running an older plugin than CI answered `baseline_stale: 48` on a tree CI
+    called clean - the entries belonged to rules that server never ran.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        f = project / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+        bl = tmp_path / ".xbsllint-baseline"
+        cli.main(["--write-baseline", str(bl), "--ignore", _NO_PAIR[0], str(f)])
+        data = json.loads(bl.read_text(encoding="utf-8"))
+        data["files"]["acme/Проба/Ч.xbsl"]["typography/em-dash"] = {
+            "Длинное тире (em dash) - в этом проекте пишут среднее.": {"count": 2},
+        }
+        bl.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+
+        res = m.lint_paths([str(f)], ignore=[*_NO_PAIR, "typography/em-dash"])
+
+        assert res["summary"]["baseline_stale"] == 0
+        assert res["summary"]["baseline_unused"] == 0
+        assert res["summary"]["baseline_not_checked"] == 1
     finally:
         sys.modules.pop("xbsl.mcp_server", None)
 

@@ -103,6 +103,12 @@ purpose. Reasons are written by the "Exclude the finding" lightbulb action of th
 accepts the same `--baseline FILE` flag, so exclusions disappear in editors too. The identity
 includes the message text: write and check the baseline under the same output language.
 
+Only the entries of the rules the run CARRIED count as stale. A rule left out of the set - by
+a narrowing `--select`, by being off by default, by being unknown to the installed plugin -
+produces no findings by construction, and calling its entries stale would declare the debt
+paid without looking. Those are counted apart ("baseline entries not checked", the
+`baseline_not_checked` key in json), and `--prune-baseline` leaves them alone.
+
 ## Use in CI
 
 `xbsl` exits non-zero only when a run produces an **error-severity** finding, so it works as a
