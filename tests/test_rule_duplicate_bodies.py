@@ -100,3 +100,18 @@ def test_the_message_counts_the_remaining_places(tmp_path):
 
     assert len(hits) == 3
     assert "ещё в 1" in hits[0].message
+
+
+def test_the_named_place_does_not_depend_on_the_walk_order(tmp_path):
+    """The message names one of the other places, and a baseline entry is keyed by the
+    message: the choice must not change between two runs over the same project."""
+    files = {"А.xbsl": BODY, "Б.xbsl": BODY, "В.xbsl": BODY}
+    for name, content in files.items():
+        (tmp_path / name).write_text(content, encoding="utf-8")
+    paths = [str(tmp_path / name) for name in files]
+
+    def messages(order):
+        diags = engine.run(discover(order), enable={RULE})
+        return {d.path: d.message for d in diags if d.rule_id == RULE}
+
+    assert messages(paths) == messages(list(reversed(paths)))

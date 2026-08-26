@@ -124,12 +124,16 @@ def duplicate_method_body(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     for group in places.values():
         if len({rel for rel, _name, _line, _count in group}) < 2:
             continue  # a copy inside one file is visible while reading it
+        # Sorted by the FILE NAME and the line: the message names one of the other places, and
+        # which one must not depend on the order the files were walked in. Unsorted, one and
+        # the same finding worded itself differently in the CLI and in the editor, and a
+        # baseline entry keyed by the message stopped matching.
+        group.sort(key=lambda item: (_file_name(item[0]), item[2], item[1]))
         for rel, name, line, count in group:
             others = [(r, n) for r, n, _l, _c in group if (r, n) != (rel, name)]
             # The FILE NAME, not the path it was reached by: a run names its files however it
             # was invoked (an absolute path from the CLI, a relative one from the editor), and
-            # a message that carried that path would differ between two runs over one project -
-            # a baseline entry keyed by the message would stop matching on another machine.
+            # a message that carried that path would differ between two runs over one project.
             first_path, first_name = _file_name(others[0][0]), others[0][1]
             more = ("" if len(others) == 1
                     else i18n.t("code/duplicate-method-body.more", count=len(others) - 1))

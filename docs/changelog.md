@@ -19,6 +19,13 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-26
+
+### Fixed
+- **`code/duplicate-method-body`: which of the other places the message names no longer
+  depends on the file walk order.** The CLI and the editor could name different places of
+  one and the same copy, and a baseline entry keyed by the message stopped matching.
+
 ## 2026-08-25 – 0.76.0, 0.77.0, 0.78.0
 
 ### Added
