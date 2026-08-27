@@ -840,3 +840,154 @@ def missing_subsystem_usage(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             rel, line, 1, "yaml/missing-subsystem-usage", Severity.WARNING,
             i18n.t("yaml/missing-subsystem-usage.missing", sub=name, count=count),
         )
+
+
+# --- yaml/localization-missing-import -------------------------------------------------------
+
+MESSAGES_LOCALIZATION = {
+    "yaml/localization-missing-import.title": {
+        "ru": "Нет импорта подсистемы локализации в yaml",
+        "en": "Missing import of a localization subsystem in yaml",
+    },
+    "yaml/localization-missing-import.missing": {
+        "ru": "Ссылка '${ref}' берёт строку словаря подсистемы '{sub}', а секции {n[Импорт]} "
+              "с этой подсистемой в ЭТОМ yaml нет – применение сборки отвергнет узел "
+              "(\"Пространство имен ... с локализованными строками ... не импортировано\"); "
+              "импорт в парном .xbsl разметку не покрывает. Добавьте подсистему в {n[Импорт]} "
+              "либо назовите её прямо в ссылке: '${sub}::{ref}' (эта форма работает без "
+              "импорта).",
+        "en": "The reference '${ref}' takes a string of a dictionary of subsystem '{sub}', "
+              "which the {n[Импорт]} section of THIS yaml does not list – the apply rejects "
+              "the node (\"the namespace with the localized strings is not imported\"); an "
+              "import in the paired .xbsl does not cover the markup. Add the subsystem to "
+              "{n[Импорт]}, or name it right in the reference: '${sub}::{ref}' (that form "
+              "needs no import).",
+    },
+}
+i18n.register(MESSAGES_LOCALIZATION)
+
+#: A dictionary reference of a yaml value: `$Словарь.Ключ`. The qualified form
+#: (`$Подсистема::Словарь.Ключ`) does not match on purpose - it needs no import.
+_LOCALIZATION_REF = re.compile(r"\$([^\W\d]\w*)\.([^\W\d]\w*)", re.UNICODE)
+_LOCALIZATION_KIND = "ЛокализованныеСтроки"
+
+
+@lru_cache(maxsize=1)
+def _localization_kind_names() -> frozenset[str]:
+    """Every spelling of the localized-strings kind: the serializer's vocabulary plus the
+    type dictionary - with no data only the Russian spelling matches, as everywhere."""
+    return frozenset({
+        _LOCALIZATION_KIND,
+        terms.kinds_table().get(_LOCALIZATION_KIND),
+        terms.english(_LOCALIZATION_KIND, "types"),
+    } - {None})
+
+
+dataset.register_reset(_localization_kind_names.cache_clear)
+
+
+def _localization_import_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a subsystem yaml contributes its root, a localized-strings element its
+    name and place, any other yaml element - its imports and the `$Словарь.Ключ` references
+    it makes, with positions."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return None
+    if source.path.name in _SUBSYSTEM_FILES:
+        data, err = _parsed(source)
+        name = value_of(data, "Имя") if err is None and isinstance(data, dict) else None
+        return {
+            "k": "sub",
+            "dir": str(source.path.parent),
+            "name": name if isinstance(name, str) else source.path.parent.name,
+        }
+    data, err = _parsed(source)
+    kind = object_kind(data)
+    if err is not None or not isinstance(data, dict) or not kind:
+        return None  # a translation file carries no kind - its texts are data
+    if kind in _localization_kind_names():
+        name = value_of(data, "Имя", kind)
+        if not isinstance(name, str) or not name:
+            return None
+        return {
+            "k": "dict",
+            "path": str(source.path),
+            "name": name,
+            "vis": value_of(data, "ОбластьВидимости", kind),
+        }
+    if "$" not in source.text:
+        return None
+    lm = linemap(source)
+    refs = [
+        [m.group(1), m.group(2), *lm.linecol(m.start())]
+        for m in _LOCALIZATION_REF.finditer(source.text)
+    ]
+    if not refs:
+        return None
+    raw = value_of(data, "Импорт", kind)
+    imports = [e for e in raw if isinstance(e, str)] if isinstance(raw, list) else []
+    return {"k": "el", "path": str(source.path), "imports": imports, "refs": refs}
+
+
+@rule(
+    "yaml/localization-missing-import", "yaml/localization-missing-import.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_localization_import_mapper,
+)
+def localization_missing_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """An unqualified `$Словарь.Ключ` whose dictionary lives in a subsystem this yaml does
+    not import - the apply refuses the node.
+
+    The documentation ("Локализация", the collision rules) states the resolution outright:
+    an unqualified reference reaches the local subsystem's dictionaries and the IMPORTED
+    ones, collisions resolve in favour of the local, and a subsystem that is used but not
+    imported must be named in the reference itself. An import in the paired module does not
+    cover the markup - the live case that prompted the rule was exactly that shape, and the
+    apply refused it with the namespace-not-imported message, so the defect costs a deploy
+    cycle and a rollback.
+
+    The narrowings mirror the sibling rules, for the same reasons: a name of the file's own
+    subsystem resolves locally and is skipped, only PUBLIC foreign dictionaries are counted
+    as candidates (a non-public one is a visibility problem, not an import one), a name no
+    project dictionary declares is unknown rather than wrong, and the qualified reference
+    form does not match the pattern at all. One diagnostic per missing subsystem per file,
+    anchored at the first offending reference.
+    """
+    roots: dict[Path, str] = {}
+    for fact in facts.values():
+        if fact["k"] == "sub":
+            roots[Path(fact["dir"])] = fact["name"]
+    if not roots:
+        return  # no subsystem files - the project layout is unknown, nothing to judge
+    owners: dict[str, dict[str, object]] = {}
+    for fact in facts.values():
+        if fact["k"] != "dict":
+            continue
+        sub = _subsystem_of(Path(fact["path"]), roots)
+        if sub:
+            owners.setdefault(fact["name"], {})[sub] = fact["vis"]
+    if not owners:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "el":
+            continue
+        my_sub = _subsystem_of(Path(fact["path"]), roots)
+        if my_sub is None:
+            continue
+        imports = set(fact["imports"])
+        reported: set[tuple[str, ...]] = set()
+        for name, key, line, col in fact["refs"]:
+            subs = owners.get(name)
+            if not subs or my_sub in subs:
+                continue  # not a dictionary of the project, or resolved locally
+            candidates = tuple(sorted(
+                sub for sub, vis in subs.items() if vis in _public_scopes()
+            ))
+            if not candidates or imports.intersection(candidates):
+                continue
+            if candidates in reported:
+                continue
+            reported.add(candidates)
+            yield Diagnostic(
+                rel, line, col, "yaml/localization-missing-import", Severity.ERROR,
+                i18n.t("yaml/localization-missing-import.missing",
+                       ref=f"{name}.{key}", sub="/".join(candidates)),
+            )

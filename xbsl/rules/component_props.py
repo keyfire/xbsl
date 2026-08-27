@@ -59,6 +59,7 @@ from xbsl.rules.yaml_schema import (
     _is_object,
     _parsed,
     _scalar_entries,
+    object_kind,
     yaml,
 )
 
@@ -94,6 +95,26 @@ MESSAGES = {
     "yaml/toggle-command-pair.title": {
         "ru": "Пара команд с зеркальной видимостью",
         "en": "A pair of commands with mirrored visibility",
+    },
+    "yaml/inline-command-name.title": {
+        "ru": "Имя у команды в разметке",
+        "en": "A name on an inline command",
+    },
+    "yaml/inline-command-name.found": {
+        "ru": "Команда '{name}' объявлена прямо в разметке (инлайновый "
+              "{n[ФрагментКомандногоИнтерфейса]}) и несёт {n[Имя]} – применение сборки "
+              "отвергнет узел (\"Имя команды разрешено задавать только в элементах проекта "
+              "типа фрагмент командного интерфейса\") и стенд откатится на прежнюю сборку. "
+              "Обращайтесь к команде через параметр обработчика (Команда.Активна, "
+              "Команда.Видимость) – либо, если имя необходимо, вынесите фрагмент отдельным "
+              "элементом проекта.",
+        "en": "Command '{name}' is declared inline in the markup (an inline "
+              "{n[ФрагментКомандногоИнтерфейса]}) and carries {n[Имя]} – the apply rejects "
+              "the node (\"a command name is allowed only in command-interface-fragment "
+              "project elements\") and the stand rolls back to the previous build. Reach "
+              "the command through the handler parameter (Command.{n[Активна]}, "
+              "Command.{n[Видимость]}) – or, when the name is needed, move the fragment "
+              "into a project element of its own.",
     },
     "yaml/toggle-command-pair.pair": {
         "ru": "Две соседние {n[ОбычнаяКоманда]} с зеркальной {n[Видимость]} ('{first}' и "
@@ -425,3 +446,86 @@ def toggle_command_pair(source: SourceFile) -> Iterable[Diagnostic]:
                         first=first_vis[1].value, second=second_vis[1].value,
                     ),
                 )
+
+
+# --- yaml/inline-command-name ---------------------------------------------------------
+
+#: Command components a markup node may declare inline, in the Russian spelling.
+_COMMAND_KINDS = ("ОбычнаяКоманда", "ПереключаемаяКоманда", "КомандаСПараметром")
+_FRAGMENT_KIND = "ФрагментКомандногоИнтерфейса"
+#: The structural key the platform refuses on an inline command, either spelling.
+_NAME_KEYS = ("Имя", "Name")
+
+
+def _kind_spellings(names: tuple[str, ...]) -> frozenset[str]:
+    """Every spelling of the given kinds: the serializer's vocabulary plus the type
+    dictionary - the two sources cover different names (`CommandWithParameter` has no
+    serializer entry, `LocalizedStrings` no type entry), and a hand-written English
+    spelling is exactly what the data exists to replace. With no data only the Russian
+    spellings match - the usual degradation."""
+    kinds = terms.kinds_table()
+    out = set(names)
+    for name in names:
+        out.update({kinds.get(name), terms.english(name, "types")})
+    return frozenset(out - {None})
+
+
+@lru_cache(maxsize=1)
+def _command_names() -> frozenset[str]:
+    return _kind_spellings(_COMMAND_KINDS)
+
+
+@lru_cache(maxsize=1)
+def _fragment_names() -> frozenset[str]:
+    return _kind_spellings((_FRAGMENT_KIND,))
+
+
+dataset.register_reset(_command_names.cache_clear)
+dataset.register_reset(_fragment_names.cache_clear)
+
+
+@rule(
+    "yaml/inline-command-name", "yaml/inline-command-name.title", "A",
+    severity=Severity.ERROR,
+)
+def inline_command_name(source: SourceFile) -> Iterable[Diagnostic]:
+    """An inline command of the markup carrying a `Name` - the apply refuses the node.
+
+    A command declared straight in the markup (an inline command-interface fragment, or a
+    single-command property such as `MainCommand`) must not carry a name: the platform
+    answers "a command name is allowed only in command-interface-fragment project
+    elements" at apply time, so the defect costs a deploy cycle and a
+    rollback. In a fragment PROJECT ELEMENT the same key is legal - that is the cure when
+    the name is actually needed - so a file whose root kind is the fragment is skipped
+    whole. Only nodes under `Inherits` are judged: elsewhere a command spelling next to a
+    `Name` is a declaration, not markup.
+    """
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    commands = _command_names()
+    if not any(name in source.text for name in commands):
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    if object_kind(data) in _fragment_names():
+        return  # a fragment project element - its commands own their names
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    for mapping in _markup_nodes(root):
+        type_node = _type_value(mapping)
+        if type_node is None:
+            continue
+        if type_node.value.split("<", 1)[0].strip() not in commands:
+            continue
+        for key_node, value_node in mapping.value:
+            if not (isinstance(key_node, yaml.ScalarNode) and key_node.value in _NAME_KEYS):
+                continue
+            shown = value_node.value if isinstance(value_node, yaml.ScalarNode) else ""
+            yield Diagnostic(
+                source.rel,
+                key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+                "yaml/inline-command-name", Severity.ERROR,
+                i18n.t("yaml/inline-command-name.found", name=shown),
+            )

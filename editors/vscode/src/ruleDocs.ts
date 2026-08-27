@@ -185,8 +185,13 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "yaml/placeholder-key-in-strings"
       || r === "code/compare-with-localized"
       || r === "yaml/localization-key-unique"
-      || r === "yaml/localization-ref-to-template",
+      || r === "yaml/localization-ref-to-template"
+      || r === "yaml/localization-missing-import",
     page: "topics/app-localization",
+  },
+  {
+    match: (r) => r === "yaml/inline-command-name",
+    page: "topics/command-interface-fragment",
   },
   { match: (r) => r === "code/unknown-row-field", page: "topics/dynamic-list" },
   { match: (r) => r === "code/row-field-null", page: "topics/dynamic-list" },
