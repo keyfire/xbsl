@@ -19,9 +19,21 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-27 – 0.81.0
+## 2026-08-27 – 0.81.0, 0.82.0
 
 ### Added
+- **`naming/filler-word` and `naming/number` judge English names.** A translated tree used to
+  pass both rules silently. The filler list carries both spellings, and a Russian filler
+  prefix is caught where the translation puts it - at the end of the compound
+  (`УправлениеСкладами` - `WarehouseManagement`). The head of an English compound is its last
+  word (`BankAccounts` - `Accounts`), and its grammatical number comes from suffix heuristics
+  with the irregular plurals listed - no morphology extra is needed for it; mass nouns and
+  the ambiguous `-os` tail are left undecided rather than guessed. The standard's exempt
+  heads (`TaskData`, `MessageQueue`) are known in both spellings too.
+- **A translated description is parsed like the original.** The name key (`Name:`) and the
+  section keys (`Attributes:`, `TabularParts:` and the rest) are read in either spelling by
+  the naming rules and the indexer; the English spellings come from the metamodel, not from
+  a hand-kept list.
 - **Localizable yaml values are translated by the literals plane.** A value the metamodel
   declares a localizable text (`Localizable`) - the presentations of commands, access
   privileges and enumerations - is read by a person on the page: it is now either named whole
