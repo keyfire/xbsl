@@ -37,6 +37,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   once per distinct text per file.
 - **The translation report prints the warnings as a list** - file, line, kind and text (the
   first twenty) instead of a bare count: the details used to require the json mode.
+- **The suffixes of a duration literal are translated** (`300мс` -> `300ms`,
+  `2д14ч30м5с6мс` -> `2d14h30m5s6ms`). The Russian set comes from the documentation of the
+  Duration type; the English spellings are confirmed by the platform compiler (a probe
+  build accepts `2d14h30m5s6ms`). A number glued to letters outside the suffix set is left
+  alone.
 
 ## 2026-08-26 – 0.79.0, 0.79.1, 0.79.2, 0.80.0
 

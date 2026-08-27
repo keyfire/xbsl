@@ -116,3 +116,22 @@ def test_an_entry_equal_to_its_key_marks_data_and_draws_no_warning():
 def test_a_moved_literal_that_matches_no_data_value_is_quiet():
     _out, report = _code(_PARSE, tokens=_PARSE_TOKENS, literals={"Сбоку": "Side"})
     assert report.warnings == []
+
+
+def test_duration_suffixes_move_to_english():
+    out, _report = _code('''метод Пауза(): Длительность
+    знч Короткая = 300мс
+    знч Сборная = 2д14ч30м5с6мс
+    возврат Короткая + Сборная + 0с
+;
+''', tokens={"Пауза": "Pause", "Короткая": "Short", "Сборная": "Combined"})
+    assert "300ms" in out and "2d14h30m5s6ms" in out and "0s" in out
+
+
+def test_non_duration_number_letters_stay():
+    # A number glued to letters outside the duration set is not the pass's to touch.
+    out, _report = _code('''метод Предел(): Строка
+    возврат "%{50мб}"
+;
+''', tokens={"Предел": "Limit"})
+    assert "50мб" in out

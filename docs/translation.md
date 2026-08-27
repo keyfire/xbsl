@@ -76,6 +76,11 @@ expressions are renamed as names, while the text itself comes from the literals 
 value; what the plane does not name goes into the gap report instead of staying in the source
 language silently.
 
+The suffixes of a duration literal in code move to their English spellings by themselves
+(`300мс` -> `300ms`, `2д14ч30м5с6мс` -> `2d14h30m5s6ms`): the Russian set comes from the
+type's documentation, the English one is confirmed by the platform compiler. A number glued
+to any other letters is left alone.
+
 The same plane serves every yaml value the metamodel declares a localizable text
 (`Localizable`): the presentations of commands, access privileges and enumerations are read by a
 person on the page, so each is either named whole by an entry or reported as a gap. The one

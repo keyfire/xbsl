@@ -339,6 +339,8 @@ def collect_token_edits(
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
                                  chain_root=chain_root)
+        elif kind == "NUMBER":
+            _duration_edit(tok, base, edits)
         elif kind == "PATTERN":
             # A pattern literal is a program of another language and nothing here reads it as
             # text - except the names of its named groups, which the code reads back by name.
@@ -358,6 +360,34 @@ def collect_token_edits(
             chain_root = ""
         prev_dot = kind == "OP" and tok.value == "."
     return
+
+
+#: The letter parts of a duration literal and their English spellings. The Russian set is
+#: the platform documentation of the Duration type (`[д][ч][м][с][мс]`); the English set is
+#: confirmed by the platform compiler (a probe build accepts `2d14h30m5s6ms`).
+_DURATION_SUFFIXES = {"д": "d", "ч": "h", "м": "m", "с": "s", "мс": "ms"}
+
+_NUMBER_PARTS_RE = re.compile(r"([0-9]+)([^0-9]+)")
+
+
+def _duration_edit(tok, base, edits) -> None:
+    """Spell the suffixes of a duration literal in English (`300мс` -> `300ms`).
+
+    Only a literal whose EVERY letter part is a duration suffix moves: a number glued to
+    any other letters (a data-size value, a date-like tail) is left as written - the pass
+    must never guess at what it cannot name.
+    """
+    value = tok.value
+    if value.isascii():
+        return
+    parts = _NUMBER_PARTS_RE.findall(value)
+    if not parts or any(letters not in _DURATION_SUFFIXES for _digits, letters in parts):
+        return
+    consumed = "".join(digits + letters for digits, letters in parts)
+    if consumed != value:
+        return
+    replacement = "".join(digits + _DURATION_SUFFIXES[letters] for digits, letters in parts)
+    edits.append((base + tok.start, base + tok.end, replacement))
 
 
 def _is_named_argument(toks: list, index: int) -> bool:
