@@ -76,6 +76,12 @@ expressions are renamed as names, while the text itself comes from the literals 
 value; what the plane does not name goes into the gap report instead of staying in the source
 language silently.
 
+The same plane serves every yaml value the metamodel declares a localizable text
+(`Localizable`): the presentations of commands, access privileges and enumerations are read by a
+person on the page, so each is either named whole by an entry or reported as a gap. The one
+exception is the `Description` property: it is developer documentation, it stays data and never
+enters the gaps.
+
 Whole names, not words: the word order of an English name is the reverse of the Russian one and
 the parts of a Russian name are declined, so gluing per-word translations produces calques.
 Comments are translated line by line - an edit next to a line does not invalidate it, and one
@@ -113,6 +119,13 @@ project, not a copy of it.
 
 A string literal that equals a renamed name is reported as a warning: a method called by its
 name from a string breaks silently when only the declaration is renamed.
+
+A second warning of the same kind is `literal-data-value`: a literal that equals a VALUE from a
+json resource of the project and was moved by a literals-plane entry. Such a literal is usually
+compared against that data (a seeding parse), and data is never translated - after the move the
+comparison goes silently dry. When the literal really is data, an entry whose value EQUALS its
+key marks that explicitly: the coverage is counted, the text does not move, no warning is drawn.
+The report prints the warnings as a list - file, line, kind and text.
 
 Two exceptions, both of them names written a SECOND time, outside the code.
 

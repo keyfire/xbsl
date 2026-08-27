@@ -73,11 +73,16 @@ class Resolver:
         project_names: frozenset[str] = frozenset(),
         dictionary_scopes: frozenset[str] = frozenset(),
         component_names: frozenset[str] = frozenset(),
+        data_values: frozenset[str] = frozenset(),
     ) -> None:
         self.dictionary = dictionary
         self.project_names = project_names
         self.dictionary_scopes = dictionary_scopes
         self.component_names = component_names
+        #: Cyrillic string VALUES of the project's json resources. A code literal spelled
+        #: exactly like one of them is usually COMPARED against that data, and translating
+        #: the literal parts the comparison from values no translation ever touches.
+        self.data_values = data_values
 
     def dictionary_key(self, name: str, scope: str) -> tuple[str | None, str]:
         """A KEY of a localized-strings dictionary - the project dictionary answers alone.
@@ -749,6 +754,14 @@ def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
         return False
     report.note_literal_named(body)
     line, col = at if at is not None else (tok.line, tok.col)
+    if translated != body and body in resolver.data_values \
+            and not any(w[0] == "literal-data-value" and w[3] == body for w in report.warnings):
+        # The literal doubles a VALUE of a json resource, and data is never translated: after
+        # this replacement a comparison against that data goes silently dry (a seeding parse
+        # loses every branch). If the literal really is data, give the entry a value equal to
+        # its key - that keeps the coverage and the comparison alike. One note per text per
+        # file: a wizard that checks its page code eight times is one place to look, not eight.
+        report.warnings.append(("literal-data-value", line, col, body))
     replacement = translate_interpolations(translated, resolver, report, at=(line, col))
     if replacement != body:
         edits.append((base + tok.start + 1, base + tok.end - 1, replacement))

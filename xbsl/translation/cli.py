@@ -148,6 +148,12 @@ MESSAGES = {
         "ru": "ключей json-ресурсов переименовано вслед за полями структур: {keys}",
         "en": "json resource keys renamed after their structure fields: {keys}",
     },
+    "translate.warnings-header": {
+        "ru": "предупреждения (string-equals-token: литерал равен переименованному имени;"
+              " literal-data-value: литерал равен значению данных json-ресурса):",
+        "en": "warnings (string-equals-token: a literal equals a renamed name;"
+              " literal-data-value: a literal equals a json resource data value):",
+    },
     "translate.problems": {
         "ru": "проблемы ({count}):",
         "en": "problems ({count}):",
@@ -394,6 +400,21 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
         ))
     if totals["data_keys"]:
         print(i18n.t("translate.summary-data-keys", keys=totals["data_keys"]))
+    if totals["warnings"]:
+        # The details, not only the count: a warning asks a person to look at ONE place, and
+        # a bare number sends them hunting for it with the json mode.
+        print(i18n.t("translate.warnings-header"))
+        shown = 0
+        for rel, file_report in sorted(report.files.items()):
+            for kind, line, _col, what in file_report.warnings:
+                print(f"  {rel}:{line}  [{kind}]  {what}")
+                shown += 1
+                if shown >= 20:
+                    break
+            if shown >= 20:
+                break
+        if totals["warnings"] > shown:
+            print(f"  ... +{totals['warnings'] - shown}")
     if report.problems:
         print(i18n.t("translate.problems", count=len(report.problems)))
         for problem in report.problems:

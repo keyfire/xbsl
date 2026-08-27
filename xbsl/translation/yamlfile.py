@@ -61,6 +61,12 @@ _IDENT_VALUE_KEYS = frozenset({
 #: yaml keys whose value is an XBSL expression WITHOUT the leading `=`.
 _EXPR_VALUE_KEYS = frozenset({"Выражение"})
 
+#: `Localizable`-typed properties that are DOCUMENTATION, not something a visitor reads:
+#: an event kind's and a scheduled job's description lives for the developer, and asking the
+#: literals plane to name every paragraph of it would fill the dictionary with prose nobody
+#: ships. They stay data, listed under "kept as texts" as before.
+_DOC_TEXT_KEYS = frozenset({"Описание"})
+
 #: yaml keys whose value names a TYPE or a data table - a name that must move with the object
 #: it points at. The metamodel types some of them, but inside a component tree the schema is
 #: the ui one, and there they are ordinary properties: left as data, the reference outlives
@@ -292,8 +298,13 @@ def _template_scalar(node, resolver, report, edits) -> None:
         report.note_literal(body, line, col)
 
 
-def _generic_scalar(node, resolver, report, edits) -> None:
-    """A value nothing typed: expressions, references and resource files translate, data stays."""
+def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False) -> None:
+    """A value nothing typed: expressions, references and resource files translate, data stays.
+
+    A value the metamodel types `Localizable` (a command's or a privilege's presentation) is
+    the one exception to "data stays": a person reads it on the page, so it goes through the
+    literals plane the way a presentation template does - named whole or reported as a gap.
+    """
     value = node.value
     if not isinstance(value, str) or not value:
         return
@@ -309,6 +320,9 @@ def _generic_scalar(node, resolver, report, edits) -> None:
         _set_scalar(node, "=" + translate_expression(value[1:], resolver, report, at=_at(node)), edits)
         return
     if _dollar_ref(node, resolver, report, edits):
+        return
+    if localizable and has_cyrillic(value):
+        _template_scalar(node, resolver, report, edits)
         return
     if has_cyrillic(value):
         line, col = _at(node)
@@ -490,6 +504,11 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
         _identifier_value(vnode, resolver, report, edits)
         return
     if declared == "UUID":
+        return
+    if declared == "Localizable":
+        # A presentation a person reads on the page - through the literals plane; the
+        # documentation properties stay data (see _DOC_TEXT_KEYS).
+        _generic_scalar(vnode, resolver, report, edits, localizable=key not in _DOC_TEXT_KEYS)
         return
     _generic_scalar(vnode, resolver, report, edits)
 

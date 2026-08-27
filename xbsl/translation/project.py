@@ -219,15 +219,16 @@ def translate_project(
     swap_localization: bool = True,
 ) -> ProjectReport:
     """Translate the tree under `root`; write it under `out` when one is given."""
+    files = _iter_files(root)
     resolver = Resolver(
         dictionary,
         project_names_module.collect(root, engine.load),
         project_names_module.dictionary_scopes(root, engine.load),
         project_names_module.component_names(root, engine.load),
+        _collect_data_values(files),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
     report = ProjectReport(root=root)
-    files = _iter_files(root)
     swaps = _localization_map(root, files) if swap_localization else {}
     outputs: dict[Path, tuple[str, bytes | str, engine.SourceFile | None]] = {}
     targets: dict[str, str] = {}
@@ -275,6 +276,36 @@ def translate_project(
 class _Swap:
     role: str  # 'base' | 'section'
     partner: Path | None  # the other file of the pair, when it exists
+
+
+def _collect_data_values(files: list[Path]) -> frozenset[str]:
+    """Cyrillic string VALUES of the project's json resources.
+
+    The key side of a json resource follows the structure fields (`translate_json`); the
+    values are data and stay as written. A code literal spelled exactly like one of these
+    values is where the two meet - `_literal_edit` warns when a dictionary entry moves it.
+    """
+    values: set[str] = set()
+
+    def walk(node) -> None:
+        if isinstance(node, str):
+            if has_cyrillic(node):
+                values.add(node)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+        elif isinstance(node, dict):
+            for item in node.values():
+                walk(item)
+
+    for path in files:
+        if path.suffix != ".json":
+            continue
+        try:
+            walk(json.loads(path.read_text(encoding="utf-8-sig")))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+            continue
+    return frozenset(values)
 
 
 def _translate_json_bytes(

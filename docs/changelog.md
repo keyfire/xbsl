@@ -19,6 +19,25 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-27
+
+### Added
+- **Localizable yaml values are translated by the literals plane.** A value the metamodel
+  declares a localizable text (`Localizable`) - the presentations of commands, access
+  privileges and enumerations - is read by a person on the page: it is now either named whole
+  by a literals-plane entry or reported as a gap, the way a presentation template already is.
+  The `Description` property is developer documentation: it stays data and never enters the
+  gaps.
+- **The `literal-data-value` warning: a dictionary entry moved a literal that equals a value
+  from a json resource of the project.** Such a literal is usually compared against that data
+  (a seeding parse), and data is never translated - after the move the comparison goes silently
+  dry; the class was found by an English-build review of the pilot project, where a full
+  reseed lost the card layout. A data literal is marked by an entry whose value equals its
+  key: the coverage is counted, the text does not move, no warning is drawn. The warning fires
+  once per distinct text per file.
+- **The translation report prints the warnings as a list** - file, line, kind and text (the
+  first twenty) instead of a bare count: the details used to require the json mode.
+
 ## 2026-08-26 – 0.79.0, 0.79.1, 0.79.2, 0.80.0
 
 ### Added
