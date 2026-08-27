@@ -12,6 +12,39 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`yaml/inline-command-name` (tier A, error).** A command declared inline in the markup
+  (an inline command-interface fragment or a single-command property) must not carry a
+  `Name`: the platform refuses the node at apply time - "a command name is allowed only in
+  command-interface-fragment project elements" - and the stand rolls back, so the defect
+  used to cost a deploy cycle. A fragment PROJECT ELEMENT is skipped whole: there the same
+  key is the point. Both spellings of the command components are read from the platform
+  dictionaries.
+- **`yaml/localization-missing-import` (tier D, error, project-wide).** An unqualified
+  `$Dictionary.Key` reference whose dictionary lives in another subsystem needs that
+  subsystem in the `Import` section of THE SAME yaml - an import in the paired module does
+  not cover the markup, and the apply refuses the node as a not-imported namespace. The
+  rule mirrors the resolution rules of the documentation: a local dictionary wins, an
+  imported subsystem resolves, the qualified `$Subsystem::Dictionary.Key` form needs no
+  import and is left alone, and only public foreign dictionaries are candidates.
+- **`translate_set` takes the batch as a file.** The new `edits_file` (MCP) sends hundreds
+  of entries without inlining kilobytes of escaped JSON, and `--set` (CLI) now reads the
+  same two shapes: the dictionary's own yaml format - `tokens`/`phrases`/`literals`
+  sections, the dictionary's quoting, an empty value removes the entry - next to the JSON
+  list `[{key, value, kind}]` scripts already produce. A file that yields no entries is
+  refused rather than read as "nothing to change".
+- **`translate_gaps` has a compact mode.** With `compact` every row is only
+  `{key, kind, count}` - the worklist a translator actually needs; a full page of hundreds
+  of gaps with places and suggestions did not fit a tool answer.
+
+### Changed
+- **A localization-swap problem names the key the SOURCE file spells.** The report used to
+  say `'PublishedCheckbox' has no en value` about a line the base file calls
+  `ОпубликованоФлажок`, sending the reader to the reverse dictionary; now the source name
+  comes first and the translation follows in brackets.
+
 ## 2026-08-27 – 0.81.0, 0.82.0
 
 ### Added
