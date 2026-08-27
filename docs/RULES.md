@@ -308,9 +308,11 @@ values.
 
 The number of a name is checked against the kind: catalogs, documents, registers and tabular
 sections are named in the plural, enumerations and structures in the singular (`naming/number`).
-This is morphology, not a guess by the ending: a singular noun that the standard allows is told
-apart from a plural that reads as a genitive singular without the case. Needs the `[morph]`
-extra (`pip install "xbsl[morph]"`); without it the rule stays silent.
+For a Russian name this is morphology, not a guess by the ending: a singular noun that the
+standard allows is told apart from a plural that reads as a genitive singular without the case.
+Needs the `[morph]` extra (`pip install "xbsl[morph]"`); without it Russian names stay silent.
+An English name (a translated tree) is judged by its last word with suffix heuristics and the
+irregular plurals listed, and needs no extra; mass nouns and ambiguous tails are left undecided.
 
 The rest: the letter yo and underscores in names, an abbreviation written in mixed case instead
 of all caps, an English term transliterated rather than kept as the original (`Xml`, not its

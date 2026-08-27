@@ -96,12 +96,13 @@ i18n.register(MESSAGES)
 _UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
 #: An `Ид:` line in either spelling - the platform reads the English key just as well.
 _ID_LINE_RE = re.compile(r"(?m)^[ \t]*(?:Ид|Id):[ \t]*(\S+)")
-# A line with the `Имя:` key: the indent (a list-item dash counts as indent), the value with or
-# without quotes, an optional trailing comment (per YAML it is not part of the value); `\r?` lets
-# CRLF files match (`$` anchors before `\n`). Groups: 1 – indent, 2 – quote, 3 – value.
+# A line with the `Имя:` key in either spelling (a translated description writes `Name:`):
+# the indent (a list-item dash counts as indent), the value with or without quotes, an
+# optional trailing comment (per YAML it is not part of the value); `\r?` lets CRLF files
+# match (`$` anchors before `\n`). Groups: 1 – indent, 2 – quote, 3 – value.
 # Shared by the naming rules and the indexer.
 _NAME_LINE_RE = re.compile(
-    r"(?m)^([ \t]*(?:-[ \t]+)?)Имя:[ \t]*(['\"]?)([^\r\n#]*?)\2[ \t]*(?:#.*)?\r?$"
+    r"(?m)^([ \t]*(?:-[ \t]+)?)(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\2[ \t]*(?:#.*)?\r?$"
 )
 
 # The platform limits on the length of the standard fields, both verified by the compiler on a

@@ -228,6 +228,20 @@ def test_filler_word_needs_a_word_boundary():
     assert _lint(_FILLER, "Структура", "РаботаСотрудника") == []
 
 
+def test_filler_word_english_suffix():
+    # A Russian filler prefix lands at the end of the translated compound:
+    # `УправлениеСкладами` - `WarehouseManagement`.
+    d = _lint(_FILLER, "ОбщийМодуль", "WarehouseManagement")
+    assert len(d) == 1
+    assert "Management" in d[0].message
+
+
+def test_filler_word_english_compound_silent():
+    # Inside a name the word belongs to a compound term, as in the Russian branch.
+    assert _lint(_FILLER, "ОбщийМодуль", "TaskManagementPanel") == []
+    assert _lint(_FILLER, "ОбщийМодуль", "TaskManagerContact") == []
+
+
 def test_filler_word_inside_a_compound_term_is_silent():
     # the standard speaks of PREFIXES and postfixes; inside a compound term
     # ('контент-менеджер' is a job title) the word is not a filler
@@ -301,9 +315,63 @@ def test_number_tabular_section_must_be_plural(morph):
 
 
 def test_number_silent_without_morphology(monkeypatch):
-    # Without pymorphy3 the rule stays silent: guessing the number by endings is not allowed.
+    # Without pymorphy3 the rule stays silent: guessing the number of a RUSSIAN name by
+    # endings is not allowed.
     monkeypatch.setattr(naming, "_morph", lambda: None)
     assert _lint(_NUMBER, "Справочник", "Акция") == []
+
+
+# --- the number of an English name (suffix heuristics, no morphology) ---------------------------
+
+def test_number_english_register_singular(monkeypatch):
+    # The head of an English compound is its last word; no pymorphy3 is needed for it.
+    monkeypatch.setattr(naming, "_morph", lambda: None)
+    d = _lint(_NUMBER, "РегистрСведений", "CurrencyRate")
+    assert len(d) == 1
+    assert "CurrencyRate" in d[0].message
+
+
+def test_number_english_plural_silent():
+    assert _lint(_NUMBER, "Справочник", "WarehouseSections") == []
+    assert _lint(_NUMBER, "Справочник", "Tasks") == []
+
+
+def test_number_english_enumeration_plural():
+    d = _lint(_NUMBER, "Перечисление", "PaymentKinds")
+    assert len(d) == 1
+    assert "PaymentKinds" in d[0].message
+
+
+def test_number_english_exempt_heads_silent():
+    # The translated spellings of the standard's exceptions: the head does not choose a number.
+    assert _lint(_NUMBER, "Справочник", "Nomenclature") == []
+    assert _lint(_NUMBER, "Структура", "TaskData") == []
+    assert _lint(_NUMBER, "РегистрСведений", "MessageQueue") == []
+
+
+def test_number_english_undecided_silent():
+    # Mass nouns and ambiguous tails (-os) are not guessed.
+    assert _lint(_NUMBER, "Справочник", "News") == []
+    assert _lint(_NUMBER, "Справочник", "BatchPhotos") == []
+
+
+@pytest.mark.needs_data
+def test_number_english_tabular_section():
+    # A fully translated description: the English kind, the Name key and the TabularParts
+    # section are read the same way as the Russian spellings.
+    text = (
+        "ElementKind: Catalog\n"
+        f"Id: {_ID}\n"
+        "Name: Warehouses\n"
+        "TabularParts:\n"
+        "    -\n"
+        "        Id: 22222222-3333-4444-5555-000000000001\n"
+        "        Name: Structure\n"
+    )
+    source = engine.load_text("Warehouses.yaml", text)
+    d = engine.run_sources([source], select={_NUMBER})
+    assert len(d) == 1
+    assert "Structure" in d[0].message
 
 
 # --- 1.9 the name of a boolean attribute -----------------------------------------------------------

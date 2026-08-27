@@ -168,10 +168,34 @@ dataset.register_reset(_deprecated_prefixes.cache_clear)
 
 # Lines with the Имя key are parsed by the shared regex yaml_schema._NAME_LINE_RE (it strips
 # quotes and a trailing comment off the value); the sections where the key may occur are below:
-# the indent tells whose name it is.
-_SECTION_RE = re.compile(
-    r"(?m)^([ \t]*)(Реквизиты|Измерения|Ресурсы|ТабличныеЧасти|Элементы|Поля|Параметры):"
-)
+# the indent tells whose name it is. Both spellings of every section, so a translated
+# description is parsed the same way as the original.
+_SECTION_NAMES = ("Реквизиты", "Измерения", "Ресурсы", "ТабличныеЧасти", "Элементы", "Поля", "Параметры")
+
+
+def _section_spellings(name: str) -> tuple[str, ...]:
+    """Both spellings of a section key: the property pair, or the global metamodel pair
+    (`Attributes` pairs with the Russian section name as a metamodel name, not as a
+    property)."""
+    spellings = list(terms.key_forms(name))
+    english = metamodel.english_name(name)
+    if english and english not in spellings:
+        spellings.append(english)
+    return tuple(spellings)
+
+
+@lru_cache(maxsize=1)
+def _section_re() -> re.Pattern[str]:
+    spellings = []
+    for name in _SECTION_NAMES:
+        for form in _section_spellings(name):
+            if form not in spellings:
+                spellings.append(form)
+    spellings.sort(key=len, reverse=True)
+    return re.compile(r"(?m)^([ \t]*)(" + "|".join(spellings) + r"):")
+
+
+dataset.register_reset(_section_re.cache_clear)
 
 # A word in an UpperCamelCase name: Cyrillic, Latin or a number.
 _WORD_RE = re.compile(r"[А-ЯЁ][а-яё]*|[A-Z][a-z]*|\d+")
@@ -204,7 +228,7 @@ def _names(source: SourceFile) -> list[NameRef]:
         return cached
     lm = linemap(source)
     sections: list[tuple[int, int, str]] = [
-        (m.start(), len(m.group(1)), m.group(2)) for m in _SECTION_RE.finditer(source.text)
+        (m.start(), len(m.group(1)), m.group(2)) for m in _section_re().finditer(source.text)
     ]
     out: list[NameRef] = []
     for m in _NAME_LINE_RE.finditer(source.text):
@@ -257,18 +281,52 @@ def _morph():
     return pymorphy3.MorphAnalyzer()
 
 
+# English plurals that no suffix rule catches, and words that do not choose a number at all
+# (mass nouns and s-ending singulars: News, Series). An ambiguous tail (-os: Photos against
+# Chaos) stays undecided rather than guessed.
+_LATIN_IRREGULAR_PLURALS = frozenset({
+    "people", "children", "men", "women", "feet", "teeth", "mice",
+    "criteria", "phenomena", "media", "indices", "matrices", "vertices",
+})
+_LATIN_NUMBERLESS = frozenset({"news", "series", "species"})
+
+
+def _latin_number(word: str) -> str | None:
+    """The grammatical number of an English word: 'sing', 'plur' or None (undecided).
+
+    Suffix heuristics instead of morphology: a Latin name has no pymorphy3 behind it.
+    """
+    lowered = word.lower()
+    if lowered in _LATIN_IRREGULAR_PLURALS:
+        return "plur"
+    if lowered in _LATIN_NUMBERLESS:
+        return None
+    if lowered.endswith(("ss", "us", "is")):
+        return "sing"
+    if lowered.endswith("os"):
+        return None
+    if lowered.endswith("s"):
+        return "plur"
+    return "sing"
+
+
 def _head_number(name: str) -> str | None:
     """The number of the name's head word: 'sing', 'plur' or None (no morphology / not parsed).
 
-    The head word is the first noun of the name: in "ОптовыеЗаказы" it is "Заказы", in
+    The head word of a Russian name is its first noun: in "ОптовыеЗаказы" it is "Заказы", in
     "БанковскиеСчетаОрганизаций" - "Счета" ("Организаций" only qualifies it). The number is
     taken from the nominative case: without it "Задачи" and "Партии" read as genitive
-    singular.
+    singular. In an English compound the head is the LAST word (BankAccounts - Accounts), and
+    its number comes from suffix heuristics - so a translated project is judged without the
+    [morph] extra.
     """
+    words = [w for w in _WORD_RE.findall(name) if len(w) > 1 and w[0] in "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ"]
+    if not words:
+        latin = [w for w in _WORD_RE.findall(name) if len(w) > 1 and w[0].isascii() and w[0].isupper()]
+        return _latin_number(latin[-1]) if latin else None
     morph = _morph()
     if morph is None:
         return None
-    words = [w for w in _WORD_RE.findall(name) if len(w) > 1 and w[0] in "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ"]
     for word in words:
         # Contractions and abbreviations (Доп, МС) carry no number - keep looking for the head word.
         nouns = [
@@ -305,15 +363,24 @@ SINGULAR_KINDS = {
     "ЗапланированноеЗадание": "запланированное задание",
 }
 # A tabular section is named in the plural (the table title on a form).
-PLURAL_SECTIONS = {"ТабличныеЧасти"}
+@lru_cache(maxsize=1)
+def _plural_sections() -> frozenset[str]:
+    return frozenset(_section_spellings("ТабличныеЧасти"))
+
+
+dataset.register_reset(_plural_sections.cache_clear)
 
 # Words whose number is not a matter of choice: changing it distorts the meaning of the entity.
 # The standard itself lists them as exceptions - the catalog Номенклатура, the registers
 # ИсторияРассылокОтчетов and ОчередьСообщений, the structures ДанныеЗадачи and
 # СведенияОСотруднике. A name with such a head word is left alone by the rule.
+# The second row is the same exceptions as a translated name spells them (lower case:
+# the head of a Latin name is matched case-insensitively).
 NUMBER_EXEMPT_HEADS = frozenset({
     "Номенклатура", "Данные", "Сведения", "История", "Очередь", "Итоги", "Информация",
     "Настройки", "Статистика",
+    "nomenclature", "data", "information", "details", "history", "queue", "totals",
+    "settings", "statistics",
 })
 
 # The kind word at the start of a name: the kind is not part of the name (the report
@@ -335,7 +402,13 @@ _VT_PREFIX_RE = re.compile(r"^(ВТ_|Таблица[А-ЯЁ])")
 # РаботаСЦветами, УправлениеЦветами, УправлениеАдресами - are all prefixes), so _filler_hit
 # matches only at a word boundary at either end: inside a name such a fragment belongs to a
 # compound term (ПанельКонтентМенеджера - a content manager's panel) and is not a filler.
-FILLER_WORDS = ("Управление", "Механизм", "Функциональность", "Менеджер", "Процедуры", "РаботаС")
+# The second row is the same fillers as a translated name spells them: a Russian filler
+# prefix usually lands at the end of the English compound (`УправлениеСкладами` -
+# `WarehouseManagement`).
+FILLER_WORDS = (
+    "Управление", "Механизм", "Функциональность", "Менеджер", "Процедуры", "РаботаС",
+    "Management", "Mechanism", "Functionality", "Manager", "Procedures", "WorkWith",
+)
 
 
 def _filler_hit(name: str) -> str | None:
@@ -566,17 +639,24 @@ def module_suffix(source: SourceFile) -> Iterable[Diagnostic]:
 
 def _number_exempt(name: str) -> bool:
     """A name whose number is not checked: its head word does not choose one (ДанныеЗадачи,
-    СведенияОСотруднике, ОчередьСообщений, Номенклатура)."""
-    head = next(iter(_WORD_RE.findall(name)), "")
-    return head in NUMBER_EXEMPT_HEADS
+    `СведенияОСотруднике`, `ОчередьСообщений`, `Номенклатура`).
+    The head of a Russian name is its first word, of an English one - the last (TaskData)."""
+    words = _WORD_RE.findall(name)
+    if not words:
+        return False
+    if any(w[0] in "АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЭЮЯ" for w in words):
+        return words[0] in NUMBER_EXEMPT_HEADS
+    return words[-1].lower() in NUMBER_EXEMPT_HEADS
 
 
 @rule("naming/number", "naming/number.title", "D", severity=Severity.WARNING)
 def number(source: SourceFile) -> Iterable[Diagnostic]:
     """Section 3: catalogs, documents, registers and tabular sections - in the plural,
-    enumerations and structures - in the singular. Silent without the [morph] extra (pymorphy3)."""
+    enumerations and structures - in the singular. Russian names are judged by morphology
+    and stay silent without the [morph] extra (pymorphy3); English names are judged by
+    suffix heuristics and need no extra."""
     got = _vid(source)
-    if got is None or _morph() is None:
+    if got is None:
         return
     vid = got[0]
     refs = _names(source)
@@ -591,7 +671,7 @@ def number(source: SourceFile) -> Iterable[Diagnostic]:
                         name=obj.name, vid=SINGULAR_KINDS[vid])
 
     for ref in refs:
-        if ref.section not in PLURAL_SECTIONS or _number_exempt(ref.name):
+        if ref.section not in _plural_sections() or _number_exempt(ref.name):
             continue
         if _head_number(ref.name) == "sing":
             yield _diag(source, ref, "naming/number", "naming/number.plural",
