@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-27
+## 2026-08-27 – 0.81.0
 
 ### Added
 - **Localizable yaml values are translated by the literals plane.** A value the metamodel
