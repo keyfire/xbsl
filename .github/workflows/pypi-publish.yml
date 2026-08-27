@@ -105,3 +105,23 @@ jobs:
           merge-multiple: true
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+
+  # Карточка релиза на GitHub: подписчики репозитория видят в ленте "что нового" из
+  # CHANGELOG. Только после успешной публикации - релиз объявляет то, что уже на PyPI.
+  # Отсутствие раздела карточку не отменяет: тело останется автогенерированным.
+  github-release:
+    needs: publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Тело релиза из CHANGELOG
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          python3 scripts/release-notes.py "$version" CHANGELOG.md --out notes.md \
+            || { echo "::warning::в CHANGELOG.md нет раздела $version - тело релиза останется автогенерированным"; : > notes.md; }
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          generate_release_notes: true

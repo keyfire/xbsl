@@ -39,11 +39,22 @@ jobs:
         run: npm run check
       - name: Package .vsix
         run: npm run package
+      # Тело релиза - раздел версии из CHANGELOG расширения: подписчики видят в ленте
+      # "что нового", а не голую ссылку сравнения. Отсутствие раздела публикацию не
+      # останавливает - релиз уходит с автогенерированными заметками и предупреждением.
+      - name: Тело релиза из CHANGELOG
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="${GITHUB_REF_NAME#vscode-v}"
+          python3 ../../scripts/release-notes.py "$version" CHANGELOG.md --out notes.md \
+            || { echo "::warning::в CHANGELOG.md расширения нет раздела $version - тело релиза останется автогенерированным"; : > notes.md; }
       - name: GitHub Release (.vsix)
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: editors/vscode/xbsl-vscode.vsix
+          body_path: editors/vscode/notes.md
+          generate_release_notes: true
       - name: Publish to VS Code Marketplace
         if: env.VSCE_PAT != ''
         run: npm run publish:vsce
