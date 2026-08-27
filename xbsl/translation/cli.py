@@ -55,12 +55,16 @@ MESSAGES = {
         "en": "everything the editor table shows in ONE pass: entries, gaps and the totals",
     },
     "translate.help.set": {
-        "ru": "применить правки словаря из файла JSON: [{{key, value, kind}}]; у литерала ключ"
-              " и перевод – текст между кавычками ровно так, как он написан в исходнике"
-              " (кавычка внутри – \\\", обратный слеш – \\\\)",
-        "en": "apply dictionary edits from a JSON file: [{{key, value, kind}}]; for a literal the"
-              " key and the value are the text between the quotes exactly as the source writes"
-              " it (an inner quote is \\\", a backslash is \\\\)",
+        "ru": "применить правки словаря из файла: либо yaml формата самого словаря (секции"
+              " tokens/phrases/literals, пустое значение снимает запись), либо JSON"
+              " [{{key, value, kind}}]; у литерала ключ и перевод – текст между кавычками"
+              " ровно так, как он написан в исходнике (кавычка внутри – \\\", обратный"
+              " слеш – \\\\)",
+        "en": "apply dictionary edits from a file: either the dictionary's own yaml format"
+              " (tokens/phrases/literals sections, an empty value removes the entry) or the"
+              " JSON list [{{key, value, kind}}]; for a literal the key and the value are the"
+              " text between the quotes exactly as the source writes it (an inner quote is"
+              " \\\", a backslash is \\\\)",
     },
     "translate.help.target": {
         "ru": "файл словаря для НОВЫХ записей (по умолчанию 090-manual.yaml)",
@@ -573,13 +577,9 @@ def _apply_edits(args, root: Path, loaded) -> int:
         print(i18n.t("translate.entries.no-dictionary"), file=sys.stderr)
         return 2
     try:
-        raw = json.loads(Path(args.set_file).read_text(encoding="utf-8-sig"))
+        edits = entries_module.read_edits_file(Path(args.set_file))
     except (OSError, ValueError) as exc:
         print(i18n.t("translate.set-unreadable", error=exc), file=sys.stderr)
-        return 2
-    edits = raw.get("edits") if isinstance(raw, dict) else raw
-    if not isinstance(edits, list):
-        print(i18n.t("translate.set-unreadable", error="expected a list of edits"), file=sys.stderr)
         return 2
     result = entries_module.write_entries(
         path, edits, target=args.target or entries_module.DEFAULT_TARGET,

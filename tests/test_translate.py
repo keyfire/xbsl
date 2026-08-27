@@ -359,7 +359,10 @@ def test_translate_project_renames_swaps_and_flips(tmp_path: Path):
     assert "Name: StringsDictionary" in base
     assert "    Save: Save" in base  # the En value became the base value
     assert '    Untranslated: "Только русское значение"' in base  # kept, and reported
-    assert any("БезПеревода" in problem or "Untranslated" in problem for problem in report.problems)
+    # The problem names the key the SOURCE file spells (the translation next to it): the
+    # reader greps the sources, and 'Untranslated' alone would need the reverse dictionary.
+    assert any("'БезПеревода' (Untranslated)" in problem for problem in report.problems), \
+        report.problems
 
     ru = (out / "Main" / "Localization" / "Ru" / "StringsDictionary.yaml").read_text(encoding="utf-8")
     assert ru.startswith("Strings:")

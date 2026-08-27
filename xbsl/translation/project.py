@@ -381,8 +381,12 @@ def _apply_language_flip(root, outputs, swaps, dictionary, report) -> None:
         del section_rel_str, section_source
         section_body = section_text.lstrip("﻿")
         merged, missing = _merge_localization_bodies(section_body, base_body)
-        for key in missing:
-            report.problems.append(f"{base_rel_str}: '{key}' has no {dictionary.language} value; kept as is")
+        names = _source_key_names(base_source, base_body)
+        for section_name, key in missing:
+            source_name = names.get((section_name, key), "")
+            shown = f"'{source_name}' ({key})" if source_name and source_name != key else f"'{key}'"
+            report.problems.append(
+                f"{base_rel_str}: {shown} has no {dictionary.language} value; kept as is")
         outputs[base_rel] = (base_rel_str, header + merged, base_source)
         displaced = Path(*base_rel.parts[:-1], _LOCALIZATION_DIR_EN, _language_dir("ru"), base_rel.name)
         outputs[displaced] = (base_rel_str, base_body, base_source)
@@ -414,37 +418,68 @@ def _split_localization(text: str) -> tuple[str, str]:
     return text[:m.start()], text[m.start():]
 
 
-def _merge_localization_bodies(target_body: str, fallback_body: str) -> tuple[str, list[str]]:
+def _localization_sections(body: str) -> dict[str, dict]:
+    """The sections of a localized-strings body - both spellings of a section name
+    collapse to the canonical English one."""
+    if yaml is None:  # pragma: no cover - pyyaml is an install-time dependency
+        return {}
+    try:
+        data = yaml.safe_load(body) or {}
+    except Exception:  # noqa: BLE001 - an unparsable body contributes nothing
+        return {}
+    out: dict[str, dict] = {}
+    for name, keys in (data.items() if isinstance(data, dict) else ()):
+        if isinstance(keys, dict):
+            out[_canonical_section(str(name))] = keys
+    return out
+
+
+def _source_key_names(base_source, translated_body: str) -> dict[tuple[str, str], str]:
+    """(canonical section, translated key) -> the key as the SOURCE file spells it.
+
+    A problem must point at a line its reader can find, and after the pass the keys are
+    already translated - looking one up in the source takes the reverse dictionary. The
+    two bodies are the same file before and after one deterministic pass, so pairing the
+    keys of a section by position is exact; a section whose counts diverge contributes
+    nothing rather than a guess.
+    """
+    if base_source is None:
+        return {}
+    _header, original_body = _split_localization(base_source.text.lstrip("﻿"))
+    original = _localization_sections(original_body)
+    translated = _localization_sections(translated_body)
+    out: dict[tuple[str, str], str] = {}
+    for section, translated_keys in translated.items():
+        original_keys = original.get(section)
+        if not original_keys or len(original_keys) != len(translated_keys):
+            continue
+        for source_key, key in zip(original_keys, translated_keys):
+            out[(section, str(key))] = str(source_key)
+    return out
+
+
+def _merge_localization_bodies(
+    target_body: str, fallback_body: str,
+) -> tuple[str, list[tuple[str, str]]]:
     """The target-language sections, completed with keys only the fallback carries.
 
     A key that never got a target value cannot simply disappear - the references to it
     would stop compiling - so its fallback (original-language) line joins the matching
-    section, and the caller reports it.
+    section, and the caller reports it as a (canonical section, key) pair.
     """
     if yaml is None:  # pragma: no cover - pyyaml is an install-time dependency
         return target_body, []
 
-    def sections_of(body: str) -> dict[str, dict]:
-        try:
-            data = yaml.safe_load(body) or {}
-        except Exception:  # noqa: BLE001 - an unparsable body contributes nothing
-            return {}
-        out: dict[str, dict] = {}
-        for name, keys in (data.items() if isinstance(data, dict) else ()):
-            if isinstance(keys, dict):
-                out[_canonical_section(str(name))] = keys
-        return out
-
-    target = sections_of(target_body)
-    fallback = sections_of(fallback_body)
-    missing: list[str] = []
+    target = _localization_sections(target_body)
+    fallback = _localization_sections(fallback_body)
+    missing: list[tuple[str, str]] = []
     additions: dict[str, list[str]] = {}
     for section, fallback_keys in fallback.items():
         target_keys = target.get(section) or {}
         for key, value in fallback_keys.items():
             if key in target_keys:
                 continue
-            missing.append(str(key))
+            missing.append((section, str(key)))
             additions.setdefault(section, []).append(
                 f"    {key}: {json.dumps(value, ensure_ascii=False)}")
     if not additions:

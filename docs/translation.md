@@ -219,10 +219,16 @@ engine core.
 xbsl translate e1c/app --gaps --kind token --limit 20      # what is missing, most frequent first
 xbsl translate e1c/app --entries --filter Задач            # what the dictionary already says
 xbsl translate e1c/app --table --limit 0                   # all three: entries, gaps, totals
-xbsl translate e1c/app --set edits.json                    # apply [{key, value, kind}]
+xbsl translate e1c/app --set правки.yaml                   # apply a batch file (see below)
 ```
 
 `--table` answers all three questions in one pass, and that is what it exists for: the editor table asks exactly those three, and asked apart they are two identical walks over the sources in two processes plus a third reading of the same dictionary.
+
+`--set` takes the batch as a FILE in either shape: the dictionary's own yaml format
+(`tokens`/`phrases`/`literals` sections, the same quoting as the dictionary files, an
+empty value removes the entry) or the JSON list `[{key, value, kind}]` that scripts
+produce. A batch of hundreds of entries is authored the way the dictionary itself is
+written, not as inline JSON.
 
 `--gaps` shows the count, the first places to look at and `suggestion` - the platform's own
 spelling where it has one. A suggestion is a hint, never an answer: a name the project
@@ -233,9 +239,12 @@ class such as `CodeAttrMd`) is never offered at all.
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`);
+  `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an
+  answer when the full rows would not;
 - `translate_entries` - what the dictionary already says, with the file and line of each
   entry, so a new word stays consistent with the accepted ones;
-- `translate_set` - write entries back: add, correct in place, or remove by emptying a value.
+- `translate_set` - write entries back: add, correct in place, or remove by emptying a
+  value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 
 A new entry lands in `090-manual.yaml` (or the file named by `target`), while an entry that
 already exists is corrected where it lives - the writer never duplicates a key, and a

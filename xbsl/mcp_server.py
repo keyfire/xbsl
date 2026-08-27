@@ -1146,14 +1146,18 @@ def translate_gaps(
     filter: str = "",
     limit: int = 50,
     offset: int = 0,
+    compact: bool = False,
 ) -> dict:
     """What the dictionary does not cover yet, most frequent first.
 
     root   – the project directory;
     kind   – 'token' (names), 'phrase' (comment lines), 'literal' (string literals) or 'any';
     filter – a substring of the key;
-    limit/offset – the page (limit 0 means all, which can be thousands of rows).
-    Every row carries the count, up to a few places to look at, and `suggestion` - the
+    limit/offset – the page (limit 0 means all, which can be thousands of rows);
+    compact – each row is only {key, kind, count}: the shape of a translator's worklist.
+    A full page of hundreds of gaps does not fit an answer - places and suggestions are
+    the bulk - while the keys alone do; ask for one full row by `filter` when needed.
+    Every full row carries the count, up to a few places to look at, and `suggestion` - the
     platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
     the project declared may need a different word; a literal never carries one, because
     between the quotes stands as often a sentence as a name.
@@ -1173,6 +1177,11 @@ def translate_gaps(
         if (kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
     ]
     page = rows[offset:offset + limit] if limit else rows[offset:]
+    if compact:
+        return {
+            "total": len(rows),
+            "gaps": [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page],
+        }
     return {
         "total": len(rows),
         "gaps": [
@@ -1218,10 +1227,15 @@ def translate_entries(
 
 
 @mcp.tool()
-def translate_set(root: str, edits: list[dict], target: str = "", comment: str = "") -> dict:
+def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = "",
+                  target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
 
     root   – the project directory;
+    edits_file – a FILE with the batch, and the way to send one of any size: either the
+             dictionary's own yaml format (tokens/phrases/literals sections, the same
+             quoting as the dictionary files, an empty value removes the entry) or the
+             JSON list below. Combines with inline `edits` (the file goes first).
     edits  – [{key, value, kind}]; `kind` is 'token' (default), 'phrase' or 'literal'. The key
              AND the value of a literal are the text between the quotes exactly as the source
              writes it - interpolations and escaping alike: an inner quote is \\", a backslash
@@ -1251,8 +1265,15 @@ def translate_set(root: str, edits: list[dict], target: str = "", comment: str =
     path = translate_cli.dictionary_path_for(project)
     if path is None:
         return {"error": i18n.t("translate.entries.no-dictionary")}
+    batch: list[dict] = []
+    if edits_file:
+        try:
+            batch.extend(entries_module.read_edits_file(Path(edits_file)))
+        except (OSError, ValueError) as exc:
+            return {"error": i18n.t("translate.set-unreadable", error=exc)}
+    batch.extend(edits or [])
     result = entries_module.write_entries(
-        path, list(edits or []), target=target or entries_module.DEFAULT_TARGET,
+        path, batch, target=target or entries_module.DEFAULT_TARGET,
         comment=comment,
     )
     return {**result, "dictionary": str(path)}

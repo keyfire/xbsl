@@ -33,6 +33,16 @@ MESSAGES = {
         "ru": "словарь перевода не найден рядом с проектом",
         "en": "no translation dictionary next to the project",
     },
+    "translate.entries.edits-not-list": {
+        "ru": "в файле правок ожидается список [{{key, value, kind}}]",
+        "en": "the edits file must carry a list [{{key, value, kind}}]",
+    },
+    "translate.entries.edits-empty": {
+        "ru": "в файле правок не найдено ни одной записи: нужны секции"
+              " tokens/phrases/literals формата словаря либо список JSON",
+        "en": "no entries found in the edits file: it needs tokens/phrases/literals"
+              " sections in the dictionary format, or a JSON list",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -232,6 +242,32 @@ def _places(report, key: str, kind: str, limit: int = 20) -> list[tuple[str, int
             if len(places) >= limit:
                 return places
     return places
+
+
+def read_edits_file(path: Path) -> list[dict]:
+    """Edits out of a file: the dictionary's own yaml format, or the JSON list.
+
+    A batch of a real task runs to hundreds of entries, and that much inline JSON with
+    Cyrillic and literal escaping is where mistakes come from - so a batch is authored the
+    way the dictionary itself is written: `tokens`/`phrases`/`literals` sections, the same
+    quoting (the entry reader is shared with the dictionary, escaping included), an empty
+    value removes the entry. The JSON shape - `[{key, value, kind}]` or `{"edits": [...]}` -
+    stays accepted: it is what scripts already produce for `--set`.
+
+    Raises ValueError when neither shape yields entries: a silently empty batch would read
+    as "nothing to change" over a file that simply had its sections misspelled.
+    """
+    text = path.read_text(encoding="utf-8-sig")
+    if text.lstrip().startswith(("[", "{")):
+        data = json.loads(text)
+        edits = data.get("edits") if isinstance(data, dict) else data
+        if not isinstance(edits, list):
+            raise ValueError(i18n.t("translate.entries.edits-not-list"))
+        return [dict(item) for item in edits if isinstance(item, dict)]
+    entries = read_entries(path)
+    if not entries:
+        raise ValueError(i18n.t("translate.entries.edits-empty"))
+    return [{"key": e.key, "value": e.value, "kind": e.kind} for e in entries]
 
 
 def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
