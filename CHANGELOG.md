@@ -65,6 +65,24 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   (one of the encoded tests asserted the wrong facet spelling and never could fire). The
   spellings come from the property and facet dictionaries; parity was measured by a full
   file-by-file run of the translated tree against the Russian one.
+- **`structure/xbsl-pair` recognises an English module of a generated type.** A module
+  extending a type an element generates carries the type's tail and has no descriptor of its
+  own - `Prices.RecordSet.xbsl` is described by `Prices.yaml`. The tails came from a catalog
+  that spells them Russian, patched by hand with the single word `Object`, so every other
+  English module was read as a module without a descriptor and reported - a finding its
+  Russian twin never got. Both spellings are derived from the platform dictionaries now:
+  the suffix set grew from 39 entries to 76, and no Russian tail is left without its English
+  twin.
+- **The hand-written English column of the derived-type tails is gone.** Nine of its thirteen
+  names repeated what the dictionaries already answer, and four were guesses the platform
+  does not support: `Ref`, `RecordManager` and `Selection` are 1C:Enterprise habits (Element
+  spells those roles `Reference` and `Record`, and the dictionary reads `Selection` as a UI
+  selection). Standing on the English side alone, they forgave on one spelling exactly what
+  the rule reports on the other. What remains is one PAIR the dictionaries carry no entry
+  for, kept whole so the two trees cannot disagree.
+- **The catalog tables of the semantics rules drop on a data-root switch.** Four tables read
+  the catalog of one version and cached it with no reset registered, so pinning another data
+  root kept them answering from the version pinned before.
 
 ## 2026-08-27 – 0.81.0, 0.82.0
 

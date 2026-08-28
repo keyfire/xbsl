@@ -25,6 +25,15 @@ def _lint(files: dict[str, str], rule: str) -> list:
     return [d for d in engine.run_sources(sources, select={rule}) if d.rule_id == rule]
 
 
+def _lint_on_disk(tmp_path, files: dict[str, str], rule: str) -> list:
+    """The same, for a rule that judges the files on disk rather than their content."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    for name, text in files.items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    paths = engine.find_sources(tmp_path, "*.xbsl") + engine.find_sources(tmp_path, "*.yaml")
+    return [d for d in engine.run(paths, select={rule}) if d.rule_id == rule]
+
+
 # --- code/unknown-object-type: the derived types an object generates -----------------------
 
 _RULE_OBJECT_TYPE = "code/unknown-object-type"
@@ -372,3 +381,117 @@ def test_unknown_table_of_an_english_query_is_still_flagged():
     }
     found = _lint(files, _RULE_TABLE)
     assert len(found) == 1 and "Userz" in found[0].message
+
+
+# --- structure/xbsl-pair: the module of a generated type ------------------------------------
+
+_RULE_PAIR = "structure/xbsl-pair"
+
+_REGISTER_RU = """\
+ВидЭлемента: РегистрСведений
+Ид: 1d1f5c60-0000-4000-8000-0000000000d1
+Имя: Цены
+ОбластьВидимости: ВПроекте
+"""
+_REGISTER_EN = """\
+ElementKind: InformationRegister
+Id: 1d1f5c60-0000-4000-8000-0000000000d1
+Name: Prices
+VisibilityScope: InProject
+"""
+_BODY_RU = "метод Проба()\n;\n"
+_BODY_EN = "method Probe()\n;\n"
+
+
+def test_module_of_a_generated_type_pairs_in_a_russian_project(tmp_path):
+    files = {"Цены.yaml": _REGISTER_RU, "Цены.НаборЗаписей.xbsl": _BODY_RU}
+    assert _lint_on_disk(tmp_path, files, _RULE_PAIR) == []
+
+
+@pytest.mark.parametrize("tail", ["RecordSet", "RecordKey", "Record", "AutomaticListForm"])
+def test_module_of_a_generated_type_pairs_in_an_english_project(tmp_path, tail):
+    """The regression: only the object module was recognised in English.
+
+    A module extending a generated type carries the type's tail and no yaml of its own -
+    `Prices.RecordSet.xbsl` is described by `Prices.yaml`. The tails came from a catalog that
+    spells them Russian, patched by hand with the single word `Object`, so every other English
+    module was read as a module without a descriptor and reported - a finding its Russian twin
+    never got. A count of findings could not see it: the English tree being measured carries
+    object modules alone.
+    """
+    files = {"Prices.yaml": _REGISTER_EN, f"Prices.{tail}.xbsl": _BODY_EN}
+    found = _lint_on_disk(tmp_path, files, _RULE_PAIR)
+    assert found == [], [d.message for d in found]
+
+
+def test_a_module_without_a_descriptor_is_still_reported_in_both_spellings(tmp_path):
+    """The negative control: reading wider must not mean reading blind."""
+    russian = _lint_on_disk(tmp_path / "ru", {"Осиротевший.xbsl": _BODY_RU}, _RULE_PAIR)
+    english = _lint_on_disk(tmp_path / "en", {"Orphaned.xbsl": _BODY_EN}, _RULE_PAIR)
+    assert len(russian) == 1, [d.message for d in russian]
+    assert len(english) == 1, [d.message for d in english]
+
+
+def test_a_tail_that_is_no_generated_type_is_still_reported(tmp_path):
+    """And a tail of neither spelling stays a finding - the set is a vocabulary, not a wildcard."""
+    files = {"Prices.yaml": _REGISTER_EN, "Prices.Nonsense.xbsl": _BODY_EN}
+    found = _lint_on_disk(tmp_path, files, _RULE_PAIR)
+    assert len(found) == 1, [d.message for d in found]
+
+
+# --- the tables themselves: every Russian name answers in English --------------------------
+
+def test_every_module_suffix_carries_its_english_twin():
+    """Symmetry as an invariant, not as a list of cases.
+
+    The suffix set is built from the catalog, which grows with the platform; a kind added
+    later brings Russian tails that no test below names. Asserting the DERIVATION instead of
+    the names keeps the guarantee whole: whatever the catalog carries, the English half of
+    the set is there next to it.
+    """
+    from xbsl.rules.semantics import _english_tail
+    from xbsl.rules.structure import _module_suffixes
+
+    suffixes = _module_suffixes()
+    lonely = {
+        name: english for name in suffixes
+        if (english := _english_tail(name)) and english not in suffixes
+    }
+    assert lonely == {}
+
+
+def test_the_entity_protocol_is_known_in_both_spellings():
+    """The entity protocol - `Reference`, `DeletionMark`, `Write`, `Delete` - in both spellings.
+
+    The table is Russian by construction (the compiler probe that confirmed it ran on a
+    Russian module), and the English half is derived rather than listed. `Reference` is the
+    one word of the four the compiler dictionary does not pair, and the entity protocol
+    speaks the FACET language, where the property vocabulary would call it `Link` instead.
+    """
+    from xbsl.rules.undefined_names import _ENTITY_COMMON, _both_spellings
+
+    both = _both_spellings(set(_ENTITY_COMMON))
+    assert {"Reference", "DeletionMark", "Write", "Delete"} <= both
+    assert set(_ENTITY_COMMON) <= both
+
+
+def test_no_derived_type_tail_stands_on_the_english_side_alone():
+    """An English tail with no Russian twin would forgive what the Russian tree reports.
+
+    This is what the hand-written English column used to do: `Ref`, `RecordManager` and
+    `Selection` were 1C:Enterprise habits with no counterpart in the Russian table, and they
+    widened the English side alone. The English half is derived now, so the asymmetry cannot
+    come back by hand - the test states the rule that made them wrong.
+    """
+    from xbsl.rules.semantics import (
+        _MEMBER_TYPE_TAILS, _TAILS_WITHOUT_PAIR, _english_tails, _object_members,
+    )
+
+    russian = set(_MEMBER_TYPE_TAILS)
+    for members in _object_members().values():
+        russian |= set(members)
+    assert set(_TAILS_WITHOUT_PAIR) <= russian
+    orphan_english = _english_tails(frozenset(_TAILS_WITHOUT_PAIR)) - set(
+        _TAILS_WITHOUT_PAIR.values()
+    )
+    assert orphan_english == set()

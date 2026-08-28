@@ -180,16 +180,25 @@ _MEMBER_TYPE_TAILS = frozenset({
 
 # Element identifiers are bilingual: platform types carry English names too (`Банки.Record`
 # is `Банки.Запись`). The extracted catalog (stdlib.json object_members) holds only the Russian
-# derived-type names, so the English forms would be flagged as unknown. This hand-kept set adds
-# the English equivalents of the generated member types - the standard 1C:Element English type
-# names. The rule is built for zero FALSE POSITIVES (the server compilation on deploy is the real
-# check), so it errs generous here: an unknown-but-plausible English tail is a false negative,
-# which the union already tolerates, never a false positive.
-_MEMBER_TYPE_TAILS_EN = frozenset({
-    "Reference", "Ref", "Object", "Data", "Record", "RecordSet", "RecordManager",
-    "RecordKey", "Selection",
-    "WriteParameters", "DeleteParameters", "FillParameters", "Parameters",
-})
+# derived-type names, and the English half is DERIVED from the platform dictionaries - see
+# _english_tail. This table is only for the tails the dictionaries pair with nothing, where
+# there is nowhere to derive from.
+#
+# It used to be a hand-written column of thirteen English names. Nine of them merely repeated
+# what the dictionaries already answer, and four were guesses the platform does not support:
+# `Ref`, `RecordManager` and `Selection` are 1C:Enterprise habits (Element spells those roles
+# `Reference` and `Record`, and the dictionary pairs `Selection` with a selection in the
+# interface, another role entirely). Standing on the English side alone, they forgave on one
+# spelling exactly what the rule reports on the other - the asymmetry _member_family prevents.
+#
+# The one surviving entry keeps a PAIR whole: its Russian half is in _MEMBER_TYPE_TAILS and no
+# documented type stands behind either spelling, so dropping the English half alone would
+# leave the Russian tree accepting what the English tree reports. The dictionary does know
+# `FillParameters`, but as the English of a METHOD that fills parameters - another role - so
+# it cannot be derived and is written here instead.
+_TAILS_WITHOUT_PAIR = {
+    "ПараметрыЗаполнения": "FillParameters",
+}
 
 
 def _english_tail(name: str) -> str | None:
@@ -203,6 +212,7 @@ def _english_tail(name: str) -> str | None:
         terms.facet_suffix_english(name)
         or terms.common_english(name)
         or terms.english(name, "types")
+        or _TAILS_WITHOUT_PAIR.get(name)
     )
 
 
@@ -300,6 +310,14 @@ def _manager_member_types() -> dict[str, dict[str, str]]:
     }
 
 
+# All four read the catalog of ONE version and cache it, so pinning another data root has to
+# drop them - otherwise the tables keep answering from the version pinned before.
+for _catalog_cache in (
+    _stdlib_names, _object_members, _manager_members, _manager_member_types,
+):
+    dataset.register_reset(_catalog_cache.cache_clear)
+
+
 def _checked_kinds() -> frozenset[str]:
     return _BASE_CHECKED_KINDS | frozenset(_object_members())
 
@@ -309,9 +327,9 @@ def _member_family(kind: str) -> frozenset[str]:
 
     Both spellings count as known - platform identifiers are bilingual - and the two halves are
     built the SAME way, so that neither tree is wider than the other: the catalog entry of THIS
-    kind and its translation, then the kind-agnostic safety net and its translation next to the
-    hand-kept _MEMBER_TYPE_TAILS_EN. A translation taken across all kinds at once would forgive
-    on one spelling exactly what the rule reports on the other.
+    kind and its translation, then the kind-agnostic safety net and its translation. A
+    translation taken across all kinds at once would forgive on one spelling exactly what the
+    rule reports on the other.
 
     This is what the rules JUDGE by, where a name too many is a tolerated false negative and a
     name too few is a false positive. What an editor OFFERS is a different question - see
@@ -320,7 +338,7 @@ def _member_family(kind: str) -> frozenset[str]:
     generated = _object_members().get(kind, frozenset())
     return (
         generated | _english_tails(generated)
-        | _MEMBER_TYPE_TAILS | _MEMBER_TYPE_TAILS_EN | _english_tails(_MEMBER_TYPE_TAILS)
+        | _MEMBER_TYPE_TAILS | _english_tails(_MEMBER_TYPE_TAILS)
     )
 
 
