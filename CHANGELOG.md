@@ -89,6 +89,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   with the method spelling - two names of `BinaryObjectProperties` are like that. The data has
   to be rebuilt (`xbsl extract --only terms,uiterms`), after which `code/unknown-member` stops
   reporting a legal call.
+- **A baseline now travels between machines: a path INSIDE the text of a finding is read in
+  the baseline's own form.** The cross-file rules name the second file the way the run
+  received it - with the separators of the host, absolute when the root was absolute - while
+  the identity of an entry is its text. A baseline frozen on Windows therefore suppressed
+  nothing in a Linux CI and was announced stale on both sides (on one revision of the site
+  project: "97 frozen, 2 stale" locally against "89 and 7" in CI). The path in a message is
+  now read the way the path of the file is: POSIX, relative to the directory of the baseline.
+  Existing files keep working without a rewrite - the common form is computed on both sides
+  of the comparison.
 - **`translate_set` announced a removal that never happened.** A batch that removed an entry
   from a file and at the same time added a new one aimed at THAT file lost the removal: the
   addition rebuilt the text of the file from disk, overwriting the edits already planned,

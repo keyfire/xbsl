@@ -33,6 +33,7 @@ baseline` never touches them.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from xbsl import i18n
@@ -95,6 +96,20 @@ def _identity_path(diag_path: str, base_dir: Path) -> str:
         return p.as_posix()
 
 
+#: A file path INSIDE the text of a finding. The cross-file rules name the second file the way
+#: the run received it - with the separators of the host, and absolute when the root given on
+#: the command line was absolute - while the identity of an entry is its text. Without a common
+#: form the same finding reads as two: a baseline frozen on Windows suppressed nothing in a
+#: Linux CI and was announced stale on both sides (measured on the site project: "97 frozen, 2
+#: stale" locally against "89 and 7" in CI on one revision).
+_PATH_IN_MESSAGE = re.compile(r"[^\s\"'()<>]*[\\/][^\s\"'()<>]*\.(?:yaml|xbsl|xbql|json)")
+
+
+def _identity_message(message: str, base_dir: Path) -> str:
+    """The message with every path it names in the baseline's own form."""
+    return _PATH_IN_MESSAGE.sub(lambda hit: _identity_path(hit.group(0), base_dir), message)
+
+
 def _entry_count(value) -> int:
     """The allowed count of an entry: a bare int or the 'count' of a {count, reason} dict."""
     if isinstance(value, int):
@@ -112,8 +127,13 @@ def _entry_reason(value) -> str | None:
     return None
 
 
-def reasons_of(data: dict) -> dict[tuple[str, str, str], str]:
-    """(path, rule, message) -> reason for every entry of the payload that carries one."""
+def reasons_of(data: dict, base_dir: Path) -> dict[tuple[str, str, str], str]:
+    """(path, rule, message) -> reason for every entry of the payload that carries one.
+
+    The message is taken in the common form, the same one `build` writes: a rewrite carries a
+    reason over by identity, and an entry naming another file would otherwise lose it on the
+    first machine whose separators differ from the ones it was frozen with.
+    """
     out: dict[tuple[str, str, str], str] = {}
     for path, per_rule in data.get("files", {}).items():
         if not isinstance(per_rule, dict):
@@ -124,7 +144,7 @@ def reasons_of(data: dict) -> dict[tuple[str, str, str], str]:
             for message, value in per_message.items():
                 reason = _entry_reason(value)
                 if reason:
-                    out[(path, rule_id, message)] = reason
+                    out[(path, rule_id, _identity_message(message, base_dir))] = reason
     return out
 
 
@@ -140,12 +160,13 @@ def build(
     files: dict[str, dict[str, dict[str, object]]] = {}
     for d in sorted(diags, key=lambda x: x.sort_key()):
         path = _identity_path(d.path, base_dir)
+        message = _identity_message(d.message, base_dir)
         per_rule = files.setdefault(path, {})
         per_message = per_rule.setdefault(d.rule_id, {})
-        per_message[d.message] = _entry_count(per_message.get(d.message, 0)) + 1
-        reason = (reasons or {}).get((path, d.rule_id, d.message))
+        per_message[message] = _entry_count(per_message.get(message, 0)) + 1
+        reason = (reasons or {}).get((path, d.rule_id, message))
         if reason:
-            per_message[d.message] = {"count": per_message[d.message], "reason": reason}
+            per_message[message] = {"count": per_message[message], "reason": reason}
     return {
         "meta": {
             "tool": "xbsl",
@@ -167,7 +188,7 @@ def write(path: Path, diags: list[Diagnostic]) -> dict:
     reasons: dict[tuple[str, str, str], str] = {}
     if path.is_file():
         try:
-            reasons = reasons_of(load(path))
+            reasons = reasons_of(load(path), path.parent)
         except BaselineError:
             pass
     data = build(diags, path.parent, reasons)
@@ -227,6 +248,7 @@ def not_checked_entries(data: dict, rules: set[str] | None) -> list[dict]:
 
 def stale_entries(
     data: dict, used: dict[tuple[str, str, str], int], rules: set[str] | None = None,
+    base_dir: Path | None = None,
 ) -> list[dict]:
     """The baseline entries this run did not spend, as records ready to print.
 
@@ -238,7 +260,9 @@ def stale_entries(
     out: list[dict] = []
     for path, rule_id, message, value in _entries(data, rules, wanted=True):
         count = _entry_count(value)
-        left = count - used.get((path, rule_id, message), 0)
+        # Spent by identity, reported as WRITTEN: the caller drops the entry by its own key.
+        spent = message if base_dir is None else _identity_message(message, base_dir)
+        left = count - used.get((path, rule_id, spent), 0)
         if count > 0 and left > 0:
             out.append({
                 "path": path, "rule": rule_id, "message": message,
@@ -300,14 +324,19 @@ def apply(
             for message, value in per_message.items():
                 count = _entry_count(value)
                 if count > 0:
-                    budgets[(path, rule_id, message)] = count
+                    # Two entries of one identity meet when a file carries a message frozen
+                    # on Windows and its twin frozen on Linux: their budgets add up rather
+                    # than one replacing the other.
+                    key = (path, rule_id, _identity_message(message, base_dir))
+                    budgets[key] = budgets.get(key, 0) + count
                     if rules is None or rule_id in rules:
                         total_budget += count
     kept: list[Diagnostic] = []
     used: dict[tuple[str, str, str], int] = {}
     suppressed = 0
     for d in sorted(diags, key=lambda x: x.sort_key()):
-        key = (_identity_path(d.path, base_dir), d.rule_id, d.message)
+        key = (_identity_path(d.path, base_dir), d.rule_id,
+               _identity_message(d.message, base_dir))
         left = budgets.get(key, 0)
         if left > 0:
             budgets[key] = left - 1
@@ -315,4 +344,5 @@ def apply(
             suppressed += 1
         else:
             kept.append(d)
-    return kept, suppressed, total_budget - suppressed, stale_entries(data, used, rules)
+    return (kept, suppressed, total_budget - suppressed,
+            stale_entries(data, used, rules, base_dir))

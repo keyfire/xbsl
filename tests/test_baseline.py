@@ -401,3 +401,67 @@ def test_not_checked_line_is_silent_on_a_full_run(tmp_path, capsys):
     cli.main(["--baseline", str(bl), *_NO_PAIR, str(f)])
     err = capsys.readouterr().err
     assert "не проверено" not in err
+
+
+# --- a path INSIDE the text of a finding ------------------------------------------------------
+
+def _entry(message: str, reason: str = "") -> dict:
+    """A one-entry baseline payload for the module below, with the given message."""
+    value: object = {"count": 1, "reason": reason} if reason else 1
+    return {"meta": {"tool": "xbsl", "format": 1},
+            "files": {"Второй.yaml": {"yaml/duplicate-subtree": {message: value}}}}
+
+
+def _finding(base_dir, message: str):
+    from xbsl.diagnostics import Diagnostic, Severity
+
+    return Diagnostic(str(base_dir / "Второй.yaml"), 1, 1, "yaml/duplicate-subtree",
+                      Severity.WARNING, message)
+
+
+def test_a_path_in_the_message_is_read_in_the_baselines_own_form(tmp_path):
+    """The same finding, written on Windows and met on Linux: one entry, one identity.
+
+    A rule that names a SECOND file writes the path the way the run received it - with the
+    separators of the host, absolute when the run was given an absolute root. The baseline
+    keys on the text of the finding, so without a common form an entry frozen on one machine
+    freezes nothing on the other and is announced stale on both.
+    """
+    from xbsl import baseline
+
+    windows = "Повторяет поддерево в файле Основное\Первый.yaml (всего таких мест: 2)."
+    posix = "Повторяет поддерево в файле Основное/Первый.yaml (всего таких мест: 2)."
+    absolute = (f"Повторяет поддерево в файле {tmp_path / 'Основное' / 'Первый.yaml'}"
+                " (всего таких мест: 2).")
+
+    for stored in (windows, posix):
+        for met in (windows, posix, absolute):
+            kept, suppressed, unused, stale = baseline.apply(
+                [_finding(tmp_path, met)], _entry(stored), tmp_path)
+            assert (kept, suppressed, unused, stale) == ([], 1, 0, []), (stored, met)
+
+
+def test_the_written_baseline_states_the_path_in_one_form(tmp_path):
+    """What --write-baseline stores must be what another host will look up."""
+    from xbsl import baseline
+
+    absolute = (f"Повторяет поддерево в файле {tmp_path / 'Основное' / 'Первый.yaml'}"
+                " (всего таких мест: 2).")
+    data = baseline.build([_finding(tmp_path, absolute)], tmp_path)
+
+    stored = list(data["files"]["Второй.yaml"]["yaml/duplicate-subtree"])
+    assert stored == ["Повторяет поддерево в файле Основное/Первый.yaml (всего таких мест: 2)."]
+
+
+def test_a_reason_survives_a_rewrite_of_an_entry_naming_a_file(tmp_path):
+    """The reasons are carried over by identity - which must be the common form too."""
+    from xbsl import baseline
+
+    windows = "Повторяет поддерево в файле Основное\Первый.yaml (всего таких мест: 2)."
+    posix = "Повторяет поддерево в файле Основное/Первый.yaml (всего таких мест: 2)."
+    reasons = baseline.reasons_of(_entry(windows, reason="две формы списка одного вида"),
+                                  tmp_path)
+    data = baseline.build([_finding(tmp_path, posix)], tmp_path, reasons)
+
+    entry = data["files"]["Второй.yaml"]["yaml/duplicate-subtree"][posix]
+    assert entry == {"count": 1, "reason": "две формы списка одного вида"}
