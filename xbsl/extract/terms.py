@@ -45,7 +45,7 @@ import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from xbsl.extract import _distro
+from xbsl.extract import _distro, classcode
 
 STD_BASE = "data/docs/help/ru/stdlib/element/xbsl/Std/"
 
@@ -86,6 +86,10 @@ def _add(target: dict[str, str], ru: str, en: str, conflicts: set[str]) -> None:
 
 #: Meta-object classes: the file name without this suffix is the English name of the type.
 _META_SUFFIX = re.compile(r"(CtMetaObject|MetaObject|BslImpl)$")
+#: A class states its members only if it calls one of the builders that take the pair;
+#: the test is a substring of the compiled reference, cheap enough to run on every class
+#: and far cheaper than walking the bytecode of one that declares nothing.
+_DECLARES_MEMBERS_RE = re.compile(rb"CtMeta(Method|Prop)Builder")
 #: Jars of the platform itself - the only ones that can hold meta objects.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
@@ -188,7 +192,14 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
             if not pairs:
                 continue
             owner = _META_SUFFIX.sub("", inner.rsplit("/", 1)[-1][:-len(".class")])
-            for en, ru in pairs:
+            # A meta object STATES its members by calling a builder, and a statement beats the
+            # neighbourhood: adjacency named 2 of 2015 members wrongly, both confidently - the
+            # `CharAt` of a `String` came out `Symbol`, which is the fill PARAMETER of
+            # `PadFromBegin`. Read only where the builders are actually called.
+            declared = classcode.declared_members(data) if _DECLARES_MEMBERS_RE.search(data) else {}
+            resolved = {ru: en for en, ru in pairs}
+            resolved.update(declared)
+            for ru, en in resolved.items():
                 members[owner][ru] = en
                 variants[ru][en] += 1
     common: dict[str, str] = {}

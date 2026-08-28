@@ -349,7 +349,8 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
 
     added = 0
     if fresh:
-        target_file, new_text, added = _plan_new(dictionary_path, fresh, target, comment)
+        target_file, new_text, added = _plan_new(dictionary_path, fresh, target, comment,
+                                                 planned=files)
         if added:
             files[str(target_file)] = new_text
     return {"files": files, "changed": changed, "added": added, "removed": removed,
@@ -410,8 +411,14 @@ DEFAULT_COMMENT = "Записи словаря перевода."
 
 
 def _plan_new(dictionary_path: Path, edits: list[dict], target: str,
-              comment: str = "") -> tuple[Path, str, int]:
-    """(the target file, its full text with the new entries, how many were added)."""
+              comment: str = "", planned: dict[str, str] | None = None
+              ) -> tuple[Path, str, int]:
+    """(the target file, its full text with the new entries, how many were added).
+
+    `planned` holds the texts the same batch has already computed for the files it corrects
+    and empties. The target may be one of them - then the new entries go on top of THAT text
+    rather than the one on disk, which still carries the entries the batch has just removed.
+    """
     file = dictionary_path / target if dictionary_path.is_dir() else dictionary_path
     sections = {
         section: {e["key"]: e["value"] for e in edits if e["kind"] == kind and e["value"]}
@@ -419,7 +426,9 @@ def _plan_new(dictionary_path: Path, edits: list[dict], target: str,
     }
     if not any(sections.values()):
         return file, "", 0
-    if file.exists():
+    if planned and str(file) in planned:
+        text = planned[str(file)]
+    elif file.exists():
         text = file.read_text(encoding="utf-8-sig")
     else:
         head = " ".join((comment or DEFAULT_COMMENT).split())

@@ -66,7 +66,7 @@ from pathlib import Path
 
 import yaml
 
-from xbsl.extract import _distro
+from xbsl.extract import _distro, classcode
 
 #: A value spelling: a plain identifier, no dots or spaces (a UUID is filtered by the shape).
 _NAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9]*$")
@@ -263,13 +263,20 @@ def _member_names(meta_classes: dict[str, bytes]) -> dict[str, dict[str, str]]:
     is for. The key is the class stem, which is the English name of the type, the spelling
     the catalog stores next to the Russian one.
 
-    Parameter names ride along with the member names here: telling them apart would need the
-    signature, and the consumer of this section errs on the generous side anyway - a name too
-    many costs a check not made, never a wrong finding.
+    Parameter names ride along with the member names here, in the part still read by
+    adjacency: telling them apart would need the signature, and the consumer of this section
+    errs on the generous side anyway - a name too many costs a check not made, never a wrong
+    finding. Where the class states the member itself, the statement is taken instead, and a
+    parameter can no longer be mistaken for it: `Символ` of a `String` is the method `CharAt`,
+    while `Symbol` is the fill parameter that sits beside it in the pool.
     """
     out: dict[str, dict[str, str]] = {}
     for stem, blob in meta_classes.items():
         pairs = {ru: en for ru, en in enum_pairs(blob).items() if _NAME_RE.match(en)}
+        # What the class STATES beats what stands next to what: the pool interleaves the names
+        # of members with the names of their parameters, and adjacency then hands a member the
+        # spelling of a parameter (see classcode).
+        pairs.update(classcode.declared_members(blob))
         if pairs:
             out[stem] = dict(sorted(pairs.items()))
     return dict(sorted(out.items()))

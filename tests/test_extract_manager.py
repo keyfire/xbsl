@@ -19,7 +19,9 @@ from xbsl.extract import _distro
 REPO = Path(__file__).resolve().parent.parent
 PACKAGE = REPO / "xbsl" / "extract"
 TOOLS = REPO / "tools"
-_NOT_STEPS = {"__init__", "__main__", "_distro"}
+# Modules of the package that are not steps but helpers the steps share: the distribution
+# walker and the class-file reader that states the bilingual pairs of a meta object.
+_NOT_STEPS = {"__init__", "__main__", "_distro", "classcode"}
 
 
 def test_every_extractor_module_is_a_step():

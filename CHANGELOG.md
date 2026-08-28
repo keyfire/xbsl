@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0
+## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0, 0.86.1
 
 ### Added
 - **`yaml/computed-binding-assigned` (tier D, warning, project-wide).** Every instance of a
@@ -76,6 +76,24 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   comes first and the translation follows in brackets.
 
 ### Fixed
+- **The English spellings of members are read from the DECLARATIONS of a meta object rather
+  than from the neighbourhood of the constant pool.** The pool keeps strings in the order the
+  code first mentions them, so a name whose twin was already interned ended up beside a
+  stranger and the dictionary stated a confident wrong pair. Measured over the distribution:
+  of 2015 declared members adjacency got two wrong, and both were worse than a miss - the
+  translated tree called a method the type does not have (the `CharAt` of a string came out
+  `Symbol`, the fill PARAMETER of `PadFromBegin`; the `Schedule` of the updating scheduled job
+  came out `ScheduleWithoutTransaction`). The pairs now come from the builder calls
+  (`CtMetaMethodBuilder.meth`, `CtMetaPropBuilder.prop`), with adjacency left as the fallback
+  for classes that declare nothing. A name declared both as a method and as a property answers
+  with the method spelling - two names of `BinaryObjectProperties` are like that. The data has
+  to be rebuilt (`xbsl extract --only terms,uiterms`), after which `code/unknown-member` stops
+  reporting a legal call.
+- **`translate_set` announced a removal that never happened.** A batch that removed an entry
+  from a file and at the same time added a new one aimed at THAT file lost the removal: the
+  addition rebuilt the text of the file from disk, overwriting the edits already planned,
+  while the report still said `removed: 1`. Correcting an entry in the target file went the
+  same way. New entries now go on top of the text already planned.
 - **`code/unknown-member` judges English member spellings.** It used to skip every Latin
   member outright - with a Russian-only catalog, judging them would have reported correct
   code. Now a type whose WHOLE member set is stated by the vocabularies is judged in both

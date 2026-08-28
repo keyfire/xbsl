@@ -1743,3 +1743,26 @@ def test_a_verified_member_spelling_wins_over_the_owner_table(tmp_path: Path):
     out = tmp_path / "en"
     translate_project(root, _dictionary({"Модуль": "Module", "Разобрать": "Parse", "Тело": "Body"}), out)
     assert "Body.CharAt(1)" in (out / "Module.xbsl").read_text(encoding="utf-8")
+
+
+def test_new_entry_in_the_same_file_keeps_the_removal(tmp_path: Path):
+    """A new entry aimed at the file the batch also edits does not undo those edits.
+
+    New entries are merged into the target file's text, corrections and removals into the
+    text of the file the entry lives in. When the two are the SAME file, the merge must lie
+    on top of the text already planned - otherwise the report announces a removal that never
+    reached the disk.
+    """
+    from xbsl.translation import entries
+
+    folder = _dict_dir(tmp_path)
+    plan = entries.plan_entries(folder, [
+        {"key": "строка комментария", "value": "", "kind": "phrase"},  # removed
+        {"key": "Шаги", "value": "Steps", "kind": "token"},             # added to the same file
+        {"key": "Задачи", "value": "Jobs", "kind": "token"},            # corrected in the same file
+    ], target="010-objects.yaml")
+    assert plan["added"] == 1 and plan["changed"] == 1 and plan["removed"] == 1
+    edited = plan["files"][str(folder / "010-objects.yaml")]
+    assert "    Шаги: Steps" in edited
+    assert "    Задачи: Jobs" in edited
+    assert "строка комментария" not in edited
