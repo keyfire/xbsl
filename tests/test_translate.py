@@ -1766,3 +1766,30 @@ def test_new_entry_in_the_same_file_keeps_the_removal(tmp_path: Path):
     assert "    Шаги: Steps" in edited
     assert "    Задачи: Jobs" in edited
     assert "строка комментария" not in edited
+
+
+def test_the_dictionary_catalog_is_not_a_source_of_the_project(tmp_path: Path):
+    """A run rooted ABOVE the project sees the dictionary next to it - and must not read it.
+
+    Its files are yaml of the same shape as a project's, so the pass counted their own
+    comments as untranslated prose: a run from the repository root of the site project
+    reported 871 phrase gaps and 99.2% coverage where the project itself is at 100%. The
+    figure looks trustworthy and sends the reader after a hole that is not there.
+    """
+    from xbsl.translation import entries
+    from xbsl.translation.dictionary import DICTIONARY_DIR
+    from xbsl.translation.project import translate_project
+
+    root = tmp_path / "Acme"
+    _write(root / "Demo" / "Модуль.xbsl", "// пояснение\nметод Считать()\n    возврат 1\n;\n")
+    _write(root / DICTIONARY_DIR / "010-objects.yaml",
+           "version: 1\nlanguage: en\n\n# Записи, добавленные из редактора\ntokens:\n"
+           "    Считать: Read\n"
+           "phrases:\n"
+           '    "пояснение": "an explanation"\n')
+
+    report = translate_project(root, _dictionary({"Считать": "Read", "Модуль": "Module"},
+                                                {"пояснение": "an explanation"}), None)
+
+    assert report.merged_missing_phrases() == {}
+    assert [gap.key for gap in entries.gaps_of_report(report)] == []

@@ -98,6 +98,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   now read the way the path of the file is: POSIX, relative to the directory of the baseline.
   Existing files keep working without a rewrite - the common form is computed on both sides
   of the comparison.
+- **The dictionary catalog is no longer counted as a source of the project.** A run rooted
+  ABOVE the project (the repository root) finds the dictionary next to it, and its files are
+  yaml of the same shape: their own comments came back as untranslated prose. On the site
+  project such a run reported 871 phrase gaps and 99.19% coverage where the project itself is
+  at 100% - a figure that looks trustworthy and sends the reader after a hole that is not
+  there. The walk now skips the `xbsl-translation` catalog (and the file of the same name),
+  along with a dictionary the caller named wherever it lies.
 - **`translate_set` announced a removal that never happened.** A batch that removed an entry
   from a file and at the same time added a new one aimed at THAT file lost the removal: the
   addition rebuilt the text of the file from disk, overwriting the edits already planned,

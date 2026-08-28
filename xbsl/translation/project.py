@@ -25,7 +25,9 @@ from xbsl import engine, scaffold, terms
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
 from xbsl.translation.code import Resolver, has_cyrillic, translate_code
-from xbsl.translation.dictionary import Dictionary
+from xbsl.translation.dictionary import (
+    DICTIONARY_DIR, DICTIONARY_FILE, Dictionary,
+)
 from xbsl.translation.jsonfile import translate_json
 from xbsl.translation.reporting import FileReport
 from xbsl.translation.yamlfile import translate_yaml
@@ -172,13 +174,26 @@ class ProjectReport:
                 )
 
 
-def _iter_files(root: Path) -> list[Path]:
+def _iter_files(root: Path, dictionary: Dictionary | None = None) -> list[Path]:
+    """The files of the project under `root` - the dictionary that translates it excluded.
+
+    A run rooted ABOVE the project (the repository root, say) finds the dictionary catalog
+    next to the sources, and its files are yaml of the same shape. Counted as sources, their
+    own comments came back as untranslated prose: on the site project such a run reported 871
+    phrase gaps and 99.2% coverage while the project itself is at 100%. The figure looks
+    trustworthy, which is what makes it expensive.
+    """
+    known = {path.resolve() for path in (dictionary.sources if dictionary else ())}
     out: list[Path] = []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
             continue
         rel = path.relative_to(root)
         if any(part.startswith(".") for part in rel.parts):
+            continue
+        if DICTIONARY_DIR in rel.parts or path.name == DICTIONARY_FILE:
+            continue
+        if path.resolve() in known:  # a dictionary named by the caller, wherever it lies
             continue
         out.append(path)
     return out
@@ -219,7 +234,7 @@ def translate_project(
     swap_localization: bool = True,
 ) -> ProjectReport:
     """Translate the tree under `root`; write it under `out` when one is given."""
-    files = _iter_files(root)
+    files = _iter_files(root, dictionary)
     resolver = Resolver(
         dictionary,
         project_names_module.collect(root, engine.load),
