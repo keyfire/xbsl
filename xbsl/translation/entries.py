@@ -53,10 +53,18 @@ DEFAULT_TARGET = "090-manual.yaml"
 #: A quoted key may carry a quote of its own - a comment line that cites something is an
 #: ordinary key here - so the escape is part of the pattern; stopping at the first inner quote
 #: would drop the whole entry, and the writer would then add the key a second time.
+#:
+#: A BARE key ends where yaml ends it: at a colon followed by a space or by the end of the
+#: line, never at just any colon. A key holding `::` is ordinary in this data - a platform
+#: form is cited as a `Std::Jobs::Interface::JobsForm` path - and reading the key as
+#: "everything up to the first colon" tore such an entry in two: the key stopped mid-word and
+#: the rest of it was stored as part of the translation. The damage was silent, because both
+#: halves are valid strings; it surfaced as one phrase going missing from the coverage.
 _ENTRY_RE = re.compile(
     r"^(?P<indent>[ \t]+)"
-    r"(?:\"(?P<dq>(?:[^\"\\]|\\.)*)\"|'(?P<sq>(?:[^']|'')*)'|(?P<plain>[^\s:#][^:]*?))"
-    r":[ \t]*(?P<value>.*?)[ \t]*$"
+    r"(?:\"(?P<dq>(?:[^\"\\]|\\.)*)\"|'(?P<sq>(?:[^']|'')*)'"
+    r"|(?P<plain>[^\s:#](?:[^:]|:(?![ \t]|$))*?))"
+    r":(?=[ \t]|$)[ \t]*(?P<value>.*?)[ \t]*$"
 )
 #: The head of a section. A comment may sit on that line - yaml allows it, so a dictionary
 #: written that way loads and translates; a reader that refused it would show an empty table

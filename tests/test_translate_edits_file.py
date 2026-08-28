@@ -96,3 +96,41 @@ def test_file_without_entries_is_refused(tmp_path):
     prose.write_text("токены:\n    ИмяА: NameA\n", encoding="utf-8")
     with pytest.raises(ValueError):
         entries.read_edits_file(prose)
+
+
+def test_a_bare_key_may_hold_a_double_colon(tmp_path):
+    """A key ends at a colon followed by a SPACE, the way yaml ends it - not at any colon.
+
+    The regression: a platform form is cited in comments by its `Std::Jobs::JobsForm` path,
+    and reading the key as "everything up to the first colon" tore the entry in two - the key
+    stopped mid-word and the rest of it was stored as part of the translation. Both halves
+    are valid strings, so nothing complained; the phrase simply vanished from the coverage,
+    and the dictionary carried a broken entry until someone counted the gaps.
+    """
+    batch = tmp_path / "batch.yaml"
+    batch.write_text(
+        "phrases:\n"
+        "    Регламентные задания - форма (Стд::Задания::ФормаЗаданий),: "
+        "Scheduled jobs - the form (Std::Jobs::JobsForm),\n"
+        "tokens:\n"
+        "    Стд::Задания::ФормаЗаданий: Std::Jobs::JobsForm\n",
+        encoding="utf-8",
+    )
+    edits = entries.read_edits_file(batch)
+    by_key = {e["key"]: e["value"] for e in edits}
+    assert "Регламентные задания - форма (Стд::Задания::ФормаЗаданий)," in by_key
+    assert by_key["Регламентные задания - форма (Стд::Задания::ФормаЗаданий),"] == (
+        "Scheduled jobs - the form (Std::Jobs::JobsForm),")
+    assert by_key["Стд::Задания::ФормаЗаданий"] == "Std::Jobs::JobsForm"
+
+
+def test_a_key_with_a_colon_and_a_space_still_needs_quoting(tmp_path):
+    """The negative control: `: ` inside a BARE key still ends it, as yaml says.
+
+    Widening the key must not swallow the separator - otherwise the reader would part ways
+    with the loader, and an entry would be written under a key no yaml parser agrees with.
+    """
+    batch = tmp_path / "batch.yaml"
+    batch.write_text("tokens:\n    Ключ: значение: хвост\n", encoding="utf-8")
+    edits = entries.read_edits_file(batch)
+    assert edits == [{"key": "Ключ", "value": "значение: хвост", "kind": "token"}]

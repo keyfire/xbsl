@@ -64,6 +64,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   comes first and the translation follows in brackets.
 
 ### Fixed
+- **A dictionary entry whose key holds `::` is no longer torn in two.** The entry reader
+  ended a bare key at the first colon, while yaml ends it at a colon followed by a space -
+  so a phrase citing a platform form by its `Std::Jobs::JobsForm` path was split mid-word,
+  and the tail of the key was stored as part of the translation. Nothing complained: both
+  halves are valid strings, and the damage surfaced only as a phrase missing from the
+  coverage. Affects every writing surface - `translate_set`, the CLI `--set`, the editor
+  panel.
 - **`naming/prefix-by-kind` reads English names.** The head of an English compound is its
   last word, so a translated element carries the same kind word as a SUFFIX - the rule used
   to demand the Russian prefix literally and reported every such element of a translated
