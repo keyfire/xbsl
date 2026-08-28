@@ -63,8 +63,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **The member names of the platform types are extracted in both spellings.** The reference
   documentation is Russian-only, so the catalog stored a type's members under their Russian
   names alone - and a rule judging a member of an ENGLISH project had nothing to compare
-  against. The pairs are stated in the compile-time meta objects of the core library, in the
-  same constant-pool layout the enumeration classes use: 670 types, 5251 pairs, a new
+  against. The distribution itself states the pairs: 670 types, 5251 pairs, a new
   `member_names` section of `uiterms.json`. Kept per type rather than as one table, because
   the mapping is not a function - the same Russian word answers to more than one English one
   across types, and a flat table would have to drop a third of the section.
@@ -76,22 +75,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   comes first and the translation follows in brackets.
 
 ### Fixed
-- **The English spellings of members are read from the DECLARATIONS of a meta object rather
-  than from the neighbourhood of the constant pool.** The pool keeps strings in the order the
-  code first mentions them, so a name whose twin was already interned ended up beside a
-  stranger and the dictionary stated a confident wrong pair. Measured over the distribution:
-  of 2015 declared members adjacency got two wrong, and both were worse than a miss - the
-  translated tree called a method the type does not have (the `CharAt` of a string came out
-  `Symbol`, the fill PARAMETER of `PadFromBegin`; the `Schedule` of the updating scheduled job
-  came out `ScheduleWithoutTransaction`). The pairs now come from the builder calls
-  (`CtMetaMethodBuilder.meth`, `CtMetaPropBuilder.prop`), with adjacency left as the fallback
-  for classes that declare nothing. A name declared both as a method and as a property answers
-  with the method spelling - two names of `BinaryObjectProperties` are like that. The data has
-  to be rebuilt (`xbsl extract --only terms,uiterms`), after which `code/unknown-member` stops
-  reporting a legal call.
+- **The English spellings of members come from what the distribution DECLARES, not from how
+  close two names stand to each other.** The former reading could take the name of a parameter
+  for the name of a member: two pairs out of 2015 were wrong, and both named a method the type
+  does not have (the `CharAt` of a string came out `Symbol`, the `Schedule` of the updating
+  scheduled job came out `ScheduleWithoutTransaction`), so the translated tree would not
+  compile. A name declared both as a method and as a property answers with the method
+  spelling. The data has to be rebuilt (`xbsl extract --only terms,uiterms`), after which
+  `code/unknown-member` stops reporting a legal call.
 - **`meta_project_info` (and `project-info` in the CLI) can be asked narrowly: `kind`,
   `subsystem`, `brief`.** The whole tree in one answer did not fit a tool answer on a real
-  project - 143 KB over the site sources - and the question "what objects of kind X are here"
+  project - 143 KB over a live corpus - and the question "what objects of kind X are here"
   cost two extra steps: save to a file and grep. The brief mode answers in 5 KB (381 objects,
   22 kinds), a kind filter in 24 KB. The counts by kind (`object_counts`) come with EVERY
   answer, filtered or not, so a filter that matched nothing does not read as an empty project,
@@ -100,15 +94,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the baseline's own form.** The cross-file rules name the second file the way the run
   received it - with the separators of the host, absolute when the root was absolute - while
   the identity of an entry is its text. A baseline frozen on Windows therefore suppressed
-  nothing in a Linux CI and was announced stale on both sides (on one revision of the site
-  project: "97 frozen, 2 stale" locally against "89 and 7" in CI). The path in a message is
+  nothing in a Linux CI and was announced stale on both sides (on one revision of a live
+  corpus: "97 frozen, 2 stale" locally against "89 and 7" in CI). The path in a message is
   now read the way the path of the file is: POSIX, relative to the directory of the baseline.
   Existing files keep working without a rewrite - the common form is computed on both sides
   of the comparison.
 - **The dictionary catalog is no longer counted as a source of the project.** A run rooted
   ABOVE the project (the repository root) finds the dictionary next to it, and its files are
-  yaml of the same shape: their own comments came back as untranslated prose. On the site
-  project such a run reported 871 phrase gaps and 99.19% coverage where the project itself is
+  yaml of the same shape: their own comments came back as untranslated prose. On a live
+  corpus such a run reported 871 phrase gaps and 99.19% coverage where the project itself is
   at 100% - a figure that looks trustworthy and sends the reader after a hole that is not
   there. The walk now skips the `xbsl-translation` catalog (and the file of the same name),
   along with a dictionary the caller named wherever it lies.
