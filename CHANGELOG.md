@@ -45,6 +45,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **`translate_gaps` has a compact mode.** With `compact` every row is only
   `{key, kind, count}` - the worklist a translator actually needs; a full page of hundreds
   of gaps with places and suggestions did not fit a tool answer.
+- **`tools/parity_seed.py` - the seeded bilingual parity check.** The measurement used so far
+  was a counting diff over a real translated project, and it is blind to a rule whose count is
+  zero on both sides: `structure/xbsl-pair` lived in that shadow, reporting every English
+  module of a generated type while the measured tree happened to carry object modules alone.
+  The check plants its own case instead - a small Russian tree plus the verdict the rule owes
+  it - and takes the English twin from the toolkit's own translator rather than a second
+  fixture, so the spelling under test is the one the toolkit really produces. The verdict names
+  the guilty side and its mistake (`en-misses`, `en-invents`), because a table lacking the
+  English spelling makes a rule miss while one lacking the Russian reading makes it invent. A
+  seed that stops planting its case reports `stale` rather than passing quietly, and
+  `tests/test_parity_seed.py` runs the catalog on every test run.
 
 ### Changed
 - **A localization-swap problem names the key the SOURCE file spells.** The report used to

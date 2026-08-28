@@ -76,10 +76,40 @@ python -c "import xbsl.lexer as L; print(L.__file__)"
    `editors/vscode/package.json` as well. All of it is checked against the registry by
    `tests/test_metadata_sync.py`, so a forgotten place shows up right away instead of at the
    next extension release.
+7. **If the rule judges a NAME, seed it for bilingual parity** – see below.
 
 The lexer and the language/type data are extracted from the platform itself (the Xtext/ANTLR
 grammar and the distribution docs), not made up – stick to this principle: verify against the
 primary source.
+
+### Bilingual parity: seed the rule, do not count its findings
+
+Element identifiers are bilingual, and the tables the rules judge by are extracted from
+Russian-only documentation. A rule that matches source text against such a table reads a
+translated project against a vocabulary that does not contain it: it misses real defects, or
+reports what the compiler accepts. Deriving the English spelling from the platform dictionaries
+(`xbsl/terms.py`, `xbsl/uischema.py`) is the fix; writing a second spelling by hand is not –
+a guess matches nothing, and nothing is what it silently keeps matching.
+
+Measuring this by LINTING a translated project and comparing the counts finds only the rules
+whose count moved. It is blind to a rule that fires on neither side, whether because the rule
+is broken or because the project happens to carry no such construct. So the check plants its
+own case instead:
+
+```
+python tools/parity_seed.py                    # every seed
+python tools/parity_seed.py --rule group/name  # one rule
+python tools/parity_seed.py --uncovered        # rules no seed speaks for
+```
+
+A seed is a small Russian tree plus the verdict the rule owes it – a finding, or silence. The
+English twin comes from the toolkit's own translator rather than from a second fixture, so the
+spelling under test is the one the toolkit really produces. The verdict names the side that is
+wrong and what it did (`en-misses`, `en-invents`, and the same for `ru-`), because a table
+lacking the English spelling makes a rule miss while one lacking the Russian reading makes it
+invent, and the two need opposite fixes. A seed that stops planting its case reports `stale`
+rather than passing quietly. `tests/test_parity_seed.py` runs the whole catalog, so seeds are
+checked on every test run and not only when someone remembers the tool.
 
 ## Data for a new Element version
 
