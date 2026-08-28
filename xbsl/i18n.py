@@ -971,6 +971,18 @@ _CORE_MESSAGES = {
         "ru": "обзор исходников: проекты, подсистемы, объекты",
         "en": "sources overview: projects, subsystems, objects",
     },
+    "cli.help.scaf.project-info-kind": {
+        "ru": "только объекты этого вида",
+        "en": "only the objects of this kind",
+    },
+    "cli.help.scaf.project-info-subsystem": {
+        "ru": "только объекты этой подсистемы",
+        "en": "only the objects of this subsystem",
+    },
+    "cli.help.scaf.project-info-brief": {
+        "ru": "без перечня объектов: только счётчики по видам",
+        "en": "no list of objects: the counts by kind alone",
+    },
     "cli.help.scaf.form-tree": {
         "ru": "дерево компонента интерфейса (узлы, слоты, свойства со спанами)",
         "en": "interface component tree (nodes, slots, properties with spans)",

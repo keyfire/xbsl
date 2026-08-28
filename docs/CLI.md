@@ -581,7 +581,7 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 ### `xbsl project-info`
 
 ```bash
-usage: xbsl project-info [-h] root
+usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] root
 ```
 
 **Arguments**
@@ -595,6 +595,9 @@ usage: xbsl project-info [-h] root
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
+| `--kind KIND` | only the objects of this kind |
+| `--subsystem SUBSYSTEM` | only the objects of this subsystem |
+| `--brief` | no list of objects: the counts by kind alone |
 
 ### `xbsl localization-info`
 

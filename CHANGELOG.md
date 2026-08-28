@@ -89,6 +89,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   with the method spelling - two names of `BinaryObjectProperties` are like that. The data has
   to be rebuilt (`xbsl extract --only terms,uiterms`), after which `code/unknown-member` stops
   reporting a legal call.
+- **`meta_project_info` (and `project-info` in the CLI) can be asked narrowly: `kind`,
+  `subsystem`, `brief`.** The whole tree in one answer did not fit a tool answer on a real
+  project - 143 KB over the site sources - and the question "what objects of kind X are here"
+  cost two extra steps: save to a file and grep. The brief mode answers in 5 KB (381 objects,
+  22 kinds), a kind filter in 24 KB. The counts by kind (`object_counts`) come with EVERY
+  answer, filtered or not, so a filter that matched nothing does not read as an empty project,
+  and `filter` states what was left out.
 - **A baseline now travels between machines: a path INSIDE the text of a finding is read in
   the baseline's own form.** The cross-file rules name the second file the way the run
   received it - with the separators of the host, absolute when the root was absolute - while

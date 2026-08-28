@@ -581,7 +581,7 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 ### `xbsl project-info`
 
 ```bash
-usage: xbsl project-info [-h] root
+usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] root
 ```
 
 **Аргументы**
@@ -595,6 +595,9 @@ usage: xbsl project-info [-h] root
 | Параметр | Описание |
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
+| `--kind KIND` | только объекты этого вида |
+| `--subsystem SUBSYSTEM` | только объекты этой подсистемы |
+| `--brief` | без перечня объектов: только счётчики по видам |
 
 ### `xbsl localization-info`
 

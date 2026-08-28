@@ -2763,3 +2763,42 @@ def test_rename_object_knows_the_english_spelling_of_the_list_table(tmp_path):
     assert renamed["WarehousesListTable.xbql"] == "StoragesListTable.xbql"
     apply_result(result)
     assert "Storages AS W" in (subsystem / "StoragesListTable.xbql").read_text(encoding="utf-8")
+
+
+def test_project_info_answers_by_kind_and_in_brief(tmp_path):
+    """The whole tree in one answer is unusable on a real project - so it can be asked narrowly.
+
+    On the site project the full overview is 105 KB (3071 lines) and does not fit in a tool
+    answer at all, which made the agent save it to a file and grep - two extra steps for a
+    question like "what objects of kind X are there". A kind, a subsystem and a brief mode
+    answer that question directly; the counts come with every answer, so a filter that matched
+    nothing still shows what the project does hold.
+    """
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Склады"))
+    apply_result(scaffold.op_new_object(subsystem, "Перечисление", "Цвета"))
+
+    by_kind = scaffold.project_info(tmp_path, kind="Перечисление")
+    assert [o["name"] for o in by_kind["objects"]] == ["Цвета"]
+    assert by_kind["filter"] == {"kind": "Перечисление", "subsystem": None}
+    assert by_kind["object_counts"]["Справочник"] == 2
+
+    brief = scaffold.project_info(tmp_path, brief=True)
+    assert "objects" not in brief
+    assert brief["object_counts"] == {"Перечисление": 1, "Справочник": 2}
+    assert brief["objects_total"] == 3
+
+    nothing = scaffold.project_info(tmp_path, kind="Отчет")
+    assert nothing["objects"] == []
+    assert nothing["object_counts"]["Справочник"] == 2  # what the project does hold
+
+
+def test_project_info_filters_by_subsystem(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    name = scaffold.project_info(tmp_path)["objects"][0]["subsystem"]
+
+    assert [o["name"] for o in scaffold.project_info(tmp_path, subsystem=name)["objects"]] \
+        == ["Товары"]
+    assert scaffold.project_info(tmp_path, subsystem="Нет")["objects"] == []

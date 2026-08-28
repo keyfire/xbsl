@@ -411,15 +411,22 @@ def _meta(op, *args, **kwargs) -> dict:
 
 
 @mcp.tool()
-def meta_project_info(root: str) -> dict:
+def meta_project_info(root: str, kind: str | None = None, subsystem: str | None = None,
+                      brief: bool = False) -> dict:
     """Map the 1C:Element sources under a root: projects, subsystems, objects by kind.
+
+    kind / subsystem – list only the objects of that kind (`Catalog`) or of that
+    subsystem; brief – leave the list out and answer with the counts alone. A real project
+    does not fit here whole (the site sources are 105 KB of listing), so ask narrowly: the
+    counts by kind (`object_counts`) come with every answer, filtered or not, and `filter`
+    states what was left out.
 
     Also reports which object kinds meta_new_object can create and which section kinds
     meta_add_field accepts per object kind. Use before creating objects to pick the
     directory and to check for name clashes.
     """
     try:
-        return scaffold.project_info(Path(root))
+        return scaffold.project_info(Path(root), kind=kind, subsystem=subsystem, brief=brief)
     except scaffold.ScaffoldError as exc:
         return {"error": str(exc)}
 

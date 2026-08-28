@@ -565,6 +565,10 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("project-info", help=i18n.t("cli.help.scaf.project-info"))
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("--kind", help=i18n.t("cli.help.scaf.project-info-kind"))
+    p.add_argument("--subsystem", help=i18n.t("cli.help.scaf.project-info-subsystem"))
+    p.add_argument("--brief", action="store_true",
+                   help=i18n.t("cli.help.scaf.project-info-brief"))
 
     p = sub.add_parser("form-tree", help=i18n.t("cli.help.scaf.form-tree"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
@@ -878,7 +882,11 @@ def _scaffold_main(argv: list[str]) -> int:
             ))
             return 0
         else:  # project-info
-            print(json.dumps(scaffold.project_info(Path(args.root)), ensure_ascii=False))
+            print(json.dumps(
+                scaffold.project_info(Path(args.root), kind=args.kind,
+                                      subsystem=args.subsystem, brief=args.brief),
+                ensure_ascii=False,
+            ))
             return 0
     except (scaffold.ScaffoldError, ValueError) as exc:
         print(json.dumps({"error": str(exc)}, ensure_ascii=False))

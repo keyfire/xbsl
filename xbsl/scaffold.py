@@ -1376,33 +1376,60 @@ def _suggest_layout(field_count: int, tc_count: int) -> str:
     return "tabs"
 
 
-def project_info(root: Path) -> dict:
-    """Overview of the sources under the root: projects, subsystems and objects by kind."""
+def project_info(root: Path, kind: str | None = None, subsystem: str | None = None,
+                 brief: bool = False) -> dict:
+    """Overview of the sources under the root: projects, subsystems and objects by kind.
+
+    The whole tree in one answer is unusable on a real project - on the site sources it is
+    105 KB (3071 lines) and does not fit in a tool answer at all, so the caller ended up
+    saving it to a file and grepping: two extra steps for a question like "what objects of
+    kind X live here". `kind` and `subsystem` narrow the list, `brief` drops it altogether
+    and leaves the counts.
+
+    `object_counts` is in EVERY answer, filtered or not: a filter that matched nothing must
+    not read as an empty project, and the count of what is there says which it was. What the
+    answer left out is stated by `filter`, for the same reason.
+    """
     projects = find_projects(root)
     objects = []
-    for yaml_path, kind, name, text in _iter_objects(root):
-        subsystem, namespace = _namespace_of(yaml_path, root)
+    counts: dict[str, int] = {}
+    for yaml_path, object_kind, name, text in _iter_objects(root):
+        object_subsystem, namespace = _namespace_of(yaml_path, root)
+        counts[object_kind] = counts.get(object_kind, 0) + 1
+        if kind is not None and object_kind.casefold() != kind.casefold():
+            continue
+        if subsystem is not None and (object_subsystem or "").casefold() != subsystem.casefold():
+            continue
+        if brief:
+            continue
         entry = {
-            "kind": kind, "name": name, "path": str(yaml_path),
-            "subsystem": subsystem, "namespace": namespace,
+            "kind": object_kind, "name": name, "path": str(yaml_path),
+            "subsystem": object_subsystem, "namespace": namespace,
         }
-        if kind in ACCESS_KIND_RIGHTS:
+        if object_kind in ACCESS_KIND_RIGHTS:
             # Project-wide rights summary: the method for ПоУмолчанию (None - no section,
             # so РазрешеноАдминистраторам applies) and the methods of individual rights.
             access = access_info(text)
             entry["access_default"] = access["default"] if access else None
             entry["access_permissions"] = access["permissions"] if access else {}
         objects.append(entry)
-    return {
+    info = {
         "projects": [
             {**p, "dir": str(p["dir"])} for p in projects
         ],
-        "objects": sorted(objects, key=lambda o: (o["kind"], o["name"])),
+        "object_counts": {k: counts[k] for k in sorted(counts)},
+        "objects_total": sum(counts.values()),
+        "filter": {"kind": kind, "subsystem": subsystem},
         "creatable_kinds": sorted(KIND_SPECS),
-        "field_kinds": {kind: list(sections) for kind, sections in KIND_SECTIONS.items()},
+        "field_kinds": {
+            section_kind: list(sections) for section_kind, sections in KIND_SECTIONS.items()
+        },
         "access_methods": list(ACCESS_METHODS),
         "access_kind_rights": {k: list(v) for k, v in ACCESS_KIND_RIGHTS.items()},
     }
+    if not brief:
+        info["objects"] = sorted(objects, key=lambda o: (o["kind"], o["name"]))
+    return info
 
 
 # --- operation result and applying ------------------------------------------------------
