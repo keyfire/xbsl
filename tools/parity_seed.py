@@ -31,6 +31,11 @@ The verdict names the side that is wrong and what it did, because the two failur
 opposite fixes: a table that lacks the English spelling makes the rule miss, and one that
 lacks the Russian reading of an English construct makes it invent.
 
+A gap that cannot be closed today is still planted, with `known=` naming the reason: deleting
+the seed would delete the evidence, and the next reader would rediscover the same thing from
+scratch. Such a seed reports `known (...)` and does not fail the run - but the moment it
+starts AGREEING it reports `fixed!` and fails, so a closed gap cannot keep a stale excuse.
+
 Usage:
 
     python tools/parity_seed.py                  # every seed
@@ -78,6 +83,12 @@ class Seed:
     #: The project names the translator needs. Platform names come from the shipped
     #: dictionaries; only the names this seed invents belong here.
     tokens: dict[str, str] = field(default_factory=dict)
+    #: Why this disagreement is KNOWN and accepted for now. A gap that cannot be closed
+    #: today is still worth planting: deleting the seed would delete the evidence, and the
+    #: next reader would rediscover the same thing from scratch. A seed carrying a reason
+    #: does not fail the run - but if it starts AGREEING, the run says so loudly, because
+    #: that means the gap closed and this note is now a lie.
+    known: str = ""
 
 
 _REGISTER_RU = """\
@@ -176,6 +187,72 @@ SEEDS: list[Seed] = [
         },
         tokens={"ФормаЗаявок": "ApplicationsForm"},
     ),
+    Seed(
+        rule="yaml/unknown-property",
+        expect=CLEAN,
+        note="the properties a kind declares - the metamodel spells them Russian",
+        files={"Заявки.yaml": _CATALOG_RU},
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="yaml/unknown-property",
+        expect=FINDING,
+        note="a property the kind does not declare is reported",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "ЛишнееСвойство: Истина\n",
+        },
+        tokens={"Заявки": "Applications", "ЛишнееСвойство": "SpareProperty"},
+    ),
+    Seed(
+        rule="code/unknown-member",
+        expect=CLEAN,
+        note="a member of a stdlib type - the catalog stores the members Russian",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n    знч Список = новый Массив<Строка>()\n"
+                           "    Список.Добавить(\"a\")\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Список": "List"},
+    ),
+    Seed(
+        rule="code/unknown-member",
+        expect=FINDING,
+        note="a member no stdlib type has is reported",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n    знч Список = новый Массив<Строка>()\n"
+                           "    Список.НетТакогоМетода()\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Список": "List",
+                "НетТакогоМетода": "NoSuchMethod"},
+        known="the rule skips Latin member spellings on purpose, and the type catalog stores "
+              "members in Russian alone: translating the member set would report every "
+              "correct English member whose Russian name the dictionaries do not pair - 287 "
+              "of them, mostly enumeration values, which live in the ui terms rather than in "
+              "the compiler dictionary. Closing this needs the member vocabulary completed, "
+              "not a change to the rule.",
+    ),
+    Seed(
+        rule="code/unknown-type",
+        expect=CLEAN,
+        note="a stdlib type in a signature - the type catalog is keyed Russian",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Значение: Строка)\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/unknown-type",
+        expect=FINDING,
+        note="a type of neither the platform nor the project is reported",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Значение: НесуществующийТип)\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значение": "Value",
+                "НесуществующийТип": "NonexistentType"},
+    ),
 ]
 
 
@@ -221,10 +298,15 @@ def run_seed(seed: Seed) -> dict:
         else:
             status = f"ru-{flavour}"
 
+        if seed.known:
+            # A documented gap: not a failure, but its CLOSING is news worth shouting.
+            status = "fixed!" if status == "ok" else f"known ({status})"
+
         return {
             "rule": seed.rule,
             "expect": seed.expect,
             "note": seed.note,
+            "known": seed.known,
             "status": status,
             "russian": len(ru_found),
             "english": len(en_found),
@@ -265,7 +347,10 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     results = [run_seed(seed) for seed in seeds]
-    bad = [r for r in results if r["status"] != "ok"]
+    # A documented gap does not fail the run; a gap that CLOSED does, so the note gets removed.
+    bad = [r for r in results
+           if r["status"] != "ok" and not r["status"].startswith("known")]
+    known = [r for r in results if r["status"].startswith("known")]
 
     if args.json:
         print(json.dumps(
@@ -279,11 +364,13 @@ def main(argv: list[str] | None = None) -> int:
         mark = result["status"].ljust(width)
         print(f"[{mark}] {result['rule']} ({result['expect']}): "
               f"ru={result['russian']} en={result['english']} - {result['note']}")
+        if result["known"]:
+            print(f"          known: {result['known']}")
         if result["translation_problems"]:
             print(f"          translation: {result['translation_problems']}")
 
     covered = len({s.rule for s in SEEDS})
-    print(f"\nseeds: {len(results)}, disagreements: {len(bad)}; "
+    print(f"\nseeds: {len(results)}, disagreements: {len(bad)}, known gaps: {len(known)}; "
           f"rules with a seed: {covered}, without: {len(_uncovered())}")
     return 1 if bad else 0
 

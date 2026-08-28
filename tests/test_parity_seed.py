@@ -38,11 +38,22 @@ _TOOL = _tool()
     "seed", _TOOL.SEEDS, ids=lambda s: f"{s.rule.replace('/', '-')}-{s.expect}",
 )
 def test_seed_reads_the_same_in_both_spellings(seed):
+    """Every seed agrees across the two spellings - or carries the reason it cannot yet.
+
+    A seed marked `known` is allowed to disagree: the gap is documented and the evidence is
+    kept planted rather than deleted. What it is NOT allowed to do is start agreeing while
+    still carrying the note - `fixed!` fails here on purpose, so a closed gap cannot keep a
+    stale excuse attached to it.
+    """
     result = _TOOL.run_seed(seed)
-    assert result["status"] == "ok", (
-        f"{result['status']}: {seed.note} "
-        f"(ru={result['russian']}, en={result['english']})"
-    )
+    detail = (f"{result['status']}: {seed.note} "
+              f"(ru={result['russian']}, en={result['english']})")
+    if seed.known:
+        assert result["status"] != "fixed!", (
+            f"the gap closed - remove the `known` note. {detail}")
+        assert result["status"].startswith("known"), detail
+    else:
+        assert result["status"] == "ok", detail
 
 
 def test_a_seed_that_stops_planting_its_case_is_reported_stale():

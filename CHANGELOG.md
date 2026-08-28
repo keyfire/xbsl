@@ -55,7 +55,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the guilty side and its mistake (`en-misses`, `en-invents`), because a table lacking the
   English spelling makes a rule miss while one lacking the Russian reading makes it invent. A
   seed that stops planting its case reports `stale` rather than passing quietly, and
-  `tests/test_parity_seed.py` runs the catalog on every test run.
+  `tests/test_parity_seed.py` runs the catalog on every test run. A gap that cannot be closed
+  today is planted with a `known=` reason: it reports `known (...)` instead of failing, and
+  the moment it starts agreeing it reports `fixed!` and fails, so the note cannot outlive the
+  gap. The first such gap is already recorded - `code/unknown-member` skips Latin member
+  spellings, and the member vocabulary is not complete enough to lift that yet.
 
 ### Changed
 - **A localization-swap problem names the key the SOURCE file spells.** The report used to

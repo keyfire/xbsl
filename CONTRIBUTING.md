@@ -111,6 +111,12 @@ invent, and the two need opposite fixes. A seed that stops planting its case rep
 rather than passing quietly. `tests/test_parity_seed.py` runs the whole catalog, so seeds are
 checked on every test run and not only when someone remembers the tool.
 
+A gap you cannot close today is still worth planting: give the seed a `known=` reason and it
+reports `known (...)` instead of failing. Deleting it would delete the evidence, and the next
+reader would rediscover the same thing from scratch. The note is not a place to hide a
+failure - the moment such a seed starts agreeing it reports `fixed!` and fails the run, which
+is the signal to delete the note.
+
 ## Data for a new Element version
 
 The data is versioned under `xbsl/data/element/<version>/`. To add a new version, take its
