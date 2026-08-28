@@ -78,6 +78,7 @@ _DATA_DEPENDENT = {
     "test_rule_presentation_field",  # the rule needs the metamodel
     "test_rule_static_context",  # the rules parse and tokenize the module
     "test_rule_bound_property",  # the rule tokenizes the module
+    "test_rule_computed_binding_assigned",  # the mapper tokenizes the module
     "test_rule_type_defaults",  # the rules tokenize the module (the catalog is pinned there)
     "test_translate",  # the translator reads the term pairs, the metamodel and the ui schema
     "test_translate_groups",  # the same translator, the same data

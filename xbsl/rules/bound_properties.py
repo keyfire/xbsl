@@ -22,14 +22,23 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 from pathlib import Path
 
-from xbsl import i18n
+from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, make_source, rule
 from xbsl.lexer import Token
-from xbsl.rules._syntax import code_tokens
-from xbsl.rules.yaml_schema import _composed, _mapping_nodes, _scalar_entries, yaml
+from xbsl.rules._syntax import code_tokens, signatures
+from xbsl.rules.environment import _pair_stem
+from xbsl.rules.yaml_schema import (
+    _composed,
+    _mapping_nodes,
+    _parsed,
+    _scalar_entries,
+    object_kind,
+    yaml,
+)
 
 MESSAGES = {
     "code/bound-property-assign.title": {
@@ -148,3 +157,219 @@ def bound_property_assign(source: SourceFile) -> Iterable[Diagnostic]:
             Severity.WARNING,
             i18n.t("code/bound-property-assign.msg", prop=prop, name=name, line=line),
         )
+
+
+# --- yaml/computed-binding-assigned ---------------------------------------------------------
+#
+# The cross-file half of the same defect (found live: every instance of one component
+# bound a property with computed expressions while the component assigned it - the
+# platform threw IllegalStateException on each run of that code). The in-form rule above cannot see it:
+# the assignment lives in the COMPONENT's module and the binding at the INSTANCE in another
+# file. What reconnaissance settled, and the rule encodes:
+#
+# - a bare `Prop = ...` is an assignment only at paren depth 0: the same spelling inside
+#   a constructor call is a NAMED ARGUMENT, and two of the three raw corpus hits were
+#   exactly that;
+# - an instance the code CONSTRUCTS (`новый Кнопка(...)`) is a legal assignment target, and a
+#   component may guard the expression-bound instances at runtime (the live corpus carries
+#   exactly that pattern, with a comment saying so) - so one code construction anywhere
+#   silences the pair;
+# - an instance that binds the property with a bare path, a literal, or not at all is a
+#   legal target too - the rule fires only when EVERY instance of the component binds the
+#   property computed, which is how the live defect looked.
+
+MESSAGES_CROSS = {
+    "yaml/computed-binding-assigned.title": {
+        "ru": "Вычисляемая связь свойства, которое компонент присваивает",
+        "en": "A computed binding of a property the component assigns",
+    },
+    "yaml/computed-binding-assigned.msg": {
+        "ru": "Свойство '{prop}' связано вычисляемым выражением, а компонент '{name}' "
+              "ПРИСВАИВАЕТ его в своём модуле ({module}:{line}) – на присваивании платформа "
+              "падает (IllegalStateException), то есть падает каждое срабатывание этого кода. "
+              "Так связан каждый экземпляр компонента{more}. Свяжите свойство голым путём к "
+              "реквизиту или задайте литералом – либо уберите присваивание в компоненте.",
+        "en": "Property '{prop}' is bound by a computed expression while component '{name}' "
+              "ASSIGNS it in its module ({module}:{line}) - the platform crashes on the "
+              "assignment (IllegalStateException), i.e. every run of that code crashes. Every "
+              "instance of the component is bound this way{more}. Bind the property with a "
+              "bare path to an attribute or a literal - or drop the assignment in the "
+              "component.",
+    },
+    "yaml/computed-binding-assigned.more": {
+        "ru": "; таких мест ещё {count}",
+        "en": "; {count} more such places",
+    },
+}
+i18n.register(MESSAGES_CROSS)
+
+_COMPONENT_KIND = "КомпонентИнтерфейса"
+_PROPERTY_SECTIONS = ("Свойства", "Properties")
+
+
+@lru_cache(maxsize=1)
+def _component_kind_names() -> frozenset[str]:
+    """Every spelling of the interface-component kind, from the platform dictionaries."""
+    return frozenset({
+        _COMPONENT_KIND,
+        terms.kinds_table().get(_COMPONENT_KIND),
+        terms.english(_COMPONENT_KIND, "types"),
+    } - {None})
+
+
+dataset.register_reset(_component_kind_names.cache_clear)
+
+
+def _declared_properties(data: dict) -> list[str]:
+    """Names of the properties a component declares, either spelling of the section."""
+    out: list[str] = []
+    for section in _PROPERTY_SECTIONS:
+        for item in data.get(section) or []:
+            if isinstance(item, dict):
+                for key in _NAME_KEYS:
+                    if isinstance(item.get(key), str):
+                        out.append(item[key])
+    return out
+
+
+def _own_assignments(toks: list[Token]) -> dict[str, int]:
+    """Name -> first line of a bare `Name = ...` STATEMENT of the module.
+
+    Depth 0 only: the same spelling inside parentheses is a named argument. A name the
+    method declares itself (a parameter, `пер`/`знч`) is the method's local, not the
+    component's property - assigning it is free.
+    """
+    sigs = signatures(toks)
+    spans: list[tuple[int, int, set[str]]] = []
+    for number, sig in enumerate(sigs):
+        end = sigs[number + 1].name.line if number + 1 < len(sigs) else 1 << 30
+        spans.append((sig.name.line, end, {p.name.value for p in sig.params}))
+    for i, tok in enumerate(toks):
+        if tok.kind == "KEYWORD" and tok.canonical in ("VAR", "VAL") and i + 1 < len(toks):
+            declared = toks[i + 1]
+            if declared.kind == "IDENT":
+                for span in spans:
+                    if span[0] <= declared.line < span[1]:
+                        span[2].add(declared.value)
+    out: dict[str, int] = {}
+    depth = 0
+    for i, tok in enumerate(toks):
+        if tok.kind == "OP" and tok.value in "([{":
+            depth += 1
+            continue
+        if tok.kind == "OP" and tok.value in ")]}":
+            depth = max(0, depth - 1)
+            continue
+        if depth or tok.kind != "IDENT" or tok.value in out:
+            continue
+        if i + 1 >= len(toks) or toks[i + 1].kind != "OP" or toks[i + 1].value != "=":
+            continue
+        prev = toks[i - 1] if i else None
+        if prev is not None and prev.kind == "OP" and prev.value in (".", "?."):
+            continue
+        if prev is not None and prev.kind == "KEYWORD" and prev.canonical in ("VAR", "VAL"):
+            continue
+        if any(start <= tok.line < end and tok.value in names
+               for start, end, names in spans):
+            continue
+        out[tok.value] = tok.line
+    return out
+
+
+def _cross_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a component yaml contributes its declared properties, a module its
+    bare assignments and the components it constructs, any yaml - its instances and their
+    computed-bound properties."""
+    if source.kind == "xbsl":
+        toks = code_tokens(source)
+        if not toks:
+            return None
+        constructed = sorted({
+            toks[i + 1].value
+            for i, tok in enumerate(toks)
+            if tok.kind == "KEYWORD" and tok.canonical == "NEW" and i + 1 < len(toks)
+            and toks[i + 1].kind == "IDENT"
+        })
+        assigns = [[name, line] for name, line in _own_assignments(toks).items()]
+        if not constructed and not assigns:
+            return None
+        return {"k": "x", "stem": _pair_stem(source.rel), "rel": source.rel,
+                "assigns": assigns, "constructed": constructed}
+    if source.kind != "yaml" or yaml is None:
+        return None
+    fact: dict = {}
+    data, err = _parsed(source)
+    if err is None and isinstance(data, dict) and object_kind(data) in _component_kind_names():
+        name = next((data[k] for k in _NAME_KEYS if isinstance(data.get(k), str)), None)
+        props = _declared_properties(data)
+        if name and props:
+            fact["comp"] = {"stem": _pair_stem(source.rel), "name": name, "props": props}
+    root = _composed(source)
+    if root is not None:
+        counts: dict[str, int] = {}
+        computed: list[list] = []
+        for mapping in _mapping_nodes(root):
+            entries = _scalar_entries(mapping)
+            typed = next((entries[key] for key in ("Тип", "Type") if key in entries), None)
+            if typed is None or not isinstance(typed[1], yaml.ScalarNode):
+                continue
+            head = typed[1].value.split("<", 1)[0].strip()
+            counts[head] = counts.get(head, 0) + 1
+            for _prop, (key, value) in entries.items():
+                if not isinstance(value, yaml.ScalarNode):
+                    continue
+                text = (value.value or "").lstrip()
+                if text.startswith("=") and _computed(text):
+                    # The RAW spelling of the key: the component declares its properties in
+                    # its own file's spelling, and both sides of one tree share it.
+                    computed.append(
+                        [head, key.value, value.start_mark.line + 1,
+                         value.start_mark.column + 1])
+        if counts:
+            fact["inst"] = counts
+        if computed:
+            fact["computed"] = computed
+    return fact or None
+
+
+@rule(
+    "yaml/computed-binding-assigned", "yaml/computed-binding-assigned.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_cross_mapper,
+)
+def computed_binding_assigned(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """Every instance binds the property computed while the component assigns it."""
+    modules: dict[str, dict] = {}
+    constructed: set[str] = set()
+    for fact in facts.values():
+        if fact.get("k") == "x":
+            modules[fact["stem"]] = fact
+            constructed.update(fact["constructed"])
+    instance_counts: dict[str, int] = {}
+    computed_places: dict[tuple[str, str], list[tuple[str, int, int]]] = {}
+    for rel, fact in facts.items():
+        for head, count in (fact.get("inst") or {}).items():
+            instance_counts[head] = instance_counts.get(head, 0) + count
+        for head, prop, line, col in fact.get("computed") or ():
+            computed_places.setdefault((head, prop), []).append((rel, line, col))
+    for fact in facts.values():
+        comp = fact.get("comp")
+        if not comp or comp["name"] in constructed:
+            continue
+        module = modules.get(comp["stem"])
+        if module is None:
+            continue
+        assigns = {name: line for name, line in module["assigns"] if name in comp["props"]}
+        for prop, line in sorted(assigns.items()):
+            places = sorted(computed_places.get((comp["name"], prop), []))
+            if not places:
+                continue
+            if len(places) < instance_counts.get(comp["name"], 0):
+                continue  # an instance without the computed binding is a legal target
+            rel, at_line, at_col = places[0]
+            more = (i18n.t("yaml/computed-binding-assigned.more", count=len(places) - 1)
+                    if len(places) > 1 else "")
+            yield Diagnostic(
+                rel, at_line, at_col, "yaml/computed-binding-assigned", Severity.WARNING,
+                i18n.t("yaml/computed-binding-assigned.msg", prop=prop, name=comp["name"],
+                       module=module["rel"], line=line, more=more),
+            )
