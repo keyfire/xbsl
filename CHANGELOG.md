@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0
+## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0
 
 ### Added
 - **`yaml/computed-binding-assigned` (tier D, warning, project-wide).** Every instance of a
