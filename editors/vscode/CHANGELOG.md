@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.2
+
+### Added
+- **Two more rules open their platform documentation.** `yaml/inline-command-name` leads to
+  the command-interface fragment, `yaml/localization-missing-import` to app localization -
+  from the hint, the rules panel and the documentation tree alike. The rules themselves came
+  with the engine and have been working all along; what was missing was the way through.
+
 ## 0.67.1
 
 ### Fixed
