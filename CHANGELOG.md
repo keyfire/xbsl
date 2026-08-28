@@ -12,6 +12,17 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`yaml/computed-binding-assigned` (tier D, warning, project-wide).** Every instance of a
+  component binds a property with a computed expression while the component assigns that
+  property in its own module - the platform crashes on the assignment
+  (IllegalStateException) on every run of that code. Reconnaissance shaped the
+  narrowings: a named argument is not an assignment, and a code-built instance, a bare-path
+  binding, a literal or an unbound instance make the assignment legal - the guarded-component
+  pattern the corpus carries stays silent.
+
 ## 2026-08-28 – 0.83.0
 
 ### Added
@@ -41,8 +52,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Changed
 - **A localization-swap problem names the key the SOURCE file spells.** The report used to
-  say `'PublishedCheckbox' has no en value` about a line the base file calls
-  `ОпубликованоФлажок`, sending the reader to the reverse dictionary; now the source name
+  say `'TaskCheckbox' has no en value` about a line the base file calls
+  `ЗадачаФлажок`, sending the reader to the reverse dictionary; now the source name
   comes first and the translation follows in brackets.
 
 ## 2026-08-27 – 0.81.0, 0.82.0
