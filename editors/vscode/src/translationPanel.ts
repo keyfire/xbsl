@@ -224,7 +224,7 @@ interface LoadedDictionary {
 
 // One reading of everything the table shows - one engine run. The three questions the table
 // asks (the entries, the gaps, the totals) used to be three processes, and two of them walked
-// the whole source tree separately: on the site project that was nine seconds of a machine
+// the whole source tree separately: on a live project that was nine seconds of a machine
 // doing the same pass twice. `--table` answers all three out of a single pass.
 async function loadDictionary(folder: vscode.WorkspaceFolder): Promise<LoadedDictionary | undefined> {
   const cwd = folder.uri.fsPath;

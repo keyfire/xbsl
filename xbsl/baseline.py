@@ -100,7 +100,7 @@ def _identity_path(diag_path: str, base_dir: Path) -> str:
 #: the run received it - with the separators of the host, and absolute when the root given on
 #: the command line was absolute - while the identity of an entry is its text. Without a common
 #: form the same finding reads as two: a baseline frozen on Windows suppressed nothing in a
-#: Linux CI and was announced stale on both sides (measured on the site project: "97 frozen, 2
+#: Linux CI and was announced stale on both sides (measured on a live project: "97 frozen, 2
 #: stale" locally against "89 and 7" in CI on one revision).
 _PATH_IN_MESSAGE = re.compile(r"[^\s\"'()<>]*[\\/][^\s\"'()<>]*\.(?:yaml|xbsl|xbql|json)")
 

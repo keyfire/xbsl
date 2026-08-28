@@ -179,7 +179,7 @@ def _iter_files(root: Path, dictionary: Dictionary | None = None) -> list[Path]:
 
     A run rooted ABOVE the project (the repository root, say) finds the dictionary catalog
     next to the sources, and its files are yaml of the same shape. Counted as sources, their
-    own comments came back as untranslated prose: on the site project such a run reported 871
+    own comments came back as untranslated prose: on a live project such a run reported 871
     phrase gaps and 99.2% coverage while the project itself is at 100%. The figure looks
     trustworthy, which is what makes it expensive.
     """

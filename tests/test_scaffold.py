@@ -2768,7 +2768,7 @@ def test_rename_object_knows_the_english_spelling_of_the_list_table(tmp_path):
 def test_project_info_answers_by_kind_and_in_brief(tmp_path):
     """The whole tree in one answer is unusable on a real project - so it can be asked narrowly.
 
-    On the site project the full overview is 105 KB (3071 lines) and does not fit in a tool
+    On a live project the full overview is 105 KB (3071 lines) and does not fit in a tool
     answer at all, which made the agent save it to a file and grep - two extra steps for a
     question like "what objects of kind X are there". A kind, a subsystem and a brief mode
     answer that question directly; the counts come with every answer, so a filter that matched

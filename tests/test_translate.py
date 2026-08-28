@@ -1772,7 +1772,7 @@ def test_the_dictionary_catalog_is_not_a_source_of_the_project(tmp_path: Path):
     """A run rooted ABOVE the project sees the dictionary next to it - and must not read it.
 
     Its files are yaml of the same shape as a project's, so the pass counted their own
-    comments as untranslated prose: a run from the repository root of the site project
+    comments as untranslated prose: a run from the repository root of a live project
     reported 871 phrase gaps and 99.2% coverage where the project itself is at 100%. The
     figure looks trustworthy and sends the reader after a hole that is not there.
     """
