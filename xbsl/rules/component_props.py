@@ -249,7 +249,23 @@ def unknown_component_property(source: SourceFile) -> Iterable[Diagnostic]:
 # The reference input whose commands are left to the platform: the type argument names a
 # reference facet, and the node declares no commands of its own.
 _COMMANDS_KEYS = frozenset({"Команды", "Commands"})
-_REFERENCE_FACETS = ("Ссылка", "Ref")
+_REFERENCE_FACET = "Ссылка"
+
+
+@lru_cache(maxsize=1)
+def _reference_facets() -> tuple[str, ...]:
+    """Both spellings of the reference facet, from the platform dictionary.
+
+    The English spelling used to be written by hand as a word the serializer never writes -
+    on a translated tree the rule saw no reference inputs at all.
+    """
+    return tuple(dict.fromkeys(
+        name for name in (_REFERENCE_FACET, terms.facet_suffix_english(_REFERENCE_FACET))
+        if name
+    ))
+
+
+dataset.register_reset(_reference_facets.cache_clear)
 _INPUT_COMPONENTS = frozenset({"ПолеВвода", "Edit"})
 
 
@@ -261,7 +277,7 @@ def _reference_argument(type_value: str) -> str | None:
     argument = type_value[start + 1:-1].strip()
     for member in argument.split("|"):
         member = member.strip().rstrip("?").strip()
-        if any(member.endswith(f".{facet}") for facet in _REFERENCE_FACETS):
+        if any(member.endswith(f".{facet}") for facet in _reference_facets()):
             return argument
     return None
 

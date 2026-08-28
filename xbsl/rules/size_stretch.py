@@ -171,7 +171,23 @@ _LAYOUT_ENUM = "КомпоновкаСодержимого"
 _LAYOUT_KEYS = ("Компоновка", "Layout")
 _MATRIX_SETTINGS_KEYS = ("НастройкиМатричнойКомпоновки", "MatrixLayoutSettings")
 _MAX_WIDTH_KEYS = ("МаксимальнаяШирина", "MaxWidth")
-_WEIGHT_KEYS = ("ВесПриРастягивании", "StretchWeight")
+_WEIGHT_KEY = "ВесПриРастягивании"
+
+
+@lru_cache(maxsize=1)
+def _weight_keys() -> tuple[str, ...]:
+    """Both spellings of the stretch-weight property, from the platform dictionary.
+
+    The English spelling used to be written by hand - and matched nothing: the serializer
+    spells the property another way, so on a translated tree the rule went silent (the text
+    gate below never passed). A spelling that has a data source never gets typed again.
+    """
+    return tuple(dict.fromkeys(
+        name for name in (_WEIGHT_KEY, uischema.english_property(_WEIGHT_KEY)) if name
+    ))
+
+
+dataset.register_reset(_weight_keys.cache_clear)
 #: The inner columns of a card: the cure had to cover them too. A text or a picture inside a
 #: card carries a weight legitimately and is left alone.
 _GROUP_COMPONENTS = frozenset({"Группа", "Group"})
@@ -300,7 +316,7 @@ def card_literal_stretch_weight(source: SourceFile) -> Iterable[Diagnostic]:
     """A literal stretch weight on a card - the zero basis collapses it in a column."""
     if source.kind != "yaml" or not _HAVE_YAML:
         return
-    if not any(key in source.text for key in _WEIGHT_KEYS):
+    if not any(key in source.text for key in _weight_keys()):
         return
     cards = _card_components()
     if not cards:
@@ -312,7 +328,7 @@ def card_literal_stretch_weight(source: SourceFile) -> Iterable[Diagnostic]:
     if root is None:  # pragma: no cover - _parsed has already vetted the syntax
         return
     for mapping, head in _card_scoped_nodes(root, cards):
-        weight = _entry(_scalar_entries(mapping), _WEIGHT_KEYS)
+        weight = _entry(_scalar_entries(mapping), _weight_keys())
         if weight is None:
             continue
         value = _numeric(weight[1])

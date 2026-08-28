@@ -479,6 +479,24 @@ def test_suffix_by_kind_present_silent():
     assert _lint(_PREFIX, "ЛокализованныеСтроки", "ОбменЛокализация") == []
 
 
+@pytest.mark.needs_data
+def test_prefix_by_kind_english_suffix_silent():
+    # The head of an English compound is its last word: the English name carries the same
+    # kind word as a SUFFIX, spelled by the platform dictionary - a translated tree used to
+    # get one report per element here.
+    assert _lint(_PREFIX, "КлючДоступа", "AdministratorAccessKey") == []
+    assert _lint(_PREFIX, "ПравоНаДействие", "ContentImportPrivilege") == []
+    assert _lint(_PREFIX, "НавигационнаяКоманда", "MainNavigation") == []
+    assert _lint(_PREFIX, "ЛокализованныеСтроки", "MainLocalization") == []
+
+
+@pytest.mark.needs_data
+def test_prefix_by_kind_english_missing_names_the_english_form():
+    d = _lint(_PREFIX, "КлючДоступа", "Administrator")
+    assert len(d) == 1
+    assert "AccessKey" in d[0].message
+
+
 # --- a trailing comment and quotes on the Имя line ----------------------------------------
 
 def test_trailing_comment_not_part_of_name():

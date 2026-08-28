@@ -1,6 +1,8 @@
 """Checks of yaml/ref-input-auto-commands: a reference input that leaves its commands to the
 platform, which then draws its own "open the value" button next to the field."""
 
+import pytest
+
 from xbsl import engine
 
 RULE = "yaml/ref-input-auto-commands"
@@ -37,10 +39,13 @@ def test_a_union_carrying_a_reference_is_reported():
     assert len(d) == 1
 
 
+@pytest.mark.needs_data
 def test_the_english_spelling_is_read_the_same_way():
+    # The facet spelling comes from the platform dictionary: the serializer writes
+    # `Reference`, and the hand-written `Ref` this test used to encode matched nothing.
     text = (
         "ElementKind: InterfaceComponent\nName: Форма\nInherits:\n    Type: Form\n    Content:\n"
-        "        -\n            Type: Edit<Товары.Ref?>\n"
+        "        -\n            Type: Edit<Товары.Reference?>\n"
     )
     d = [x for x in engine.run_sources([engine.load_text("Форма.yaml", text)], select={RULE})
          if x.rule_id == RULE]

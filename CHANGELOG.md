@@ -23,6 +23,20 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   binding, a literal or an unbound instance make the assignment legal - the guarded-component
   pattern the corpus carries stays silent.
 
+### Fixed
+- **`naming/prefix-by-kind` reads English names.** The head of an English compound is its
+  last word, so a translated element carries the same kind word as a SUFFIX - the rule used
+  to demand the Russian prefix literally and reported every such element of a translated
+  tree; the expected spelling in the message follows the script of the name, and the
+  English words come from the platform dictionary.
+- **Three hand-written English spellings matched nothing and are data-driven now.** The
+  stretch-weight property of `yaml/card-literal-stretch-weight` and the reference facet of
+  `yaml/ref-input-auto-commands` and `code/ref-field-needs-req` were spelled by hand, and
+  the serializer writes them differently - the rules went silent on a translated tree
+  (one of the encoded tests asserted the wrong facet spelling and never could fire). The
+  spellings come from the property and facet dictionaries; parity was measured by a full
+  file-by-file run of the translated tree against the Russian one.
+
 ## 2026-08-28 – 0.83.0
 
 ### Added

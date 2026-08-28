@@ -80,9 +80,10 @@ only.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from collections.abc import Iterable
 
-from xbsl import i18n, terms
+from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
@@ -256,9 +257,26 @@ def _plain_ref_chain(alt: list[Token]) -> list[Token] | None:
         elif not (t.kind == "OP" and t.value == "."):
             return None
         expect_ident = not expect_ident
-    if expect_ident or len(idents) < 2 or idents[-1].value != "Ссылка":
+    if expect_ident or len(idents) < 2 or idents[-1].value not in _reference_facets():
         return None
     return idents
+
+
+_REFERENCE_FACET = "Ссылка"
+
+
+@lru_cache(maxsize=1)
+def _reference_facets() -> frozenset[str]:
+    """Both spellings of the reference facet, from the platform dictionary - a translated
+    module spells the chain with the English facet, and the Russian word alone went blind
+    there."""
+    return frozenset(
+        name for name in (_REFERENCE_FACET, terms.facet_suffix_english(_REFERENCE_FACET))
+        if name
+    )
+
+
+dataset.register_reset(_reference_facets.cache_clear)
 
 
 @rule(

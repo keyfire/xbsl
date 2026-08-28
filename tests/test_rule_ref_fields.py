@@ -38,6 +38,14 @@ def test_ref_field_without_req_flagged():
     assert "обз пер Ссылка: Товары.Ссылка" in d[0].message
 
 
+@pytest.mark.needs_data
+def test_ref_field_reads_the_english_facet():
+    # A translated module spells the chain with the English facet from the platform
+    # dictionary - the Russian word alone went blind there.
+    d = _lint("структура Шапка\n    пер Товар: Tasks.Reference\n;\n")
+    assert len(d) == 1, [x.message for x in d]
+
+
 def test_val_ref_field_flagged():
     d = _lint("структура Шапка\n    знч Владелец: Склады.Ссылка\n;\n")
     assert len(d) == 1 and "обз знч Владелец: Склады.Ссылка" in d[0].message

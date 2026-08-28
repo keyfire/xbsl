@@ -238,6 +238,19 @@ def test_a_literal_weight_on_a_card_is_reported():
     assert "СтандартнаяКарточка" in d[0].message
 
 
+@pytest.mark.needs_data  # the spellings come from the platform dictionaries
+def test_a_literal_weight_on_a_card_is_reported_in_english_markup():
+    # The English property spelling comes from the data - the hand-written one used to
+    # match nothing the serializer writes, and the rule went silent on a translated tree.
+    body = (
+        "        -\n"
+        "            Type: StandardCard\n"
+        "            WeightOnStretch: 1\n"
+    )
+    d = _lint("Ф.yaml", _form(body), select={CARD_RULE})
+    assert [(x.rule_id, x.line) for x in d] == [(CARD_RULE, 10)]
+
+
 @pytest.mark.needs_data  # the card list comes from the ui schema
 def test_an_inner_column_of_a_card_is_reported_as_well():
     """The cure had to cover the inner columns too - so they are judged."""

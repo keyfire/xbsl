@@ -450,6 +450,32 @@ KIND_PREFIX_REQUIRED = {
 KIND_SUFFIX_REQUIRED = {
     "ЛокализованныеСтроки": "Локализация",
 }
+# The DATA WORD behind each affix - the English spelling comes from the platform dictionary,
+# never typed by hand. `ПравоНа` composes the privilege word with a preposition the
+# English name drops.
+_AFFIX_WORDS = {
+    "КлючДоступа": "КлючДоступа",
+    "ПравоНа": "Право",
+    "Навигация": "Навигация",
+    "Команда": "Команда",
+    "Локализация": "Локализация",
+}
+
+
+@lru_cache(maxsize=1)
+def _english_affixes() -> dict[str, str]:
+    """Russian affix -> its English spelling, for the affixes the data spells."""
+    out: dict[str, str] = {}
+    for affix, word in _AFFIX_WORDS.items():
+        english = terms.common_english(word)
+        if english:
+            out[affix] = english
+    return out
+
+
+dataset.register_reset(_english_affixes.cache_clear)
+
+_CYRILLIC_LETTER_RE = re.compile(r"[А-Яа-яЁё]")
 # HTTP service: words that are not part of the name.
 HTTP_FORBIDDEN = ("Api", "Web", "Апи", "Веб")
 
@@ -751,9 +777,16 @@ def presentation(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("naming/prefix-by-kind", "naming/prefix-by-kind.title", "D", severity=Severity.WARNING)
 def prefix_by_kind(source: SourceFile) -> Iterable[Diagnostic]:
-    """Section 3: an access key is КлючДоступа<whose>, a right is ПравоНа<what>, a navigation
-    command is Навигация<what>, a switchable one is Команда<what>, localized strings are
-    <Project>Локализация; an HTTP service name does not include web or Api."""
+    """Section 3: certain kinds carry a mandatory kind word - an access key, a privilege, a
+    navigation command and a switchable command put it FIRST, localized strings carry it as
+    a suffix; an HTTP service name does not include web or Api.
+
+    An ENGLISH name carries the same kind word as a SUFFIX: the head of an English compound
+    is its last word (the fact naming/number already relies on), and that is how the
+    translator spells these kinds. The rule used to demand the Russian prefix literally and
+    reported every element of a translated tree; the expectation in the message follows the
+    script of the name.
+    """
     got = _vid(source)
     if got is None:
         return
@@ -761,17 +794,29 @@ def prefix_by_kind(source: SourceFile) -> Iterable[Diagnostic]:
     ref = _object_name(_names(source))
     if ref is None:
         return
+    latin = not _CYRILLIC_LETTER_RE.search(ref.name)
 
     prefix = KIND_PREFIX_REQUIRED.get(vid)
-    if prefix and not ref.name.startswith(prefix):
-        yield _diag(source, ref, "naming/prefix-by-kind", "naming/prefix-by-kind.missing",
-                    name=ref.name, vid=vid, prefix=prefix, what=i18n.t("naming.prefix-word"))
+    if prefix:
+        english = _english_affixes().get(prefix)
+        if ref.name.startswith(prefix) or (english and ref.name.endswith(english)):
+            pass
+        else:
+            shown, what = ((english, i18n.t("naming.suffix-word")) if latin and english
+                           else (prefix, i18n.t("naming.prefix-word")))
+            yield _diag(source, ref, "naming/prefix-by-kind", "naming/prefix-by-kind.missing",
+                        name=ref.name, vid=vid, prefix=shown, what=what)
         return
 
     suffix = KIND_SUFFIX_REQUIRED.get(vid)
-    if suffix and not ref.name.endswith(suffix):
-        yield _diag(source, ref, "naming/prefix-by-kind", "naming/prefix-by-kind.missing",
-                    name=ref.name, vid=vid, prefix=suffix, what=i18n.t("naming.suffix-word"))
+    if suffix:
+        english = _english_affixes().get(suffix)
+        if ref.name.endswith(suffix) or (english and ref.name.endswith(english)):
+            pass
+        else:
+            shown = english if latin and english else suffix
+            yield _diag(source, ref, "naming/prefix-by-kind", "naming/prefix-by-kind.missing",
+                        name=ref.name, vid=vid, prefix=shown, what=i18n.t("naming.suffix-word"))
         return
 
     if vid == "HttpСервис":
