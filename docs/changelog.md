@@ -19,6 +19,160 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0, 0.86.1
+
+### Added
+- **`yaml/computed-binding-assigned` (tier D, warning, project-wide).** Every instance of a
+  component binds a property with a computed expression while the component assigns that
+  property in its own module - the platform crashes on the assignment
+  (IllegalStateException) on every run of that code. Reconnaissance shaped the
+  narrowings: a named argument is not an assignment, and a code-built instance, a bare-path
+  binding, a literal or an unbound instance make the assignment legal - the guarded-component
+  pattern the corpus carries stays silent.
+- **`yaml/inline-command-name` (tier A, error).** A command declared inline in the markup
+  (an inline command-interface fragment or a single-command property) must not carry a
+  `Name`: the platform refuses the node at apply time - "a command name is allowed only in
+  command-interface-fragment project elements" - and the stand rolls back, so the defect
+  used to cost a deploy cycle. A fragment PROJECT ELEMENT is skipped whole: there the same
+  key is the point. Both spellings of the command components are read from the platform
+  dictionaries.
+- **`yaml/localization-missing-import` (tier D, error, project-wide).** An unqualified
+  `$Dictionary.Key` reference whose dictionary lives in another subsystem needs that
+  subsystem in the `Import` section of THE SAME yaml - an import in the paired module does
+  not cover the markup, and the apply refuses the node as a not-imported namespace. The
+  rule mirrors the resolution rules of the documentation: a local dictionary wins, an
+  imported subsystem resolves, the qualified `$Subsystem::Dictionary.Key` form needs no
+  import and is left alone, and only public foreign dictionaries are candidates.
+- **`translate_set` takes the batch as a file.** The new `edits_file` (MCP) sends hundreds
+  of entries without inlining kilobytes of escaped JSON, and `--set` (CLI) now reads the
+  same two shapes: the dictionary's own yaml format - `tokens`/`phrases`/`literals`
+  sections, the dictionary's quoting, an empty value removes the entry - next to the JSON
+  list `[{key, value, kind}]` scripts already produce. A file that yields no entries is
+  refused rather than read as "nothing to change".
+- **`translate_gaps` has a compact mode.** With `compact` every row is only
+  `{key, kind, count}` - the worklist a translator actually needs; a full page of hundreds
+  of gaps with places and suggestions did not fit a tool answer.
+- **`tools/parity_seed.py` - the seeded bilingual parity check.** The measurement used so far
+  was a counting diff between a Russian tree and its translation, and it is blind to a rule
+  whose count is zero on both sides: `structure/xbsl-pair` lived in that shadow, reporting
+  every English module of a generated type while no counted tree happened to carry one.
+  The check plants its own case instead - a small Russian tree plus the verdict the rule owes
+  it - and takes the English twin from the toolkit's own translator rather than a second
+  fixture, so the spelling under test is the one the toolkit really produces. The verdict names
+  the guilty side and its mistake (`en-misses`, `en-invents`), because a table lacking the
+  English spelling makes a rule miss while one lacking the Russian reading makes it invent. A
+  seed that stops planting its case reports `stale` rather than passing quietly, and
+  `tests/test_parity_seed.py` runs the catalog on every test run. A gap that cannot be closed
+  today is planted with a `known=` reason: it reports `known (...)` instead of failing, and
+  the moment it starts agreeing it reports `fixed!` and fails, so the note cannot outlive the
+  gap. The first such gap is already recorded - `code/unknown-member` skips Latin member
+  spellings, and the member vocabulary is not complete enough to lift that yet.
+- **The member names of the platform types are extracted in both spellings.** The reference
+  documentation is Russian-only, so the catalog stored a type's members under their Russian
+  names alone - and a rule judging a member of an ENGLISH project had nothing to compare
+  against. The distribution itself states the pairs: 670 types, 5251 pairs, a new
+  `member_names` section of `uiterms.json`. Kept per type rather than as one table, because
+  the mapping is not a function - the same Russian word answers to more than one English one
+  across types, and a flat table would have to drop a third of the section.
+
+### Changed
+- **A localization-swap problem names the key the SOURCE file spells.** The report used to
+  say `'TaskCheckbox' has no en value` about a line the base file calls
+  `ЗадачаФлажок`, sending the reader to the reverse dictionary; now the source name
+  comes first and the translation follows in brackets.
+
+### Fixed
+- **The English spellings of members come from what the distribution DECLARES, not from how
+  close two names stand to each other.** The former reading could take the name of a parameter
+  for the name of a member: two pairs out of 2015 were wrong, and both named a method the type
+  does not have (the `CharAt` of a string came out `Symbol`, the `Schedule` of the updating
+  scheduled job came out `ScheduleWithoutTransaction`), so the translated tree would not
+  compile. A name declared both as a method and as a property answers with the method
+  spelling. The data has to be rebuilt (`xbsl extract --only terms,uiterms`), after which
+  `code/unknown-member` stops reporting a legal call.
+- **`meta_project_info` (and `project-info` in the CLI) can be asked narrowly: `kind`,
+  `subsystem`, `brief`.** The whole tree in one answer did not fit a tool answer on a real
+  project - 143 KB over a live corpus - and the question "what objects of kind X are here"
+  cost two extra steps: save to a file and grep. The brief mode answers in 5 KB (381 objects,
+  22 kinds), a kind filter in 24 KB. The counts by kind (`object_counts`) come with EVERY
+  answer, filtered or not, so a filter that matched nothing does not read as an empty project,
+  and `filter` states what was left out.
+- **A baseline now travels between machines: a path INSIDE the text of a finding is read in
+  the baseline's own form.** The cross-file rules name the second file the way the run
+  received it - with the separators of the host, absolute when the root was absolute - while
+  the identity of an entry is its text. A baseline frozen on Windows therefore suppressed
+  nothing in a Linux CI and was announced stale on both sides (on one revision of a live
+  corpus: "97 frozen, 2 stale" locally against "89 and 7" in CI). The path in a message is
+  now read the way the path of the file is: POSIX, relative to the directory of the baseline.
+  Existing files keep working without a rewrite - the common form is computed on both sides
+  of the comparison.
+- **The dictionary catalog is no longer counted as a source of the project.** A run rooted
+  ABOVE the project (the repository root) finds the dictionary next to it, and its files are
+  yaml of the same shape: their own comments came back as untranslated prose. On a live
+  corpus such a run reported 871 phrase gaps and 99.19% coverage where the project itself is
+  at 100% - a figure that looks trustworthy and sends the reader after a hole that is not
+  there. The walk now skips the `xbsl-translation` catalog (and the file of the same name),
+  along with a dictionary the caller named wherever it lies.
+- **`translate_set` announced a removal that never happened.** A batch that removed an entry
+  from a file and at the same time added a new one aimed at THAT file lost the removal: the
+  addition rebuilt the text of the file from disk, overwriting the edits already planned,
+  while the report still said `removed: 1`. Correcting an entry in the target file went the
+  same way. New entries now go on top of the text already planned.
+- **`code/unknown-member` judges English member spellings.** It used to skip every Latin
+  member outright - with a Russian-only catalog, judging them would have reported correct
+  code. Now a type whose WHOLE member set is stated by the vocabularies is judged in both
+  spellings; one member without a stated pair keeps its type unjudged in English, so the rule
+  keeps its zero-false-positive contract. Four in five types are covered.
+- **A structure a module declares itself is no longer judged as a platform type of that
+  name.** The rule is file-scope and cannot know project types, but the module's own
+  declarations are in it - and a project structure that happens to carry a platform type's
+  name had its own fields reported as unknown members.
+- **A form tree covers a block sequence written at the column of its own key.** Yaml allows
+  that spelling; the span of a node came from walking indentation, so such a sequence looked
+  unindented and the node ended one line after it began. A node that no longer enclosed its
+  children stopped `node_at` from descending, and every designer edit anchored below it was
+  refused. The enclosing is an invariant now rather than a derivation: a node stretches to
+  cover its children, whose bounds come from yaml's own marks.
+- **A refused form edit says what it found.** The message named neither the place nor what
+  stood there; it now names the line, the offset and the node the tree holds there.
+- **A dictionary entry whose key holds `::` is no longer torn in two.** The entry reader
+  ended a bare key at the first colon, while yaml ends it at a colon followed by a space -
+  so a phrase citing a platform form by its `Std::Jobs::JobsForm` path was split mid-word,
+  and the tail of the key was stored as part of the translation. Nothing complained: both
+  halves are valid strings, and the damage surfaced only as a phrase missing from the
+  coverage. Affects every writing surface - `translate_set`, the CLI `--set`, the editor
+  panel.
+- **`naming/prefix-by-kind` reads English names.** The head of an English compound is its
+  last word, so a translated element carries the same kind word as a SUFFIX - the rule used
+  to demand the Russian prefix literally and reported every such element of a translated
+  tree; the expected spelling in the message follows the script of the name, and the
+  English words come from the platform dictionary.
+- **Three hand-written English spellings matched nothing and are data-driven now.** The
+  stretch-weight property of `yaml/card-literal-stretch-weight` and the reference facet of
+  `yaml/ref-input-auto-commands` and `code/ref-field-needs-req` were spelled by hand, and
+  the serializer writes them differently - the rules went silent on a translated tree
+  (one of the encoded tests asserted the wrong facet spelling and never could fire). The
+  spellings come from the property and facet dictionaries; parity was measured by a full
+  file-by-file run of the translated tree against the Russian one.
+- **`structure/xbsl-pair` recognises an English module of a generated type.** A module
+  extending a type an element generates carries the type's tail and has no descriptor of its
+  own - `Prices.RecordSet.xbsl` is described by `Prices.yaml`. The tails came from a catalog
+  that spells them Russian, patched with the single word `Object`, so every other English
+  module was read as a module without a descriptor and reported - a finding its Russian
+  twin never got. Both spellings are derived from the platform dictionaries now:
+  the suffix set grew from 39 entries to 76, and no Russian tail is left without its English
+  twin.
+- **The hand-written English column of the derived-type tails is gone.** Nine of its thirteen
+  names repeated what the dictionaries already answer, and four were guesses the platform
+  does not support: `Ref`, `RecordManager` and `Selection` are 1C:Enterprise habits (Element
+  spells those roles `Reference` and `Record`, and the dictionary reads `Selection` as a UI
+  selection). Standing on the English side alone, they forgave on one spelling exactly what
+  the rule reports on the other. What remains is one PAIR the dictionaries carry no entry
+  for, kept whole so the two trees cannot disagree.
+- **The catalog tables of the semantics rules drop on a data-root switch.** Four tables read
+  the catalog of one version and cached it with no reset registered, so pinning another data
+  root kept them answering from the version pinned before.
+
 ## 2026-08-27 – 0.81.0, 0.82.0
 
 ### Added
@@ -177,8 +331,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the word fell through to the flat dictionary - which pairs it with `NULL`, a reserved word of
   its own that no Russian spelling maps to. The compiler takes both, so every check stayed
   green; on the running application a condition against `NULL` is never true, and the query came
-  back empty. Met live on a translated site: a register stopped being recalculated, a page block
-  and a whole navigation menu went blank at once. The literals `TRUE`, `FALSE` and `UNDEFINED`
+  back empty. Met live on a translated corpus, where three places that depended on such a
+  condition fell silent at once. The literals `TRUE`, `FALSE` and `UNDEFINED`
   are now stated by the engine, along with the single-word keywords the extractor pairs wrongly.
 
 ## 2026-08-23 – 0.73.0

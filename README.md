@@ -84,8 +84,9 @@ at runtime – `xbsl --list-rules`; what tier D verifies in depth –
 typography characters, mixed newlines – and only them: anything needing judgment is never
 touched.
 
-**Baseline.** Adopt a rule on a legacy codebase without drowning: freeze the current findings
-once, hold only new code to the rule; the same file records point exclusions with reasons.
+**Baseline.** A rule can be adopted on an old codebase without cleaning all of it first: the
+current findings are frozen once, and only new code answers to the rule. The same file records
+point exclusions with reasons.
 [Details](https://github.com/keyfire/xbsl/blob/main/docs/linting.md#baseline-adopt-a-rule-on-a-legacy-codebase).
 
 **Metadata scaffolding.** Creating objects, attributes, routes and forms without hand-writing
@@ -111,8 +112,7 @@ All subcommands with their options –
 ([Marketplace](https://marketplace.visualstudio.com/items?itemName=keyfire.xbsl),
 [Open VSX](https://open-vsx.org/extension/keyfire/xbsl)): syntax highlighting, live and
 project-wide diagnostics, go-to-definition and completion, the form designer, a metadata tree and
-a deploy button. Under the hood is `xbsl-lsp` – a Language Server any LSP-capable editor can
-spawn ([details](https://github.com/keyfire/xbsl/blob/main/docs/servers.md#lsp-server)).
+a deploy button. It runs on `xbsl-lsp`, a Language Server any LSP-capable editor can spawn ([details](https://github.com/keyfire/xbsl/blob/main/docs/servers.md#lsp-server)).
 
 **Code templates.** Type the first letters of a construct, press Ctrl+Space – get the whole
 construct with edit points.
