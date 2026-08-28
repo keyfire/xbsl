@@ -34,16 +34,17 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 from typing import NamedTuple
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
 from xbsl.rules._syntax import YAML_NAME_RE, pair_yaml_names
-from xbsl.rules.semantics import _object_name_fast
+from xbsl.rules.semantics import _file_local_types, _object_name_fast
 from xbsl.rules.undefined_names import _IMPLICIT
 
 MESSAGES = {
@@ -282,8 +283,156 @@ def _walk_body(stmts: list[P.Stmt], scope: _Scope, uses: list[P.Member]) -> None
             _walk_expr(st.value, scope, uses)
 
 
+#: A member spelled in Cyrillic is the one the catalog stores; a Latin one needs the pair.
+_CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
+
+
 def _is_latin(name: str) -> bool:
     return all(ord(c) < 128 for c in name)
+
+
+def _judged_members(type_name: str, member: str, members_by_type: dict,
+                    local_types: frozenset[str] = frozenset()) -> frozenset[str] | None:
+    """The names this member access is judged against, or None when it is not judged.
+
+    Both spellings when the type's whole member set translates; otherwise the catalog's own
+    spellings, and then a LATIN access is not judged at all - its English twin is exactly what
+    the vocabulary failed to state, so judging it would invent a finding. The gate is per type
+    on purpose: this rule exists to have no false positives, and one member without a stated
+    pair is enough to make its type unsafe to judge in English.
+    """
+    if type_name in local_types:
+        # A structure the module declares itself wins over a platform type of the same name:
+        # the module's own members are the truth there. The collision is not hypothetical -
+        # a project structure translated into the spelling of a platform type is exactly how
+        # this surfaced, and judging it by the platform's members invented seven findings.
+        return None
+    members = members_by_type.get(type_name)
+    if members is None:
+        return None
+    both = _both_member_spellings(type_name, members)
+    if both is not None:
+        return both
+    return None if _is_latin(member) else members
+
+
+def _member_english(type_name: str, member: str) -> str | None:
+    """The English spelling of one member, or None when nothing states it.
+
+    Three vocabularies answer, in the order of how specific they are: the compiler dictionary
+    (most members), the ENUMERATION the member belongs to (a value is spelled per enumeration -
+    the same Russian word answers to more than one English one across enumerations, so the
+    owner has to be part of the question), and the interface vocabulary. The enumeration table
+    is keyed by the Russian name of the type, while a catalog type is stored under both
+    spellings - so the Russian twin of the type is asked for as well.
+    """
+    # The type's OWN table first: it is the only one that can tell `Граница` as `Border` from
+    # `Граница` as `Bound`, and the same word does answer differently across types.
+    for spelling in (type_name, terms.english(type_name, "types"),
+                     terms.common_english(type_name)):
+        if spelling:
+            got = (_ui_member_names().get(spelling) or {}).get(member)
+            if got:
+                return got
+    got = (terms.common_english(member)
+           or terms.english(member, "properties")
+           or terms.english(member, "types")
+           or terms.english(member, "enums")
+           or terms.facet_suffix_english(member))
+    if got:
+        return got
+    for spelling in (type_name, terms.russian(type_name, "types"),
+                     terms.common_russian(type_name)):
+        if spelling:
+            got = (_ui_enum_values().get(spelling) or {}).get(member)
+            if got:
+                return got
+    # Last: a member table of ANOTHER type, but only for a name the whole distribution spells
+    # one way. A type inherits members, and the meta object that states them is the one of the
+    # BASE - `Array` takes its own from the mutable-array meta object, whose name is not the
+    # type's. Names that answer differently somewhere (`Border` and `Bound` are one word) are
+    # excluded from this pass: there the owner decides, and the owner is what we just failed
+    # to find.
+    return _unambiguous_member_names().get(member) or _ui_names().get(member)
+
+
+@lru_cache(maxsize=1)
+def _unambiguous_member_names() -> dict[str, str]:
+    """{Russian member: English} for names spelled ONE way across every type table."""
+    seen: dict[str, set[str]] = {}
+    for table in _ui_member_names().values():
+        for russian, english in table.items():
+            seen.setdefault(russian, set()).add(english)
+    return {russian: next(iter(v)) for russian, v in seen.items() if len(v) == 1}
+
+
+@lru_cache(maxsize=1)
+def _ui_member_names() -> dict[str, dict[str, str]]:
+    """{type: {Russian member: English}} of the interface vocabulary ({} on older data).
+
+    Keyed by the ENGLISH name of the type, which is how the meta objects of the core library
+    name themselves; a catalog type is stored under both spellings, so the caller asks with
+    whichever it holds and the English one is derived when needed.
+    """
+    try:
+        raw = dataset.load_json("uiterms.json").get("member_names") or {}
+    except (dataset.DatasetError, KeyError, ValueError):
+        return {}
+    return {k: dict(v) for k, v in raw.items() if isinstance(v, dict)}
+
+
+@lru_cache(maxsize=1)
+def _ui_enum_values() -> dict[str, dict[str, str]]:
+    """{enumeration: {Russian value: English}} of the interface vocabulary ({} when absent)."""
+    try:
+        raw = dataset.load_json("uiterms.json").get("enum_values") or {}
+    except (dataset.DatasetError, KeyError, ValueError):
+        return {}
+    return {k: dict(v) for k, v in raw.items() if isinstance(v, dict)}
+
+
+@lru_cache(maxsize=1)
+def _ui_names() -> dict[str, str]:
+    """{Russian: English} of the interface properties and types, merged ({} when absent)."""
+    try:
+        ui = dataset.load_json("uiterms.json")
+    except (dataset.DatasetError, KeyError, ValueError):
+        return {}
+    out: dict[str, str] = {}
+    for section in ("properties", "types"):
+        for english, russian in (ui.get(section) or {}).items():
+            if isinstance(russian, str) and isinstance(english, str):
+                out.setdefault(russian, english)
+    return out
+
+
+@lru_cache(maxsize=None)
+def _both_member_spellings(type_name: str, members: frozenset[str]) -> frozenset[str] | None:
+    """Members in BOTH spellings, or None when the set cannot be translated whole.
+
+    The gate is per TYPE and it is what keeps the rule free of false positives. A correct
+    English member whose Russian twin no vocabulary states would be reported as unknown, so a
+    type carrying even one such member keeps the old behaviour - its Latin member accesses are
+    not judged at all. Where the whole set translates, both spellings are known and the check
+    applies to an English project exactly as it does to a Russian one.
+    """
+    english: set[str] = set()
+    for member in members:
+        if not _CYRILLIC_RE.search(member):
+            english.add(member)  # already Latin - the same word serves both trees
+            continue
+        spelling = _member_english(type_name, member)
+        if spelling is None:
+            return None
+        english.add(spelling)
+    return frozenset(members | english)
+
+
+dataset.register_reset(_ui_member_names.cache_clear)
+dataset.register_reset(_unambiguous_member_names.cache_clear)
+dataset.register_reset(_ui_enum_values.cache_clear)
+dataset.register_reset(_ui_names.cache_clear)
+dataset.register_reset(_both_member_spellings.cache_clear)
 
 
 @rule("code/unknown-member", "code/unknown-member.title", "D", severity=Severity.ERROR)
@@ -295,6 +444,8 @@ def unknown_member(source: SourceFile) -> Iterable[Diagnostic]:
     if not members_by_type:
         return
     module, errors = parse(source)
+    # A structure the module declares itself shadows a platform type of the same name.
+    local_types = frozenset(_file_local_types(source))
     if errors:
         return
     lm = linemap(source)
@@ -319,8 +470,8 @@ def unknown_member(source: SourceFile) -> Iterable[Diagnostic]:
             type_name = scope.types.get(use.obj.name)
             if type_name is None:
                 continue
-            members = members_by_type.get(type_name)
-            if members is None or _is_latin(use.name):
+            members = _judged_members(type_name, use.name, members_by_type, local_types)
+            if members is None:
                 continue
             if use.name in members or use.name in _COMMON_MEMBERS:
                 continue
@@ -546,6 +697,8 @@ def _static_mapper(source: SourceFile) -> dict | None:
     if "." in stem:
         stem = ""
     module, errors = parse(source)
+    # A structure the module declares itself shadows a platform type of the same name.
+    local_types = frozenset(_file_local_types(source))
     if errors:
         # A broken file gives no candidates, but its stem must still poison the name.
         return {"stem": stem, "returns": None} if stem else None
@@ -596,8 +749,8 @@ def _static_mapper(source: SourceFile) -> dict | None:
                 if name in shadow or name not in members_by_type:
                     continue
                 type_name, root = name, name
-            members = members_by_type.get(type_name)
-            if members is None or _is_latin(use.name):
+            members = _judged_members(type_name, use.name, members_by_type, local_types)
+            if members is None:
                 continue
             if use.name in members or use.name in _COMMON_MEMBERS:
                 continue

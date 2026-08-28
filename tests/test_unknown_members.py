@@ -528,3 +528,57 @@ def test_a_typo_in_an_event_name_is_still_flagged():
         ";\n"
     )
     assert len(diags) == 1 and "ПриНажатие" in diags[0].message
+
+
+# --- English member spellings: judged where the vocabulary states the whole set ------------
+
+
+def test_english_member_of_a_covered_type_passes():
+    """A correct English member is not a finding once the type's set translates whole.
+
+    The rule used to skip every Latin member outright: the catalog stores members in Russian
+    alone, so judging them would have reported correct code. The vocabularies now state the
+    pairs, and where a type's WHOLE set is stated the check applies to both spellings alike.
+    """
+    assert _lint("method Test(Name: String): Number\n"
+                 "    return Name.Length\n"
+                 ";\n") == []
+
+
+def test_english_typo_is_caught_on_a_covered_type():
+    """The other half: judging both spellings has to mean CATCHING the English mistake."""
+    diags = _lint("method Test(Name: String): Number\n"
+                  "    return Name.Lenght\n"
+                  ";\n")
+    assert len(diags) == 1 and "Lenght" in diags[0].message
+
+
+def test_a_locally_declared_structure_shadows_a_platform_type():
+    """A structure the module declares wins over a platform type of the same name.
+
+    Found on a translated tree: a project structure was rendered into the spelling of a
+    platform type, and the rule judged its own fields by the platform's members - seven
+    findings on correct code. The rule is file-scope and cannot know project types, but the
+    module's OWN declarations are right there in it.
+    """
+    assert _lint("структура СтрокаСписка\n"
+                 "    пер Код: Строка\n"
+                 ";\n"
+                 "метод Тест(Элемент: СтрокаСписка): Строка\n"
+                 "    возврат Элемент.Код\n"
+                 ";\n") == []
+
+
+def test_a_type_without_a_stated_pair_still_skips_latin_members():
+    """The gate is per type: an incomplete vocabulary must not turn into a false finding.
+
+    `Array` carries members no vocabulary pairs, so its English spellings stay unjudged -
+    reporting them would invent findings about correct code. The Russian half keeps working.
+    """
+    assert _lint("method Test(Items: Array<String>): Number\n"
+                 "    return Items.WhateverThisIs\n"
+                 ";\n") == []
+    diags = _lint("метод Тест(Список: Массив<Строка>): Число\n"
+                  "    возврат Список.НетТакогоЧлена\n"
+                  ";\n")
+    assert len(diags) == 1

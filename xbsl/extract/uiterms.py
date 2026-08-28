@@ -248,6 +248,33 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
     return None
 
 
+def _member_names(meta_classes: dict[str, bytes]) -> dict[str, dict[str, str]]:
+    """{type: {Russian member: English}} from the compile-time meta objects of the core library.
+
+    The reference documentation is Russian-only, so the catalog stores a type's members under
+    their Russian names alone - and a rule judging a member of an ENGLISH project had nothing
+    to compare against. The pairs are stated in `<Type>CtMetaObject`: its constant pool holds
+    the English name of every member immediately followed by the Russian one, the same layout
+    the enumeration classes use, so the same reader serves.
+
+    Kept PER TYPE rather than as one table, because the mapping is not a function: `Граница`
+    is `Border` on one type and `Bound` on another, `Загрузить` is `Load` and `Upload`, and a
+    flat table would have to drop such names - measured, that is a third of what the section
+    is for. The key is the class stem, which is the English name of the type, the spelling
+    the catalog stores next to the Russian one.
+
+    Parameter names ride along with the member names here: telling them apart would need the
+    signature, and the consumer of this section errs on the generous side anyway - a name too
+    many costs a check not made, never a wrong finding.
+    """
+    out: dict[str, dict[str, str]] = {}
+    for stem, blob in meta_classes.items():
+        pairs = {ru: en for ru, en in enum_pairs(blob).items() if _NAME_RE.match(en)}
+        if pairs:
+            out[stem] = dict(sorted(pairs.items()))
+    return dict(sorted(out.items()))
+
+
 def _package(name: str) -> str:
     """Everything but the last segment of a qualified name."""
     return "::".join(part.strip().strip('"') for part in name.split("::")[:-1])
@@ -267,6 +294,7 @@ def collect(dist: Path) -> dict:
     manifests: list[dict] = []
     classes: dict[str, bytes] = {}
     type_classes: dict[str, bytes] = {}
+    meta_classes: dict[str, bytes] = {}
     # The same descriptions ship inside several jars - keyed by path so each is read once.
     components: dict[str, object] = {}
     projects: dict[str, object] = {}
@@ -288,6 +316,9 @@ def collect(dist: Path) -> dict:
                     classes.setdefault(name[: -len("G5Enum.class")], jar.read(member))
                 elif name.endswith("G5Type.class") and "$" not in name:
                     type_classes.setdefault(name[: -len("G5Type.class")], jar.read(member))
+                elif name.endswith("CtMetaObject.class") and "$" not in name:
+                    meta_classes.setdefault(
+                        name[: -len("CtMetaObject.class")], jar.read(member))
                 elif member.endswith(".yaml") and _COMPONENT_DIR in member:
                     components.setdefault(member, _load_yaml(jar.read(member)))
                 elif member.endswith(".yaml") and member not in projects:
@@ -338,6 +369,7 @@ def collect(dist: Path) -> dict:
         "enum_values": dict(sorted(enum_values.items())),
         "types": _unambiguous(type_votes),
         "properties": _unambiguous(name_votes),
+        "member_names": _member_names(meta_classes),
     }
 
 
@@ -352,6 +384,7 @@ def build(dist: Path, version: str) -> dict:
             "packages": len(data["packages"]),
             "types": len(data["types"]),
             "properties": len(data["properties"]),
+            "member_types": len(data["member_names"]),
         },
         **data,
     }

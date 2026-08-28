@@ -60,6 +60,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the moment it starts agreeing it reports `fixed!` and fails, so the note cannot outlive the
   gap. The first such gap is already recorded - `code/unknown-member` skips Latin member
   spellings, and the member vocabulary is not complete enough to lift that yet.
+- **The member names of the platform types are extracted in both spellings.** The reference
+  documentation is Russian-only, so the catalog stored a type's members under their Russian
+  names alone - and a rule judging a member of an ENGLISH project had nothing to compare
+  against. The pairs are stated in the compile-time meta objects of the core library, in the
+  same constant-pool layout the enumeration classes use: 670 types, 5251 pairs, a new
+  `member_names` section of `uiterms.json`. Kept per type rather than as one table, because
+  the mapping is not a function - the same Russian word answers to more than one English one
+  across types, and a flat table would have to drop a third of the section.
 
 ### Changed
 - **A localization-swap problem names the key the SOURCE file spells.** The report used to
@@ -68,6 +76,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   comes first and the translation follows in brackets.
 
 ### Fixed
+- **`code/unknown-member` judges English member spellings.** It used to skip every Latin
+  member outright - with a Russian-only catalog, judging them would have reported correct
+  code. Now a type whose WHOLE member set is stated by the vocabularies is judged in both
+  spellings; one member without a stated pair keeps its type unjudged in English, so the rule
+  keeps its zero-false-positive contract. Four in five types are covered.
+- **A structure a module declares itself is no longer judged as a platform type of that
+  name.** The rule is file-scope and cannot know project types, but the module's own
+  declarations are in it - and a project structure that happens to carry a platform type's
+  name had its own fields reported as unknown members.
 - **A form tree covers a block sequence written at the column of its own key.** Yaml allows
   that spelling; the span of a node came from walking indentation, so such a sequence looked
   unindented and the node ended one line after it began. A node that no longer enclosed its
