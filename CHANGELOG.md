@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-08-28 – 0.83.0
 
 ### Added
 - **`yaml/inline-command-name` (tier A, error).** A command declared inline in the markup
