@@ -46,9 +46,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   `{key, kind, count}` - the worklist a translator actually needs; a full page of hundreds
   of gaps with places and suggestions did not fit a tool answer.
 - **`tools/parity_seed.py` - the seeded bilingual parity check.** The measurement used so far
-  was a counting diff over a real translated project, and it is blind to a rule whose count is
-  zero on both sides: `structure/xbsl-pair` lived in that shadow, reporting every English
-  module of a generated type while the measured tree happened to carry object modules alone.
+  was a counting diff between a Russian tree and its translation, and it is blind to a rule
+  whose count is zero on both sides: `structure/xbsl-pair` lived in that shadow, reporting
+  every English module of a generated type while no counted tree happened to carry one.
   The check plants its own case instead - a small Russian tree plus the verdict the rule owes
   it - and takes the English twin from the toolkit's own translator rather than a second
   fixture, so the spelling under test is the one the toolkit really produces. The verdict names
@@ -68,6 +68,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   comes first and the translation follows in brackets.
 
 ### Fixed
+- **A form tree covers a block sequence written at the column of its own key.** Yaml allows
+  that spelling; the span of a node came from walking indentation, so such a sequence looked
+  unindented and the node ended one line after it began. A node that no longer enclosed its
+  children stopped `node_at` from descending, and every designer edit anchored below it was
+  refused. The enclosing is an invariant now rather than a derivation: a node stretches to
+  cover its children, whose bounds come from yaml's own marks.
+- **A refused form edit says what it found.** The message named neither the place nor what
+  stood there; it now names the line, the offset and the node the tree holds there.
 - **A dictionary entry whose key holds `::` is no longer torn in two.** The entry reader
   ended a bare key at the first colon, while yaml ends it at a colon followed by a space -
   so a phrase citing a platform form by its `Std::Jobs::JobsForm` path was split mid-word,
@@ -90,9 +98,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **`structure/xbsl-pair` recognises an English module of a generated type.** A module
   extending a type an element generates carries the type's tail and has no descriptor of its
   own - `Prices.RecordSet.xbsl` is described by `Prices.yaml`. The tails came from a catalog
-  that spells them Russian, patched by hand with the single word `Object`, so every other
-  English module was read as a module without a descriptor and reported - a finding its
-  Russian twin never got. Both spellings are derived from the platform dictionaries now:
+  that spells them Russian, patched with the single word `Object`, so every other English
+  module was read as a module without a descriptor and reported - a finding its Russian
+  twin never got. Both spellings are derived from the platform dictionaries now:
   the suffix set grew from 39 entries to 76, and no Russian tail is left without its English
   twin.
 - **The hand-written English column of the derived-type tails is gone.** Nine of its thirteen

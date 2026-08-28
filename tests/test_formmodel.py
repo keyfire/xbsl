@@ -1562,3 +1562,88 @@ def test_move_into_a_new_array_slot_lands_as_a_list_item():
     slot = form.nodes["Наследует/Содержимое[0]/Содержимое"]
     assert slot.list_style is True
     assert [c.name for c in slot.children] == ["Список"]
+
+
+# --- a block sequence written at the column of its own key ---------------------------------
+
+SAME_COLUMN_FORM = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-0000000000e1
+Имя: Проба
+Наследует:
+    Тип: Форма
+    Содержимое:
+    -
+        Тип: Группа
+        Имя: Внешняя
+        Содержимое:
+        -
+            Тип: Надпись
+            Имя: Первая
+    # ── БАННЕР между элементами, на столбце КЛЮЧА ──
+        -
+            Тип: Надпись
+            Имя: Вторая
+    ДругоеСвойство: Истина
+"""
+
+
+def test_sequence_at_the_key_column_is_read_whole():
+    """Yaml lets a block sequence stand at the column of its key - the tree must cover it.
+
+    The regression: the span of a node came from walking indentation, and a sequence written
+    that way is not indented relative to its key at all - the walk stopped on the first dash
+    and handed back a node one line long. Such a node no longer enclosed its own children, so
+    `node_at` could not descend past it and every edit anchored below was refused with "the
+    result node was not found". The file this came from is a real form of a hundred thousand
+    characters, where the refusal cost a manual edit.
+    """
+    form = parse_form(SAME_COLUMN_FORM)
+    outer = next(n for n in form.nodes.values() if n.name == "Внешняя")
+    slot = form.nodes[outer.id + "/Содержимое"]
+    assert [c.name for c in slot.children] == ["Первая", "Вторая"]
+    for child in slot.children:
+        assert slot.span.encloses(child.span), child.name
+    assert outer.span.encloses(slot.span)
+
+
+def test_a_banner_comment_between_items_does_not_end_the_sequence():
+    """A comment standing between two items is inside the sequence, whatever its column."""
+    form = parse_form(SAME_COLUMN_FORM)
+    outer = next(n for n in form.nodes.values() if n.name == "Внешняя")
+    slot = form.nodes[outer.id + "/Содержимое"]
+    second = next(c for c in slot.children if c.name == "Вторая")
+    assert slot.span.encloses(second.span)
+
+
+def test_a_sibling_key_still_ends_the_sequence():
+    """The negative control: reading wider must not swallow what follows the sequence.
+
+    `ДругоеСвойство` stands at the column of the dashes and is NOT an item - the outer slot
+    must end before it, or the next property would be read as part of the list.
+    """
+    form = parse_form(SAME_COLUMN_FORM)
+    root_slot = form.nodes["Наследует/Содержимое"]
+    tail = SAME_COLUMN_FORM[root_slot.span.end:]
+    assert "ДругоеСвойство" in tail, "свойство после списка попало внутрь слота"
+
+
+def test_every_node_encloses_its_children():
+    """The invariant itself, over both spellings of the fixture and the main one."""
+    for text in (FORM, SAME_COLUMN_FORM):
+        form = parse_form(text)
+        for node in form.nodes.values():
+            for child in node.children:
+                assert node.span.encloses(child.span), f"{node.id} !> {child.id}"
+
+
+def test_insert_into_a_slot_written_at_the_key_column(tmp_path):
+    """The operation the regression broke: inserting into such a slot now works."""
+    form = parse_form(SAME_COLUMN_FORM)
+    outer = next(n for n in form.nodes.values() if n.name == "Внешняя")
+    result = formedits.insert_component(
+        SAME_COLUMN_FORM, outer.id, "Содержимое", type_="Надпись", name="Третья")
+    again = parse_form(result.new_text)
+    slot = again.nodes[outer.id + "/Содержимое"]
+    assert [c.name for c in slot.children] == ["Первая", "Вторая", "Третья"]
+    assert pyyaml.safe_load(result.new_text)["Наследует"]["Содержимое"][0]["Имя"] == "Внешняя"

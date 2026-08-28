@@ -199,6 +199,12 @@ class _Lines:
 
         The block continues over blank lines and lines indented at least min_indent;
         trailing blank lines are not part of the block.
+
+        The walk answers by INDENTATION alone, and yaml has shapes it cannot see - a block
+        sequence may sit at the very column of its key, and then nothing about it looks
+        indented. So the walk is not where a node's reach is settled: `_Builder._cover_children`
+        stretches a node over its children afterwards, and their bounds come from yaml's own
+        marks. Teaching this walk those shapes was tried and measured to change no span at all.
         """
         last = anchor_line
         i = anchor_line + 1
@@ -428,6 +434,27 @@ class _Builder:
     def _line_span(self, first_line: int, last_line: int) -> Span:
         return Span(self.lines.start(first_line), self.lines.after(last_line))
 
+    @staticmethod
+    def _cover_children(node: Node) -> None:
+        """Stretch the node's span so it ENCLOSES its children. Structural, not derived.
+
+        A node's own end comes from walking indentation, and yaml has more shapes than that
+        walk can name: a sequence at the column of its key, a banner comment between two items
+        written at either column, the same in the parent's own body. Chasing them one by one
+        left the tree with a parent ending before its child - and `node_at` then stopped short,
+        which every edit reads as "the result node was not found".
+
+        The invariant is worth stating once instead: children come from yaml's own marks, so
+        whatever they cover, the parent covers. This only ever EXTENDS a span, never trims it.
+        """
+        if not node.children:
+            return
+        end = max(child.span.end for child in node.children)
+        if end > node.span.end:
+            node.span = Span(node.span.start, end)
+        if end > node.content_span.end:
+            node.content_span = Span(node.content_span.start, end)
+
     def _pairs_of(self, map_node: yaml.MappingNode) -> tuple[dict[str, Pair], list[Pair]]:
         pairs: dict[str, Pair] = {}
         order: list[Pair] = []
@@ -485,6 +512,7 @@ class _Builder:
                     key=pair.key, kind=kind, value_preview=preview,
                     span=pair.span, value_span=pair.scalar_span,
                 ))
+        self._cover_children(node)
         return node
 
     def build_slot(self, pair: Pair, parent: Node) -> Node:
@@ -518,6 +546,7 @@ class _Builder:
                 comment_indent=value.start_mark.column, dash_col=None,
             ))
         # an empty scalar value ("Слот:" with nothing nested) keeps zero children
+        self._cover_children(slot)
         return slot
 
     def build_properties(self, key_node: yaml.ScalarNode, value: object) -> PropertiesSection:

@@ -425,7 +425,21 @@ def _finish(text: str, edits: list[TextEdit], anchor: int | None) -> EditResult:
         or node.kind != "component"
         or not node.span.start <= anchor <= node.content_span.start
     ):
-        raise FormModelError("внутренняя ошибка: узел-результат не найден после правки")
+        # The refusal is correct - nothing is written - but a bare "not found" is a dead end:
+        # it names neither the place nor what stood there, and the reader is left to bisect a
+        # file of a hundred thousand characters. Say what was found at the anchor instead.
+        line = new_text.count("\n", 0, anchor) + 1
+        if node is None:
+            what = "ни одного узла"
+        else:
+            what = (f"{'слот' if node.kind == 'slot' else 'компонент'} "
+                    f"{node.name or node.id} [{node.span.start}, {node.span.end})")
+        raise FormModelError(
+            f"внутренняя ошибка: правка записана в строку {line} (смещение {anchor}), "
+            f"но на этом месте дерево формы держит {what} – ожидался компонент, "
+            f"начинающийся здесь. Так бывает, когда узел-родитель не накрывает "
+            f"собственных детей; правка не применена."
+        )
     return EditResult(ordered, new_text, node.id, node.span)
 
 
