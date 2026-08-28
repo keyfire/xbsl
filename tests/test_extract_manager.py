@@ -20,7 +20,7 @@ REPO = Path(__file__).resolve().parent.parent
 PACKAGE = REPO / "xbsl" / "extract"
 TOOLS = REPO / "tools"
 # Modules of the package that are not steps but helpers the steps share: the distribution
-# walker and the class-file reader that states the bilingual pairs of a meta object.
+# walker and the class-file reader that states the bilingual pairs of a type.
 _NOT_STEPS = {"__init__", "__main__", "_distro", "classcode"}
 
 

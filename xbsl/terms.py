@@ -36,7 +36,7 @@ _common_reverse: dict[str, str] | None = None
 
 
 def _common_pairs() -> dict[str, str]:
-    """{Russian name: English} out of the compiler meta objects (terms_full.json).
+    """{Russian name: English} out of the distribution (terms_full.json).
 
     The compact terms.json covers types, facets, yaml properties and enumeration values; the
     names of TYPE MEMBERS and of everything the metamodel annotations leave unnamed - a form

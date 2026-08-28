@@ -1609,7 +1609,7 @@ def _kind_by_english() -> dict[str, str]:
 
     The platform is bilingual and a project may be written in either language, so the tool
     accepts both spellings of a kind. The pairs come from the term dictionary (documentation
-    plus the compiler meta objects), never from a translation; without the data the map is
+    plus the compiled classes of the distribution), never from a translation; without the data the map is
     empty and only the Russian spellings are accepted, as before.
     """
     pairs: dict[str, str] = {}

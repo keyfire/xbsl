@@ -1,9 +1,9 @@
-"""Member pairs read from the DECLARATIONS of a meta object (xbsl/extract/classcode.py).
+"""Member pairs read from what a class DECLARES (xbsl/extract/classcode.py).
 
-The class here is assembled by the test, byte for byte, in the shape the platform's own meta
-objects have: a method whose code pushes the two spellings and calls the builder that takes
-them. No Element data is needed, and no vendor class is carried in the repository - what is
-reproduced is the layout of the class file, which is a public standard.
+The class here is assembled by the test, byte for byte: a method whose code pushes the two
+spellings and makes the call that takes them. No Element data is needed, and no vendor class
+is carried in the repository - what is reproduced is the layout of a class file, which is a
+public standard.
 
 The case that pays for the module is the last one: the pool ALSO holds `Symbol` next to
 `Символ` - the fill parameter of another method - and the neighbourhood reading of the same
@@ -102,9 +102,11 @@ def _class_of(calls: list[tuple[str, list[str]]], extra_strings: list[str] = [],
     )
 
 
-BUILDER = "com/e1c/g5rt/xbsl/mogen/rtlib/CtMetaMethodBuilder.meth"
-PROPERTY = "com/e1c/g5rt/xbsl/mogen/rtlib/CtMetaPropBuilder.prop"
-PARAMETER = "com/e1c/g5rt/xbsl/mogen/rtlib/CtMetaMethodBuilder.p"
+# The calls a fixture makes, addressed the way the reader addresses them - by the tail the
+# module itself names, with a package of the test's own in front.
+BUILDER = "demo/builders/" + classcode.METHOD_FACTORY
+PROPERTY = "demo/builders/" + classcode.PROPERTY_FACTORY
+PARAMETER = "demo/builders/CtMetaMethodBuilder.p"
 
 
 def test_a_declared_method_states_its_pair():

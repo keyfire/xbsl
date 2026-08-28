@@ -324,8 +324,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the word fell through to the flat dictionary - which pairs it with `NULL`, a reserved word of
   its own that no Russian spelling maps to. The compiler takes both, so every check stayed
   green; on the running application a condition against `NULL` is never true, and the query came
-  back empty. Met live on a translated site: a register stopped being recalculated, a page block
-  and a whole navigation menu went blank at once. The literals `TRUE`, `FALSE` and `UNDEFINED`
+  back empty. Met live on a translated corpus, where three places that depended on such a
+  condition fell silent at once. The literals `TRUE`, `FALSE` and `UNDEFINED`
   are now stated by the engine, along with the single-word keywords the extractor pairs wrongly.
 
 ## 2026-08-23 – 0.73.0

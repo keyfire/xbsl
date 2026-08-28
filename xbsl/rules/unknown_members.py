@@ -348,8 +348,8 @@ def _member_english(type_name: str, member: str) -> str | None:
             if got:
                 return got
     # Last: a member table of ANOTHER type, but only for a name the whole distribution spells
-    # one way. A type inherits members, and the meta object that states them is the one of the
-    # BASE - `Array` takes its own from the mutable-array meta object, whose name is not the
+    # one way. A type inherits members, and the class that states them is the one of the
+    # BASE - `Array` takes its own from the mutable-array class, whose name is not the
     # type's. Names that answer differently somewhere (`Border` and `Bound` are one word) are
     # excluded from this pass: there the owner decides, and the owner is what we just failed
     # to find.
@@ -370,7 +370,7 @@ def _unambiguous_member_names() -> dict[str, str]:
 def _ui_member_names() -> dict[str, dict[str, str]]:
     """{type: {Russian member: English}} of the interface vocabulary ({} on older data).
 
-    Keyed by the ENGLISH name of the type, which is how the meta objects of the core library
+    Keyed by the ENGLISH name of the type, which is how the classes of the distribution
     name themselves; a catalog type is stored under both spellings, so the caller asks with
     whichever it holds and the English one is derived when needed.
     """

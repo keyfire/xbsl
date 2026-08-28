@@ -95,7 +95,7 @@ def _english_keys() -> dict[str, str]:
     out: dict[str, str] = {}
     for russian in (*CHILD_SLOTS, TYPE_KEY, NAME_KEY, ROOT_KEY, PROPERTIES_KEY, KIND_KEY):
         # The kind key is a metamodel property (`@PropertyInfo(ru="ВидЭлемента", en="ElementKind")`),
-        # the rest are named by the compiler meta objects.
+        # the rest are named by the compiled classes of the distribution.
         english = terms.common_english(russian) or terms.english(russian, "properties")
         if english:
             out[english] = russian

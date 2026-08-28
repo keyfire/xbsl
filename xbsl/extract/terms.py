@@ -14,12 +14,10 @@ Every pair here comes from the distribution, never from a translation:
   relies on;
 - yaml properties - the EMF metamodel annotates them `@PropertyInfo(ru="Имя", en="Name")`;
 - enumeration values - the metamodel declares them `InProject as "ВПроекте"`;
-- members of every stdlib type - the compiler's meta objects. The two documentation-and-xcore
-  sources above are thin: a great many names carry no `en` in the metamodel at all
-  (`@PropertyInfo(ru="Реквизиты")`), which used to read as "the platform has no English name
-  for this" - and that was wrong. The compiler builds each meta object with calls shaped like
-  `builder.name("Get", "Получить")`, so the class constant pool holds the English name
-  immediately before the Russian one, for every type and every member. Scanning those classes
+- members of every stdlib type - the distribution states them itself. The two
+  documentation-and-xcore sources above are thin: a great many names carry no `en` in the
+  metamodel at all (`@PropertyInfo(ru="Реквизиты")`), which used to read as "the platform has
+  no English name for this" - and that was wrong. Reading what the distribution declares
   yields thousands of pairs the other sources never see (Реквизиты/Attributes,
   ТабличныеЧасти/TabularParts, СоздатьОбъект/CreateObject).
 
@@ -84,13 +82,13 @@ def _add(target: dict[str, str], ru: str, en: str, conflicts: set[str]) -> None:
         conflicts.add(ru)
 
 
-#: Meta-object classes: the file name without this suffix is the English name of the type.
+#: Classes that describe a type: the file name without this suffix is its English name.
 _META_SUFFIX = re.compile(r"(CtMetaObject|MetaObject|BslImpl)$")
 #: A class states its members only if it calls one of the builders that take the pair;
 #: the test is a substring of the compiled reference, cheap enough to run on every class
 #: and far cheaper than walking the bytecode of one that declares nothing.
 _DECLARES_MEMBERS_RE = re.compile(rb"CtMeta(Method|Prop)Builder")
-#: Jars of the platform itself - the only ones that can hold meta objects.
+#: Jars of the platform itself - the only ones that can hold such classes.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
 #: The Russian side of a pair may be MIXED: the platform spells `HttpService`, `FtpSource`,
@@ -150,7 +148,7 @@ def _constant_pool(data: bytes) -> list[str]:
 
 
 def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
-    """({owner type: {ru: en}}, {ru: en}) from the compiler meta objects of the distribution.
+    """({owner type: {ru: en}}, {ru: en}) from the compiled classes of the distribution.
 
     A class without a single Cyrillic byte cannot hold a pair and is skipped before parsing -
     that check alone drops the overwhelming majority of the classes.
@@ -192,10 +190,10 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
             if not pairs:
                 continue
             owner = _META_SUFFIX.sub("", inner.rsplit("/", 1)[-1][:-len(".class")])
-            # A meta object STATES its members by calling a builder, and a statement beats the
-            # neighbourhood: adjacency named 2 of 2015 members wrongly, both confidently - the
-            # `CharAt` of a `String` came out `Symbol`, which is the fill PARAMETER of
-            # `PadFromBegin`. Read only where the builders are actually called.
+            # A class STATES its members, and a statement beats the neighbourhood: adjacency
+            # named 2 of 2015 members wrongly, both confidently - the `CharAt` of a `String`
+            # came out `Symbol`, which is the fill PARAMETER of `PadFromBegin`. Read only
+            # where such declarations are actually made.
             declared = classcode.declared_members(data) if _DECLARES_MEMBERS_RE.search(data) else {}
             resolved = {ru: en for en, ru in pairs}
             resolved.update(declared)
@@ -226,7 +224,7 @@ def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
     The type dictionary spells the STDLIB TYPE (`Перечисление` -> `Enum`), while the yaml
     of an English project carries the KIND enum's spelling (`ElementKind: Enumeration`) -
     mapping kinds through the dictionary lost such objects from every by-kind view. The
-    enum class pairs the spellings the same way the meta objects do: the English constant
+    enum class pairs the spellings the same way the type classes do: the English constant
     right before the Russian one.
     """
     for entry in car.namelist():
@@ -260,7 +258,7 @@ def _scan_query_terms(car: zipfile.ZipFile) -> dict[str, str]:
     The XBSL grammar does not describe queries at all - `Запрос{...}` is a nested language
     with its own parser (TreeSQL), and its vocabulary is nowhere in the documentation either.
     The one place that pairs the spellings is the QueryTerms class of the parser's model, and
-    there the English name lies right before the Russian one, exactly as in the meta objects.
+    there the English name lies right before the Russian one, exactly as in the type classes.
     """
     for entry in car.namelist():
         if not entry.endswith(".jar") or not _QUERY_JAR_RE.search(entry):

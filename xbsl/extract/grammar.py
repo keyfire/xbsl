@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Extract the XBSL language data from the 1C:Element platform grammar.
 
-XBSL is implemented on Eclipse Xtext + ANTLR. The distribution (the jar
-com.e1c.g5rt.xbsl.language-*.jar) carries the generated InternalBsl.g and InternalBsl.tokens.
-The script reads them and builds xbsl/data/element/<version>/language.json: bilingual
+XBSL is implemented on Eclipse Xtext + ANTLR, and the distribution carries the generated
+grammar and token table of the language. The script reads them and builds xbsl/data/element/<version>/language.json: bilingual
 keywords, operators/symbols, and the token identifier map.
 
 The Element version is detected from the distribution automatically (or set via --element-version).

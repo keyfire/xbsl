@@ -7,7 +7,7 @@ values, and the value's type decides what happens to it:
 
 - `Term` / `AttributeName`   - an identifier of the project: the dictionary;
 - `kind: type`               - a type expression: platform types, facets, project names;
-- `kind: enum` / `*G5Enum`   - an enumeration value, translated within its enumeration;
+- `kind: enum` / an enum class - an enumeration value, translated within its enumeration;
 - `kind: boolean`            - "Истина" -> `True`;
 - `Localizable` / `String`   - DATA: left as written (a `$Словарь.Ключ` reference is the
   exception - both of its parts are names and follow their renames);

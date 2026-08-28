@@ -1,9 +1,9 @@
 // Debugging 1C:Element applications: a thin client for the platform's own debug adapter.
 //
-// The extension does not ship the platform debug adapter (1C's proprietary jars): it starts the
-// stock Java adapter `com.e1c.g5rt.debugger.adapter.App` from the directory named by
-// xbsl.debug.adapterPath (extracted from an Element distribution) and speaks DAP to it over
-// stdio - exactly the way the Theia-based IDE does.
+// The extension does not ship the platform debug adapter (1C's proprietary jars): it starts
+// the stock Java adapter of the platform from the directory named by xbsl.debug.adapterPath
+// (extracted from an Element distribution) and speaks DAP to it over stdio - exactly the way
+// the Theia-based IDE does.
 //
 // The token and the address of the debug session come from the platform through
 // `elemctl apps debug` (Console API /actions/debug). The session id is generated on the client

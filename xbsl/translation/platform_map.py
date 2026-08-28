@@ -191,7 +191,7 @@ _VERIFIED_MEMBER_SPELLINGS: dict[str, str] = {
 
 @lru_cache(maxsize=1)
 def _members_by_owner() -> dict[str, dict[str, str]]:
-    """{English type name: {Russian member: English}} out of the compiler meta objects."""
+    """{English type name: {Russian member: English}} out of the compiled classes of the distribution."""
     try:
         data = dataset.load_json("terms_full.json") or {}
     except Exception:  # noqa: BLE001 - no data, no pairs

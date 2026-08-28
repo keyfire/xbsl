@@ -1,8 +1,8 @@
-"""Reading the DECLARATIONS a compiled meta object makes, not the neighbourhood of its pool.
+"""Reading what a compiled class DECLARES, not what stands next to what in its constants.
 
-The bilingual pairs of the platform were read by adjacency: the constant pool of a meta object
-holds each English name next to its Russian twin, and the reader took every Cyrillic string
-together with the identifier beside it. Adjacency is a guess. The pool keeps strings in the
+The bilingual pairs of the platform were read by adjacency: a compiled class of the
+distribution holds each English name next to its Russian twin, and the reader took every
+Cyrillic string together with the identifier beside it. Adjacency is a guess. The pool keeps strings in the
 order the code first mentions them, so a name whose twin was already interned ends up beside a
 stranger, and the reader then states a pair nobody declared. Measured over the whole
 distribution it got 2 of 2015 members wrong, and both were the damaging kind - a CONFIDENT
@@ -11,13 +11,9 @@ wrong spelling: the `CharAt` of a `String` came out `Symbol`, which is the fill 
 came out `ScheduleWithoutTransaction`. A tree translated with such a pair calls a method the
 compiler does not have.
 
-A meta object states every member by CALLING a builder of the runtime library:
-
-    CtMetaMethodBuilder.meth(OWNER, "CharAt", "Символ", 35)
-    CtMetaPropBuilder.prop(OWNER, "Presentation", "Представление")
-
-so the pair is not guessed but read: the two string constants pushed immediately before the
-call ARE the two spellings the platform declares. That is what this module returns.
+The distribution does not leave the pairs to be guessed: a member is DECLARED by a call that
+takes both of its spellings, and the two string constants pushed right before that call are
+the pair itself. Reading the calls is what this module does.
 
 Nothing here is specific to the vocabulary - it is a small class-file reader: the constant
 pool, the code of every method, and the calls that code makes with string arguments.
@@ -47,9 +43,9 @@ _INVOKE = (0xB6, 0xB7, 0xB8, 0xB9)  # virtual, special, static, interface
 _WIDE = 0xC4
 _TABLESWITCH, _LOOKUPSWITCH = 0xAA, 0xAB
 
-#: The builders whose call states the pair of a MEMBER - a method or a property of a type.
-#: A parameter is stated by `CtMetaMethodBuilder.p` and a constructor by `CtMetaCtorBuilder`;
-#: those are names too, but not names of members, and mixing them in is what adjacency did.
+#: The calls that state the pair of a MEMBER - a method or a property of a type. Parameters
+#: and constructors are declared by calls of their own: those carry names too, but not names
+#: of members, and mixing them in is exactly what the neighbourhood reading did.
 METHOD_FACTORY = "CtMetaMethodBuilder.meth"
 PROPERTY_FACTORY = "CtMetaPropBuilder.prop"
 MEMBER_FACTORIES = (METHOD_FACTORY, PROPERTY_FACTORY)

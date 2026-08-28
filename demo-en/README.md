@@ -16,8 +16,8 @@ Exactly such a project compiles, and `elemctl` (0.27.0+) builds it - both spelli
 service file names are resolved there too.
 
 Enumeration values are English here as well (`Banner`, `Single`, `Double`, `Main`) - the
-compiler accepts them. The generated data does not carry those pairs yet (they live
-in the distribution's `*G5Enum.class`), so the linter deliberately does not judge an ASCII value
+compiler accepts them. The generated data does not carry those pairs yet (they live inside
+the distribution), so the linter deliberately does not judge an ASCII value
 of such a property: silence beats a false error on legal code.
 
 The members of the form's base type are English here as well - a built-in command is a

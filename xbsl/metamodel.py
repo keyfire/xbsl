@@ -522,7 +522,7 @@ def _english_kinds() -> dict[str, str]:
     Built FORWARD from the kinds themselves: the dictionaries are many-to-one the other way
     (`Type` is the English of both `Тип` and `ТипЭлементаПроекта`), so a plain reverse map would
     answer with whichever pair came last. The two sources complement each other - the compact
-    dictionary names Catalog and HttpService, the compiler meta objects InterfaceComponent and
+    dictionary names Catalog and HttpService, the compiled classes InterfaceComponent and
     CommonModule. On top of both goes the SERIALIZER's own kind table: what an English project
     actually writes into `ElementKind:` (the distribution's own table when the dataset carries
     it, the proven constant otherwise) - every spelling stays accepted, the serializer's wins

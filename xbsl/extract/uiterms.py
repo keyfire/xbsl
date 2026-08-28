@@ -10,19 +10,17 @@ palette stayed Russian in an English editor.
 
 Where the pairs live in the distribution:
 
-- `types-manifest.yaml` of the `com.e1c.g5rt.appengine.*` jars - one record per platform type
-  with `name` (the English short name), `nameEn` and `nameRu` (both fully qualified). The
-  package pair is what stays after dropping the last segment of each.
-- `<name>G5Enum.class` next to it - the values of that enumeration. In the constant pool the
-  English spelling of a value sits right before the Russian one (`Icon`, `Иконка`, a UUID,
-  `IconAndText`, `ИконкаИТекст`, ...), which is what this module reads. Pairs are collected
-  PER ENUMERATION: globally the same Russian word answers to several English ones
-  (`Обычная` is Common, Normal and Usual in different enumerations). The manifest names only
-  part of the enumerations, so the name of the rest is taken from the neighbouring
-  `<name>G5Type.class`, whose pool carries the type's own pair - without it the values of
-  the event-log importance enumeration and of a hundred-odd others stayed unnamed.
-- the component descriptions the runtime itself is built from -
-  `com/e1c/g5rt/appengine/ui/stdcomponents/common/components/{ui,data}/<Type>.yaml`. Every
+- the type manifest - one record per platform type with its short English name and both
+  fully qualified spellings. The package pair is what stays after dropping the last segment
+  of each.
+- the enumeration classes next to it - the values of each enumeration, where the English
+  spelling of a value stands right beside the Russian one. Pairs are collected PER
+  ENUMERATION: globally the same Russian word answers to several English ones (`Обычная` is
+  Common, Normal and Usual in different enumerations). The manifest names only part of the
+  enumerations, so the name of the rest comes from the neighbouring type class - without it
+  the values of the event-log importance enumeration and of a hundred-odd others stayed
+  unnamed.
+- the component descriptions the runtime itself is built from. Every
   type, property, event, method, method parameter and generic argument carries
   `term: {en, ru}` there, which is the authoritative bilingual vocabulary of the interface:
   the reference documentation is Russian-only, so for most names nothing else in the data
@@ -230,7 +228,7 @@ def _unambiguous(votes: dict[str, Counter]) -> dict[str, str]:
 
 
 def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str | None:
-    """The Russian name of an enumeration: from the manifest, else from its `G5Type` class.
+    """The Russian name of an enumeration: from the manifest, else from its own type class.
 
     The manifest lists well under half of the enumerations, and the rest would lose their
     values entirely. The type class carries the pair of the type itself in its pool, so the
@@ -249,13 +247,12 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
 
 
 def _member_names(meta_classes: dict[str, bytes]) -> dict[str, dict[str, str]]:
-    """{type: {Russian member: English}} from the compile-time meta objects of the core library.
+    """{type: {Russian member: English}} out of the compiled classes of the distribution.
 
     The reference documentation is Russian-only, so the catalog stores a type's members under
     their Russian names alone - and a rule judging a member of an ENGLISH project had nothing
-    to compare against. The pairs are stated in `<Type>CtMetaObject`: its constant pool holds
-    the English name of every member immediately followed by the Russian one, the same layout
-    the enumeration classes use, so the same reader serves.
+    to compare against. The distribution states the pairs beside each other, in the layout the
+    enumeration classes use, so the same reader serves.
 
     Kept PER TYPE rather than as one table, because the mapping is not a function: `Граница`
     is `Border` on one type and `Bound` on another, `Загрузить` is `Load` and `Upload`, and a
