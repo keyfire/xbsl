@@ -193,6 +193,114 @@ def test_qualified_and_binding_values_skipped():
     assert _lint(_project(form)) == []
 
 
+# --- yaml/missing-import: binding chain roots -------------------------------------------
+
+MODULE_B = "ВидЭлемента: ОбщийМодуль\nИмя: ЧужойМодуль\nОбластьВидимости: ВПроекте\n"
+BINDING_FORM = (
+    FORM_HEAD
+    + "Наследует:\n"
+    + "    Тип: Группа\n"
+    + "Содержимое:\n"
+    + "    -\n"
+    + "        Тип: Надпись\n"
+    + "        Имя: Метка\n"
+    + "        Значение: =ЧужойМодуль.ОриентацияЭтапов()\n"
+)
+
+
+def _binding_project(form_yaml, **extra):
+    files = {
+        "А/Подсистема.yaml": SUB_A,
+        "Б/Подсистема.yaml": SUB_B,
+        "Б/ЧужойМодуль.yaml": MODULE_B,
+        "А/Форма.yaml": form_yaml,
+    }
+    files.update(extra)
+    return files
+
+
+def test_binding_call_of_a_foreign_module_is_reported():
+    """The live case: a form markup calls a method of a foreign common module from a
+    binding, with no import line - the linter read only the type positions and passed
+    the project clean, and the server compiler refused at the price of a full deploy."""
+    diags = _lint(_binding_project(BINDING_FORM))
+    assert len(diags) == 1
+    d = diags[0]
+    assert d.rule_id == RULE
+    assert "ЧужойМодуль.ОриентацияЭтапов" in d.message and "'Б'" in d.message
+    assert (d.line, d.col) == (9, 20)  # the root inside the binding value
+
+
+def test_binding_with_the_import_is_silent():
+    form = BINDING_FORM.replace("Имя: Форма\n", "Имя: Форма\nИмпорт:\n    - Б\n", 1)
+    assert _lint(_binding_project(form)) == []
+
+
+def test_binding_root_declared_in_this_yaml_is_silent():
+    # The root is an attribute of the form itself - the markup scope explains it.
+    form = (
+        FORM_HEAD
+        + "Наследует:\n    Тип: Группа\n"
+        + "Реквизиты:\n    -\n        Имя: ЧужойМодуль\n        Тип: Строка\n"
+        + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Метка\n"
+        + "        Значение: =ЧужойМодуль.Длина()\n"
+    )
+    assert _lint(_binding_project(form)) == []
+
+
+@pytest.mark.needs_data  # the mapper parses the paired module: the lexer needs language.json
+def test_binding_root_declared_in_the_paired_module_is_silent():
+    """The paired module declares the name (a field here) - the markup addresses it
+    locally even when a foreign subsystem holds a public element of the same name."""
+    form = BINDING_FORM.replace("ЧужойМодуль.ОриентацияЭтапов()", "Кэш.Длина()")
+    files = _binding_project(form)
+    files["Б/Кэш.yaml"] = "ВидЭлемента: Справочник\nИмя: Кэш\nОбластьВидимости: ВПроекте\n"
+    files["А/Форма.xbsl"] = "пер Кэш: Строка\n\nметод Т()\n;\n"
+    assert _lint(files) == []
+
+
+def test_binding_qualified_and_localization_refs_are_not_chains():
+    # `Б::ЧужойМодуль.Метод()` relies on the usage declaration and needs no import line;
+    # `$ЧужойМодуль.Ключ` is a localization reference - the sibling rule's case.
+    form = (
+        FORM_HEAD
+        + "Наследует:\n    Тип: Группа\n"
+        + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Метка\n"
+        + "        Значение: =Б::ЧужойМодуль.Метод() + $ЧужойМодуль.Ключ\n"
+    )
+    assert _lint(_binding_project(form)) == []
+
+
+def test_a_plain_string_value_is_not_a_binding():
+    form = BINDING_FORM.replace(
+        "=ЧужойМодуль.ОриентацияЭтапов()", "Текст про ЧужойМодуль.Метод"
+    )
+    assert _lint(_binding_project(form)) == []
+
+
+def test_a_binding_to_a_non_public_foreign_element_is_left_alone():
+    """Not proven: for a binding to a NON-public foreign element the compiler's refusal
+    was never demonstrated, so neither rule judges it - this one skips non-public
+    candidates, and yaml/foreign-not-public does not read bindings at all."""
+    files = _binding_project(BINDING_FORM)
+    files["Б/ЧужойМодуль.yaml"] = "ВидЭлемента: ОбщийМодуль\nИмя: ЧужойМодуль\n"
+    assert _lint(files) == []
+    assert _lint_vis(files) == []
+
+
+def test_a_type_and_a_binding_of_one_subsystem_are_one_diagnostic():
+    # The fix is a single import line, so one report per missing subsystem per file.
+    form = (
+        FORM_HEAD
+        + FORM_BODY
+        + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Метка\n"
+        + "        Значение: =ЧужойМодуль.Метод()\n"
+    )
+    files = _binding_project(form)
+    files["Б/Товары.yaml"] = GOODS
+    assert len(_lint(files)) == 1
+
+
 # --- yaml/foreign-not-public: the other half of the same boundary -----------------------
 
 VIS_RULE = "yaml/foreign-not-public"

@@ -37,6 +37,21 @@ reference is either a type position (the string values of `Тип` keys, generic
 included) or a navigation target (`ТипФормы`) - see _REFERENCE_KEYS. The namespace import in the paired `.xbsl` module does not cover the yaml – such
 a project deploys, but the component initialization fails at runtime.
 
+A third reference shape is a BINDING: a yaml string value opening with `=` holds an
+expression, and the root of a dotted chain in it (`=ЧужойМодуль.Метод()`) reaches a
+common module of another subsystem exactly the way a type position does - except the
+refusal comes earlier, from the server compiler
+(`Пространство имен ... не импортировано`), at the price of a full deploy cycle.
+
+The binding shape is judged by THIS rule only: yaml/foreign-not-public deliberately does
+not read bindings, because for a binding to a NON-public foreign element the compiler's
+refusal is not proven - that rule reports only what is (see its docstring). The live case
+behind the extension: a form markup called a method of a foreign common module from a
+property binding with no import line, the linter read only the type positions and passed
+the whole project clean, and the refusal arrived from the server compiler at the price of
+a full deploy cycle. Re-checked on a copy of that tree with the import line removed:
+zero findings before this extension.
+
 An element's subsystem is determined by the source layout: a directory with a
 `Подсистема.yaml` is a subsystem root (the subsystem name is the directory name, or the
 file's `Имя` when present), and every element under it belongs to that subsystem
@@ -59,6 +74,13 @@ Narrowings for zero false positives:
   of nothing);
 - qualified names (`Подсистема::Тип`) rely on the subsystem's `Использование`, not on
   the element's import – they do not parse as short chains and are skipped;
+- a binding root declared in THIS yaml (any name-key value of the tree – an attribute,
+  a component, a command, a property) or in the PAIRED module (a method, a field, a
+  structure, an enumeration) resolves to the file's own scope and is skipped, as are
+  the implicit names of the platform;
+- a `$Словарь.Ключ` reference inside a binding belongs to
+  yaml/localization-missing-import and does not match the chain pattern, and neither
+  does a qualified `Подсистема::Элемент.Метод` chain (that form needs no import);
 - a file outside any subsystem (no `Подсистема.yaml` up the path) is skipped, as is the
   whole check when the project has no subsystem files at all.
 
@@ -86,6 +108,7 @@ from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules import semantics
+from xbsl.rules.enum_values import _binding_values, _name_values
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.undefined_names import _IMPLICIT
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
@@ -150,6 +173,15 @@ MESSAGES = {
               "not list: the component initialization fails at runtime "
               "(an import in the paired .xbsl does not cover the yaml).",
     },
+    "yaml/missing-import.chain": {
+        "ru": "Обращение '{name}' – к элементу подсистемы '{sub}', а в секции Импорт её нет: "
+              "деплой упадёт на серверной компиляции "
+              "(\"Пространство имен ... не импортировано\"); импорт в парном .xbsl "
+              "биндинги разметки не покрывает.",
+        "en": "'{name}' reaches an element of subsystem '{sub}' which the {n[Импорт]} section "
+              "does not list: the deploy fails at server compilation (\"the namespace is not "
+              "imported\"); an import in the paired .xbsl does not cover the markup bindings.",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -167,6 +199,54 @@ dataset.register_reset(_public_scopes.cache_clear)
 # position, so both rules below read both keys: `ТипФормы: ЗадачиФормаСписка` reaches into
 # another subsystem exactly the way `Тип: Задачи.Ссылка` does.
 _REFERENCE_KEYS = ("Тип", "ТипФормы")
+
+#: The root of a dotted chain inside a binding value (`=Модуль.Метод(...)`): an identifier
+#: opening with a capital of either alphabet, a dot, a member (the same shape
+#: code/unknown-enum-value reads out of bindings). The lookbehinds keep out what is not a
+#: chain root: a member of a longer chain (after `.`), a `$Словарь.Ключ` localization
+#: reference (yaml/localization-missing-import's case), and a qualified
+#: `Подсистема::Элемент` name - that form relies on the usage declaration of the
+#: subsystem and needs no import.
+_BINDING_CHAIN = re.compile(
+    r"(?<![\wА-Яа-яЁё.$])(?<!::)([А-ЯЁA-Z][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
+    re.UNICODE,
+)
+
+
+def _binding_chain_roots(
+    source: SourceFile, data: dict, stdlib: frozenset[str],
+) -> list[tuple[str, str, int, int]]:
+    """Chain roots of the binding values of a parsed yaml, with positions.
+
+    Everything THIS file explains is subtracted right here, where the answer lives: a root
+    that any name-key value of the tree declares (an attribute, a component, a command, a
+    property - the platform binds those names into the markup scope), a stdlib name (without
+    an import it resolves to the standard namespace), an implicit platform name. What the
+    PAIRED module declares is subtracted in the reduce - it lives in another file. The
+    position is the first occurrence of the chain in the raw text, root first.
+    """
+    if "=" not in source.text:  # the cheap gate: no bindings, nothing to scan
+        return []
+    own_names = _name_values(data)
+    pairs: dict[tuple[str, str], None] = {}
+    for binding in _binding_values(data):
+        for match in _BINDING_CHAIN.finditer(binding):
+            root = match.group(1)
+            if root in stdlib or root in own_names or root in _IMPLICIT:
+                continue
+            pairs.setdefault((root, match.group(2)))
+    if not pairs:
+        return []
+    lm = linemap(source)
+    roots: list[tuple[str, str, int, int]] = []
+    for root, member in pairs:
+        pat = re.compile(
+            r"(?<![\wА-Яа-яЁё.$])(?<!::)" + re.escape(f"{root}.{member}") + r"(?![\wА-Яа-яЁё])"
+        )
+        found = pat.search(source.text)
+        line, col = lm.linecol(found.start()) if found else (1, 1)
+        roots.append((root, f"{root}.{member}", line, col))
+    return roots
 
 
 def _subsystem_roots(sources: list[SourceFile]) -> dict[Path, str]:
@@ -191,18 +271,27 @@ def _subsystem_of(path: Path, roots: dict[Path, str]) -> str | None:
 
 def _yaml_import_mapper(source: SourceFile) -> dict | None:
     """The map phase: a subsystem yaml contributes its root directory, an object yaml its
-    placement slice (name, visibility, imports) and its candidate type roots (stdlib
-    settles here), a module its local types (the collision guard)."""
+    placement slice (name, visibility, imports) with its candidate type roots and binding
+    chain roots (stdlib settles here), a module its local types (the collision guard) and
+    the names it declares - the paired yaml addresses those through the element name, so
+    they explain a binding root the same way a local name does."""
     if not _HAVE_YAML:
         return None
     if source.kind == "xbsl":
         try:
             local = semantics._file_local_types(source)
         except DatasetError:
-            return None  # no language data – the collision guard has nothing to skip
-        if not local:
+            return None  # no language data – neither guard has anything to offer
+        module, errors = parse(source)
+        declared = set() if errors else {
+            name for member in module.members
+            if isinstance(member, (P.ObjectField, P.Structure, P.Enum, P.Method))
+            and (name := getattr(member, "name", ""))
+        }
+        if not local and not declared:
             return None
-        return {"k": "x", "local_types": sorted(local)}
+        return {"k": "x", "stem": _pair_stem(source.rel),
+                "local_types": sorted(local), "declared": sorted(declared)}
     if source.kind != "yaml":
         return None
     if source.path.name in _SUBSYSTEM_FILES:
@@ -238,10 +327,12 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
     return {
         "k": "el",
         "path": str(source.path),
+        "stem": _pair_stem(source.rel),
         "name": nm if isinstance(nm, str) else None,
         "vis": value_of(data, "ОбластьВидимости", kind),
         "imports": imports,
         "cands": cands,
+        "broots": _binding_chain_roots(source, data, stdlib),
     }
 
 
@@ -258,9 +349,11 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     if not roots:
         return
     local_types: set[str] = set()
+    declared_by_stem: dict[str, set[str]] = {}
     for fact in facts.values():
         if fact["k"] == "x":
             local_types.update(fact["local_types"])
+            declared_by_stem.setdefault(fact["stem"], set()).update(fact["declared"])
     placement: dict[str, dict[str, object]] = {}
     elements: list[tuple[str, dict, str]] = []
     for rel, fact in facts.items():
@@ -274,8 +367,14 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             placement.setdefault(fact["name"], {})[sub] = fact["vis"]
     for rel, fact, my_sub in elements:
         imports = set(fact["imports"])
+        # A binding root the PAIRED module declares (a method, a field, a structure) is
+        # addressed through the element's own name - the file explains it, not an import.
+        paired = declared_by_stem.get(fact["stem"], frozenset())
+        candidates_here = [(*c, "missing") for c in fact["cands"]] + [
+            (*c, "chain") for c in fact["broots"] if c[0] not in paired
+        ]
         reported: set[tuple[str, ...]] = set()
-        for root, chain_name, line, col in fact["cands"]:
+        for root, chain_name, line, col, shape in candidates_here:
             if root in local_types:
                 continue
             subs = placement.get(root)
@@ -291,7 +390,8 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             reported.add(candidates)
             yield Diagnostic(
                 rel, line, col, "yaml/missing-import", Severity.WARNING,
-                i18n.t("yaml/missing-import.missing", name=chain_name, sub="/".join(candidates)),
+                i18n.t(f"yaml/missing-import.{shape}", name=chain_name,
+                       sub="/".join(candidates)),
             )
 
 
