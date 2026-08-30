@@ -9,6 +9,14 @@ from xbsl import dataset, i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.semantics import _MEMBER_TYPE_TAILS, _english_tails, _object_members
+from xbsl.rules.yaml_schema import _composed, _mapping_nodes
+
+try:
+    import yaml
+
+    _HAVE_YAML = True
+except ImportError:  # pragma: no cover
+    _HAVE_YAML = False
 
 MESSAGES = {
     "structure/xbsl-pair.title": {
@@ -19,8 +27,23 @@ MESSAGES = {
         "ru": "Нет парного описания {name} для модуля.",
         "en": "No paired descriptor {name} for the module.",
     },
+    "yaml/duplicate-key.title": {
+        "ru": "Ключ задан в узле дважды",
+        "en": "A key is set twice in one node",
+    },
+    "yaml/duplicate-key.repeat": {
+        "ru": "Ключ '{name}' уже задан в этом узле (строка {line}) – повтор молча "
+              "вытесняет первое значение, а компилятор отклоняет файл при деплое.",
+        "en": "The key '{name}' is already set in this node (line {line}) - the repeat "
+              "silently overrides the first value, and the compiler rejects the file on "
+              "deploy.",
+    },
 }
 i18n.register(MESSAGES)
+
+#: The `<<` key: YAML 1.1 lets one mapping carry several merge keys, each pulling in
+#: another mapping, so a repeated `<<` is legal and is not a duplicate.
+_MERGE_TAG = "tag:yaml.org,2002:merge"
 
 @lru_cache(maxsize=1)
 def _module_suffixes() -> frozenset[str]:
@@ -69,3 +92,55 @@ def xbsl_pair(source: SourceFile) -> Iterable[Diagnostic]:
             source.rel, 1, 1, "structure/xbsl-pair", Severity.WARNING,
             i18n.t("structure/xbsl-pair.missing", name=yaml_path.name),
         )
+
+
+@rule("yaml/duplicate-key", "yaml/duplicate-key.title", "A", severity=Severity.ERROR)
+def yaml_duplicate_key(source: SourceFile) -> Iterable[Diagnostic]:
+    """A scalar key repeated within one YAML mapping.
+
+    The second and later occurrences are flagged, at the position of the repeat, naming the
+    key and the line where it was first set. YAML syntax allows the repeat, so `yaml/valid`
+    is silent, and the loader keeps only the LAST value - by the time any schema rule reads
+    the parsed document, the duplicate has already collapsed into one entry, and the whole
+    engine judges a file that is not the one on disk. The compiler is the first to object,
+    at deploy time: the platform rejects a property given twice, and the half-merged node
+    breeds a wave of induced errors after it. The live case (2026-08-28): a recomposition of
+    a form tab lost one list-item dash, the properties of the neighbouring page merged into
+    a single node, the linter answered clean - and the deploy fell over. A structural check
+    on the composed node graph (`yaml_schema._composed`, cached per source - PyYAML's
+    composer keeps the duplicates that the loader folds) catches this before any metamodel
+    is consulted, which is why the rule needs no Element data and runs in a public clone.
+
+    Narrowings:
+
+    - non-scalar keys are skipped: the platform serializer never writes a complex key, and
+      deciding equality of composed subtrees is not what this rule measures;
+    - the merge key is skipped by its tag (`_MERGE_TAG`): several `<<` entries in one
+      mapping are legal YAML 1.1, each pulling in another mapping;
+    - keys compare by (tag, text), the way the loader tells keys apart: a plain `1` and a
+      quoted `1` are an int key and a str key - different entries, not a duplicate. Two
+      spellings of one boolean (a plain `true` next to `True`) differ in text and are let
+      through - a miss on a key no platform file carries, never a false alarm;
+    - a mapping reached through an alias is judged once: `_mapping_nodes` deduplicates the
+      anchored node itself, so an anchor used twice does not double the findings.
+    """
+    if not _HAVE_YAML or source.kind != "yaml":
+        return
+    root = _composed(source)
+    if root is None:
+        return
+    for mapping in _mapping_nodes(root):
+        first_lines: dict[tuple[str, str], int] = {}
+        for key, _value in mapping.value:
+            if not isinstance(key, yaml.ScalarNode) or key.tag == _MERGE_TAG:
+                continue
+            ident = (key.tag, key.value)
+            line = key.start_mark.line + 1
+            if ident not in first_lines:
+                first_lines[ident] = line
+                continue
+            yield Diagnostic(
+                source.rel, line, key.start_mark.column + 1,
+                "yaml/duplicate-key", Severity.ERROR,
+                i18n.t("yaml/duplicate-key.repeat", name=key.value, line=first_lines[ident]),
+            )
