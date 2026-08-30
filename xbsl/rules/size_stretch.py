@@ -1,6 +1,6 @@
 """Tier D: fixed sizes and stretch weights the platform reads differently than intended.
 
-Three checks, all of them disabled by default: each one is true about the layout, yet whether
+Four checks, all of them disabled by default: each one is true about the layout, yet whether
 it MATTERS depends on where the component ends up, which a file cannot say. Enable them
 point-blank when the symptom is on the screen.
 
@@ -68,6 +68,38 @@ to list the candidates. Checked are only КонтейнерHtml nodes (an iframe
 so `Авто` most often resolves to "stretch") whose size is a fixed positive number; `Авто`,
 bindings (`=...`) and zero are skipped. Only a missing Растягивать* key fires – an explicit
 `Авто` or `Истина` is taken as the author's deliberate choice.
+
+--- yaml/col-width-needs-no-stretch (a column width that turns into a share) ---
+
+All three table column kinds - `StandardTableColumn`, `TableColumn`, `CustomTableColumn` -
+carry both `Width` and `HorizontalStretch` in the ui schema, and the schema defines `Width`
+as a DEFAULT width ("Задает ширину компонента по умолчанию."). When the column stretches -
+which `Auto` readily resolves to inside a stretching table - the number acts as a share of
+the free space (a flex basis) rather than pixels: the column comes out wider than asked and
+the content drifts away from its neighbour. The trap is that the author usually MEANS
+pixels: the reference case in a deployed project is a 40-pixel badge column whose badge ran
+far away from the adjacent name until an explicit `HorizontalStretch: False` pinned it, and
+the comment left next to the cure says exactly that.
+
+Judged is a column of one of the three kinds whose `Width` is a fixed positive number (not
+`Auto`, not a binding, not zero) with NO `HorizontalStretch` key in the same node. An
+explicit value of ANY kind - `False`, `True`, `Auto`, a binding - is the author's
+deliberate choice and is never judged: the same project keeps `Width: 300` together with
+`HorizontalStretch: True` on purpose, the width working as the flex basis of a share.
+
+Width-as-a-share is a legitimate technique in its own right, documented in the surveyed
+project itself (a share layout keeps numeric widths deliberately and hands one column the
+whole leftover), and the convention is INVERTED relative to `HtmlContainer`: of 43
+numeric-width columns only 2 spell the ban out. Statically the trap cannot be told from
+the technique, so the rule follows the family model - severity INFO, disabled by default,
+enabled point-blank when the symptom is on the screen (a column wider than asked, content
+drifting away from its neighbour). The message carries both cures: `HorizontalStretch:
+False` for a pixel width, and `MinWidth` for a share with a guaranteed minimum - 30
+columns of the surveyed project already live that way.
+
+A SEPARATE rule rather than a new entry in `_CHECKED_TYPES`: a point-blank `--select` must
+tell columns from `HtmlContainer`, and a column is judged on the `Width` axis alone - the
+`Height` axis of a column has not been surveyed.
 
 Positions come from the composed yaml node graph (yaml.compose keeps line/column marks), so
 equal values in different nodes are told apart; PyYAML counts CRLF line breaks correctly.
@@ -139,6 +171,33 @@ MESSAGES = {
         "en": "The {type} component has a fixed {size_key}: {value} but no {stretch_key}: {n[Ложь]} – "
               "at '{n[Авто]}' the platform may stretch the component over the parent's leftover space, "
               "overriding the size.",
+    },
+    "yaml/col-width-needs-no-stretch.title": {
+        "ru": "Ширина колонки без отключения растягивания",
+        "en": "A column width without disabling the stretch",
+    },
+    "yaml/col-width-needs-no-stretch.share": {
+        "ru": "У колонки {type} задана {width_key}: {value} без {stretch_key} – при "
+              "растягивании (на '{n[Авто]}' платформа решает сама) число работает как доля "
+              "свободного места, а не пиксели: колонка выходит шире заданного, и содержимое "
+              "уезжает от соседней. Пиксельной ширине – {stretch_key}: {n[Ложь]}, доле с "
+              "гарантированным минимумом – {min_width_key}.",
+        "en": "The {type} column has a fixed {width_key}: {value} but no {stretch_key} – when "
+              "the column stretches (at '{n[Авто]}' the platform decides on its own) the "
+              "number acts as a share of the free space rather than pixels: the column comes "
+              "out wider than asked and the content drifts away from its neighbour. A pixel "
+              "width needs {stretch_key}: {n[Ложь]}, a share with a guaranteed minimum – "
+              "{min_width_key}.",
+    },
+    "yaml/col-width-needs-no-stretch.off": {
+        "ru": "ширина-как-доля – законная техника (долевые раскладки колонок носят её "
+              "сознательно), и статически ловушка от техники не отличается – предупреждение "
+              "дало бы ложные. Включайте точечно, когда колонка на экране шире заданного и "
+              "содержимое уезжает от соседней",
+        "en": "a width-as-a-share is a legitimate technique (share layouts of columns carry "
+              "it on purpose), and the trap is statically indistinguishable from the "
+              "technique – a warning would be false. Enable it point-blank when a column on "
+              "the screen is wider than asked and the content drifts away from its neighbour",
     },
 }
 i18n.register(MESSAGES)
@@ -385,3 +444,57 @@ def size_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
                     value=entry[1].value, stretch_key=shown_stretch,
                 ),
             )
+#: The table column kinds: the abstract base and both concrete kinds alike carry `Width`
+#: and `HorizontalStretch` in the ui schema, so all three are judged.
+_COLUMN_TYPES = frozenset({
+    "КолонкаТаблицы",
+    "ПроизвольнаяКолонкаТаблицы",
+    "СтандартнаяКолонкаТаблицы",
+})
+_WIDTH_KEY = "Ширина"
+_H_STRETCH_KEY = "РастягиватьПоГоризонтали"
+_MIN_WIDTH_KEY = "МинимальнаяШирина"
+
+
+@rule(
+    "yaml/col-width-needs-no-stretch", "yaml/col-width-needs-no-stretch.title", "D",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="yaml/col-width-needs-no-stretch.off",
+)
+def col_width_needs_no_stretch(source: SourceFile) -> Iterable[Diagnostic]:
+    """A fixed column width without disabling the stretch - the number acts as a share."""
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    data, err = _parsed(source)
+    if err is not None or not _is_object(data):
+        return
+    root = _composed(source)
+    if root is None:  # pragma: no cover - _parsed has already vetted the syntax
+        return
+    for mapping in _mapping_nodes(root):
+        keys = _scalar_entries(mapping)
+        type_entry = keys.get("Тип")
+        if type_entry is None or not isinstance(type_entry[1], yaml.ScalarNode):
+            continue
+        written_type = type_entry[1].value.split("<", 1)[0].strip()
+        if uischema.canonical_component(written_type) not in _COLUMN_TYPES:
+            continue
+        entry = keys.get(_WIDTH_KEY)
+        if entry is None or _H_STRETCH_KEY in keys or not _fixed_size(entry[1]):
+            continue
+        key_node = entry[0]
+        # The advice names the keys the way the file spells them, like the sibling rule
+        # above: an English-spelled form must not be sent looking for a Russian key.
+        shown_stretch, shown_min = _H_STRETCH_KEY, _MIN_WIDTH_KEY
+        if key_node.value.isascii():
+            shown_stretch = terms.common_english(_H_STRETCH_KEY) or shown_stretch
+            shown_min = terms.common_english(_MIN_WIDTH_KEY) or shown_min
+        yield Diagnostic(
+            source.rel, key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+            "yaml/col-width-needs-no-stretch", Severity.INFO,
+            i18n.t(
+                "yaml/col-width-needs-no-stretch.share",
+                type=written_type, width_key=key_node.value, value=entry[1].value,
+                stretch_key=shown_stretch, min_width_key=shown_min,
+            ),
+        )
