@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.3
+
+### Changed
+- **The extension's description names what it does.** The card promised syntax highlighting and
+  on-the-fly linting, while the extension has long had the form designer, a metadata tree, the
+  platform docs panel, debugging and a deploy button. No mechanics changed - the text people
+  read before installing did.
+
 ## 0.67.2
 
 ### Added
