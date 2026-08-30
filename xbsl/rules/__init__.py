@@ -54,6 +54,7 @@ from . import (  # noqa: F401
     closeable,
     component_since,
     component_values,
+    dynlist_decl,
     dynlist_fields,
     enum_defaults,
     enum_nullable,
