@@ -63,6 +63,7 @@ from . import (  # noqa: F401
     environment,
     event_log,
     handlers,
+    image_binding,
     load_object,
     local_visibility,
     naming,
