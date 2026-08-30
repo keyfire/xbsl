@@ -6,7 +6,7 @@ from xbsl import engine
 from xbsl.cli import discover
 
 _ENUM_YAML = (
-    "ВидЭлемента: Перечисление\nИмя: ВидимостьКапчи\nЭлементы:\n"
+    "ВидЭлемента: Перечисление\nИмя: ВидимостьМетки\nЭлементы:\n"
     "    -\n        Имя: Невидимая\n    -\n        Имя: Видимая\n"
 )
 
@@ -14,7 +14,7 @@ _RULE = "yaml/enum-default-value"
 
 
 def _run_rule(tmp_path, extra_yaml, enum_yaml=_ENUM_YAML):
-    (tmp_path / "ВидимостьКапчи.yaml").write_text(enum_yaml, encoding="utf-8")
+    (tmp_path / "ВидимостьМетки.yaml").write_text(enum_yaml, encoding="utf-8")
     (tmp_path / "Ф.yaml").write_text(extra_yaml, encoding="utf-8")
     return engine.run(discover([str(tmp_path)]), select={_RULE})
 
@@ -28,8 +28,8 @@ def test_qualified_default_on_constant_flagged(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: ВидимостьКапчи\n        Тип: ВидимостьКапчи?\n"
-        "        ЗначениеПоУмолчанию: ВидимостьКапчи.Невидимая\n",
+        "    -\n        Имя: ВидимостьМетки\n        Тип: ВидимостьМетки?\n"
+        "        ЗначениеПоУмолчанию: ВидимостьМетки.Невидимая\n",
     )
     assert len(d) == 1 and d[0].rule_id == _RULE
     assert "'Невидимая'" in d[0].message
@@ -41,7 +41,7 @@ def test_bare_declared_default_not_flagged(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: ВидимостьКапчи\n        Тип: ВидимостьКапчи?\n"
+        "    -\n        Имя: ВидимостьМетки\n        Тип: ВидимостьМетки?\n"
         "        ЗначениеПоУмолчанию: Невидимая\n",
     )
     assert not _has(d)
@@ -51,10 +51,10 @@ def test_bare_unknown_default_flagged(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: ВидимостьКапчи\n        Тип: ВидимостьКапчи?\n"
+        "    -\n        Имя: ВидимостьМетки\n        Тип: ВидимостьМетки?\n"
         "        ЗначениеПоУмолчанию: Прозрачная\n",
     )
-    assert len(d) == 1 and "Прозрачная" in d[0].message and "ВидимостьКапчи" in d[0].message
+    assert len(d) == 1 and "Прозрачная" in d[0].message and "ВидимостьМетки" in d[0].message
 
 
 def test_catalog_attribute_judged_like_a_constant(tmp_path):
@@ -63,8 +63,8 @@ def test_catalog_attribute_judged_like_a_constant(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: Справочник\nИмя: Письма\nРеквизиты:\n"
-        "    -\n        Имя: Вид\n        Тип: ВидимостьКапчи\n"
-        "        ЗначениеПоУмолчанию: ВидимостьКапчи.Видимая\n",
+        "    -\n        Имя: Вид\n        Тип: ВидимостьМетки\n"
+        "        ЗначениеПоУмолчанию: ВидимостьМетки.Видимая\n",
     )
     assert len(d) == 1 and "'Видимая'" in d[0].message
 
@@ -97,10 +97,10 @@ def test_union_and_generic_types_skipped(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: А\n        Тип: ВидимостьКапчи|Строка\n"
-        "        ЗначениеПоУмолчанию: ВидимостьКапчи.Невидимая\n"
-        "    -\n        Имя: Б\n        Тип: Массив<ВидимостьКапчи>\n"
-        "        ЗначениеПоУмолчанию: ВидимостьКапчи.Невидимая\n",
+        "    -\n        Имя: А\n        Тип: ВидимостьМетки|Строка\n"
+        "        ЗначениеПоУмолчанию: ВидимостьМетки.Невидимая\n"
+        "    -\n        Имя: Б\n        Тип: Массив<ВидимостьМетки>\n"
+        "        ЗначениеПоУмолчанию: ВидимостьМетки.Невидимая\n",
     )
     assert not _has(d)
 
@@ -110,7 +110,7 @@ def test_foreign_prefix_skipped(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: ВидимостьКапчи\n        Тип: ВидимостьКапчи?\n"
+        "    -\n        Имя: ВидимостьМетки\n        Тип: ВидимостьМетки?\n"
         "        ЗначениеПоУмолчанию: ДругойТип.Невидимая\n",
     )
     assert not _has(d)
@@ -122,7 +122,7 @@ def test_same_text_default_elsewhere_skipped(tmp_path):
     d = _run_rule(
         tmp_path,
         "ВидЭлемента: НаборКонстант\nИмя: Настройки\nКонстанты:\n"
-        "    -\n        Имя: ВидимостьКапчи\n        Тип: ВидимостьКапчи?\n"
+        "    -\n        Имя: ВидимостьМетки\n        Тип: ВидимостьМетки?\n"
         "        ЗначениеПоУмолчанию: Прозрачная\n"
         "    -\n        Имя: Заголовок\n        Тип: Строка\n"
         "        ЗначениеПоУмолчанию: Прозрачная\n",
@@ -142,11 +142,11 @@ def test_no_project_enum_declared_silent(tmp_path):
 
 
 def test_crlf_default_position(tmp_path):
-    (tmp_path / "ВидимостьКапчи.yaml").write_text(_ENUM_YAML, encoding="utf-8")
+    (tmp_path / "ВидимостьМетки.yaml").write_text(_ENUM_YAML, encoding="utf-8")
     (tmp_path / "Ф.yaml").write_bytes(
         "ВидЭлемента: НаборКонстант\r\nИмя: Настройки\r\nКонстанты:\r\n"
-        "    -\r\n        Имя: Вид\r\n        Тип: ВидимостьКапчи?\r\n"
-        "        ЗначениеПоУмолчанию: ВидимостьКапчи.Невидимая\r\n".encode("utf-8")
+        "    -\r\n        Имя: Вид\r\n        Тип: ВидимостьМетки?\r\n"
+        "        ЗначениеПоУмолчанию: ВидимостьМетки.Невидимая\r\n".encode("utf-8")
     )
     d = engine.run(discover([str(tmp_path)]), select={_RULE})
     assert len(d) == 1 and (d[0].line, d[0].col) == (7, 30)
@@ -157,13 +157,13 @@ def test_english_tree_judged_and_translator_hole_caught(tmp_path):
     # the translated tree keeps English element names; a default left in Russian names no
     # declared value and fails the server compilation - a true finding, not a false one
     enum_en = (
-        "ElementKind: Enumeration\nName: CaptchaVisibility\nItems:\n"
+        "ElementKind: Enumeration\nName: LabelVisibility\nItems:\n"
         "    -\n        Name: Invisible\n    -\n        Name: Visible\n"
     )
     hole = _run_rule(
         tmp_path,
         "ElementKind: ConstantsSet\nName: Settings\nConstants:\n"
-        "    -\n        Name: CaptchaVisibility\n        Type: CaptchaVisibility?\n"
+        "    -\n        Name: LabelVisibility\n        Type: LabelVisibility?\n"
         "        DefaultValue: Невидимая\n",
         enum_yaml=enum_en,
     )
@@ -171,15 +171,15 @@ def test_english_tree_judged_and_translator_hole_caught(tmp_path):
     qualified = _run_rule(
         tmp_path,
         "ElementKind: ConstantsSet\nName: Settings\nConstants:\n"
-        "    -\n        Name: CaptchaVisibility\n        Type: CaptchaVisibility?\n"
-        "        DefaultValue: CaptchaVisibility.Invisible\n",
+        "    -\n        Name: LabelVisibility\n        Type: LabelVisibility?\n"
+        "        DefaultValue: LabelVisibility.Invisible\n",
         enum_yaml=enum_en,
     )
     assert len(qualified) == 1 and "'Invisible'" in qualified[0].message
     clean = _run_rule(
         tmp_path,
         "ElementKind: ConstantsSet\nName: Settings\nConstants:\n"
-        "    -\n        Name: CaptchaVisibility\n        Type: CaptchaVisibility?\n"
+        "    -\n        Name: LabelVisibility\n        Type: LabelVisibility?\n"
         "        DefaultValue: Invisible\n",
         enum_yaml=enum_en,
     )

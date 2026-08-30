@@ -30,7 +30,7 @@ _HEAD = (
 _HISTORIC_SPACER = (
     "ВидЭлемента: КомпонентИнтерфейса\n"
     "Ид: 7c2e9f4a-aaaa-bbbb-cccc-444455556667\n"
-    "Имя: ЗаголовокСекции\n"
+    "Имя: ШапкаРаздела\n"
     "Наследует:\n"
     "    Тип: Группа\n"
     "    Компоновка: Вертикальная\n"
@@ -61,7 +61,7 @@ def _diags(tmp_path, name: str, text: str):
 
 @pytest.mark.needs_data
 def test_unnamed_binding_spacer_group_is_reported(tmp_path):
-    found = _diags(tmp_path, "ЗаголовокСекции.yaml", _HISTORIC_SPACER)
+    found = _diags(tmp_path, "ШапкаРаздела.yaml", _HISTORIC_SPACER)
     assert len(found) == 1
     assert found[0][0] == 14  # the size key of the spacer, not the outer group
     assert "=ОтступСнизу" in found[0][1]
@@ -74,7 +74,7 @@ def test_named_binding_spacer_group_is_silent(tmp_path):
         "            Высота: =ОтступСнизу\n",
         "            Имя: Контейнер\n            Высота: =ОтступСнизу\n",
     )
-    assert _diags(tmp_path, "ЗаголовокСекции.yaml", text) == []
+    assert _diags(tmp_path, "ШапкаРаздела.yaml", text) == []
 
 
 @pytest.mark.needs_data

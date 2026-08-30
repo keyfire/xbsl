@@ -52,7 +52,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   switched on pointwise when the symptom shows on screen.
 - **`yaml/enum-default-value` (tier D, error, project-wide) and `yaml/event-property-type`
   (tier D, error).** The `DefaultValue` of a field typed by a project enumeration must be the
-  bare name of a declared value: the type-prefixed spelling (`CaptchaVisibility.Invisible`) and
+  bare name of a declared value: the type-prefixed spelling (`LabelVisibility.Invisible`) and
   an unknown name used to slip past the linter and were refused only at apply time ("an unknown
   enumeration item"); on an English tree the rule also catches a Russian value a translator
   left next to English items. An `EventLogEvent` property type outside the platform's closed

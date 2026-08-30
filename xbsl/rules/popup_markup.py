@@ -9,8 +9,8 @@ regular element: the window content shows up right in the form flow before the w
 opens. `Visible: False` is not a cure - the platform does not unfold a hidden component,
 so the window itself stops working. The only working shape is building the window in code
 on every opening (`new PopupComponent(...)` + `OpenInPopupWindow`), which is exactly what
-the project sources settled on: the live components (`ЗначокБейджа`, `ПодсказкаПоКлику`)
-construct the popup in code, and their yaml comments document the trap in so many words.
+live project sources settle on: their popup-bearing components construct the window in
+code, and their yaml comments document the trap in so many words.
 
 The predicate: inside the `Inherits` subtree of a yaml element, a mapping whose `Type`
 head (the name before the generic arguments, the `?` suffix and a namespace qualifier) is
