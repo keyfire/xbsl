@@ -300,15 +300,17 @@ def _lede(path: Path) -> str:
 def pitch_surfaces() -> dict[str, dict[str, str]]:
     """The short annotations by locale: what is quoted instead of the page being read."""
     return {
+        # The PyPI summary is English: the card it heads carries the English README, and the
+        # neighbouring packages (elemctl, edt-bridge-mcp) are described in English too.
         "en": {
             "blume.config.ts": _site_description(),
             "docs/index.md": _front_description(DOCS / "index.md"),
             "README.md": _lede(ROOT / "README.md"),
+            "pyproject.toml": _pyproject_description(),
         },
         "ru": {
             "docs/index.ru.md": _front_description(DOCS / "index.ru.md"),
             "README.ru.md": _lede(ROOT / "README.ru.md"),
-            "pyproject.toml": _pyproject_description(),
         },
     }
 

@@ -19,6 +19,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-08-30 – 0.86.2
+
+### Changed
+- **The package description names translation, the MCP server and the extension - in English.**
+  The PyPI summary listed the linter, LSP, documentation and scaffolding - a set the toolkit had
+  outgrown - and was the only Russian one among the neighbouring packages, while heading an
+  English README. The keywords gained `mcp` and `translation`.
+
 ## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0, 0.86.1
 
 ### Added

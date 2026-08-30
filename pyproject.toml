@@ -8,7 +8,7 @@ name = "xbsl"
 # статус-бар расширения. Раньше версия дублировалась здесь, разъехалась при бампах, и
 # пакеты 0.20/0.21 представлялись как 0.19.0.
 dynamic = ["version"]
-description = "Инструментарий XBSL (1С:Элемент): линтер, LSP, MCP-сервер, документация, индекс проекта, скаффолдинг метаданных, перевод на английские написания и расширение VS Code на том же движке"
+description = "The XBSL (1C:Element) toolkit: a linter with autofixes, LSP, MCP server, documentation search, project index, metadata scaffolding, translation into English spellings, and a VS Code extension"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
