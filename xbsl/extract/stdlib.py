@@ -33,6 +33,12 @@ without the consumers changing:
   loader adds the English key of each from terms.json, so a type is not stored twice (Запрос/Query).
 Both are done by dataset._add_english_keys + dataset._expand_inherited.
 
+The help pages are not the only description the distribution ships: the language server
+carries a markdown page per stdlib type, and it covers types the help omits entirely (the
+whole `Favorites` branch among them). Those are read by undocumented_types - the structure
+from the markdown, the Russian spellings of members from what the shipped classes declare -
+and only for the types the help does NOT describe: the help stays the primary source.
+
 The result is xbsl/data/element/<version>/stdlib.json:
 { "names": [...], "object_members": {"Справочник": [...], ...},
   "component_props": {"СтандартнаяКарточка": [...], ...},
@@ -44,13 +50,14 @@ from __future__ import annotations
 
 import argparse
 import html
+import io
 import json
 import re
 import zipfile
 from pathlib import Path
 
 from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER
-from xbsl.extract import _distro
+from xbsl.extract import _distro, classcode
 from xbsl.extract.terms import scan_kind_table
 
 STD_BASE = "data/docs/help/ru/stdlib/element/xbsl/Std/"
@@ -827,10 +834,214 @@ def extract(dist: Path) -> tuple:
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
     names |= TOPIC_ONLY_TYPES
+    documented = {
+        "Std::" + "::".join(entry[len(STD_BASE):].split("/")[:-2]
+                            + [entry[len(STD_BASE):].split("/")[-2][:-len("_ru")]])
+        for entry in entries
+        if entry.startswith(STD_BASE) and entry.endswith("/index.html")
+        and entry[len(STD_BASE):].count("/") >= 1
+        and entry[len(STD_BASE):].split("/")[-2].endswith("_ru")
+    }
+    with zipfile.ZipFile(car) as z:
+        for name, russian, own, own_bases, own_ctor in undocumented_types(z, documented):
+            names.add(name)
+            names.add(russian)
+            bases.setdefault(russian, list(own_bases))
+            ctors.setdefault(russian, own_ctor)
+            if own:
+                slot = types.setdefault(russian, _empty_member_slot())
+                for kind, member_names in own.items():
+                    slot[kind] |= member_names
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
             facets, returns, signatures, bases, ctors, type_params, method_params)
+
+
+# --- Types the reference pages never describe ------------------------------------------
+#
+# The HTML help under STD_BASE is not the only description the distribution ships: the
+# language server carries a markdown page per stdlib type, and the two sets do not match.
+# Measured on one build - 1170 types in the help, 1397 in the markdown, and 21 Std types
+# described ONLY in the markdown. The whole `Favorites` branch is among them: the platform
+# implements it, the compiler accepts it, and the help says nothing, so every call to it
+# read as an undefined name.
+#
+# The markdown states the STRUCTURE (which types exist, which members are their own, what
+# they inherit) in English. The Russian spellings are not there - a member page names the
+# Russian type (`Определен:`) but not the Russian member - so they come from what the
+# compiler's own classes DECLARE, the same source extract_terms reads.
+LSP_JAR_RE = re.compile(r"lsp\.server\.appengine")
+LSP_DOCS_BASE = "docs/element/xbsl/ru/"
+#: The heading of a member page: `# <type qualified name>#<member>`.
+_MD_MEMBER_RE = re.compile(r"^# (Std::[A-Za-z:]+::[A-Za-z]\w*)#(.+)$", re.M)
+#: `**Определен:** **ИсходныйТип**` - the type a member belongs to, spelled Russian. On a
+#: type's own member it names the type itself, on an inherited one its ancestor.
+_MD_OWNER_RE = re.compile(r"^\*\*Определен:\*\*\s*\*\*([А-ЯЁ][А-Яа-яЁё0-9]*)\*\*", re.M)
+_MD_SINGLETON = "**Тип-одиночка**"
+#: What a page calling a type a singleton says about its hierarchy, spelled as the catalog
+#: spells it for the singletons the help does describe (`UserWorkHistory`).
+SINGLETON_BASE = "Одиночка"
+#: A class that may state the pair of a type: its own name plus, for a Constants class,
+#: the names of its members.
+_PAIR_CLASS_RE = re.compile(r"(Constants|G5Type|G5Enum|CtMetaObject)\.class$")
+#: The static field a Constants class stores a member term into - the suffix tells the kind.
+#: A parameter of a method (`..._PARAM_TERM`) is not a member and is left out; so is any
+#: field whose suffix says nothing, because guessing a kind is what a completion list shows.
+_TERM_FIELD_KIND = {
+    "_PROPERTY_TERM": "properties",
+    "_METHOD_TERM": "methods",
+    "_EVENT_TERM": "events",
+}
+
+
+def undocumented_types(
+    car: zipfile.ZipFile, documented: set[str]
+) -> list[tuple[str, str, dict[str, set[str]], list[str], str]]:
+    """[(English name, Russian name, own members by kind, base types, constructor kind)].
+
+    Only the types the language server documents and the reference pages do not: the help
+    is the primary source, and a type described in both is read from the help as before.
+    """
+    pages = _markdown_pages(car, documented)
+    if not pages:
+        return []
+    spellings = _declared_spellings(car, {qname.split("::")[-1] for qname in pages})
+    found: list[tuple[str, str, dict[str, set[str]], list[str], str]] = []
+    for qname, page in sorted(pages.items()):
+        english = qname.split("::")[-1]
+        pairs = spellings.get(english, {})
+        russian = page["russian"] or pairs.get(english, "")
+        if not russian:
+            # Neither the page nor a class names it in Russian: stating one would be a guess.
+            continue
+        own = {kind: set() for kind in MEMBER_KINDS}
+        for kind, member_names in page["members"].items():
+            for member in member_names:
+                spelled = pairs.get(member)
+                if spelled:
+                    own[kind].add(spelled)
+        found.append((english, russian, own, page["bases"], page["ctors"]))
+    return found
+
+
+def _markdown_pages(car: zipfile.ZipFile, documented: set[str]) -> dict[str, dict]:
+    """{qualified name: what its language-server page says} for the types the help omits."""
+    jars = [entry for entry in car.namelist() if entry.endswith(".jar") and LSP_JAR_RE.search(entry)]
+    pages: dict[str, dict] = {}
+    for entry in jars:
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if not inner.startswith(LSP_DOCS_BASE) or not inner.endswith(".md"):
+                continue
+            stem = inner[len(LSP_DOCS_BASE):-len(".md")]
+            if stem.startswith("#"):  # a namespace page, not a type
+                continue
+            qname = stem.replace("_", "::")
+            if not qname.startswith("Std::") or qname in documented or qname in pages:
+                continue
+            pages[qname] = _read_markdown(jar.read(inner).decode("utf-8", "replace"), qname)
+    return pages
+
+
+def _read_markdown(text: str, qname: str) -> dict:
+    """The structure one type page states: its Russian name, own members by kind, bases."""
+    english = qname.split("::")[-1]
+    owners: list[str] = []
+    members: dict[str, set[str]] = {kind: set() for kind in MEMBER_KINDS}
+    per_member: list[tuple[str, str]] = []
+    for match in _MD_MEMBER_RE.finditer(text):
+        member = match.group(2).strip()
+        owner_match = _MD_OWNER_RE.search(text, match.end())
+        owner = owner_match.group(1) if owner_match else ""
+        owners.append(owner)
+        per_member.append((member, owner))
+    # The type's own Russian name is the owner its OWN members name; an inherited member
+    # names an ancestor instead. The commonest owner is the type itself - a page lists more
+    # of its own members than any single ancestor's - and a page of nothing but inherited
+    # members leaves the name to the classes.
+    russian = ""
+    if owners:
+        russian = max({o for o in owners if o}, key=owners.count, default="")
+    bases: list[str] = []
+    ctors = CTOR_NONE
+    for member, owner in per_member:
+        if owner and owner != russian and owner not in bases:
+            bases.append(owner)
+        if owner != russian:
+            continue
+        name = member.split("(")[0]
+        if name.startswith("Std::"):
+            # A constructor is named after the type itself; whether the page shows one, and
+            # with which parameters, is how the catalog says the type can be built.
+            ctor = CTOR_EMPTY if member.endswith("()") else CTOR_ARGS
+            if CTOR_RANK[ctor] > CTOR_RANK[ctors]:
+                ctors = ctor
+            continue
+        members["methods" if "(" in member else "properties"].add(name)
+    singleton = _MD_SINGLETON in text
+    if singleton and SINGLETON_BASE not in bases:
+        # The page states the type is a singleton; the base is that statement, not a guess.
+        bases.append(SINGLETON_BASE)
+    return {
+        "russian": russian,
+        "members": members,
+        "bases": bases,
+        "singleton": singleton,
+        "ctors": ctors,
+        "english": english,
+    }
+
+
+def _declared_spellings(car: zipfile.ZipFile, wanted: set[str]) -> dict[str, dict[str, str]]:
+    """{English type name: {English name: Russian spelling}} as the compiler classes state it.
+
+    Only the classes that may speak for one of the wanted types are opened: the walk is over
+    every jar of the distribution, and reading them all to answer about twenty types would
+    cost minutes. A class speaks for a type when its own name begins with the type's English
+    name - `UserFavoritesItemConstants` and `UserFavoritesItemG5Type` for `UserFavoritesItem`,
+    `UserFavoritesClientCtMetaObject` for `UserFavorites`.
+    """
+    spellings: dict[str, dict[str, str]] = {name: {} for name in wanted}
+    for entry in car.namelist():
+        if not entry.endswith(".jar"):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            simple = inner.rsplit("/", 1)[-1]
+            if not _PAIR_CLASS_RE.search(simple):
+                continue
+            # The longest match wins: `UserFavoritesItemConstants` speaks for the item, not
+            # for `UserFavorites`, whose name is a prefix of the item's.
+            owner = max((name for name in wanted if simple.startswith(name)), key=len, default="")
+            if not owner:
+                continue
+            try:
+                blob = jar.read(inner)
+            except (zipfile.BadZipFile, KeyError):
+                continue
+            spellings[owner].update(_class_spellings(blob, owner))
+    return spellings
+
+
+def _class_spellings(blob: bytes, owner: str) -> dict[str, str]:
+    """{English name: Russian spelling} one class states, for the type and for its members."""
+    found: dict[str, str] = {}
+    for field, english, russian in classcode.declared_terms(blob):
+        if not russian.isascii() and (field == "TYPE_NAME" or english == owner):
+            found[english] = russian
+        elif any(field.endswith(suffix) for suffix in _TERM_FIELD_KIND):
+            found.setdefault(english, russian)
+    # A singleton states its methods through the member builders instead of static terms.
+    for english, russian in ((en, ru) for ru, en in classcode.declared_members(blob).items()):
+        found.setdefault(english, russian)
+    return found
 
 
 def _empty_member_slot() -> dict[str, set[str]]:

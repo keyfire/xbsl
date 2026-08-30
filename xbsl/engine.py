@@ -420,10 +420,16 @@ def _worker_lint(payload: tuple) -> tuple[list[Diagnostic], dict[str, dict[str, 
     A file worker additionally runs the mappers of the map-reduce project rules
     (mapped_ids) over its shard - the AST/yaml caches are already warm there - and
     returns the facts as {rule_id: {rel: fact}}; the reduce runs in the parent."""
-    kind, paths, select, ignore, enable, lang, element_version, mapped_ids = payload
+    kind, paths, select, ignore, enable, lang, element_version, mapped_ids, data_root = payload
     from xbsl import dataset, i18n
 
     i18n.set_lang(lang)
+    # The root a worker resolves on its own is the INSTALLED data - the pin the parent was
+    # given (--data-dir) lives in a process global, and a spawned worker starts without it.
+    # Carried in the payload for the same reason the version is: a run that says which data
+    # to read must read that data in every process, or the report describes another dataset.
+    if data_root:
+        dataset.set_data_root(data_root)
     if element_version:
         dataset.set_version(element_version)
     sources = [load(Path(p)) for p in paths]
@@ -482,7 +488,7 @@ def run_parallel(
 
     from concurrent.futures import ProcessPoolExecutor
 
-    from xbsl import i18n
+    from xbsl import dataset, i18n
 
     lang = lang or i18n.current_lang()
     all_paths = [str(p) for p in paths]
@@ -505,12 +511,13 @@ def run_parallel(
 
     file_workers = max(1, workers - group_count)
     chunks = [[str(p) for p in paths[i::file_workers]] for i in range(file_workers)]
+    pinned_root = dataset.pinned_root()
     payloads: list[tuple] = [
-        ("file", chunk, select, ignore, enable, lang, element_version, mapped_ids)
+        ("file", chunk, select, ignore, enable, lang, element_version, mapped_ids, pinned_root)
         for chunk in chunks if chunk
     ]
     payloads += [
-        ("project", all_paths, group, None, None, lang, element_version, ())
+        ("project", all_paths, group, None, None, lang, element_version, (), pinned_root)
         for group in project_groups
     ]
     diags: list[Diagnostic] = []

@@ -469,3 +469,139 @@ def test_a_member_with_only_deprecated_forms_keeps_its_result():
     )
 
     assert _MODULE.page_member_types(page)["Прочитать"] == "Объект?"
+
+
+# --- Types the reference pages never describe ------------------------------------------
+#
+# The language server of the distribution carries a markdown page per stdlib type, and it
+# describes types the HTML help does not - the whole `Favorites` branch among them. The pages
+# below are modeled on the real ones: a heading per member, the Russian owner under it, and
+# `**Тип-одиночка**` where the type is a singleton.
+
+_SINGLETON_PAGE = (
+    "Позволяет добавлять объекты в Избранное пользователя.\n\n"
+    "--------------------\n\n"
+    "**Тип-одиночка**\n\n"
+    "**Доступность:** Клиент\n\n"
+    "# Std::Interface::Favorites::UserFavorites#Delete(String)\n\n"
+    "**Определен:** **ИзбранноеПользователя**\n\n"
+    "# Std::Interface::Favorites::UserFavorites#LoadAll()\n\n"
+    "**Определен:** **ИзбранноеПользователя**\n"
+)
+
+_ITEM_PAGE = (
+    "Элемент избранного.\n\n"
+    "--------------------\n\n"
+    "# Std::Interface::Favorites::UserFavoritesItem#Link\n\n"
+    "**Определен:** **ЭлементИзбранногоПользователя**\n\n"
+    "# Std::Interface::Favorites::UserFavoritesItem#Pinned\n\n"
+    "**Определен:** **ЭлементИзбранногоПользователя**\n\n"
+    "# Std::Interface::Favorites::UserFavoritesItem"
+    "#Std::Interface::Favorites::UserFavoritesItem(Uuid,String,Boolean)\n\n"
+    "**Определен:** **ЭлементИзбранногоПользователя**\n\n"
+    "# Std::Interface::Favorites::UserFavoritesItem#ToString()\n\n"
+    "**Определен:** **Объект**\n"
+)
+
+
+def test_a_singleton_page_states_its_methods_and_its_kind():
+    page = _MODULE._read_markdown(_SINGLETON_PAGE, "Std::Interface::Favorites::UserFavorites")
+
+    assert page["russian"] == "ИзбранноеПользователя"
+    assert page["members"]["methods"] == {"Delete", "LoadAll"}
+    assert page["members"]["properties"] == set()
+    assert page["singleton"] is True
+    assert page["bases"] == [_MODULE.SINGLETON_BASE]
+    assert page["ctors"] == _MODULE.CTOR_NONE
+
+
+def test_a_page_tells_own_members_from_inherited_ones():
+    page = _MODULE._read_markdown(_ITEM_PAGE, "Std::Interface::Favorites::UserFavoritesItem")
+
+    assert page["russian"] == "ЭлементИзбранногоПользователя"
+    # ToString belongs to `Object` - it lands in the base, not among the type's own members.
+    assert page["members"]["properties"] == {"Link", "Pinned"}
+    assert page["members"]["methods"] == set()
+    assert page["bases"] == ["Объект"]
+    # The constructor is named after the type itself and is not a member of it.
+    assert page["ctors"] == _MODULE.CTOR_ARGS
+    assert page["singleton"] is False
+
+
+def test_a_page_of_nothing_but_a_description_leaves_the_name_to_the_classes():
+    page = _MODULE._read_markdown(
+        "Исключение, выбрасываемое при ...\n\n**Доступность:** КлиентИСервер\n",
+        "Std::Interface::Favorites::UserFavoritesItemNotExistsException",
+    )
+
+    assert page["russian"] == ""
+    assert page["bases"] == []
+    assert page["ctors"] == _MODULE.CTOR_NONE
+
+
+def test_the_class_that_speaks_for_a_type_states_the_spellings_of_its_members():
+    from test_extract_classcode import TERM, _class_of_terms
+
+    blob = _class_of_terms([
+        ("NS_TERM", TERM, ["Std::Interface::Favorites", "Стд::Интерфейс::Избранное"]),
+        ("USER_FAVORITES_ITEM_TERM", TERM, ["UserFavoritesItem", "ЭлементИзбранногоПользователя"]),
+        ("LINK_PROPERTY_TERM", TERM, ["Link", "Ссылка"]),
+        ("PINNED_PROPERTY_TERM", TERM, ["Pinned", "Закреплено"]),
+        # A parameter of a method is not a member of the type - the field says so, and the
+        # spelling must not join the member set under the type's name.
+        ("WRITE_METHOD_LINK_PARAM_TERM", TERM, ["Link", "Адрес"]),
+    ])
+
+    spelled = _MODULE._class_spellings(blob, "UserFavoritesItem")
+
+    assert spelled["UserFavoritesItem"] == "ЭлементИзбранногоПользователя"
+    assert spelled["Link"] == "Ссылка"  # the property, not the parameter that shares the name
+    assert spelled["Pinned"] == "Закреплено"
+    assert "Стд::Интерфейс::Избранное" not in spelled.values()
+
+
+def test_a_type_the_help_describes_is_not_supplemented(tmp_path, monkeypatch):
+    # The help is the primary source: a type it carries is read from it as before, and the
+    # markdown never gets a second, differently-parsed say about the same type.
+    pages = {
+        "Std::Interface::Favorites::UserFavorites": _MODULE._read_markdown(
+            _SINGLETON_PAGE, "Std::Interface::Favorites::UserFavorites"
+        ),
+    }
+    monkeypatch.setattr(_MODULE, "_markdown_pages", lambda car, documented: {
+        name: page for name, page in pages.items() if name not in documented
+    })
+    monkeypatch.setattr(_MODULE, "_declared_spellings", lambda car, wanted: {
+        "UserFavorites": {"Delete": "Удалить", "LoadAll": "ЗагрузитьВсе"}
+    })
+
+    supplemented = _MODULE.undocumented_types(None, set())
+    assert [(name, russian) for name, russian, *_ in supplemented] == [
+        ("UserFavorites", "ИзбранноеПользователя")
+    ]
+    assert supplemented[0][2]["methods"] == {"Удалить", "ЗагрузитьВсе"}
+
+    already_known = _MODULE.undocumented_types(
+        None, {"Std::Interface::Favorites::UserFavorites"}
+    )
+    assert already_known == []
+
+
+def test_a_member_no_class_spells_in_russian_is_left_out():
+    # Half a pair is worse than none: a member stored under its English name would answer a
+    # dot in Russian code with a name the compiler does not have.
+    pages = {
+        "Std::Interface::Favorites::UserFavorites": _MODULE._read_markdown(
+            _SINGLETON_PAGE, "Std::Interface::Favorites::UserFavorites"
+        ),
+    }
+    import pytest
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(_MODULE, "_markdown_pages", lambda car, documented: pages)
+        patch.setattr(_MODULE, "_declared_spellings", lambda car, wanted: {
+            "UserFavorites": {"LoadAll": "ЗагрузитьВсе"}
+        })
+        supplemented = _MODULE.undocumented_types(None, set())
+
+    assert supplemented[0][2]["methods"] == {"ЗагрузитьВсе"}

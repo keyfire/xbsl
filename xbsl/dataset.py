@@ -139,6 +139,15 @@ def set_data_root(path: str | os.PathLike[str] | None) -> None:
     _clear_caches()
 
 
+def pinned_root() -> str | None:
+    """The root set_data_root pinned for this process, or None when nothing is pinned.
+
+    A worker process starts without the pin - the override is a module global - so a run
+    that spawns workers has to hand it over explicitly (engine._worker_lint).
+    """
+    return str(_root_override) if _root_override is not None else None
+
+
 def data_root() -> Path:
     """The effective data root, by priority order (see the module description).
 

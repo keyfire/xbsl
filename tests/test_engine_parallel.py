@@ -92,3 +92,54 @@ def test_parallel_run_matches_the_sequential_one(request):
     parallel = run_parallel(paths, jobs=2)
 
     assert parallel == sequential
+
+
+@pytest.mark.needs_data
+def test_a_pinned_data_root_reaches_the_workers(request, tmp_path):
+    """What `--data-dir` promises must hold in every process of the run.
+
+    The pin is a module global of `dataset`, and a spawned worker starts without it: it
+    resolved the INSTALLED data instead and the report described a dataset nobody asked
+    for. The failure is silent - the run says nothing about which data it read - and it
+    only appears once the run is large enough to go parallel, so a sequential check
+    passes and a real project does not.
+
+    The pinned root here is the installed one with a single name added to the catalog. A
+    worker reading it accepts that name; a worker that resolved its own data flags it as
+    unknown, which is exactly the report the defect produced.
+    """
+    import json
+    import shutil
+
+    from xbsl import dataset
+
+    invented = "ТипКоторогоНетВПоставке"
+    source = tmp_path / "Проба.xbsl"
+    source.write_text(
+        "метод Проба(): " + invented + "?\n    возврат неопределено\n;\n",
+        encoding="utf-8",
+    )
+    paths = [source]
+    assert any(d.rule_id == "code/unknown-type" for d in run_parallel(paths, jobs=2)), (
+        "the invented type is already known - the test would prove nothing"
+    )
+
+    root = tmp_path / "data"
+    version = dataset.default_version()
+    (root / version).mkdir(parents=True)
+    shutil.copy(dataset.data_root() / "index.json", root / "index.json")
+    for name in dataset.data_root().joinpath(version).glob("*.json"):
+        shutil.copy(name, root / version / name.name)   # the json files only - docs.sqlite is 40 MB
+    catalog = json.loads((root / version / "stdlib.json").read_text(encoding="utf-8"))
+    catalog["names"].append(invented)
+    (root / version / "stdlib.json").write_text(
+        json.dumps(catalog, ensure_ascii=False), encoding="utf-8"
+    )
+
+    dataset.set_data_root(root)
+    try:
+        pinned = run_parallel(paths, jobs=2)
+    finally:
+        dataset.set_data_root(None)
+
+    assert not [d for d in pinned if d.rule_id == "code/unknown-type"]
