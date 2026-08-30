@@ -52,6 +52,7 @@ from . import (  # noqa: F401
     catch_exceptions,
     choice_list,
     closeable,
+    component_render,
     component_since,
     component_values,
     dynlist_decl,
