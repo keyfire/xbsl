@@ -12,41 +12,29 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-30 - 0.87.0
+## 2026-08-30 – 0.86.2, 0.87.0
 
 ### Added
 - **The type catalog is completed from what the reference pages never describe.** The
-  distribution describes the stdlib twice: the help pages the catalog was built from, and the
-  markdown the language server carries, which holds more types - on the build measured, 1170
-  against 1397, with 16 Std types living only in the second one; among them the whole `Favorites`
-  branch, which the platform implements and the compiler accepts while the help says nothing,
-  so every call to it read as an undefined name. The `stdlib` step takes the structure from
-  the markdown (own members told from inherited ones, base types, the constructor, whether the
-  type is a singleton) and the Russian spellings of members from what the shipped classes
-  declare: a page names the Russian TYPE (`Определен:`) but never the Russian MEMBER. Half a
-  pair is not kept - a member left with an English spelling alone would answer a dot in
-  Russian code with a name the compiler does not have. The help stays the primary source: a
-  type it carries is read from it as before.
-- **`classcode.declared_terms` - a pair read together with the field it is stored into.** A
-  namespace, a type and each of its members are declared the same way, and what is declared
-  is told by the NAME of the static field (`NS_TERM`, `LINK_PROPERTY_TERM`,
-  `SWITCH_SCREEN_METHOD_TERM`): without it a pair cannot tell a property from a method, nor a
-  method's parameter from a member of the type.
-
-### Fixed
-- **`--data-dir` did not reach the parallel workers.** The pinned data root lives in a process
-  global, and a spawned worker starts without it and resolved the INSTALLED data: the run read
-  a dataset other than the one it was asked for, and said nothing about it. The data VERSION
-  was carried in the worker payload, the root was not. It only showed on a run large enough to
-  go parallel, so a small check passed and a real project did not.
-
-## 2026-08-30 – 0.86.2
+  distribution describes the stdlib twice, and the language server's markdown holds more types:
+  16 Std types lived only there, the whole `Favorites` branch among them, whose every call read
+  as an undefined name. The structure comes from the markdown, the Russian spellings of members
+  from what the shipped classes declare.
+- **`classcode.declared_terms` - a pair read together with the field it is stored into.** The
+  NAME of the static field tells what kind of member it is (`LINK_PROPERTY_TERM`,
+  `SWITCH_SCREEN_METHOD_TERM`); the pair alone tells neither property from method nor a method's
+  parameter from a member.
 
 ### Changed
 - **The package description names translation, the MCP server and the extension - in English.**
   The PyPI summary listed the linter, LSP, documentation and scaffolding - a set the toolkit had
   outgrown - and was the only Russian one among the neighbouring packages, while heading an
   English README. The keywords gained `mcp` and `translation`.
+
+### Fixed
+- **`--data-dir` did not reach the parallel workers.** The pinned root lives in a process global,
+  and a spawned worker starts without it and took the INSTALLED data: the run read a dataset
+  other than the one it was asked for, and said nothing about it.
 
 ## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0, 0.86.1
 
