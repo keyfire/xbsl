@@ -7,7 +7,8 @@
 ![CI](https://github.com/keyfire/xbsl/actions/workflows/ci.yml/badge.svg)
 
 The XBSL (1C:Element) toolkit: a linter with autofixes, an LSP server, a project index,
-platform documentation search, metadata scaffolding and an MCP server for AI agents.
+platform documentation search, metadata scaffolding, translation of sources into English
+spellings and an MCP server for AI agents – plus a VS Code extension on the same engine.
 It works on `Name.yaml` (element description) and `Name.xbsl` (code module) pairs –
 before the server-side compilation that happens on deploy.
 

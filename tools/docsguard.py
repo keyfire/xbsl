@@ -20,7 +20,10 @@ can write. So the pages stay hand-written and this guard holds them to the code:
     named there by id or by its title from package.nls (a wildcard row - `xbsl.groups.*` -
     covers its family);
   * every CLI subcommand is described in both CLI pages;
-  * every XBSL_* environment variable is mentioned somewhere.
+  * every XBSL_* environment variable is mentioned somewhere;
+  * every headline of "What is in the box" is named in the short annotations - the site
+    description, the README lede, the PyPI summary - or is recorded here as one deliberately
+    left out of them.
 
 Run:
 
@@ -234,6 +237,128 @@ def check_environment(problems: list[str]) -> None:
             problems.append(f"environment variable {name} is documented nowhere")
 
 
+# --- the short annotations ------------------------------------------------------------------
+
+#: A headline of "What is in the box" - the English page, the Russian page - and the word that
+#: has to stand for it in the short annotations of that language. The block on the front page is
+#: the full list, but a search engine, PyPI and an AI answer quote the one-liners instead, and
+#: those drift on their own: `xbsl translate` shipped in August 2026 and every annotation still
+#: named the six surfaces that existed before it. A row with no words is a headline deliberately
+#: kept out of the one-liners - the reason belongs in a comment beside it.
+PITCH_ITEMS: tuple[tuple[str, str, str | None, str | None], ...] = (
+    ("Linter with autofixes", "Линтер с автоисправлениями", "linter", "линтер"),
+    ("LSP server", "LSP-сервер", "LSP", "LSP"),
+    ("Metadata scaffolding", "Создание метаданных", "scaffolding", "метаданных"),
+    ("Translation into English spellings", "Перевод проекта на английские написания",
+     "translation", "перевод"),
+    ("Documentation search", "Поиск по документации", "documentation", "документаци"),
+    ("MCP server", "MCP-сервер", "MCP", "MCP"),
+    # The web panel is a local page a developer opens for the findings of one project, not a
+    # surface anyone picks the toolkit by: it is described on the servers page and left out of
+    # the annotations on purpose.
+    ("Web panel", "Веб-панель", None, None),
+    ("VS Code extension", "Расширение VS Code", "VS Code", "VS Code"),
+)
+
+
+def _box_headlines(path: Path, heading: str) -> list[str]:
+    """The bold headline of every bullet of one "What is in the box" block, in page order."""
+    text = path.read_text(encoding="utf-8")
+    section = re.search(rf"^## {re.escape(heading)}\s*$(.*?)^## ", text, re.M | re.S)
+    headlines = []
+    for line in (section.group(1) if section else "").splitlines():
+        found = re.match(r"- \*\*(.+?)\*\*", line)
+        if not found:
+            continue
+        label = found.group(1)
+        link = re.fullmatch(r"\[(.+?)\]\(.*\)", label)  # the headline may be a link
+        headlines.append(link.group(1) if link else label)
+    return headlines
+
+
+def _front_description(path: Path) -> str:
+    found = re.search(r'^description:\s*"(.*)"\s*$', path.read_text(encoding="utf-8"), re.M)
+    return found.group(1) if found else ""
+
+
+def _site_description() -> str:
+    """The `description` of blume.config.ts - the meta description of every page."""
+    text = (ROOT / "blume.config.ts").read_text(encoding="utf-8")
+    found = re.search(r"\n  description:\s*((?:\s*\"[^\"]*\"\s*\+?)+),", text)
+    return "".join(re.findall(r'"([^"]*)"', found.group(1))) if found else ""
+
+
+def _lede(path: Path) -> str:
+    """The first paragraph of prose of a README - the part GitHub shows above the fold."""
+    skip = ("#", ">", "!", "[", "**English**", "**Documentation", "**Документация")
+    for block in re.split(r"\n\s*\n", path.read_text(encoding="utf-8")):
+        if block.strip() and not block.strip().startswith(skip):
+            return block.strip()
+    return ""
+
+
+def pitch_surfaces() -> dict[str, dict[str, str]]:
+    """The short annotations by locale: what is quoted instead of the page being read."""
+    return {
+        "en": {
+            "blume.config.ts": _site_description(),
+            "docs/index.md": _front_description(DOCS / "index.md"),
+            "README.md": _lede(ROOT / "README.md"),
+        },
+        "ru": {
+            "docs/index.ru.md": _front_description(DOCS / "index.ru.md"),
+            "README.ru.md": _lede(ROOT / "README.ru.md"),
+            "pyproject.toml": _pyproject_description(),
+        },
+    }
+
+
+def _pyproject_description() -> str:
+    """The `description` of pyproject.toml - the summary line of the PyPI card."""
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    found = re.search(r'^description = "(.*)"\s*$', text, re.M)
+    return found.group(1) if found else ""
+
+
+def pitch_problems(
+    headlines: dict[str, list[str]], surfaces: dict[str, dict[str, str]]
+) -> list[str]:
+    """The gaps between the front-page block, the table above and the annotations."""
+    problems: list[str] = []
+    for locale, column, page in (("en", 0, "docs/index.md"), ("ru", 1, "docs/index.ru.md")):
+        listed = headlines[locale]
+        known = [item[column] for item in PITCH_ITEMS]
+        for headline in listed:
+            if headline not in known:
+                problems.append(
+                    f'{page}: "{headline}" is in no PITCH_ITEMS row - add the word that stands '
+                    f"for it in the annotations, or the reason it stays out of them"
+                )
+        for headline in known:
+            if headline not in listed:
+                problems.append(f'{page}: PITCH_ITEMS names "{headline}", the page does not')
+
+    for english, _russian, *words in PITCH_ITEMS:
+        for locale, word in zip(("en", "ru"), words):
+            if not word:
+                continue
+            for where, text in surfaces[locale].items():
+                if word.lower() not in text.lower():
+                    problems.append(
+                        f'{where}: the short annotation says nothing about "{english}" '
+                        f'(expected "{word}")'
+                    )
+    return problems
+
+
+def check_pitches(problems: list[str]) -> None:
+    headlines = {
+        "en": _box_headlines(DOCS / "index.md", "What is in the box"),
+        "ru": _box_headlines(DOCS / "index.ru.md", "Что внутри"),
+    }
+    problems.extend(pitch_problems(headlines, pitch_surfaces()))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quiet", action="store_true", help="print the summary line only")
@@ -245,6 +370,7 @@ def main() -> int:
     check_extension(problems)
     check_cli(problems)
     check_environment(problems)
+    check_pitches(problems)
 
     if problems and not args.quiet:
         for problem in problems:

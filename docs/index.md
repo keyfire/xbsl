@@ -1,6 +1,6 @@
 ---
 title: "XBSL (1C:Element)"
-description: "A toolkit for 1C:Element: a linter with autofixes, an LSP server, documentation search, and metadata scaffolding – plus a VS Code extension on the same engine."
+description: "A toolkit for 1C:Element: a linter with autofixes, an LSP server, documentation search, metadata scaffolding and translation into English spellings – plus an MCP server and a VS Code extension on the same engine."
 sidebar:
   label: Home
   order: 1
@@ -25,10 +25,12 @@ ships as a Python engine and a VS Code extension built on top of it.
   distribution.
 - **MCP server** – linting, documentation search and every scaffolding operation exposed as
   tools for AI agents.
+- **Web panel** – a local page with the project findings: rule settings by tier, filters and
+  opening a file in the editor.
 - **[VS Code extension](https://github.com/keyfire/xbsl/blob/main/editors/vscode/README.md)**
   (publisher `keyfire`, extension id `keyfire.xbsl`) – syntax highlighting, project-wide
-  diagnostics, the form designer, a metadata tree and a deploy button, all backed by the same
-  engine.
+  diagnostics, the form designer, a metadata tree, the platform docs panel, debugging and a
+  deploy button, all backed by the same engine.
 
 ## Where to go next
 

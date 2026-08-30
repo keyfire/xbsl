@@ -1,7 +1,7 @@
 {
   "name": "xbsl",
   "displayName": "XBSL (1C:Element)",
-  "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, docs and metadata scaffolding via the xbsl engine.",
+  "description": "1C:Element (XBSL) tooling: syntax highlighting, linting, navigation, the docs panel, the form designer, a metadata tree, metadata scaffolding, debugging and deploy via the xbsl engine.",
   "version": "0.67.2",
   "publisher": "keyfire",
   "license": "MIT",

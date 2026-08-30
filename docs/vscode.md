@@ -10,7 +10,8 @@ sidebar:
      Edit editors/vscode/README.md and run: npm run sync:docs -->
 
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
-[xbsl](https://github.com/keyfire/xbsl) linter.
+[xbsl](https://github.com/keyfire/xbsl) engine – plus the form designer, a metadata tree, the
+platform docs panel, metadata scaffolding, debugging and a deploy button.
 
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
