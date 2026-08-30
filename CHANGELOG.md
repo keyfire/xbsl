@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0
+## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0, 0.88.1
 
 ### Added
 - **The type catalog is completed from what the reference pages never describe.** The
@@ -74,6 +74,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   calls, and delegation into a shared rights module is shown bound to the entity.
 
 ### Changed
+- **Rule fixtures and the examples in the documentation now speak the demo project's vocabulary**
+  (0.88.1). Names in an example have to read on their own rather than point at someone else's
+  solution; the rule tables of both editions were brought to the same vocabulary along the way.
 - **The package description names translation, the MCP server and the extension - in English.**
   The PyPI summary listed the linter, LSP, documentation and scaffolding - a set the toolkit had
   outgrown - and was the only Russian one among the neighbouring packages, while heading an
