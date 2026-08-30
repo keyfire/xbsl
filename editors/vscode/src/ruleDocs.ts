@@ -101,6 +101,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   // --- language: constructs ---
   { match: (r) => r === "code/parse-error", page: DESIGN },
   { match: (r) => r === "code/param-type-required", page: METHODS, anchor: "определение-метода" },
+  { match: (r) => r === "code/duplicate-annotation", page: "topics/annotations" },
   {
     match: (r) => r === "code/module-var-not-const",
     page: "topics/variable-declaration-statement",
@@ -136,7 +137,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
       || r === "code/component-in-server-context"
       || r === "code/server-call-from-handler"
       || r === "code/query-needs-server"
-      || r === "code/global-unavailable",
+      || r === "code/global-unavailable"
+      || r === "code/image-binding-server-call",
     page: EXEC,
   },
   {
@@ -198,6 +200,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "form/unknown-handler", page: "topics/form-component", anchor: "события" },
   { match: (r) => r === "form/handler-signature", page: "topics/form-component", anchor: "события" },
   { match: (r) => r === "yaml/enum-needs-nullable", page: ENUM, anchor: "элементы" },
+  { match: (r) => r === "yaml/enum-default-value", page: ENUM, anchor: "элементы" },
   { match: (r) => r === "yaml/ref-needs-nullable", page: TYPES, anchor: "тип-неопределено" },
   { match: (r) => r === "yaml/date-input-needs-plain-date", page: "topics/edit-component" },
   { match: (r) => r === "code/resource-bare-name", page: IMAGES },
@@ -228,6 +231,19 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
+  {
+    match: (r) => r === "yaml/dynlist-joined-table-param"
+      || r === "yaml/dynlist-filter-disabled",
+    page: "topics/dynamic-list",
+  },
+  { match: (r) => r === "yaml/list-form-needs-dynlist", page: "topics/list-form-component" },
+  { match: (r) => r === "yaml/badge-column-image", page: "topics/standard-table-column-component" },
+  { match: (r) => r === "yaml/popup-in-markup", page: "topics/popup-component" },
+  { match: (r) => r === "code/load-object-unwrap", page: "topics/data-deletion" },
+  {
+    match: (r) => r === "code/permission-right-not-computable",
+    page: "topics/manage-access-control",
+  },
   { match: (r) => r === "yaml/ref-input-auto-commands", page: "topics/edit-component" },
   {
     match: (r) => r === "yaml/toggle-command-pair",
@@ -244,6 +260,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "важность",
   },
   {
+    match: (r) => r === "yaml/event-property-type",
+    page: "topics/event-properties",
+    anchor: "тип",
+  },
+  {
     match: (r) => r === "yaml/choice-needs-static-list",
     page: "stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru",
     anchor: "списоквыбора",
@@ -256,7 +277,8 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   {
     match: (r) => r === "yaml/insert-row-needs-align"
       || r === "yaml/matrix-group-max-width"
-      || r === "yaml/card-literal-stretch-weight",
+      || r === "yaml/card-literal-stretch-weight"
+      || r === "yaml/col-width-needs-no-stretch",
     page: "topics/arrange-components-on-screen",
   },
   {

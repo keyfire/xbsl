@@ -24,12 +24,68 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   NAME of the static field tells what kind of member it is (`LINK_PROPERTY_TERM`,
   `SWITCH_SCREEN_METHOD_TERM`); the pair alone tells neither property from method nor a method's
   parameter from a member.
+- **`yaml/duplicate-key` (tier A, error) and `code/duplicate-annotation` (tier C, error) -
+  duplicates only the server compilation used to show.** A scalar key set twice in one YAML
+  mapping is silently collapsed by the loader - the last value wins, the merged node passes
+  every schema check, and the deploy used to be the first to fail; the rule reads the composed
+  tree where the duplicates are still visible, flags the repeat and names the line of the first
+  occurrence (the `<<` merge key and non-scalar keys are not judged). A duplicate annotation on
+  one declaration - the "Annotation ... is already placed" error - also used to surface only on
+  deploy.
+- **Three rules over the dynamic list declaration.** `yaml/dynlist-joined-table-param` (error) -
+  parameters and bindings in the joined tables: the list fails at runtime while the compiler
+  stays silent; `yaml/list-form-needs-dynlist` (error) - a `ListForm` with an array-sourced
+  table and no dynamic list: the navigation item silently disappears;
+  `yaml/dynlist-filter-disabled` (warning, project-wide) - a filter declared off and enabled by
+  the paired module: the first-render race, the first frame shows the whole table.
+- **Property combinations half of which the platform silently does not draw.**
+  `yaml/badge-column-image` (warning) - an `Image` on a column with `Kind: Badge`: the value is
+  drawn as tag pills, and the picture is documented only for `Kind: Picture`;
+  `yaml/value-choice-title` (warning) - a `Title` on a `ValueChoice` with an explicit
+  `Switcher` kind is not drawn and the field stays unlabeled; `yaml/popup-in-markup` (warning,
+  project-wide) - a popup component, the raw type or a project descendant through the
+  `Inherits` closure, placed in the yaml markup: the content is drawn in the form flow before
+  the window opens, and the cure is to build the window in code (a new `PopupComponent` plus
+  `OpenInPopupWindow`); `yaml/col-width-needs-no-stretch` (info, off by default) - a numeric
+  table-column width without an explicit `HorizontalStretch`: when the column stretches the
+  width acts as a share rather than pixels - a sibling of the `size-needs-no-stretch` family,
+  switched on pointwise when the symptom shows on screen.
+- **`yaml/enum-default-value` (tier D, error, project-wide) and `yaml/event-property-type`
+  (tier D, error).** The `DefaultValue` of a field typed by a project enumeration must be the
+  bare name of a declared value: the type-prefixed spelling (`CaptchaVisibility.Invisible`) and
+  an unknown name used to slip past the linter and were refused only at apply time ("an unknown
+  enumeration item"); on an English tree the rule also catches a Russian value a translator
+  left next to English items. An `EventLogEvent` property type outside the platform's closed
+  list is refused by the server compilation at the price of a deploy; the list comes from the
+  metamodel, and the message names the allowed types and advises writing variant values as
+  string codes listed in the property's `Description`.
+- **`code/load-object-unwrap` (tier D, warning) and `code/image-binding-server-call` (tier D,
+  info, project-wide) - data does not arrive the way the code reads.** A force-unwrap "!" of a
+  `LoadObject()` result on a reference taken from a field of another record or of a
+  tabular-section row - a dangling reference after a physical deletion fails the whole pass,
+  and the result must be checked for Undefined. An `Image` property binding whose call
+  resolves - directly or transitively - into a server method: the image arrives by its own
+  server round-trip after the rows are drawn and is requested again on every redraw; the cure
+  is a field of a joined table or client-side data.
+- **`code/permission-right-not-computable` (tier D, error, project-wide).** A permission
+  granted by the permission-computing handler must be declared computable in the entity's
+  yaml - otherwise the build applies and the permission recomputation fails at runtime;
+  permissions are collected from `AccessPermission` constructors transitively over project
+  calls, and delegation into a shared rights module is shown bound to the entity.
 
 ### Changed
 - **The package description names translation, the MCP server and the extension - in English.**
   The PyPI summary listed the linter, LSP, documentation and scaffolding - a set the toolkit had
   outgrown - and was the only Russian one among the neighbouring packages, while heading an
   English README. The keywords gained `mcp` and `translation`.
+- **`yaml/missing-import` now reads the chain roots in markup bindings.** A
+  `=ForeignModule.Method()` call in a property binding reaches a foreign subsystem the way a
+  type position does, but without an import line the refusal used to come only from the server
+  compilation at the price of a deploy; everything that explains the name on its own - the
+  declarations of this yaml, of the paired module, the implicit platform names - is subtracted.
+- **`yaml/empty-group-sized` now also catches a size binding (`Height: =...`) on an empty group
+  without a `Name`.** Exactly such a spacer lived unnoticed in a live corpus for a month and a
+  half; named empty containers filled from code are not flagged.
 
 ### Fixed
 - **`--data-dir` did not reach the parallel workers.** The pinned root lives in a process global,
