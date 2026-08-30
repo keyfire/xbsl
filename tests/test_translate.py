@@ -1793,3 +1793,57 @@ def test_the_dictionary_catalog_is_not_a_source_of_the_project(tmp_path: Path):
 
     assert report.merged_missing_phrases() == {}
     assert [gap.key for gap in entries.gaps_of_report(report)] == []
+
+
+def test_enumeration_default_moves_with_its_enumeration(tmp_path: Path):
+    """The default of a field typed by a project enumeration is an element NAME.
+
+    The metamodel types `DefaultValue` as a plain object, so nothing renamed it: the value
+    stayed Russian next to a translated enumeration, and the build refused the pair with
+    'Неизвестный элемент перечисления' - visible only at apply time, after a full build.
+    """
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Готовность.yaml", (
+        "ВидЭлемента: Перечисление\n"
+        "Имя: Готовность\n"
+        "Элементы:\n"
+        "    -\n"
+        "        Имя: Скрытая\n"
+    ))
+    _write(root / "Задачи.yaml", (
+        "ВидЭлемента: Справочник\n"
+        "Имя: Задачи\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Готовность\n"
+        "        Тип: Готовность?\n"
+        "        ЗначениеПоУмолчанию: Скрытая\n"
+    ))
+    out = tmp_path / "out"
+    translate_project(
+        root,
+        _dictionary({"Готовность": "Readiness", "Скрытая": "Hidden", "Задачи": "Tasks"}),
+        out,
+        swap_localization=False,
+    )
+    written = (out / "Tasks.yaml").read_text(encoding="utf-8")
+    assert "Type: Readiness?" in written
+    assert "DefaultValue: Hidden" in written
+
+
+def test_a_default_the_dictionary_cannot_name_is_left_alone(tmp_path: Path):
+    """A data string under a field of a platform type is not an element name."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Задачи.yaml", (
+        "ВидЭлемента: Справочник\n"
+        "Имя: Задачи\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Пометка\n"
+        "        Тип: Строка\n"
+        "        ЗначениеПоУмолчанию: черновик\n"
+    ))
+    out = tmp_path / "out"
+    translate_project(root, _dictionary({"Задачи": "Tasks", "Пометка": "Mark"}), out,
+                      swap_localization=False)
+    assert "DefaultValue: черновик" in (out / "Tasks.yaml").read_text(encoding="utf-8")

@@ -1,6 +1,6 @@
 from xbsl.translation.machine.shape import identifier
 
-TERMS = {"program": "Program", "subscriber": "Subscriber"}
+TERMS = {"task": "Task", "assignee": "Assignee"}
 
 
 def test_prose_becomes_camel_case():

@@ -280,7 +280,7 @@ def _filter_form(use_line: str = "Использовать: Ложь", item: str
 
 
 _ENABLING_CODE = (
-    "// Turns the subscriber filter on after the service data arrives.\n"
+    "// Turns the assignee filter on after the service data arrives.\n"
     "@Обработчик\n"
     "метод ПослеСоздания()\n"
     "    для Элемент из Данные.Фильтр.Элементы\n"
@@ -366,7 +366,7 @@ def test_english_use_false_flagged():
         "                Items:\n"
         "                    -\n"
         "                        Type: FilterItem\n"
-        "                        Field: Subscriber\n"
+        "                        Field: Assignee\n"
         "                        Use: False\n"
     )
     code = (
@@ -380,4 +380,4 @@ def test_english_use_false_flagged():
     )
     d = _lint(RACE, ("TheList.yaml", form), ("TheList.xbsl", code))
     assert [x.rule_id for x in d] == [RACE]
-    assert "'Subscriber'" in d[0].message
+    assert "'Assignee'" in d[0].message

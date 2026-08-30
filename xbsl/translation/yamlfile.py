@@ -345,6 +345,25 @@ def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:
         report.note_platform(value, line, col)
 
 
+def _enum_default(vnode, sibling_type: str, resolver) -> bool:
+    """Is this default value an element of a PROJECT enumeration named by the sibling `Type`?
+
+    Narrow on purpose: the type has to be a bare project name (the nullable marker aside), the
+    value a single Cyrillic word, and the dictionary has to know that word. A default the
+    dictionary cannot name is left where it is - a data string that merely looks like an
+    element name is never touched.
+    """
+    if not isinstance(vnode, yaml.ScalarNode):
+        return False
+    value = vnode.value
+    if not isinstance(value, str) or not has_cyrillic(value) or " " in value or "." in value:
+        return False
+    name = sibling_type.rstrip("?")
+    if not name or not has_cyrillic(name) or name not in resolver.project_names:
+        return False
+    return bool(resolver.dictionary.token(value))
+
+
 def _boolean_scalar(node, edits) -> bool:
     value = node.value
     if isinstance(value, str) and not value.isascii():
@@ -393,15 +412,23 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
             if localized_strings and key in ("Строки", "Шаблоны"):
                 _walk_localization_section(vnode, resolver, report, edits, scope=scope)
                 continue
-            _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner, namespace)
+            _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner, namespace,
+                        sibling_type=_mapping_value(node, "Тип") or _mapping_value(node, "Type") or "")
         else:
             _component_key_value(knode, vnode, None, resolver, report, edits, owner)
 
 
 def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: str = "",
-                namespace: str = "") -> None:
+                namespace: str = "", sibling_type: str = "") -> None:
     value_kind = record.get("kind")
     declared = str(record.get("type") or "")
+    if key in ("ЗначениеПоУмолчанию", "DefaultValue") and _enum_default(vnode, sibling_type, resolver):
+        # The default of a field typed by a PROJECT enumeration is the bare name of an
+        # element, and the metamodel types it as a plain object - so nothing above renames it
+        # and the value stayed Russian next to a translated enumeration. The build refuses
+        # such a pair with 'Неизвестный элемент перечисления'.
+        _enum_scalar(vnode, sibling_type.rstrip("?"), resolver, report, edits)
+        return
     if key == "ВидЭлемента":
         replacement = platform_map.kind_english(vnode.value) if isinstance(vnode, yaml.ScalarNode) else None
         if replacement:

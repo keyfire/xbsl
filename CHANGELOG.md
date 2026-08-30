@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0, 0.88.1
+## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0, 0.88.1, 0.88.2
 
 ### Added
 - **The type catalog is completed from what the reference pages never describe.** The
@@ -91,6 +91,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   stay silent; named empty containers filled from code are not flagged.
 
 ### Fixed
+- **The default of an enumeration-typed field now moves with its enumeration** (0.88.2). The
+  metamodel types `DefaultValue` as a plain object, so the element name stayed Russian next to a
+  translated enumeration and the build refused the pair with "Неизвестный элемент перечисления" -
+  visible only at apply time. Judged narrowly: the field's type has to be a bare project name and
+  the value a word the dictionary knows.
 - **`--data-dir` did not reach the parallel workers.** The pinned root lives in a process global,
   and a spawned worker starts without it and took the INSTALLED data: the run read a dataset
   other than the one it was asked for, and said nothing about it.
