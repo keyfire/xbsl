@@ -9,6 +9,14 @@ that before a human notices it in a browser.
   thrown out of the DOM entirely: the spacer it was meant to be leaves no gap at all (found
   twice on the same page of a live project). The cure is a non-empty transparent insert – a
   `КонтейнерHtml` of the same height whose content only paints nothing.
+
+  A size given as a binding (`Высота: =ОтступСнизу`) is the same defect in disguise – the node
+  is dropped whatever the binding yields – but it is judged only on a group WITHOUT a `Name`:
+  a named empty container is a legitimate pattern, code fills it through the name
+  (`Компоненты.<Имя>.Содержимое.Добавить`), while an unnamed one is unreachable from code and
+  stays empty forever (a spacer of exactly this shape sat unnoticed on a live public page for
+  a month and a half). The cure there is a spacer label of the same height, or a
+  `VerticalIndent` on the element the gap was meant for.
 - `yaml/hint-too-long` – the renderer cuts a `Подсказка` off with an ellipsis at about 290
   characters, and the tail is not shown at all: there is no scroll and no "more" affordance,
   so the end of a long explanation is simply lost.
@@ -89,6 +97,19 @@ MESSAGES = {
               "at all – the renderer throws such a node out, and there will be no gap. If a gap is "
               "what is needed, use a non-empty transparent {n[КонтейнерHtml]} of the same height.",
     },
+    "yaml/empty-group-sized.binding": {
+        "ru": "Пустая безымянная {n[Группа]} с биндингом {size_key}: {value} и без {n[Содержимое]} "
+              "не отрисуется вовсе – рендер выбрасывает такой узел при любом значении биндинга, и "
+              "отступа не будет, а без {n[Имя]} группу не наполнить и из кода. Нужен зазор – несите "
+              "его распоркой {n[Надпись]} без текста той же высоты либо задайте "
+              "{n[ОтступПоВертикали]} элементу, ради которого отступ писался.",
+        "en": "An empty unnamed {n[Группа]} with a {size_key}: {value} binding and no "
+              "{n[Содержимое]} will not render at all – the renderer throws such a node out "
+              "whatever the binding yields, there will be no gap, and without a {n[Имя]} the group "
+              "cannot be filled from code either. If a gap is what is needed, carry it with a "
+              "{n[Надпись]} spacer of the same height and no text, or set {n[ОтступПоВертикали]} "
+              "on the element the gap was meant for.",
+    },
     "yaml/hint-too-long.title": {
         "ru": "Подсказка длиннее предела отрисовки",
         "en": "The hint is longer than the render limit",
@@ -141,6 +162,18 @@ def _fixed_size(node) -> bool:
         return float(node.value) > 0
     except ValueError:
         return False
+
+
+def _binding_size(node) -> bool:
+    """Whether the scalar is a size binding (`=...`) – a value computed at run time.
+
+    A block scalar (`|`, `>`) is text, not a binding, and is skipped the way the other
+    binding-aware rules skip it; a quote style does not matter – the platform reads the
+    string the same either way.
+    """
+    if not isinstance(node, yaml.ScalarNode) or node.style in ("|", ">"):
+        return False
+    return node.value.strip().startswith("=")
 
 
 def _object_mappings(source: SourceFile):
@@ -252,6 +285,16 @@ def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
     Only a group whose `Содержимое` key is absent altogether or holds an empty sequence is
     judged: a group filled by a binding (`Содержимое: =...`) or by anything else is content
     the rule cannot weigh.
+
+    The size comes in two flavours. A positive literal is judged on any such group – the node
+    is dropped regardless of what else it declares. A binding (`Высота: =ОтступСнизу`) is
+    judged only on a group WITHOUT a `Name`: a named empty container is filled from code
+    through its name (`Компоненты.<Имя>.Содержимое.Добавить` – both live near-misses of the wider
+    predicate on real projects are exactly that), while an unnamed one is unreachable from
+    code, so the renderer drops it whatever the binding yields – the exact spacer shape that
+    sat unnoticed on a live public page for a month and a half. The literal flavour keeps its
+    original reach on purpose: it has live findings behind it and no name-shaped
+    counter-example on the corpora.
     """
     for mapping in _object_mappings(source):
         keys = _scalar_entries(mapping)
@@ -278,6 +321,23 @@ def empty_group_sized(source: SourceFile) -> Iterable[Diagnostic]:
                 "yaml/empty-group-sized", Severity.WARNING,
                 i18n.t(
                     "yaml/empty-group-sized.spacer",
+                    size_key=key_node.value, value=entry[1].value,
+                ),
+            )
+            return  # one finding per node: both axes are the same defect
+        if "Имя" in keys:
+            continue  # a named empty container is filled from code – a legitimate pattern
+        for size_key in _SIZE_KEYS:
+            entry = keys.get(size_key)
+            if entry is None or not _binding_size(entry[1]):
+                continue
+            key_node = entry[0]
+            yield Diagnostic(
+                source.rel,
+                key_node.start_mark.line + 1, key_node.start_mark.column + 1,
+                "yaml/empty-group-sized", Severity.WARNING,
+                i18n.t(
+                    "yaml/empty-group-sized.binding",
                     size_key=key_node.value, value=entry[1].value,
                 ),
             )
