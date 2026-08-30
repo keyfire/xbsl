@@ -1671,7 +1671,7 @@ def test_completion_after_a_facet_namespace():
     and the dot after the first one used to answer nothing - though what may follow is known."""
     got = resolve_completions(
         LOOKUP, language_id="xbsl", line_prefix="    знч П = [Сущность.",
-        file_stem="Абоненты",
+        file_stem="Исполнители",
         stdlib_members={"Сущность.Право": {"properties": ["Чтение"]},
                         "Сущность.Объект": {"methods": ["Записать"]},
                         "Массив": {"methods": ["Добавить"]}},

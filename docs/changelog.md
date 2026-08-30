@@ -1085,7 +1085,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Fixed
 - **`code/unknown-member` judges generic variables by the head of the type:** the members of
-  `ReadOnlyArray<Subscriber>` are those of `ReadOnlyArray`, while a parameterized type used to be
+  `ReadOnlyArray<Task>` are those of `ReadOnlyArray`, while a parameterized type used to be
   skipped whole.
 - **The documentation search no longer answers a multi-word query with nothing** - when no page
   carries every word, it relaxes to "any of the words".

@@ -3,7 +3,7 @@
 A form's dynamic list names its row type with `ИмяТипаДанныхСтроки`, and the fields of that
 type are the list's `Поля` - the `Псевдоним` when there is one, otherwise the last segment of
 the expression. The type itself the engine already knows (`semantics._row_type_names`), but
-nobody checked the FIELDS: `Строка.КодАбонент` instead of `КодАбонента` passes the linter and
+nobody checked the FIELDS: `Строка.КодИсполнитель` instead of `КодИсполнителя` passes the linter and
 fails the server-side compilation.
 
 How a variable gets the row type (an AST walk, per method - one map per FILE would be wrong,
@@ -145,7 +145,7 @@ def _table_aliases(node) -> set[str]:
 def _list_fields(node) -> Iterable[tuple[str, dict[str, str]]]:
     """(row type name, {field: the expression that may yield Null, '' when it may not}).
 
-    A field taken THROUGH A REFERENCE (`Абонент.Номер`) is typed `<тип>|Null`, and that costs:
+    A field taken THROUGH A REFERENCE (`Исполнитель.Номер`) is typed `<тип>|Null`, and that costs:
     assigning it to a typed structure field answers
     `Incompatible types: "Null" cannot be assigned to "Число"`. A dotted head that names one of
     the list's own table aliases is not a reference, and neither is an expression that already
@@ -366,8 +366,8 @@ def _row_catalog(facts: dict[str, dict]) -> tuple[dict[str, dict[str, str]], dic
 def row_field_null(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """A row field taken through a reference is `<тип>|Null` and cannot fill a typed field.
 
-    The compiler is explicit: `новый Карточка(Номер = Строка.НомерАбонента)`, where the list
-    field is `Абонент.Номер`, answers
+    The compiler is explicit: `новый Карточка(Номер = Строка.НомерИсполнителя)`, where the list
+    field is `Исполнитель.Номер`, answers
     `Incompatible types: "Null" cannot be assigned to "Число"`. The description of the list
     itself compiles - the probe applied it cleanly - so the finding belongs to the assignment,
     and the fix is `.ЗаменитьNull(...)` on the field expression.

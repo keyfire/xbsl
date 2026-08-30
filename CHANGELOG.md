@@ -84,8 +84,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   compilation at the price of a deploy; everything that explains the name on its own - the
   declarations of this yaml, of the paired module, the implicit platform names - is subtracted.
 - **`yaml/empty-group-sized` now also catches a size binding (`Height: =...`) on an empty group
-  without a `Name`.** Exactly such a spacer lived unnoticed in a live corpus for a month and a
-  half; named empty containers filled from code are not flagged.
+  without a `Name`.** An unnamed spacer with a computed size reads as an empty group and used to
+  stay silent; named empty containers filled from code are not flagged.
 
 ### Fixed
 - **`--data-dir` did not reach the parallel workers.** The pinned root lives in a process global,
@@ -1150,7 +1150,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 
 ### Fixed
 - **`code/unknown-member` judges generic variables by the head of the type:** the members of
-  `ReadOnlyArray<Subscriber>` are those of `ReadOnlyArray`, while a parameterized type used to be
+  `ReadOnlyArray<Task>` are those of `ReadOnlyArray`, while a parameterized type used to be
   skipped whole.
 - **The documentation search no longer answers a multi-word query with nothing** - when no page
   carries every word, it relaxes to "any of the words".

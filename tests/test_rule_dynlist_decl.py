@@ -255,7 +255,7 @@ def test_english_list_form_flagged():
 # --- yaml/dynlist-filter-disabled -------------------------------------------------------
 
 def _filter_form(use_line: str = "Использовать: Ложь", item: str = "ЭлементФильтра",
-                 field_line: str = "Поле: Абонент") -> str:
+                 field_line: str = "Поле: Исполнитель") -> str:
     text = (
         "ВидЭлемента: КомпонентИнтерфейса\n"
         "Имя: Список\n"
@@ -306,7 +306,7 @@ _COMPARING_CODE = (
 def test_disabled_filter_enabled_from_code_flagged():
     d = _lint(RACE, ("Список.yaml", _filter_form()), ("Список.xbsl", _ENABLING_CODE))
     assert [x.rule_id for x in d] == [RACE]
-    assert "'Абонент'" in d[0].message
+    assert "'Исполнитель'" in d[0].message
     assert d[0].line == 16  # the declared value, where the cure applies
 
 

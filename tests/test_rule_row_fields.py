@@ -9,37 +9,37 @@ _RULE = "code/unknown-row-field"
 _FORM = """\
 ВидЭлемента: КомпонентИнтерфейса
 Ид: 1f9b6d38-5c27-4e91-8a43-2d7e0b5c9a11
-Имя: Кабинет
+Имя: СписокЗадач
 Свойства:
     -
         Ид: 8f3a2c14-7b6d-4e05-9a1c-2d5f8b47e903
         Имя: Список
-        Тип: ДинамическийСписок<Кабинет.СтрокаСписка>
+        Тип: ДинамическийСписок<СписокЗадач.СтрокаСписка>
         ЗначениеПоУмолчанию:
             ИмяТипаДанныхСтроки: СтрокаСписка
             ОсновнаяТаблица:
-                Таблица: Приложения
+                Таблица: Задачи
             Поля:
                 -
                     Тип: ПолеДинамическогоСписка
                     Выражение: Наименование
                 -
                     Тип: ПолеДинамическогоСписка
-                    Выражение: Абонент.Код.ЗаменитьNull(0)
-                    Псевдоним: КодАбонента
+                    Выражение: Исполнитель.Код.ЗаменитьNull(0)
+                    Псевдоним: КодИсполнителя
 """
 
 
 def _lint(code: str):
     sources = [
-        engine.load_text("acme/П/О/Кабинет.yaml", _FORM),
-        engine.load_text("acme/П/О/Кабинет.xbsl", code),
+        engine.load_text("acme/П/О/СписокЗадач.yaml", _FORM),
+        engine.load_text("acme/П/О/СписокЗадач.xbsl", code),
     ]
     return engine.run_sources(sources, select={_RULE})
 
 
 _HANDLER = (
-    "метод Клик(ДанныеСтроки: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+    "метод Клик(ДанныеСтроки: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
     "    знч Строка = ДанныеСтроки.Данные\n"
     "    Ф(Строка.{field})\n"
     ";\n"
@@ -47,13 +47,13 @@ _HANDLER = (
 
 
 def test_unknown_field_is_reported_with_a_hint():
-    d = _lint(_HANDLER.format(field="КодАбонент"))
+    d = _lint(_HANDLER.format(field="КодИсполнитель"))
     assert len(d) == 1 and d[0].rule_id == _RULE and d[0].line == 3
-    assert "КодАбонента" in d[0].message
+    assert "КодИсполнителя" in d[0].message
 
 
 def test_declared_field_is_silent():
-    assert _lint(_HANDLER.format(field="КодАбонента")) == []
+    assert _lint(_HANDLER.format(field="КодИсполнителя")) == []
 
 
 def test_field_named_by_the_expression_is_silent():
@@ -69,9 +69,9 @@ def test_same_variable_name_with_another_row_type_is_not_mixed():
     """One map per file fails exactly here: one map per FILE reported eight
     false misses, because `Строка` carries different row types in different handlers."""
     code = (
-        "метод А(ДанныеСтроки: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+        "метод А(ДанныеСтроки: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
         "    знч Строка = ДанныеСтроки.Данные\n"
-        "    Ф(Строка.КодАбонента)\n"
+        "    Ф(Строка.КодИсполнителя)\n"
         ";\n"
         "метод Б(Строка: Строка)\n"
         "    Ф(Строка.Длина())\n"
@@ -94,21 +94,21 @@ def test_a_variable_of_an_unrelated_type_is_silent():
 _NULL_FORM = """\
 ВидЭлемента: КомпонентИнтерфейса
 Ид: 1f9b6d38-5c27-4e91-8a43-2d7e0b5c9a11
-Имя: Кабинет
+Имя: СписокЗадач
 Свойства:
     -
         Ид: 8f3a2c14-7b6d-4e05-9a1c-2d5f8b47e903
         Имя: Список
-        Тип: ДинамическийСписок<Кабинет.СтрокаСписка>
+        Тип: ДинамическийСписок<СписокЗадач.СтрокаСписка>
         ЗначениеПоУмолчанию:
             ИмяТипаДанныхСтроки: СтрокаСписка
             ОсновнаяТаблица:
-                Таблица: Приложения
+                Таблица: Задачи
             Поля:
                 -
                     Тип: ПолеДинамическогоСписка
-                    Выражение: Абонент.Номер
-                    Псевдоним: НомерАбонента
+                    Выражение: Исполнитель.Номер
+                    Псевдоним: НомерИсполнителя
                 -
                     Тип: ПолеДинамическогоСписка
                     Выражение: Вид.Код.ЗаменитьNull("")
@@ -121,7 +121,7 @@ _NULL_MODULE = """\
     знч Код: Строка = ""
     знч Мягкий: Число? = 0
 ;
-метод Клик(ДанныеСтроки: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)
+метод Клик(ДанныеСтроки: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)
     знч Строка = ДанныеСтроки.Данные
     знч К = новый Карточка({args})
 ;
@@ -130,16 +130,16 @@ _NULL_MODULE = """\
 
 def _lint_null(args: str):
     sources = [
-        engine.load_text("acme/П/О/Кабинет.yaml", _NULL_FORM),
-        engine.load_text("acme/П/О/Кабинет.xbsl", _NULL_MODULE.format(args=args)),
+        engine.load_text("acme/П/О/СписокЗадач.yaml", _NULL_FORM),
+        engine.load_text("acme/П/О/СписокЗадач.xbsl", _NULL_MODULE.format(args=args)),
     ]
     return engine.run_sources(sources, select={"code/row-field-null"})
 
 
 def test_reference_field_into_a_typed_structure_field_is_reported():
-    d = _lint_null("Номер = Строка.НомерАбонента")
+    d = _lint_null("Номер = Строка.НомерИсполнителя")
     assert len(d) == 1 and d[0].rule_id == "code/row-field-null"
-    assert "Абонент.Номер" in d[0].message and "ЗаменитьNull" in d[0].message
+    assert "Исполнитель.Номер" in d[0].message and "ЗаменитьNull" in d[0].message
 
 
 def test_guarded_field_is_silent():
@@ -147,7 +147,7 @@ def test_guarded_field_is_silent():
 
 
 def test_nullable_target_field_is_silent():
-    assert _lint_null("Мягкий = Строка.НомерАбонента") == []
+    assert _lint_null("Мягкий = Строка.НомерИсполнителя") == []
 
 
 def test_the_constructor_walk_does_not_need_dunder_dict(monkeypatch):
@@ -159,7 +159,7 @@ def test_the_constructor_walk_does_not_need_dunder_dict(monkeypatch):
         raise TypeError("vars() argument must have __dict__ attribute")
 
     monkeypatch.setattr(builtins, "vars", _no_dict)
-    d = _lint_null("Номер = Строка.НомерАбонента")
+    d = _lint_null("Номер = Строка.НомерИсполнителя")
     assert len(d) == 1 and d[0].rule_id == "code/row-field-null"
 
 
@@ -171,7 +171,7 @@ def test_the_key_of_a_row_is_a_member_of_the_row_type():
     data member alone, that documented shape read as a field the list does not have.
     """
     d = _lint(
-        "метод Открыть(Строка: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
         "    Форма.Открыть(Ключ = Строка.Ключ)\n"
         ";\n"
     )
@@ -180,7 +180,7 @@ def test_the_key_of_a_row_is_a_member_of_the_row_type():
 
 def test_an_unknown_field_is_still_reported_next_to_the_key():
     d = _lint(
-        "метод Открыть(Строка: СтрокаДинамическогоСписка<Кабинет.СтрокаСписка>)\n"
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
         "    Форма.Открыть(Ключ = Строка.Ключ, Имя = Строка.НетТакого)\n"
         ";\n"
     )

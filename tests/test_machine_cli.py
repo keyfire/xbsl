@@ -68,7 +68,7 @@ def test_suggest_passes_the_terms_section_as_glossary_and_spelling(tmp_path: Pat
     dictionary = tmp_path / "xbsl-translation"
     dictionary.mkdir()
     (dictionary / "terms.yaml").write_text(
-        "terms:\n    Программа: Program\n    Абонент: Subscriber\n", encoding="utf-8")
+        "terms:\n    Задача: Task\n    Исполнитель: Assignee\n", encoding="utf-8")
 
     from xbsl.translation.machine import dispatch as dispatch_module
 
@@ -84,8 +84,8 @@ def test_suggest_passes_the_terms_section_as_glossary_and_spelling(tmp_path: Pat
     code = cli.cli_main(
         [str(project), "--dictionary", str(dictionary), "--suggest", "--format", "json"])
     assert code == 0
-    assert sorted(seen["glossary"]) == [("Абонент", "Subscriber"), ("Программа", "Program")]
-    assert seen["terms"] == {"program": "Program", "subscriber": "Subscriber"}
+    assert sorted(seen["glossary"]) == [("Задача", "Task"), ("Исполнитель", "Assignee")]
+    assert seen["terms"] == {"task": "Task", "assignee": "Assignee"}
 
 
 def test_suggest_out_help_states_the_directory_is_dropped():

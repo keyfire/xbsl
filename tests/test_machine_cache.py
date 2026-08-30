@@ -4,8 +4,8 @@ from xbsl.translation.machine.cache import Cache, fingerprint
 
 
 def test_fingerprint_ignores_order_and_case():
-    first = fingerprint([("Программа", "Program"), ("Абонент", "Subscriber")])
-    second = fingerprint([("абонент", "Subscriber"), ("Программа", "Program")])
+    first = fingerprint([("Задача", "Task"), ("Исполнитель", "Assignee")])
+    second = fingerprint([("исполнитель", "Assignee"), ("Задача", "Task")])
     assert first == second
     assert first != fingerprint([("Программа", "Software")])
 
