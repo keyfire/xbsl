@@ -66,6 +66,7 @@ from . import (  # noqa: F401
     local_visibility,
     naming,
     ns_objects,
+    popup_markup,
     queries,
     reserved_names,
     row_fields,
