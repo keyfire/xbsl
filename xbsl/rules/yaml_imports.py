@@ -1,9 +1,10 @@
-"""Tier D: cross-subsystem references - five rules over one placement model.
+"""Tier D: cross-subsystem references - six rules over one placement model.
 
 The platform asks for three things before an element of subsystem Б may be used in subsystem А
 (docs, "Модульная разработка"): the element is public, the consumer imports the namespace, and
 the consumer's subsystem declares Б in its `Использование`. One rule per condition per side:
-yaml/foreign-not-public for the first, yaml/missing-import and code/missing-import for the
+yaml/foreign-not-public and code/foreign-not-public for the first (the markup and the module
+reach the element from two places), yaml/missing-import and code/missing-import for the
 second (the yaml and the code of one element import separately), yaml/missing-subsystem-usage
 for the third. code/unused-import is the odd one out - it looks the other way, at an import
 nothing needs.
@@ -803,6 +804,125 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "code/missing-import", Severity.WARNING,
                 i18n.t(f"code/missing-import.{shape}", name=chain_name,
                        sub="/".join(candidates)),
+            )
+
+
+# --- code/foreign-not-public --------------------------------------------------------------
+
+MESSAGES_CODE_VISIBILITY = {
+    "code/foreign-not-public.title": {
+        "ru": "Обращение из кода к непубличному элементу чужой подсистемы",
+        "en": "Code reference to a non-public element of another subsystem",
+    },
+    "code/foreign-not-public.found": {
+        "ru": "Элемент '{name}' лежит в подсистеме '{sub}' и не публичен "
+              "(ОбластьВидимости: {vis}) – из модуля подсистемы '{mine}' он недоступен, "
+              "компиляция упадёт на этой строке (\"Тип ... недоступен из-за модификатора "
+              "видимости\"). Задайте у элемента ОбластьВидимости: ВПроекте; аннотация "
+              "@ВПроекте на методе не помогает – видимость элемента старше.",
+        "en": "Element '{name}' lives in subsystem '{sub}' and is not public "
+              "({n[ОбластьВидимости]}: {vis}) - it is unreachable from a module of subsystem "
+              "'{mine}', and compilation fails at this line (\"Type ... is invisible due to "
+              "visibility modifier\"). Set {n[ОбластьВидимости]}: {n[ВПроекте]} on the "
+              "element; a @{n[ВПроекте]} annotation on the method does not help - the "
+              "visibility of the element comes first.",
+    },
+    "code/foreign-not-public.root": {
+        "ru": "Элемент '{name}' лежит в подсистеме '{sub}' и не публичен "
+              "(ОбластьВидимости: {vis}) – из модуля вне подсистем (модуль проекта) он "
+              "недоступен, компиляция упадёт на этой строке (\"Тип ... недоступен из-за "
+              "модификатора видимости\"). Задайте у элемента ОбластьВидимости: ВПроекте; "
+              "аннотация @ВПроекте на методе не помогает – видимость элемента старше.",
+        "en": "Element '{name}' lives in subsystem '{sub}' and is not public "
+              "({n[ОбластьВидимости]}: {vis}) - it is unreachable from a module outside any "
+              "subsystem (the project module), and compilation fails at this line (\"Type ... "
+              "is invisible due to visibility modifier\"). Set {n[ОбластьВидимости]}: "
+              "{n[ВПроекте]} on the element; a @{n[ВПроекте]} annotation on the method does "
+              "not help - the visibility of the element comes first.",
+    },
+}
+i18n.register(MESSAGES_CODE_VISIBILITY)
+
+
+@rule(
+    "code/foreign-not-public", "code/foreign-not-public.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_missing_import_mapper,
+)
+def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A module reaches an element of a subsystem it is not in, and the element is not public.
+
+    The code side of yaml/foreign-not-public, split the way yaml/missing-import is split from
+    code/missing-import: the markup and the module reach the element from two places, so
+    they are two rules. The compiler refuses the reference at the position of the name
+    (`Тип "..." недоступен из-за модификатора видимости @ВПодсистеме`); the live case was the
+    project module calling a common module of a subsystem left at the default visibility, and
+    the refusal arrived from the server compilation at the price of a deploy. The annotation
+    on the called method does not enter into it: a method marked `@ВПроекте` inside a module
+    whose element is `InSubsystem` stays unreachable, because the type of the module is what
+    the compiler judges first.
+
+    The facts are those of code/missing-import - the written type positions and the roots of
+    `Модуль.Метод()` chains, with everything the module itself explains subtracted in the
+    mapper - and the reduce mirrors foreign_not_public: a name the module's own subsystem
+    owns resolves locally, a target that is public anywhere is at most a missing import (the
+    sibling's case), a module-declared local type and a section of the paired yaml are not
+    references. What this rule adds is the place OUTSIDE any subsystem: the project module
+    (`Проект.xbsl`) belongs to none, so every non-public element is foreign to it - the live
+    case exactly, and the place where code/missing-import stands down because such a module
+    needs no import. A module outside the subsystems is not judged against a name that an
+    unplaced element carries as well (a namesake next to it resolves nearer), and a qualified
+    `Подсистема::Элемент` root is skipped like everywhere in this module - it never names a
+    placed element. One diagnostic per target per module.
+    """
+    roots = {Path(f["dir"]): f["name"] for f in facts.values() if f["k"] == "sub"}
+    if not roots:
+        return  # no subsystem files - the project layout is unknown, nothing to judge
+    local_types: set[str] = set()
+    for fact in facts.values():
+        if fact["k"] == "mod":
+            local_types.update(fact["local_types"])
+    placement: dict[str, dict[str, object]] = {}
+    unplaced: set[str] = set()  # elements that sit outside every subsystem
+    paired_keys: dict[str, set[str]] = {}
+    for fact in facts.values():
+        if fact["k"] != "el":
+            continue
+        paired_keys[fact["stem"]] = set(fact["keys"])
+        sub = _subsystem_of(Path(fact["path"]), roots)
+        if sub:
+            placement.setdefault(fact["name"], {})[sub] = fact["vis"]
+        else:
+            unplaced.add(fact["name"])
+    for rel, fact in facts.items():
+        if fact["k"] != "mod":
+            continue
+        own_keys = paired_keys.get(fact["stem"], frozenset())
+        candidates_here = list(fact["cands"]) + [
+            c for c in fact.get("roots", ()) if c[0] not in own_keys
+        ]
+        if not candidates_here:
+            continue
+        my_sub = _subsystem_of(Path(fact["path"]), roots)
+        reported: set[str] = set()
+        for root, chain_name, line, col in candidates_here:
+            if root in reported or root in local_types or "::" in root:
+                continue
+            if my_sub is None and root in unplaced:
+                continue
+            owners = placement.get(root)
+            if not owners or my_sub in owners:
+                continue
+            if any(vis in _public_scopes() for vis in owners.values()):
+                continue  # public somewhere - a missing import at most, the sibling's case
+            owner = sorted(owners)[0]
+            reported.add(root)
+            yield Diagnostic(
+                rel, line, col, "code/foreign-not-public", Severity.ERROR,
+                i18n.t(
+                    "code/foreign-not-public.found" if my_sub else "code/foreign-not-public.root",
+                    name=chain_name, sub=owner, mine=my_sub or "",
+                    vis=owners[owner] or i18n.name(_DEFAULT_SCOPE),
+                ),
             )
 
 
