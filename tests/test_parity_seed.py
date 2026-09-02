@@ -76,6 +76,58 @@ def test_a_seed_that_stops_planting_its_case_is_reported_stale():
     assert _TOOL.run_seed(stale)["status"] == "stale"
 
 
+def test_a_hand_written_twin_the_rule_misreads_is_blamed_on_the_rule():
+    """With a hand-written English twin the `en-...` verdict speaks about the rule alone.
+
+    The hand writes a KNOWN type where the Russian tree plants an unknown one, so the rule is
+    right to stay silent there - and the tool must still call it the English side's miss,
+    while the translated tree (which carries the unknown type) is reported apart.
+    """
+    seed = _TOOL.Seed(
+        rule="code/unknown-type",
+        expect=_TOOL.FINDING,
+        note="a hand-written twin that no longer plants the case",
+        files={
+            "Заявки.yaml": _TOOL._CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Значение: НесуществующийТип)\n;\n",
+        },
+        english={
+            "Applications.yaml": _TOOL._CATALOG_EN,
+            "Applications.xbsl": "method Probe(Value: String)\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значение": "Value",
+                "НесуществующийТип": "NonexistentType"},
+    )
+    result = _TOOL.run_seed(seed)
+    assert result["status"] == "en-misses"
+    assert result["translated"] == 1
+    assert result["translator_differs"] == ["Applications.xbsl"]
+
+
+def test_a_translated_twin_that_disagrees_alone_is_blamed_on_the_translator():
+    """The dictionary maps the unknown type onto a platform one: the translated tree passes
+    where the hand-written twin reports, and the verdict names the translator, not the rule."""
+    seed = _TOOL.Seed(
+        rule="code/unknown-type",
+        expect=_TOOL.FINDING,
+        note="a translation that turns the planted case into legal code",
+        files={
+            "Заявки.yaml": _TOOL._CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Значение: НесуществующийТип)\n;\n",
+        },
+        english={
+            "Applications.yaml": _TOOL._CATALOG_EN,
+            "Applications.xbsl": "method Probe(Value: NonexistentType)\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значение": "Value",
+                "НесуществующийТип": "String"},
+    )
+    result = _TOOL.run_seed(seed)
+    assert result["status"] == "translator-misses"
+    assert result["english"] == 1 and result["translated"] == 0
+    assert result["translator_differs"] == ["Applications.xbsl"]
+
+
 def test_the_translator_leaves_no_problem_behind_on_a_seed():
     """A seed whose translation collides is testing the dictionary, not the rule."""
     problems = {

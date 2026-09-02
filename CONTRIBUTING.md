@@ -111,6 +111,15 @@ invent, and the two need opposite fixes. A seed that stops planting its case rep
 rather than passing quietly. `tests/test_parity_seed.py` runs the whole catalog, so seeds are
 checked on every test run and not only when someone remembers the tool.
 
+A rule that matches names against the platform's tables gets its English twin written by hand
+as well (`english=`), spelled from `terms.json`, `uiterms.json` and the ui schema – never
+guessed. The rule is then judged on the platform's own spelling, and the translator's output
+becomes a third tree: `translator-misses` / `translator-invents` name a gap of the translator
+rather than of the rule, and the files it wrote differently from the hand are listed next to
+the verdict. Seed a PAIR – one case for the finding, one for the silence – because a table
+without the English spelling makes the rule miss and one without the Russian reading makes it
+invent, and a seed catches only the direction it plants.
+
 A gap you cannot close today is still worth planting: give the seed a `known=` reason and it
 reports `known (...)` instead of failing. Deleting it would delete the evidence, and the next
 reader would rediscover the same thing from scratch. The note is not a place to hide a
