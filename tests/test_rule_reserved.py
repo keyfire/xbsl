@@ -37,6 +37,16 @@ def test_structure_field_type_latin_flagged():
     assert len(d) == 1 and (d[0].line, d[0].col) == (2, 9)
 
 
+def test_structure_field_type_capitalized_flagged():
+    # The spelling an English structure field carries; a live apply refuses it like the others.
+    d = _lint(
+        "М.xbsl",
+        "структура С\n    пер Type: Строка\n;\n",
+        "code/reserved-name",
+    )
+    assert len(d) == 1 and (d[0].line, d[0].col) == (2, 9)
+
+
 def test_structure_field_req_flagged():
     d = _lint(
         "М.xbsl",

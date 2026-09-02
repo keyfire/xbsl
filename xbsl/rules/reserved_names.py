@@ -8,8 +8,10 @@ terminating `;` at bracket depth 0 (or, as a safety stop, to the next lowercase
 метод/конструктор/структура/перечисление/исключение keyword – a structure holds only field
 declarations); parameters come from the shared signature parser. The lexer classifies `Тип`
 as a keyword (the type literal), so for the name scan the TYPE keyword is downgraded to an
-identifier locally. Exactly these two spellings are checked – other casings are not
-confirmed to be rejected. Local variables and other name positions are left alone on
+identifier locally. Three spellings are checked: the two above and the capitalized `Type`
+an English structure field carries - a live apply (02.09.2026) refused a field of that name
+as reserved, the same refusal as for the other two; other casings are not confirmed to be
+rejected. Local variables and other name positions are left alone on
 purpose: a local variable named `Тип` inside a method is legal, so widening the rule would
 produce false positives.
 
@@ -77,7 +79,7 @@ MESSAGES = {
 i18n.register(MESSAGES)
 
 # The exact spellings the server apply is confirmed to reject in field/parameter positions.
-_RESERVED_NAMES = frozenset({"Тип", "type"})
+_RESERVED_NAMES = frozenset({"Тип", "type", "Type"})
 
 # Keywords that cannot occur inside a structure body – a safety stop for an unterminated block.
 _BLOCK_BREAK_KW = ("METHOD", "CONSTRUCTOR", "STRUCTURE", "ENUMERATION", "EXCEPTION")

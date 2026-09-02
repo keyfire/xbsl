@@ -448,11 +448,6 @@ SEEDS: list[Seed] = [
                                     "            Type: CommandInterfaceFragment<UsualCommand>\n",
         },
         tokens=_FORM_TOKENS,
-        known="the rule reads the Russian spelling alone in three places - the key gate matches "
-              "`Тип:` only, the component of the owning node and the type head are looked up in "
-              "the schema's Russian names with no canonicalization - so an English form is never "
-              "judged. Every name involved has its English pair in the data; closing this is a "
-              "three-line change to the rule with a test, not a data gap.",
     ),
     Seed(
         rule="form/unknown-handler",
@@ -687,10 +682,6 @@ SEEDS: list[Seed] = [
                                     "        Name: State\n",
         },
         tokens={**_FORM_TOKENS, "Состояния": "States", "Открыт": "Open", "Состояние": "State"},
-        known="the rule matches the input component by a hand-written English spelling, "
-              "`InputField`, which no serializer writes - the platform's is `Edit` (terms.json, "
-              "the ui schema) - so an English form is never judged. The data has the pair; the "
-              "rule has to build its alternation from the dictionary instead of the literal.",
     ),
     Seed(
         rule="code/reserved-name",
@@ -699,10 +690,6 @@ SEEDS: list[Seed] = [
         files={"Заявки.xbsl": "структура Данные\n    пер Тип: Строка\n;\n"},
         english={"Applications.xbsl": "structure Data\n    var Type: String\n;\n"},
         tokens={"Заявки": "Applications", "Данные": "Data"},
-        known="the rule checks the two spellings the server is confirmed to reject, `Тип` and "
-              "`type`; the capitalized `Type` an English structure field carries is confirmed "
-              "neither way, and the rule does not guess. A live apply of a structure field named "
-              "`Type` settles it - a fact to measure, not logic to change.",
     ),
     Seed(
         rule="code/global-unavailable",

@@ -217,15 +217,24 @@ def test_english_default_value_guards_and_english_input_field_advice(tmp_path):
         enum_yaml=enum_en,
     )
     assert not _has(guarded)
+    # `Edit` is the platform's own spelling of the input component (terms.json): the rule
+    # matches the spellings the data names, not a word guessed from the Russian
     d = _вид(
         tmp_path,
         "ElementKind: InterfaceComponent\nName: F\nContent:\n"
-        "    -\n        Name: KindField\n        Type: InputField<MessageKind>\n",
+        "    -\n        Name: KindField\n        Type: Edit<MessageKind>\n",
         enum_yaml=enum_en,
     )
     # the advice keeps the spelling of the file
-    assert len(d) == 1 and "InputField<MessageKind?>" in d[0].message
+    assert len(d) == 1 and "Edit<MessageKind?>" in d[0].message
     assert "ПолеВвода" not in d[0].message
+    # a word no serializer writes is not an input field - yaml/unknown-type's case, not this one
+    (tmp_path / "Ф.yaml").write_text(
+        "ElementKind: InterfaceComponent\nName: F\nContent:\n"
+        "    -\n        Name: KindField\n        Type: InputField<MessageKind>\n",
+        encoding="utf-8",
+    )
+    assert not _has(engine.run(discover([str(tmp_path)]), select={_RULE}))
 
 
 def test_crlf_positions(tmp_path):

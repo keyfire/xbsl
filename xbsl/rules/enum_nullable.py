@@ -24,7 +24,8 @@ Legal non-nullable forms (per the platform docs) are skipped:
 
 Narrowing (deliberate, to keep the zero-false-positive bar): only the two exact shapes are
 flagged – a value that is the bare enumeration name, and `ПолеВвода<Имя>` with the bare name
-as the only argument. Unions (`ВидОплаты|Строка`), other generics (`Массив<ВидОплаты>`)
+as the only argument (the component under either spelling the data names - `Edit<Имя>` in an
+English form). Unions (`ВидОплаты|Строка`), other generics (`Массив<ВидОплаты>`)
 and qualified names are left alone – whether the compiler demands a default there is not
 certain. Only yaml files with `ВидЭлемента` are checked; the values are taken from the parsed
 yaml tree, so a `Тип: ...` line inside a literal block scalar cannot false-match. The rule is
@@ -38,7 +39,7 @@ import re
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, metamodel, uischema
+from xbsl import dataset, i18n, metamodel, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
@@ -66,12 +67,22 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-# `ПолеВвода<Имя>` with a single bare-name argument (no '?', no union, no FQN); the component
-# is named as the file spells it - advising `ПолеВвода` to an English source would send the
-# author looking for a key that must not be there.
-_INPUT_FIELD_RE = re.compile(
-    r"^\s*(ПолеВвода|InputField)\s*<\s*([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)\s*>\s*$"
-)
+@lru_cache(maxsize=1)
+def _input_field_re() -> re.Pattern:
+    """`ПолеВвода<Имя>` with a single bare-name argument (no '?', no union, no FQN).
+
+    The component is matched under both spellings the platform reads, taken from the data - the
+    English one is `Edit` (terms.json), not a word guessed from the Russian - and it is named in
+    the message as the file spells it: advising the Russian spelling to an English source would
+    send the author looking for a key that must not be there.
+    """
+    spellings = "|".join(re.escape(form) for form in terms.forms("ПолеВвода", "types"))
+    return re.compile(
+        r"^\s*(" + spellings + r")\s*<\s*([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)\s*>\s*$"
+    )
+
+
+dataset.register_reset(_input_field_re.cache_clear)
 
 
 @lru_cache(maxsize=1)
@@ -181,7 +192,7 @@ def _plain_enum_shape(value: str) -> tuple[str, int, str, str] | None:
     stripped = value.strip()
     if stripped and re.match(r"^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*$", stripped):
         return stripped, value.index(stripped), "yaml/enum-needs-nullable.bare", ""
-    m = _INPUT_FIELD_RE.match(value)
+    m = _input_field_re().match(value)
     if m:
         return m.group(2), m.start(2), "yaml/enum-needs-nullable.input", m.group(1)
     return None

@@ -92,6 +92,12 @@ parametrized by any other member of the same union; every parameter of the type 
 documented default (otherwise the comparison has no ground); a value whose head the property
 does not declare at all is skipped – a subtype written in a `Массив<КолонкаТаблицы<...>>` slot
 is legal and this rule is not the one to judge it.
+
+An English form is read against the same schema. The `Type:` key, the owning component and
+property (the ui vocabulary) and the type head (the type dictionary, forward from the heads the
+schema declares) are canonicalized before the lookup, and the argument is compared with the
+default name by name in either spelling - `CommandInterfaceFragment<Command>` is as silent as
+`ФрагментКомандногоИнтерфейса<Команда>`. The message keeps the spelling of the file.
 """
 
 from __future__ import annotations
@@ -111,6 +117,7 @@ from xbsl.rules.yaml_schema import (
     _parsed,
     _scalar_entries,
 )
+from xbsl.rules.yaml_types import _key_spellings, _NAME_RE
 
 if _HAVE_YAML:
     import yaml
@@ -422,13 +429,48 @@ def bare_object_value(source: SourceFile) -> Iterable[Diagnostic]:
             )
 
 
-#: `Тип:` whose value carries a type argument - the only files this rule has anything to judge.
-_TYPE_ARGUMENT_RE = re.compile(r"(?m)^[ \t]*(?:-[ \t]+)?Тип[ \t]*:[^\n]*<")
+@lru_cache(maxsize=1)
+def _type_argument_re() -> re.Pattern:
+    """`Тип:` whose value carries a type argument - the only files this rule has anything to judge.
+
+    The key is matched in both spellings - an English form writes `Type:` - and the pair comes
+    from the data, so the gate is built once the data root is known and dropped with it.
+    """
+    spellings = "|".join(re.escape(form) for form in _key_spellings("Тип"))
+    return re.compile(r"(?m)^[ \t]*(?:-[ \t]+)?(?:" + spellings + r")[ \t]*:[^\n]*<")
+
+
+dataset.register_reset(_type_argument_re.cache_clear)
 
 
 def _squeezed(text: str) -> str:
     """Whitespace-free spelling: `Массив< Строка >` and `Массив<Строка>` are one type."""
     return "".join(text.split())
+
+
+def _names_the_default(arguments: str, default: str) -> bool:
+    """Whether the argument list written is the default one, each name in either spelling.
+
+    `ФрагментКомандногоИнтерфейса<Команда>` and `CommandInterfaceFragment<Command>` are one
+    type, and the platform reads every name on its own: the shape of the list (brackets, commas,
+    dots) has to match, and each name has to be the default's own or its English spelling. The
+    English spelling is derived FORWARD from the default, name by name - a name the data does not
+    pair counts only under the spelling the docs print.
+    """
+    written, expected = _squeezed(arguments), _squeezed(default)
+    if written == expected:
+        return True
+    if _NAME_RE.sub("#", written) != _NAME_RE.sub("#", expected):
+        return False
+    return all(
+        name == wanted or name == terms.type_english(wanted)
+        for name, wanted in zip(_NAME_RE.findall(written), _NAME_RE.findall(expected))
+    )
+
+
+def _english_names(default: str) -> str:
+    """The default argument list with every name in its English spelling - for an English file."""
+    return _NAME_RE.sub(lambda m: terms.type_english(m.group(0)), default)
 
 
 def _default_arguments(record: dict) -> str | None:
@@ -447,24 +489,35 @@ def _default_arguments(record: dict) -> str | None:
 
 
 @lru_cache(maxsize=1)
-def _unparametrized_props() -> tuple[dict[str, dict[str, frozenset[str]]], dict[str, str]]:
-    """({component: {property: heads declared WITHOUT an argument}}, {head: default arguments}).
+def _unparametrized_props() -> tuple[
+    dict[str, dict[str, frozenset[str]]], dict[str, str], dict[str, str],
+]:
+    """({component: {property: heads declared WITHOUT an argument}}, {head: default arguments},
+    {English spelling of a head: the head}).
 
     A head lands in the table only when the schema declares it bare AND no member of the same
     union declares it parametrized (`КомандыСтроки` takes exactly
     `ФрагментКомандногоИнтерфейса<КомандаСПараметром<...>>`, so writing an argument there is
     right) AND its default arguments are known - that is what makes a difference judgeable.
+
+    The tables are keyed by the schema's own (Russian) names; the third one lets an English
+    form's head find its row. It is built FORWARD from the heads the schema declares: the
+    dictionaries are many-to-one in reverse and would answer with whichever pair came last.
     """
     schema = dataset.load_ui_schema()
     if not schema:
-        return {}, {}
+        return {}, {}, {}
     defaults = {
         name: args
         for name, record in (schema.get("type_params") or {}).items()
         if (args := _default_arguments(record)) is not None
     }
     if not defaults:
-        return {}, {}
+        return {}, {}, {}
+    heads_by_english = {
+        english: name for name in defaults
+        if (english := terms.english(name, "types") or terms.common_english(name))
+    }
     table: dict[str, dict[str, frozenset[str]]] = {}
     for component, rec in (schema.get("components") or {}).items():
         judged: dict[str, frozenset[str]] = {}
@@ -476,7 +529,7 @@ def _unparametrized_props() -> tuple[dict[str, dict[str, frozenset[str]]], dict[
                 judged[prop] = frozenset(bare)
         if judged:
             table[component] = judged
-    return table, defaults
+    return table, defaults, heads_by_english
 
 
 dataset.register_reset(_unparametrized_props.cache_clear)
@@ -489,8 +542,8 @@ dataset.register_reset(_unparametrized_props.cache_clear)
 def unexpected_type_argument(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "yaml" or not _HAVE_YAML:
         return
-    table, defaults = _unparametrized_props()
-    if not table or not _TYPE_ARGUMENT_RE.search(source.text):
+    table, defaults, heads_by_english = _unparametrized_props()
+    if not table or not _type_argument_re().search(source.text):
         return
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
@@ -508,14 +561,18 @@ def unexpected_type_argument(source: SourceFile) -> Iterable[Diagnostic]:
         parent_type = _scalar_entries(parent).get("Тип")
         if parent_type is None or not isinstance(parent_type[1], yaml.ScalarNode):
             continue
+        # The file may be English: the names are looked up as the schema spells them and
+        # reported as the author wrote them.
         component = parent_type[1].value.split("<", 1)[0].strip()
-        heads = (table.get(component) or {}).get(key)
+        props = table.get(uischema.canonical_component(component)) or {}
+        heads = props.get(uischema.canonical_property(key))
         head = value.split("<", 1)[0].strip()
-        if heads is None or head not in heads:
+        canonical_head = heads_by_english.get(head, head)
+        if heads is None or canonical_head not in heads:
             continue
         arguments = value[value.index("<") + 1: value.rindex(">")]
-        default = defaults[head]
-        if _squeezed(arguments) == _squeezed(default):
+        default = defaults[canonical_head]
+        if _names_the_default(arguments, default):
             continue  # the argument spelled out equals the default - the same type
         yield Diagnostic(
             source.rel,
@@ -523,7 +580,8 @@ def unexpected_type_argument(source: SourceFile) -> Iterable[Diagnostic]:
             "yaml/unexpected-type-argument", Severity.ERROR,
             i18n.t(
                 "yaml/unexpected-type-argument.extra",
-                value=value, prop=key, component=component, head=head, default=default,
+                value=value, prop=key, component=component, head=head,
+                default=_english_names(default) if head.isascii() else default,
             ),
         )
 

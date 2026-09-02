@@ -1,7 +1,8 @@
 """Checks of the yaml/unexpected-type-argument rule (a generic argument vs the ui schema).
 
-The schema, its type parameters and their defaults are written into a temporary data root, so
-the tests need no generated Element data and run in a public checkout as well.
+The schema, its type parameters and their defaults - and the English pairs of the names, the
+way the term dictionaries state them - are written into a temporary data root, so the tests need
+no generated Element data and run in a public checkout as well.
 """
 
 import json
@@ -39,6 +40,19 @@ _SCHEMA = {
         "РядАкме": {"params": ["ТипЗначения"]},
     },
 }
+# The English spellings an English form writes, as the data states them: the types in the term
+# dictionary (terms.json), the keys in the ui vocabulary (uiterms.json).
+_TERMS = {
+    "types": {
+        "ФормаАкме": "AcmeForm",
+        "ФрагментАкме": "AcmeFragment",
+        "КомандаАкме": "AcmeCommand",
+        "ОбычнаяКомандаАкме": "AcmeUsualCommand",
+    },
+}
+_UI_TERMS = {
+    "properties": {"Type": "Тип", "AdditionalCommands": "ДополнительныеКоманды"},
+}
 
 
 def _pin(root):
@@ -54,6 +68,10 @@ def ui_root(tmp_path):
     ver_dir.mkdir(parents=True)
     (ver_dir / "uischema.json").write_text(
         json.dumps(_SCHEMA, ensure_ascii=False), encoding="utf-8"
+    )
+    (ver_dir / "terms.json").write_text(json.dumps(_TERMS, ensure_ascii=False), encoding="utf-8")
+    (ver_dir / "uiterms.json").write_text(
+        json.dumps(_UI_TERMS, ensure_ascii=False), encoding="utf-8"
     )
     (root / "index.json").write_text(
         json.dumps({"available": [_VER], "default": _VER}), encoding="utf-8"
@@ -77,6 +95,14 @@ def _run(tmp_path, body, name="Ф.yaml"):
     src = tmp_path / "src"
     src.mkdir(exist_ok=True)
     text = "ВидЭлемента: КомпонентИнтерфейса\nИмя: Ф\nНаследует:\n    Тип: ФормаАкме\n" + body
+    (src / name).write_text(text, encoding="utf-8")
+    return engine.run(discover([str(src)]), select={_RULE})
+
+
+def _run_english(tmp_path, body, name="F.yaml"):
+    src = tmp_path / "src"
+    src.mkdir(exist_ok=True)
+    text = "ElementKind: InterfaceComponent\nName: F\nInherits:\n    Type: AcmeForm\n" + body
     (src / name).write_text(text, encoding="utf-8")
     return engine.run(discover([str(src)]), select={_RULE})
 
@@ -135,6 +161,37 @@ def test_unknown_component_is_skipped(tmp_path, ui_root):
         encoding="utf-8",
     )
     assert not _has(engine.run(discover([str(src)]), select={_RULE}))
+
+
+def test_english_form_argument_other_than_the_default_flagged(tmp_path, ui_root):
+    """An English form is read against the same schema.
+
+    The key, the component, the property and the head are looked up as the schema spells them;
+    the message keeps the spelling of the file, the default included.
+    """
+    d = _run_english(
+        tmp_path, "    AdditionalCommands:\n        Type: AcmeFragment<AcmeUsualCommand>\n"
+    )
+    assert len(d) == 1 and d[0].rule_id == _RULE
+    assert "AcmeFragment<AcmeUsualCommand>" in d[0].message
+    assert "AcmeFragment<AcmeCommand>" in d[0].message
+    assert "ФрагментАкме" not in d[0].message and "КомандаАкме" not in d[0].message
+    assert (d[0].line, d[0].col) == (6, 15)
+
+
+def test_english_argument_equal_to_the_default_not_flagged(tmp_path, ui_root):
+    """AcmeFragment<AcmeCommand> IS AcmeFragment: the default is compared name by name, and
+    the English spelling of a name counts as the name."""
+    d = _run_english(tmp_path, "    AdditionalCommands:\n        Type: AcmeFragment<AcmeCommand>\n")
+    assert not _has(d)
+
+
+def test_english_argument_of_a_project_type_is_another_type(tmp_path, ui_root):
+    """A name the data does not pair is not the default under any spelling."""
+    d = _run_english(
+        tmp_path, "    AdditionalCommands:\n        Type: AcmeFragment<OrderCommand>\n"
+    )
+    assert len(d) == 1 and "AcmeFragment<OrderCommand>" in d[0].message
 
 
 def test_without_the_schema_the_rule_is_silent(tmp_path, no_data):
