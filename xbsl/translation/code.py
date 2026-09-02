@@ -37,10 +37,13 @@ dictionary refuses a value that would not survive being pasted back between two 
 
 from __future__ import annotations
 
+import dataclasses
 import re
+from collections import Counter
 from functools import lru_cache
 
-from xbsl import lexer, terms
+from xbsl import lexer, terms, typeinfer
+from xbsl import parser as P
 from xbsl.engine import SourceFile
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
@@ -181,7 +184,8 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport) -
     edits: list[Edit] = []
     toks = lexer.tokens(source)
     ranges = _syntax.query_ranges(source)
-    collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits)
+    collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits,
+                        inferred_locals=inferred_locals(source, resolver.project_names))
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -199,12 +203,15 @@ def collect_token_edits(
     edits: list[Edit],
     at: tuple[int, int] | None = None,
     root_scope: str = "",
+    inferred_locals: dict[str, MethodTypes] | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
     `at` anchors the REPORT positions of a nested fragment (an interpolation, a yaml value)
     at the fragment's own place in the outer file - the token positions inside it count
-    from the fragment start and would point nowhere.
+    from the fragment start and would point nowhere. `inferred_locals` is what the type
+    inference read off the whole module (see inferred_locals): the types of the locals whose
+    declarations name none. A fragment has no methods and passes nothing.
     """
     del text  # spans address the outer text through `base`; kept for symmetry of callers
     prev_dot = False
@@ -230,6 +237,8 @@ def collect_token_edits(
     #: field of that structure, and the dictionary may spell it for that structure alone.
     #: Cleared at every method boundary.
     local_names: dict[str, str] = {}
+    #: What the inference knows about the locals of the current method (see inferred_locals).
+    method_types: MethodTypes | None = None
     #: The structure whose fields are being declared right now, and whether the next name
     #: belongs to it. The fields of one structure share a namespace: two Russian words
     #: translated into one English word are a structure the compiler refuses.
@@ -246,6 +255,12 @@ def collect_token_edits(
             pending_field = False
             local_names = _method_locals(toks, index)
             method_name = _next_ident(toks, index)
+            method_types = (inferred_locals or {}).get(method_name)
+            # A declaration that names no type is typed by its value, where the inference can
+            # name one; a type the source writes stands as written.
+            for local, typed in (method_types.plain.items() if method_types else ()):
+                if local in local_names and not local_names[local]:
+                    local_names[local] = typed
             # Every declared name of one method shares a namespace: two Russian words that
             # translate into ONE English word collide there, and the compiler refuses the
             # module ("variable is already defined"). Only the translator can see this - the
@@ -324,6 +339,9 @@ def collect_token_edits(
                 # an entry qualified by the variable a project reads its json into was
                 # written about that variable, and it must keep answering.
                 type_scope = local_names.get(prev_ident, "") if prev_dot and not field_of else ""
+                if prev_dot and not field_of and not type_scope and method_types is not None:
+                    # A local declared more than once in the method is typed by the place.
+                    type_scope = method_types.type_at(prev_ident, base + tok.start)
                 if not prev_dot and ctor_stack and _is_named_argument(toks, index):
                     scope = ctor_stack[-1][0]
                 elif not prev_dot and tok.value in local_names and method_name:
@@ -338,7 +356,8 @@ def collect_token_edits(
                 )
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
-                                 chain_root=chain_root)
+                                 chain_root=chain_root,
+                                 receiver_is_local=prev_dot and prev_ident in local_names)
         elif kind == "NUMBER":
             _duration_edit(tok, base, edits)
         elif kind == "PATTERN":
@@ -490,6 +509,110 @@ def _declared_type(toks: list, index: int) -> str:
     return name
 
 
+@dataclasses.dataclass
+class MethodTypes:
+    """The inferred types of one method's locals, for the declarations that write none.
+
+    `plain` answers by name for a name the method declares once. A name declared more than
+    once - in two loops, as a loop variable and later a local - is answered by PLACE: the
+    platform scopes a declaration to its block, and `typeinfer.method_env` reads that rule
+    when given the place. That reading walks the method again per question, so it is asked
+    about such names only; everything else costs one walk per method. Types are reduced to
+    their LAST part, the shape `_declared_type` keeps.
+    """
+
+    method: object
+    returns: dict[str, typeinfer.Inferred]
+    project_names: frozenset[str]
+    plain: dict[str, str]
+    repeated: frozenset[str]
+
+    def type_at(self, name: str, offset: int) -> str:
+        """The type of `name` as seen from `offset` in the module text, or "" when unknown."""
+        known = self.plain.get(name)
+        if known is not None:
+            return known
+        if name not in self.repeated:
+            return ""
+        env = typeinfer.method_env(self.method, returns=self.returns, at=offset)
+        got = env.variables.get(name)
+        return _type_scope_of(got, self.project_names) if got is not None else ""
+
+
+def _type_scope_of(inferred: typeinfer.Inferred, project_names: frozenset[str]) -> str:
+    """The inferred type in the shape `local_names` keeps a written one.
+
+    The last part of a namespace-qualified name - `Seeding.JsonRoot` is the structure
+    `JsonRoot`, and the dictionary qualifies its entries by the structure - but the WHOLE of a
+    facet of a project object: the object side of a catalog of the project is not the
+    platform's `Object`, and read by its last part alone it would be.
+    """
+    head, dot, _tail = inferred.name.partition(".")
+    if dot and head in project_names:
+        return inferred.name
+    return inferred.name.rsplit(".", 1)[-1]
+
+
+def inferred_locals(source: SourceFile, project_names: frozenset[str] = frozenset(),
+                    ) -> dict[str, MethodTypes]:
+    """{method name: the inferred types of its locals} for one module.
+
+    `_method_locals` reads the types a method WRITES. A local written without one is typed
+    here by what it holds - the constructor, the cast, the literal, a call of a neighbouring
+    method with a declared result - through the engine's own inference (typeinfer.py), and
+    that type opens the namespace of a member exactly as a written one does: after
+    `пер Индекс = новый Соответствие<...>()` the removal method of the local is a member of a
+    map, spelled the way the map spells it, not the way the flat dictionary spells the word;
+    after `знч Корень = Данные как КореньJson` an entry qualified by that structure answers
+    for the fields read off the local. `project_names` tells a facet of a project object from
+    a namespace-qualified name (see _type_scope_of).
+    """
+    module, _errors = P.parse(source)
+    methods = [member for member in module.members if isinstance(member, P.Method)]
+    returns: dict[str, typeinfer.Inferred] = {}
+    for method in methods:
+        declared = typeinfer.nominal(getattr(method.return_type, "text", None))
+        if declared is not None:
+            returns[method.name] = declared
+    out: dict[str, MethodTypes] = {}
+    for method in methods:
+        env = typeinfer.method_env(method, returns=returns)
+        times = Counter(_declared_names(method))
+        repeated = frozenset(name for name, count in times.items() if count > 1)
+        plain = {
+            name: _type_scope_of(got, project_names)
+            for name, got in env.variables.items() if name not in repeated
+        }
+        if plain or repeated:
+            out[method.name] = MethodTypes(method, returns, project_names, plain, repeated)
+    return out
+
+
+def _declared_names(method: P.Method) -> list[str]:
+    """Every name the method declares, once per declaration - parameters, locals, loop
+    variables, lambda parameters - so that a name declared twice can be told apart."""
+    names = [param.name for param in method.params or ()]
+
+    def walk(node: object) -> None:
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, P.Node):
+            return
+        if isinstance(node, P.VarDecl):
+            names.append(node.name)
+        elif isinstance(node, (P.ForEach, P.ForTo)):
+            names.append(str(getattr(node, "var", "")))
+        elif isinstance(node, P.Lambda):
+            names.extend(param.name for param in node.params or ())
+        for field in dataclasses.fields(node):
+            walk(getattr(node, field.name, None))
+
+    walk(method.body)
+    return names
+
+
 def _query_phrase_at(toks: list, index: int) -> tuple[int, tuple[str, ...]] | None:
     """(how many tokens, the English words) when a query phrase starts at `index`.
 
@@ -522,24 +645,47 @@ def _member_by_owner(scope: str, type_scope: str, name: str) -> str | None:
 
 def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at=None,
                      scope: str = "", type_scope: str = "", static_root: bool = False,
-                     chain_root: str = "") -> None:
+                     chain_root: str = "", receiver_is_local: bool = False) -> None:
     if in_query:
         keyword = platform_map.query_keyword_english(tok.value)
         if keyword:
             edits.append((base + tok.start, base + tok.end, keyword))
             return
+    # The receiver as written is read as a platform TYPE only when it is not a local of the
+    # method: a variable named like a type is the variable, and its members are those of ITS
+    # type - declared or inferred - never the namesake's. A local holding a project object
+    # and named after a component once took the component's spelling of a property. The
+    # dictionary still sees the receiver as written: an entry qualified by the variable is
+    # about that variable.
+    owner = "" if receiver_is_local else scope
+    # A local of a PROJECT type - a structure, an object of the project, one of its facets -
+    # has the project's members, and the platform tables have nothing to say about them. For
+    # every other receiver the checked spellings answer first, then the owner's own table. A
+    # project type is a name the project declares and the platform does not know as a type:
+    # a project also declares properties, and one spelled like the string type must not turn
+    # every string into a project structure.
+    head = type_scope.split(".", 1)[0] if type_scope else ""
+    project_typed = (
+        bool(head) and head in resolver.project_names and not platform_map.is_platform_type(head)
+    )
+    platform_member = None
+    if after_dot and not project_typed:
+        platform_member = (
+            platform_map.verified_member(tok.value)
+            or _member_by_owner(owner, type_scope, tok.value)
+        )
     if after_dot and scope in resolver.dictionary_scopes:
         replacement, plane = resolver.dictionary_key(tok.value, scope)
-    elif after_dot and _member_by_owner(scope, type_scope, tok.value):
+    elif platform_member:
         # The receiver is a platform TYPE - named right before the dot, or the type a local
-        # was declared as: its own vocabulary wins over the flat one, which keeps a single
-        # spelling for a word two types spell apart.
-        replacement, plane = _member_by_owner(scope, type_scope, tok.value), "platform"
-    elif after_dot and platform_map.enum_value_of(scope, tok.value):
+        # was declared as or inferred to hold: its own vocabulary wins over the flat one,
+        # which keeps a single spelling for a word two types spell apart.
+        replacement, plane = platform_member, "platform"
+    elif after_dot and platform_map.enum_value_of(owner, tok.value):
         # `InformationConnotation.Normal` - a value belongs to ITS enumeration: globally one
         # Russian word answers to several English ones, and the flat dictionary hands out
         # whichever came last (the compiler then refuses the item).
-        replacement, plane = platform_map.enum_value_of(scope, tok.value), "platform"
+        replacement, plane = platform_map.enum_value_of(owner, tok.value), "platform"
     elif after_dot and chain_root in ("Компоненты", "Components"):
         # After `Components.` stands either a NODE of this form - a name the project gave -
         # or a built-in member of a component. The project's own name wins; for the rest the

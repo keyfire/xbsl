@@ -15,12 +15,11 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from xbsl import dataset, metamodel, terms, uischema
+from xbsl import dataset, metamodel, terms, typeinfer, uischema
 
 
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
-                   _members_by_owner,
                    ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
                    _unanimous_enum_value):
         cached.cache_clear()
@@ -190,17 +189,6 @@ _VERIFIED_MEMBER_SPELLINGS: dict[str, str] = {
 
 
 @lru_cache(maxsize=1)
-def _members_by_owner() -> dict[str, dict[str, str]]:
-    """{English type name: {Russian member: English}} out of the compiled classes of the distribution."""
-    try:
-        data = dataset.load_json("terms_full.json") or {}
-    except Exception:  # noqa: BLE001 - no data, no pairs
-        return {}
-    members = data.get("members") or {}
-    return {owner: dict(pairs) for owner, pairs in members.items() if isinstance(pairs, dict)}
-
-
-@lru_cache(maxsize=1)
 def _member_names() -> frozenset[str]:
     """Every name the platform declares as a MEMBER of a type, whatever the type.
 
@@ -235,13 +223,25 @@ def is_member_name(name: str) -> bool:
     return bool(name) and name in _member_names()
 
 
+def verified_member(name: str) -> str | None:
+    """The checked spelling of a member the flat dictionary gets wrong, whatever the receiver.
+
+    The receiver of a call is not always known - a value read off a project object, a chain
+    of calls - and the flat dictionary answers `Symbol` for the string method the compiler
+    only takes as `CharAt`; the checked table answers for such a receiver too.
+    """
+    return _VERIFIED_MEMBER_SPELLINGS.get(name)
+
+
 def member_of(owner: str, name: str) -> str | None:
     """The English spelling of `name` as a member OF `owner`, or None.
 
     The flat dictionary keeps one spelling per word, and where the platform names the same
     word differently by receiver that one is a coin toss: `Загрузить` is `Load` on a binary
     object and `Upload` on the object storage, and the wrong half is refused by the compiler.
-    `owner` may be given in either spelling - the table is keyed by the English name.
+    `owner` may be given in either spelling - the table is keyed by the English name. The
+    owner table and the walk over the type's ancestors live in terms.member_english_of, shared
+    with the member rules of the linter, so the two read one and the same vocabulary.
     """
     if not owner or not name:
         return None
@@ -252,8 +252,7 @@ def member_of(owner: str, name: str) -> str | None:
         # data is wrong about it under its owner too (`Символ` of a String is `CharAt`, which
         # the compiler takes, and the table says `Symbol`, which it refuses).
         return verified
-    english_owner = terms.english(owner, "types") or owner
-    return (_members_by_owner().get(english_owner) or {}).get(name)
+    return terms.member_english_of(owner, name)
 
 
 def component_member_english(name: str) -> str | None:
@@ -277,6 +276,21 @@ def property_english(name: str) -> str | None:
 def type_english(name: str) -> str | None:
     """The English spelling of a platform TYPE, or None - members are not consulted here."""
     return terms.english(name, "types") or component_english(name)
+
+
+def is_platform_type(name: str) -> bool:
+    """Whether the platform declares a TYPE spelled so, in either language.
+
+    The type catalog and the type pairs answer; the flat compiler dictionary does not, because
+    it pairs every word the platform uses anywhere, member names included, and a project
+    structure named after one of those is still the project's.
+    """
+    if not name:
+        return False
+    return bool(
+        terms.english(name, "types") or terms.russian(name, "types")
+        or typeinfer.is_type_name(name) or component_english(name)
+    )
 
 
 def component_english(name: str) -> str | None:

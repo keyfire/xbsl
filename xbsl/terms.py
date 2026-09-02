@@ -66,6 +66,86 @@ def common_russian(name: str) -> str | None:
     return _common_reverse.get(name)
 
 
+_owners: dict[str, dict[str, str]] | None = None
+_bases: dict[str, list[str]] | None = None
+
+
+def _members_by_owner() -> dict[str, dict[str, str]]:
+    """{English type: {Russian member: English}} - what each class of the distribution declares.
+
+    The `members` section of terms_full.json: the owner is kept because a word is spelled
+    differently by receiver, and the flat `common` table holds one spelling per word.
+    """
+    global _owners
+    if _owners is None:
+        try:
+            data = dataset.load_json("terms_full.json")
+        except Exception:  # noqa: BLE001 - no data, no owner tables
+            data = {}
+        _owners = {
+            owner: dict(pairs) for owner, pairs in (data.get("members") or {}).items()
+            if isinstance(pairs, dict)
+        }
+    return _owners
+
+
+def _type_bases() -> dict[str, list[str]]:
+    """{type: its ancestors} out of the type catalog (stdlib.json), under either spelling.
+
+    The owner table is keyed by the class that DECLARES a member, and a type inherits most of
+    what it answers to: the removal method of a map is declared on the mutable-map base, while
+    the map's own row never names the word. The list is a flat, transitively closed set - not
+    an order - which is what member_english_of keeps in mind.
+    """
+    global _bases
+    if _bases is None:
+        try:
+            kin = (dataset.load_json("stdlib.json") or {}).get("bases") or {}
+        except Exception:  # noqa: BLE001 - no data, no ancestors
+            kin = {}
+        _bases = {name: list(bases) for name, bases in kin.items() if isinstance(bases, list)}
+    return _bases
+
+
+def type_english(name: str) -> str:
+    """The English spelling of a type given in either spelling, or the name as given.
+
+    The type table answers first. A type the reference pages never describe (the favorites
+    branch) has no row there, yet its own classes pair it, and that pair is in the compiler
+    dictionary; a name neither knows comes back as given - already English, or unknown, and
+    an unknown key finds no row anywhere.
+    """
+    return english(name, "types") or common_english(name) or name
+
+
+def member_english_of(owner: str, member: str) -> str | None:
+    """The English spelling of `member` as a member OF `owner`, or None.
+
+    The flat dictionary keeps one spelling per word, and where the platform names the same
+    word differently by receiver that one is a coin toss: the loading method is `Load` on a
+    binary object and `Upload` on the object storage, and the wrong half is refused by the
+    compiler. `owner` may be given in either spelling - the table is keyed by the English name.
+
+    An inherited member is spelled by the ancestor that declares it: the removal method is
+    `Remove` on a map because the mutable-map base says so, and the map's own row never names
+    the word (the flat dictionary says `Delete`, which the compiler refuses on a map). The
+    type's own row answers first; the ancestors are a flat set, so they have to AGREE - two of
+    them spelling one word apart is no answer, and the caller falls back to what it had.
+    """
+    if not owner or not member:
+        return None
+    table = _members_by_owner()
+    own = (table.get(type_english(owner)) or {}).get(member)
+    if own:
+        return own
+    inherited = {
+        spelling for base in _type_bases().get(owner) or ()
+        for spelling in ((table.get(type_english(base)) or {}).get(member),)
+        if spelling
+    }
+    return inherited.pop() if len(inherited) == 1 else None
+
+
 _kinds: dict[str, str] | None = None
 
 
@@ -93,13 +173,15 @@ def _reset() -> None:
     Without this the process would keep answering from the previously pinned dataset - a
     pinned root with no terms.json still handed out the English spellings of the old one.
     """
-    global _cache, _reverse, _common, _common_reverse, _kinds, _facets
+    global _cache, _reverse, _common, _common_reverse, _kinds, _facets, _owners, _bases
     _facets = None
     _cache = None
     _reverse = None
     _common = None
     _common_reverse = None
     _kinds = None
+    _owners = None
+    _bases = None
 
 
 dataset.register_reset(_reset)

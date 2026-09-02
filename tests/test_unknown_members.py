@@ -582,3 +582,15 @@ def test_a_type_without_a_stated_pair_still_skips_latin_members():
                   "    возврат Список.НетТакогоЧлена\n"
                   ";\n")
     assert len(diags) == 1
+
+
+def test_an_inherited_member_spelled_by_its_ancestor_passes():
+    """The removal method of a map is `Remove` - declared on the mutable-map ancestor, where the
+    flat dictionary spells the Russian word `Delete`; the compiler takes the ancestor's word,
+    and so must the rule. A translated module was reported for the very call the build accepts."""
+    diags = _lint(
+        "method Test(Index: Map<String, Number>)\n"
+        '    Index.Remove("a")\n'
+        ";\n"
+    )
+    assert diags == []

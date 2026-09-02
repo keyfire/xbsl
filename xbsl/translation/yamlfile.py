@@ -31,6 +31,7 @@ from functools import lru_cache
 
 from xbsl import dataset, metamodel, terms, uischema
 from xbsl.engine import SourceFile
+from xbsl.rules.enum_defaults import bare_type_name
 from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
 from xbsl.translation import platform_map
 from xbsl.translation.code import (
@@ -345,23 +346,43 @@ def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:
         report.note_platform(value, line, col)
 
 
-def _enum_default(vnode, sibling_type: str, resolver) -> bool:
-    """Is this default value an element of a PROJECT enumeration named by the sibling `Type`?
+def _enum_default_name(vnode, sibling_type: str, resolver) -> str | None:
+    """The PROJECT enumeration a default value is an element of, by the sibling `Type`, or None.
 
-    Narrow on purpose: the type has to be a bare project name (the nullable marker aside), the
-    value a single Cyrillic word, and the dictionary has to know that word. A default the
-    dictionary cannot name is left where it is - a data string that merely looks like an
-    element name is never touched.
+    Narrow on purpose. The type is read the way `yaml/enum-default-value` reads it - a bare
+    project name, the nullable marker aside (`Готовность`, `Готовность?`, `Готовность ?`); a
+    union, a generic and a qualified name are left to the rule's own silence, so that the two
+    never disagree on where an element name stands. The value has to be a single Cyrillic word
+    the dictionary knows: a default the dictionary cannot name is left where it is - a data
+    string that merely looks like an element name is never touched.
     """
     if not isinstance(vnode, yaml.ScalarNode):
-        return False
+        return None
     value = vnode.value
     if not isinstance(value, str) or not has_cyrillic(value) or " " in value or "." in value:
-        return False
-    name = sibling_type.rstrip("?")
+        return None
+    name = bare_type_name(sibling_type or "")
     if not name or not has_cyrillic(name) or name not in resolver.project_names:
+        return None
+    return name if resolver.dictionary.token(value) else None
+
+
+def _enum_default_edit(key: str, vnode, sibling_type: str, resolver, report, edits) -> bool:
+    """Rewrite the default of a field typed by a PROJECT enumeration; True when this was one.
+
+    The default is the bare name of an element, and no schema types it as such: the metamodel
+    calls it a plain object, the property class of an interface component knows nothing beyond
+    the name and the type. Left to the generic walk, the value stayed Russian next to a
+    translated enumeration, and the build refused the pair ("Неизвестный элемент перечисления")
+    - or the linter did, on the English tree, with `yaml/enum-default-value`.
+    """
+    if key not in ("ЗначениеПоУмолчанию", "DefaultValue"):
         return False
-    return bool(resolver.dictionary.token(value))
+    enum_name = _enum_default_name(vnode, sibling_type, resolver)
+    if enum_name is None:
+        return False
+    _enum_scalar(vnode, enum_name, resolver, report, edits)
+    return True
 
 
 def _boolean_scalar(node, edits) -> bool:
@@ -392,6 +413,8 @@ def _walk_object(root, kind: str, resolver, report, edits, *, localized_strings:
 def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner: str = "",
                        namespace: str = "",
                        localized_strings: bool = False, scope: str = "") -> None:
+    # The node's own `Type`: what a default value standing next to it is judged against.
+    sibling_type = _mapping_value(node, "Тип") or _mapping_value(node, "Type") or ""
     for knode, vnode in node.value:
         if not isinstance(knode, yaml.ScalarNode):
             continue
@@ -413,21 +436,19 @@ def _walk_meta_mapping(node, cls, props, kind, resolver, report, edits, *, owner
                 _walk_localization_section(vnode, resolver, report, edits, scope=scope)
                 continue
             _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner, namespace,
-                        sibling_type=_mapping_value(node, "Тип") or _mapping_value(node, "Type") or "")
+                        sibling_type=sibling_type)
         else:
-            _component_key_value(knode, vnode, None, resolver, report, edits, owner)
+            # A key the class does not describe - the default of an interface component's
+            # property among them: the class knows the name and the type, nothing else.
+            _component_key_value(knode, vnode, None, resolver, report, edits, owner,
+                                 sibling_type=sibling_type)
 
 
 def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: str = "",
                 namespace: str = "", sibling_type: str = "") -> None:
     value_kind = record.get("kind")
     declared = str(record.get("type") or "")
-    if key in ("ЗначениеПоУмолчанию", "DefaultValue") and _enum_default(vnode, sibling_type, resolver):
-        # The default of a field typed by a PROJECT enumeration is the bare name of an
-        # element, and the metamodel types it as a plain object - so nothing above renames it
-        # and the value stayed Russian next to a translated enumeration. The build refuses
-        # such a pair with 'Неизвестный элемент перечисления'.
-        _enum_scalar(vnode, sibling_type.rstrip("?"), resolver, report, edits)
+    if _enum_default_edit(key, vnode, sibling_type, resolver, report, edits):
         return
     if key == "ВидЭлемента":
         replacement = platform_map.kind_english(vnode.value) if isinstance(vnode, yaml.ScalarNode) else None
@@ -626,14 +647,17 @@ def _component_prop(comp_type: str | None, key: str) -> dict | None:
 
 def _walk_component_mapping(node, resolver, report, edits, owner: str = "") -> None:
     comp_type = None
+    written_type = ""
     for knode, vnode in node.value:
         if isinstance(knode, yaml.ScalarNode) and knode.value in ("Тип", "Type") \
                 and isinstance(vnode, yaml.ScalarNode) and isinstance(vnode.value, str):
-            comp_type = vnode.value.split("<", 1)[0].strip()
+            written_type = vnode.value
+            comp_type = written_type.split("<", 1)[0].strip()
             break
     for knode, vnode in node.value:
         if isinstance(knode, yaml.ScalarNode):
-            _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner)
+            _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner,
+                                 sibling_type=written_type)
 
 
 #: An event key of a component: the platform names its own events this way, and a project
@@ -667,7 +691,10 @@ def _typed_value(node, type_name: str, resolver, report, edits) -> None:
         report.note_missing(value, line, col, plane)
 
 
-def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner: str = "") -> None:
+def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner: str = "",
+                         sibling_type: str = "") -> None:
+    """One key of a node below the metamodel's reach; `sibling_type` is the node's own `Type`
+    as written - the type a default value is judged against when the node is a property."""
     key = knode.value
     if has_cyrillic(key):
         # A property of a PROJECT component belongs to the project: the platform vocabulary
@@ -720,6 +747,10 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
         return
     value = vnode.value
     if not isinstance(value, str) or not value:
+        return
+    if _enum_default_edit(key, vnode, sibling_type, resolver, report, edits):
+        # A property of an interface component: its class knows the name and the type alone,
+        # so the default of one typed by a project enumeration reached this walk as data.
         return
     if key in ("Тип", "Type") or key in _TYPE_VALUE_KEYS:
         if has_cyrillic(value):

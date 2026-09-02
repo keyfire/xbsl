@@ -1847,3 +1847,200 @@ def test_a_default_the_dictionary_cannot_name_is_left_alone(tmp_path: Path):
     translate_project(root, _dictionary({"Задачи": "Tasks", "Пометка": "Mark"}), out,
                       swap_localization=False)
     assert "DefaultValue: черновик" in (out / "Tasks.yaml").read_text(encoding="utf-8")
+
+
+def test_enumeration_default_moves_in_interface_component_properties(tmp_path: Path):
+    """The properties of an interface component are typed by a class the metamodel knows
+    nothing about beyond the name and the type, so the default fell through to the untyped
+    walk and stayed Russian - with and without the nullable marker."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Готовность.yaml", (
+        "ВидЭлемента: Перечисление\n"
+        "Имя: Готовность\n"
+        "Элементы:\n"
+        "    -\n"
+        "        Имя: Скрытая\n"
+    ))
+    _write(root / "Главная.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Главная\n"
+        "Свойства:\n"
+        "    -\n"
+        "        Имя: Показ\n"
+        "        Тип: Готовность?\n"
+        "        ЗначениеПоУмолчанию: Скрытая\n"
+        "    -\n"
+        "        Имя: Режим\n"
+        "        Тип: Готовность\n"
+        "        ЗначениеПоУмолчанию: Скрытая\n"
+        "Содержимое:\n"
+        "    -\n"
+        "        Тип: Надпись\n"
+        "        Значение: x\n"
+    ))
+    out = tmp_path / "out"
+    report = translate_project(
+        root,
+        _dictionary({"Готовность": "Readiness", "Скрытая": "Hidden", "Главная": "Home",
+                     "Показ": "Display", "Режим": "Mode"}),
+        out,
+        swap_localization=False,
+    )
+    written = (out / "Home.yaml").read_text(encoding="utf-8")
+    assert written.count("DefaultValue: Hidden") == 2
+    assert "Скрытая" not in written
+    assert not report.files["Главная.yaml"].texts_kept
+
+
+def test_enumeration_default_reads_the_type_the_way_the_rule_does(tmp_path: Path):
+    """A space before the nullable marker is the same type; a union is not judged by the
+    rule and not rewritten here - the two must agree on where an element name stands."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Готовность.yaml", (
+        "ВидЭлемента: Перечисление\n"
+        "Имя: Готовность\n"
+        "Элементы:\n"
+        "    -\n"
+        "        Имя: Скрытая\n"
+    ))
+    _write(root / "Задачи.yaml", (
+        "ВидЭлемента: Справочник\n"
+        "Имя: Задачи\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Показ\n"
+        "        Тип: Готовность ?\n"
+        "        ЗначениеПоУмолчанию: Скрытая\n"
+        "    -\n"
+        "        Имя: Пометка\n"
+        "        Тип: Готовность | Строка\n"
+        "        ЗначениеПоУмолчанию: Скрытая\n"
+    ))
+    out = tmp_path / "out"
+    translate_project(
+        root,
+        _dictionary({"Готовность": "Readiness", "Скрытая": "Hidden", "Задачи": "Tasks",
+                     "Показ": "Display", "Пометка": "Mark"}),
+        out,
+        swap_localization=False,
+    )
+    written = (out / "Tasks.yaml").read_text(encoding="utf-8")
+    assert "Type: Readiness ?\n        DefaultValue: Hidden" in written
+    assert "Type: Readiness | String\n        DefaultValue: Скрытая" in written
+
+
+# --- the receiver typed by inference ------------------------------------------------------------
+
+
+@pytest.mark.needs_data
+def test_member_of_walks_the_base_types():
+    """The removal method is `Remove` on a map because the mutable-map base declares it so; the
+    map's own table never names the word, and the flat dictionary says `Delete`."""
+    from xbsl.translation import platform_map
+
+    assert platform_map.member_of("Соответствие", "Удалить") == "Remove"
+    assert platform_map.member_of("Map", "Удалить") == "Remove"
+    assert platform_map.member_of("Массив", "Удалить") == "Remove"
+    assert platform_map.member_of("Соответствие", "НетТакогоЧлена") is None
+
+
+@pytest.mark.needs_data
+def test_a_member_of_a_receiver_built_by_a_constructor_takes_the_type_spelling():
+    """A local declared without a type is typed by what it is built from."""
+    out, _report = _code(
+        "метод Собрать()\n"
+        "    пер Индекс = новый Соответствие<Строка, Число>()\n"
+        '    Индекс.Вставить("а", 1)\n'
+        '    Индекс.Удалить("а")\n'
+        ";\n",
+        tokens={"Собрать": "Build", "Индекс": "Index"},
+    )
+    assert 'Index.Remove("а")' in out
+    assert 'Index.Insert("а", 1)' in out
+
+
+def test_a_receiver_typed_by_a_cast_opens_the_dictionary_namespace_of_its_type():
+    """`знч Корень = Данные как КореньJson` - the cast names the type, and the field is then
+    spelled by the entry qualified with that type, as a declared `Корень: КореньJson` would be."""
+    out, _report = _code(
+        "структура КореньJson\n"
+        "    знч Услуги: Массив<Строка>\n"
+        ";\n"
+        "\n"
+        "метод Прочитать(Данные: Объект)\n"
+        "    знч Корень = Данные как КореньJson\n"
+        "    пер Перечень = Корень.Услуги\n"
+        ";\n",
+        tokens={"КореньJson": "JsonRoot", "КореньJson.Услуги": "Offerings", "Услуги": "Services",
+                "Прочитать": "Read", "Данные": "Data", "Корень": "Root", "Перечень": "Items"},
+    )
+    assert "val Offerings: Array<String>" in out
+    assert "var Items = Root.Offerings" in out
+
+
+@pytest.mark.needs_data
+def test_a_name_declared_two_ways_in_one_method_is_typed_by_the_place():
+    """One name, two blocks, two types: each use answers to the declaration its block sees -
+    a map in the first branch, a platform object with a differently spelled member in the
+    second. A live module declares one name in two loops of one method, and the second
+    declaration is the one that met a platform type."""
+    out, _report = _code(
+        "метод Очистить(Данные: Объект, Признак: Булево)\n"
+        "    если Признак\n"
+        "        знч Элемент = Данные как Соответствие<Строка, Число>\n"
+        '        Элемент.Удалить("к")\n'
+        "    иначе\n"
+        "        знч Элемент = Данные как Файлы\n"
+        '        Элемент.Удалить("к")\n'
+        "    ;\n"
+        ";\n",
+        tokens={"Очистить": "Clear", "Данные": "Data", "Признак": "Flag", "Элемент": "Item"},
+    )
+    assert 'as Map<String, Number>\n        Item.Remove("к")' in out
+    assert 'as Files\n        Item.Delete("к")' in out
+
+
+@pytest.mark.needs_data
+def test_a_local_named_like_a_platform_type_is_the_local():
+    """A parameter named after the platform's string type holds a project structure: its field
+    is spelled by the dictionary, not by the string type's table, which spells the same Russian
+    word `Remove`. A local holding a project object and named after a component once took the
+    component's spelling of a property."""
+    out, _report = _code(
+        "структура Пометки\n"
+        "    знч Удалить: Булево\n"
+        ";\n"
+        "\n"
+        "метод Проба(Строка: Пометки): Булево\n"
+        "    возврат Строка.Удалить\n"
+        ";\n",
+        tokens={"Пометки": "Marks", "Удалить": "Delete", "Проба": "Probe", "Строка": "Line"},
+    )
+    assert "val Delete: Boolean" in out
+    assert "return Line.Delete" in out
+
+
+@pytest.mark.needs_data
+def test_a_project_property_spelled_like_a_platform_type_does_not_hide_the_type(tmp_path: Path):
+    """A form declares a property named after the string type; a local of that type is still
+    a string, and its checked member spelling wins over a dictionary entry of the same word."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Карточка.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Карточка\n"
+        "Свойства:\n"
+        "    -\n"
+        "        Имя: Строка\n"
+        "        Тип: Строка\n"
+    ))
+    _write(root / "Модуль.xbsl", (
+        "метод Первый(Тело: Строка): Строка\n"
+        "    возврат Тело.Символ(0)\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Карточка": "Card", "Строка": "Line", "Модуль": "Module", "Первый": "First",
+        "Тело": "Body", "Символ": "Character",
+    }), out)
+    assert "return Body.CharAt(0)" in (out / "Module.xbsl").read_text(encoding="utf-8")

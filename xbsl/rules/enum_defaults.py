@@ -79,11 +79,13 @@ _CANDIDATE_RE = re.compile(rf"{_NAME}(?:\.{_NAME})?\Z")
 _BARE_NAME_RE = re.compile(rf"{_NAME}\Z")
 
 
-def _bare_type_name(value: str) -> str | None:
+def bare_type_name(value: str) -> str | None:
     """The bare type name of a judged `Type` value, the nullable marker stripped, or None.
 
     Anything beyond a single name with an optional trailing question mark - a union, a
     generic, a namespace-qualified name - answers None and takes the node out of the check.
+    The translator reads a default's type through this very function, so the two agree on
+    where an element name stands: what the rule does not judge, the translator does not move.
     """
     stripped = value.strip()
     if stripped.endswith("?"):
@@ -130,7 +132,7 @@ def _enum_default_mapper(source: SourceFile) -> dict | None:
             default = node[default_key]
             if not isinstance(default, str) or not _CANDIDATE_RE.fullmatch(default):
                 continue
-            type_name = _bare_type_name(node[keys["Тип"]])
+            type_name = bare_type_name(node[keys["Тип"]])
             if type_name is None:
                 continue
             types, count = judged.setdefault(default, (set(), 0))

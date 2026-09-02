@@ -425,6 +425,13 @@ def _both_member_spellings(type_name: str, members: frozenset[str]) -> frozenset
         if spelling is None:
             return None
         english.add(spelling)
+        # The spelling the OWNER declares, through its ancestors, where it differs from the
+        # flat one: the removal method of a map is `Remove` (the mutable-map ancestor says so)
+        # while the flat dictionary spells the word `Delete`, and the compiler takes the
+        # ancestor's word - a finding against it would be a finding against correct code.
+        declared = terms.member_english_of(type_name, member)
+        if declared:
+            english.add(declared)
     return frozenset(members | english)
 
 
