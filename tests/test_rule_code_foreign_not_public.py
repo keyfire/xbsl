@@ -135,11 +135,25 @@ def test_a_public_owner_anywhere_silences_the_name():
 
 
 @pytest.mark.needs_data
-def test_a_qualified_name_is_not_judged():
+@pytest.mark.needs_data
+def test_a_qualified_name_is_judged_by_the_subsystem_it_names():
+    """`Б::Задачи.Ссылка` in a type position and `Б::СрокиЗадач.БлижайшийСрок()` as a call:
+    the form needs no import, but a server build refuses both when the element is not
+    public (probe of 02.09.2026, the same message at the position of the name)."""
     qualified = SUMMARY_XBSL.replace("Задачи.Ссылка", "Б::Задачи.Ссылка").replace(
         "СрокиЗадач.БлижайшийСрок", "Б::СрокиЗадач.БлижайшийСрок"
     )
-    assert _lint(_project(**{"А/СводкаЗадач.xbsl": qualified})) == []
+    diags = _lint(_project(**{"А/СводкаЗадач.xbsl": qualified}))
+    assert sorted(d.line for d in diags) == [3, 4]
+    assert any("Б::Задачи" in d.message for d in diags)
+    assert any("Б::СрокиЗадач" in d.message for d in diags)
+    # Public targets: the qualified form is as clean as the plain one.
+    public = _project(**{
+        "А/СводкаЗадач.xbsl": qualified,
+        "Б/СрокиЗадач.yaml": DEADLINES_YAML.replace("ВПодсистеме", "ВПроекте"),
+        "Б/Задачи.yaml": TASKS_YAML + "ОбластьВидимости: ВПроекте\n",
+    })
+    assert _lint(public) == []
 
 
 @pytest.mark.needs_data

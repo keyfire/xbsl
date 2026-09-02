@@ -278,14 +278,64 @@ def test_a_plain_string_value_is_not_a_binding():
     assert _lint(_binding_project(form)) == []
 
 
-def test_a_binding_to_a_non_public_foreign_element_is_left_alone():
-    """Not proven: for a binding to a NON-public foreign element the compiler's refusal
-    was never demonstrated, so neither rule judges it - this one skips non-public
-    candidates, and yaml/foreign-not-public does not read bindings at all."""
+def test_a_binding_to_a_non_public_foreign_element_is_the_visibility_rules_case():
+    """A binding to a NON-public foreign element: no import can help, so this rule stays
+    silent and yaml/foreign-not-public reports it - a server build refuses such a binding
+    at its position with the same message the type positions get (probe of 02.09.2026)."""
     files = _binding_project(BINDING_FORM)
     files["Б/ЧужойМодуль.yaml"] = "ВидЭлемента: ОбщийМодуль\nИмя: ЧужойМодуль\n"
     assert _lint(files) == []
+    diags = _lint_vis(files)
+    assert len(diags) == 1
+    assert "ЧужойМодуль" in diags[0].message and "'Б'" in diags[0].message
+    assert diags[0].line == 9  # the binding line of BINDING_FORM
+
+
+def test_a_qualified_binding_to_a_non_public_foreign_element_is_reported():
+    """`Б::ЧужойМодуль.Метод()` needs no import, but the element must still be public: the
+    same probe refused the qualified binding too. The qualified root resolves by the
+    subsystem it names - a public namesake elsewhere would not reach it."""
+    form = (
+        FORM_HEAD
+        + "Наследует:\n    Тип: Группа\n"
+        + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Метка\n"
+        + "        Значение: =Б::ЧужойМодуль.Метод()\n"
+    )
+    files = _binding_project(form)
+    files["Б/ЧужойМодуль.yaml"] = "ВидЭлемента: ОбщийМодуль\nИмя: ЧужойМодуль\n"
+    assert _lint(files) == []
+    diags = _lint_vis(files)
+    assert len(diags) == 1
+    assert "Б::ЧужойМодуль" in diags[0].message and "'Б'" in diags[0].message
+    files["Б/ЧужойМодуль.yaml"] = MODULE_B  # public: the qualified form is clean
     assert _lint_vis(files) == []
+
+
+def test_a_qualified_type_position_names_its_subsystem():
+    """`Тип: Б::Товары.Ссылка` does not parse as a plain chain and used to slip through both
+    rules; the visibility rule reads it by the subsystem it names."""
+    form = FORM_HEAD + FORM_BODY.replace("Товары.Ссылка", "Б::Товары.Ссылка")
+    assert "Б::Товары.Ссылка" in form
+    files = _project(form)
+    files["Б/Товары.yaml"] = "ВидЭлемента: Справочник\nИмя: Товары\n"  # non-public
+    diags = _lint_vis(files)
+    assert len(diags) == 1
+    assert "Б::Товары" in diags[0].message
+    files["Б/Товары.yaml"] = GOODS  # public: nothing to say
+    assert _lint_vis(files) == []
+
+
+@pytest.mark.needs_data
+def test_a_binding_root_the_paired_module_declares_is_not_a_reference_for_visibility():
+    """`=Сводка.Итог()` where the paired module declares `Сводка`: the file explains the
+    root, and a non-public foreign namesake is not what the binding reaches."""
+    form = BINDING_FORM.replace("ЧужойМодуль.ОриентацияЭтапов()", "Сводка.Итог()")
+    files = _binding_project(form)
+    files["Б/Сводка.yaml"] = "ВидЭлемента: ОбщийМодуль\nИмя: Сводка\n"  # non-public namesake
+    files["А/Форма.xbsl"] = "метод Сводка(): Строка\n    возврат \"\"\n;\n"
+    assert _lint_vis(files) == []
+    files["А/Форма.xbsl"] = "метод Другое()\n;\n"  # no explanation - the namesake is reached
+    assert len(_lint_vis(files)) == 1
 
 
 def test_a_type_and_a_binding_of_one_subsystem_are_one_diagnostic():

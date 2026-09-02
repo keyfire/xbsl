@@ -44,14 +44,21 @@ common module of another subsystem exactly the way a type position does - except
 refusal comes earlier, from the server compiler
 (`Пространство имен ... не импортировано`), at the price of a full deploy cycle.
 
-The binding shape is judged by THIS rule only: yaml/foreign-not-public deliberately does
-not read bindings, because for a binding to a NON-public foreign element the compiler's
-refusal is not proven - that rule reports only what is (see its docstring). The live case
-behind the extension: a form markup called a method of a foreign common module from a
-property binding with no import line, the linter read only the type positions and passed
-the whole project clean, and the refusal arrived from the server compiler at the price of
-a full deploy cycle. Re-checked on a copy of that tree with the import line removed:
+The binding shape is judged by both rules: this one wants the public foreign root imported,
+yaml/foreign-not-public wants it public in the first place - a probe applied on a server
+(02.09.2026) refused a binding to a non-public foreign module at the binding position with
+the same `Тип "..." недоступен из-за модификатора видимости @ВПодсистеме` the type positions
+get. The live case behind the extension: a form markup called a method of a foreign common
+module from a property binding with no import line, the linter read only the type positions
+and passed the whole project clean, and the refusal arrived from the server compiler at the
+price of a full deploy cycle. Re-checked on a copy of that tree with the import line removed:
 zero findings before this extension.
+
+A qualified name (`Подсистема::Элемент`, in a type position, a binding or a call) needs no
+import - it relies on the usage declaration - but the element it names must be public all
+the same: the same probe refused a qualified binding and a qualified call from code with the
+very same message. The two visibility rules judge the qualified form by the subsystem it
+names; the import rules keep leaving it alone.
 
 An element's subsystem is determined by the source layout: a directory with a
 `Подсистема.yaml` is a subsystem root (the subsystem name is the directory name, or the
@@ -96,6 +103,7 @@ yaml/unknown-type, it does not run in single-file mode).
 
 from __future__ import annotations
 
+import re
 import re
 from collections.abc import Iterable
 from dataclasses import fields
@@ -248,6 +256,75 @@ def _binding_chain_roots(
         line, col = lm.linecol(found.start()) if found else (1, 1)
         roots.append((root, f"{root}.{member}", line, col))
     return roots
+
+
+#: A qualified reference: one or more `Имя::` qualifiers and the element name. The LAST
+#: qualifier is the subsystem (`e1c::site::Б::Элемент` and `Б::Элемент` name one subsystem Б);
+#: whether it is a subsystem of THIS project is decided in the reduce, so a library
+#: (`Стд::...`) or a typo is left alone.
+_QUALIFIED = re.compile(
+    r"(?<![\wА-Яа-яЁё.$:])((?:[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*::)+)([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)"
+)
+
+
+def _qualified_roots(text: str) -> list[tuple[str, str]]:
+    """`(субсистема::элемент, the written form)` of every qualified name in a string.
+
+    The root keeps the subsystem so the reduce resolves it by the named subsystem alone: a
+    qualified name never means "whichever public namesake". One entry per root, first
+    written form kept.
+    """
+    out: dict[str, str] = {}
+    for match in _QUALIFIED.finditer(text):
+        qualifiers = match.group(1).rstrip(":").split("::")
+        out.setdefault(f"{qualifiers[-1]}::{match.group(2)}", match.group(0))
+    return list(out.items())
+
+
+def _qualified_positions(
+    source: SourceFile, texts: Iterable[str],
+) -> list[tuple[str, str, int, int]]:
+    """Qualified roots of the given yaml values with the position of their first occurrence."""
+    found: dict[str, tuple[str, int, int]] = {}
+    lm = None
+    for text in texts:
+        if "::" not in text:
+            continue
+        for root, written in _qualified_roots(text):
+            if root in found:
+                continue
+            lm = lm or linemap(source)
+            hit = re.search(r"(?<![\wА-Яа-яЁё.$:])" + re.escape(written) + r"(?![\wА-Яа-яЁё:])", source.text)
+            line, col = lm.linecol(hit.start()) if hit else (1, 1)
+            found[root] = (written, line, col)
+    return [(root, written, line, col) for root, (written, line, col) in found.items()]
+
+
+def _foreign_owner(
+    root: str, my_sub: str | None, placement: dict[str, dict[str, object]],
+) -> tuple[str, object] | None:
+    """(owner subsystem, its visibility) of the non-public foreign target `root` names, or None.
+
+    A plain root resolves by name: the referrer's own subsystem wins, and a public owner
+    anywhere silences it (a missing import at most - the sibling rules' case). A qualified
+    root names its subsystem itself: the element there is the target, and only its own
+    visibility counts - a public namesake elsewhere does not reach a qualified reference.
+    """
+    if "::" in root:
+        sub, _, name = root.rpartition("::")
+        owners = placement.get(name)
+        if not owners or sub not in owners or sub == my_sub:
+            return None
+        if owners[sub] in _public_scopes():
+            return None
+        return sub, owners[sub]
+    owners = placement.get(root)
+    if not owners or my_sub in owners:
+        return None
+    if any(vis in _public_scopes() for vis in owners.values()):
+        return None
+    owner = sorted(owners)[0]
+    return owner, owners[owner]
 
 
 def _subsystem_roots(sources: list[SourceFile]) -> dict[Path, str]:
@@ -418,8 +495,11 @@ _DEFAULT_SCOPE = "ВПодсистеме"  # the platform default when the prope
 
 
 def _visibility_mapper(source: SourceFile) -> dict | None:
-    """The map phase: the same placement slice as above, but the candidates also come from
-    the navigation key `ТипФормы` - a form opened from another subsystem must be public."""
+    """The map phase: the same placement slice as above, the candidates also coming from the
+    navigation key `FormType` (a form opened from another subsystem must be public), from the
+    roots of the binding chains and from the qualified names of both. A module contributes
+    its local types and the names it declares - a binding root the paired module declares is
+    addressed through the element's own name, not a reference."""
     if not _HAVE_YAML:
         return None
     if source.kind == "xbsl":
@@ -427,9 +507,16 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
             local = semantics._file_local_types(source)
         except DatasetError:
             return None
-        if not local:
+        module, errors = parse(source)
+        declared = set() if errors else {
+            name for member in module.members
+            if isinstance(member, (P.ObjectField, P.Structure, P.Enum, P.Method))
+            and (name := getattr(member, "name", ""))
+        }
+        if not local and not declared:
             return None
-        return {"k": "x", "local_types": sorted(local)}
+        return {"k": "x", "stem": _pair_stem(source.rel),
+                "local_types": sorted(local), "declared": sorted(declared)}
     if source.kind != "yaml":
         return None
     if source.path.name in _SUBSYSTEM_FILES:
@@ -460,12 +547,17 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
     nm = value_of(data, "Имя", kind)
+    typed = [v for key in _REFERENCE_KEYS for v in dict.fromkeys(_type_values(data, key))]
+    bound = list(_binding_values(data)) if "=" in source.text else []
     return {
         "k": "el",
         "path": str(source.path),
+        "stem": _pair_stem(source.rel),
         "name": nm if isinstance(nm, str) else None,
         "vis": value_of(data, "ОбластьВидимости", kind),
         "cands": cands,
+        "broots": _binding_chain_roots(source, data, stdlib),
+        "qroots": _qualified_positions(source, typed + bound),
     }
 
 
@@ -491,9 +583,17 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
     The narrowings of the sibling rule apply here too (they are what keeps this at zero
     false positives): names of the file's own subsystem resolve locally, stdlib names and
-    module-declared local types are skipped, qualified `Подсистема::Тип` names rely on the
-    subsystem's `Использование`, and a name no project element declares (a platform form
-    like ФормаЖурналаСобытий) is unknown, not wrong. One diagnostic per target per file.
+    module-declared local types are skipped, and a name no project element declares (a
+    platform form like `ФормаЖурналаСобытий`) is unknown, not wrong. One diagnostic per
+    target per file.
+
+    Three shapes are read: the type positions and navigation targets, the roots of the
+    binding chains (`=ЧужойМодуль.Метод()`, less what the paired module declares), and the
+    qualified names `Подсистема::Элемент` of both. The last two were proven the same way on a
+    server build (02.09.2026): a binding to a non-public foreign module, a qualified binding
+    and a qualified call from code all fail with the same message at the reference position -
+    a qualified name needs no import, but the element it names must be public. It resolves
+    by the subsystem it names alone: a public namesake elsewhere does not reach it.
     """
     roots: dict[Path, str] = {}
     for fact in facts.values():
@@ -502,9 +602,11 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     if not roots:
         return
     local_types: set[str] = set()
+    declared_by_stem: dict[str, set[str]] = {}
     for fact in facts.values():
         if fact["k"] == "x":
             local_types.update(fact["local_types"])
+            declared_by_stem.setdefault(fact["stem"], set()).update(fact.get("declared", ()))
     placement: dict[str, dict[str, object]] = {}
     elements: list[tuple[str, dict, str]] = []
     for rel, fact in facts.items():
@@ -517,17 +619,21 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["name"]:
             placement.setdefault(fact["name"], {})[sub] = fact["vis"]
     for rel, fact, my_sub in elements:
+        # A binding root the PAIRED module declares is addressed through the element's own
+        # name - the file explains it, not a foreign element.
+        paired = declared_by_stem.get(fact.get("stem", ""), frozenset())
+        candidates_here = list(fact["cands"]) + [
+            c for c in fact.get("broots", ()) if c[0] not in paired
+        ] + list(fact.get("qroots", ()))
         reported: set[str] = set()
-        for root, chain_name, line, col in fact["cands"]:
+        for root, chain_name, line, col in candidates_here:
             if root in local_types or root in reported:
                 continue
-            subs = placement.get(root)
-            if not subs or my_sub in subs:
+            found = _foreign_owner(root, my_sub, placement)
+            if found is None:
                 continue
-            if any(vis in _public_scopes() for vis in subs.values()):
-                continue  # a public one exists - missing import at most, the sibling's case
-            owner = sorted(subs)[0]
-            vis = subs[owner] or _DEFAULT_SCOPE
+            owner, vis = found
+            vis = vis or _DEFAULT_SCOPE
             reported.add(root)
             yield Diagnostic(
                 rel, line, col, "yaml/foreign-not-public", Severity.ERROR,
@@ -673,11 +779,18 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
     for node in _nodes(module):
         if not isinstance(node, P.TypeRef):
             continue
-        for chain in _parse_type_string(getattr(node, "text", "") or "") or ():
+        text = getattr(node, "text", "") or ""
+        for chain in _parse_type_string(text) or ():
             if chain[0] in stdlib:
                 continue
             line, col = lm.linecol(node.start)
             cands.append((chain[0], ".".join(chain), line, col))
+        # A qualified type (`Б::Задачи.Ссылка`) does not parse as a plain chain; it is read
+        # as what it is - a name with its subsystem - for the visibility rule to judge.
+        if "::" in text:
+            line, col = lm.linecol(node.start)
+            for root, written in _qualified_roots(text):
+                cands.append((root, written, line, col))
     # The other shape: the root of a chain, `Модуль.Метод()`. A bare name is many things, so
     # everything the module itself explains is taken off the table here, in the file that has
     # the answer: names declared in the method, names the module declares, and the implicit
@@ -870,9 +983,11 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     (`Проект.xbsl`) belongs to none, so every non-public element is foreign to it - the live
     case exactly, and the place where code/missing-import stands down because such a module
     needs no import. A module outside the subsystems is not judged against a name that an
-    unplaced element carries as well (a namesake next to it resolves nearer), and a qualified
-    `Подсистема::Элемент` root is skipped like everywhere in this module - it never names a
-    placed element. One diagnostic per target per module.
+    unplaced element carries as well (a namesake next to it resolves nearer). A qualified
+    `Подсистема::Элемент` root - a type position or the root of a call - is judged by the
+    subsystem it names: the form needs no import, yet the element must be public (proven on
+    a server build 02.09.2026, the same refusal at the position of the name). One diagnostic
+    per target per module.
     """
     roots = {Path(f["dir"]): f["name"] for f in facts.values() if f["k"] == "sub"}
     if not roots:
@@ -905,23 +1020,21 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         my_sub = _subsystem_of(Path(fact["path"]), roots)
         reported: set[str] = set()
         for root, chain_name, line, col in candidates_here:
-            if root in reported or root in local_types or "::" in root:
+            if root in reported or root in local_types:
                 continue
             if my_sub is None and root in unplaced:
                 continue
-            owners = placement.get(root)
-            if not owners or my_sub in owners:
+            found = _foreign_owner(root, my_sub, placement)
+            if found is None:
                 continue
-            if any(vis in _public_scopes() for vis in owners.values()):
-                continue  # public somewhere - a missing import at most, the sibling's case
-            owner = sorted(owners)[0]
+            owner, vis = found
             reported.add(root)
             yield Diagnostic(
                 rel, line, col, "code/foreign-not-public", Severity.ERROR,
                 i18n.t(
                     "code/foreign-not-public.found" if my_sub else "code/foreign-not-public.root",
                     name=chain_name, sub=owner, mine=my_sub or "",
-                    vis=owners[owner] or i18n.name(_DEFAULT_SCOPE),
+                    vis=vis or i18n.name(_DEFAULT_SCOPE),
                 ),
             )
 
