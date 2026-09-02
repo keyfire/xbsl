@@ -939,7 +939,9 @@ def _global_env_mapper(source: SourceFile) -> dict | None:
             t = toks[i]
             if t.kind != "IDENT":
                 continue
-            env = availability.get(t.value)
+            # The table is keyed by the Russian names the docs print; an English module
+            # spells the same global by its dictionary pair.
+            env = availability.get(t.value) or availability.get(terms.common_russian(t.value) or "")
             if env is None or env == "КлиентИСервер":
                 continue
             if t.value in shadowed or t.value in decls:

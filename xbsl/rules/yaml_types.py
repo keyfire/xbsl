@@ -159,10 +159,14 @@ dataset.register_reset(_key_spellings.cache_clear)
 
 
 def _type_values(node, key: str = "Тип") -> Iterable[str]:
-    """All string values of `key` keys in the parsed yaml tree (`ТипФормы` for navigation)."""
+    """All string values of `key` keys in the parsed yaml tree (`FormType` for navigation).
+
+    The key is matched in both spellings - an English form writes `Type:` - the same way the
+    positions are found; read by the Russian name alone the rule never saw a translated tree.
+    """
     if isinstance(node, dict):
         for k, v in node.items():
-            if k == key and isinstance(v, str):
+            if k in _key_spellings(key) and isinstance(v, str):
                 yield v
             yield from _type_values(v, key)
     elif isinstance(node, list):

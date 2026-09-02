@@ -48,11 +48,9 @@ _TASKS_RU = (
     "        Имя: Товар\n"
     "        Тип: Товары.Ссылка?\n"
 )
-# The type key stays as the metamodel names it while the rest is English: the walk that
-# collects type VALUES out of a document still matches that one key literally (_type_values
-# in xbsl/rules/yaml_types.py) - a blind spot of its own, and not what these checks are
-# about. Everything the rules under test read here - the section keys and the visibility
-# value - is spelled in English.
+# Every key is English, the type key included: the walk that collects type VALUES out of a
+# document (_type_values in xbsl/rules/yaml_types.py) reads it in both spellings - it once
+# matched the Russian name alone, which kept these fixtures half Russian.
 _TASKS_EN = (
     "ElementKind: Catalog\n"
     "Name: Tasks\n"
@@ -60,7 +58,7 @@ _TASKS_EN = (
     "Attributes:\n"
     "    -\n"
     "        Name: Product\n"
-    "        Тип: Goods.Reference?\n"
+    "        Type: Goods.Reference?\n"
 )
 
 
@@ -295,13 +293,13 @@ _FORM_OVER_STEPS_RU = (
     "        Имя: Строки\n"
     "        Тип: Массив<Задачи.Шаги>\n"
 )
-_FORM_OVER_STEPS_EN = (  # the type key: see the note above the English catalog
+_FORM_OVER_STEPS_EN = (
     "ElementKind: InterfaceComponent\n"
     "Name: Form\n"
     "Attributes:\n"
     "    -\n"
     "        Name: Rows\n"
-    "        Тип: Array<Tasks.Steps>\n"
+    "        Type: Array<Tasks.Steps>\n"
 )
 
 
@@ -323,6 +321,15 @@ def test_unknown_type_still_reports_a_section_the_english_object_lacks():
     }
     found = _lint(files, "yaml/unknown-type")
     assert len(found) == 1 and "Tasks.Stages" in found[0].message
+
+
+def test_unknown_type_reads_the_english_type_key():
+    """A plain unknown type under `Type:` - found by the parity seed of the rule: the walk that
+    collects the values matched the Russian key alone, and an English tree was never judged."""
+    files = {"Tasks.yaml": _TASKS_WITH_STEPS_EN.replace("Type: String", "Type: NonexistentType")}
+    found = _lint(files, "yaml/unknown-type")
+    assert len(found) == 1 and "NonexistentType" in found[0].message
+    assert _lint({"Tasks.yaml": _TASKS_WITH_STEPS_EN}, "yaml/unknown-type") == []
 
 
 # --- Inherits / Properties: yaml/builtin-property-name -------------------------------------

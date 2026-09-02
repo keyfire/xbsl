@@ -145,6 +145,9 @@ def test_serializer_kind_spellings_survive_without_the_dataset_table(monkeypatch
 
 # --- forms ------------------------------------------------------------------------------
 
+# `Edit` is the platform's own spelling of the input component (terms.json, the ui schema);
+# the fixture once said `InputField`, a guess no serializer writes, and yaml/unknown-type
+# reports such a type the moment the English `Type:` key is read.
 EN_FORM = """\
 ElementKind: InterfaceComponent
 Id: 6f0b6a44-0000-4000-8000-000000000201
@@ -158,7 +161,7 @@ Inherits:
             Name: Hint
             Value: "Fill in the order."
         -
-            Type: InputField<String>
+            Type: Edit<String>
             Name: Recipient
 """
 
@@ -171,7 +174,7 @@ def test_english_form_builds_the_same_tree():
     slot = form.root.children[0]
     assert slot.name == "Content" and slot.list_style is True
     assert [(c.type_full, c.name) for c in slot.children] == [
-        ("Label", "Hint"), ("InputField<String>", "Recipient"),
+        ("Label", "Hint"), ("Edit<String>", "Recipient"),
     ]
     # Тип and Имя are node fields, not properties, in either spelling
     assert [p.key for p in slot.children[0].properties] == ["Value"]
@@ -197,7 +200,7 @@ def test_english_value_of_an_enumeration_is_accepted(tmp_path):
     unknown.
     """
     form = EN_FORM.replace(
-        "Type: InputField<String>", "Type: StandardCard\n            DisplayKind: Banner"
+        "Type: Edit<String>", "Type: StandardCard\n            DisplayKind: Banner"
     )
     assert _lint(tmp_path, form, name="OrderPanel.yaml") == []
 

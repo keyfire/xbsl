@@ -50,6 +50,24 @@ def test_object_module_judged_via_entity_yaml():
     assert len(d) == 1
 
 
+def test_english_module_is_judged_by_the_dictionary_pair_of_the_global():
+    """The availability table is keyed by the Russian names the docs print; an English module
+    spells the same global as its dictionary pair, and the verdict must not depend on the
+    alphabet - found by the parity seed of this rule."""
+    catalog = engine.load_text(
+        "Tasks.yaml",
+        "ElementKind: Catalog\n"
+        "Id: 019ef4c8-232f-7f33-9da6-c3604720b3ab\n"
+        "Name: Tasks\n",
+    )
+    d = _lint(catalog, engine.load_text(
+        "Tasks.xbsl",
+        "method Warn()\n    Message(\"no\")\n;\n"))
+    assert len(d) == 1
+    assert d[0].rule_id == RULE and "Message" in d[0].message
+    assert d[0].line == 2 and d[0].col == 5
+
+
 def test_client_global_in_form_module_silent():
     assert _lint(_FORM, engine.load_text(
         "Панель.xbsl",
