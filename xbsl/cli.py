@@ -8,7 +8,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from xbsl import __version__, baseline, dataset, engine, i18n, plugins, report
+from xbsl import __version__, baseline, dataset, engine, environment, i18n, plugins, report
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
@@ -332,6 +332,103 @@ def _selfupdate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stop-holders", action="store_true",
                         help=i18n.t("cli.help.selfupdate-stop"))
     return parser
+
+
+def _baseline_parser() -> argparse.ArgumentParser:
+    parser = i18n.ArgumentParser(
+        prog="xbsl baseline",
+        description=i18n.t("cli.help.bl.description"),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    sub = parser.add_subparsers(dest="action", required=True)
+    p = sub.add_parser("add", help=i18n.t("cli.help.bl.add"))
+    p.add_argument("paths", nargs="+", help=i18n.t("cli.help.bl.paths"))
+    p.add_argument("--rule", metavar=i18n.t("cli.help.meta.rule-selector"), action="append",
+                   required=True, help=i18n.t("cli.help.bl.rule"))
+    p.add_argument("--reason", help=i18n.t("cli.help.bl.reason"))
+    p.add_argument("--baseline", metavar=i18n.t("cli.help.meta.file"),
+                   help=i18n.t("cli.help.bl.baseline"))
+    p.add_argument("--format", choices=("text", "json"), default="text",
+                   help=i18n.t("cli.help.bl.format"))
+    p.add_argument("--jobs", type=int, default=0, metavar="N", help=i18n.t("cli.help.jobs"))
+    p.add_argument("--lang", choices=i18n.LANGS, help=i18n.t("cli.help.lang"))
+    p.add_argument("--element-version", metavar=i18n.t("cli.help.meta.version"),
+                   help=i18n.t("cli.help.element-version"))
+    p.add_argument("--data-dir", metavar=i18n.t("cli.help.meta.dir"),
+                   help=i18n.t("cli.help.data-dir"))
+    return parser
+
+
+def _baseline_main(argv: list[str]) -> int:
+    """xbsl baseline add: append the findings of one rule to the baseline and nothing else.
+
+    The run is the check mode's: the project context of the paths is loaded, the findings
+    are narrowed to the requested paths, the baseline is the one named or the project's
+    own. Only the selected rules run - the command adds one kind of debt, not a snapshot.
+    """
+    i18n.set_lang(i18n.lang_from_argv(argv))
+    args = _baseline_parser().parse_args(argv)
+    i18n.set_lang(args.lang)
+    if args.data_dir:
+        dataset.set_data_root(args.data_dir)
+    if args.element_version:
+        dataset.set_version(args.element_version)
+    try:
+        dataset.resolve_version()
+    except dataset.DatasetError as exc:
+        print(i18n.t("cli.data-error", error=exc), file=sys.stderr)
+        return 2
+
+    from xbsl.engine import active_rules, run_parallel
+
+    select = _parse_set(args.rule) or set()
+    # A selector nothing answers to is a typo, and a typo must not pass for "nothing new".
+    unknown = [s for s in sorted(select) if not active_rules({s})]
+    if unknown:
+        print(i18n.t("cli.baseline-unknown-rule", rule=", ".join(unknown)), file=sys.stderr)
+        return 2
+    missing = [p for p in args.paths if not Path(p).exists()]
+    if missing:
+        print(i18n.t("cli.missing-paths", paths=", ".join(f"'{p}'" for p in missing)),
+              file=sys.stderr)
+        return 2
+    files, requested = discover_with_context(args.paths)
+    if not files:
+        print(i18n.t("cli.nothing-collected", paths=", ".join(f"'{p}'" for p in args.paths)),
+              file=sys.stderr)
+        return 2
+    target = Path(args.baseline) if args.baseline else baseline.discover(files)
+    if target is None:
+        print(i18n.t("cli.baseline-none-to-extend"), file=sys.stderr)
+        return 2
+    try:
+        data = baseline.load(target)
+    except baseline.BaselineError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    diagnostics = _filter_requested(
+        run_parallel(files, select=select, jobs=args.jobs,
+                     element_version=args.element_version or None),
+        requested,
+    )
+    added = baseline.add_entries(data, diagnostics, target.parent, reason=args.reason)
+    if added:
+        baseline.save(target, data)
+    findings = sum(entry["count"] for entry in added)
+    if args.format == "json":
+        print(json.dumps({"baseline": str(target), "added": added, "findings": findings,
+                          "written": bool(added)}, ensure_ascii=False))
+        return 0
+    for entry in added:
+        print(i18n.t("cli.baseline-added-entry", path=entry["path"], rule=entry["rule"],
+                     count=entry["count"], message=entry["message"]))
+    if added:
+        print(i18n.t("cli.baseline-added", path=target, count=findings, entries=len(added)))
+    else:
+        print(i18n.t("cli.baseline-nothing-to-add", path=target))
+    return 0
+
 
 def _templates_parser() -> argparse.ArgumentParser:
     parser = i18n.ArgumentParser(
@@ -948,6 +1045,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if argv[:1] == ["templates"]:
         return _templates_main(argv[1:])
+    if argv[:1] == ["baseline"]:
+        return _baseline_main(argv[1:])
     if argv[:1] == ["extract"]:
         # The dataset generator (xbsl.extract) - the same code as tools/extract.py in a clone.
         from xbsl import extract as extract_package
@@ -1012,7 +1111,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(build_index(root), ensure_ascii=False))
         return 0
 
-    from xbsl.engine import RULES, load, make_source, run_sources
+    from xbsl.engine import RULES, active_rules, load, make_source, run_sources
 
     if args.list_rules:
         for r in sorted(RULES, key=lambda x: (x.tier, x.id)):
@@ -1029,6 +1128,9 @@ def main(argv: list[str] | None = None) -> int:
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)
     enable = _parse_set(args.enable)
+    # The rule set of this run, named in every report: two installations answering
+    # differently about one tree differ here first, and the report must say so itself.
+    active = active_rules(select, ignore, enable)
 
     if args.fix and args.stdin:
         print(i18n.t("cli.fix-needs-files"), file=sys.stderr)
@@ -1113,15 +1215,16 @@ def main(argv: list[str] | None = None) -> int:
         except baseline.BaselineError as exc:
             print(str(exc), file=sys.stderr)
             return 2
-        # The rule set the run carried: an entry of a rule nobody ran is not stale debt,
-        # it is debt nobody looked at, and pruning it would drop the record silently.
-        from xbsl.engine import active_rules
-
-        carried = {r.id for r in active_rules(select, ignore, enable)}
+        # The rule set the run carried and the paths it reached: an entry of a rule nobody
+        # ran, or of a file nobody asked about, is not stale debt - it is debt nobody looked
+        # at, and pruning it would drop the record silently.
+        carried = {r.id for r in active}
+        asked = [Path(args.filename)] if args.stdin else [Path(p) for p in (args.paths or ["."])]
+        roots = baseline.roots_of(asked, Path(args.baseline).parent)
         diagnostics, suppressed, unused, stale = baseline.apply(
-            diagnostics, data, Path(args.baseline).parent, carried,
+            diagnostics, data, Path(args.baseline).parent, carried, roots,
         )
-        not_checked = baseline.not_checked_entries(data, carried)
+        not_checked = baseline.not_checked_entries(data, carried, roots)
         # The stale entries are named, not just counted: without the list the only way to
         # find them was to rewrite the whole baseline and diff it.
         if (args.stale_baseline or args.prune_baseline) and args.format == "text":
@@ -1140,6 +1243,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.format == "json":
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
+        payload["summary"].update(environment.provenance(active))
         if suppressed is not None:
             payload["summary"]["baselined"] = suppressed
             # Two different units, both useful: `unused` counts the suppressions nobody
@@ -1151,6 +1255,9 @@ def main(argv: list[str] | None = None) -> int:
             # apart so two environments with different rule sets stop contradicting each
             # other about one and the same baseline.
             payload["summary"]["baseline_not_checked"] = len(not_checked)
+            split = baseline.not_checked_split(not_checked)
+            payload["summary"]["baseline_not_checked_rules"] = split["rules"]
+            payload["summary"]["baseline_not_checked_paths"] = split["paths"]
         _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
@@ -1171,6 +1278,7 @@ def main(argv: list[str] | None = None) -> int:
                    diags=len(diagnostics), errors=n_err),
             file=sys.stderr,
         )
+        print(environment.provenance_note(environment.provenance(active)), file=sys.stderr)
         if suppressed is not None:
             # The count names ENTRIES, as the text promises; `unused` counts the individual
             # suppressions behind them and lives in the json payload.
@@ -1182,7 +1290,8 @@ def main(argv: list[str] | None = None) -> int:
             # here, and a line of zeros in every report teaches nobody anything.
             if not_checked:
                 print(
-                    i18n.t("cli.baseline-not-checked", count=len(not_checked)),
+                    i18n.t("cli.baseline-not-checked", count=len(not_checked),
+                           **baseline.not_checked_split(not_checked)),
                     file=sys.stderr,
                 )
 

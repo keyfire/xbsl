@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sys
 
-from xbsl import __version__, dataset, plugins
+from xbsl import __version__, dataset, i18n, plugins
 
 
 def snapshot() -> dict:
@@ -34,6 +34,41 @@ def snapshot() -> dict:
         "data": data,
         "plugins": plugins.installed(),
     }
+
+
+def rule_set(active: list) -> dict:
+    """The rule set a run judged by: {active, total, plugin}.
+
+    `active` is what the run carried (engine.active_rules); `total` every rule this
+    installation knows, plugins included; `plugin` the active rules that came from plugins.
+    Two servers disagreeing about one tree differ here first.
+    """
+    from xbsl.engine import RULES  # lazy: the engine is heavy and not needed by snapshot()
+
+    return {
+        "active": len(active),
+        "total": len(RULES),
+        "plugin": sum(1 for r in active if not r.func.__module__.startswith("xbsl.")),
+    }
+
+
+def provenance(active: list) -> dict:
+    """What judged a report: the engine version, the plugins and the rule set.
+
+    Goes into the summary of every check (the CLI json, the MCP answer), so that two
+    environments answering differently about one tree show the difference in the answer
+    itself rather than after a second round of `--version` on both sides.
+    """
+    return {"engine": __version__, "plugins": plugins.installed(), "rules": rule_set(active)}
+
+
+def provenance_note(info: dict) -> str:
+    """The same as one line of the text summary."""
+    listed = ", ".join(f"{p['name']} {p['version']}" for p in info["plugins"])
+    return i18n.t(
+        "cli.run-set", engine=info["engine"], plugins=listed or i18n.t("cli.plugins-none"),
+        **info["rules"],
+    )
 
 
 def note() -> str:

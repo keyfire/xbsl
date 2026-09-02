@@ -44,6 +44,7 @@ def parsers():
     yield from walk(cli._templates_parser(), "xbsl templates")
     yield from walk(cli._scaffold_parser(), "xbsl <scaffold>")
     yield from walk(cli._selfupdate_parser(), "xbsl self-update")
+    yield from walk(cli._baseline_parser(), "xbsl baseline")
 
 
 def actions_with_help(parser: argparse.ArgumentParser):

@@ -157,9 +157,43 @@ _CORE_MESSAGES = {
     },
     "cli.baseline-not-checked": {
         "ru": "Записей базлайна не проверено: {count} – их правил не было в наборе этого "
-              "прогона (устаревшими они не считаются и при чистке не снимаются)",
+              "прогона ({rules}) либо их файлы лежат вне проверенных путей ({paths}); "
+              "устаревшими они не считаются и при чистке не снимаются",
         "en": "Baseline entries not checked: {count} - their rules were not in this run's "
-              "set (they do not count as stale and pruning leaves them alone)",
+              "set ({rules}) or their files lie outside the checked paths ({paths}); "
+              "they do not count as stale and pruning leaves them alone",
+    },
+    "cli.run-set": {
+        "ru": "Набор прогона: xbsl {engine}; надстройки: {plugins}; правил активно: "
+              "{active} из {total} (из надстроек: {plugin})",
+        "en": "Run set: xbsl {engine}; plugins: {plugins}; rules active: "
+              "{active} of {total} (from plugins: {plugin})",
+    },
+    "cli.plugins-none": {
+        "ru": "нет",
+        "en": "none",
+    },
+    "cli.baseline-added-entry": {
+        "ru": "добавлено в базлайн: {path} [{rule}] +{count} – {message}",
+        "en": "added to the baseline: {path} [{rule}] +{count} - {message}",
+    },
+    "cli.baseline-added": {
+        "ru": "Базлайн дополнен: {path} (находок: {count}, записей: {entries})",
+        "en": "Baseline extended: {path} ({count} findings in {entries} entries)",
+    },
+    "cli.baseline-nothing-to-add": {
+        "ru": "Новых находок нет – базлайн не изменён: {path}",
+        "en": "No new findings - the baseline is unchanged: {path}",
+    },
+    "cli.baseline-unknown-rule": {
+        "ru": "Правило не найдено: {rule} (список – xbsl --list-rules)",
+        "en": "Unknown rule: {rule} (the list: xbsl --list-rules)",
+    },
+    "cli.baseline-none-to-extend": {
+        "ru": "Базлайн не найден выше проверяемых путей – укажите --baseline либо создайте "
+              "файл: xbsl <пути> --write-baseline .xbsllint-baseline",
+        "en": "No baseline above the checked paths - pass --baseline or create the file: "
+              "xbsl <paths> --write-baseline .xbsllint-baseline",
     },
     "cli.baseline-written": {
         "ru": "Базлайн записан: {path} ({diags} замечаний в {files} файлах)",
@@ -378,6 +412,51 @@ _CORE_MESSAGES = {
     "cli.help.commands.templates": {
         "ru": "шаблоны кода: list, export, import, save",
         "en": "code templates: list, export, import, save",
+    },
+    "cli.help.commands.baseline": {
+        "ru": "базлайн замороженных находок: add – дописать находки одного правила с причиной",
+        "en": "the baseline of frozen findings: add - append one rule's findings with a reason",
+    },
+    "cli.help.bl.description": {
+        "ru": "Базлайн: точечные правки файла замороженных находок.\n\n"
+              "Полный снимок пишет режим проверки (xbsl <пути> --write-baseline ФАЙЛ); здесь – "
+              "дописывание отдельных находок без перезаписи остального.",
+        "en": "Baseline: targeted edits of the frozen findings file.\n\n"
+              "A full snapshot is written by the check mode (xbsl <paths> --write-baseline FILE); "
+              "here single findings are appended without rewriting the rest.",
+    },
+    "cli.help.bl.add": {
+        "ru": "дописать в базлайн новые находки одного правила по указанным путям: порядок и "
+              "чужие причины не трогаются, повторный вызов ничего не меняет",
+        "en": "append the new findings of one rule under the given paths to the baseline: "
+              "order and other reasons stay untouched, a repeated call changes nothing",
+    },
+    "cli.help.bl.paths": {
+        "ru": "файлы или каталоги, находки которых заморозить",
+        "en": "files or directories whose findings to freeze",
+    },
+    "cli.help.bl.rule": {
+        "ru": "правило (группа или уровень – как в --select), находки которого дописать; "
+              "можно повторять",
+        "en": "the rule (a group or a tier - as in --select) whose findings to append; "
+              "repeatable",
+    },
+    "cli.help.bl.reason": {
+        "ru": "причина исключения: пишется в новые записи и в записи без причины, "
+              "записанные причины не заменяются",
+        "en": "the reason for the exclusion: written on new entries and on entries without "
+              "one, recorded reasons are never replaced",
+    },
+    "cli.help.bl.baseline": {
+        "ru": "файл базлайна; без флага ищется .xbsllint-baseline над проверяемыми путями",
+        "en": "the baseline file; without the flag .xbsllint-baseline is looked up above "
+              "the checked paths",
+    },
+    "cli.help.bl.format": {
+        "ru": "формат вывода: text – список добавленного, json – "
+              "{{baseline, added, findings, written}}",
+        "en": "output format: text - the list of what was added, json - "
+              "{{baseline, added, findings, written}}",
     },
     "cli.help.commands.self-update": {
         "ru": "обновить xbsl распаковкой колеса с PyPI",

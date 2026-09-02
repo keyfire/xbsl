@@ -111,6 +111,7 @@ def version_info() -> dict:
 
 def _through_baseline(
     diags: list, files: list[Path], path: str | None, disabled: bool, rules: set[str],
+    asked: list[Path],
 ) -> tuple[list, dict]:
     """The findings the baseline leaves, plus the summary keys describing what it took.
 
@@ -119,7 +120,9 @@ def _through_baseline(
 
     `rules` is what this server actually carries: a plugin older than the one CI runs knows
     fewer rules, and without the set their entries were reported as stale - the two answered
-    differently about one baseline.
+    differently about one baseline. `asked` is what the caller named: the entries of other
+    files are out of this run's reach, and a request for two files used to be answered with
+    the whole baseline called stale.
     """
     if disabled:
         return diags, {}
@@ -127,16 +130,22 @@ def _through_baseline(
     if found is None:
         return diags, {}
     data = baseline_data.load(found)
-    kept, suppressed, unused, stale = baseline_data.apply(diags, data, found.parent, rules)
+    roots = baseline_data.roots_of(asked, found.parent)
+    kept, suppressed, unused, stale = baseline_data.apply(
+        diags, data, found.parent, rules, roots,
+    )
     summary = {
         "baseline": str(found),
         "baselined": suppressed,
         "baseline_unused": unused,
         "baseline_stale": len(stale),
     }
-    not_checked = baseline_data.not_checked_entries(data, rules)
+    not_checked = baseline_data.not_checked_entries(data, rules, roots)
     if not_checked:
+        split = baseline_data.not_checked_split(not_checked)
         summary["baseline_not_checked"] = len(not_checked)
+        summary["baseline_not_checked_rules"] = split["rules"]
+        summary["baseline_not_checked_paths"] = split["paths"]
     return kept, summary
 
 
@@ -165,8 +174,12 @@ def lint_paths(
     Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
-    Entries this server could not judge - their rule is not in its set, an older plugin or a
-    narrower selection - are counted apart as `baseline_not_checked` and are NOT called stale.
+    Entries this server could not judge - their rule is not in its set (an older plugin, a
+    narrower selection) or their file is not among the requested paths - are counted apart
+    as `baseline_not_checked` (split into `_rules` and `_paths`) and are NOT called stale.
+    The summary also names what judged: `engine`, `plugins` (with versions) and `rules`
+    {active, total, plugin} - the first place two environments disagreeing about one tree
+    differ.
     """
     files, requested = discover_with_context(paths)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
@@ -174,9 +187,13 @@ def lint_paths(
         run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
     )
     counted = requested if requested is not None else files
-    carried = {r.id for r in active_rules(*chosen)}
-    diags, extra = _through_baseline(diags, counted, baseline, no_baseline, carried)
+    active = active_rules(*chosen)
+    diags, extra = _through_baseline(
+        diags, counted, baseline, no_baseline, {r.id for r in active},
+        [Path(p) for p in paths],
+    )
     payload = report.report(diags, len(counted))
+    payload["summary"].update(environment.provenance(active))
     payload["summary"].update(extra)
     return payload
 
@@ -195,10 +212,13 @@ def lint_source(
     Only per-file rules run (cross-file rules need the whole project).
     """
     src = load_text(filename, content)
-    diags = run_sources(
-        [src], select=_as_set(select), ignore=_as_set(ignore), scopes=("file",)
+    chosen = (_as_set(select), _as_set(ignore))
+    diags = run_sources([src], select=chosen[0], ignore=chosen[1], scopes=("file",))
+    payload = report.report(diags, 1)
+    payload["summary"].update(
+        environment.provenance([r for r in active_rules(*chosen) if r.scope == "file"]),
     )
-    return report.report(diags, 1)
+    return payload
 
 
 def _page_as_text(doc_id: str | None) -> dict:

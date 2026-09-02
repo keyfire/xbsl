@@ -227,3 +227,26 @@ def test_a_directory_with_sources_says_nothing_extra(tmp_path, capsys):
     code = cli.main([str(tmp_path)])
     assert code == 0
     assert "исходник" not in capsys.readouterr().err
+
+
+def test_the_summary_names_the_engine_and_the_rule_set(tmp_path, capsys):
+    """A report says what judged it: engine, plugins, how many rules and whose.
+
+    Two installations answered differently about one tree and nothing in either report
+    said which rule set it ran with - the diagnosis went through site-packages of both.
+    """
+    from xbsl import __version__
+
+    f = tmp_path / "Ч.xbsl"
+    f.write_text("метод Ф(): Число\n    возврат 1  \n;\n", encoding="utf-8")
+
+    cli.main(["--format", "json", "--ignore", "structure/xbsl-pair", str(f)])
+    summary = json.loads(capsys.readouterr().out)["summary"]
+    assert summary["engine"] == __version__
+    assert isinstance(summary["plugins"], list)
+    assert 0 < summary["rules"]["active"] < summary["rules"]["total"]
+
+    cli.main(["--ignore", "structure/xbsl-pair", str(f)])
+    err = capsys.readouterr().err
+    assert f"xbsl {__version__}" in err
+    assert f"{summary['rules']['active']} из {summary['rules']['total']}" in err

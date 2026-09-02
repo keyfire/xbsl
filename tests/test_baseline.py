@@ -230,7 +230,7 @@ def test_lsp_apply_baseline_file(tmp_path):
 
 
 def _seed_stale(bl, extra_path="Ушедший.xbsl"):
-    """Add an entry nothing can spend: its file is not even in the run."""
+    """Add an entry nothing can spend: its file is gone (a run over the directory reaches it)."""
     data = json.loads(bl.read_text(encoding="utf-8"))
     data["files"][extra_path] = {"whitespace/trailing": {"Хвостовые пробелы.": 2}}
     bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
@@ -244,7 +244,7 @@ def test_stale_entries_are_listed(tmp_path, capsys):
     capsys.readouterr()
     _seed_stale(bl)
 
-    cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(f)])
+    cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(tmp_path)])
     err = capsys.readouterr().err
     # the entry is named - path, rule and how many suppressions it still holds
     assert "Ушедший.xbsl" in err and "whitespace/trailing" in err and "x2" in err
@@ -260,7 +260,7 @@ def test_prune_removes_only_stale_entries(tmp_path, capsys):
     capsys.readouterr()
     _seed_stale(bl)
 
-    code = cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(f)])
+    code = cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(tmp_path)])
     err = capsys.readouterr().err
     assert code == 0 and "удалено записей: 1" in err
     data = json.loads(bl.read_text(encoding="utf-8"))
@@ -292,7 +292,7 @@ def test_json_payload_names_stale_entries(tmp_path, capsys):
     capsys.readouterr()
     _seed_stale(bl)
 
-    _, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
+    _, payload = _run_json(["--baseline", str(bl), str(tmp_path)], capsys)
     summary = payload["summary"]
     # one entry, two suppressions behind it - the two counters are not the same number
     assert summary["baseline_stale"] == 1 and summary["baseline_unused"] == 2
@@ -465,3 +465,228 @@ def test_a_reason_survives_a_rewrite_of_an_entry_naming_a_file(tmp_path):
 
     entry = data["files"]["Второй.yaml"]["yaml/duplicate-subtree"][posix]
     assert entry == {"count": 1, "reason": "две формы списка одного вида"}
+
+
+# --- the run's reach: entries of files the run did not cover ---------------------------------
+
+def test_entries_of_files_outside_the_run_are_not_stale(tmp_path, capsys):
+    """A run over ONE file judges the entries of that file alone.
+
+    The whole baseline used to be weighed against a partial run: `lint_paths` over two files
+    answered "0 suppressed, 76 stale" while the same server over the project answered "74
+    suppressed, 4 stale" - the difference was the files nobody asked about.
+    """
+    first = tmp_path / "А.xbsl"
+    second = tmp_path / "Б.xbsl"
+    first.write_text(_TRAILING, encoding="utf-8")
+    second.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(first), str(second)])
+    capsys.readouterr()
+
+    _, payload = _run_json(["--baseline", str(bl), str(first)], capsys)
+    summary = payload["summary"]
+    assert summary["baselined"] == 1
+    assert summary["baseline_stale"] == 0 and summary["baseline_unused"] == 0
+    assert summary["baseline_not_checked"] == 1
+    assert summary["baseline_not_checked_paths"] == 1
+    assert summary["baseline_not_checked_rules"] == 0
+
+    # a directory run reaches every file under it: the entry of a deleted file IS stale
+    second.unlink()
+    _, payload = _run_json(["--baseline", str(bl), str(tmp_path)], capsys)
+    summary = payload["summary"]
+    assert summary["baselined"] == 1 and summary["baseline_stale"] == 1
+    assert summary["baseline_not_checked"] == 0
+
+
+def test_the_not_checked_line_names_the_files_outside_the_run(tmp_path, capsys):
+    first = tmp_path / "А.xbsl"
+    second = tmp_path / "Б.xbsl"
+    first.write_text(_TRAILING, encoding="utf-8")
+    second.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(first), str(second)])
+    capsys.readouterr()
+
+    cli.main(["--baseline", str(bl), *_NO_PAIR, str(first)])
+    err = capsys.readouterr().err
+    assert "не проверено: 1" in err and "вне проверенных путей" in err
+
+
+def test_a_run_above_the_baseline_reaches_every_entry(tmp_path, capsys):
+    """The baseline may live BELOW the requested root: everything under it is in reach."""
+    nested = tmp_path / "проект"
+    nested.mkdir()
+    f = nested / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = nested / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    f.write_text("метод Ф(): Число\n    возврат 1\n;\n", encoding="utf-8")
+
+    _, payload = _run_json(["--baseline", str(bl), str(tmp_path)], capsys)
+    assert payload["summary"]["baseline_stale"] == 1
+    assert payload["summary"]["baseline_not_checked"] == 0
+
+
+# --- xbsl baseline add ------------------------------------------------------------------------
+
+def _lines(path) -> list[bytes]:
+    # bytes, not text: a line ending rewritten from LF to CRLF is a changed line too
+    return path.read_bytes().split(b"\n")
+
+
+def _is_pure_addition(before: list[bytes], after: list[bytes]) -> bool:
+    """Every old line survives, in its old order: the diff holds added lines and nothing else."""
+    rest = iter(after)
+    return all(any(line == candidate for candidate in rest) for line in before)
+
+
+def _with_reason(bl, path: str, reason: str) -> str:
+    """Give the (only) entry of `path` a hand-written reason; returns its message."""
+    from xbsl import baseline
+
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    per_message = data["files"][path]["whitespace/trailing"]
+    message = next(iter(per_message))
+    per_message[message] = {"count": per_message[message], "reason": reason}
+    baseline.save(bl, data)
+    return message
+
+
+def test_add_appends_one_finding_without_reordering_or_touching_reasons(tmp_path, capsys):
+    """`baseline add` writes ONLY the new finding: the file grows, nothing in it moves.
+
+    Until the command existed, one finding with a reason meant a rewrite (which drops the
+    reasons of nothing else, but re-sorts) or a snapshot into a temporary file merged by
+    hand - the first attempt of which re-sorted the file (a diff of 28/16 lines for +12).
+    """
+    from xbsl import baseline
+
+    project = tmp_path / "acme" / "Проба"
+    project.mkdir(parents=True)
+    first = project / "Альфа.xbsl"
+    third = project / "Омега.xbsl"
+    first.write_text(_TRAILING, encoding="utf-8")
+    third.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(first), str(third)])
+    message = _with_reason(bl, "acme/Проба/Альфа.xbsl", "так надо")
+    before = _lines(bl)
+    second = project / "Бета.xbsl"  # sorts between the two frozen files
+    second.write_text(_TRAILING, encoding="utf-8")
+    capsys.readouterr()
+
+    code = cli.main(["baseline", "add", str(second), "--rule", "whitespace/trailing",
+                     "--reason", "новая причина"])
+
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "Бета.xbsl" in out and "whitespace/trailing" in out
+    after = _lines(bl)
+    assert len(after) > len(before) and _is_pure_addition(before, after)
+    data = baseline.load(bl)
+    assert list(data["files"]) == [
+        "acme/Проба/Альфа.xbsl", "acme/Проба/Бета.xbsl", "acme/Проба/Омега.xbsl",
+    ]
+    assert data["files"]["acme/Проба/Альфа.xbsl"]["whitespace/trailing"][message] == {
+        "count": 1, "reason": "так надо",
+    }
+    assert data["files"]["acme/Проба/Бета.xbsl"]["whitespace/trailing"][message] == {
+        "count": 1, "reason": "новая причина",
+    }
+    # the baseline now covers the finding: the plain check is clean
+    _, payload = _run_json([str(second)], capsys)
+    assert payload["diagnostics"] == [] and payload["summary"]["baselined"] == 1
+
+
+def test_add_is_idempotent_and_says_so(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    frozen = bl.read_bytes()
+
+    code = cli.main(["baseline", "add", str(f), "--rule", "whitespace/trailing",
+                     "--format", "json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0
+    assert payload["added"] == [] and payload["written"] is False
+    assert payload["baseline"] == str(bl)
+    assert bl.read_bytes() == frozen
+
+
+def test_add_raises_the_count_of_an_existing_entry_and_keeps_its_reason(tmp_path, capsys):
+    from xbsl import baseline
+
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    message = _with_reason(bl, "Ч.xbsl", "так надо")
+    # a second occurrence of the same finding in the same file
+    f.write_text("метод Ф(): Число\n    пер Итог = 1  \n    возврат Итог  \n;\n", encoding="utf-8")
+    capsys.readouterr()
+
+    code = cli.main(["baseline", "add", str(f), "--rule", "whitespace/trailing",
+                     "--baseline", str(bl), "--reason", "другая", "--format", "json"])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert code == 0 and payload["written"] is True
+    assert payload["added"] == [{
+        "path": "Ч.xbsl", "rule": "whitespace/trailing", "message": message,
+        "count": 1, "reason": "так надо",
+    }]
+    entry = baseline.load(bl)["files"]["Ч.xbsl"]["whitespace/trailing"][message]
+    assert entry == {"count": 2, "reason": "так надо"}
+
+
+def test_add_takes_only_the_named_rule(tmp_path, capsys):
+    """Other findings of the file stay out: the command adds ONE kind of debt, not a snapshot."""
+    from xbsl import baseline
+
+    f = tmp_path / "Ч.xbsl"  # trailing whitespace AND no paired yaml
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    baseline.save(bl, baseline.build([], tmp_path))
+    capsys.readouterr()
+
+    code = cli.main(["baseline", "add", str(f), "--rule", "whitespace/trailing"])
+
+    assert code == 0
+    data = baseline.load(bl)
+    assert list(data["files"]["Ч.xbsl"]) == ["whitespace/trailing"]
+
+
+def test_add_refuses_an_unknown_rule_and_a_missing_baseline(tmp_path, capsys):
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+
+    assert cli.main(["baseline", "add", str(f), "--rule", "whitespace/nothing"]) == 2
+    assert "whitespace/nothing" in capsys.readouterr().err
+
+    assert cli.main(["baseline", "add", str(f), "--rule", "whitespace/trailing"]) == 2
+    assert "--write-baseline" in capsys.readouterr().err
+
+
+def test_save_keeps_the_line_endings_and_the_bom_of_an_existing_file(tmp_path):
+    """A committed baseline is LF; a rewrite in the platform's native style once turned a
+    one-entry addition on Windows into a diff of every line."""
+    from xbsl import baseline
+
+    bl = tmp_path / "baseline.json"
+    payload = baseline.build([], tmp_path)
+    baseline.save(bl, payload)
+    assert b"\r" not in bl.read_bytes()  # a new file: LF, the form it is committed in
+
+    crlf = bl.read_bytes().replace(b"\n", b"\r\n")
+    bl.write_bytes(crlf)
+    baseline.save(bl, payload)
+    assert bl.read_bytes() == crlf  # an existing CRLF file stays CRLF
+
+    bl.write_bytes(b"\xef\xbb\xbf" + crlf)
+    baseline.save(bl, payload)
+    assert bl.read_bytes() == b"\xef\xbb\xbf" + crlf  # and keeps its BOM

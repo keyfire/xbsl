@@ -266,3 +266,54 @@ def test_lint_paths_can_add_a_rule_that_is_off_by_default(tmp_path, monkeypatch)
         assert len(added["diagnostics"]) > len(default["diagnostics"])
     finally:
         sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_over_a_few_files_judges_their_entries_alone(tmp_path, monkeypatch):
+    """The entries of files the request did not name are not stale - nobody looked at them.
+
+    One server, one baseline, one minute apart: a request for two files answered
+    `baselined: 0, baseline_stale: 76`, a request for the project `baselined: 74,
+    baseline_stale: 4`. The whole baseline was being weighed against a partial run.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        first = project / "А.xbsl"
+        second = project / "Б.xbsl"
+        first.write_text(_TRAILING, encoding="utf-8")
+        second.write_text(_TRAILING, encoding="utf-8")
+        cli.main(["--write-baseline", str(tmp_path / ".xbsllint-baseline"),
+                  "--ignore", _NO_PAIR[0], str(first), str(second)])
+
+        part = m.lint_paths([str(first)], ignore=_NO_PAIR)["summary"]
+        whole = m.lint_paths([str(project)], ignore=_NO_PAIR)["summary"]
+
+        assert part["baselined"] == 1
+        assert part["baseline_stale"] == 0 and part["baseline_unused"] == 0
+        assert part["baseline_not_checked"] == 1 and part["baseline_not_checked_paths"] == 1
+        assert whole["baselined"] == 2 and whole["baseline_stale"] == 0
+        assert "baseline_not_checked" not in whole
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_names_the_engine_and_the_rule_set_it_judged_by(tmp_path, monkeypatch):
+    """Two environments answering differently about one tree must SAY what they ran with."""
+    from xbsl import __version__
+
+    m = _with_stub(monkeypatch)
+    try:
+        f = tmp_path / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+
+        summary = m.lint_paths([str(f)], ignore=_NO_PAIR)["summary"]
+
+        assert summary["engine"] == __version__
+        assert isinstance(summary["plugins"], list)
+        rules = summary["rules"]
+        assert set(rules) == {"active", "total", "plugin"}
+        assert 0 < rules["active"] < rules["total"]  # one rule ignored, some off by default
+        assert 0 <= rules["plugin"] <= rules["active"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
