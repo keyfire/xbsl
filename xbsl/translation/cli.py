@@ -176,6 +176,22 @@ MESSAGES = {
         "ru": "покрытие по объектам (только неполные):",
         "en": "coverage by object (incomplete only):",
     },
+    "translate.verdict-ready": {
+        "ru": "ГОТОВО",
+        "en": "READY",
+    },
+    "translate.verdict-not-ready": {
+        "ru": "НЕ ГОТОВО: токенов {tokens}, фраз {phrases}{tail}",
+        "en": "NOT READY: tokens {tokens}, phrases {phrases}{tail}",
+    },
+    "translate.verdict-platform": {
+        "ru": "; пробелов данных платформы {platform}",
+        "en": "; platform data gaps {platform}",
+    },
+    "translate.verdict-problems": {
+        "ru": "; проблем {problems}",
+        "en": "; problems {problems}",
+    },
     "translate.entries-header": {
         "ru": "записей словаря: {shown} из {total}",
         "en": "dictionary entries: {shown} of {total}",
@@ -340,14 +356,44 @@ def cli_main(argv: list[str] | None = None) -> int:
     else:
         _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
 
-    totals = report.totals()
-    # A platform gap fails the gate as an untranslated name does, and for the same reason: the
-    # name stays Cyrillic in the translated tree, so the build refuses it. It is named apart in
-    # the report because the CURE is different - not a dictionary entry, which the compiler
-    # would refuse, but the platform data.
-    if args.strict and (totals["missing"] or totals["platform_gaps"] or report.problems):
+    if args.strict and not _ready(report):
         return 1
     return 0
+
+
+def _ready(report) -> bool:
+    """Whether the translated tree would build: nothing left in Cyrillic, no problems.
+
+    One answer for the exit code of `--strict` and the verdict line of the report, so the two
+    cannot drift apart. A platform gap fails the gate as an untranslated name does, and for
+    the same reason: the name stays Cyrillic in the translated tree, so the build refuses it.
+    It is named apart in the report because the CURE is different - not a dictionary entry,
+    which the compiler would refuse, but the platform data.
+    """
+    totals = report.totals()
+    return not (totals["missing"] or totals["platform_gaps"] or report.problems)
+
+
+def _verdict(report) -> str:
+    """The LAST line of the text report: READY, or NOT READY with what stands in the way.
+
+    The report used to end the same way with zero gaps and with hundreds - the coverage, then
+    the incomplete objects - and a log read from its tail passed a tree with hundreds of
+    Russian names as done. The counts are the distinct tokens and phrases of the summary line,
+    so the verdict and the summary speak of the same things.
+    """
+    if _ready(report):
+        return i18n.t("translate.verdict-ready")
+    totals = report.totals()
+    tail = ""
+    if totals["platform_gaps"]:
+        tail += i18n.t("translate.verdict-platform", platform=totals["platform_gaps"])
+    if report.problems:
+        tail += i18n.t("translate.verdict-problems", problems=len(report.problems))
+    return i18n.t(
+        "translate.verdict-not-ready",
+        tokens=totals["missing_tokens"], phrases=totals["missing_phrases"], tail=tail,
+    )
 
 
 def _load_dictionary(paths, root, dictionary_module):
@@ -386,6 +432,7 @@ def _as_json(report, args, dictionary: Path | None) -> dict:
     out = {
         "dictionary": str(dictionary) if dictionary else None,
         "totals": report.totals(),
+        "ready": _ready(report),
         "problems": report.problems,
         "missing_tokens": report.merged_missing_tokens(),
         "missing_phrases": report.merged_missing_phrases(),
@@ -462,6 +509,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
         ))
     if args.out:
         print(i18n.t("translate.written", count=report.written, out=args.out))
+    # Last on purpose - whatever else the report prints, the tail of the log is the verdict.
+    print(_verdict(report))
 
 
 # --- the table modes ---------------------------------------------------------------------
