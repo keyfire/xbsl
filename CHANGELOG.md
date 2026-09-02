@@ -12,9 +12,17 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-09-02 – 0.89.0, 0.90.0
+## 2026-09-02 – 0.89.0, 0.90.0, 0.91.0
 
 ### Added
+- **`meta_add_field` knows the built-in attributes.** `Number` and `Date` of a document, `Code`,
+  `Name` and `Owner` of a catalog are judged by their own descriptor class - the way
+  `metadata_schema` already dispatched them - so `Length`, `Uniqueness` and the `Autonumbering`
+  block are accepted instead of being refused as unknown properties of a regular attribute,
+  and `type` may be omitted where the class fixes it. Property values take a nested block as a
+  dict or a dotted key and a list as a sequence (CLI `--prop`, LSP and MCP alike); a block of a
+  class the metamodel does not describe is refused by name as a known limitation.
+  `meta_set_field_property` takes the same shapes and replaces a nested block whole.
 - **`lint_paths` takes `root` like the `meta_*` tools do.** Relative `paths` and `baseline`
   resolve against the caller's root rather than the server's working directory, so a session
   in a git worktree no longer checks the other checkout and reads its clean answer as its own;
@@ -36,6 +44,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   third tree.
 
 ### Changed
+- **The visibility rules read bindings and qualified names.** A probe applied on a server
+  refused a binding to a non-public element of another subsystem, a qualified
+  `Subsystem::Element` binding and a qualified call from code with the same
+  `Type "..." is invisible due to visibility modifier` the type positions get, so
+  `yaml/foreign-not-public` now judges the roots of binding chains (less what the paired
+  module declares) and qualified names in bindings and type positions, and
+  `code/foreign-not-public` judges qualified names too - by the subsystem they name.
+  The import rules keep leaving the qualified form alone: it needs no import.
 - **`xbsl translate` ends with a verdict line**, `READY` / `NOT READY: tokens N, phrases M` –
   the tail of a log no longer reads as success with hundreds of gaps; the json report carries
   `ready`, the exit code is unchanged.
@@ -51,6 +67,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   class-declared type pairs – the data needs regenerating to pick them up.
 
 ### Fixed
+- **Two parity gaps closed: `yaml/unexpected-type-argument` and `yaml/enum-needs-nullable`
+  judge an English tree as they judge a Russian one.** The first gated on the `Тип:` key alone
+  and canonized neither the component nor the type head, and would have reported the English
+  default as a stranger; now the key, the component, the property and the head are canonized
+  and the argument is compared with the default name by name in either spelling. The second
+  recognized the input field by a hand-written `InputField`, which no serializer writes: the
+  platform spells it `Edit`, and the spellings come from the data. `code/reserved-name` now
+  reports the capitalized `Type` too - a live apply refused it like `Тип` and `type`. 41 parity
+  seeds, 0 disagreements, 1 known gap left (the member catalog).
 - **The term extractor fills the gaps of the common table with the terms classes state.** The
   built-in code attribute had no common spelling: a dozen classes state the term `Code`, and
   the neighbourhood reading refuses `Code` as an English candidate because a class-file
