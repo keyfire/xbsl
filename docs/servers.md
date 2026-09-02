@@ -110,8 +110,8 @@ entries never means reading the files.
 
 | Tool | What it does |
 |---|---|
-| `meta_add_field(yaml_path, field_kind, name, type, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, tabular section |
-| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists |
+| `meta_add_field(yaml_path, field_kind, name, type, props, ...)` | add a section item: attribute, dimension, resource, enumeration value, parameter, field, tabular section. A built-in attribute (`Number`, `Date`, `Code`, `Name`, `Owner`) is judged by its own class, so `Length`, `Uniqueness` and the `Autonumbering` block are accepted and `type` may be omitted where the class fixes it; `props` takes a nested block as a dict or a dotted key (`Autonumbering.Prefix`) and a list as a sequence; a block of a class the metamodel does not describe (`Presentation`) is refused as a known limitation |
+| `meta_set_field_property(yaml_path, field_kind, name, props, ...)` | set properties on a section item that already exists; the same value shapes as `meta_add_field`, a nested block replaces the old one whole |
 | `meta_add_route(yaml_path, routes, template, methods)` | add url templates to an `HttpService` plus the handler stubs |
 | `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |
 | `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | generate forms for an object and register them in its `Interface` |

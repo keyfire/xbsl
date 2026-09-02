@@ -361,9 +361,9 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--type TYPE` | the field type (default String) |
+| `--type TYPE` | the field type (default String; a standard attribute takes its class default) |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
-| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-route`
@@ -530,7 +530,7 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | Option | Description |
 |---|---|
 | `-h, --help` | show this help message and exit |
-| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address |
+| `--prop КЛЮЧ=ЗНАЧЕНИЕ` | an item property (repeatable): DefaultValue=https://example.com, Presentation=Service address; a nested block by a dotted key: Autonumbering.Prefix=RQ |
 | `--tabular TABULAR` | tabular section name (the attribute is added into it) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
