@@ -20,6 +20,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   in a git worktree no longer checks the other checkout and reads its clean answer as its own;
   the diagnostics carry absolute paths and the summary names the `root`.
 
+### Fixed
+- **The term extractor fills the gaps of the common table with the terms classes state.** The
+  built-in code attribute had no common spelling: a dozen classes state the term `Code`, and
+  the neighbourhood reading refuses `Code` as an English candidate because a class-file
+  attribute is named so. With the pair absent, `yaml/unknown-attribute-property` tolerated the
+  keys of the code attribute on every ASCII-named attribute of an English tree - `Length` on a
+  number went unreported. A stated term answers only where the neighbourhood settled nothing,
+  so the settled spellings stay; data rebuilt with the fix carries the pair.
+
 ## 2026-09-02 – 0.89.0
 
 ### Added

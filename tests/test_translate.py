@@ -642,12 +642,20 @@ def test_gaps_carry_count_place_and_suggestion(tmp_path: Path):
     assert gaps["пояснение"].kind == "phrase"
 
 
-def test_internal_platform_names_are_not_suggested():
-    """A metadata class name is not a translation - offering it would look authoritative."""
-    from xbsl.translation import entries
+def test_internal_platform_names_are_not_suggested(monkeypatch):
+    """A metadata class name is not a translation - offering it would look authoritative.
 
-    assert entries._suggestion("Код") == ""      # the dictionary only knows `CodeAttrMd`
+    The built-in code attribute used to be the live case: its only pair was the class name
+    `CodeAttrMd`, read off a stale overlay. The data now carries the pair the classes state,
+    so the class-shaped answer is planted here and the honest one is checked as it is.
+    """
+    from xbsl.translation import entries, platform_map
+
+    assert entries._suggestion("Код") == "Code"
     assert entries._suggestion("Объект") == "Object"
+    monkeypatch.setattr(platform_map, "ident_english", lambda name: "CodeAttrMd")
+    monkeypatch.setattr(platform_map, "member_english", lambda name: None)
+    assert entries._suggestion("Код") == ""
 
 
 def test_rule_finding_carries_machine_readable_data(tmp_path: Path):

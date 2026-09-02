@@ -128,3 +128,60 @@ def test_the_scan_files_declared_members_under_the_type_and_reports_the_type_pai
     # The neighbourhood reading of the class stays under the class name, as it always did.
     assert members["UserFavoritesItemConstants"]["Ссылка"] == "Link"
     assert types == {"ЭлементИзбранногоПользователя": "UserFavoritesItem"}
+
+
+def test_a_term_a_class_states_reaches_the_common_table_past_the_adjacency_filter():
+    """`Code` names a class-file attribute and is never an English candidate of the
+    neighbourhood reading, so the built-in code attribute had no common spelling at all -
+    although a dozen classes state the term `Code`. A stated term is the platform's own
+    word and answers where the neighbourhood settled nothing; a class named after no type
+    files no type and no member by it."""
+    import io
+    import zipfile
+
+    from test_extract_classcode import TERM, _class_of_terms
+
+    from xbsl.extract.terms import _scan_meta_objects
+
+    blob = _class_of_terms([("CODE_ATTR_NAME", TERM, ["Code", "Код"])])
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        z.writestr("demo/metadata/CodeAttributeMetadata.class", blob)
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
+
+    members, common, types = _scan_meta_objects(zipfile.ZipFile(car))
+
+    assert common == {"Код": "Code"}
+    assert types == {}
+    assert "CodeAttributeMetadata" not in members
+
+
+def test_a_stated_term_does_not_unsettle_a_word_the_neighbourhood_knows():
+    """A class states its OWN vocabulary: mixed into the flat count, the statements of a dozen
+    classes broke the dominance of fifteen settled words on a real distribution. So a stated
+    term answers only where the neighbourhood settled nothing - here the word for rows is read
+    by adjacency as `Rows` in two classes against one `Lines`, which settles nothing either
+    way, and the statements of the same classes add no third opinion."""
+    import io
+    import zipfile
+
+    from test_extract_classcode import TERM, _class_of_terms
+
+    from xbsl.extract.terms import _scan_meta_objects
+
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        for index in range(2):
+            z.writestr(f"demo/rows/Table{index}.class",
+                       _class_of_terms([("ROWS_PROPERTY_TERM", TERM, ["Rows", "Строки"])]))
+        z.writestr("demo/text/Editor.class",
+                   _class_of_terms([("LINES_PROPERTY_TERM", TERM, ["Lines", "Строки"])]))
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
+
+    _members, common, _types = _scan_meta_objects(zipfile.ZipFile(car))
+
+    assert "Строки" not in common  # two against one is not dominance, as it never was

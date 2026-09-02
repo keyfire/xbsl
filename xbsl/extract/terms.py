@@ -167,7 +167,14 @@ def _is_type_field(field: str, english: str) -> bool:
     return bool(_TYPE_FIELD_RE.match(field)) or field == _SNAKE_RE.sub("_", english).upper() + "_TERM"
 
 
-def _declared_type(simple: str, blob: bytes) -> tuple[str, str, dict[str, str]] | None:
+def _is_term_pair(en: str, ru: str) -> bool:
+    """Whether a stated term is a spelling pair: an English name against a Russian one."""
+    return bool(_EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru))
+
+
+def _declared_type(
+    simple: str, blob: bytes, found: list[tuple[str, str, str]] | None = None,
+) -> tuple[str, str, dict[str, str]] | None:
     """(English type, Russian type, {Russian member: English}) a class states as TERMS, or None.
 
     A `<Type>Constants` class stores the type's own term and one term per member into named
@@ -185,25 +192,31 @@ def _declared_type(simple: str, blob: bytes) -> tuple[str, str, dict[str, str]] 
     """
     if not _TYPE_CLASS_RE.search(simple):
         return None
-    found = classcode.declared_terms(blob)
+    if found is None:
+        found = classcode.declared_terms(blob)
     if not found:
         return None
-
-    def is_pair(en: str, ru: str) -> bool:
-        return bool(_EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru))
-
     named = [
         (en, ru) for field, en, ru in found
-        if is_pair(en, ru) and simple.startswith(en) and _is_type_field(field, en)
+        if _is_term_pair(en, ru) and simple.startswith(en) and _is_type_field(field, en)
     ]
     if not named:
         return None
     english, russian = max(named, key=lambda pair: len(pair[0]))
     members = {
         ru: en for field, en, ru in found
-        if field.endswith(classcode.MEMBER_TERM_SUFFIXES) and is_pair(en, ru)
+        if field.endswith(classcode.MEMBER_TERM_SUFFIXES) and _is_term_pair(en, ru)
     }
     return english, russian, members
+
+
+def _dominant(counter: Counter) -> str | None:
+    """The spelling a counter settles on, or None when two of them are too close to call."""
+    ranked = counter.most_common(2)
+    best, best_n = ranked[0]
+    if len(ranked) == 1 or best_n >= ranked[1][1] * _DOMINANCE:
+        return best
+    return None
 
 
 def _scan_meta_objects(
@@ -212,13 +225,15 @@ def _scan_meta_objects(
     """({owner type: {ru: en}}, {ru: en}, {ru type: en type}) from the compiled classes.
 
     The third table is the types the classes DECLARE as terms (see _declared_type) - the
-    pairs of the types the reference pages never describe.
+    pairs of the types the reference pages never describe. The flat table is the
+    neighbourhood's, and the terms the classes state answer where it settled nothing.
 
     A class without a single Cyrillic byte cannot hold a pair and is skipped before parsing -
     that check alone drops the overwhelming majority of the classes.
     """
     members: dict[str, dict[str, str]] = defaultdict(dict)
     variants: dict[str, Counter] = defaultdict(Counter)
+    stated_variants: dict[str, Counter] = defaultdict(Counter)
     declared_types: dict[str, str] = {}
     for entry in car.namelist():
         if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
@@ -253,8 +268,9 @@ def _scan_meta_objects(
                 without = _query_untranslated(names)
                 pairs = [(en, ru) for en, ru in pairs if ru not in without]
             simple = inner.rsplit("/", 1)[-1][:-len(".class")]
-            stated = _declared_type(simple, data) if _DECLARES_TERMS_RE.search(data) else None
-            if not pairs and stated is None:
+            found = classcode.declared_terms(data) if _DECLARES_TERMS_RE.search(data) else []
+            stated = _declared_type(simple, data, found) if found else None
+            if not pairs and not found:
                 continue
             owner = _META_SUFFIX.sub("", simple)
             # A class STATES its members, and a statement beats the neighbourhood: adjacency
@@ -267,6 +283,18 @@ def _scan_meta_objects(
             for ru, en in resolved.items():
                 members[owner][ru] = en
                 variants[ru][en] += 1
+            # A TERM a class states is a spelling the platform wrote down itself. It is counted
+            # apart from the neighbourhood - once per class and pair - and answers only where
+            # the neighbourhood settled nothing (see below): a class states its OWN vocabulary,
+            # and mixed into the flat count the statements of a dozen classes broke the
+            # dominance of fifteen settled words. The gap it exists for: the built-in code
+            # attribute had no common spelling - a dozen classes state the term `Code`, and
+            # adjacency reads none of them, because `Code` also names a class-file attribute
+            # and is refused as an English candidate on that ground; the two declarations that
+            # do name it are outweighed by one neighbour reading the class name instead.
+            for en, ru in {(en, ru) for _field, en, ru in found if _is_term_pair(en, ru)}:
+                if resolved.get(ru) != en:
+                    stated_variants[ru][en] += 1
             if stated:
                 # The members a class states as TERMS are the TYPE's, filed under the type
                 # the class is named after - the row a receiver of that type is looked up by.
@@ -279,9 +307,16 @@ def _scan_meta_objects(
                     members[english][ru] = en
     common: dict[str, str] = {}
     for ru, counter in variants.items():
-        ranked = counter.most_common(2)
-        best, best_n = ranked[0]
-        if len(ranked) == 1 or best_n >= ranked[1][1] * _DOMINANCE:
+        best = _dominant(counter)
+        if best:
+            common[ru] = best
+    # The statements answer where the neighbourhood settled nothing: a word it never met, or
+    # one it left between two spellings. A word it settled keeps its spelling.
+    for ru, counter in stated_variants.items():
+        if ru in common:
+            continue
+        best = _dominant(counter)
+        if best:
             common[ru] = best
     return (
         {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())},
