@@ -166,7 +166,9 @@ Three counters are kept apart on purpose: the DICTIONARY's coverage (the number 
 towards 100%), the platform DATA gaps (nothing a dictionary entry should paper over) and the
 Cyrillic scalars left alone as data (listed so a reviewer can confirm they really are data).
 
-The dictionary is discovered next to the project and above it; `--dictionary` names it
+The dictionary is discovered next to the project and above it – a root with none is refused,
+the message naming the places looked at and a dictionary found below the root, if any;
+`--dictionary` names it
 explicitly (a file or a directory), and `--target` names the file NEW entries land in
 (`090-manual.yaml` by default); `--comment` is the head line such a file is created with,
 which is the place to say what the batch is about. `--format json` hands the whole report
@@ -238,7 +240,8 @@ class such as `CodeAttrMd`) is never offered at all.
 **The MCP tools** are the same four, for an agent that fills the dictionary:
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
-- `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`);
+- `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
+  the answer naming the `dictionary` it read;
   `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an
   answer when the full rows would not;
 - `translate_entries` - what the dictionary already says, with the file and line of each

@@ -12,6 +12,49 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-09-02 – 0.89.0
+
+### Added
+- **`code/foreign-not-public` (tier D, error, project-wide) – the code side of
+  `yaml/foreign-not-public`.** A module reaching an element of another subsystem left at
+  `VisibilityScope: InSubsystem` (or with no scope at all – the default) was refused by the
+  compiler on deploy while the linter stayed silent: `code/missing-import` deliberately leaves a
+  non-public target alone. Written type positions and the roots of `Module.Method()` chains are
+  judged; the project module belongs to no subsystem and is foreign to every one.
+- **`xbsl baseline add <paths> --rule <rule> [--reason ...]`** appends only the new findings of
+  one rule: a new file takes its sorted place, nothing else moves, recorded reasons stay, a
+  repeated call changes nothing; `--format json` answers `{baseline, added, findings, written}`.
+  Saving keeps the file's line endings and BOM; a new file is written with LF.
+- **Every `meta_*` MCP tool takes `root`** – the caller's root: relative paths resolve against
+  it instead of the server's working directory, and answers carry absolute paths plus `root`.
+- **Parity seeds: 27 new seeds over 14 rules** that judge by the platform vocabularies; a seed's
+  English twin is written by hand from the data and the translator's output is checked as a
+  third tree.
+
+### Changed
+- **`xbsl translate` ends with a verdict line**, `READY` / `NOT READY: tokens N, phrases M` –
+  the tail of a log no longer reads as success with hundreds of gaps; the json report carries
+  `ready`, the exit code is unchanged.
+- **The translation tools refuse a root without a dictionary** and name where one is looked for
+  (and where it sits when below the root); `translate_gaps` reports `dictionary`. The CLI does
+  the same: `--gaps` without a dictionary refuses, the report writes `dictionary` into its JSON.
+- **The baseline is judged only within the requested paths:** entries of other files are not
+  checked, never stale (an MCP request for two files answered "0 suppressed, 76 stale" on a
+  clean project). `baseline_not_checked` splits into `_rules` and `_paths`.
+- **The summary names what judged:** `engine`, `plugins` with versions, `rules {active, total,
+  plugin}` in the CLI json and MCP answers, a "Run set" line in text.
+- **The terms extractor files members declared by Constants classes under their type** and adds
+  class-declared type pairs – the data needs regenerating to pick them up.
+
+### Fixed
+- **A member of a local declared without a type is spelled by the inferred type** (constructor,
+  cast, literal), through the owner table walked up the base types (`Remove` on a map);
+  `code/unknown-member` accepts the ancestor's spelling.
+- **The default of a field typed by a project enumeration is translated inside interface
+  component properties too**, the type read the way `yaml/enum-default-value` reads it.
+- **Two English-tree blind spots:** `code/global-unavailable` did not recognize a global by its
+  English spelling, `yaml/unknown-type` never read the `Type:` key.
+
 ## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0, 0.88.1, 0.88.2
 
 ### Added

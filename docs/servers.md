@@ -51,6 +51,12 @@ Every writing `meta_*` tool applies the changes and returns the lint of the writ
 same response – creation and validation in one round trip. The core and the CLI do not require
 `mcp` – it lives only in the `[mcp]` extra.
 
+Every `meta_*` tool takes `root` – the caller's project root (an agent working in a git
+worktree does not share the server's working directory): relative `directory`, `yaml_path`,
+`module_path` and the like resolve against it, and the answer carries the absolute paths of the
+written files plus the `root` they were resolved from. Without it the server's own working
+directory is used, as before.
+
 **Checking and the environment**
 
 | Tool | What it does |
@@ -77,8 +83,8 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 
 | Tool | What it does |
 |---|---|
-| `translate_status(root, dictionary)` | the coverage and what is left - the cheap check before deciding anything |
-| `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row |
+| `translate_status(root)` | the coverage and what is left - the cheap check before deciding anything; a root without a dictionary is refused, the answer naming where one is looked for |
+| `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row; the answer names the `dictionary` it read |
 | `translate_entries(root, kind, filter, limit, offset)` | what the dictionary already says, with the file and line of each entry |
 | `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place, or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format or the JSON list), `comment` is the head line a newly created file gets |
 

@@ -286,7 +286,7 @@ def page(lang: str) -> str:
               "Не редактировать вручную. -->\n\n")
     out.write(t["intro"] + "\n\n")
     out.write(f"## {t['common']}\n\n" + render(root_help, t))
-    for name in (*cli._SERVER_COMMANDS, "templates", "self-update"):
+    for name in (*cli._SERVER_COMMANDS, "templates", "baseline", "self-update"):
         section(out, name, lang, t)
     out.write(f"## {t['scaffold']}\n\n{t['scaffold_intro']}\n\n")
     for name in cli._META_COMMANDS:

@@ -37,7 +37,7 @@ to the current directory – run it from the repository root and save the output
 
 ## Rules in depth
 
-**The full list of all 185 rules of the base set** (severity, default state, scope, links to
+**The full list of all 186 rules of the base set** (severity, default state, scope, links to
 platform documentation sections) is in [RULES.md](/RULES);
 at runtime – `xbsl --list-rules`, which also counts in the rules and severity overrides of the
 installed plugins. The tier overview is in the README; below is what the deeper
@@ -108,6 +108,16 @@ a narrowing `--select`, by being off by default, by being unknown to the install
 produces no findings by construction, and calling its entries stale would declare the debt
 paid without looking. Those are counted apart ("baseline entries not checked", the
 `baseline_not_checked` key in json), and `--prune-baseline` leaves them alone.
+
+`xbsl baseline add <paths> --rule <rule> [--reason ...]` freezes one finding at a time: it runs
+the named rule over the given paths and appends only the findings the baseline does not cover
+yet – a new file takes its sorted place, nothing else moves, recorded reasons stay, and a
+repeated call changes nothing (`--format json` answers `{baseline, added, findings, written}`).
+The baseline is judged only within the requested paths: entries of files outside them are not
+checked rather than stale, and `baseline_not_checked` splits into `_rules` and `_paths`. The
+summary names what judged the run – `engine`, `plugins` with versions, `rules {active, total,
+plugin}` in json and a "Run set" line in text – so two environments disagreeing about one tree
+show their difference at once.
 
 ## Use in CI
 

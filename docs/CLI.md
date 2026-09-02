@@ -65,6 +65,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `mcp` | MCP server for the agent |
 | `web` | web panel |
 | `templates` | code templates: list, export, import, save |
+| `baseline` | the baseline of frozen findings: add - append one rule's findings with a reason |
 | `extract` | generate the language data from an Element distribution (`--dist`) |
 | `data-diff` | compare two data versions: what changed in the platform |
 | `translate` | translate the project sources into English spellings |
@@ -211,6 +212,55 @@ usage: xbsl templates save [-h] [--file FILE]
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--file FILE` | the user's templates file (default .xbsl-templates.json); it extends the builtin set and overrides same-named templates |
+
+## `xbsl baseline`
+
+Baseline: targeted edits of the frozen findings file.
+
+```bash
+usage: xbsl baseline [-h] {add} ...
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `add` | append the new findings of one rule under the given paths to the baseline: order and other reasons stay untouched, a repeated call changes nothing |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+
+### `xbsl baseline add`
+
+```bash
+usage: xbsl baseline add [-h] --rule ID/GROUP/TIER [--reason REASON] [--baseline FILE]
+                         [--format {text,json}] [--jobs N] [--lang {ru,en}]
+                         [--element-version VERSION] [--data-dir DIR]
+                         paths [paths ...]
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `paths` | files or directories whose findings to freeze |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--rule ID/GROUP/TIER` | the rule (a group or a tier - as in `--select`) whose findings to append; repeatable |
+| `--reason REASON` | the reason for the exclusion: written on new entries and on entries without one, recorded reasons are never replaced |
+| `--baseline FILE` | the baseline file; without the flag .xbsllint-baseline is looked up above the checked paths |
+| `--format {text,json}` | output format: text - the list of what was added, json - {baseline, added, findings, written} |
+| `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
+| `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
+| `--element-version VERSION` | Element data version (default: the latest in the bundle) |
+| `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
 
 ## `xbsl self-update`
 

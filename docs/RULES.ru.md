@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 185.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 186.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -182,6 +182,7 @@ sidebar:
 | `code/unknown-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Обращение к отсутствующему члену переменной известного stdlib-типа – простого или дженерика, у которого аргументы типизируют члены, но не называют их (первый шаг цепочки, у опечаток подсказка) |
 | `code/unknown-static-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к отсутствующему члену по имени типа (`ДатаВремя.Минимальная()`); тип результата такого вызова переносится на следующий шаг цепочки. Голое имя читается как тип, только если проект не придаёт ему другого смысла; парный yaml модуля учитывается и при проверке одиночного файла |
 | `yaml/foreign-not-public` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ссылка из yaml (позиция типа или цель навигации `ТипФормы`) на элемент чужой подсистемы, у которого `ОбластьВидимости` не `ВПроекте`/`Глобально` – снаружи своей подсистемы он недоступен, и импорт не поможет [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/foreign-not-public` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Модуль называет элемент чужой подсистемы, у которого `ОбластьВидимости` не `ВПроекте`/`Глобально` – в записанной позиции типа или корнем цепочки `Модуль.Метод()`: компилятор отвергает обращение на этой строке, импорт не поможет, аннотация `@ВПроекте` на методе тоже. Модуль проекта не принадлежит ни одной подсистеме, и всякий непубличный элемент для него чужой [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `code/call-arity-cross` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Число аргументов вызова `Модуль.Метод(...)` вне диапазона сигнатуры модуля-адресата [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/undefined-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Неизвестное имя в выражении (опечатки вида `Адресар` вместо `Адреса`) и в короткой интерполяции строки (`"?$format=json"` – подстановка имени `format`, нужен `\$`) – компилятор такой код отвергает |
 | `code/unknown-object-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Неизвестный тип объекта проекта |

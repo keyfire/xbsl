@@ -97,7 +97,7 @@ def test_parser_shapes_match_between_languages():
 
 def command_sections() -> set[str]:
     """The sections both pages must carry: servers, templates, self-update, scaffolding."""
-    return {f"xbsl {name}" for name in (*cli._SERVER_COMMANDS, "templates", "self-update",
+    return {f"xbsl {name}" for name in (*cli._SERVER_COMMANDS, "templates", "baseline", "self-update",
                                         *cli._META_COMMANDS)}
 
 
@@ -130,7 +130,7 @@ _SERVER_DEPS = {("mcp",): "mcp", ("lsp",): "pygls"}
 
 @pytest.mark.parametrize(
     "command",
-    [(), ("mcp",), ("lsp",), ("web",), ("templates",), ("self-update",), ("new-object",)],
+    [(), ("mcp",), ("lsp",), ("web",), ("templates",), ("baseline",), ("self-update",), ("new-object",)],
 )
 def test_help_answers_within_timeout(command):
     # `xbsl mcp --help` used to start the MCP server and wait on stdin instead of answering

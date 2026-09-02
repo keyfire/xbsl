@@ -110,6 +110,7 @@ def _commands_help() -> str:
     entries += [(name, i18n.t(f"cli.help.server.{name}")) for name in _SERVER_COMMANDS]
     entries += [
         ("templates", i18n.t("cli.help.commands.templates")),
+        ("baseline", i18n.t("cli.help.commands.baseline")),
         ("extract", i18n.t("cli.help.commands.extract")),
         ("data-diff", i18n.t("cli.help.commands.data-diff")),
         ("translate", i18n.t("cli.help.commands.translate")),

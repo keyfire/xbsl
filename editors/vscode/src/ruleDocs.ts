@@ -155,7 +155,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "yaml/missing-import", page: MODULAR, anchor: "импорт-пространств-имен" },
   { match: (r) => r === "yaml/presentation-field", page: "topics/element-view" },
   {
-    match: (r) => r === "yaml/foreign-not-public",
+    match: (r) => r === "yaml/foreign-not-public" || r === "code/foreign-not-public",
     page: MODULAR,
     anchor: "область-видимости-элемента-проекта",
   },
