@@ -353,6 +353,7 @@ def test_mcp_meta_yaml_path_resolves_against_root(mcp_module, tmp_path, monkeypa
     assert info["root"] == str(root)
 
 
+@pytest.mark.needs_data  # the written files are linted, and linting tokenizes them - needs language.json
 def test_mcp_meta_project_info_answers_absolute_paths_for_a_relative_root(
     mcp_module, tmp_path, monkeypatch,
 ):
@@ -368,6 +369,7 @@ def test_mcp_meta_project_info_answers_absolute_paths_for_a_relative_root(
     ]
 
 
+@pytest.mark.needs_data  # the written files are linted, and linting tokenizes them - needs language.json
 def test_mcp_meta_form_tools_resolve_against_root(mcp_module, tmp_path, monkeypatch):
     _server_cwd, root = _elsewhere(tmp_path, monkeypatch)
     mcp_module.meta_new_object("Main", "Справочник", "Задачи", root=str(root))
@@ -389,6 +391,7 @@ def test_mcp_meta_form_tools_resolve_against_root(mcp_module, tmp_path, monkeypa
     assert bound["root"] == str(root)
 
 
+@pytest.mark.needs_data  # the written files are linted, and linting tokenizes them - needs language.json
 def test_mcp_meta_module_and_subsystem_tools_resolve_against_root(
     mcp_module, tmp_path, monkeypatch,
 ):
