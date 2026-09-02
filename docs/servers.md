@@ -51,17 +51,18 @@ Every writing `meta_*` tool applies the changes and returns the lint of the writ
 same response – creation and validation in one round trip. The core and the CLI do not require
 `mcp` – it lives only in the `[mcp]` extra.
 
-Every `meta_*` tool takes `root` – the caller's project root (an agent working in a git
-worktree does not share the server's working directory): relative `directory`, `yaml_path`,
-`module_path` and the like resolve against it, and the answer carries the absolute paths of the
-written files plus the `root` they were resolved from. Without it the server's own working
-directory is used, as before.
+Every `meta_*` tool and `lint_paths` take `root` – the caller's project root (an agent working
+in a git worktree does not share the server's working directory): relative `directory`,
+`yaml_path`, `module_path`, `paths` and `baseline` resolve against it, and the answer carries
+absolute paths (of the written files, of the diagnostics) plus the `root` they were resolved
+from. Without it the server's own working directory is used, as before – and a relative path
+from a worktree then names the other checkout, whose clean answer looks like yours.
 
 **Checking and the environment**
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, enable, baseline, no_baseline)` | check files and directories on disk; the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root)` | check files and directories on disk (relative paths – against `root`, the summary names it); the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `list_rules()` | the rules available here: id, title, tier, scope, severity |
 | `version_info()` | the environment answering: engine, interpreter, data version, plugins – tells apart two environments that answer differently on the same file |

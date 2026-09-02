@@ -149,7 +149,48 @@ def _through_baseline(
     return kept, summary
 
 
+# Paths. The server's working directory is where the CLIENT started it, not where the caller
+# works: a session in a git worktree that passed `vendor/app/Main` had its files created in
+# the main checkout, and the answer's relative paths looked right. So every meta_* tool, and
+# lint_paths with them, takes `root` - the caller's project or repository root - resolves
+# relative paths against it (an absolute path stands as it is) and answers with absolute
+# paths plus the root they were counted from, so the two trees can be told apart without a
+# find. Without `root` the server's own working directory serves, as before. The tools whose
+# operand IS a root (project_info, add_form, rename_object ...) take it as their first,
+# required parameter; the tools addressing a file take it as the optional last one.
+
+_ROOT_NOTE = (
+    "root – the caller's project or repository root, an absolute path: relative paths above\n"
+    "resolve against it, and the answer names it as `root` next to absolute file paths.\n"
+    "Without it the server's own working directory serves, which for a session started\n"
+    "elsewhere (a git worktree) is another checkout - so pass it."
+)
+
+
+def _documents_root(fn):
+    """Append the shared note on `root` to a tool description.
+
+    FastMCP reads __doc__ when @mcp.tool() registers the function, so this decorator sits
+    under it; the note is one text for the whole family rather than a copy per tool.
+    """
+    fn.__doc__ = f"{(fn.__doc__ or '').rstrip()}\n\n{_ROOT_NOTE}\n"
+    return fn
+
+
+def _base(root: str | None) -> Path:
+    """The directory relative paths resolve against: the caller's root, else the server's cwd."""
+    return Path(os.path.abspath(root)) if root else Path.cwd()
+
+
+def _under(base: Path, path: str | Path | None) -> Path | None:
+    """`path` against the base; an absolute path stands as it is, an absent one stays absent."""
+    if path is None or path == "":
+        return None
+    return Path(os.path.normpath(os.path.join(base, path)))
+
+
 @mcp.tool()
+@_documents_root
 def lint_paths(
     paths: list[str],
     select: list[str] | None = None,
@@ -157,6 +198,7 @@ def lint_paths(
     enable: list[str] | None = None,
     baseline: str | None = None,
     no_baseline: bool = False,
+    root: str | None = None,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -181,7 +223,10 @@ def lint_paths(
     {active, total, plugin} - the first place two environments disagreeing about one tree
     differ.
     """
-    files, requested = discover_with_context(paths)
+    base = _base(root)
+    asked = [str(_under(base, p)) for p in paths]
+    named = _under(base, baseline)
+    files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     diags = _filter_requested(
         run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
@@ -189,12 +234,13 @@ def lint_paths(
     counted = requested if requested is not None else files
     active = active_rules(*chosen)
     diags, extra = _through_baseline(
-        diags, counted, baseline, no_baseline, {r.id for r in active},
-        [Path(p) for p in paths],
+        diags, counted, str(named) if named else None, no_baseline, {r.id for r in active},
+        [Path(p) for p in asked],
     )
     payload = report.report(diags, len(counted))
     payload["summary"].update(environment.provenance(active))
     payload["summary"].update(extra)
+    payload["summary"]["root"] = str(base)
     return payload
 
 
@@ -405,46 +451,6 @@ def metadata_schema(
 # the written files ships in the same response. An operation failure is a structured error
 # field, not an exception: that makes branching easier for an agent.
 #
-# Paths. The server's working directory is where the CLIENT started it, not where the caller
-# works: a session in a git worktree that passed `vendor/app/Main` had its files created in
-# the main checkout, and the answer's relative paths looked right. So every meta_* tool takes
-# `root` - the caller's project or repository root - resolves relative paths against it (an
-# absolute path stands as it is) and answers with absolute paths plus the root they were
-# counted from, so the two trees can be told apart without a find. Without `root` the
-# server's own working directory serves, as before. The tools whose operand IS a root
-# (project_info, add_form, rename_object ...) take it as their first, required parameter;
-# the tools addressing a file take it as the optional last one.
-
-_ROOT_NOTE = (
-    "root – the caller's project or repository root, an absolute path: relative paths above\n"
-    "resolve against it, and the answer names it as `root` next to absolute file paths.\n"
-    "Without it the server's own working directory serves, which for a session started\n"
-    "elsewhere (a git worktree) is another checkout - so pass it."
-)
-
-
-def _documents_root(fn):
-    """Append the shared note on `root` to a tool description.
-
-    FastMCP reads __doc__ when @mcp.tool() registers the function, so this decorator sits
-    under it; the note is one text for the whole family rather than a copy per tool.
-    """
-    fn.__doc__ = f"{(fn.__doc__ or '').rstrip()}\n\n{_ROOT_NOTE}\n"
-    return fn
-
-
-def _base(root: str | None) -> Path:
-    """The directory relative paths resolve against: the caller's root, else the server's cwd."""
-    return Path(os.path.abspath(root)) if root else Path.cwd()
-
-
-def _under(base: Path, path: str | Path | None) -> Path | None:
-    """`path` against the base; an absolute path stands as it is, an absent one stays absent."""
-    if path is None or path == "":
-        return None
-    return Path(os.path.normpath(os.path.join(base, path)))
-
-
 def _absolute(payload: dict, base: Path) -> dict:
     """The answer with every file path absolute and the root they were counted from named."""
     for entry in payload.get("files", ()):
@@ -1251,7 +1257,6 @@ def meta_add_handler(
     out["methodAdded"] = outcome.plan.method_added
     out["module"] = str(_under(base, outcome.module_path))
     return out
-
 
 
 # --- translation dictionary -----------------------------------------------------------------

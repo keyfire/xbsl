@@ -12,6 +12,14 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`lint_paths` takes `root` like the `meta_*` tools do.** Relative `paths` and `baseline`
+  resolve against the caller's root rather than the server's working directory, so a session
+  in a git worktree no longer checks the other checkout and reads its clean answer as its own;
+  the diagnostics carry absolute paths and the summary names the `root`.
+
 ## 2026-09-02 – 0.89.0
 
 ### Added

@@ -4,6 +4,7 @@ import importlib
 import json
 import sys
 import types
+from pathlib import Path
 
 import pytest
 
@@ -238,6 +239,54 @@ def test_without_either_home_the_message_names_the_extra(monkeypatch):
     """Neither of the two - the extra is not installed, and the message says exactly that."""
     with pytest.raises(SystemExit, match=r"xbsl\[mcp\]"):
         _load_copy(monkeypatch, mcpserver=None, fastmcp=None)
+
+
+def test_lint_paths_resolves_relative_paths_against_the_callers_root(tmp_path, monkeypatch):
+    """A session in a git worktree names files relative to ITS checkout, while the server's
+    working directory is wherever the client started it: without `root` the relative path
+    named nothing (or the other checkout) and the answer looked clean. With `root` the paths
+    resolve against the caller's tree, the findings carry absolute paths and the summary
+    names the root they were counted from - as the meta_* tools do.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        (project / "Ч.xbsl").write_text(_TRAILING, encoding="utf-8")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        monkeypatch.chdir(elsewhere)
+
+        blind = m.lint_paths(["acme/Проба/Ч.xbsl"], ignore=_NO_PAIR)
+        res = m.lint_paths(["acme/Проба/Ч.xbsl"], ignore=_NO_PAIR, root=str(tmp_path))
+
+        assert blind["diagnostics"] == []
+        assert len(res["diagnostics"]) == 1
+        assert Path(res["diagnostics"][0]["path"]) == project / "Ч.xbsl"
+        assert res["summary"]["root"] == str(tmp_path)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_resolves_a_relative_baseline_against_the_root(tmp_path, monkeypatch):
+    """The named baseline is a path of the caller's tree as well."""
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "acme" / "Проба"
+        project.mkdir(parents=True)
+        f = project / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+        cli.main(["--write-baseline", str(tmp_path / "frozen.baseline"),
+                  "--ignore", _NO_PAIR[0], str(f)])
+        monkeypatch.chdir(tmp_path / "acme")
+
+        res = m.lint_paths(["acme/Проба/Ч.xbsl"], ignore=_NO_PAIR,
+                           baseline="frozen.baseline", root=str(tmp_path))
+
+        assert res["diagnostics"] == []
+        assert res["summary"]["baselined"] == 1
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
 
 
 def test_lint_paths_can_add_a_rule_that_is_off_by_default(tmp_path, monkeypatch):
