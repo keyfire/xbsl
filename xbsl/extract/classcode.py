@@ -64,6 +64,11 @@ TERM_FACTORIES = (
     "Term$TermWithHistory$Builder.add",
 )
 
+#: The suffixes of the static fields a Constants class stores a MEMBER term into - a
+#: property, a method, an event of the type. A parameter (`..._PARAM_TERM`), the namespace
+#: (`NS_TERM`) and the type's own term carry other suffixes and are not members.
+MEMBER_TERM_SUFFIXES = ("_PROPERTY_TERM", "_METHOD_TERM", "_EVENT_TERM")
+
 
 def constant_pool(blob: bytes) -> tuple[dict[int, tuple[int, object]], int]:
     """({index: (tag, value)}, the offset just past the pool).

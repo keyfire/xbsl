@@ -88,6 +88,9 @@ _META_SUFFIX = re.compile(r"(CtMetaObject|MetaObject|BslImpl)$")
 #: the test is a substring of the compiled reference, cheap enough to run on every class
 #: and far cheaper than walking the bytecode of one that declares nothing.
 _DECLARES_MEMBERS_RE = re.compile(rb"CtMeta(Method|Prop)Builder")
+#: A class states TERMS - a type and its members as pairs stored into named static fields
+#: (classcode.declared_terms) - only if it references one of the term factories.
+_DECLARES_TERMS_RE = re.compile(rb"Term|QNames")
 #: Jars of the platform itself - the only ones that can hold such classes.
 _PLATFORM_JAR_RE = re.compile(r"g5rt|_1c")
 _EN_NAME_RE = re.compile(r"^[A-Z][A-Za-z0-9_]*$")
@@ -147,14 +150,76 @@ def _constant_pool(data: bytes) -> list[str]:
     return [out[key] for key in sorted(out)]
 
 
-def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]], dict[str, str]]:
-    """({owner type: {ru: en}}, {ru: en}) from the compiled classes of the distribution.
+#: A class that may state the pair of a TYPE - the same shapes extract_stdlib reads the
+#: undocumented types from. Other classes store terms too, and a term is not a type because
+#: a class happens to be named after it: `NameGenerator` stores the `Name` of a yaml key,
+#: `CodeAttributeMetadata` the `Code` of an attribute, `ValueTerms` the query keyword `Value`.
+_TYPE_CLASS_RE = re.compile(r"(Constants|G5Type|G5Enum|CtMetaObject)$")
+#: The static field a type class stores its OWN term into. A Constants class also stores the
+#: element KIND it serves (`PROJECT_ELEMENT_KIND_TERM` - `CommonModule`, `Structure`), and a
+#: kind is not a type: only a field named for a type, or for the type itself (the English
+#: name in upper snake case plus `_TERM`), states one.
+_TYPE_FIELD_RE = re.compile(r"^(TYPE_NAME|TYPE_TERM|.*_TYPE_TERM)$")
+_SNAKE_RE = re.compile(r"(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+
+def _is_type_field(field: str, english: str) -> bool:
+    return bool(_TYPE_FIELD_RE.match(field)) or field == _SNAKE_RE.sub("_", english).upper() + "_TERM"
+
+
+def _declared_type(simple: str, blob: bytes) -> tuple[str, str, dict[str, str]] | None:
+    """(English type, Russian type, {Russian member: English}) a class states as TERMS, or None.
+
+    A `<Type>Constants` class stores the type's own term and one term per member into named
+    static fields; a `<Type>G5Type` class stores the type's term alone. The type is the term
+    the class is NAMED AFTER - its English spelling is a prefix of the class name
+    (`UserFavoritesItem` for `UserFavoritesItemConstants`), stored in a field that says it
+    is the type's own (see _is_type_field); the longest such when several fit. A class of
+    another shape, or one named after no type term it states, declares no type here. The
+    members are the fields whose suffix says they are one (a property, a method, an event):
+    a parameter term and the namespace term are neither.
+
+    Filed under the class name, as every other class is, these pairs answered no receiver a
+    program writes: no variable is of the type `UserFavoritesItemConstants`, and the link
+    property of a favorites item stayed `Reference` where the platform says `Link`.
+    """
+    if not _TYPE_CLASS_RE.search(simple):
+        return None
+    found = classcode.declared_terms(blob)
+    if not found:
+        return None
+
+    def is_pair(en: str, ru: str) -> bool:
+        return bool(_EN_NAME_RE.match(en) and _RU_NAME_RE.match(ru) and _CYRILLIC_RE.search(ru))
+
+    named = [
+        (en, ru) for field, en, ru in found
+        if is_pair(en, ru) and simple.startswith(en) and _is_type_field(field, en)
+    ]
+    if not named:
+        return None
+    english, russian = max(named, key=lambda pair: len(pair[0]))
+    members = {
+        ru: en for field, en, ru in found
+        if field.endswith(classcode.MEMBER_TERM_SUFFIXES) and is_pair(en, ru)
+    }
+    return english, russian, members
+
+
+def _scan_meta_objects(
+    car: zipfile.ZipFile,
+) -> tuple[dict[str, dict[str, str]], dict[str, str], dict[str, str]]:
+    """({owner type: {ru: en}}, {ru: en}, {ru type: en type}) from the compiled classes.
+
+    The third table is the types the classes DECLARE as terms (see _declared_type) - the
+    pairs of the types the reference pages never describe.
 
     A class without a single Cyrillic byte cannot hold a pair and is skipped before parsing -
     that check alone drops the overwhelming majority of the classes.
     """
     members: dict[str, dict[str, str]] = defaultdict(dict)
     variants: dict[str, Counter] = defaultdict(Counter)
+    declared_types: dict[str, str] = {}
     for entry in car.namelist():
         if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
             continue
@@ -187,9 +252,11 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
                 ]
                 without = _query_untranslated(names)
                 pairs = [(en, ru) for en, ru in pairs if ru not in without]
-            if not pairs:
+            simple = inner.rsplit("/", 1)[-1][:-len(".class")]
+            stated = _declared_type(simple, data) if _DECLARES_TERMS_RE.search(data) else None
+            if not pairs and stated is None:
                 continue
-            owner = _META_SUFFIX.sub("", inner.rsplit("/", 1)[-1][:-len(".class")])
+            owner = _META_SUFFIX.sub("", simple)
             # A class STATES its members, and a statement beats the neighbourhood: adjacency
             # named 2 of 2015 members wrongly, both confidently - the `CharAt` of a `String`
             # came out `Symbol`, which is the fill PARAMETER of `PadFromBegin`. Read only
@@ -200,13 +267,27 @@ def _scan_meta_objects(car: zipfile.ZipFile) -> tuple[dict[str, dict[str, str]],
             for ru, en in resolved.items():
                 members[owner][ru] = en
                 variants[ru][en] += 1
+            if stated:
+                # The members a class states as TERMS are the TYPE's, filed under the type
+                # the class is named after - the row a receiver of that type is looked up by.
+                # Only the stated pairs move there: the neighbourhood reading of the same class
+                # stays under the class name, so no adjacency noise reaches a row that answers.
+                # The pairs were counted above; a second count would tilt the common table.
+                english, russian, term_members = stated
+                declared_types.setdefault(russian, english)
+                for ru, en in term_members.items():
+                    members[english][ru] = en
     common: dict[str, str] = {}
     for ru, counter in variants.items():
         ranked = counter.most_common(2)
         best, best_n = ranked[0]
         if len(ranked) == 1 or best_n >= ranked[1][1] * _DOMINANCE:
             common[ru] = best
-    return {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())}, common
+    return (
+        {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())},
+        common,
+        dict(sorted(declared_types.items())),
+    )
 
 
 #: The serializer's own element-kind enum: what an English project writes into ElementKind.
@@ -374,9 +455,18 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
                     continue
 
     with zipfile.ZipFile(car) as z:
-        members, common = _scan_meta_objects(z)
+        members, common, declared_types = _scan_meta_objects(z)
         query = _scan_query_terms(z)
         kind_table = scan_kind_table(z)
+
+    # A type the reference pages never describe is still paired by its own classes: the
+    # favorites branch has no page and had no row here, so a receiver of that type found no
+    # owner table. The pages stay the primary source - a class fills a gap, never overrides.
+    class_types = {
+        russian: english for russian, english in declared_types.items()
+        if russian not in types and _NAME_RE.match(russian)
+    }
+    types.update(class_types)
 
     for section, names in conflicts.items():
         target = {"types": types, "facets": facets, "properties": properties, "enums": enums}[section]
@@ -385,6 +475,7 @@ def extract(dist: Path) -> tuple[dict[str, dict[str, str]], dict[str, set[str]]]
     return {
         "types": types, "facets": facets, "properties": properties, "enums": enums,
         "members": members, "common": common, "query": query, "kinds": kind_table,
+        "class_types": class_types,
     }, conflicts
 
 
@@ -429,6 +520,8 @@ def main(argv=None) -> None:
     for name in ("types", "facets", "properties", "enums"):
         dropped = sorted(conflicts[name])
         extra = f", исключено по конфликту: {dropped}" if dropped else ""
+        if name == "types":
+            extra += f", из них объявлено классами: {len(sections['class_types'])}"
         print(f"  {name}: {len(sections[name])}{extra}")
     print(f"  query: {len(sections['query'])} ключевых слов языка запросов")
     print(f"  kinds: {len(sections['kinds'])} видов элементов (написания сериализатора)")
