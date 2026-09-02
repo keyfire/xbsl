@@ -29,10 +29,6 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 MESSAGES = {
-    "translate.entries.no-dictionary": {
-        "ru": "словарь перевода не найден рядом с проектом",
-        "en": "no translation dictionary next to the project",
-    },
     "translate.entries.edits-not-list": {
         "ru": "в файле правок ожидается список [{{key, value, kind}}]",
         "en": "the edits file must carry a list [{{key, value, kind}}]",

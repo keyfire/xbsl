@@ -38,6 +38,7 @@ it describes, and never ships inside an assembly.
 
 from __future__ import annotations
 
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -66,6 +67,18 @@ MESSAGES = {
     "translate.dictionary.not-found": {
         "ru": "словарь не найден: {path}",
         "en": "dictionary not found: {path}",
+    },
+    "translate.dictionary.not-discovered": {
+        "ru": "словарь не найден рядом с {root}: ожидается каталог {dir} или файл {file} в этом"
+              " каталоге либо в одном из родительских – укажите каталог проекта (с дескриптором"
+              " проекта), рядом с которым лежит словарь",
+        "en": "no dictionary found next to {root}: an {dir} directory or an {file} file is"
+              " expected there or in one of its parent directories - pass the project directory"
+              " (the one with the project descriptor) the dictionary sits next to",
+    },
+    "translate.dictionary.found-below": {
+        "ru": "; ниже {root} словарь есть – {found}: каталог проекта лежит рядом с ним",
+        "en": "; a dictionary sits below {root} - {found}: the project directory is next to it",
     },
     "translate.dictionary.bad-file": {
         "ru": "{path}: файл словаря не читается: {error}",
@@ -306,6 +319,63 @@ def discover(start: Path) -> Path | None:
         if as_file.is_file():
             return as_file
     return None
+
+
+#: How many levels below a start directory found_below() looks: `<repository>/<vendor>/` +
+#: DICTIONARY_DIR is two levels under the repository root, and that root is the first one a
+#: caller reaches for; a bound keeps a wrong root high up in the tree from becoming a disk walk.
+HINT_DEPTH = 3
+
+
+def found_below(start: Path, depth: int = HINT_DEPTH) -> list[Path]:
+    """Dictionaries UNDER `start` - what discover() never sees, since it only walks up.
+
+    The hint for a root passed one level too high. Hidden directories are skipped, symlinked
+    ones are not followed, and the search stops at `depth` levels.
+    """
+    out: list[Path] = []
+    level = [start]
+    for _ in range(depth):
+        deeper: list[Path] = []
+        for folder in level:
+            try:
+                with os.scandir(folder) as it:
+                    entries = sorted(it, key=lambda entry: entry.name)
+            except OSError:
+                continue
+            for entry in entries:
+                if entry.name.startswith("."):
+                    continue
+                if entry.name == DICTIONARY_DIR and entry.is_dir(follow_symlinks=False):
+                    out.append(Path(entry.path))
+                elif entry.name == DICTIONARY_FILE and entry.is_file(follow_symlinks=False):
+                    out.append(Path(entry.path))
+                elif entry.is_dir(follow_symlinks=False):
+                    deeper.append(Path(entry.path))
+        level = deeper
+    return out
+
+
+def missing_message(start: Path) -> str:
+    """Why discover(start) came back empty, spelled from the constants the search itself uses.
+
+    Names the root, the two spellings looked for there and above, and - when one sits BELOW
+    the root - where it is. The case this exists for is the repository root passed instead of
+    the project directory: the walk-up never looks down, and an empty dictionary read as
+    "every name is a gap" - a report that looked like work.
+    """
+    root = start if start.is_dir() else start.parent
+    text = i18n.t(
+        "translate.dictionary.not-discovered",
+        root=root, dir=DICTIONARY_DIR, file=DICTIONARY_FILE,
+    )
+    below = found_below(root)
+    if below:
+        text += i18n.t(
+            "translate.dictionary.found-below",
+            root=root, found=", ".join(str(path) for path in below),
+        )
+    return text
 
 
 def load(path: Path) -> Dictionary:

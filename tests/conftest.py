@@ -14,6 +14,10 @@ fails on an English locale. The autouse fixture puts the pin back for each test;
 another language still sets it inside its own body.
 """
 
+import importlib
+import sys
+import types
+
 import pytest
 
 from xbsl import dataset, i18n
@@ -111,3 +115,33 @@ def pytest_collection_modifyitems(config, items):
         name = getattr(module, "__name__", "")
         if name in _DATA_DEPENDENT or item.get_closest_marker("needs_data"):
             item.add_marker(skip)
+
+
+@pytest.fixture()
+def mcp_module(monkeypatch):
+    """The MCP server module imported against a stub FastMCP: its tools are plain functions.
+
+    The [mcp] extra is not needed, and the module is dropped from sys.modules afterwards so a
+    later import meets the real package (or another stub) rather than this one.
+    """
+    class _FakeMCP:
+        def __init__(self, name):
+            self.name = name
+            self.tools = {}
+
+        def tool(self):
+            def deco(fn):
+                self.tools[fn.__name__] = fn
+                return fn
+
+            return deco
+
+    fast = types.ModuleType("mcp.server.fastmcp")
+    fast.FastMCP = _FakeMCP
+    monkeypatch.setitem(sys.modules, "mcp", types.ModuleType("mcp"))
+    monkeypatch.setitem(sys.modules, "mcp.server", types.ModuleType("mcp.server"))
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fast)
+    sys.modules.pop("xbsl.mcp_server", None)
+    module = importlib.import_module("xbsl.mcp_server")
+    yield module
+    sys.modules.pop("xbsl.mcp_server", None)

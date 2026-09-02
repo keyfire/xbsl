@@ -1242,13 +1242,20 @@ def meta_add_handler(
 # frequent first, with a place to look at and the platform's own spelling as a hint), what the
 # dictionary already says about a word, and a way to write entries back without touching yaml
 # by hand.
+#
+# A root with no dictionary is refused, not answered with an empty one: passed the repository
+# root instead of the project directory, the tools reported coverage 0.0 and every name of the
+# project as a gap - a report that looked like work. The refusal (load_for_tools) spells where
+# a dictionary is looked for, and every answer names the absolute `dictionary` it read.
 
 
 @mcp.tool()
 def translate_status(root: str) -> dict:
     """Coverage of the project's translation dictionary: how much is done and what is left.
 
-    root – the project directory (the one with the project descriptor).
+    root – the project directory (the one with the project descriptor), next to which - or
+    above which - the xbsl-translation dictionary sits; a root without one is refused with
+    the places looked at, and the answer names the absolute `dictionary` read.
     Returns the totals only - a cheap health check before deciding what to fill.
     Two units live here, so read the names: `missing_tokens`, `missing_phrases`,
     `literals_translated` and `missing_literals` count DISTINCT entries - what a dictionary line
@@ -1293,7 +1300,9 @@ def translate_gaps(
 ) -> dict:
     """What the dictionary does not cover yet, most frequent first.
 
-    root   – the project directory;
+    root   – the project directory (the one with the project descriptor); a root without a
+             dictionary next to or above it is refused with the places looked at, and the
+             answer names the absolute `dictionary` read;
     kind   – 'token' (names), 'phrase' (comment lines), 'literal' (string literals) or 'any';
     filter – a substring of the key;
     limit/offset – the page (limit 0 means all, which can be thousands of rows);
@@ -1320,18 +1329,15 @@ def translate_gaps(
         if (kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
     ]
     page = rows[offset:offset + limit] if limit else rows[offset:]
+    out = {"total": len(rows), "dictionary": str(translate_cli.dictionary_path_for(project))}
     if compact:
-        return {
-            "total": len(rows),
-            "gaps": [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page],
-        }
-    return {
-        "total": len(rows),
-        "gaps": [
-            {**gap.as_dict(), "places": [f"{f}:{ln}" for f, ln in gap.places[:3]]}
-            for gap in page
-        ],
-    }
+        out["gaps"] = [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page]
+        return out
+    out["gaps"] = [
+        {**gap.as_dict(), "places": [f"{f}:{ln}" for f, ln in gap.places[:3]]}
+        for gap in page
+    ]
+    return out
 
 
 @mcp.tool()
@@ -1344,7 +1350,8 @@ def translate_entries(
 ) -> dict:
     """What the dictionary already says - the way to keep a new entry consistent with it.
 
-    root   – the project directory;
+    root   – the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at);
     filter – a substring of the key OR of the value (look up a root before inventing a word);
     kind   – 'token', 'phrase', 'literal' or 'any'.
     Every row names the file and line it lives on, so an entry can be corrected in place.
@@ -1356,8 +1363,6 @@ def translate_entries(
     if error:
         return {"error": error}
     path = translate_cli.dictionary_path_for(project)
-    if path is None:
-        return {"error": i18n.t("translate.entries.no-dictionary")}
     needle = (filter or "").casefold()
     rows = [
         entry for entry in entries_module.read_entries(path)
@@ -1374,7 +1379,8 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
                   target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.
 
-    root   – the project directory;
+    root   – the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at - the tools never start a dictionary);
     edits_file – a FILE with the batch, and the way to send one of any size: either the
              dictionary's own yaml format (tokens/phrases/literals sections, the same
              quoting as the dictionary files, an empty value removes the entry) or the
@@ -1406,8 +1412,6 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
     if error:
         return {"error": error}
     path = translate_cli.dictionary_path_for(project)
-    if path is None:
-        return {"error": i18n.t("translate.entries.no-dictionary")}
     batch: list[dict] = []
     if edits_file:
         try:
