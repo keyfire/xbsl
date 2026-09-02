@@ -527,6 +527,27 @@ def test_dictionary_keys_live_in_their_own_namespace(tmp_path: Path):
     assert "return Strings.Title()" in (out / "Module.xbsl").read_text(encoding="utf-8")
 
 
+def test_a_name_inside_a_type_expression_of_the_code_is_a_type_and_its_facet_is_platform():
+    """`Заявки.Ссылка` as the type of a parameter, a result, a declaration, a generic argument
+    or a type test is `Applications.Reference`, while the same words as a member access are
+    `Record.Link`. The parity seed of code/unknown-ns-object found the member reading in a
+    type position: a parameter typed by a reference did not compile in English."""
+    out, report = _code(
+        "метод Проба(Заявка: Справочник.Заявки.Ссылка): Заявки.Ссылка?\n"
+        "    пер Список = новый Массив<Заявки.Ссылка>()\n"
+        "    знч Найдено = Заявка это Заявки.Ссылка\n"
+        "    возврат Запись.Ссылка\n;\n",
+        {"Заявки": "Applications", "Проба": "Probe", "Заявка": "Application",
+         "Список": "List", "Найдено": "Found", "Запись": "Record"},
+    )
+
+    assert "method Probe(Application: Catalog.Applications.Reference): Applications.Reference?" in out
+    assert "var List = new Array<Applications.Reference>()" in out
+    assert "val Found = Application is Applications.Reference" in out
+    assert "return Record.Link" in out
+    assert report.missing_tokens == {}
+
+
 def test_facets_stay_platform_even_when_the_project_declares_the_word(tmp_path: Path):
     """`.Ссылка` is a facet of a type expression - a project attribute of that name must not gate it."""
     resolver = Resolver(_dictionary({"Задачи": "Tasks"}), frozenset({"Задачи", "Ссылка"}))

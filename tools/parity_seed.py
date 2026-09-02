@@ -604,11 +604,6 @@ SEEDS: list[Seed] = [
             "Applications.xbsl": "method Probe(Application: Catalog.Applications.Reference)\n;\n",
         },
         tokens={"Заявки": "Applications", "Проба": "Probe", "Заявка": "Application"},
-        known="the rule is sound - the hand-written twin passes; it is the code translator that "
-              "resolves `.Ссылка` in a TYPE position (a parameter, a declaration, a generic "
-              "argument) as the member `Link` rather than the facet `Reference`, while the yaml "
-              "translator gets the same value right. Type positions inside code are not told "
-              "apart from member accesses (xbsl/translation/code.py, collect_token_edits).",
     ),
     Seed(
         rule="code/unknown-ns-object",

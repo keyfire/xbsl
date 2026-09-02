@@ -25,7 +25,9 @@ xbsl translate e1c/app --out build/app-en --strict   # non-zero exit unless it i
 of the same case (`Если` -> `If`, `если` -> `if`); a yaml key takes the English spelling its
 metamodel class declares, so the same word can differ by node; an enumeration value is looked up
 inside its own enumeration (globally one Russian word answers to several English ones); a type
-expression keeps its shape and its facets (`.Ссылка` -> `.Reference`); inside `Query{ ... }`
+expression keeps its shape and its facets (`.Ссылка` -> `.Reference`) - in yaml and in the code
+alike, wherever the parser reads a type (a parameter, a declaration, a constructor, a cast, a
+type argument), while the same word after a dot elsewhere is a member; inside `Query{ ... }`
 blocks the query vocabulary answers instead of the general one. A name the data cannot spell
 stays as written and is reported as a data gap - the translator never guesses.
 

@@ -28,6 +28,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   keys of the code attribute on every ASCII-named attribute of an English tree - `Length` on a
   number went unreported. A stated term answers only where the neighbourhood settled nothing,
   so the settled spellings stay; data rebuilt with the fix carries the pair.
+- **A name inside a type expression of the code is translated as a type.** The token walk
+  did not tell a type position from a member access, and `.Ссылка` typing a parameter, a
+  declaration, a constructor, a cast or a type argument came out as the property `Link`
+  instead of the facet `Reference` - the English tree did not compile, and a parity seed of
+  `code/unknown-ns-object` had to be marked as known. The spans of the type expressions now
+  come from the parser, and a name inside one resolves the way a yaml type does.
 
 ## 2026-09-02 – 0.89.0
 

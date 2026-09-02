@@ -185,7 +185,8 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport) -
     toks = lexer.tokens(source)
     ranges = _syntax.query_ranges(source)
     collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits,
-                        inferred_locals=inferred_locals(source, resolver.project_names))
+                        inferred_locals=inferred_locals(source, resolver.project_names),
+                        type_ranges=type_ranges(source))
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -204,6 +205,7 @@ def collect_token_edits(
     at: tuple[int, int] | None = None,
     root_scope: str = "",
     inferred_locals: dict[str, MethodTypes] | None = None,
+    type_ranges: list[tuple[int, int]] | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -211,7 +213,10 @@ def collect_token_edits(
     at the fragment's own place in the outer file - the token positions inside it count
     from the fragment start and would point nowhere. `inferred_locals` is what the type
     inference read off the whole module (see inferred_locals): the types of the locals whose
-    declarations name none. A fragment has no methods and passes nothing.
+    declarations name none. A fragment has no methods and passes nothing. `type_ranges` are
+    the spans of the TYPE expressions (see type_ranges): a name inside one is a type or a
+    facet, never a member - `Заявки.Ссылка` as a type is `Tasks.Reference`, the very same
+    words as a member access are `Tasks.Link`.
     """
     del text  # spans address the outer text through `base`; kept for symmetry of callers
     prev_dot = False
@@ -332,7 +337,9 @@ def collect_token_edits(
                 # as two Russian ones collide with each other.
                 translated, _plane = resolver.identifier(tok.value, scope=field_of)
                 report.note_name(f"structure:{field_of}", tok.value, translated or tok.value)
-            if not tok.value.isascii():
+            if not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
+                _type_identifier_edit(tok, base, prev_dot, resolver, report, edits, at)
+            elif not tok.value.isascii():
                 scope = field_of or (prev_ident if prev_dot else root_scope)
                 # The type of the receiver, when its declaration names one: the SECOND
                 # namespace a member answers to. The receiver as written stays the first -
@@ -588,6 +595,41 @@ def inferred_locals(source: SourceFile, project_names: frozenset[str] = frozense
     return out
 
 
+def type_ranges(source: SourceFile) -> list[tuple[int, int]]:
+    """[start, end) offsets of every TYPE expression of the module, as the parser read them.
+
+    A parameter, a declaration, a return type, a structure field, a constructor, a cast, a
+    type argument of a call or a literal: the parser keeps each as a TypeRef with its span,
+    and a name inside such a span is resolved as a type, not as a member. Where the parser
+    gave up on a file the list is what it managed to read - the rest keeps the member
+    reading, as it always had.
+    """
+    cached = source.cache.get("type_ranges")
+    if cached is not None:
+        return cached
+    module, _errors = P.parse(source)
+    ranges: list[tuple[int, int]] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, P.Node):
+            return
+        if isinstance(node, P.TypeRef):
+            if node.end > node.start:
+                ranges.append((node.start, node.end))
+            return
+        for field in dataclasses.fields(node):
+            walk(getattr(node, field.name, None))
+
+    walk(module.members)
+    ranges.sort()
+    source.cache["type_ranges"] = ranges
+    return ranges
+
+
 def _declared_names(method: P.Method) -> list[str]:
     """Every name the method declares, once per declaration - parameters, locals, loop
     variables, lambda parameters - so that a name declared twice can be told apart."""
@@ -721,6 +763,26 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
     if plane in ("missing", "platform-gap"):
         line, col = at if at is not None else (tok.line, tok.col)
         report.note_missing(tok.value, line, col, plane)
+
+
+def _type_identifier_edit(tok, base, after_dot, resolver, report, edits, at=None) -> None:
+    """A name inside a TYPE expression of the code, resolved the way a yaml type is.
+
+    After a dot there stands a facet, and the facet is the platform's word: `Задачи.Ссылка`
+    is `Tasks.Reference`. The member reading of the same token gave `Link` - the spelling of
+    the property - and a parameter typed by a reference did not compile.
+    """
+    replacement, plane = resolver.type_name(tok.value, after_dot=after_dot)
+    if plane == "user":
+        report.user_done += 1
+    elif plane == "platform":
+        report.note_platform_answer(tok.value, tok.line, tok.col)
+    if replacement:
+        if replacement != tok.value:
+            edits.append((base + tok.start, base + tok.end, replacement))
+        return
+    line, col = at if at is not None else (tok.line, tok.col)
+    report.note_missing(tok.value, line, col, plane)
 
 
 def _inside(ranges: list[tuple[int, int]], offset: int) -> bool:
