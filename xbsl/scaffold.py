@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import re
 import uuid as _uuid
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -1823,18 +1824,24 @@ def op_add_field(
     field_kind: str,
     name: str,
     *,
-    type_: str = "Строка",
+    type_: str | None = None,
     tabular: str | None = None,
-    props: dict[str, str] | None = None,
+    props: Mapping[str, object] | None = None,
     reader=None,
 ) -> ScaffoldResult:
     """Add a section item to an object: an attribute, dimension, resource, enumeration
     value, parameter, structure field or tabular part; tabular - the tabular part name
     when adding an attribute into it.
 
-    props - the item's other properties (DefaultValue, Presentation,
-    MaxLength...), checked against the metamodel class of the section item; the
-    keys the operation writes itself (Name, Type, Id) are refused there.
+    type_ - the item's type; None is the default: `String` for a regular item, and for a
+    BUILT-IN one (the `Number` and `Date` of a document, the `Code` of a catalog) whatever
+    its own metamodel class settles - see _item_type.
+
+    props - the item's other properties (DefaultValue, Presentation, MaxLength...), checked
+    against the metamodel class of THAT item - a built-in `Number` takes its `Length`,
+    `Uniqueness` and `Autonumbering`, a regular attribute does not; the keys the operation
+    writes itself (Name, Type, Id) are refused there. A nested block goes in as a dict or as
+    dotted keys, a list property as a list - see _checked_props.
     """
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
@@ -1850,13 +1857,18 @@ def op_add_field(
         offset = find_section_item_offset(text, "ТабличныеЧасти", tabular)
         if offset is None:
             raise ScaffoldError(f"Табличная часть '{tabular}' не найдена в {yaml_path.name}")
-        extra = _checked_props(
-            props, kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)), ("Ид", "Имя", "Тип"),
-        )
+        # The path ends with the item's own name: where the collection dispatches by it, the
+        # class - and with it the checked properties and the `Id`/`Type` lines - is the
+        # built-in's own, not the regular attribute's.
+        path = (("ТабличныеЧасти", tabular), ("Реквизиты", name))
+        extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
+        resolved = _item_type(kind, path, name, type_, lang)
         lines = spelled_lines(
             _reconciled_id(
-                [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {type_}"],
-                kind, (("ТабличныеЧасти", tabular), ("Реквизиты", None)),
+                _reconciled_type(
+                    [f"Ид: {new_uuid()}", f"Имя: {name}", f"Тип: {resolved}"], resolved,
+                ),
+                kind, path,
             ) + _prop_lines(extra), lang
         )
         starter = _starter_attribute_span(text, offset, tabular)
@@ -1902,13 +1914,13 @@ def op_add_field(
     if name in existing:
         raise ScaffoldError(f"'{name}' уже есть в секции {spec['section']} файла {yaml_path.name}")
     template = _KIND_SECTION_LINES.get((kind, field_kind), spec["lines"])
-    extra = _checked_props(
-        props, kind, ((spec["section"], None),), ("Ид", "Имя", "Тип"),
-    )
-    lines = spelled_lines(_reconciled_id([
-        line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=type_)
+    path = ((spec["section"], name),)
+    extra = _checked_props(props, kind, path, ("Ид", "Имя", "Тип"))
+    resolved = _item_type(kind, path, name, type_, lang)
+    lines = spelled_lines(_reconciled_id(_reconciled_type([
+        line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=resolved or "")
         for line in template
-    ], kind, ((spec["section"], None),)) + _prop_lines(extra), lang)
+    ], resolved), kind, path) + _prop_lines(extra), lang)
     edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
@@ -1957,8 +1969,11 @@ def item_property_forms(kind: str, path: tuple[tuple[str, str | None], ...]) -> 
     (spelled_lines), so everything in between speaks one vocabulary.
     """
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
-    if not cls:
-        return {}
+    return _class_property_forms(cls) if cls else {}
+
+
+def _class_property_forms(cls: str) -> dict[str, str]:
+    """{any accepted spelling of a property of the class: its Russian name}."""
     forms: dict[str, str] = {}
     for name, record in metamodel.properties_of_class(cls).items():
         forms[name] = name
@@ -1995,47 +2010,225 @@ def _reconciled_id(
     return lines
 
 
+def _item_label(cls: str | None, path: tuple[tuple[str, str | None], ...]) -> str:
+    """How a message names the item, in the genitive: a built-in by its name and class
+    ("стандартного реквизита Номер (класс NumberAttributeDescriptor)"), the rest by class."""
+    section, name = path[-1] if path else ("", None)
+    if cls and name and metamodel.dispatch_name(cls):
+        noun = "стандартного реквизита" if section == "Реквизиты" else "стандартного элемента"
+        return f"{noun} {name} (класс {cls})"
+    return f"элемента секции (класс {cls})" if cls else "элемента секции"
+
+
+def _russian_type(value: str) -> str:
+    """A type name as the metamodel spells it: an English one (`String`) comes back Russian."""
+    if not value.isascii():
+        return value
+    return terms.russian(value, "types") or terms.common_russian(value) or value
+
+
+def _item_type(
+    kind: str, path: tuple[tuple[str, str | None], ...], name: str, type_: str | None, lang: str,
+) -> str | None:
+    """The `Type` of a new item, or None when the item carries no `Type` line at all.
+
+    A regular item takes the caller's type, `String` when none was given. A BUILT-IN item of
+    a collection dispatched by name (the `Number` and `Date` of a document, the `Code`,
+    `Name` and `Owner` of a catalog) is judged by its own class instead - the class
+    metadata_schema answers with for that name:
+
+    - a class that declares no `Type` (`Name`) gets no `Type` line: the platform fixes the
+      type, and one passed explicitly is refused rather than written into a file the
+      compiler rejects;
+    - a closed type (the `Number` attribute: a `String` or a `Number`; `Date`: a `Date`, a
+      `DateTime` or an `Instant`) refuses a type outside the set and, when none was given,
+      takes the platform default the class records;
+    - an open type with no default (`Owner` - the owner is the author's choice) needs an
+      explicit type and says so.
+    """
+    cls = metamodel.item_class(kind, path) if metamodel.available() else None
+    if not cls or not metamodel.dispatch_name(cls):
+        return type_ or "Строка"
+    label = _item_label(cls, path)
+    record = metamodel.properties_of_class(cls).get("Тип")
+    if record is None:
+        if type_:
+            raise ScaffoldError(
+                f"У {label} нет свойства Тип – тип этого реквизита задан платформой"
+            )
+        return None
+    options = record.get("options")
+    if type_:
+        if options and _russian_type(type_) not in options:
+            raise ScaffoldError(
+                f"Тип '{type_}' не подходит для {label}; допустимы: {', '.join(options)}"
+            )
+        return type_
+    default = record.get("default")
+    if default:
+        # The metamodel records the default as a qualified platform type (`Стд::Строка`,
+        # `Стд::Время::ДатаВремя`); the yaml names a type by its last segment.
+        return spelled_type(default.rsplit("::", 1)[-1], lang)
+    raise ScaffoldError(
+        f"Для {label} нужен явный тип: платформа не задаёт его по умолчанию "
+        "(например, Тип ссылки справочника-владельца)"
+    )
+
+
+def _reconciled_type(lines: list[str], resolved: str | None) -> list[str]:
+    """The template lines without the top-level `Type` when the item carries none."""
+    if resolved is not None:
+        return lines
+    return [line for line in lines if not line.startswith("Тип:")]
+
+
+def _nested(props: Mapping[str, object]) -> dict[str, object]:
+    """The properties with dotted keys folded into nested dicts (`A.B: v` -> `A: {B: v}`).
+
+    The CLI (`--prop`) and the LSP (two parallel arrays) carry flat pairs only, so a block is
+    written flat there; the MCP passes a dict as it is. Both meet here in one shape. A dict
+    given for a key a dotted pair also names is merged with it, never mutated.
+    """
+    out: dict[str, object] = {}
+    for key, value in props.items():
+        parts = [part.strip() for part in str(key).split(".")]
+        target = out
+        for part in parts[:-1]:
+            inner = target.get(part)
+            if not isinstance(inner, dict):
+                inner = {}
+                target[part] = inner
+            target = inner
+        folded = _nested(value) if isinstance(value, Mapping) else value
+        current = target.get(parts[-1])
+        if isinstance(current, dict) and isinstance(folded, dict):
+            current.update(folded)
+        else:
+            target[parts[-1]] = folded
+    return out
+
+
 def _checked_props(
-    props: dict[str, str] | None,
+    props: Mapping[str, object] | None,
     kind: str,
     path: tuple[tuple[str, str | None], ...],
     written: tuple[str, ...],
-) -> dict[str, str]:
+) -> dict[str, object]:
     """Properties canonicalized to Russian names and checked against the metamodel.
 
     `written` are the keys the operation writes itself (Name, Type, Id): passing one of them
     would silently lose either the parameter or the property, so it is refused. Without the
     metamodel data nothing is checked - the tool writes what it was given, as it always did.
+
+    The class is the ITEM's own. A collection dispatched by name gives the built-in `Number`
+    of a document a class of its own (`Length`, `Uniqueness`, `Autonumbering` - the very
+    class metadata_schema answers with for that name), and a regular attribute keeps the
+    default one, so a `Length` on it is refused with the class named.
+
+    A value is a scalar, a dict or a list. A dict is a NESTED BLOCK (`Autonumbering`): the
+    property must be one the class declares as a block of a class the metamodel describes,
+    and its keys are checked against that class in turn, level by level; a dotted key
+    (`Автонумерация.Префикс`) is the same block written flat. A list is a yaml sequence of
+    scalars (`NumberingSeries`). A block whose class the metamodel describes as opaque
+    (`Presentation` is a Localizable with no members recorded) is refused with the class
+    named - that block still goes into the yaml by hand.
     """
     if not props:
         return {}
-    forms = item_property_forms(kind, path)
+    cls = metamodel.item_class(kind, path) if metamodel.available() else None
     written_forms = {form for name in written for form in key_forms(name)}
-    out: dict[str, str] = {}
+    return _checked_block(_nested(props), cls, _item_label(cls, path), written_forms)
+
+
+def _checked_block(
+    props: Mapping[str, object], cls: str | None, label: str,
+    written: frozenset[str] | set[str] = frozenset(),
+) -> dict[str, object]:
+    """One level of _checked_props: the keys against the class, the values by their kind."""
+    forms = _class_property_forms(cls) if cls else {}
+    records = metamodel.properties_of_class(cls) if cls else {}
+    out: dict[str, object] = {}
     for key, value in props.items():
         key = str(key).strip()
-        if key in written_forms:
+        if key in written:
             raise ScaffoldError(
                 f"Свойство '{key}' задаётся отдельным параметром операции, "
                 "а не в списке свойств"
             )
         if forms and key not in forms:
             raise ScaffoldError(
-                f"У элемента секции нет свойства '{key}'; доступны: "
+                f"У {label} нет свойства '{key}'; доступны: "
                 + ", ".join(sorted(set(forms.values())))
             )
-        text = "" if value is None else str(value)
-        if "\n" in text or "\r" in text:
-            raise ScaffoldError(
-                f"Значение свойства '{key}' многострочное – такие блоки "
-                "(напр. вложенные структуры) пишутся в yaml вручную"
-            )
-        out[forms.get(key, key)] = text
+        name = forms.get(key, key)
+        out[name] = _checked_value(value, name, records.get(name), label)
     return out
 
 
-def _prop_lines(props: dict[str, str]) -> list[str]:
-    return [f"{key}: {_yaml_scalar(value)}" for key, value in props.items()]
+def _checked_value(value: object, name: str, record: dict | None, label: str) -> object:
+    """A property value checked by the kind its class records for it, shaped for _prop_lines."""
+    kind = (record or {}).get("kind")
+    if isinstance(value, Mapping):
+        if not value:
+            raise ScaffoldError(f"Блок '{name}' у {label} пуст – в нём нечего записать")
+        if record is None:
+            # Nothing to judge by (no data, or a property the class lacks): written as given.
+            return {
+                str(key).strip(): _checked_value(item, str(key), None, label)
+                for key, item in value.items()
+            }
+        inner = record.get("type") if kind == "block" else None
+        if inner is None:
+            raise ScaffoldError(
+                f"Свойство '{name}' у {label} не является блоком (вид значения: {kind}) – "
+                "словарь ему не подходит"
+            )
+        if not metamodel.properties_of_class(inner):
+            raise ScaffoldError(
+                f"Блок '{name}' у {label} имеет класс {inner}, состав которого метамодель "
+                "не описывает – известное ограничение: такой блок пишется в yaml вручную"
+            )
+        return _checked_block(value, inner, f"блока {name} (класс {inner})")
+    if isinstance(value, (list, tuple)):
+        if not value:
+            raise ScaffoldError(f"Список '{name}' у {label} пуст – в нём нечего записать")
+        if record is not None and kind != "list":
+            raise ScaffoldError(
+                f"Свойство '{name}' у {label} не является списком (вид значения: {kind}) – "
+                "список ему не подходит"
+            )
+        if any(isinstance(item, (Mapping, list, tuple)) for item in value):
+            raise ScaffoldError(f"Список '{name}' у {label} принимает только скаляры")
+        return [_scalar_text(item, name) for item in value]
+    return _scalar_text(value, name)
+
+
+def _scalar_text(value: object, name: str) -> str:
+    """A scalar property value as text: a boolean the platform's way, anything else as is."""
+    if isinstance(value, bool):
+        return "Истина" if value else "Ложь"
+    text = "" if value is None else str(value)
+    if "\n" in text or "\r" in text:
+        raise ScaffoldError(
+            f"Значение свойства '{name}' многострочное – вложенный блок передаётся "
+            "словарём, остальное пишется в yaml вручную"
+        )
+    return text
+
+
+def _prop_lines(props: Mapping[str, object], indent: str = "") -> list[str]:
+    """Property lines as they go under the item; a block and a list nest by four spaces."""
+    lines: list[str] = []
+    for key, value in props.items():
+        if isinstance(value, Mapping):
+            lines.append(f"{indent}{key}:")
+            lines.extend(_prop_lines(value, indent + "    "))
+        elif isinstance(value, (list, tuple)):
+            lines.append(f"{indent}{key}:")
+            lines.extend(f"{indent}    - {_yaml_scalar(str(item))}" for item in value)
+        else:
+            lines.append(f"{indent}{key}: {_yaml_scalar(str(value))}")
+    return lines
 
 
 def _item_block_span(text: str, offset: int) -> tuple[int, int]:
@@ -2062,11 +2255,37 @@ def _item_block_span(text: str, offset: int) -> tuple[int, int]:
     return end - (1 if text[end - 1: end] == "\r" else 0), field_indent
 
 
+def _nested_span_end(block: str, start: int, key_indent: int) -> int:
+    """The end of the value nested under a key line that ends at `start`.
+
+    Every following line indented deeper than the key belongs to the value; blank lines
+    inside it count, trailing ones do not. The answer steps back over a `\r` the same way
+    _item_block_span does.
+    """
+    end = start
+    pos = start
+    while pos < len(block):
+        line_start = block.find("\n", pos)
+        if line_start == -1:
+            break
+        line_start += 1
+        line_end = _line_end(block, line_start)
+        line = block[line_start:line_end]
+        if line.strip() == "":
+            pos = line_end
+            continue
+        if len(_LINE_INDENT.match(line).group(0)) <= key_indent:
+            break
+        end = line_end - (1 if block[line_end - 1: line_end] == "\r" else 0)
+        pos = line_end
+    return end
+
+
 def op_set_field_property(
     yaml_path: Path,
     field_kind: str,
     name: str,
-    props: dict[str, str],
+    props: Mapping[str, object],
     *,
     tabular: str | None = None,
     reader=None,
@@ -2078,6 +2297,10 @@ def op_set_field_property(
     counterpart of the form tools - meta_set_component_property serves interface components
     and refuses everything else, so until now the properties of a metadata item could only
     be written by hand.
+
+    The values are judged the way op_add_field judges them (a built-in item by its own class,
+    a nested block by the block's class). A block given for a key replaces whatever stands
+    under that key whole; a scalar over an existing block is refused rather than flattened.
     """
     yaml_path = Path(yaml_path)
     if not props:
@@ -2104,7 +2327,7 @@ def op_set_field_property(
         raise ScaffoldError(f"У вида {kind} нет секции для '{field_kind}'; доступны: {avail}")
 
     if tabular:
-        path = (("ТабличныеЧасти", tabular), ("Реквизиты", None))
+        path = (("ТабличныеЧасти", tabular), ("Реквизиты", name))
         tabular_offset = find_section_item_offset(text, "ТабличныеЧасти", tabular)
         if tabular_offset is None:
             raise ScaffoldError(f"Табличная часть '{tabular}' не найдена в {yaml_path.name}")
@@ -2116,7 +2339,9 @@ def op_set_field_property(
         offset = None if inner is None else slice_start + inner
         location = f"табличной части '{tabular}'"
     else:
-        path = ((spec["section"], None),)
+        # The item's own name closes the path: a built-in `Number` is judged by its own class
+        # here just as it is when created (see op_add_field).
+        path = ((spec["section"], name),)
         offset = find_section_item_offset(text, spec["section"], name)
         location = f"секции {spec['section']}"
     if offset is None:
@@ -2132,20 +2357,28 @@ def op_set_field_property(
     edits: list[TextEdit] = []
     appended: list[str] = []
     for key, value in checked.items():
-        line = spelled_lines([f"{key}: {_yaml_scalar(value)}"], lang)[0]
+        lines = spelled_lines(_prop_lines({key: value}), lang)
         spellings = "|".join(re.escape(form) for form in key_forms(key))
         m = re.search(rf"^{indent}(?:{spellings}):[ \t]*(.*?)[ \t]*\r?$", block, re.M)
         if m is None:
-            appended.append(line)
+            appended.extend(lines)
             continue
-        # Only the key's OWN line is replaced: a block value (a nested structure under the
-        # key) is not a scalar and must not be flattened into one.
-        if m.group(1) == "":
+        nested = isinstance(value, (Mapping, list, tuple))
+        if m.group(1) == "" and not nested:
+            # A block value (a nested structure under the key) is not a scalar and must not
+            # be flattened into one; a new block replaces the old one whole, though.
             raise ScaffoldError(
                 f"Свойство '{key}' задано блоком (вложенной структурой) – "
                 "такое значение правится в yaml вручную"
             )
-        edits.append(TextEdit(offset + m.start(), offset + m.end(), indent + line))
+        # The key's own line, or the whole value nested under it. The match may have taken
+        # the `\r` of a CRLF line - the replacement stops short of it.
+        span_end = m.end() - (1 if block[m.end() - 1: m.end()] == "\r" else 0)
+        if m.group(1) == "":
+            span_end = _nested_span_end(block, span_end, field_indent)
+        edits.append(TextEdit(
+            offset + m.start(), offset + span_end, nl.join(indent + line for line in lines),
+        ))
 
     new_text = text
     for edit in sorted(edits, key=lambda e: e.start, reverse=True):

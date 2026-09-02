@@ -1357,7 +1357,7 @@ def _make_server() -> "LanguageServer":
             Path(str(_param(params, "path"))),
             str(_param(params, "fieldKind")),
             str(_param(params, "name")),
-            type_=_opt_str(params, "type") or "Строка",
+            type_=_opt_str(params, "type"),
             tabular=_opt_str(params, "tabular"),
             props=_props_param(params) or None,
             reader=_buffer_reader,

@@ -47,6 +47,35 @@ def test_mcp_meta_field_and_info(mcp_module, tmp_path):
     assert "Справочник" in overview["creatable_kinds"]
 
 
+@pytest.mark.needs_data  # the built-in's class is the metamodel's, and the written file is linted
+def test_mcp_meta_add_field_of_a_built_in_attribute(mcp_module, tmp_path):
+    mcp_module.meta_new_object(str(tmp_path), "Документ", "Заявки", presentation="Номер")
+    yaml_path = str(tmp_path / "Заявки.yaml")
+    res = mcp_module.meta_add_field(
+        yaml_path, "реквизит", "Номер",
+        props={"Длина": 11, "Уникальность": "Истина",
+               "Автонумерация": {"Префикс": "ЗА", "Формат": {"ДлинаПрефикса": 2}}},
+    )
+    assert "error" not in res
+    assert res["lint"]["summary"]["diagnostics"] == 0, res["lint"]["diagnostics"]
+    text = (tmp_path / "Заявки.yaml").read_text(encoding="utf-8")
+    assert "    -\n        Имя: Номер\n        Тип: Строка\n        Длина: 11\n" in text
+    assert "            Формат:\n                ДлинаПрефикса: 2\n" in text
+
+    err = mcp_module.meta_add_field(yaml_path, "реквизит", "Номер2", props={"Длина": 11})
+    assert "DocumentRegularAttributeDescriptor" in err["error"]
+    info = mcp_module.meta_object_info(str(tmp_path), name="Заявки")
+    assert [f["name"] for f in info["fields"]] == ["Дата", "Номер"]
+
+    res = mcp_module.meta_set_field_property(
+        yaml_path, "реквизит", "Номер", {"Автонумерация": {"Использовать": False}},
+    )
+    assert "error" not in res and res["lint"]["summary"]["diagnostics"] == 0
+    text = (tmp_path / "Заявки.yaml").read_text(encoding="utf-8")
+    assert "        Автонумерация:\n            Использовать: Ложь\n" in text
+    assert "Префикс" not in text
+
+
 # --- CLI ---------------------------------------------------------------------------------
 
 
@@ -67,6 +96,22 @@ def test_cli_new_object_and_field(tmp_path, capsys):
     assert code == 0
     text = (tmp_path / "Товары.yaml").read_text(encoding="utf-8")
     assert "Имя: Цвет" in text
+
+
+@pytest.mark.needs_data  # the class default of a built-in comes from the metamodel
+def test_cli_add_field_of_a_built_in_takes_the_class_default_type(tmp_path, capsys):
+    _run_cli(capsys, "new-object", str(tmp_path), "Документ", "Заявки")
+    yaml_path = str(tmp_path / "Заявки.yaml")
+    code, _out = _run_cli(
+        capsys, "add-field", yaml_path, "реквизит", "Номер",
+        "--prop", "Длина=11", "--prop", "Автонумерация.Префикс=ЗА",
+    )
+    assert code == 0
+    text = (tmp_path / "Заявки.yaml").read_text(encoding="utf-8")
+    assert "        Имя: Номер\n        Тип: Строка\n        Длина: 11\n" in text
+    assert "        Автонумерация:\n            Префикс: ЗА\n" in text
+    code, err = _run_cli(capsys, "add-field", yaml_path, "реквизит", "Файлы", "--type", "Строка")
+    assert code == 2 and "DocumentFilesAttribute" in err["error"]
 
 
 def test_cli_dry_run_writes_nothing(tmp_path, capsys):
@@ -143,6 +188,30 @@ def test_lsp_meta_add_field_error_shape(tmp_path):
         {"path": str(tmp_path / "Нет.yaml"), "fieldKind": "реквизит", "name": "Цвет"}
     )
     assert "не найден" in result["error"].lower()
+
+
+@pytest.mark.needs_data  # the built-in's class comes from the metamodel
+def test_lsp_meta_add_field_of_a_built_in_with_dotted_props(tmp_path):
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    server, features = _server_features()
+    # The operations read files through the editor buffers - a workspace has to exist.
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
+    path = tmp_path / "Заявки.yaml"
+    path.write_text(
+        "ВидЭлемента: Документ\nИд: 6f0b6a44-0000-4000-8000-0000000000d2\nИмя: Заявки\n",
+        encoding="utf-8", newline="\n",
+    )
+    # The LSP carries the properties as two flat arrays - a block travels as a dotted key.
+    result = features["xbsl/metaAddField"]({
+        "path": str(path), "fieldKind": "реквизит", "name": "Номер",
+        "propKeys": ["Длина", "Автонумерация.Префикс"], "propValues": ["11", "ЗА"],
+    })
+    assert (
+        "    -\n        Имя: Номер\n        Тип: Строка\n        Длина: 11\n"
+        "        Автонумерация:\n            Префикс: ЗА\n"
+    ) in result["files"][0]["content"]
 
 
 def test_mcp_meta_rename_object(mcp_module, tmp_path):

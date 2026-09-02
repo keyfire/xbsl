@@ -590,7 +590,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
                                                  "параметр", "поле", "табличная-часть")))
     p.add_argument("name", help=i18n.t("cli.help.scaf.af-name"))
-    p.add_argument("--type", default="Строка", help=i18n.t("cli.help.scaf.af-type"))
+    p.add_argument("--type", help=i18n.t("cli.help.scaf.af-type"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
     p.add_argument("--prop", action="append", metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))

@@ -2611,6 +2611,263 @@ def test_set_field_property_on_a_tabular_attribute(tmp_path):
     assert "МаксимальнаяДлина" not in parsed["Реквизиты"][0]
 
 
+# --- built-in attributes: judged by their own class -------------------------------------------
+#
+# A collection dispatched by name gives the `Number` and `Date` of a document and the `Code`,
+# `Name` and `Owner` of a catalog classes of their own - the ones metadata_schema answers with
+# for those names. The tool used to judge every attribute by the regular class: a `Length` on
+# `Number` was refused, and the yaml was finished by hand.
+
+
+def _document(tmp_path, name="Заявки"):
+    apply_result(scaffold.op_new_object(tmp_path, "Документ", name))
+    return tmp_path / f"{name}.yaml"
+
+
+def _bare_document(tmp_path, name="Шаги"):
+    """A document with no attributes at all - the template declares `Date` itself."""
+    path = tmp_path / f"{name}.yaml"
+    path.write_text(
+        f"ВидЭлемента: Документ\nИд: 6f0b6a44-0000-4000-8000-0000000000d1\nИмя: {name}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _attribute(path, name):
+    attributes = _valid_yaml(path.read_text(encoding="utf-8"))["Реквизиты"]
+    return next(a for a in attributes if a["Имя"] == name)
+
+
+@pytest.mark.needs_data
+def test_add_field_judges_a_built_in_attribute_by_its_own_class(tmp_path):
+    path = _document(tmp_path)
+    apply_result(scaffold.op_add_field(
+        path, "реквизит", "Номер",
+        props={
+            "Длина": 11, "Уникальность": "Истина",
+            "Автонумерация": {"Префикс": "ЗА", "Формат": {"ДлинаПрефикса": 2}},
+            "СерииНумерации": ["Префикс", "Постфикс"],
+        },
+    ))
+    text = path.read_text(encoding="utf-8")
+    number = _attribute(path, "Номер")
+    # No identifier: the class of the built-in declares none, and apply rejects one.
+    assert "Ид" not in number
+    assert number["Тип"] == "Строка"  # the platform default the class records
+    assert number["Длина"] == 11 and number["Уникальность"] == "Истина"
+    assert number["Автонумерация"] == {"Префикс": "ЗА", "Формат": {"ДлинаПрефикса": 2}}
+    assert number["СерииНумерации"] == ["Префикс", "Постфикс"]
+    assert (
+        "        Автонумерация:\n            Префикс: ЗА\n            Формат:\n"
+        "                ДлинаПрефикса: 2\n        СерииНумерации:\n"
+        "            - Префикс\n            - Постфикс\n"
+    ) in text
+
+
+@pytest.mark.needs_data
+def test_add_field_refuses_a_foreign_property_naming_the_class(tmp_path):
+    path = _document(tmp_path)
+    with pytest.raises(
+        ScaffoldError,
+        match=r"Номер \(класс NumberAttributeDescriptor\) нет свойства 'МаксимальнаяДлина'",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"МаксимальнаяДлина": 10})
+    # A regular attribute keeps the regular class as its judge - named as well.
+    with pytest.raises(
+        ScaffoldError, match=r"DocumentRegularAttributeDescriptor\) нет свойства 'Длина'",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Комментарий", props={"Длина": 10})
+
+
+@pytest.mark.needs_data
+def test_add_field_type_of_a_built_in_follows_its_class(tmp_path):
+    path = _bare_document(tmp_path)
+    with pytest.raises(
+        ScaffoldError,
+        match=r"'Строка' не подходит для стандартного реквизита Дата "
+              r"\(класс DateAttributeDescriptor\); допустимы: Дата, ДатаВремя, Момент",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Дата", type_="Строка")
+    apply_result(scaffold.op_add_field(path, "реквизит", "Дата"))
+    apply_result(scaffold.op_add_field(path, "реквизит", "Номер", type_="Число"))
+    text = path.read_text(encoding="utf-8")
+    # No type given: the platform default the class records, named by its last segment.
+    assert "    -\n        Имя: Дата\n        Тип: ДатаВремя\n" in text
+    assert "    -\n        Имя: Номер\n        Тип: Число\n" in text
+
+
+@pytest.mark.needs_data
+def test_add_field_of_a_built_in_without_a_type_property(tmp_path):
+    # The catalog `Name` declares no `Type` at all (always a string): the line is dropped and
+    # an explicit type refused - the demo project declares exactly the name and a `Length`.
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Задачи"))
+    path = tmp_path / "Задачи.yaml"
+    with pytest.raises(
+        ScaffoldError, match=r"Наименование \(класс CatalogNameAttribute\) нет свойства Тип",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Наименование", type_="Строка")
+    apply_result(scaffold.op_add_field(path, "реквизит", "Наименование", props={"Длина": 250}))
+    text = path.read_text(encoding="utf-8")
+    assert "Реквизиты:\n    -\n        Имя: Наименование\n        Длина: 250\n" in text
+    assert _valid_yaml(text)["Реквизиты"] == [{"Имя": "Наименование", "Длина": 250}]
+
+
+@pytest.mark.needs_data
+def test_add_field_of_an_open_typed_built_in_needs_the_type(tmp_path):
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Шаги"))
+    path = tmp_path / "Шаги.yaml"
+    with pytest.raises(
+        ScaffoldError, match=r"Владелец \(класс OwnerAttributeDescriptor\) нужен явный тип",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Владелец")
+    apply_result(scaffold.op_add_field(path, "реквизит", "Владелец", type_="Задачи.Ссылка?"))
+    assert _attribute(path, "Владелец") == {"Имя": "Владелец", "Тип": "Задачи.Ссылка?"}
+
+
+@pytest.mark.needs_data
+def test_add_field_a_namesake_of_another_kinds_built_in_stays_regular(tmp_path):
+    # `Number` is a built-in of a document only: in a catalog it is a regular attribute - an
+    # identifier, a type and the regular class's properties.
+    apply_result(scaffold.op_new_object(tmp_path, "Справочник", "Задачи"))
+    path = tmp_path / "Задачи.yaml"
+    with pytest.raises(
+        ScaffoldError, match=r"CatalogRegularAttributeDescriptor\) нет свойства 'Длина'",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Длина": 11})
+    apply_result(scaffold.op_add_field(path, "реквизит", "Номер", props={"МаксимальнаяДлина": 11}))
+    number = _attribute(path, "Номер")
+    assert set(number) == {"Ид", "Имя", "Тип", "МаксимальнаяДлина"} and number["Тип"] == "Строка"
+    # The same inside a tabular part of a document: its attributes are not dispatched.
+    doc = _document(tmp_path)
+    apply_result(scaffold.op_add_field(doc, "табличная-часть", "Строки"))
+    apply_result(scaffold.op_add_field(
+        doc, "реквизит", "Номер", tabular="Строки", props={"МаксимальнаяДлина": 5},
+    ))
+    row = _valid_yaml(doc.read_text(encoding="utf-8"))["ТабличныеЧасти"][0]["Реквизиты"][0]
+    assert set(row) == {"Ид", "Имя", "Тип", "МаксимальнаяДлина"} and row["Имя"] == "Номер"
+
+
+@pytest.mark.needs_data
+def test_add_field_nested_block_by_dotted_keys(tmp_path):
+    # The CLI and the LSP carry flat pairs only: a dotted key is the same block written flat,
+    # and a dict given for the same key is merged with it.
+    path = _document(tmp_path)
+    apply_result(scaffold.op_add_field(
+        path, "реквизит", "Номер",
+        props={
+            "Автонумерация.Префикс": "ЗА", "Автонумерация.Формат.ДлинаПрефикса": "2",
+            "Автонумерация": {"Постфикс": "П"}, "Длина": "11",
+        },
+    ))
+    number = _attribute(path, "Номер")
+    assert number["Автонумерация"] == {
+        "Префикс": "ЗА", "Формат": {"ДлинаПрефикса": 2}, "Постфикс": "П",
+    }
+    assert number["Длина"] == 11
+
+
+@pytest.mark.needs_data
+def test_add_field_nested_values_are_checked_by_their_kind(tmp_path):
+    path = _document(tmp_path)
+    # The keys of a block go against the block's own class.
+    with pytest.raises(
+        ScaffoldError,
+        match=r"блока Автонумерация \(класс NumberAutoNumbering\) нет свойства 'Префкс'",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Автонумерация": {"Префкс": "ЗА"}})
+    # A scalar property takes no block and no list; an empty block has nothing to write.
+    with pytest.raises(ScaffoldError, match=r"'Длина'.*не является блоком"):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Длина": {"x": 1}})
+    with pytest.raises(ScaffoldError, match=r"'Длина'.*не является списком"):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Длина": [1]})
+    with pytest.raises(ScaffoldError, match=r"'Автонумерация'.*пуст"):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Автонумерация": {}})
+    # A block the metamodel describes as opaque is the known limitation, named with its class.
+    with pytest.raises(
+        ScaffoldError, match=r"'Представление'.*класс Localizable.*известное ограничение",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Номер", props={"Представление": {"ru": "Номер"}})
+    # Nothing of that touched the file.
+    assert "Номер" not in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.needs_data
+def test_add_field_english_built_in_is_dispatched_by_its_english_name(tmp_path):
+    subsystem = _make_english_project(tmp_path)
+    path = subsystem / "Requests.yaml"
+    path.write_text(
+        "ElementKind: Document\nId: 6f0b6a44-0000-4000-8000-0000000000c1\nName: Requests\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(
+        ScaffoldError, match=r"Number \(класс NumberAttributeDescriptor\) нет свойства 'MaxLength'",
+    ):
+        scaffold.op_add_field(path, "реквизит", "Number", props={"MaxLength": 5})
+    apply_result(scaffold.op_add_field(
+        path, "реквизит", "Number", props={"Length": 11, "Autonumbering": {"Prefix": "RQ"}},
+    ))
+    # The keys in the file's spelling, the default type spelled the platform's English way.
+    assert (
+        "Attributes:\n    -\n        Name: Number\n        Type: String\n        Length: 11\n"
+        "        Autonumbering:\n            Prefix: RQ\n"
+    ) in path.read_text(encoding="utf-8")
+
+
+@pytest.mark.needs_data
+def test_set_field_property_on_a_built_in_and_its_block(tmp_path):
+    path = _document(tmp_path)
+    apply_result(scaffold.op_add_field(path, "реквизит", "Номер"))
+    apply_result(scaffold.op_set_field_property(
+        path, "реквизит", "Номер",
+        {"Уникальность": False, "Автонумерация": {"Префикс": "ЗА", "Использовать": True}},
+    ))
+    number = _attribute(path, "Номер")
+    assert number["Уникальность"] == "Ложь"  # a boolean the platform's way
+    assert number["Автонумерация"] == {"Префикс": "ЗА", "Использовать": "Истина"}
+    # A new block replaces the old one whole - nothing of the old nesting survives.
+    apply_result(scaffold.op_set_field_property(
+        path, "реквизит", "Номер", {"Автонумерация.Формат.ДлинаПрефикса": 2, "Длина": 7},
+    ))
+    text = path.read_text(encoding="utf-8")
+    number = _attribute(path, "Номер")
+    assert number["Автонумерация"] == {"Формат": {"ДлинаПрефикса": 2}} and number["Длина"] == 7
+    assert text.count("Автонумерация:") == 1 and "Префикс:" not in text
+    # A scalar over an existing block is still refused rather than flattened into it; and
+    # the class is the built-in's own here as well.
+    with pytest.raises(ScaffoldError, match="блоком"):
+        scaffold.op_set_field_property(path, "реквизит", "Номер", {"Автонумерация": "нет"})
+    with pytest.raises(
+        ScaffoldError,
+        match=r"Номер \(класс NumberAttributeDescriptor\) нет свойства 'МаксимальнаяДлина'",
+    ):
+        scaffold.op_set_field_property(path, "реквизит", "Номер", {"МаксимальнаяДлина": 5})
+
+
+def test_set_field_property_keeps_crlf(tmp_path):
+    path = tmp_path / "НастройкиПриложения.yaml"
+    path.write_bytes(
+        (
+            "ВидЭлемента: НаборКонстант\r\nИд: 6f0b6a44-0000-4000-8000-0000000000c4\r\n"
+            "Имя: НастройкиПриложения\r\nОбластьВидимости: ВПодсистеме\r\nКонстанты:\r\n    -\r\n"
+            "        Ид: 6f0b6a44-0000-4000-8000-0000000000c5\r\n        Имя: Ключ\r\n"
+            "        Тип: Строка\r\n        Представление: Старое\r\n"
+            "        ЗначениеПоУмолчанию: 1\r\n"
+        ).encode("utf-8")
+    )
+    apply_result(scaffold.op_set_field_property(
+        path, "константа", "Ключ",
+        {"Представление": "Новое", "ОграниченияЭлементов": {"МаксимальнаяДлина": 10}},
+    ))
+    raw = path.read_bytes().decode("utf-8")
+    # A line in the middle replaced, a block appended - and not a single lone LF.
+    assert (
+        "        Представление: Новое\r\n        ЗначениеПоУмолчанию: 1\r\n"
+        "        ОграниченияЭлементов:\r\n            МаксимальнаяДлина: 10\r\n"
+    ) in raw
+    assert raw.count("\n") == raw.count("\r\n")
+
+
 def test_new_object_presentation(tmp_path):
     apply_result(scaffold.op_new_object(
         tmp_path, "НаборКонстант", "НастройкиПриложения", presentation="Настройки приложения",

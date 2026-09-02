@@ -23,6 +23,7 @@ import os
 import re
 from html import unescape
 from pathlib import Path
+from typing import Any
 
 from xbsl import __version__
 from xbsl import (
@@ -624,9 +625,9 @@ def meta_add_field(
     yaml_path: str,
     field_kind: str,
     name: str,
-    type: str = "Строка",
+    type: str | None = None,
     tabular: str | None = None,
-    props: dict[str, str] | None = None,
+    props: dict[str, Any] | None = None,
     root: str | None = None,
 ) -> dict:
     """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
@@ -637,15 +638,28 @@ def meta_add_field(
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected.
 
+    type – the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
+    name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
+    and is judged by its own metamodel class - the one metadata_schema answers with for that
+    name: no "Ид", a "Тип" only where the class declares one ("Наименование" has none), the
+    class default when omitted ("Номер" - "Строка", "Дата" - "ДатаВремя"), a closed set
+    enforced ("Номер" takes "Строка" or "Число"), and "Владелец" needs the owner's reference
+    type explicitly.
+
     tabular – target tabular-section name when adding a реквизит into it.
 
-    props – the item's other properties as {"Property": "value"}: DefaultValue, Presentation,
+    props – the item's other properties as {"Property": value}: DefaultValue, Presentation,
     MaxLength and whatever else the item's class declares (ask metadata_schema with
-    sections=["<section>"] for the list). Names are checked against that class in either
-    language; Name/Type/Id belong to the parameters above, not here.
-    Values are written as yaml scalars (quoted where a bare one would be ambiguous); a
-    nested block is not a scalar - such a value is refused rather than mangled. To change
-    the properties of an item that already exists use meta_set_field_property.
+    sections=["<section>"] and names=["<name>"] for the list - a built-in "Номер" declares
+    "Длина", "Уникальность" and "Автонумерация" where a regular attribute does not). Names
+    are checked against that class in either language; Name/Type/Id belong to the parameters
+    above, not here. A scalar is written as a yaml scalar (quoted where a bare one would be
+    ambiguous). A nested block is a dict - {"Автонумерация": {"Префикс": "ЗА", "Формат":
+    {"ДлинаПрефикса": 2}}} - or dotted keys ({"Автонумерация.Префикс": "ЗА"}), checked the
+    same way level by level; a list property ("СерииНумерации") is a list of scalars. A
+    block the metamodel describes as opaque ("Представление") is refused with its class
+    named - it still goes into the yaml by hand. To change the properties of an item that
+    already exists use meta_set_field_property.
     """
     base = _base(root)
     return _meta(
@@ -660,7 +674,7 @@ def meta_set_field_property(
     yaml_path: str,
     field_kind: str,
     name: str,
-    props: dict[str, str],
+    props: dict[str, Any],
     tabular: str | None = None,
     root: str | None = None,
 ) -> dict:
@@ -669,10 +683,12 @@ def meta_set_field_property(
     one is appended to the item.
 
     The metadata counterpart of meta_set_component_property, which serves interface
-    components only. Names are checked against the item's metamodel class (both languages
-    accepted, written in the project's own); Name is refused - renaming is meta_rename_object,
-    which updates the references too. A property written as a nested block is refused rather
-    than flattened into a scalar.
+    components only. Names are checked against the item's metamodel class - a built-in
+    "Номер" or "Код" by its own class, as in meta_add_field (both languages accepted, written
+    in the project's own); Name is refused - renaming is meta_rename_object, which updates the
+    references too. Values take the shapes meta_add_field takes: a nested block as a dict or
+    dotted keys replaces whatever stands under that key whole; a scalar over an existing
+    block is refused rather than flattened into it.
     """
     base = _base(root)
     return _meta(

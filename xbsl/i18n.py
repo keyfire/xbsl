@@ -799,8 +799,8 @@ _CORE_MESSAGES = {
         "en": "the field name",
     },
     "cli.help.scaf.af-type": {
-        "ru": "тип поля (по умолчанию Строка)",
-        "en": "the field type (default String)",
+        "ru": "тип поля (по умолчанию Строка; у стандартного реквизита – тип его класса)",
+        "en": "the field type (default String; a standard attribute takes its class default)",
     },
     "cli.help.scaf.ar-yaml": {
         "ru": "yaml HttpСервис, в который добавить маршруты",
@@ -880,9 +880,11 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.field-prop": {
         "ru": "свойство элемента (можно повторять): ЗначениеПоУмолчанию=https://example.com, "
-              "Представление=Адрес сервиса",
+              "Представление=Адрес сервиса; вложенный блок – ключом через точку: "
+              "Автонумерация.Префикс=ЗА",
         "en": "an item property (repeatable): DefaultValue=https://example.com, "
-              "Presentation=Service address",
+              "Presentation=Service address; a nested block by a dotted key: "
+              "Autonumbering.Prefix=RQ",
     },
     "cli.help.scaf.set-field-property": {
         "ru": "задать свойства существующего элемента секции (константы, реквизита ...)",
