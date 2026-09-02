@@ -26,9 +26,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-# The command set comes from the module itself rather than from parsing the main help:
-# the scaffolding is listed there as prose (a comma-separated list inside a group), which
-# the parser cannot see.
+# The command set comes from the registry of the module itself (cli.COMMANDS) rather than
+# from parsing the main help: the scaffolding is listed there as prose (a comma-separated
+# list inside a group), which the parser cannot see.
 from xbsl import cli  # noqa: E402 - imported after sys.path is adjusted
 
 TEXT = {
@@ -286,11 +286,13 @@ def page(lang: str) -> str:
               "Не редактировать вручную. -->\n\n")
     out.write(t["intro"] + "\n\n")
     out.write(f"## {t['common']}\n\n" + render(root_help, t))
-    for name in (*cli._SERVER_COMMANDS, "templates", "baseline", "self-update"):
-        section(out, name, lang, t)
+    for command in cli.COMMANDS:
+        if command.reference and not command.scaffold:
+            section(out, command.name, lang, t)
     out.write(f"## {t['scaffold']}\n\n{t['scaffold_intro']}\n\n")
-    for name in cli._META_COMMANDS:
-        section(out, name, lang, t, level="###")
+    for command in cli.COMMANDS:
+        if command.reference and command.scaffold:
+            section(out, command.name, lang, t, level="###")
     return out.getvalue()
 
 

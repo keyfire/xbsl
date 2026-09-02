@@ -39,12 +39,18 @@ def walk(parser: argparse.ArgumentParser, path: str):
 
 
 def parsers():
-    """(command path, parser) for every argparse tree the CLI dispatches to."""
-    yield from walk(cli.build_parser(), "xbsl")
-    yield from walk(cli._templates_parser(), "xbsl templates")
-    yield from walk(cli._scaffold_parser(), "xbsl <scaffold>")
-    yield from walk(cli._selfupdate_parser(), "xbsl self-update")
-    yield from walk(cli._baseline_parser(), "xbsl baseline")
+    """(command path, parser) for every argparse tree the CLI dispatches to.
+
+    The registry names the parser factory of every command cli.py owns; a factory shared by
+    a family (the scaffolding) is walked once, under the family's label.
+    """
+    walked = set()
+    for command in cli.COMMANDS:
+        if command.parser is None or command.parser in walked:
+            continue
+        walked.add(command.parser)
+        label = "xbsl <scaffold>" if command.scaffold else f"xbsl {command.name}"
+        yield from walk(command.parser(), label)
 
 
 def actions_with_help(parser: argparse.ArgumentParser):
@@ -96,9 +102,8 @@ def test_parser_shapes_match_between_languages():
 
 
 def command_sections() -> set[str]:
-    """The sections both pages must carry: servers, templates, self-update, scaffolding."""
-    return {f"xbsl {name}" for name in (*cli._SERVER_COMMANDS, "templates", "baseline", "self-update",
-                                        *cli._META_COMMANDS)}
+    """The sections both pages must carry: every command the registry marks for the reference."""
+    return {f"xbsl {command.name}" for command in cli.COMMANDS if command.reference}
 
 
 def page_sections(fname: str) -> set[str]:
@@ -122,19 +127,23 @@ def test_page_sections_match_between_languages():
     assert page_sections("CLI.md") == page_sections("CLI.ru.md")
 
 
-# The server commands dispatch to entry points with optional dependencies (extras mcp/lsp);
-# without those installed --help cannot answer, which is a fact of the minimal install, not
-# a hang. The public CI installs [dev] only - skip what cannot run there.
-_SERVER_DEPS = {("mcp",): "mcp", ("lsp",): "pygls"}
+def help_probes() -> list:
+    """The check mode, every top-level command and one scaffold command for the family: the
+    scaffolding shares a parser, so one of them answering stands for all (and spares a
+    subprocess per name)."""
+    probes = [pytest.param((), id="check")]
+    probes += [pytest.param((c.name,), id=c.name) for c in cli.COMMANDS if not c.scaffold]
+    first = next(c.name for c in cli.COMMANDS if c.scaffold)
+    return [*probes, pytest.param((first,), id=first)]
 
 
-@pytest.mark.parametrize(
-    "command",
-    [(), ("mcp",), ("lsp",), ("web",), ("templates",), ("baseline",), ("self-update",), ("new-object",)],
-)
+@pytest.mark.parametrize("command", help_probes())
 def test_help_answers_within_timeout(command):
-    # `xbsl mcp --help` used to start the MCP server and wait on stdin instead of answering
-    dep = _SERVER_DEPS.get(tuple(command))
+    # `xbsl mcp --help` used to start the MCP server and wait on stdin instead of answering.
+    # The server commands dispatch to entry points with optional dependencies (extras
+    # mcp/lsp); without those installed --help cannot answer, which is a fact of the minimal
+    # install, not a hang. The public CI installs [dev] only - skip what cannot run there.
+    dep = next((c.dependency for c in cli.COMMANDS if (c.name,) == command), None)
     if dep and importlib.util.find_spec(dep) is None:
         pytest.skip(f"optional dependency {dep} is not installed")
     out = subprocess.run(

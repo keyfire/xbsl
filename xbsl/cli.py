@@ -6,7 +6,10 @@ import argparse
 import json
 import sys
 import textwrap
+from collections.abc import Callable
+from functools import partial
 from pathlib import Path
+from typing import NamedTuple
 
 from xbsl import __version__, baseline, dataset, engine, environment, i18n, plugins, report
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
@@ -103,24 +106,20 @@ def _commands_help() -> str:
 
     The top-level commands are dispatched by hand in main(): the default mode accepts arbitrary
     paths, so argparse cannot tell "xbsl Форма.xbsl" from a command name and would not build this
-    list itself. The names come from the same tuples as the dispatch, so they cannot drift apart.
-    The help texts go through i18n.t: the language is chosen before build_parser is called.
+    list itself. The names and descriptions come from COMMANDS, the registry main() dispatches
+    by, so the list cannot drift apart from the dispatch. The help texts go through i18n.t: the
+    language is chosen before build_parser is called.
     """
-    entries = [(i18n.t("cli.help.commands.lint-name"), i18n.t("cli.help.commands.lint-desc"))]
-    entries += [(name, i18n.t(f"cli.help.server.{name}")) for name in _SERVER_COMMANDS]
-    entries += [
-        ("templates", i18n.t("cli.help.commands.templates")),
-        ("baseline", i18n.t("cli.help.commands.baseline")),
-        ("extract", i18n.t("cli.help.commands.extract")),
-        ("data-diff", i18n.t("cli.help.commands.data-diff")),
-        ("translate", i18n.t("cli.help.commands.translate")),
-        ("self-update", i18n.t("cli.help.commands.self-update")),
+    entries = [
+        (i18n.t(command.label) if command.label else command.name, i18n.t(command.help))
+        for command in COMMANDS if not command.scaffold
     ]
     lines = [i18n.t("cli.help.commands.header")]
     lines += [f"  {name:<16}{description}" for name, description in entries]
     lines += ["", "  " + i18n.t("cli.help.commands.scaffold-header")]
     # break_on_hyphens=False: without it the wrapper splits names like add-subsystem in half.
-    lines += textwrap.wrap(", ".join(_META_COMMANDS), width=74, break_on_hyphens=False,
+    scaffold = ", ".join(command.name for command in COMMANDS if command.scaffold)
+    lines += textwrap.wrap(scaffold, width=74, break_on_hyphens=False,
                            initial_indent="    ", subsequent_indent="    ")
     lines += ["", i18n.t("cli.help.commands.footer")]
     return "\n".join(lines)
@@ -317,13 +316,14 @@ def _apply_fixes(sources, diagnostics, args) -> int:
     return 1 if any(d.severity.value == "error" for d in remaining) else 0
 
 
+#: The metadata scaffolding in the order the help and the reference list it: one family
+#: sharing a parser (_scaffold_parser) and a handler (_scaffold_main) across every name.
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
     "add-subsystem", "add-dependency", "add-localization", "set-field-property",
     "rename-object", "delete-object", "set-access", "object-info", "project-info",
     "localization-info", "form-tree", "form-edit", "form-handlers",
 )
-_SERVER_COMMANDS = ("lsp", "mcp", "web")
 
 
 def _selfupdate_parser() -> argparse.ArgumentParser:
@@ -333,6 +333,21 @@ def _selfupdate_parser() -> argparse.ArgumentParser:
     parser.add_argument("--stop-holders", action="store_true",
                         help=i18n.t("cli.help.selfupdate-stop"))
     return parser
+
+
+def _selfupdate_main(argv: list[str]) -> int:
+    # Updating by unpacking the wheel - safe while the exe files are held by LSP/MCP processes.
+    from xbsl import selfupdate
+
+    args = _selfupdate_parser().parse_args(argv)
+    try:
+        old, new = selfupdate.self_update(version=args.version, stop_busy=args.stop_holders,
+                                          log=lambda msg: print(msg, file=sys.stderr))
+    except selfupdate.SelfUpdateError as exc:
+        print(json.dumps({"error": str(exc)}, ensure_ascii=False))
+        return 2
+    print(json.dumps({"updated": old != new, "from": old, "to": new}, ensure_ascii=False))
+    return 0
 
 
 def _baseline_parser() -> argparse.ArgumentParser:
@@ -1006,66 +1021,8 @@ def _scaffold_main(argv: list[str]) -> int:
     return 0
 
 
-def main(argv: list[str] | None = None) -> int:
-    # The linter output is always UTF-8, regardless of the console encoding (matters for
-    # Cyrillic and for redirection to a file/editor).
-    for stream in (sys.stdout, sys.stderr):
-        reconfigure = getattr(stream, "reconfigure", None)
-        if reconfigure is not None:
-            try:
-                reconfigure(encoding="utf-8")
-            except (ValueError, OSError):
-                pass
-
-    argv = list(sys.argv[1:] if argv is None else argv)
-    if argv[:1] == ["self-update"]:
-        # Updating by unpacking the wheel - safe while the exe files are held by LSP/MCP processes.
-        from xbsl import selfupdate
-
-        sp_args = _selfupdate_parser().parse_args(argv[1:])
-        try:
-            old, new = selfupdate.self_update(version=sp_args.version,
-                                              stop_busy=sp_args.stop_holders,
-                                              log=lambda msg: print(msg, file=sys.stderr))
-        except selfupdate.SelfUpdateError as exc:
-            print(json.dumps({"error": str(exc)}, ensure_ascii=False))
-            return 2
-        print(json.dumps({"updated": old != new, "from": old, "to": new}, ensure_ascii=False))
-        return 0
-    if argv and argv[0] in _SERVER_COMMANDS:
-        # xbsl lsp|mcp|web - a dispatcher to the entry points of the same names.
-        command, rest = argv[0], argv[1:]
-        sys.argv = [f"xbsl-{command}", *rest]
-        if command == "lsp":
-            from xbsl.lsp import main as server_main
-        elif command == "mcp":
-            from xbsl.mcp_server import main as server_main
-        else:
-            from xbsl.web import main as server_main
-        server_main()
-        return 0
-    if argv[:1] == ["templates"]:
-        return _templates_main(argv[1:])
-    if argv[:1] == ["baseline"]:
-        return _baseline_main(argv[1:])
-    if argv[:1] == ["extract"]:
-        # The dataset generator (xbsl.extract) - the same code as tools/extract.py in a clone.
-        from xbsl import extract as extract_package
-
-        return extract_package.main(argv[1:])
-    if argv[:1] == ["data-diff"]:
-        from xbsl import datadiff
-
-        return datadiff.cli_main(argv[1:])
-    if argv[:1] == ["translate"]:
-        from xbsl.translation import cli as translate_cli
-
-        return translate_cli.cli_main(argv[1:])
-    if argv and argv[0] in _META_COMMANDS:
-        return _scaffold_main(argv)
-    if argv[:1] == ["lint"]:
-        argv = argv[1:]  # an explicit alias of the default mode
-
+def _check_main(argv: list[str]) -> int:
+    """The check mode: `xbsl <paths> [options]`, also spelled `xbsl lint <paths>`."""
     # The language must be known BEFORE build_parser: the check-mode help (help=) is assembled in
     # the chosen language. Prescan argv for --lang; env and locale are read by t() via current_lang().
     i18n.set_lang(i18n.lang_from_argv(argv))
@@ -1297,6 +1254,117 @@ def main(argv: list[str] | None = None) -> int:
                 )
 
     return 1 if any(d.severity.value == "error" for d in diagnostics) else 0
+
+
+def _server_main(command: str, argv: list[str]) -> int:
+    """xbsl lsp|mcp|web - a dispatcher to the entry points of the same names."""
+    sys.argv = [f"xbsl-{command}", *argv]
+    if command == "lsp":
+        from xbsl.lsp import main as server_main
+    elif command == "mcp":
+        from xbsl.mcp_server import main as server_main
+    else:
+        from xbsl.web import main as server_main
+    server_main()
+    return 0
+
+
+def _extract_main(argv: list[str]) -> int:
+    # The dataset generator (xbsl.extract) - the same code as tools/extract.py in a clone.
+    from xbsl import extract as extract_package
+
+    return extract_package.main(argv)
+
+
+def _datadiff_main(argv: list[str]) -> int:
+    from xbsl import datadiff
+
+    return datadiff.cli_main(argv)
+
+
+def _translate_main(argv: list[str]) -> int:
+    from xbsl.translation import cli as translate_cli
+
+    return translate_cli.cli_main(argv)
+
+
+def _scaffold_run(name: str, argv: list[str]) -> int:
+    """One scaffold command: the family's parser wants the command name back in front."""
+    return _scaffold_main([name, *argv])
+
+
+class Command(NamedTuple):
+    """One top-level command - the single place `xbsl <command>` is registered (COMMANDS).
+
+    The help epilog (_commands_help), the dispatch in main(), the reference generator
+    (scripts/gen-cli-docs.py) and the help tests (tests/test_cli_docs.py) all read the
+    registry: a new command is one record here plus its parser and handler, and every
+    consumer picks it up. Before the registry each of them kept its own list, and a command
+    missing from one of the lists was noticed by a red test or by a reader of the reference.
+    """
+
+    name: str
+    #: i18n key of the one-line description in the help epilog.
+    help: str
+    #: The handler: takes the arguments after the command name, returns the exit code.
+    run: Callable[[list[str]], int]
+    #: The argparse factory when this module owns the parser - the help tests walk it; None
+    #: when the command hands its arguments to another module's entry point.
+    parser: Callable[[], argparse.ArgumentParser] | None = None
+    #: i18n key of the name as the help prints it, when it says more than the name
+    #: ("lint <paths>"); None prints the name itself.
+    label: str | None = None
+    #: The metadata scaffolding: the family shares one parser and one handler, the help
+    #: lists it as prose and the reference gives it a chapter of subsections.
+    scaffold: bool = False
+    #: Whether the reference (docs/CLI*.md) carries a section of the command's own --help.
+    reference: bool = True
+    #: Import name of the optional dependency the command needs even to answer --help
+    #: (the [lsp] and [mcp] extras); without it the tests skip the command.
+    dependency: str | None = None
+
+
+#: The top-level commands in the order the help lists them. The reference documents the
+#: check mode as its opening block rather than as a section of `lint`, and describes
+#: extract, data-diff and translate on the platform-data and translation pages, so those
+#: four carry no section of their own.
+COMMANDS: tuple[Command, ...] = (
+    Command("lint", "cli.help.commands.lint-desc", _check_main, parser=build_parser,
+            label="cli.help.commands.lint-name", reference=False),
+    Command("lsp", "cli.help.server.lsp", partial(_server_main, "lsp"), dependency="pygls"),
+    Command("mcp", "cli.help.server.mcp", partial(_server_main, "mcp"), dependency="mcp"),
+    Command("web", "cli.help.server.web", partial(_server_main, "web")),
+    Command("templates", "cli.help.commands.templates", _templates_main,
+            parser=_templates_parser),
+    Command("baseline", "cli.help.commands.baseline", _baseline_main, parser=_baseline_parser),
+    Command("extract", "cli.help.commands.extract", _extract_main, reference=False),
+    Command("data-diff", "cli.help.commands.data-diff", _datadiff_main, reference=False),
+    Command("translate", "cli.help.commands.translate", _translate_main, reference=False),
+    Command("self-update", "cli.help.commands.self-update", _selfupdate_main,
+            parser=_selfupdate_parser),
+    *(Command(name, f"cli.help.scaf.{name}", partial(_scaffold_run, name),
+              parser=_scaffold_parser, scaffold=True) for name in _META_COMMANDS),
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    # The linter output is always UTF-8, regardless of the console encoding (matters for
+    # Cyrillic and for redirection to a file/editor).
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8")
+            except (ValueError, OSError):
+                pass
+
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # By name, not by argparse: the check mode accepts arbitrary paths, so a parser could not
+    # tell a command from a file that happens to be called like one.
+    for command in COMMANDS:
+        if argv[:1] == [command.name]:
+            return command.run(argv[1:])
+    return _check_main(argv)
 
 
 if __name__ == "__main__":
