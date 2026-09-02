@@ -12,32 +12,13 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-09-02 – 0.89.0, 0.90.0
 
 ### Added
 - **`lint_paths` takes `root` like the `meta_*` tools do.** Relative `paths` and `baseline`
   resolve against the caller's root rather than the server's working directory, so a session
   in a git worktree no longer checks the other checkout and reads its clean answer as its own;
   the diagnostics carry absolute paths and the summary names the `root`.
-
-### Fixed
-- **The term extractor fills the gaps of the common table with the terms classes state.** The
-  built-in code attribute had no common spelling: a dozen classes state the term `Code`, and
-  the neighbourhood reading refuses `Code` as an English candidate because a class-file
-  attribute is named so. With the pair absent, `yaml/unknown-attribute-property` tolerated the
-  keys of the code attribute on every ASCII-named attribute of an English tree - `Length` on a
-  number went unreported. A stated term answers only where the neighbourhood settled nothing,
-  so the settled spellings stay; data rebuilt with the fix carries the pair.
-- **A name inside a type expression of the code is translated as a type.** The token walk
-  did not tell a type position from a member access, and `.Ссылка` typing a parameter, a
-  declaration, a constructor, a cast or a type argument came out as the property `Link`
-  instead of the facet `Reference` - the English tree did not compile, and a parity seed of
-  `code/unknown-ns-object` had to be marked as known. The spans of the type expressions now
-  come from the parser, and a name inside one resolves the way a yaml type does.
-
-## 2026-09-02 – 0.89.0
-
-### Added
 - **`code/foreign-not-public` (tier D, error, project-wide) – the code side of
   `yaml/foreign-not-public`.** A module reaching an element of another subsystem left at
   `VisibilityScope: InSubsystem` (or with no scope at all – the default) was refused by the
@@ -70,6 +51,19 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   class-declared type pairs – the data needs regenerating to pick them up.
 
 ### Fixed
+- **The term extractor fills the gaps of the common table with the terms classes state.** The
+  built-in code attribute had no common spelling: a dozen classes state the term `Code`, and
+  the neighbourhood reading refuses `Code` as an English candidate because a class-file
+  attribute is named so. With the pair absent, `yaml/unknown-attribute-property` tolerated the
+  keys of the code attribute on every ASCII-named attribute of an English tree - `Length` on a
+  number went unreported. A stated term answers only where the neighbourhood settled nothing,
+  so the settled spellings stay; data rebuilt with the fix carries the pair.
+- **A name inside a type expression of the code is translated as a type.** The token walk
+  did not tell a type position from a member access, and `.Ссылка` typing a parameter, a
+  declaration, a constructor, a cast or a type argument came out as the property `Link`
+  instead of the facet `Reference` - the English tree did not compile, and a parity seed of
+  `code/unknown-ns-object` had to be marked as known. The spans of the type expressions now
+  come from the parser, and a name inside one resolves the way a yaml type does.
 - **A member of a local declared without a type is spelled by the inferred type** (constructor,
   cast, literal), through the owner table walked up the base types (`Remove` on a map);
   `code/unknown-member` accepts the ancestor's spelling.
