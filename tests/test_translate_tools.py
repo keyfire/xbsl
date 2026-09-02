@@ -105,6 +105,7 @@ def test_translate_gaps_names_the_dictionary_it_answered_from(mcp_module, tmp_pa
 # --- the CLI -------------------------------------------------------------------------------
 
 
+@pytest.mark.needs_data
 def test_cli_table_modes_refuse_a_root_without_a_dictionary(tmp_path, capsys):
     project = _project(tmp_path)
     code = cli.main(["translate", str(project), "--gaps", "--format", "json"])
