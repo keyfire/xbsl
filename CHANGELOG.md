@@ -12,6 +12,24 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **The `xbsl translate` report says when the dictionary has fallen behind the sources.** The
+  count of project surfaces was the only sign that a local report had gone stale after an edit,
+  and noticing it took comparing that number by eye with a report from elsewhere. The line names
+  how many files were changed after the dictionary and which of them is the newest; in json it
+  is the `dictionary_behind` field. Modification times are what is compared - there is nothing
+  else to compare - so the mark stays a note and never changes the verdict.
+
+### Fixed
+- **The build number is recorded only for the version it belongs to.** Extracting under a
+  borrowed name (`--element-version`) recorded in `builds` that the borrowed directory holds a
+  build of the version it was never taken from: the entry had to be removed by hand, and until
+  it was, `--keep-previous` would have named a snapshot after that foreign build. A build
+  number belonging to the distribution's own version is no longer recorded at all, and the run
+  says so in a line.
+
 ## 2026-09-02 – 0.89.0, 0.90.0, 0.91.0
 
 ### Added

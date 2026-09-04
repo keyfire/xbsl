@@ -146,6 +146,14 @@ MESSAGES = {
         "en": "distinct string literals: {done} translated, {missing} left in Cyrillic"
               " ({occurrences} occurrences rewritten)",
     },
+    "translate.dictionary-behind": {
+        "ru": "словарь отстаёт от исходников: правились после него файлов – {files}, "
+              "позже всех {newest}. Отчёт описывает текущее дерево, а словарь мог за ним "
+              "не поспеть",
+        "en": "the dictionary is behind the sources: {files} files were changed after it, "
+              "the newest is {newest}. The report describes the tree as it is now, and the "
+              "dictionary may not have kept up",
+    },
     "translate.summary-kept": {
         "ru": "оставлено как данные (тексты): {texts}; предупреждений: {warnings}",
         "en": "kept as data (texts): {texts}; warnings: {warnings}",
@@ -351,10 +359,11 @@ def cli_main(argv: list[str] | None = None) -> int:
             missing_literals=missing_literals,
         )
 
+    lag = _dictionary_lag(report, root, found)
     if args.format == "json":
-        print(json.dumps(_as_json(report, args, found), ensure_ascii=False, indent=1))
+        print(json.dumps(_as_json(report, args, found, lag), ensure_ascii=False, indent=1))
     else:
-        _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
+        _print_text(report, args, missing_tokens, missing_phrases, missing_literals, lag)
 
     if args.strict and not _ready(report):
         return 1
@@ -428,9 +437,10 @@ def _no_dictionary(root: Path) -> int:
     return 2
 
 
-def _as_json(report, args, dictionary: Path | None) -> dict:
+def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> dict:
     out = {
         "dictionary": str(dictionary) if dictionary else None,
+        "dictionary_behind": lag,
         "totals": report.totals(),
         "ready": _ready(report),
         "problems": report.problems,
@@ -455,7 +465,52 @@ def _as_json(report, args, dictionary: Path | None) -> dict:
     return out
 
 
-def _print_text(report, args, missing_tokens, missing_phrases, missing_literals) -> None:
+def _newest_mtime(paths) -> float:
+    """The newest modification time among the paths; 0.0 when there are none to read."""
+    newest = 0.0
+    for path in paths:
+        try:
+            newest = max(newest, path.stat().st_mtime)
+        except OSError:  # a file that vanished between the walk and the stat
+            continue
+    return newest
+
+
+def _dictionary_lag(report, root: Path, dictionary: Path | None) -> dict | None:
+    """Which sources are newer than the dictionary, or None when none are.
+
+    The count of project surfaces was the only sign that a local report had gone stale after
+    an edit, and noticing it took comparing the number by eye with a report from elsewhere.
+    This answers the question the number stood in for: has the code moved since the
+    dictionary last did.
+
+    Modification times, not content: the dictionary states no version of the tree, and there
+    is nothing else to compare. The price is that a fresh checkout stamps every file with the
+    same recent time, and the mark then says the obvious - it is a note in the report, never
+    a verdict.
+    """
+    if dictionary is None:
+        return None
+    files = [dictionary] if dictionary.is_file() else sorted(dictionary.rglob("*.yaml"))
+    written = _newest_mtime(files)
+    if not written:
+        return None
+    newer = []
+    for rel in report.files:
+        path = root / rel
+        try:
+            if path.stat().st_mtime > written:
+                newer.append((path.stat().st_mtime, rel))
+        except OSError:
+            continue
+    if not newer:
+        return None
+    newer.sort()
+    return {"files": len(newer), "newest": newer[-1][1]}
+
+
+def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
+                lag: dict | None = None) -> None:
     totals = report.totals()
     print(i18n.t("translate.summary", **{k: totals[k] for k in ("files", "surfaces", "translated", "coverage")}))
     print(i18n.t(
@@ -463,6 +518,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals)
         tokens=totals["missing_tokens"], phrases=totals["missing_phrases"],
         platform=totals["platform_gaps"],
     ))
+    if lag:
+        print(i18n.t("translate.dictionary-behind", files=lag["files"], newest=lag["newest"]))
     print(i18n.t("translate.summary-kept", texts=totals["texts_kept"], warnings=totals["warnings"]))
     if totals["literals_translated"] or totals["missing_literals"]:
         print(i18n.t(

@@ -83,6 +83,19 @@ def main(argv=None) -> int:
     if args.data_dir:
         _distro.set_data_root(args.data_dir)
     build = _distro.detect_build(Path(args.dist)) if args.dist else ""
+    # The build number belongs to the version the DISTRIBUTION carries. Extracting under a
+    # borrowed name (--element-version) filed the data elsewhere, and the index then claimed
+    # that the borrowed directory holds a build of the version it was never taken from -
+    # a record that has to be removed by hand, and until it is, --keep-previous names a
+    # snapshot after a foreign build.
+    if build and args.element_version:
+        native = _distro.native_version(Path(args.dist))
+        if native and native != version:
+            print(
+                f"номер сборки +{build} принадлежит версии {native} дистрибутива, "
+                f"а данные пишутся в {version} - в индекс он не записывается"
+            )
+            build = ""
     if args.keep_previous:
         if not version:
             raise SystemExit("--keep-previous требует --dist либо --element-version")

@@ -162,6 +162,39 @@ def test_keep_previous_without_a_recorded_build_says_so(data_root):
     assert not (data_root / "1.2.3+243").exists()
 
 
+def test_native_version_is_the_one_the_distribution_carries(tmp_path):
+    """It answers about the DISTRIBUTION and never raises: it is asked only to compare."""
+    (tmp_path / "acme-element-server-with-ide-1.2.3-20260731.125205+243-w.car").write_bytes(b"")
+    assert _distro.native_version(tmp_path) == "1.2.3"
+    assert _distro.native_version(tmp_path / "no-such-directory") == ""
+
+
+def test_a_borrowed_version_name_does_not_record_a_foreign_build(data_root, tmp_path, capsys):
+    """A run under a borrowed name (--element-version) records no foreign build.
+
+    The index would claim that the borrowed directory holds a build of a version it was
+    never taken from, and the entry had to be removed by hand. Worse than the entry itself:
+    --keep-previous would name a snapshot after that build.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "acme-element-server-with-ide-1.2.3-20260731.125205+243-w.car").write_bytes(b"")
+
+    # Every step skipped: what is judged is the index the manager writes, not the generation.
+    every_step = ",".join(name for name, _, _, _ in extract.STEPS)
+    extract.main(["--dist", str(dist), "--element-version", "1.2-develop", "--skip", every_step])
+
+    out = capsys.readouterr().out
+    index = data_root / "index.json"
+    recorded = _distro._read_index(index).get("builds") or {} if index.is_file() else {}
+    assert "1.2-develop" not in recorded
+    assert "не записывается" in out
+
+    # The control: without a borrowed name the build number is recorded as before.
+    extract.main(["--dist", str(dist), "--skip", every_step])
+    assert (_distro._read_index(index).get("builds") or {}).get("1.2.3") == "243"
+
+
 def test_keep_previous_skips_the_same_build(data_root):
     (data_root / "1.2.3").mkdir()
     _distro.record_build("1.2.3", "243")

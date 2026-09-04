@@ -47,6 +47,21 @@ def detect_version(dist: Path, override: str | None = None) -> str:
     return m.group(1)
 
 
+def native_version(dist: Path) -> str:
+    """The version the distribution itself carries, or '' when its name does not say.
+
+    detect_version answers what the data will be FILED under and honours the override;
+    this one answers what the distribution is, and never raises: the caller asks it only
+    to tell an override apart from the real thing.
+    """
+    try:
+        car = find_car(dist)
+    except SystemExit:
+        return ""
+    m = _VER_RE.search(car.name)
+    return m.group(1) if m else ""
+
+
 def detect_build(dist: Path) -> str:
     """The build number from the server .car name ('' when the name carries none).
 
