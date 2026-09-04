@@ -219,6 +219,105 @@ def test_non_form_module_not_checked(tmp_path):
     assert not _has(d, "code/server-call-from-handler")
 
 
+# --- code/server-annotation-in-client-module -------------------------------------------
+#
+# The mirror of the check below. The whole matrix was put through the compiler on a
+# throwaway application: a client module carrying `@НаСервере` is refused with "This context
+# allows only static methods" - a message that names neither the module nor its environment.
+
+def _client_module(tmp_path, module):
+    (tmp_path / "Модуль.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nОкружение: Клиент\n", encoding="utf-8"
+    )
+    (tmp_path / "Модуль.xbsl").write_text(module, encoding="utf-8")
+    return engine.run(
+        discover([str(tmp_path)]), select={"code/server-annotation-in-client-module"}
+    )
+
+
+def test_server_annotation_in_client_module_flagged(tmp_path):
+    d = _client_module(tmp_path, "@НаСервере\nметод Ф()\n    возврат\n;\n")
+    assert any(
+        x.rule_id == "code/server-annotation-in-client-module"
+        and "НаСервере" in x.message and "Модуль" in x.message
+        for x in d
+    ), [x.message for x in d]
+
+
+def test_server_annotation_beside_the_client_one_is_still_flagged(tmp_path):
+    """The compiler judges the server half on its own - the pair does not excuse it."""
+    d = _client_module(tmp_path, "@НаСервере @НаКлиенте\nметод Ф()\n    возврат\n;\n")
+    assert _has(d, "code/server-annotation-in-client-module")
+
+
+def test_a_client_module_with_client_annotations_is_silent(tmp_path):
+    """The control: this is how a client module is written, and it compiles."""
+    d = _client_module(tmp_path, "@НаКлиенте\nметод Ф()\n    возврат\n;\n")
+    assert not _has(d, "code/server-annotation-in-client-module")
+
+
+def test_a_server_annotation_in_a_shared_module_is_silent(tmp_path):
+    """The control on the environment: КлиентИСервер accepts both annotations."""
+    (tmp_path / "Модуль.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Модуль\nОкружение: КлиентИСервер\n", encoding="utf-8"
+    )
+    (tmp_path / "Модуль.xbsl").write_text(
+        "@НаСервере @НаКлиенте\nметод Ф()\n    возврат\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]),
+                   select={"code/server-annotation-in-client-module"})
+    assert not _has(d, "code/server-annotation-in-client-module")
+
+
+def test_the_english_spelling_is_judged_too(tmp_path):
+    (tmp_path / "Модуль.yaml").write_text(
+        "ElementKind: CommonModule\nName: Module\nEnvironment: Client\n", encoding="utf-8"
+    )
+    (tmp_path / "Модуль.xbsl").write_text(
+        "@OnServer\nmethod F()\n    return\n;\n", encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]),
+                   select={"code/server-annotation-in-client-module"})
+    assert _has(d, "code/server-annotation-in-client-module")
+
+
+# --- code/client-module-in-http-service: the consumer is any server-side module --------
+
+
+def test_a_server_common_module_reaching_a_client_one_is_flagged(tmp_path):
+    """The compiler refuses this call the way it refuses one from an HTTP service."""
+    (tmp_path / "Клиентский.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Клиентский\nОкружение: Клиент\n", encoding="utf-8")
+    (tmp_path / "Клиентский.xbsl").write_text(
+        "@НаКлиенте\nметод Значение(): Строка\n    возврат \"к\"\n;\n", encoding="utf-8")
+    (tmp_path / "Серверный.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Серверный\nОкружение: Сервер\n", encoding="utf-8")
+    (tmp_path / "Серверный.xbsl").write_text(
+        "@НаСервере\nметод Позвать(): Строка\n    возврат Клиентский.Значение()\n;\n",
+        encoding="utf-8")
+
+    d = engine.run(discover([str(tmp_path)]),
+                   select={"code/client-module-in-http-service"})
+
+    assert _has(d, "code/client-module-in-http-service"), [x.message for x in d]
+
+
+def test_a_member_of_the_client_module_declared_on_server_is_not_flagged(tmp_path):
+    """The control: a member declared on the server does exist there."""
+    (tmp_path / "Клиентский.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Клиентский\nОкружение: Клиент\n", encoding="utf-8")
+    (tmp_path / "Клиентский.xbsl").write_text(
+        "@НаСервере\nметод Значение(): Строка\n    возврат \"с\"\n;\n", encoding="utf-8")
+    (tmp_path / "Серверный.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИмя: Серверный\nОкружение: Сервер\n", encoding="utf-8")
+    (tmp_path / "Серверный.xbsl").write_text(
+        "@НаСервере\nметод Позвать(): Строка\n    возврат Клиентский.Значение()\n;\n",
+        encoding="utf-8")
+
+    d = engine.run(discover([str(tmp_path)]),
+                   select={"code/client-module-in-http-service"})
+
+    assert not _has(d, "code/client-module-in-http-service")
+
+
 # --- code/client-annotation-in-server-module -------------------------------------------
 
 def _общий(tmp_path, env, module):

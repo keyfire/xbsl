@@ -18,7 +18,31 @@ positive); each is project-wide because it needs the paired yaml of the module.
 - code/client-annotation-in-server-module: a common module with `Окружение: Сервер` may
   use only the @НаСервере annotation (docs "Исполнение модуля"), so @ДоступноСКлиента or
   @НаКлиенте in its module contradicts the declared environment – the module has to be
-  КлиентИСервер.
+  `ClientAndServer`. The apply refuses it: `Cannot use modifier "OnClient" for items
+  whose type availability is "Server"`.
+
+- code/server-annotation-in-client-module: the mirror. A module with `Environment:
+  Client` carrying `@OnServer` (alone or beside `@OnClient`) compiles the method for the
+  server,
+  where the module's own type does not exist, and the apply answers `This context allows
+  only static methods` for EVERY such method - a message that names neither the environment
+  nor the module and reads as a complaint about the method itself.
+
+All the combinations were put through the compiler on a throwaway application, one module
+per case, and the table below is its verdict rather than a reading of the documentation:
+
+    module environment    method annotation         apply
+    `Client`              `@OnClient`               ok
+    `Client`              `@OnServer`               refuses (this rule)
+    `Client`              `@OnServer @OnClient`     refuses (this rule)
+    `Server`              `@OnServer`               ok
+    `Server`              `@OnClient`               refuses (client-annotation-in-server-module)
+    `ClientAndServer`     both                      ok
+    a server module reaching a client one           refuses (client-module-in-http-service)
+    a client module reaching a server one           refuses (server-module-in-client-context)
+
+Every one of them is a COMPILE failure, so all four checks are errors: the apply rolls the
+whole project back, and a warning would let the pass through.
 
 - code/client-available-needs-context: @AvailableFromClient on a method of an interface
   component module that is neither `static` nor @Contextual. The environment of such a
@@ -42,10 +66,13 @@ positive); each is project-wide because it needs the paired yaml of the module.
   only the call form is judged.
 
 - code/client-module-in-http-service: a common module with `Окружение: Клиент` does not
-  exist on the server, so the module of an HttpСервис (environment Сервер) calling
-  `ИмяМодуля.Метод(...)` fails at runtime ("Type unavailable"). Members declared
-  @НаСервере inside the client module do exist on the server and are not flagged; a
-  member that cannot be resolved in the module is skipped rather than guessed.
+  exist on the server, so SERVER-SIDE code calling `ИмяМодуля.Метод(...)` fails with
+  `Type "X" is unavailable in the current environment`. The consumer is any module that
+  compiles for the server: an `HttpService` (the case the rule was written for and is
+  named after) and a common module with `Environment: Server` alike - the compiler refuses
+  both the same way, and the narrower reading left the second silent. Members declared
+  `@OnServer` inside the client module do exist on the server and are not flagged; a member
+  that cannot be resolved in the module is skipped rather than guessed.
 
 - code/component-in-server-context: a `Компонент.Член(...)` access from code compiled
   for the server – a `@НаСервере` method anywhere, or an unannotated method of a module
@@ -108,6 +135,21 @@ MESSAGES = {
         "en": "Annotation @{ann} in common module '{module}' with {n[Окружение]}: {n[Сервер]} – "
               "only @{n[НаСервере]} is allowed, the module needs {n[Окружение]}: {n[КлиентИСервер]}.",
     },
+    "code/server-annotation-in-client-module.title": {
+        "ru": "Серверная аннотация в клиентском общем модуле",
+        "en": "Server annotation in a client common module",
+    },
+    "code/server-annotation-in-client-module.annotation": {
+        "ru": "Аннотация @{ann} в общем модуле '{module}' с Окружение: Клиент – метод "
+              "компилируется для сервера, где типа модуля нет, и применение отвергает его "
+              "сообщением \"допустимы только статические методы\". Снимите @{ann} либо "
+              "поднимите модуль до Окружение: КлиентИСервер.",
+        "en": "Annotation @{ann} in common module '{module}' with {n[Окружение]}: "
+              "{n[Клиент]} – the method compiles for the server, where the module's type "
+              "does not exist, and the apply refuses it with \"this context allows only "
+              "static methods\". Drop @{ann}, or raise the module to {n[Окружение]}: "
+              "{n[КлиентИСервер]}.",
+    },
     "code/client-available-needs-context.title": {
         "ru": "Клиентский метод компонента без контекста",
         "en": "Client-available component method without a context",
@@ -136,14 +178,19 @@ MESSAGES = {
               "{n[Окружение]}: {n[КлиентИСервер]}.",
     },
     "code/client-module-in-http-service.title": {
-        "ru": "Клиентский общий модуль в HTTP-сервисе",
-        "en": "Client common module in an HTTP service",
+        "ru": "Клиентский общий модуль в серверном окружении",
+        "en": "Client common module in a server environment",
     },
     "code/client-module-in-http-service.call": {
-        "ru": "Обращение '{name}' из модуля HTTP-сервиса: у общего модуля '{root}' "
-              "Окружение: Клиент – на сервере тип недоступен, нужно КлиентИСервер.",
-        "en": "Access '{name}' from an HTTP service module: common module '{root}' has "
-              "{n[Окружение]}: {n[Клиент]} – the type is unavailable on the server, it needs {n[КлиентИСервер]}.",
+        "ru": "Обращение '{name}' из кода, исполняемого на сервере: у общего модуля "
+              "'{root}' Окружение: Клиент – на сервере типа нет, применение отвечает "
+              "\"тип недоступен в текущем окружении\". Нужно Окружение: КлиентИСервер "
+              "либо @НаСервере у вызываемого метода.",
+        "en": "Access '{name}' from code that runs on the server: common module '{root}' "
+              "has {n[Окружение]}: {n[Клиент]} – the type does not exist on the server, and "
+              "the apply answers \"type is unavailable in the current environment\". The "
+              "module needs {n[Окружение]}: {n[КлиентИСервер]}, or the called method "
+              "@{n[НаСервере]}.",
     },
 }
 i18n.register(MESSAGES)
@@ -373,7 +420,7 @@ def _client_ann_mapper(source: SourceFile) -> dict | None:
 @rule(
     "code/client-annotation-in-server-module",
     "code/client-annotation-in-server-module.title", "D",
-    scope="project", severity=Severity.WARNING, mapper=_client_ann_mapper,
+    scope="project", severity=Severity.ERROR, mapper=_client_ann_mapper,
 )
 def client_annotation_in_server_module(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     server_modules: dict[str, str] = {}
@@ -391,7 +438,7 @@ def client_annotation_in_server_module(facts: dict[str, dict]) -> Iterable[Diagn
         for ann, line, col in fact["anns"]:
             yield Diagnostic(
                 rel, line, col, "code/client-annotation-in-server-module",
-                Severity.WARNING,
+                Severity.ERROR,
                 i18n.t("code/client-annotation-in-server-module.annotation",
                        ann=ann, module=name),
             )
@@ -478,6 +525,74 @@ def _environment_forms() -> tuple[frozenset[str], frozenset[str]]:
     def forms(value: str) -> frozenset[str]:
         return frozenset({value, terms.english(value, "enums") or value})
     return forms("Сервер"), forms("Клиент")
+
+
+def _server_ann_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a yaml contributes its CLIENT common modules, a module its
+    `@OnServer` positions - the reduce joins the pair. The mirror of _client_ann_mapper."""
+    if not _HAVE_YAML:
+        return None
+    if source.kind == "yaml":
+        data = _parsed_object(source)
+        kind = object_kind(data) if data is not None else None
+        if kind != "ОбщийМодуль":
+            return None
+        _server_env, client_env = _environment_forms()
+        if value_of(data, "Окружение", kind) not in client_env:
+            return None
+        name = value_of(data, "Имя", kind)
+        if not isinstance(name, str):
+            return None
+        return {"k": "y", "stem": _pair_stem(source.rel), "name": name}
+    if source.kind != "xbsl":
+        return None
+    toks = code_tokens(source)
+    n = len(toks)
+    anns: list[tuple[str, int, int]] = []
+    for i, t in enumerate(toks):
+        if (t.kind == "OP" and t.value == "@" and i + 1 < n
+                and toks[i + 1].kind == "IDENT"
+                and toks[i + 1].value in _on_server_forms()):
+            a = toks[i + 1]
+            anns.append((a.value, a.line, a.col))
+    if not anns:
+        return None
+    return {"k": "x", "stem": _pair_stem(source.rel), "anns": anns}
+
+
+@rule(
+    "code/server-annotation-in-client-module",
+    "code/server-annotation-in-client-module.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_server_ann_mapper,
+)
+def server_annotation_in_client_module(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """`@OnServer` in a module whose environment is `Client` - one finding per annotation.
+
+    The apply answers `This context allows only static methods` for every such method, and
+    that message names neither the module nor its environment: a module that gained one
+    server method took six compile errors at once, and none of them pointed at the yaml
+    line that caused them. Beside `@OnClient` the annotation is no better - the compiler
+    judges the server half on its own.
+    """
+    client_modules: dict[str, str] = {}
+    for fact in facts.values():
+        if fact["k"] == "y":
+            client_modules[fact["stem"]] = fact["name"]
+    if not client_modules:
+        return
+    for rel, fact in facts.items():
+        if fact["k"] != "x":
+            continue
+        name = client_modules.get(fact["stem"])
+        if name is None:
+            continue
+        for ann, line, col in fact["anns"]:
+            yield Diagnostic(
+                rel, line, col, "code/server-annotation-in-client-module",
+                Severity.ERROR,
+                i18n.t("code/server-annotation-in-client-module.annotation",
+                       ann=ann, module=name),
+            )
 
 
 @lru_cache(maxsize=1)
@@ -599,10 +714,14 @@ def server_module_in_client_context(facts: dict[str, dict]) -> Iterable[Diagnost
 
 
 def _client_http_mapper(source: SourceFile) -> dict | None:
-    """The map phase. A yaml marks its pair as a client common module or an HTTP service;
-    a module contributes its declarations (with the НаСервере bit) and its bare
-    `Модуль.Член(...)` accesses with the local skips settled. The reduce joins the pairs
-    and matches the accesses of the HTTP service modules against the client modules."""
+    """The map phase. A yaml marks its pair as a client common module or as SERVER-SIDE
+    code; a module contributes its declarations (with the `@OnServer` bit) and its bare
+    `Module.Member(...)` accesses with the local skips settled. The reduce joins the pairs
+    and matches the accesses of the server-side modules against the client modules.
+
+    Server-side is an `HttpService` and a common module with `Environment: Server` alike:
+    the compiler refuses both with the same `Type "X" is unavailable in the current
+    environment`, and reading only the first left the second silent."""
     if not _HAVE_YAML:
         return None
     if source.kind == "yaml":
@@ -610,14 +729,18 @@ def _client_http_mapper(source: SourceFile) -> dict | None:
         if data is None:
             return None
         kind = object_kind(data)
-        _server_env, client_env = _environment_forms()
+        server_env, client_env = _environment_forms()
         name = value_of(data, "Имя", kind)
-        if (kind == "ОбщийМодуль" and value_of(data, "Окружение", kind) in client_env
-                and isinstance(name, str)):
-            return {"k": "y", "stem": _pair_stem(source.rel),
-                    "role": "client", "name": name}
+        if kind == "ОбщийМодуль":
+            env = value_of(data, "Окружение", kind)
+            if env in client_env and isinstance(name, str):
+                return {"k": "y", "stem": _pair_stem(source.rel),
+                        "role": "client", "name": name}
+            if env in server_env:
+                return {"k": "y", "stem": _pair_stem(source.rel), "role": "server"}
+            return None
         if kind == "HttpСервис":
-            return {"k": "y", "stem": _pair_stem(source.rel), "role": "http"}
+            return {"k": "y", "stem": _pair_stem(source.rel), "role": "server"}
         return None
     if source.kind != "xbsl":
         return None
@@ -649,19 +772,19 @@ def _client_http_mapper(source: SourceFile) -> dict | None:
 @rule(
     "code/client-module-in-http-service",
     "code/client-module-in-http-service.title", "D",
-    scope="project", severity=Severity.WARNING, mapper=_client_http_mapper,
+    scope="project", severity=Severity.ERROR, mapper=_client_http_mapper,
 )
 def client_module_in_http_service(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     client_stems: dict[str, str] = {}   # stem -> module name
-    http_stems: set[str] = set()
+    server_stems: set[str] = set()
     for fact in facts.values():
         if fact["k"] != "y":
             continue
         if fact["role"] == "client":
             client_stems[fact["stem"]] = fact["name"]
         else:
-            http_stems.add(fact["stem"])
-    if not client_stems or not http_stems:
+            server_stems.add(fact["stem"])
+    if not client_stems or not server_stems:
         return
     client_bits: dict[str, dict[str, bool]] = {}  # module name -> {member: НаСервере?}
     for fact in facts.values():
@@ -670,7 +793,7 @@ def client_module_in_http_service(facts: dict[str, dict]) -> Iterable[Diagnostic
     if not client_bits:
         return
     for rel, fact in facts.items():
-        if fact["k"] != "x" or fact["stem"] not in http_stems:
+        if fact["k"] != "x" or fact["stem"] not in server_stems:
             continue
         for root, member, line, col in fact["accesses"]:
             bits = client_bits.get(root)
@@ -681,7 +804,7 @@ def client_module_in_http_service(facts: dict[str, dict]) -> Iterable[Diagnostic
                 continue  # unresolved member, or one that does exist on the server
             yield Diagnostic(
                 rel, line, col, "code/client-module-in-http-service",
-                Severity.WARNING,
+                Severity.ERROR,
                 i18n.t("code/client-module-in-http-service.call",
                        name=f"{root}.{member}", root=root),
             )

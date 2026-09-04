@@ -15,6 +15,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`code/server-annotation-in-client-module` (tier D, error) - the mirror of the client
+  annotation check.** A module with `Environment: Client` carrying `@OnServer` (alone or
+  beside `@OnClient`) compiles the method for the server, where the module's own type does
+  not exist, and the apply refuses EVERY such method with "this context allows only static
+  methods" - a message that names neither the environment nor the module and reads as a
+  complaint about the method itself. The rule names the annotation, the module and the cure.
 - **`xbsl translate --unused` names the entries the project no longer uses; `--prune` removes
   them.** Deleting code leaves its names and comment lines behind, and nothing reported them:
   `--strict` judges what is not covered, and `--entries` shows where a pair is declared, not
@@ -30,6 +36,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   else to compare - so the mark stays a note and never changes the verdict.
 
 ### Fixed
+- **A client common module is caught at ANY server-side consumer, not only an HTTP
+  service.** `code/client-module-in-http-service` read the consumer as an `HttpService`
+  alone, while the compiler refuses the same access from a common module with `Environment:
+  Server` too, with the same "type is unavailable in the current environment". The rule was
+  widened (the id kept for the sake of baselines) and its message no longer says HTTP
+  service.
+- **Three environment checks became errors.** The matrix of module environment against
+  method annotation was put through the compiler on a throwaway application, one module per
+  case: every miss is a COMPILE failure, after which the apply rolls the whole project back.
+  A warning would let such a run through, so `code/client-annotation-in-server-module` and
+  `code/client-module-in-http-service` are errors now, as is the new mirror.
 - **An unknown `kind` is refused instead of answering with an empty list.** `translate_gaps`
   and `translate_entries` matched the value against the row's own kind, so the SECTION name
   (`phrases`, plural) matched nothing and the answer came back empty - indistinguishable from

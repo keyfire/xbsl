@@ -130,6 +130,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   // --- execution model and modularity ---
   {
     match: (r) => r === "code/client-annotation-in-server-module"
+      || r === "code/server-annotation-in-client-module"
       || r === "code/client-available-needs-context"
       || r === "code/client-available-unused"
       || r === "code/client-module-in-http-service"
