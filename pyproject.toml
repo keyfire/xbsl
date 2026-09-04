@@ -36,7 +36,9 @@ Changelog = "https://github.com/keyfire/xbsl/blob/main/CHANGELOG.md"
 # setuptools здесь ради теста упаковки: он сверяет список packages с деревом через
 # find_packages. Сборочная зависимость из [build-system] живёт в изолированном окружении
 # сборки, в окружении тестов её может не быть – и сторож молча пропускался бы.
-dev = ["pytest>=7", "pymorphy3>=2.0", "setuptools>=77"]
+# The documentation guard lives in its own repository and is installed from git: it runs in
+# checks only, is never shipped to a user, and needs no release cadence of its own.
+dev = ["pytest>=7", "pymorphy3>=2.0", "setuptools>=77", "docsguard @ git+https://github.com/keyfire/docsguard@main"]
 mcp = ["mcp>=1.2,<3"]
 lsp = ["pygls>=1.3,<2"]
 # Морфология русского языка: правило naming/number (справочники во множественном числе,

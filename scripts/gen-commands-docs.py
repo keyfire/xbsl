@@ -14,7 +14,7 @@ shows, so the reference cannot disagree with the UI. Run after changing the comm
 
     python scripts/gen-commands-docs.py
 
-Then `npm run sync:docs` to carry the change onto the site page. tools/docsguard.py gates on
+Then `npm run sync:docs` to carry the change onto the site page. tools/check_docs.py gates on
 the result.
 """
 

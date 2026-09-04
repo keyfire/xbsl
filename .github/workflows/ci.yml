@@ -71,7 +71,9 @@ jobs:
       - name: Install
         run: pip install -e ".[lsp,mcp]"
       - name: Docs guard (every surface is described)
-        run: python tools/docsguard.py
+        run: |
+          pip install "git+https://github.com/keyfire/docsguard@main"
+          python tools/check_docs.py
       # The generated pages are committed, so a stale one means the generator was not run.
       - name: Generated pages are up to date
         run: |

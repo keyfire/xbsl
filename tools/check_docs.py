@@ -27,8 +27,8 @@ can write. So the pages stay hand-written and this guard holds them to the code:
 
 Run:
 
-    python tools/docsguard.py            # report and exit 1 on any gap
-    python tools/docsguard.py --quiet    # only the summary line
+    python tools/check_docs.py            # report and exit 1 on any gap
+    python tools/check_docs.py --quiet    # only the summary line
 
 CI gates on the exit code, so a new surface is documented in the same change that adds it.
 """
@@ -43,9 +43,28 @@ import re
 import sys
 from pathlib import Path
 
+from docsguard import (
+    Layout,
+    PitchItem,
+    box_headlines,
+    front_description,
+    lede,
+    pitch_problems,
+    pyproject_description,
+    run,
+    site_description,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 DOCS = ROOT / "docs"
 VSCODE = ROOT / "editors" / "vscode"
+
+LAYOUT = Layout(
+    root=ROOT,
+    docs=DOCS,
+    site_config=ROOT / "blume.config.ts",
+    pyproject=ROOT / "pyproject.toml",
+)
 
 #: Pages that describe the toolkit. BACKLOG is a local note, the changelog is history.
 #: A new page belongs here - otherwise what it describes reads as undocumented.
@@ -245,144 +264,84 @@ def check_environment(problems: list[str]) -> None:
 #: those drift on their own: `xbsl translate` shipped in August 2026 and every annotation still
 #: named the six surfaces that existed before it. A row with no words is a headline deliberately
 #: kept out of the one-liners - the reason belongs in a comment beside it.
-PITCH_ITEMS: tuple[tuple[str, str, str | None, str | None], ...] = (
-    ("Linter with autofixes", "Линтер с автоисправлениями", "linter", "линтер"),
-    ("LSP server", "LSP-сервер", "LSP", "LSP"),
-    ("Metadata scaffolding", "Создание метаданных", "scaffolding", "метаданных"),
-    ("Translation into English spellings", "Перевод проекта на английские написания",
-     "translation", "перевод"),
-    ("Documentation search", "Поиск по документации", "documentation", "документаци"),
-    ("MCP server", "MCP-сервер", "MCP", "MCP"),
+PITCH_ITEMS = (
+    PitchItem("Linter with autofixes", "Линтер с автоисправлениями", "linter", "линтер"),
+    PitchItem("LSP server", "LSP-сервер", "LSP", "LSP"),
+    PitchItem("Metadata scaffolding", "Создание метаданных", "scaffolding", "метаданных"),
+    PitchItem("Translation into English spellings", "Перевод проекта на английские написания",
+              "translation", "перевод"),
+    PitchItem("Documentation search", "Поиск по документации", "documentation", "документаци"),
+    PitchItem("MCP server", "MCP-сервер", "MCP", "MCP"),
     # The web panel is a local page a developer opens for the findings of one project, not a
     # surface anyone picks the toolkit by: it is described on the servers page and left out of
     # the annotations on purpose.
-    ("Web panel", "Веб-панель", None, None),
-    ("VS Code extension", "Расширение VS Code", "VS Code", "VS Code"),
+    PitchItem("Web panel", "Веб-панель", None, None),
+    PitchItem("VS Code extension", "Расширение VS Code", "VS Code", "VS Code"),
 )
-
-
-def _box_headlines(path: Path, heading: str) -> list[str]:
-    """The bold headline of every bullet of one "What is in the box" block, in page order."""
-    text = path.read_text(encoding="utf-8")
-    section = re.search(rf"^## {re.escape(heading)}\s*$(.*?)^## ", text, re.M | re.S)
-    headlines = []
-    for line in (section.group(1) if section else "").splitlines():
-        found = re.match(r"- \*\*(.+?)\*\*", line)
-        if not found:
-            continue
-        label = found.group(1)
-        link = re.fullmatch(r"\[(.+?)\]\(.*\)", label)  # the headline may be a link
-        headlines.append(link.group(1) if link else label)
-    return headlines
-
-
-def _front_description(path: Path) -> str:
-    found = re.search(r'^description:\s*"(.*)"\s*$', path.read_text(encoding="utf-8"), re.M)
-    return found.group(1) if found else ""
-
-
-def _site_description() -> str:
-    """The `description` of blume.config.ts - the meta description of every page."""
-    text = (ROOT / "blume.config.ts").read_text(encoding="utf-8")
-    found = re.search(r"\n  description:\s*((?:\s*\"[^\"]*\"\s*\+?)+),", text)
-    return "".join(re.findall(r'"([^"]*)"', found.group(1))) if found else ""
-
-
-def _lede(path: Path) -> str:
-    """The first paragraph of prose of a README - the part GitHub shows above the fold."""
-    skip = ("#", ">", "!", "[", "**English**", "**Documentation", "**Документация")
-    for block in re.split(r"\n\s*\n", path.read_text(encoding="utf-8")):
-        if block.strip() and not block.strip().startswith(skip):
-            return block.strip()
-    return ""
 
 
 def pitch_surfaces() -> dict[str, dict[str, str]]:
     """The short annotations by locale: what is quoted instead of the page being read."""
     return {
         # The PyPI summary is English: the card it heads carries the English README, and the
-        # neighbouring packages (elemctl, edt-bridge-mcp) are described in English too.
+        # neighbouring packages are described in English too.
         "en": {
-            "blume.config.ts": _site_description(),
-            "docs/index.md": _front_description(DOCS / "index.md"),
-            "README.md": _lede(ROOT / "README.md"),
-            "pyproject.toml": _pyproject_description(),
+            "blume.config.ts": site_description(LAYOUT),
+            "docs/index.md": front_description(LAYOUT, "index.md"),
+            "README.md": lede(ROOT / "README.md"),
+            "pyproject.toml": pyproject_description(LAYOUT),
         },
         "ru": {
-            "docs/index.ru.md": _front_description(DOCS / "index.ru.md"),
-            "README.ru.md": _lede(ROOT / "README.ru.md"),
+            "docs/index.ru.md": front_description(LAYOUT, "index.ru.md"),
+            "README.ru.md": lede(ROOT / "README.ru.md"),
         },
     }
-
-
-def _pyproject_description() -> str:
-    """The `description` of pyproject.toml - the summary line of the PyPI card."""
-    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
-    found = re.search(r'^description = "(.*)"\s*$', text, re.M)
-    return found.group(1) if found else ""
-
-
-def pitch_problems(
-    headlines: dict[str, list[str]], surfaces: dict[str, dict[str, str]]
-) -> list[str]:
-    """The gaps between the front-page block, the table above and the annotations."""
-    problems: list[str] = []
-    for locale, column, page in (("en", 0, "docs/index.md"), ("ru", 1, "docs/index.ru.md")):
-        listed = headlines[locale]
-        known = [item[column] for item in PITCH_ITEMS]
-        for headline in listed:
-            if headline not in known:
-                problems.append(
-                    f'{page}: "{headline}" is in no PITCH_ITEMS row - add the word that stands '
-                    f"for it in the annotations, or the reason it stays out of them"
-                )
-        for headline in known:
-            if headline not in listed:
-                problems.append(f'{page}: PITCH_ITEMS names "{headline}", the page does not')
-
-    for english, _russian, *words in PITCH_ITEMS:
-        for locale, word in zip(("en", "ru"), words):
-            if not word:
-                continue
-            for where, text in surfaces[locale].items():
-                if word.lower() not in text.lower():
-                    problems.append(
-                        f'{where}: the short annotation says nothing about "{english}" '
-                        f'(expected "{word}")'
-                    )
-    return problems
 
 
 def check_pitches(problems: list[str]) -> None:
-    headlines = {
-        "en": _box_headlines(DOCS / "index.md", "What is in the box"),
-        "ru": _box_headlines(DOCS / "index.ru.md", "Что внутри"),
-    }
-    problems.extend(pitch_problems(headlines, pitch_surfaces()))
+    """The gaps between the front-page block, the table above and the annotations."""
+    problems.extend(pitch_problems(
+        PITCH_ITEMS,
+        {"en": box_headlines(LAYOUT, "index.md", "What is in the box"),
+         "ru": box_headlines(LAYOUT, "index.ru.md", "Что внутри")},
+        pitch_surfaces(),
+        pages={"en": "docs/index.md", "ru": "docs/index.ru.md"},
+    ))
+
+
+def _collect(check):
+    """A check written as `check(problems)` seen as one that returns its findings.
+
+    The engine's checks append in place - a shape older than the shared runner and not worth
+    rewriting six of them for.
+    """
+    def wrapped():
+        found: list[str] = []
+        check(found)
+        return found
+
+    wrapped.__name__ = check.__name__
+    return wrapped
+
+
+CHECKS = tuple(_collect(check) for check in (
+    check_rules, check_mcp, check_extension, check_cli, check_environment, check_pitches,
+))
+
+
+def problems() -> list[str]:
+    """Every finding of every check - what the test suite asserts on."""
+    found: list[str] = []
+    for check in CHECKS:
+        found.extend(check())
+    return found
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--quiet", action="store_true", help="print the summary line only")
     args = parser.parse_args()
-
-    problems: list[str] = []
-    check_rules(problems)
-    check_mcp(problems)
-    check_extension(problems)
-    check_cli(problems)
-    check_environment(problems)
-    check_pitches(problems)
-
-    if problems and not args.quiet:
-        for problem in problems:
-            print(problem)
-        print()
-    print(
-        f"docsguard: {len(problems)} gap(s)" if problems
-        else "docsguard: the documentation covers every surface"
-    )
-    return 1 if problems else 0
+    return run(CHECKS, title="docsguard", quiet=args.quiet)
 
 
 if __name__ == "__main__":
