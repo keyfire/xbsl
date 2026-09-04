@@ -49,6 +49,7 @@ from . import (  # noqa: F401
 from . import (  # noqa: F401
     binding_types,
     bound_properties,
+    form_components,
     catch_exceptions,
     choice_list,
     closeable,

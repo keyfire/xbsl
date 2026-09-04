@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 187.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 188.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -204,6 +204,7 @@ sidebar:
 | `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Имени из `Ресурс{...}` нет ни в каталогах `Ресурсы` проекта, ни в библиотеке картинок платформы [доки](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Обработчик формы не найден в модуле [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Сигнатура обработчика не совпадает с событием [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
+| `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Обращение к компоненту, которого нет в разметке формы [доки](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Серверный метод недоступен клиентскому обработчику [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | проект | Свойство `Изображение` компонента платформы связано выражением, чей вызов – напрямую или транзитивно через клиентские методы – разрешается в серверный метод (модуль элемента серверного вида, общий модуль с `Окружение: Сервер`, метод `@НаСервере`): картинка приезжает отдельным серверным вызовом после отрисовки и перезапрашивается при каждой перерисовке; отдавайте её вместе с данными (полем запроса или присоединённой таблицы) либо стройте из клиентских данных [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Клиентская аннотация в серверном общем модуле [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |

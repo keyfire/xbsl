@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 187 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 188 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -206,6 +206,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/unknown-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The name in `Resource{...}` is neither in the project's `Resources` folders nor in the platform's image library [docs](https://1cmycloud.com/docs/help/topics/image-library/) |
 | `form/unknown-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Form handler not found in the module [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `form/handler-signature` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Handler signature does not match the event [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
+| `code/unknown-form-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Access to a component the form markup does not declare [docs](https://1cmycloud.com/docs/help/topics/form-component/) |
 | `code/server-call-from-handler` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Server method is unavailable to a client handler [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/image-binding-server-call` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | ✓ | project | The `Image` property of a platform component is bound to an expression whose call – directly or transitively through client methods – resolves into a server method (an element module of a server kind, a common module with `Environment: Server`, a `@OnServer` method): the image arrives by its own server round-trip after the rows are drawn and is requested again on every redraw; hand it over with the data (a field of the query or of a joined table) or build it from client-side data [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
 | `code/client-annotation-in-server-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Client annotation in a server common module [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |

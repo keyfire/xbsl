@@ -46,6 +46,14 @@ MESSAGES = {
         "ru": "YAML: {problem}.",
         "en": "YAML: {problem}.",
     },
+    "yaml/valid.ternary": {
+        "ru": "YAML: {problem}. Похоже на тернарное выражение с пробелами вокруг "
+              "двоеточия – YAML читает такое как вложенное отображение. Уберите пробелы "
+              "(`= А ? Б() : В()` -> `=А ? Б() :В()`) либо возьмите значение в кавычки.",
+        "en": "YAML: {problem}. This looks like a ternary written with spaces around the "
+              "colon - YAML reads that as a nested mapping. Drop the spaces "
+              "(`=A ? B() : C()` -> `=A ? B() :C()`), or quote the value.",
+    },
     "yaml/id-uuid.title": {
         "ru": "Ид не является UUID",
         "en": "{n[Ид]} is not a UUID",
@@ -329,6 +337,14 @@ def _scalar_entries(mapping) -> dict:
     }
 
 
+#: A computed value written as a ternary with spaces around the colon. YAML reads the
+#: ` : ` as the start of a nested mapping, and the parser then complains about mapping
+#: values in a place that says nothing about the ternary - the author reads "mapping values
+#: are not allowed here" over a line that has no mapping in it. The shape is recognised only
+#: to NAME the cause; the finding and its position stay the parser's.
+_TERNARY_RE = re.compile(r"^\s*[\w\-]+\s*:\s*=.*\?.*\s:\s")
+
+
 @rule("yaml/valid", "yaml/valid.title", "A", severity=Severity.ERROR)
 def yaml_valid(source: SourceFile) -> Iterable[Diagnostic]:
     if not _HAVE_YAML or source.kind != "yaml":
@@ -339,9 +355,12 @@ def yaml_valid(source: SourceFile) -> Iterable[Diagnostic]:
         line = mark.line + 1 if mark else 1
         col = mark.column + 1 if mark else 1
         problem = getattr(err, "problem", None) or i18n.t("yaml/valid.default-problem")
+        lines = source.text.splitlines()
+        text = lines[line - 1] if 0 < line <= len(lines) else ""
+        key = "yaml/valid.ternary" if _TERNARY_RE.match(text) else "yaml/valid.error"
         yield Diagnostic(
             source.rel, line, col, "yaml/valid", Severity.ERROR,
-            i18n.t("yaml/valid.error", problem=problem),
+            i18n.t(key, problem=problem),
         )
 
 

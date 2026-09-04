@@ -15,6 +15,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`code/unknown-form-component` (tier D, error, file scope) - an access to a component the
+  form markup does not declare.** `Components.X` is the static map the markup gives, so a name
+  without a counterpart there does not exist: the apply refuses the project with
+  `Unknown property "<Form>.<root>.<Name>"`, and until then nothing sees it - the module is
+  fine, the name merely outlived a component moved out of one column and never put into
+  another. A probe on a throwaway application showed the whole markup tree answers to the root
+  (a nested name and the group's own name compile, an invented one does not), and a
+  measurement over a live tree settled the one real risk: 157 forms with modules, 360 accesses
+  and NOT ONE name outside its own markup, whatever the form inherits.
 - **`code/server-annotation-in-client-module` (tier D, error) - the mirror of the client
   annotation check.** A module with `Environment: Client` carrying `@OnServer` (alone or
   beside `@OnClient`) compiles the method for the server, where the module's own type does
@@ -36,6 +45,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   else to compare - so the mark stays a note and never changes the verdict.
 
 ### Fixed
+- **`yaml/valid` names a ternary written with spaces.** YAML reads ` : ` as the
+  start of a nested mapping, and the "mapping values are not allowed" complaint lands on a
+  line that has no mapping in it. The shape is recognised only to EXPLAIN: the finding and
+  its position stay the parser's.
 - **A client common module is caught at ANY server-side consumer, not only an HTTP
   service.** `code/client-module-in-http-service` read the consumer as an `HttpService`
   alone, while the compiler refuses the same access from a common module with `Environment:
