@@ -18,7 +18,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install
-        run: pip install -e ".[dev]"
+        run: |
+          pip install -e ".[dev]"
+          pip install "git+https://github.com/keyfire/docsguard@main"
       # Данные о языке в репозиторий не входят (генерируются из дистрибутива), поэтому
       # зависящие от данных тесты пропускаются; проверяются установка, импорт и смоук на
       # матрице версий Python.
@@ -69,11 +71,11 @@ jobs:
       # With the extras: without them `xbsl lsp --help` answers "needs the [lsp] extra" instead
       # of the flags, and the generated command page comes out short.
       - name: Install
-        run: pip install -e ".[lsp,mcp]"
-      - name: Docs guard (every surface is described)
         run: |
+          pip install -e ".[lsp,mcp]"
           pip install "git+https://github.com/keyfire/docsguard@main"
-          python tools/check_docs.py
+      - name: Docs guard (every surface is described)
+        run: python tools/check_docs.py
       # The generated pages are committed, so a stale one means the generator was not run.
       - name: Generated pages are up to date
         run: |
