@@ -696,6 +696,37 @@ def new_object_yaml(
     return "\n".join(lines + spelled_lines(list(extra_lines), lang)) + "\n"
 
 
+#: The base a form template belongs to: only these carry `Content: FormTemplate`, so only
+#: they need the template wrapper the default scaffold writes.
+_FORM_BASES = ("Форма", "ФормаОбъекта", "ФормаСписка", "ФормаЗаписи", "ФормаОтчета",
+               "ФормаОбработки")
+
+
+def _component_base_lines(base: str) -> list[str]:
+    """The `Inherits` block of an interface component built on `base`.
+
+    The scaffold used to write one base for every component - a form with a template wrapper -
+    and the most common base in a real project is not a form at all: a measurement over a live
+    project counted 31 components built on `Group` against 7 on a bare `Form`. Rewriting the
+    whole block by hand was therefore the usual case, not the exception.
+
+    A form base keeps the template wrapper (`Form.Content` is typed `FormTemplate?`, so a
+    group cannot sit there directly); any other base is written as it is - its content is the
+    author's business, and inventing it would be inventing markup.
+    """
+    head = base.split("<", 1)[0].strip()
+    lines = ["Наследует:", f"    Тип: {base.strip()}"]
+    if head in _FORM_BASES:
+        return lines + [
+            "    Содержимое:",
+            "        Тип: ПроизвольныйШаблонФормы",
+            "        Содержимое:",
+            "            Тип: Группа",
+            "            Компоновка: Вертикальная",
+        ]
+    return lines
+
+
 def _expand_extra(lines: tuple[str, ...], name: str) -> list[str]:
     """Substitute the name and a unique Ид for every {uuid} occurrence in object template lines."""
     out = []
@@ -1705,6 +1736,7 @@ def op_new_object(
     routes: str | None = None,
     report: dict | None = None,
     presentation: str | None = None,
+    base: str | None = None,
 ) -> ScaffoldResult:
     """Create a configuration object: Имя.yaml (+ Имя.xbsl for kinds with a module).
 
@@ -1766,6 +1798,12 @@ def op_new_object(
         )
 
     extra = _expand_extra(spec.extra, name)
+    if base:
+        if kind != "КомпонентИнтерфейса":
+            raise ScaffoldError(
+                f"Базовый тип (base) задаётся только у вида КомпонентИнтерфейса, а не у {kind}"
+            )
+        extra = _component_base_lines(base)
     if environment:
         extra = [line for line in extra if not line.startswith("Окружение:")]
         extra.append(f"Окружение: {environment}")
@@ -3751,11 +3789,15 @@ def _new_report(yaml_path: Path, name: str, report: dict, result: ScaffoldResult
 # --- operations: forms --------------------------------------------------------------------
 
 
-def _form_field_component(name: str, type_: str, indent: str) -> list[str]:
-    """Editing component by attribute type (the mapping from the form specification)."""
+def _form_field_component(name: str, type_: str, indent: str, owner: str = "Объект") -> list[str]:
+    """Editing component by attribute type (the mapping from the form specification).
+
+    `owner` is what the value binds to: a reference object's form binds to `Object`, an
+    information register's record form to `Record` - the same fields, another holder.
+    """
     if type_ == "Булево":
         return [f"{indent}-", f"{indent}    Тип: Флажок", f"{indent}    Имя: {name}",
-                f"{indent}    Значение: =Объект.{name}"]
+                f"{indent}    Значение: ={owner}.{name}"]
     component_type = type_ or "Строка"
     # '?' is added only where the type is known to have no default value: a reference and
     # an enumeration. Collections and generics (Массив<Строка> etc.) do have a default -
@@ -3771,7 +3813,7 @@ def _form_field_component(name: str, type_: str, indent: str) -> list[str]:
         f"{indent}-",
         f"{indent}    Тип: ПолеВвода<{component_type}>",
         f"{indent}    Имя: {name}",
-        f"{indent}    Значение: =Объект.{name}",
+        f"{indent}    Значение: ={owner}.{name}",
     ]
     if type_ in ("Строка", "") and name in ("Описание", "Комментарий"):
         lines += [f"{indent}    НастройкиВводаСтроки:", f"{indent}        Многострочная: Истина"]
@@ -3923,6 +3965,49 @@ def object_form_yaml(info: dict, uid: str) -> str:
             ] + [" " * 28 + "-"] + _tabular_table_lines(
                 obj, tc_name, " " * 32, panels=False, fields=tc["fields"]
             )
+    return "\n".join(lines) + "\n"
+
+
+def record_form_yaml(info: dict, uid: str) -> str:
+    """The RecordForm from a register summary: its dimensions and resources as fields.
+
+    An information register has no object form - the editable thing is its RECORD, and the
+    form type is `RecordForm<Register.Record>`. Writing one by hand was the whole cost of the
+    gap: the form itself is the same list of input fields as an object form, but every part
+    around it differs - the type argument, the binding holder (`Record`, not `Object`) and the
+    registration key (`Interface.Record.Form`).
+
+    The write commands are the form's own: the type declares `Write`, `WriteAndClose`,
+    `Refresh` and `Delete`, so nothing here needs a form module. A
+    record form that validates its fields writes its own handlers instead - that is a choice
+    the author makes, not a thing the scaffold should presume.
+    """
+    obj = info["name"]
+    lines = [
+        "ВидЭлемента: КомпонентИнтерфейса",
+        f"Ид: {uid}",
+        f"Имя: {obj}ФормаЗаписи",
+        "ОбластьВидимости: ВПодсистеме",
+        "Наследует:",
+        f"    Тип: ФормаЗаписи<{obj}.Запись>",
+        "    ВключатьВАвтоИнтерфейс: Ложь",
+        f"    Заголовок: {obj}",
+        "    ДополнительныеКоманды:",
+        "        Тип: ФрагментКомандногоИнтерфейса",
+        "        Элементы:",
+        "            - =Обновить",
+        "            - =Удалить",
+        "    ОсновнаяКоманда: =ЗаписатьИЗакрыть",
+        "    Содержимое:",
+        "        Тип: ПроизвольныйШаблонФормы",
+        "        ШиринаВКолонках: Одинарная",
+        "        Содержимое:",
+        "            Тип: Группа",
+        "            Компоновка: Вертикальная",
+        "            Содержимое:",
+    ]
+    for field in info["fields"]:
+        lines += _form_field_component(field["name"], field["type"], " " * 16, owner="Запись")
     return "\n".join(lines) + "\n"
 
 
@@ -4385,6 +4470,8 @@ def _interface_block(kind: str, obj: str, forms: list[str]) -> list[str]:
         lines += ["    Объект:", f"        Форма: {obj}ФормаОбъекта"]
     if "list" in forms:
         lines += ["    Список:", f"        Форма: {obj}ФормаСписка"]
+    if "record" in forms:
+        lines += ["    Запись:", f"        Форма: {obj}ФормаЗаписи"]
     return lines
 
 
@@ -4419,10 +4506,11 @@ def _register_forms(text: str, nl: str, kind: str, obj: str, forms: list[str], r
             text = text[: span[1]] + f"{nl}    Форма: {form_name}" + text[span[1]:]
         return text
 
-    for form, subsection in (("object", "Объект"), ("list", "Список")):
+    suffixes = {"object": "ФормаОбъекта", "list": "ФормаСписка", "record": "ФормаЗаписи"}
+    for form, subsection in (("object", "Объект"), ("list", "Список"), ("record", "Запись")):
         if form not in forms:
             continue
-        form_name = f"{obj}Форма{'Объекта' if form == 'object' else 'Списка'}"
+        form_name = f"{obj}{suffixes[form]}"
         if re.search(rf"Форма:\s*{form_name}\b", text):
             result.notes.append(f"{form_name} уже зарегистрирована в Интерфейс")
             continue
@@ -4438,7 +4526,10 @@ def _register_forms(text: str, nl: str, kind: str, obj: str, forms: list[str], r
     return text
 
 
-FORM_KINDS = ("object", "list", "list-cards", "report", "processing")
+FORM_KINDS = ("object", "list", "list-cards", "record", "report", "processing")
+#: A record form belongs to the information register alone: an accumulation register's
+#: records are written by movements, not edited on a form.
+RECORD_FORM_KINDS = ("РегистрСведений",)
 
 
 def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = None,
@@ -4496,9 +4587,15 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         raise ScaffoldError(f"Форма обработки неприменима к виду {kind}")
     # Only reference entities produce the ФормаОбъекта<X.Объект> type; a register has none.
     if "object" in forms and kind not in OBJECT_FORM_KINDS:
+        instead = ("форма записи (forms=[\"record\"]) и форма списка"
+                   if kind in RECORD_FORM_KINDS else "форма списка")
         raise ScaffoldError(
             f"У вида {kind} нет формы объекта (тип ФормаОбъекта порождают только "
-            + ", ".join(OBJECT_FORM_KINDS) + f"); для {kind} доступна форма списка"
+            + ", ".join(OBJECT_FORM_KINDS) + f"); для {kind} доступна {instead}"
+        )
+    if "record" in forms and kind not in RECORD_FORM_KINDS:
+        raise ScaffoldError(
+            f"У вида {kind} нет формы записи; она есть у: " + ", ".join(RECORD_FORM_KINDS)
         )
     if ("list" in forms or "list-cards" in forms) and kind not in LIST_FORM_KINDS:
         raise ScaffoldError(
@@ -4508,6 +4605,7 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     result = ScaffoldResult()
     generators = {
         "object": ("ФормаОбъекта", object_form_yaml),
+        "record": ("ФормаЗаписи", record_form_yaml),
         "list": ("ФормаСписка", list_form_yaml),
         "list-cards": ("ФормаСписка", lambda i, uid: cards_list_form_yaml(i, uid, min_width=card_min_width)),
         "report": ("ФормаОтчета", report_form_yaml),

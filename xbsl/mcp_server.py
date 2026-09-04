@@ -486,11 +486,13 @@ def _apply_and_lint(result: scaffold.ScaffoldResult, base: Path) -> dict:
     return _absolute(out, base)
 
 
-def _meta(base: Path, op, *args, **kwargs) -> dict:
+def _meta(root_dir: Path, op, *args, **kwargs) -> dict:
+    # The parameter is not named `base`: a scaffolding operation has a `base` of its own (the
+    # base type of an interface component), and one passed by keyword would collide here.
     try:
-        return _apply_and_lint(op(*args, **kwargs), base)
+        return _apply_and_lint(op(*args, **kwargs), root_dir)
     except scaffold.ScaffoldError as exc:
-        return _failed(exc, base)
+        return _failed(exc, root_dir)
 
 
 @mcp.tool()
@@ -590,6 +592,7 @@ def meta_new_object(
     routes: str | None = None,
     report_spec: dict | None = None,
     presentation: str | None = None,
+    base: str | None = None,
     root: str | None = None,
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
@@ -609,13 +612,17 @@ def meta_new_object(
     plan and a settings storage carry the NAME of a string attribute whose value the
     platform shows for a record (a caption written there fails to compile). Pass it:
     without one the very first lint of the new file answers naming/presentation.
+    base – for an InterfaceComponent, what the component inherits: "Form" (the default, with
+    the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
+    "ListForm<Undefined>" - a group is the most common base in a real project, and the default
+    scaffold used to be rewritten by hand for it.
     """
-    base = _base(root)
+    root_dir = _base(root)
     return _meta(
-        base, scaffold.op_new_object,
-        _under(base, directory), kind, name,
+        root_dir, scaffold.op_new_object,
+        _under(root_dir, directory), kind, name,
         scope=scope, environment=environment, access=access,
-        routes=routes, report=report_spec, presentation=presentation,
+        routes=routes, report=report_spec, presentation=presentation, base=base,
     )
 
 
@@ -799,8 +806,11 @@ def meta_add_form(
     root – the caller's project or repository root (absolute): the object is searched under
     it by name, a relative yaml_path resolves against it, and the answer names it as `root`
     next to the absolute paths written.
-    forms – subset of ["object", "list", "list-cards", "report", "processing"]; default:
-    object+list for data objects, report for Report, processing for Processing. The generated
+    forms – subset of ["object", "list", "list-cards", "record", "report", "processing"];
+    default: object+list for data objects, report for Report, processing for Processing.
+    "record" is the information register's record form (`RecordForm<Register.Record>`, the
+    fields bound to `Record`): a register has no object form, and its record is the editable
+    thing. The generated
     forms carry real content: input fields per attribute, dynamic-list columns,
     tabular-section tables, hierarchy support; the processing form wires the operation
     commands (MainCommand/UsualCommands from the Commands type).

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 import yaml as pyyaml
 
+import xbsl.engine  # noqa: F401 - breaks the scaffold <-> rules import cycle
 from xbsl import scaffold
 from xbsl.scaffold import (
     FileRename,
@@ -655,6 +656,65 @@ def test_add_forms_for_catalog(tmp_path):
     assert owner["Интерфейс"]["Объект"]["Форма"] == "ТоварыФормаОбъекта"
     assert owner["Интерфейс"]["Список"]["Форма"] == "ТоварыФормаСписка"
     assert owner["Интерфейс"]["ИспользоватьСозданиеПриВводе"] is True or owner["Интерфейс"]["ИспользоватьСозданиеПриВводе"] == "Истина"
+
+
+def test_record_form_for_an_information_register(tmp_path):
+    """A register has no object form: the editable thing is its RECORD."""
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрСведений", "Остатки"))
+    yaml_path = subsystem / "Остатки.yaml"
+    apply_result(scaffold.op_add_field(yaml_path, "измерение", "Склад"))
+    apply_result(scaffold.op_add_field(yaml_path, "ресурс", "Количество", type_="Число"))
+
+    apply_result(scaffold.op_add_form(tmp_path, name="Остатки", forms=["record"]))
+
+    form = (subsystem / "ОстаткиФормаЗаписи.yaml").read_text(encoding="utf-8")
+    parsed = _valid_yaml(form)
+    assert parsed["Наследует"]["Тип"] == "ФормаЗаписи<Остатки.Запись>"
+    # The fields bind to the RECORD, and the write commands are the form's own - the type
+    # declares Write / WriteAndClose / Refresh / Delete, so no module is needed.
+    assert "Значение: =Запись.Склад" in form and "Значение: =Запись.Количество" in form
+    assert parsed["Наследует"]["ОсновнаяКоманда"] == "=ЗаписатьИЗакрыть"
+
+    owner = _valid_yaml(yaml_path.read_text(encoding="utf-8"))
+    assert owner["Интерфейс"]["Запись"]["Форма"] == "ОстаткиФормаЗаписи"
+
+
+def test_a_record_form_is_refused_where_there_is_no_record(tmp_path):
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "Справочник", "Товары"))
+    with pytest.raises(ScaffoldError, match="нет формы записи"):
+        scaffold.op_add_form(tmp_path, name="Товары", forms=["record"])
+
+
+def test_the_object_form_refusal_names_the_record_form(tmp_path):
+    """The refusal used to leave a register with the list form alone as the way out."""
+    subsystem = _make_project(tmp_path)
+    apply_result(scaffold.op_new_object(subsystem, "РегистрСведений", "Остатки"))
+    with pytest.raises(ScaffoldError, match="форма записи"):
+        scaffold.op_add_form(tmp_path, name="Остатки", forms=["object"])
+
+
+def test_a_component_can_be_built_on_a_base_other_than_a_form(tmp_path):
+    """A group is the most common base in a real project, and it takes no template wrapper."""
+    result = scaffold.op_new_object(tmp_path, "КомпонентИнтерфейса", "ШапкаКарточки", base="Группа")
+    apply_result(result)
+    parsed = _valid_yaml((tmp_path / "ШапкаКарточки.yaml").read_text(encoding="utf-8"))
+    assert parsed["Наследует"] == {"Тип": "Группа"}
+
+
+def test_a_form_base_keeps_the_template_wrapper(tmp_path):
+    result = scaffold.op_new_object(
+        tmp_path, "КомпонентИнтерфейса", "СписокПробы", base="ФормаСписка<Неопределено>")
+    apply_result(result)
+    parsed = _valid_yaml((tmp_path / "СписокПробы.yaml").read_text(encoding="utf-8"))
+    assert parsed["Наследует"]["Тип"] == "ФормаСписка<Неопределено>"
+    assert parsed["Наследует"]["Содержимое"]["Тип"] == "ПроизвольныйШаблонФормы"
+
+
+def test_a_base_is_refused_for_a_kind_that_has_no_markup(tmp_path):
+    with pytest.raises(ScaffoldError, match="КомпонентИнтерфейса"):
+        scaffold.op_new_object(tmp_path, "Справочник", "Товары", base="Группа")
 
 
 def test_add_forms_skips_existing(tmp_path):

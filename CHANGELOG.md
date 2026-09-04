@@ -15,6 +15,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`meta_add_form` makes an information register's record form (`forms=["record"]`).** A register
+  has no object form - what gets edited is its RECORD, and the `RecordForm<Register.Record>` with
+  fields for the dimensions and resources had to be written by hand; the object-form refusal now
+  names the record form instead of the list form alone.
+- **`meta_new_object` takes the base of an interface component (`base`).** The scaffold always
+  inherited a form with a template, while the most common base in a live project is `Group`
+  (31 against 7 for a bare form): the whole `Inherits` block was rewritten by hand.
 - **`yaml/slot-needs-list` (tier D, error) - a slot declared as a list, holding a single
   component.** A component written under `Content:` without the dash is not a list of one:
   the yaml parses, every key exists, and the apply is what refuses the markup - on the server,
