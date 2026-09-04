@@ -94,6 +94,36 @@ MESSAGES = {
         "ru": "словарь обновлён: изменено {changed}, добавлено {added}, снято {removed}",
         "en": "dictionary updated: {changed} changed, {added} added, {removed} removed",
     },
+    "translate.help.unused": {
+        "ru": "показать пары словаря, ключей которых в проекте больше нет",
+        "en": "list the dictionary entries whose key the project no longer carries",
+    },
+    "translate.help.prune": {
+        "ru": "снять найденные --unused пары из словаря (правит файлы словаря)",
+        "en": "remove the entries --unused found (writes to the dictionary files)",
+    },
+    "translate.unused-header": {
+        "ru": "пар словаря без места в проекте: показано {shown} из {total}",
+        "en": "dictionary entries with no place in the project: {shown} of {total} shown",
+    },
+    "translate.unused-none": {
+        "ru": "пар без места в проекте нет: словарь описывает только то, что в нём есть",
+        "en": "no entries without a place in the project: the dictionary describes what is there",
+    },
+    "translate.pruned": {
+        "ru": "снято пар: {removed}",
+        "en": "entries removed: {removed}",
+    },
+    "translate.prune-partial": {
+        "ru": "ВНИМАНИЕ: снимается только показанная страница ({shown} из {total}) –"
+              " уберите --limit/--offset, чтобы снять всё",
+        "en": "NOTE: only the shown page is removed ({shown} of {total}) - drop"
+              " --limit/--offset to remove them all",
+    },
+    "translate.rewritten": {
+        "ru": "переписано [{kind}] {key}: \"{was}\" -> \"{now}\"",
+        "en": "rewritten [{kind}] {key}: \"{was}\" -> \"{now}\"",
+    },
     "translate.refused": {
         "ru": "не записано записей: {count} – значение не годится телом строкового литерала:",
         "en": "entries not written: {count} - the value is not a valid string-literal body:",
@@ -267,6 +297,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--coverage", action="store_true", help=i18n.t("translate.help.coverage"))
     parser.add_argument("--gaps", action="store_true", help=i18n.t("translate.help.gaps"))
     parser.add_argument("--entries", action="store_true", help=i18n.t("translate.help.entries"))
+    parser.add_argument("--unused", action="store_true", help=i18n.t("translate.help.unused"))
+    parser.add_argument("--prune", action="store_true", help=i18n.t("translate.help.prune"))
     parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
     parser.add_argument("--suggest", action="store_true", help=i18n.t("translate.help.suggest"))
@@ -333,6 +365,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         return _list_table(args, root, loaded)
     if args.entries:
         return _list_entries(args, root, loaded)
+    if args.unused or args.prune:
+        return _list_unused(args, root, loaded)
     if args.gaps:
         return _list_gaps(args, root, loaded)
     if args.suggest:
@@ -632,6 +666,57 @@ def _render_gaps(page: list, total: int) -> None:
         print(f"  {gap.count:5}x {gap.kind:6} {gap.key}{hint}   {place}")
 
 
+def _list_unused(args, root: Path, loaded) -> int:
+    """Pairs the project no longer has a place for; `--prune` takes them out.
+
+    Deleting code leaves its names and comment lines in the dictionary, and nothing said so:
+    the strict pass judges what is NOT covered, and the entries table shows where a pair is
+    declared, not whether anything uses it. One task left 43 of them behind.
+
+    `--prune` writes, so it removes exactly what it just listed - the same query, the same
+    page. A page cut by `--limit` is called out: removing "everything" while looking at fifty
+    of three thousand is not what the flag looks like it does.
+    """
+    from xbsl.translation import entries as entries_module
+
+    path = _dictionary_path(args, root)
+    if path is None:
+        return _no_dictionary(root)
+    needle = args.filter.casefold()
+    rows = [
+        entry for entry in entries_module.unused_entries(root, path, loaded)
+        if (args.kind in ("any", entry.kind))
+        and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
+    ]
+    total = len(rows)
+    page = _page(rows, args)
+    payload = {
+        "dictionary": str(path), "total": total,
+        "unused": [entry.as_dict() for entry in page],
+    }
+    if args.prune and page:
+        removed = entries_module.write_entries(
+            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
+        )
+        payload["removed"] = removed["removed"]
+    return _emit(args, payload, page,
+                 lambda _rows: _render_unused(args, page, total, payload.get("removed")))
+
+
+def _render_unused(args, page: list, total: int, removed) -> None:
+    if not total:
+        print(i18n.t("translate.unused-none"))
+        return
+    print(i18n.t("translate.unused-header", shown=len(page), total=total))
+    for entry in page:
+        print(f"  {entry.kind:7} {entry.key}  ->  {entry.value}   "
+              f"{Path(entry.file).name}:{entry.line}")
+    if removed is not None:
+        if len(page) < total:
+            print(i18n.t("translate.prune-partial", shown=len(page), total=total))
+        print(i18n.t("translate.pruned", removed=removed))
+
+
 def _list_entries(args, root: Path, loaded) -> int:
     path = _dictionary_path(args, root)
     if path is None:
@@ -719,6 +804,9 @@ def _apply_edits(args, root: Path, loaded) -> int:
         print(json.dumps(result, ensure_ascii=False))
     else:
         print(i18n.t("translate.applied", **result))
+        for row in result.get("rewritten") or []:
+            print("  " + i18n.t("translate.rewritten", kind=row["kind"], key=row["key"],
+                                was=row["was"], now=row["now"]))
         if refused:
             print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)
             for item in refused:

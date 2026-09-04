@@ -29,6 +29,10 @@ except ImportError:  # pragma: no cover
     yaml = None
 
 MESSAGES = {
+    "translate.unknown-kind": {
+        "ru": "неизвестный вид записи \"{kind}\"; ожидается один из: {allowed}",
+        "en": "unknown entry kind \"{kind}\"; expected one of: {allowed}",
+    },
     "translate.entries.edits-not-list": {
         "ru": "в файле правок ожидается список [{{key, value, kind}}]",
         "en": "the edits file must carry a list [{{key, value, kind}}]",
@@ -70,6 +74,22 @@ _SECTION_RE = re.compile(r"^(tokens|phrases|literals):[ \t]*(?:#.*)?$")
 #: The section a row of each kind lives in - the table speaks of kinds, the file of sections.
 SECTION_OF_KIND = {"token": "tokens", "phrase": "phrases", "literal": "literals"}
 KIND_OF_SECTION = {section: kind for kind, section in SECTION_OF_KIND.items()}
+#: The kinds a caller may name, in the order the documentation lists them.
+KINDS = tuple(SECTION_OF_KIND)
+
+
+def kind_refusal(kind: str, *, allow_any: bool = True) -> str:
+    """Why this `kind` cannot be honored, or an empty string when it can.
+
+    A misspelled kind used to be answered, not refused: the readers filter by `kind == row.kind`,
+    so `phrases` (the SECTION name, plural) matched nothing and the answer came back with an
+    empty list - indistinguishable from "the dictionary covers everything". A run that trusted
+    it left the gaps unfilled, and the strict pass found them after the merge.
+    """
+    allowed = (("any",) + KINDS) if allow_any else KINDS
+    if kind in allowed:
+        return ""
+    return i18n.t("translate.unknown-kind", kind=kind, allowed=", ".join(allowed))
 
 #: Suffixes of the platform's INTERNAL names. The compiler dictionary carries a few of them
 #: (the metadata class behind a built-in attribute is `CodeAttrMd`), and offering such a name
@@ -194,6 +214,72 @@ def _unquote(value: str) -> str:
     return value
 
 
+#: A name as the language writes it: letters of either alphabet, digits and the underscore.
+_WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*")
+#: A comment line of either source kind: `//` in a module, `#` in yaml.
+_COMMENT_RE = re.compile(r"(?:^|\s)(?://|#)[ \t]?(.*)$")
+#: The body of a double-quoted literal, escaping kept as the source writes it.
+_LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
+    """(names, comment lines, literal bodies) the project's sources carry, as written.
+
+    Read textually rather than taken from a translation pass: the pass records the gaps it
+    left, not the entries it applied, and teaching every one of its eleven writing sites to
+    report the entry it used would put the answer at the mercy of the one site somebody
+    forgets. The direction of the error matters more than its size here - a textual reading
+    can call an orphan "used" (a name that also occurs in prose), and that only leaves an
+    entry in place; it cannot call a LIVE entry an orphan, which is the mistake that would
+    delete a translation the project still needs.
+    """
+    from xbsl.translation import project as project_module
+
+    names: set[str] = set()
+    lines: set[str] = set()
+    literals: set[str] = set()
+    for path in project_module._iter_files(root, dictionary):
+        if path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            continue
+        names.update(_WORD_RE.findall(text))
+        literals.update(_LITERAL_RE.findall(text))
+        for raw in text.splitlines():
+            found = _COMMENT_RE.search(raw)
+            if found:
+                lines.add(found.group(1).strip())
+    return names, lines, literals
+
+
+def unused_entries(root: Path, dictionary_path: Path, dictionary=None) -> list[Entry]:
+    """Dictionary entries whose key the project no longer carries anywhere.
+
+    Deleting code leaves its names and comment lines behind in the dictionary, and nothing
+    said so: `--strict` judges what is NOT covered, and the entries table shows where a pair
+    is declared, not whether anything uses it. One task left 43 of them, found only by a
+    throwaway script.
+    """
+    names, lines, literals = _surfaces(root, dictionary)
+    out: list[Entry] = []
+    for entry in read_entries(dictionary_path):
+        if entry.kind == "phrase":
+            used = entry.key in lines
+        elif entry.kind == "literal":
+            used = entry.key in literals
+        else:
+            # A qualified key (`<Owner>.<Name>`) gives one word to one owner, and the sources
+            # spell the two halves apart: judging the dotted text as a name would call every
+            # such entry an orphan. Both halves must still be there - an entry qualified by a
+            # type the project no longer declares has nothing left to qualify.
+            used = all(part in names for part in entry.key.split("."))
+        if not used:
+            out.append(entry)
+    return out
+
+
 def gaps_of_project(root: Path, dictionary) -> list[Gap]:
     """What the translator leaves behind on this project, ready for the table."""
     from xbsl.translation import project as project_module
@@ -282,7 +368,8 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
         file = Path(path)
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(text, encoding="utf-8", newline="")
-    return {key: plan[key] for key in ("changed", "added", "removed", "refused", "collisions")}
+    return {key: plan[key]
+            for key in ("changed", "added", "removed", "rewritten", "refused", "collisions")}
 
 
 def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
@@ -309,8 +396,10 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
         kind = str(edit.get("kind") or "token")
         if not key:
             continue
-        reason = ""
-        if kind == "literal":
+        # A misspelled kind used to be written: the entry landed in a section named after it,
+        # or the plan crashed on the unknown section. Refused here, where the value is in hand.
+        reason = kind_refusal(kind, allow_any=False)
+        if not reason and kind == "literal":
             reason = _literal_edit_refusal(key, str(edit.get("value") or ""))
         if reason:
             # Written now, refused at the next load - and the author would be a day away from
@@ -324,6 +413,10 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
             by_file.setdefault(Path(entry.file), []).append((entry, edit))
 
     changed = removed = 0
+    # What exactly was overwritten. A bare count told the author that two existing entries got
+    # a new value and left them to find WHICH by diffing the dictionary; one of the two turned
+    # out to be a name that merely coincided with a new one, rewritten silently.
+    rewritten: list[dict] = []
     files: dict[str, str] = {}
     for file, items in by_file.items():
         lines = file.read_text(encoding="utf-8-sig").splitlines(keepends=True)
@@ -341,6 +434,12 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
             newline = "\r\n" if lines[index].endswith("\r\n") else "\n"
             lines[index] = f"{indent}{scalar(entry.key)}: {scalar(value)}{newline}"
             changed += 1
+            if value != entry.value:
+                rewritten.append({
+                    "key": entry.key, "kind": entry.kind,
+                    "was": entry.value, "now": value,
+                    "file": str(file), "line": entry.line,
+                })
         files[str(file)] = "".join(lines)
 
     added = 0
@@ -349,7 +448,10 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
                                                  planned=files)
         if added:
             files[str(target_file)] = new_text
+    # `changed` stays a COUNT: the reports print it as a number. The names live beside it,
+    # the way collisions do.
     return {"files": files, "changed": changed, "added": added, "removed": removed,
+            "rewritten": sorted(rewritten, key=lambda row: (row["file"], row["line"])),
             "refused": refused, "collisions": _value_collisions(known, edits)}
 
 

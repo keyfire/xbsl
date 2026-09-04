@@ -224,6 +224,7 @@ xbsl translate e1c/app --gaps --kind token --limit 20      # what is missing, mo
 xbsl translate e1c/app --entries --filter Задач            # what the dictionary already says
 xbsl translate e1c/app --table --limit 0                   # all three: entries, gaps, totals
 xbsl translate e1c/app --set правки.yaml                   # apply a batch file (see below)
+xbsl translate e1c/app --unused                            # entries the project no longer uses
 ```
 
 `--table` answers all three questions in one pass, and that is what it exists for: the editor table asks exactly those three, and asked apart they are two identical walks over the sources in two processes plus a third reading of the same dictionary.
@@ -233,6 +234,20 @@ xbsl translate e1c/app --set правки.yaml                   # apply a batch
 empty value removes the entry) or the JSON list `[{key, value, kind}]` that scripts
 produce. A batch of hundreds of entries is authored the way the dictionary itself is
 written, not as inline JSON.
+
+`--unused` answers the opposite question to `--gaps`: not what the project needs and the
+dictionary lacks, but what the dictionary still says and the project no longer has. Deleting
+code leaves its names and comment lines behind, and nothing else reports them - `--strict`
+judges what is NOT covered, and `--entries` shows where a pair is declared, not whether
+anything uses it. `--prune` removes exactly the rows it just listed, so `--kind`, `--filter`
+and the page apply to the removal as well; a page cut by `--limit` is called out, because
+removing "everything" while looking at fifty rows of three thousand is not what the flag looks
+like it does.
+
+The reading is textual, and the direction of its error is the point: a name that also occurs in
+prose may be counted as used, which merely leaves an entry in place, but a LIVE entry is never
+called an orphan. A qualified key (`<Owner>.<Name>`) is judged by both halves - the sources
+spell them apart, and reading the dotted text as one name would call every such entry an orphan.
 
 `--gaps` shows the count, the first places to look at and `suggestion` - the platform's own
 spelling where it has one. A suggestion is a hint, never an answer: a name the project

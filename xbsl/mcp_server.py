@@ -1361,6 +1361,9 @@ def translate_gaps(
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
 
+    refusal = entries_module.kind_refusal(kind)
+    if refusal:
+        return {"error": refusal}
     project, dictionary, error = translate_cli.load_for_tools(root)
     if error:
         return {"error": error}
@@ -1400,6 +1403,9 @@ def translate_entries(
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
 
+    refusal = entries_module.kind_refusal(kind)
+    if refusal:
+        return {"error": refusal}
     project, _dictionary, error = translate_cli.load_for_tools(root)
     if error:
         return {"error": error}

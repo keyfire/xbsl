@@ -15,6 +15,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`xbsl translate --unused` names the entries the project no longer uses; `--prune` removes
+  them.** Deleting code leaves its names and comment lines behind, and nothing reported them:
+  `--strict` judges what is not covered, and `--entries` shows where a pair is declared, not
+  whether anything uses it. `--prune` removes exactly what it listed (the filter and the page
+  apply to the removal too, and a cut page is called out). The reading is textual, and the
+  direction of its error is deliberate: a name that also occurs in prose stays in place, but a
+  live entry is never called an orphan; a qualified key is judged by both halves.
 - **The `xbsl translate` report says when the dictionary has fallen behind the sources.** The
   count of project surfaces was the only sign that a local report had gone stale after an edit,
   and noticing it took comparing that number by eye with a report from elsewhere. The line names
@@ -23,6 +30,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   else to compare - so the mark stays a note and never changes the verdict.
 
 ### Fixed
+- **An unknown `kind` is refused instead of answering with an empty list.** `translate_gaps`
+  and `translate_entries` matched the value against the row's own kind, so the SECTION name
+  (`phrases`, plural) matched nothing and the answer came back empty - indistinguishable from
+  "the dictionary covers everything". A run that trusted it left the gaps unfilled, and the
+  strict pass found them after the merge. An edit of an unknown kind is refused as well - it
+  used to be written into a section named after the typo.
+- **`translate --set` names the entries it overwrote.** The report carried only a count, and
+  finding WHICH existing keys got a new value meant diffing the dictionary; one of two turned
+  out to be a name that merely coincided with a new one. A `rewritten` list now stands beside
+  the count, with both values, the file and the line.
 - **The build number is recorded only for the version it belongs to.** Extracting under a
   borrowed name (`--element-version`) recorded in `builds` that the borrowed directory holds a
   build of the version it was never taken from: the entry had to be removed by hand, and until
