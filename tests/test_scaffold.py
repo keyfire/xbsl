@@ -1575,9 +1575,9 @@ def test_register_fields_include_dimensions_and_resources(tmp_path):
     _register(tmp_path)
     info = scaffold.object_info(tmp_path, name="КурсыВалют")
     # Register data is Измерения and Ресурсы; the summary used to see only Реквизиты.
-    # Измерение1 is the starter dimension (the information register does not compile
-    # without it), then the added ones.
-    assert [f["name"] for f in info["fields"]] == ["Измерение1", "Валюта", "Курс", "Источник"]
+    # The starter dimension the register is born with (it does not compile without one) is
+    # GONE: the first real dimension took its place, the way a tabular part has long done.
+    assert [f["name"] for f in info["fields"]] == ["Валюта", "Курс", "Источник"]
 
 
 def test_register_gets_list_form_only(tmp_path):
@@ -1588,7 +1588,7 @@ def test_register_gets_list_form_only(tmp_path):
     assert not (subsystem / "КурсыВалютФормаОбъекта.yaml").exists()
     form = _valid_yaml((subsystem / "КурсыВалютФормаСписка.yaml").read_text(encoding="utf-8"))
     columns = form["Наследует"]["Содержимое"]["Содержимое"]["Колонки"]
-    assert [c["Имя"] for c in columns] == ["Измерение1", "Валюта", "Курс", "Источник"]
+    assert [c["Имя"] for c in columns] == ["Валюта", "Курс", "Источник"]
 
     with pytest.raises(ScaffoldError, match="нет формы объекта"):
         scaffold.op_add_form(tmp_path, name="КурсыВалют", forms=["object"])
@@ -1617,10 +1617,10 @@ def test_object_info_balance_register(tmp_path):
     # Остатки is the default ВидРегистра value; a movement needs ВидЗаписи (Приход/Расход).
     assert info["register"]["register_kind"] == "Остатки"
     assert info["register"]["needs_record_type"] is True
-    # Ресурс1 is the starter resource (the accumulation register does not compile without
-    # it); it sits in the Ресурсы section before the added Количество.
+    # The starter resource the register is born with is GONE: the first real resource took
+    # its place, exactly as the first dimension takes the place of the starter dimension.
     assert [f["name"] for f in info["fields"]] == [
-        "Период", "Регистратор", "ВидЗаписи", "Товар", "Ресурс1", "Количество",
+        "Период", "Регистратор", "ВидЗаписи", "Товар", "Количество",
     ]
 
 
@@ -1650,7 +1650,8 @@ def test_object_info_information_register_periodicity(tmp_path):
                          encoding="utf-8")
     periodic = scaffold.object_info(tmp_path, name="Настройки")
     assert periodic["register"]["periodicity"] == "День"
-    # Период (the standard field of a periodic register) plus the starter Измерение1.
+    # The standard field of a periodic register plus the starter dimension: nothing has
+    # replaced it, the register was only created.
     assert [f["name"] for f in periodic["fields"]] == ["Период", "Измерение1"]
 
 

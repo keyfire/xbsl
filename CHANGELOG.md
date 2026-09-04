@@ -12,70 +12,53 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-09-04 – 0.92.0
 
 ### Added
+- **`code/member-kind-mismatch` (tier D, error) - a stdlib method read as a property, and a
+  property called as a method.** The member exists; the form of the access is wrong, and the
+  apply refuses the project with `Unknown constant` or `Unknown method`, neither of which
+  names the kind or the cure.
 - **`code/unknown-form-component` (tier D, error, file scope) - an access to a component the
   form markup does not declare.** `Components.X` is the static map the markup gives, so a name
-  without a counterpart there does not exist: the apply refuses the project with
-  `Unknown property "<Form>.<root>.<Name>"`, and until then nothing sees it - the module is
-  fine, the name merely outlived a component moved out of one column and never put into
-  another. A probe on a throwaway application showed the whole markup tree answers to the root
-  (a nested name and the group's own name compile, an invented one does not), and a
-  measurement over a live tree settled the one real risk: 157 forms with modules, 360 accesses
-  and NOT ONE name outside its own markup, whatever the form inherits.
+  without a counterpart there does not exist: the apply refuses the project, and until then
+  nothing sees it - the name outlives a component taken out of the markup.
 - **`code/server-annotation-in-client-module` (tier D, error) - the mirror of the client
-  annotation check.** A module with `Environment: Client` carrying `@OnServer` (alone or
-  beside `@OnClient`) compiles the method for the server, where the module's own type does
-  not exist, and the apply refuses EVERY such method with "this context allows only static
-  methods" - a message that names neither the environment nor the module and reads as a
-  complaint about the method itself. The rule names the annotation, the module and the cure.
+  annotation check.** A module with `Environment: Client` carrying `@OnServer` compiles for the
+  server, where its own type does not exist, and the apply refuses every such method with a
+  message that names neither the environment nor the module.
 - **`xbsl translate --unused` names the entries the project no longer uses; `--prune` removes
   them.** Deleting code leaves its names and comment lines behind, and nothing reported them:
-  `--strict` judges what is not covered, and `--entries` shows where a pair is declared, not
-  whether anything uses it. `--prune` removes exactly what it listed (the filter and the page
-  apply to the removal too, and a cut page is called out). The reading is textual, and the
-  direction of its error is deliberate: a name that also occurs in prose stays in place, but a
-  live entry is never called an orphan; a qualified key is judged by both halves.
-- **The `xbsl translate` report says when the dictionary has fallen behind the sources.** The
-  count of project surfaces was the only sign that a local report had gone stale after an edit,
-  and noticing it took comparing that number by eye with a report from elsewhere. The line names
-  how many files were changed after the dictionary and which of them is the newest; in json it
-  is the `dictionary_behind` field. Modification times are what is compared - there is nothing
-  else to compare - so the mark stays a note and never changes the verdict.
+  the strict pass judges what is not covered, and the entries table shows where a pair is
+  declared, not whether anything uses it.
+- **The `xbsl translate` report says when the dictionary has fallen behind the sources** - how
+  many files were changed after it and which is the newest (`dictionary_behind` in json).
+  Modification times are what is compared, so the mark stays a note and never changes the
+  verdict.
 
 ### Fixed
-- **`yaml/valid` names a ternary written with spaces.** YAML reads ` : ` as the
-  start of a nested mapping, and the "mapping values are not allowed" complaint lands on a
-  line that has no mapping in it. The shape is recognised only to EXPLAIN: the finding and
-  its position stay the parser's.
-- **A client common module is caught at ANY server-side consumer, not only an HTTP
-  service.** `code/client-module-in-http-service` read the consumer as an `HttpService`
-  alone, while the compiler refuses the same access from a common module with `Environment:
-  Server` too, with the same "type is unavailable in the current environment". The rule was
-  widened (the id kept for the sake of baselines) and its message no longer says HTTP
-  service.
-- **Three environment checks became errors.** The matrix of module environment against
-  method annotation was put through the compiler on a throwaway application, one module per
-  case: every miss is a COMPILE failure, after which the apply rolls the whole project back.
-  A warning would let such a run through, so `code/client-annotation-in-server-module` and
-  `code/client-module-in-http-service` are errors now, as is the new mirror.
-- **An unknown `kind` is refused instead of answering with an empty list.** `translate_gaps`
-  and `translate_entries` matched the value against the row's own kind, so the SECTION name
-  (`phrases`, plural) matched nothing and the answer came back empty - indistinguishable from
-  "the dictionary covers everything". A run that trusted it left the gaps unfilled, and the
-  strict pass found them after the merge. An edit of an unknown kind is refused as well - it
-  used to be written into a section named after the typo.
+- **The project's name shadow was lost on CRLF files.** The pattern that collects the yaml
+  names ended at the end-of-line anchor, and in multiline mode that matches before the line
+  feed. An empty shadow means false findings from an error-level rule: a project object named
+  like a platform type was reported as an unknown member.
+- **An unknown `kind` is refused instead of answering with an empty list.** The section name in
+  the plural matched nothing and the answer came back empty - indistinguishable from "the
+  dictionary covers everything", and a run that trusted it left the gaps to the strict pass.
 - **`translate --set` names the entries it overwrote.** The report carried only a count, and
-  finding WHICH existing keys got a new value meant diffing the dictionary; one of two turned
-  out to be a name that merely coincided with a new one. A `rewritten` list now stands beside
-  the count, with both values, the file and the line.
+  finding which existing keys got a new value meant diffing the dictionary.
+- **A localized string carrying a character yaml reads specially no longer breaks the file.**
+  What is quoted is what would not read back bare; an ordinary phrase stays unquoted. A new
+  string also reaches the translation files with the default-language value.
+- **The first dimension of a register takes the place of the placeholder instead of landing
+  beside it**, and the `Length` of a standard field is checked by the tool: the platform limit
+  used to be caught by the linter on the next run, over a file the tool had already written.
+- **`yaml/valid` names a ternary written with spaces.** YAML reads that as the start of a
+  nested mapping, and the complaint lands on a line that has no mapping in it.
+- **A client common module is caught at any server-side consumer, not only an HTTP service**,
+  and three environment checks became errors: the matrix was put through the compiler, and
+  every miss is a compile failure that rolls the whole project back.
 - **The build number is recorded only for the version it belongs to.** Extracting under a
-  borrowed name (`--element-version`) recorded in `builds` that the borrowed directory holds a
-  build of the version it was never taken from: the entry had to be removed by hand, and until
-  it was, `--keep-previous` would have named a snapshot after that foreign build. A build
-  number belonging to the distribution's own version is no longer recorded at all, and the run
-  says so in a line.
+  borrowed name recorded that the directory holds a build of a version it was never taken from.
 
 ## 2026-09-02 – 0.89.0, 0.90.0, 0.91.0
 

@@ -326,8 +326,13 @@ def _receiver_row_columns(code, toks, ranges, results, arrow: int):
 
 # `Имя: X` anywhere in a yaml - an object name, a form attribute, a component, a column. Any
 # of them becomes a bare name in the paired module and would shadow a same-named stdlib type.
+#
+# The trailing `\r?` is not decoration. In multiline mode `$` matches before the `\n`, and the
+# carriage return of a CRLF file stands exactly where the pattern expects the end of the line,
+# so on a checkout with Windows line endings the whole set came back EMPTY - and an empty
+# shadow set is what turns a project object named like a platform type into a finding.
 YAML_NAME_RE = re.compile(
-    r"^[ \t]*(?:-[ \t]*)?(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?$", re.M,
+    r"^[ \t]*(?:-[ \t]*)?(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$", re.M,
 )
 
 

@@ -23,6 +23,7 @@ document; a parser does not provide insertion positions.
 
 from __future__ import annotations
 
+import json
 import re
 import uuid as _uuid
 from collections.abc import Mapping
@@ -999,7 +1000,10 @@ _SECTION_SPECS: dict[str, dict] = {
 }
 
 # Mapping sections "Ключ: Значение" (not a list of items with "-"): ЛокализованныеСтроки.
-# quote - wrap the value in quotes (templates may contain spaces and %0/$0 substitutions).
+# quote - ALWAYS wrap the value in quotes (a template carries substitutions and reads better
+# quoted); a section without the flag quotes only what yaml requires quoting. Written as
+# given, a value with a colon and a space in it ("Переходов посетителей: $0.") broke the file
+# the tool had just written - yaml read the tail as a nested mapping.
 _MAPPING_SPECS: dict[str, dict] = {
     "строка": {"section": "Строки", "quote": False},
     "шаблон": {"section": "Шаблоны", "quote": True},
@@ -1795,6 +1799,39 @@ def op_new_object(
 #: needs a non-empty `Attributes` list, so the part cannot be born empty.
 _STARTER_ATTRIBUTE = "Реквизит1"
 
+#: The same trick a register is born with: the platform refuses an information register
+#: without a dimension and an accumulation register without a resource, so the new object
+#: carries a placeholder. Section -> (its stub name, the stub's own type).
+_STARTER_ITEMS = {
+    "Измерения": ("Измерение1", ("Строка", "String")),
+    "Ресурсы": ("Ресурс1", ("Число", "Number")),
+}
+
+
+def _starter_item_span(text: str, section: str) -> tuple[int, int, int] | None:
+    """(start, end, indent) of the section's placeholder while it is still untouched.
+
+    Untouched means the section holds exactly ONE item and it is the template's own - the
+    stub name and the stub type. An author who renamed or retyped it owns it, and a real
+    item named that way with anything else beside it is not a stub either. Without this the
+    first real dimension landed NEXT to the placeholder, and the placeholder was deleted by
+    hand after every such add - the tabular part had the same fix long ago.
+    """
+    stub = _STARTER_ITEMS.get(section)
+    if stub is None:
+        return None
+    name, types = stub
+    items = section_items(text, section, top_level=True)
+    if len(items) != 1 or items[0].get("Имя") != name:
+        return None
+    if items[0].get("Тип") not in types:
+        return None
+    offset = find_section_item_offset(text, section, name, top_level=True)
+    if offset is None:
+        return None
+    end, indent = _item_block_span(text, offset)
+    return offset, end, indent
+
 
 def _starter_attribute_span(text: str, tabular_offset: int, tabular: str) -> tuple[int, int, int] | None:
     """(start, end, field indent) of that placeholder while it is still untouched; None if not.
@@ -1921,10 +1958,20 @@ def op_add_field(
         line.format(uuid=new_uuid(), uuid2=new_uuid(), name=name, type=resolved or "")
         for line in template
     ], resolved), kind, path) + _prop_lines(extra), lang)
-    edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
+    starter = _starter_item_span(text, spec["section"])
+    notes: list[str] = []
+    if starter is None:
+        edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
+    else:
+        start, end, indent = starter
+        edit = TextEdit(start, end, (nl + " " * indent).join(lines))
+        notes.append(f"Заглушка {_STARTER_ITEMS[spec['section']][0]} секции "
+                     f"{spec['section']} заменена на {name}")
     new_text = apply_edit(text, edit)
     cursor = _cursor_at(new_text, edit.start + len(edit.new_text))
-    result = ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
+    result = ScaffoldResult(
+        [FileChange(yaml_path, new_text, created=False, cursor=cursor)], notes=notes,
+    )
     if field_kind == "операция":
         _add_operation_handler(yaml_path, name, result, reader, lang)
     if field_kind == "индекс":
@@ -2137,7 +2184,42 @@ def _checked_props(
         return {}
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
     written_forms = {form for name in written for form in key_forms(name)}
-    return _checked_block(_nested(props), cls, _item_label(cls, path), written_forms)
+    checked = _checked_block(_nested(props), cls, _item_label(cls, path), written_forms)
+    _check_standard_length(path, checked)
+    return checked
+
+
+def _check_standard_length(path: tuple[tuple[str, str | None], ...],
+                           props: Mapping[str, object]) -> None:
+    """The `Length` of a standard field against the platform limit.
+
+    The compiler refuses a longer one ('The length of attribute "Code" must fall between zero
+    and 50'), and the linter says so as well - but only on the NEXT run, over a file the tool
+    has already written. A limit the tool knows belongs in the tool: a refusal costs one call,
+    a written file costs a lint, an edit and a second call.
+    """
+    from xbsl.rules.yaml_schema import _STANDARD_LENGTH_LIMITS, _STANDARD_LENGTH_LIMITS_EN
+
+    name = path[-1][1] if path else None
+    if not isinstance(name, str):
+        return
+    limit = _STANDARD_LENGTH_LIMITS.get(name) or _STANDARD_LENGTH_LIMITS_EN.get(name)
+    if limit is None:
+        return
+    for key in ("Длина", "Length"):
+        # The checked value comes back SHAPED for the yaml line - a number arrives as its
+        # text. Read both, and let anything that is not a number pass to the checks that
+        # judge types.
+        raw = props.get(key)
+        value = raw if isinstance(raw, int) else None
+        if isinstance(raw, str) and raw.strip().isdigit():
+            value = int(raw.strip())
+        if value is not None and value > limit:
+            raise ScaffoldError(
+                f"Длина стандартного поля '{name}' – {value}, а платформа принимает не больше "
+                f"{limit}: применение отвергает такое поле сообщением о длине между нулём и "
+                f"{limit}"
+            )
 
 
 def _checked_block(
@@ -2396,6 +2478,24 @@ def op_set_field_property(
     return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
 
 
+def _survives_bare(value: str) -> bool:
+    """Would this value read back as itself if written without quotes?
+
+    Asked of the yaml parser rather than of a pattern: the value came from a person and may
+    carry anything. A colon and a space in it ("Переходов посетителей: $0.") makes yaml read
+    the tail as a nested mapping, and the file the tool had just written did not parse.
+    """
+    try:
+        import yaml as _yaml
+    except ImportError:  # pragma: no cover - the parser is a hard dependency of the linter
+        return False
+    try:
+        parsed = _yaml.safe_load("k: " + value)
+    except _yaml.YAMLError:
+        return False
+    return isinstance(parsed, dict) and parsed.get("k") == value
+
+
 def _add_mapping_entry(
     yaml_path: Path, text: str, nl: str, kind: str, field_kind: str,
     map_spec: dict, key: str, value: str,
@@ -2412,7 +2512,12 @@ def _add_mapping_entry(
         raise ScaffoldError(f"У вида {kind} нет секции для '{field_kind}'; доступны: {avail}")
     section = map_spec["section"]
     raw_value = value if value and value != "Строка" else key
-    entry_value = f'"{raw_value}"' if map_spec["quote"] else raw_value
+    # The quoting rules of yaml are the writer's job, not the caller's. Quoted only when the
+    # value would not survive being written bare - the files of a live project write their
+    # strings plain, and quoting every one of them would make the tool's lines look foreign
+    # beside the hand-written ones.
+    entry_value = (json.dumps(raw_value, ensure_ascii=False)
+                   if map_spec["quote"] or not _survives_bare(raw_value) else raw_value)
 
     bounds = _section_bounds(text, section, top_level=True)
     if bounds is not None:
@@ -2426,7 +2531,45 @@ def _add_mapping_entry(
         header = spelled_key(section, yaml_language(text, yaml_path.parent))
         new_text = text + f"{tail}{header}:{nl}    {key}: {entry_value}{nl}"
     cursor = _cursor_at(new_text, new_text.index(f"{key}: {entry_value}"))
-    return ScaffoldResult([FileChange(yaml_path, new_text, created=False, cursor=cursor)])
+    changes = [FileChange(yaml_path, new_text, created=False, cursor=cursor)]
+    notes: list[str] = []
+    _echo_into_translations(yaml_path, section, key, entry_value, nl, changes, notes)
+    return ScaffoldResult(changes, notes=notes)
+
+
+def _echo_into_translations(
+    yaml_path: Path, section: str, key: str, entry_value: str, nl: str,
+    changes: list, notes: list[str],
+) -> None:
+    """Repeat the new pair in the translation files the element already has.
+
+    A translation repeats the sections of its element key for key, and a key present in the
+    element and missing from a translation is a gap the translator only meets later. The
+    value written is the DEFAULT-language one - exactly what op_add_localization copies when
+    it creates such a file, and what a translator replaces in place.
+
+    A translation file carries no element kind of its own (only the two mapping sections), so
+    the ordinary add operation refuses it; that is why the echo lives here rather than in a
+    second call the caller has to know about.
+    """
+    for folder in _localization_dirs(yaml_path.parent):
+        for target in sorted(folder.glob(f"*/{yaml_path.name}")):
+            try:
+                text = target.read_text(encoding="utf-8-sig")
+            except OSError:
+                continue
+            bounds = _section_bounds(text, section, top_level=True)
+            if bounds is None:
+                continue
+            _, header_line_end, body_end = bounds
+            if re.search(rf"^[ \t]+{re.escape(key)}:", text[header_line_end:body_end], re.M):
+                continue
+            changes.append(FileChange(
+                target, text[:body_end] + f"{nl}    {key}: {entry_value}" + text[body_end:],
+                created=False,
+            ))
+            notes.append(f"Ключ {key} дописан в перевод {target.parent.name}/{target.name} "
+                         "значением языка по умолчанию – замените его переводом")
 
 
 def _add_operation_handler(

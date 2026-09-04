@@ -6,10 +6,16 @@ compiled on a throwaway application to settle what the root reaches: a NESTED co
 and the name of the group itself both compile, an invented one is refused.
 """
 
+import pytest
+
 from xbsl import engine
 from xbsl.cli import discover
 
 RULE = "code/unknown-form-component"
+
+# The rule reads the term dictionary (both spellings of the name key), so without the platform
+# data it cannot answer - in a public clone these must SKIP rather than fail.
+pytestmark = pytest.mark.needs_data
 
 _MARKUP = """ВидЭлемента: КомпонентИнтерфейса
 Имя: Форма

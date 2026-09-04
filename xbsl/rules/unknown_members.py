@@ -110,6 +110,36 @@ def _stdlib_members() -> dict[str, frozenset[str]]:
     return _members_cache
 
 
+_kinds_cache: dict[str, dict[str, str]] | None = None
+
+
+def _member_kinds() -> dict[str, dict[str, str]]:
+    """Type -> {member: "method" | "property"}, only where the catalog says ONE of them.
+
+    A name that a type carries BOTH ways is left out: nine of the 5057 members are like that,
+    all of them form commands (`Форма.Закрыть`, `ФормаОбъекта.Записать` and their kin), where
+    the command is a property and the handler a method of the same name. Judging those by the
+    call form would be guessing.
+    """
+    global _kinds_cache
+    if _kinds_cache is None:
+        try:
+            data = dataset.load_json("stdlib.json")
+        except Exception:  # noqa: BLE001 - no data, no rule
+            data = {}
+        out: dict[str, dict[str, str]] = {}
+        for name, record in (data.get("type_members") or {}).items():
+            methods = set(record.get("methods") or ())
+            properties = set(record.get("properties") or ())
+            both = methods & properties
+            kinds = {m: "method" for m in methods - both}
+            kinds.update({p: "property" for p in properties - both})
+            if kinds:
+                out[name] = kinds
+        _kinds_cache = out
+    return _kinds_cache
+
+
 def _nominal(tref: P.TypeRef | None) -> str | None:
     """The single type name of a declaration: plain, a one-dot facet or a generic head, or None.
 
@@ -170,117 +200,128 @@ class _Scope:
             self.types[name] = nominal
 
 
-def _walk_expr(expr: P.Expr | None, scope: _Scope, uses: list[P.Member]) -> None:
+def _walk_expr(expr: P.Expr | None, scope: _Scope, uses: list[P.Member],
+               called: set[int] | None = None) -> None:
+    """Collect the first-hop member accesses; `called` gathers the ones a call reaches.
+
+    A member that stands as the callee of a call and a bare member access are the same node
+    kind, and the walker used to hand both to the caller alike. Telling them apart is what
+    lets a rule judge the KIND of the member: the platform refuses a method read without
+    parentheses (`Unknown constant`) and a property called (`Unknown method`).
+    """
     if expr is None:
         return
     if isinstance(expr, P.Member):
         if isinstance(expr.obj, P.Name):
             uses.append(expr)
         else:
-            _walk_expr(expr.obj, scope, uses)
+            _walk_expr(expr.obj, scope, uses, called)
         return
     if isinstance(expr, P.Lambda):
         for p in expr.params:
             scope.declare(p.name, p.type)
         if isinstance(expr.body_expr, P.Expr):
-            _walk_expr(expr.body_expr, scope, uses)
+            _walk_expr(expr.body_expr, scope, uses, called)
         elif isinstance(expr.body_expr, P.Assign):
-            _walk_expr(expr.body_expr.target, scope, uses)
-            _walk_expr(expr.body_expr.value, scope, uses)
+            _walk_expr(expr.body_expr.target, scope, uses, called)
+            _walk_expr(expr.body_expr.value, scope, uses, called)
         if expr.body_stmts is not None:
-            _walk_body(expr.body_stmts, scope, uses)
+            _walk_body(expr.body_stmts, scope, uses, called)
         return
     if isinstance(expr, P.Call):
-        _walk_expr(expr.callee, scope, uses)
+        if called is not None and isinstance(expr.callee, P.Member):
+            called.add(id(expr.callee))
+        _walk_expr(expr.callee, scope, uses, called)
         for arg in expr.args:
-            _walk_expr(arg.value, scope, uses)
+            _walk_expr(arg.value, scope, uses, called)
     elif isinstance(expr, P.Unary):
-        _walk_expr(expr.operand, scope, uses)
+        _walk_expr(expr.operand, scope, uses, called)
     elif isinstance(expr, P.Binary):
-        _walk_expr(expr.left, scope, uses)
-        _walk_expr(expr.right, scope, uses)
+        _walk_expr(expr.left, scope, uses, called)
+        _walk_expr(expr.right, scope, uses, called)
     elif isinstance(expr, P.Compare):
-        _walk_expr(expr.first, scope, uses)
+        _walk_expr(expr.first, scope, uses, called)
         for _op, right in expr.rest:
-            _walk_expr(right, scope, uses)
+            _walk_expr(right, scope, uses, called)
     elif isinstance(expr, (P.IsType, P.AsType, P.NonNull)):
-        _walk_expr(expr.operand, scope, uses)
+        _walk_expr(expr.operand, scope, uses, called)
     elif isinstance(expr, P.Ternary):
-        _walk_expr(expr.cond, scope, uses)
-        _walk_expr(expr.then, scope, uses)
-        _walk_expr(expr.otherwise, scope, uses)
+        _walk_expr(expr.cond, scope, uses, called)
+        _walk_expr(expr.then, scope, uses, called)
+        _walk_expr(expr.otherwise, scope, uses, called)
     elif isinstance(expr, P.Coalesce):
-        _walk_expr(expr.left, scope, uses)
-        _walk_expr(expr.right, scope, uses)
+        _walk_expr(expr.left, scope, uses, called)
+        _walk_expr(expr.right, scope, uses, called)
     elif isinstance(expr, P.Index):
-        _walk_expr(expr.obj, scope, uses)
-        _walk_expr(expr.index, scope, uses)
+        _walk_expr(expr.obj, scope, uses, called)
+        _walk_expr(expr.index, scope, uses, called)
     elif isinstance(expr, P.New):
         if expr.args:
             for arg in expr.args:
-                _walk_expr(arg.value, scope, uses)
+                _walk_expr(arg.value, scope, uses, called)
     elif isinstance(expr, P.ArrayLit):
         for item in expr.items:
-            _walk_expr(item, scope, uses)
+            _walk_expr(item, scope, uses, called)
     elif isinstance(expr, P.MapLit):
         for k, v in expr.entries:
-            _walk_expr(k, scope, uses)
-            _walk_expr(v, scope, uses)
+            _walk_expr(k, scope, uses, called)
+            _walk_expr(v, scope, uses, called)
     elif isinstance(expr, P.Throw):
-        _walk_expr(expr.value, scope, uses)
+        _walk_expr(expr.value, scope, uses, called)
 
 
-def _walk_body(stmts: list[P.Stmt], scope: _Scope, uses: list[P.Member]) -> None:
+def _walk_body(stmts: list[P.Stmt], scope: _Scope, uses: list[P.Member],
+               called: set[int] | None = None) -> None:
     for st in stmts:
         if isinstance(st, P.VarDecl):
             scope.declare(st.name, st.type, st.init)
-            _walk_expr(st.init, scope, uses)
+            _walk_expr(st.init, scope, uses, called)
         elif isinstance(st, P.Assign):
-            _walk_expr(st.target, scope, uses)
-            _walk_expr(st.value, scope, uses)
+            _walk_expr(st.target, scope, uses, called)
+            _walk_expr(st.value, scope, uses, called)
         elif isinstance(st, (P.ExprStmt, P.UseStmt)):
-            _walk_expr(st.expr, scope, uses)
+            _walk_expr(st.expr, scope, uses, called)
         elif isinstance(st, P.If):
             for cond, body in st.branches:
-                _walk_expr(cond, scope, uses)
-                _walk_body(body, scope, uses)
+                _walk_expr(cond, scope, uses, called)
+                _walk_body(body, scope, uses, called)
             if st.else_body is not None:
-                _walk_body(st.else_body, scope, uses)
+                _walk_body(st.else_body, scope, uses, called)
         elif isinstance(st, P.Case):
             if st.subject is not None:
-                _walk_expr(st.subject, scope, uses)
+                _walk_expr(st.subject, scope, uses, called)
             for when in st.whens:
                 for cond in when.conditions:
-                    _walk_expr(cond, scope, uses)
-                _walk_body(when.body, scope, uses)
+                    _walk_expr(cond, scope, uses, called)
+                _walk_body(when.body, scope, uses, called)
             if st.else_body is not None:
-                _walk_body(st.else_body, scope, uses)
+                _walk_body(st.else_body, scope, uses, called)
         elif isinstance(st, P.While):
-            _walk_expr(st.cond, scope, uses)
-            _walk_body(st.body, scope, uses)
+            _walk_expr(st.cond, scope, uses, called)
+            _walk_body(st.body, scope, uses, called)
         elif isinstance(st, P.ForEach):
             scope.declare(st.var, None)  # the element type is inference territory
-            _walk_expr(st.source, scope, uses)
-            _walk_body(st.body, scope, uses)
+            _walk_expr(st.source, scope, uses, called)
+            _walk_body(st.body, scope, uses, called)
         elif isinstance(st, P.ForTo):
             scope.declare(st.var, None)
-            _walk_expr(st.start_expr, scope, uses)
-            _walk_expr(st.to, scope, uses)
+            _walk_expr(st.start_expr, scope, uses, called)
+            _walk_expr(st.to, scope, uses, called)
             if st.step is not None:
-                _walk_expr(st.step, scope, uses)
-            _walk_body(st.body, scope, uses)
+                _walk_expr(st.step, scope, uses, called)
+            _walk_body(st.body, scope, uses, called)
         elif isinstance(st, P.Try):
-            _walk_body(st.body, scope, uses)
+            _walk_body(st.body, scope, uses, called)
             for var, tref, body in st.catches:
                 if var:
                     scope.declare(var, tref)
-                _walk_body(body, scope, uses)
+                _walk_body(body, scope, uses, called)
             if st.finally_body is not None:
-                _walk_body(st.finally_body, scope, uses)
+                _walk_body(st.finally_body, scope, uses, called)
         elif isinstance(st, P.Scope):
-            _walk_body(st.body, scope, uses)
+            _walk_body(st.body, scope, uses, called)
         elif isinstance(st, P.Return):
-            _walk_expr(st.value, scope, uses)
+            _walk_expr(st.value, scope, uses, called)
 
 
 #: A member spelled in Cyrillic is the one the catalog stores; a Latin one needs the pair.
@@ -439,7 +480,15 @@ dataset.register_reset(_ui_member_names.cache_clear)
 dataset.register_reset(_unambiguous_member_names.cache_clear)
 dataset.register_reset(_ui_enum_values.cache_clear)
 dataset.register_reset(_ui_names.cache_clear)
+def _reset_kind_caches() -> None:
+    """Both module-level caches follow the dataset: a version switch changes the catalog."""
+    global _members_cache, _kinds_cache
+    _members_cache = None
+    _kinds_cache = None
+
+
 dataset.register_reset(_both_member_spellings.cache_clear)
+dataset.register_reset(_reset_kind_caches)
 
 
 @rule("code/unknown-member", "code/unknown-member.title", "D", severity=Severity.ERROR)
@@ -498,6 +547,24 @@ def unknown_member(source: SourceFile) -> Iterable[Diagnostic]:
 # --- The same check reached through a TYPE NAME ----------------------------------------
 
 MESSAGES_STATIC = {
+    "code/member-kind-mismatch.title": {
+        "ru": "Метод стандартной библиотеки прочитан как свойство (или наоборот)",
+        "en": "A stdlib method read as a property (or the other way round)",
+    },
+    "code/member-kind-mismatch.method": {
+        "ru": "'{type}.{member}' – это МЕТОД, а прочитан как свойство: применение отвергает "
+              "проект сообщением Unknown constant \"{type}.{member}\". Допишите скобки: "
+              "{member}().",
+        "en": "'{type}.{member}' is a METHOD read as a property: the apply refuses the "
+              "project with Unknown constant \"{type}.{member}\". Add the parentheses: "
+              "{member}().",
+    },
+    "code/member-kind-mismatch.property": {
+        "ru": "'{type}.{member}' – это СВОЙСТВО, а вызвано как метод: применение отвергает "
+              "проект сообщением Unknown method \"{type}.{member}\". Уберите скобки.",
+        "en": "'{type}.{member}' is a PROPERTY called as a method: the apply refuses the "
+              "project with Unknown method \"{type}.{member}\". Drop the parentheses.",
+    },
     "code/unknown-static-member.title": {
         "ru": "Неизвестный член при обращении по имени типа",
         "en": "Unknown member on a type name",
@@ -721,14 +788,17 @@ def _static_mapper(source: SourceFile) -> dict | None:
     lm = None
     found: list[tuple[str | None, str, str, int, int]] = []
     pending: list[tuple[str, str, str, int, int]] = []
+    kinds: list[tuple[str | None, str, str, str, int, int]] = []
+    kinds_by_type = _member_kinds()
     for method in methods:
         scope = _StaticScope()
         for p in method.params:
             scope.declare(p.name, p.type)
         uses: list[P.Member] = []
+        called: set[int] = set()
         for p in method.params:
-            _walk_expr(p.default, scope, uses)
-        _walk_body(method.body, scope, uses)
+            _walk_expr(p.default, scope, uses, called)
+        _walk_body(method.body, scope, uses, called)
         for use in uses:
             assert isinstance(use.obj, P.Name)
             name = use.obj.name
@@ -760,6 +830,15 @@ def _static_mapper(source: SourceFile) -> dict | None:
             if members is None:
                 continue
             if use.name in members or use.name in _COMMON_MEMBERS:
+                # The member exists; what may still be wrong is HOW it is reached. The
+                # platform refuses a method read without parentheses and a property called.
+                declared = kinds_by_type.get(type_name, {}).get(use.name)
+                wanted = "method" if id(use) in called else "property"
+                if declared is not None and declared != wanted:
+                    if lm is None:
+                        lm = linemap(source)
+                    line, col = lm.linecol(use.start)
+                    kinds.append((root, type_name, use.name, declared, line, col))
                 continue
             if lm is None:
                 lm = linemap(source)
@@ -770,13 +849,56 @@ def _static_mapper(source: SourceFile) -> dict | None:
         fact["uses"] = found
     if pending:
         fact["pending"] = pending
-    if found or pending:
+    if kinds:
+        fact["kinds"] = kinds
+    if found or pending or kinds:
         pair_names = _pair_names_from_disk(source)
         if pair_names:
             fact["pair_names"] = sorted(pair_names)
     elif not stem:
         return None
     return fact
+
+
+@rule(
+    "code/member-kind-mismatch", "code/member-kind-mismatch.title", "D",
+    scope="project", severity=Severity.ERROR, mapper=_static_mapper,
+)
+def member_kind_mismatch(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A member reached through a type name must be reached the way it is declared.
+
+    The member EXISTS - that is what code/unknown-static-member checks - and the mistake is
+    the form: `ЧасовойПояс.Текущий` without parentheses reads a method as a constant, and
+    `.Имя()` calls a property. The compiler refuses both, and its two messages name neither
+    the kind nor the cure; a probe on a throwaway application answered `Unknown constant` for
+    the first and `Unknown method` for the second, while the control - the method called and
+    the property read - compiled.
+
+    The shadow rules are the neighbouring check's: a name the project gives another meaning
+    (an object, an attribute of the paired form) is not read as a type.
+    """
+    global_shadow: set[str] = set()
+    paired: dict[str, set[str]] = {}
+    for rel, fact in facts.items():
+        if "names" not in fact:
+            continue
+        if fact["object"]:
+            global_shadow.add(fact["object"])
+        paired.setdefault(_pair_key(rel), set()).update(fact["names"])
+    for rel, fact in facts.items():
+        rows = fact.get("kinds")
+        if not rows:
+            continue
+        shadow = global_shadow | paired.get(_pair_key(rel), set()) | set(fact.get("pair_names", ()))
+        for root, type_name, member, declared, line, col in rows:
+            if root is not None and root in shadow:
+                continue
+            key = ("code/member-kind-mismatch.method" if declared == "method"
+                   else "code/member-kind-mismatch.property")
+            yield Diagnostic(
+                rel, line, col, "code/member-kind-mismatch", Severity.ERROR,
+                i18n.t(key, type=type_name, member=member),
+            )
 
 
 @rule(
