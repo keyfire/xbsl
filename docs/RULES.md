@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 189 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 190 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -178,6 +178,7 @@ the execution model (client/server), form handlers, properties and queries.
 | Rule | | | Scope | What it checks |
 |---|---|---|---|---|
 | `yaml/choice-needs-static-list` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | ValueChoice without a static `ChoiceList` [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
+| `yaml/slot-needs-list` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A slot the ui schema types as `Array<...>` holding a single component instead of a list: the apply refuses such markup, and the lint used to keep silent [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Groups/Group_ru/) |
 | `yaml/value-choice-title` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `ValueChoice` with an explicit `SwitcherDisplayKind: Switcher` sets a `Title` – the platform does not draw it and the field stays unlabeled; put the caption into a separate `Label` next to the switcher (nodes without an explicit kind and `Array<...>` ones – a checkbox group – are not judged) |
 | `code/unknown-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Unknown type |
 | `code/catch-non-exception` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The type in `catch` is not an exception (a stdlib non-exception or a local `structure`) - the compiler rejects such code [docs](https://1cmycloud.com/docs/help/topics/exceptions/) |

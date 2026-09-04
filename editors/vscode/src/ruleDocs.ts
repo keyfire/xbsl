@@ -268,6 +268,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "тип",
   },
   {
+    match: (r) => r === "yaml/slot-needs-list",
+    page: "stdlib/element/xbsl/Std/Interface/Groups/Group_ru",
+    anchor: "содержимое",
+  },
+  {
     match: (r) => r === "yaml/choice-needs-static-list",
     page: "stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru",
     anchor: "списоквыбора",

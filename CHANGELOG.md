@@ -12,6 +12,15 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`yaml/slot-needs-list` (tier D, error) - a slot declared as a list, holding a single
+  component.** A component written under `Content:` without the dash is not a list of one:
+  the yaml parses, every key exists, and the apply is what refuses the markup - on the server,
+  rolling the project back to the previous build. The shape is judged by the ui schema rather
+  than by the property name: on a form template the same slot legally holds one component.
+
 ## 2026-09-04 – 0.92.0
 
 ### Added

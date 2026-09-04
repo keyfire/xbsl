@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 189.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 190.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -176,6 +176,7 @@ sidebar:
 | Правило | | | Область | Что проверяет |
 |---|---|---|---|---|
 | `yaml/choice-needs-static-list` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | ВыборЗначения без статичного СпискаВыбора [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/CommonComponents/ValueChoice_ru/) |
+| `yaml/slot-needs-list` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Слот, описанный в ui-схеме типом `Массив<...>`, получил один компонент вместо списка: применение сборки отвергает такую разметку, а линт до сих пор молчал [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Interface/Groups/Group_ru/) |
 | `yaml/value-choice-title` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | У `ВыборЗначения` с явным `ВидОтображенияПереключателя: Переключатель` задан `Заголовок` – платформа его не рисует, и поле остаётся без подписи; кладите подпись отдельной `Надпись` рядом с переключателем (узлы без явного вида и с тип-аргументом `Массив<...>` – группа флажков – не судятся) |
 | `code/unknown-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Неизвестный тип |
 | `code/catch-non-exception` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип в `поймать` не исключение (stdlib-тип без сигнатуры исключения или локальная `структура`) – компилятор такой код отвергает [доки](https://1cmycloud.com/docs/help/topics/exceptions/) |
