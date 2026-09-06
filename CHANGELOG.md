@@ -15,6 +15,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## Unreleased
 
 ### Added
+- **`code/param-redeclared`: a local `val` / `var` / `use` with the name of the method's own
+  parameter.** The compiler answers "a variable named X is already defined" only at the server
+  apply, and the stand rolls back; the linter reports the clash at the declaration, nested blocks
+  included, in both spellings. Loop and catch variables, lambda parameters and lambda bodies are
+  not judged: the corpora carry none.
 - **`docs_symbol` and `docs_page` answer briefly or with one section.** A type page runs to ten
   thousand characters – the constructors, every property, the inherited lists – while "which page
   is it and what is it about" needs the head alone: `brief=True` returns the summary and the
