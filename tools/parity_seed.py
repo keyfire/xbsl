@@ -311,6 +311,96 @@ Inherits:
 """
 _TASK_TOKENS = {"Задачи": "Tasks", "Шаги": "Steps", "Шаг": "Step", "КарточкаЗадачи": "TaskCard",
                 "Проверить": "Check", "Всего": "Total"}
+#: The built-in name attribute – dispatched to a class of its own by the name alone.
+_NAME_ATTRIBUTE_RU = "Реквизиты:\n    -\n        Имя: Наименование\n"
+_NAME_ATTRIBUTE_EN = "Attributes:\n    -\n        Name: Name\n"
+#: A reference attribute pointing back at the catalog; `{mark}` is the nullable marker or nothing.
+_REFERENCE_ATTRIBUTE_RU = """\
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f0b
+        Имя: Основание
+        Тип: Заявки.Ссылка{mark}
+"""
+_REFERENCE_ATTRIBUTE_EN = """\
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f0b
+        Name: Basis
+        Type: Applications.Reference{mark}
+"""
+#: An insert of a fixed height under the form's content.
+_INSET_RU = "    Содержимое:\n        Тип: КонтейнерHtml\n        Имя: Вставка\n        Высота: 480\n"
+_INSET_EN = "    Content:\n        Type: HtmlContainer\n        Name: Inset\n        Height: 480\n"
+#: A horizontal row holding an insert next to a label (a single child has nothing to slide
+#: against); `{align}` is the alignment line or nothing.
+_ROW_RU = ("    Содержимое:\n        Тип: Группа\n        Имя: Ряд\n        Компоновка: Горизонтальная\n"
+           "{align}        Содержимое:\n            -\n                Тип: КонтейнерHtml\n"
+           "                Имя: Вставка\n            -\n                Тип: Надпись\n"
+           "                Заголовок: Есть\n")
+_ROW_EN = ("    Content:\n        Type: Group\n        Name: Row\n        Layout: Horizontal\n"
+           "{align}        Content:\n            -\n                Type: HtmlContainer\n"
+           "                Name: Inset\n            -\n                Type: Label\n"
+           "                Title: Есть\n")
+_ROW_TOKENS = {**_FORM_TOKENS, "Ряд": "Row", "Вставка": "Inset"}
+#: A table over a dynamic list with one column of a fixed width.
+_COLUMN_RU = ("    Содержимое:\n        Тип: Таблица<ДинамическийСписок>\n        Имя: Список\n"
+              "        Колонки:\n            -\n                Тип: СтандартнаяКолонкаТаблицы\n"
+              "                Ширина: 40\n")
+_COLUMN_EN = ("    Content:\n        Type: Table<DynamicList>\n        Name: List\n"
+              "        Columns:\n            -\n                Type: StandardTableColumn\n"
+              "                Width: 40\n")
+_COLUMN_TOKENS = {**_FORM_TOKENS, "Список": "List"}
+#: Common modules of one environment each – the pair the environment family judges.
+_CLIENT_MODULE_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f12
+Имя: Клиентский
+ОбластьВидимости: ВПроекте
+Окружение: Клиент
+"""
+_CLIENT_MODULE_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000f12
+Name: ClientSide
+VisibilityScope: InProject
+Environment: Client
+"""
+_SERVER_MODULE_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f13
+Имя: Серверный
+ОбластьВидимости: ВПроекте
+Окружение: Сервер
+"""
+_SERVER_MODULE_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000f13
+Name: ServerSide
+VisibilityScope: InProject
+Environment: Server
+"""
+_SERVER_READ_RU = "@НаСервере @ВПроекте\nметод Прочитать(): Строка\n    возврат \"\"\n;\n"
+_SERVER_READ_EN = "@OnServer @InProject\nmethod Read(): String\n    return \"\"\n;\n"
+_ENVIRONMENT_TOKENS = {**_FORM_TOKENS, **_TASK_TOKENS, "Клиентский": "ClientSide",
+                       "Серверный": "ServerSide", "Вычисления": "Calculations", "Проба": "Probe",
+                       "Прочитать": "Read", "Загрузить": "Load", "Отобразить": "Display",
+                       "Вызвать": "Invoke"}
+#: Query blocks over the catalog: a deletion-mark condition, the habit function and the
+#: platform's own null check.
+_MARK_QUERY_RU = ("    знч Итог = Запрос{\n        ВЫБРАТЬ Заявка.Наименование ИЗ Заявки КАК Заявка\n"
+                  "        ГДЕ НЕ Заявка.ПометкаУдаления\n    }\n")
+_MARK_QUERY_EN = ("    val Result = Query{\n        SELECT Application.Name FROM Applications AS Application\n"
+                  "        WHERE NOT Application.DeletionMark\n    }\n")
+_ISNULL_QUERY_RU = ("    знч Итог = Запрос{\n        ВЫБРАТЬ ЕСТЬNULL(Заявка.Наименование, \"\")\n"
+                    "        ИЗ Заявки КАК Заявка\n    }\n")
+_ISNULL_QUERY_EN = ("    val Result = Query{\n        SELECT ISNULL(Application.Name, \"\")\n"
+                    "        FROM Applications AS Application\n    }\n")
+_CASE_QUERY_RU = ("    знч Итог = Запрос{\n        ВЫБРАТЬ ВЫБОР КОГДА Заявка.Наименование ЕСТЬ NULL ТОГДА \"\"\n"
+                  "            ИНАЧЕ Заявка.Наименование КОНЕЦ\n        ИЗ Заявки КАК Заявка\n    }\n")
+_CASE_QUERY_EN = ("    val Result = Query{\n        SELECT CASE WHEN Application.Name IS NULL THEN \"\"\n"
+                  "            ELSE Application.Name END\n        FROM Applications AS Application\n    }\n")
+_CATALOG_QUERY_TOKENS = {**_QUERY_TOKENS, "Заявка": "Application"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -1003,6 +1093,501 @@ SEEDS: list[Seed] = [
               "Latin is not judged at all, and the array members of the catalog are Russian "
               "alone. Closing this needs the member vocabulary completed – the same gap as the "
               "unknown-member seed above, not a change to the rule.",
+    ),
+    # --- The built-in attributes, the reference facet and the field types: names the yaml
+    # spells either way and the rules resolve through the term dictionary.
+    Seed(
+        rule="yaml/standard-field-length",
+        expect=CLEAN,
+        note="the built-in name at the platform limit – the built-in is told by its dictionary "
+             "spelling",
+        files={"Заявки.yaml": _CATALOG_RU + _NAME_ATTRIBUTE_RU + "        Длина: 400\n"},
+        english={"Applications.yaml": _CATALOG_EN + _NAME_ATTRIBUTE_EN + "        Length: 400\n"},
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="yaml/standard-field-length",
+        expect=FINDING,
+        note="the built-in name over the limit is reported",
+        files={"Заявки.yaml": _CATALOG_RU + _NAME_ATTRIBUTE_RU + "        Длина: 401\n"},
+        english={"Applications.yaml": _CATALOG_EN + _NAME_ATTRIBUTE_EN + "        Length: 401\n"},
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="yaml/presentation-field",
+        expect=CLEAN,
+        note="the presentation names the built-in name attribute – a string by its dispatched "
+             "class",
+        files={"Заявки.yaml": _CATALOG_RU + "Представление: Наименование\n" + _NAME_ATTRIBUTE_RU},
+        english={"Applications.yaml": _CATALOG_EN + "Presentation: Name\n" + _NAME_ATTRIBUTE_EN},
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="yaml/presentation-field",
+        expect=FINDING,
+        note="a presentation naming no attribute of the object is reported",
+        files={"Заявки.yaml": _CATALOG_RU + "Представление: Ерунда\n" + _NAME_ATTRIBUTE_RU},
+        english={"Applications.yaml": _CATALOG_EN + "Presentation: Nonsense\n" + _NAME_ATTRIBUTE_EN},
+        tokens={"Заявки": "Applications", "Ерунда": "Nonsense"},
+    ),
+    Seed(
+        rule="yaml/item-id-required",
+        expect=CLEAN,
+        note="the built-in name attribute carries no identifier – its dispatched class declares "
+             "none",
+        files={"Заявки.yaml": _CATALOG_RU + _NAME_ATTRIBUTE_RU},
+        english={"Applications.yaml": _CATALOG_EN + _NAME_ATTRIBUTE_EN},
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="yaml/item-id-required",
+        expect=FINDING,
+        note="a regular attribute without its identifier is reported",
+        files={"Заявки.yaml": _CATALOG_RU + "Реквизиты:\n    -\n        Имя: Сумма\n        Тип: Число\n"},
+        english={
+            "Applications.yaml": _CATALOG_EN + "Attributes:\n    -\n        Name: Amount\n        Type: Number\n",
+        },
+        tokens=_NUMBER_ATTRIBUTE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/ref-needs-nullable",
+        expect=CLEAN,
+        note="a reference attribute with the nullable marker – the facet is read in both spellings",
+        files={"Заявки.yaml": _CATALOG_RU + _REFERENCE_ATTRIBUTE_RU.format(mark="?")},
+        english={"Applications.yaml": _CATALOG_EN + _REFERENCE_ATTRIBUTE_EN.format(mark="?")},
+        tokens=_DELETE_CURRENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/ref-needs-nullable",
+        expect=FINDING,
+        note="a reference attribute without the marker has no default value – reported",
+        files={"Заявки.yaml": _CATALOG_RU + _REFERENCE_ATTRIBUTE_RU.format(mark="")},
+        english={"Applications.yaml": _CATALOG_EN + _REFERENCE_ATTRIBUTE_EN.format(mark="")},
+        tokens=_DELETE_CURRENT_TOKENS,
+    ),
+    Seed(
+        rule="code/ref-field-needs-req",
+        expect=CLEAN,
+        note="a required structure field of a reference type – the facet after the dot is the "
+             "platform's word",
+        files={"Заявки.xbsl": "структура Данные\n    обз пер Основание: Заявки.Ссылка\n;\n"},
+        english={"Applications.xbsl": "structure Data\n    req var Basis: Applications.Reference\n;\n"},
+        tokens={"Заявки": "Applications", "Данные": "Data", "Основание": "Basis"},
+    ),
+    Seed(
+        rule="code/ref-field-needs-req",
+        expect=FINDING,
+        note="the same field without `обз`, `?` or an initializer is reported",
+        files={"Заявки.xbsl": "структура Данные\n    пер Основание: Заявки.Ссылка\n;\n"},
+        english={"Applications.xbsl": "structure Data\n    var Basis: Applications.Reference\n;\n"},
+        tokens={"Заявки": "Applications", "Данные": "Data", "Основание": "Basis"},
+    ),
+    Seed(
+        rule="yaml/date-input-needs-plain-date",
+        expect=CLEAN,
+        note="a date input over the plain type – the component and the type are catalog names",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: ПолеВвода<Дата>\n"
+                                "        Имя: Срок\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Edit<Date>\n"
+                                    "        Name: Deadline\n",
+        },
+        tokens={**_FORM_TOKENS, "Срок": "Deadline"},
+    ),
+    Seed(
+        rule="yaml/date-input-needs-plain-date",
+        expect=FINDING,
+        note="the nullable date argument the renderer drops is reported",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: ПолеВвода<Дата?>\n"
+                                "        Имя: Срок\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Edit<Date?>\n"
+                                    "        Name: Deadline\n",
+        },
+        tokens={**_FORM_TOKENS, "Срок": "Deadline"},
+    ),
+    # --- Rendering and layout: the component types, the layout values and the size keys are
+    # all names of the ui schema.
+    Seed(
+        rule="yaml/empty-group-sized",
+        expect=CLEAN,
+        note="a sized group with content – the content key is read by its schema spelling",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Группа\n        Высота: 20\n"
+                                "        Содержимое:\n            Тип: Надпись\n"
+                                "            Заголовок: Есть\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Group\n        Height: 20\n"
+                                    "        Content:\n            Type: Label\n"
+                                    "            Title: Есть\n",
+        },
+        tokens=_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/empty-group-sized",
+        expect=FINDING,
+        note="a sized group without content is dropped by the renderer – reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Группа\n        Высота: 20\n"},
+        english={"ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Group\n        Height: 20\n"},
+        tokens=_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/insert-row-needs-align",
+        expect=CLEAN,
+        note="a horizontal row holding an insert, aligned explicitly – the layout value and the "
+             "alignment key are schema names",
+        files={
+            "ФормаЗаявки.yaml":
+                _FORM_RU + _ROW_RU.format(align="        ВыравниваниеСодержимогоПоВертикали: Верх\n"),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _ROW_EN.format(align="        ContentVerticalAlign: Top\n"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/insert-row-needs-align",
+        expect=FINDING,
+        note="the same row left to the baseline alignment is reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _ROW_RU.format(align="")},
+        english={"ApplicationForm.yaml": _FORM_EN + _ROW_EN.format(align="")},
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=CLEAN,
+        note="a fixed height with the stretch switched off – the stretch key is spelled by the "
+             "schema",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_RU + "        РастягиватьПоВертикали: Ложь\n"},
+        english={"ApplicationForm.yaml": _FORM_EN + _INSET_EN + "        VerticalStretch: False\n"},
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/size-needs-no-stretch",
+        expect=FINDING,
+        note="a fixed height with the stretch left to the platform is reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _INSET_RU},
+        english={"ApplicationForm.yaml": _FORM_EN + _INSET_EN},
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/col-width-needs-no-stretch",
+        expect=CLEAN,
+        note="a fixed column width with the stretch switched off – the column type and the key "
+             "are schema names",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + _COLUMN_RU + "                РастягиватьПоГоризонтали: Ложь\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _COLUMN_EN + "                HorizontalStretch: False\n",
+        },
+        tokens=_COLUMN_TOKENS,
+    ),
+    Seed(
+        rule="yaml/col-width-needs-no-stretch",
+        expect=FINDING,
+        note="a fixed column width that acts as a share is reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _COLUMN_RU},
+        english={"ApplicationForm.yaml": _FORM_EN + _COLUMN_EN},
+        tokens=_COLUMN_TOKENS,
+    ),
+    Seed(
+        rule="yaml/card-literal-stretch-weight",
+        expect=CLEAN,
+        note="a literal weight on a plain group – only a card collapses, and the card list comes "
+             "from the ui schema",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Группа\n"
+                                "        Компоновка: Вертикальная\n        ВесПриРастягивании: 1\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Group\n"
+                                    "        Layout: Vertical\n        WeightOnStretch: 1\n",
+        },
+        tokens=_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/card-literal-stretch-weight",
+        expect=FINDING,
+        note="a literal weight on a card is reported – the component type is a schema name",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: СтандартнаяКарточка\n"
+                                "        ВесПриРастягивании: 1\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: StandardCard\n"
+                                    "        WeightOnStretch: 1\n",
+        },
+        tokens=_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/matrix-group-max-width",
+        expect=CLEAN,
+        note="the maximum left automatic on a matrix group – the value the platform spells Auto",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Группа\n"
+                                "        Компоновка: Матричная\n        МаксимальнаяШирина: Авто\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Group\n"
+                                    "        Layout: Matrix\n        MaxWidth: Auto\n",
+        },
+        tokens=_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/matrix-group-max-width",
+        expect=FINDING,
+        note="a numeric maximum on a matrix group is reported – the layout value is an "
+             "enumeration of the schema",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Группа\n"
+                                "        Компоновка: Матричная\n        МаксимальнаяШирина: 2000\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Group\n"
+                                    "        Layout: Matrix\n        MaxWidth: 2000\n",
+        },
+        tokens=_FORM_TOKENS,
+    ),
+    # --- The environment family: the module environment is a metamodel enumeration, the
+    # annotations are read in both spellings.
+    Seed(
+        rule="code/server-annotation-in-client-module",
+        expect=CLEAN,
+        note="a client module with the client annotation – how such a module is written",
+        files={
+            "Клиентский.yaml": _CLIENT_MODULE_RU,
+            "Клиентский.xbsl": "@НаКлиенте\nметод Проба()\n    возврат\n;\n",
+        },
+        english={
+            "ClientSide.yaml": _CLIENT_MODULE_EN,
+            "ClientSide.xbsl": "@OnClient\nmethod Probe()\n    return\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/server-annotation-in-client-module",
+        expect=FINDING,
+        note="the server annotation in a client module is reported – the apply refuses it",
+        files={
+            "Клиентский.yaml": _CLIENT_MODULE_RU,
+            "Клиентский.xbsl": "@НаСервере\nметод Проба()\n    возврат\n;\n",
+        },
+        english={
+            "ClientSide.yaml": _CLIENT_MODULE_EN,
+            "ClientSide.xbsl": "@OnServer\nmethod Probe()\n    return\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-annotation-in-server-module",
+        expect=CLEAN,
+        note="a server module with the server annotation",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаСервере\nметод Проба()\n    возврат\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnServer\nmethod Probe()\n    return\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-annotation-in-server-module",
+        expect=FINDING,
+        note="the client annotation in a server module is reported",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаКлиенте\nметод Проба()\n    возврат\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnClient\nmethod Probe()\n    return\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/server-module-in-client-context",
+        expect=CLEAN,
+        note="a server module reached from a form method the annotation pins to the server",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _SERVER_READ_RU,
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": "@НаСервере\nметод Загрузить()\n    Серверный.Прочитать()\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _SERVER_READ_EN,
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": "@OnServer\nmethod Load()\n    ServerSide.Read()\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/server-module-in-client-context",
+        expect=FINDING,
+        note="the same call from a plain form method, which runs on the client, is reported",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _SERVER_READ_RU,
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": "метод Загрузить()\n    Серверный.Прочитать()\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _SERVER_READ_EN,
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": "method Load()\n    ServerSide.Read()\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-module-in-http-service",
+        expect=CLEAN,
+        note="a server module reaching a module of both environments – its members exist on the "
+             "server",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаСервере\nметод Вызвать(): Строка\n    возврат Вычисления.Отобразить()\n;\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Отобразить(): Строка\n    возврат \"\"\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnServer\nmethod Invoke(): String\n    return Calculations.Display()\n;\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Display(): String\n    return \"\"\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-module-in-http-service",
+        expect=FINDING,
+        note="a server module reaching a client module is reported – the environment value is a "
+             "metamodel enumeration",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаСервере\nметод Вызвать(): Строка\n    возврат Клиентский.Отобразить()\n;\n",
+            "Клиентский.yaml": _CLIENT_MODULE_RU,
+            "Клиентский.xbsl": "@НаКлиенте\nметод Отобразить(): Строка\n    возврат \"\"\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnServer\nmethod Invoke(): String\n    return ClientSide.Display()\n;\n",
+            "ClientSide.yaml": _CLIENT_MODULE_EN,
+            "ClientSide.xbsl": "@OnClient\nmethod Display(): String\n    return \"\"\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/component-in-server-context",
+        expect=CLEAN,
+        note="an interface component reached from a method pinned to the client",
+        files={
+            "КарточкаЗадачи.yaml": _TASK_CARD_RU,
+            "КарточкаЗадачи.xbsl": "@НаКлиенте\nметод Проверить(): Строка\n    возврат \"\"\n;\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаКлиенте\nметод Отобразить(): Строка\n"
+                               "    возврат КарточкаЗадачи.Проверить()\n;\n",
+        },
+        english={
+            "TaskCard.yaml": _TASK_CARD_EN,
+            "TaskCard.xbsl": "@OnClient\nmethod Check(): String\n    return \"\"\n;\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnClient\nmethod Display(): String\n"
+                                 "    return TaskCard.Check()\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/component-in-server-context",
+        expect=FINDING,
+        note="the same access from an unannotated method of a module of both environments, "
+             "compiled for the server too, is reported",
+        files={
+            "КарточкаЗадачи.yaml": _TASK_CARD_RU,
+            "КарточкаЗадачи.xbsl": "@НаКлиенте\nметод Проверить(): Строка\n    возврат \"\"\n;\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "метод Отобразить(): Строка\n    возврат КарточкаЗадачи.Проверить()\n;\n",
+        },
+        english={
+            "TaskCard.yaml": _TASK_CARD_EN,
+            "TaskCard.xbsl": "@OnClient\nmethod Check(): String\n    return \"\"\n;\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "method Display(): String\n    return TaskCard.Check()\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    # --- The query language: the deletion mode of the object, the mark field and the habit
+    # function are names the block may spell either way.
+    Seed(
+        rule="query/deletion-mark-immediate",
+        expect=CLEAN,
+        note="a deletion-mark condition on an object the platform only marks – the default mode",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Пересчитать()\n" + _MARK_QUERY_RU + ";\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _MARK_QUERY_EN + ";\n",
+        },
+        tokens=_CATALOG_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="query/deletion-mark-immediate",
+        expect=FINDING,
+        note="the same condition on an object deleted outright, which has no mark field, is "
+             "reported",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "РежимУдаления: Немедленно\n",
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Пересчитать()\n" + _MARK_QUERY_RU + ";\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN + "DeletionMode: Immediately\n",
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _MARK_QUERY_EN + ";\n",
+        },
+        tokens=_CATALOG_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="query/no-isnull",
+        expect=CLEAN,
+        note="the null check spelled the platform's way – the query words come from the term "
+             "dictionary",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Пересчитать()\n" + _CASE_QUERY_RU + ";\n",
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _CASE_QUERY_EN + ";\n",
+        },
+        tokens=_CATALOG_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="query/no-isnull",
+        expect=FINDING,
+        note="the habit function of the other platform, in either spelling, is reported",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Пересчитать()\n" + _ISNULL_QUERY_RU + ";\n",
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _ISNULL_QUERY_EN + ";\n",
+        },
+        tokens=_CATALOG_QUERY_TOKENS,
     ),
 ]
 
