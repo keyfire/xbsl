@@ -12,6 +12,28 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`docs_symbol` and `docs_page` answer briefly or with one section.** A type page runs to ten
+  thousand characters – the constructors, every property, the inherited lists – while "which page
+  is it and what is it about" needs the head alone: `brief=True` returns the summary and the
+  section names, `section="Properties"` the head plus that one section (the pages' own Russian
+  headings work too); an unknown section answers with the names to choose from.
+- **Parity seeds cover 62 rules with 120 seeds (41 seeds on 23 rules before).** The rules that
+  judge text by the platform dictionaries – attribute properties, form components, module
+  environments, the query language, sizes and layout – each carry a Russian case and a
+  hand-written English twin now; four known gaps are marked with their reasons, two behind the
+  member dictionary and two behind the translator.
+
+### Fixed
+- **`yaml/ref-needs-nullable` recognizes a reference type by the English facet spelling too**
+  (`Applications.Reference`): the yaml branch kept the Russian facet in its pattern and its gate,
+  so a translated description passed without a finding.
+- **`code/member-kind-mismatch` judges the member kind in the English spelling of the type and
+  the member** (`TimeZone.Current` without brackets): the kind table is keyed by the catalog's
+  Russian names, and both sides are now brought to them through the dictionary.
+
 ## 2026-09-05 – 0.93.0
 
 ### Added
