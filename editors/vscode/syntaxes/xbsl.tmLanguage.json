@@ -10,6 +10,9 @@
       "include": "#query-block"
     },
     {
+      "include": "#pattern-literals"
+    },
+    {
       "include": "#strings"
     },
     {
@@ -65,6 +68,18 @@
         {
           "name": "comment.line.double-slash.xbsl",
           "match": "//.*$"
+        }
+      ]
+    },
+    "pattern-literals": {
+      "comment": "A pattern literal '...' - a regular expression, a duration, a time. The apostrophe has no other use in the language, a double quote inside the literal is an ordinary character, a backslash escapes the next one, and the literal does not span lines: an unclosed one ends with its line. Read as double-quoted strings, the quotes inside a pattern opened a phantom string that colored every method below it as a string tail.",
+      "name": "string.quoted.single.xbsl",
+      "begin": "'",
+      "end": "'|$",
+      "patterns": [
+        {
+          "name": "constant.character.escape.xbsl",
+          "match": "\\\\."
         }
       ]
     },

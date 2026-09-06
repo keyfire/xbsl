@@ -9,6 +9,15 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **A pattern literal no longer swallows the code after it.** The grammar knew only
+  double-quoted strings, so the quotes inside a `'...'` pattern (a regular expression with a
+  quoted key, a duration) opened a phantom string, and every method below the literal was
+  colored as its tail until the next quote. Pattern literals are a scope of their own now, with
+  backslash escapes, ending with the line - the way the engine's lexer reads them.
+
 ## 0.67.3
 
 ### Changed
