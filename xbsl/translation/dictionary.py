@@ -285,12 +285,24 @@ class Dictionary:
         that variable - and the type its declaration names second: `JsonRoot.Услуги: Offerings`
         speaks about every field of that structure, whatever the variable holding it is called.
         """
+        scoped = self.scoped_token(name, *scopes)
+        if scoped is not None:
+            return scoped
+        return self.tokens.get(name)
+
+    def scoped_token(self, name: str, *scopes: str) -> str | None:
+        """The translation of a name from a QUALIFIED entry alone, the scopes tried in order.
+
+        What `token` reads first, on its own: a caller that has a better answer than the plain
+        entry for one receiver (the reference member of a project facet, spelled by the
+        platform's facet table) still lets an entry written about THAT receiver win.
+        """
         for scope in scopes:
             if scope:
                 scoped = self.tokens.get(f"{scope}.{name}")
                 if scoped is not None:
                     return scoped
-        return self.tokens.get(name)
+        return None
 
     def phrase(self, text: str) -> str | None:
         return self.phrases.get(text)

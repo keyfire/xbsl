@@ -21,8 +21,15 @@ from xbsl import dataset, metamodel, terms, typeinfer, uischema
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
                    ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
-                   _unanimous_enum_value):
+                   _unanimous_enum_value, _member_names, reference_only_members):
         cached.cache_clear()
+
+
+#: The facet suffixes of the entity protocol, in the spelling the sources and the type catalog
+#: use: the reference to a record and the object behind it. The English words come from the
+#: facet table (`facet_suffix_english`) - these two are keys, never answers.
+REFERENCE_FACET = "Ссылка"
+OBJECT_FACET = "Объект"
 
 
 dataset.register_reset(_reset)
@@ -209,6 +216,53 @@ def _member_names() -> frozenset[str]:
                     name = member.get("name") if isinstance(member, dict) else member
                     if isinstance(name, str) and name:
                         out.add(name)
+    return frozenset(out)
+
+
+@lru_cache(maxsize=1)
+def reference_only_members() -> frozenset[str]:
+    """Members the REFERENCE facets alone declare, in both spellings.
+
+    `LoadObject` is declared by the reference of a catalog, a document, an exchange plan
+    and their kin, and by no other type of the catalog: a chain that calls it right after a
+    member says that member holds a reference, whatever the receiver's type is. A member ONE
+    reference facet alone declares (the copy of a settings storage, the http link of a binary
+    object) stays out: it tells a binary object from a record, not a reference from a
+    hyperlink. The set is read off the type catalog, so it follows the platform version.
+    """
+    try:
+        std = dataset.load_json("stdlib.json") or {}
+    except Exception:  # noqa: BLE001 - no data, no answer
+        return frozenset()
+
+    def names(members: object) -> set[str]:
+        out: set[str] = set()
+        groups = members.values() if isinstance(members, dict) else ()
+        for group in groups:
+            for member in group if isinstance(group, list) else ():
+                name = member.get("name") if isinstance(member, dict) else member
+                if isinstance(name, str) and name:
+                    out.add(name)
+        return out
+
+    facets = std.get("facet_members") or {}
+    by_references: dict[str, int] = {}
+    elsewhere: set[str] = set()
+    for owner, members in facets.items():
+        if owner.rsplit(".", 1)[-1] == REFERENCE_FACET:
+            for name in names(members):
+                by_references[name] = by_references.get(name, 0) + 1
+        else:
+            elsewhere |= names(members)
+    for members in (std.get("type_members") or {}).values():
+        elsewhere |= names(members)
+    out: set[str] = set()
+    for name, count in by_references.items():
+        if count > 1 and name not in elsewhere:
+            out.add(name)
+            english = member_english(name)
+            if english:
+                out.add(english)
     return frozenset(out)
 
 

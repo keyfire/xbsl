@@ -102,7 +102,7 @@ class Resolver:
 
     def identifier(
         self, name: str, *, after_dot: bool = False, scope: str = "", type_scope: str = "",
-        static_root: bool = False,
+        static_root: bool = False, reference: str = "",
     ) -> tuple[str | None, str]:
         """(the English spelling or None, which plane answered: user|platform|missing).
 
@@ -114,6 +114,14 @@ class Resolver:
         entered a spelling for this one namespace; `type_scope` is the second namespace of a
         member - the TYPE the receiver was declared as, which is what a structure field
         answers to.
+
+        `reference` says the member is the REFERENCE member and how the receiver told it (see
+        _reference_reading): "facet" - the receiver holds a facet of a project object, and
+        the facet word answers right after an entry qualified by the receiver or its type
+        (written about that receiver) and before the plain entry (written about the project's
+        own words); "load" - a receiver of no known type whose chain goes on to load the
+        record, and the facet word answers after the whole dictionary and the project gate,
+        in place of the flat reading.
         """
         if static_root:
             # `Strings.Join(...)` - a name with a dot after it that the platform knows as a
@@ -124,6 +132,13 @@ class Resolver:
             platform_type = platform_map.type_english(name)
             if platform_type:
                 return platform_type, "platform"
+        if reference == "facet":
+            scoped = self.dictionary.scoped_token(name, scope, type_scope)
+            if scoped is not None:
+                return scoped, "user"
+            facet = platform_map.facet_suffix_english(name)
+            if facet:
+                return facet, "platform"
         hit = self.dictionary.token(name, scope, type_scope)
         if hit is not None:
             return hit, "user"
@@ -131,6 +146,10 @@ class Resolver:
             # The project's own name: no platform fallback, so the declaration and every
             # use of it move together - or stay together, waiting for one dictionary entry.
             return None, "missing"
+        if reference == "load":
+            facet = platform_map.facet_suffix_english(name)
+            if facet:
+                return facet, "platform"
         platform = (
             platform_map.member_english(name) if after_dot
             else platform_map.ident_english(name)
@@ -258,7 +277,7 @@ def collect_token_edits(
         if kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
             struct_name = ""
             pending_field = False
-            local_names = _method_locals(toks, index)
+            local_names = _method_locals(toks, index, resolver.project_names)
             method_name = _next_ident(toks, index)
             method_types = (inferred_locals or {}).get(method_name)
             # A declaration that names no type is typed by its value, where the inference can
@@ -364,7 +383,10 @@ def collect_token_edits(
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
                                  chain_root=chain_root,
-                                 receiver_is_local=prev_dot and prev_ident in local_names)
+                                 receiver_is_local=prev_dot and prev_ident in local_names,
+                                 reference=_reference_reading(
+                                     toks, index, prev_dot, type_scope, chain_root,
+                                     resolver.project_names))
         elif kind == "NUMBER":
             _duration_edit(tok, base, edits)
         elif kind == "PATTERN":
@@ -442,14 +464,19 @@ def _next_ident(toks: list, index: int) -> str:
     return ""
 
 
-def _method_locals(toks: list, start: int) -> dict[str, str]:
+def _method_locals(toks: list, start: int, project_names: frozenset[str] = frozenset(),
+                   ) -> dict[str, str]:
     """{name: the type its declaration names} for the method that begins at `start`.
 
     Two things are read off one walk. The NAMES tell a local named after a platform type from
     the type itself. The TYPE opens the namespace a member is looked up in: `Root.Услуги`
     where `Root: JsonRoot` is a field of that structure, and one word may be spelled for that
     structure alone. A declaration with no type written down maps to an empty string - the
-    name is known, the type is not, and the receiver then answers for itself as before.
+    name is known, the type is not, and the receiver then answers for itself as before - with
+    one exception: a local that holds the LOAD of a reference to a project object holds the
+    object facet of that object (see _loaded_facet), a type no declaration writes and the
+    engine's inference cannot name, because the catalog knows the platform's facets alone.
+    `project_names` tells such a facet from a namespace-qualified name (see _declared_type).
 
     The method ends at the `;` that closes it; a nested declaration inside it belongs to the
     same scope for this purpose.
@@ -470,7 +497,7 @@ def _method_locals(toks: list, start: int) -> dict[str, str]:
         elif depth == 1 and tok.kind == "IDENT":
             prev = toks[index - 1]
             if prev.kind == "OP" and prev.value in ("(", ","):
-                out[tok.value] = _declared_type(toks, index)
+                out[tok.value] = _declared_type(toks, index, project_names)
         index += 1
     # The body: declarations and loop variables, up to the closing `;` of the method.
     while index < len(toks):
@@ -484,27 +511,35 @@ def _method_locals(toks: list, start: int) -> dict[str, str]:
             while position < len(toks) and toks[position].kind == "KEYWORD":
                 position += 1
             if position < len(toks) and toks[position].kind == "IDENT":
-                out[toks[position].value] = _declared_type(toks, position)
+                name = toks[position].value
+                out[name] = (
+                    _declared_type(toks, position, project_names)
+                    or _loaded_facet(toks, position, out, project_names)
+                )
         index += 1
     return out
 
 
-def _declared_type(toks: list, index: int) -> str:
+def _declared_type(toks: list, index: int, project_names: frozenset[str] = frozenset()) -> str:
     """The type named after `name:` at `index` - its LAST part, or "" when none is written.
 
     The last part is the type itself (`Seeding.JsonRoot` is the structure `JsonRoot`), and
     the parameters of a generic are not read: `Array<String>` is an Array, and what it holds
-    says nothing about the name that follows a dot.
+    says nothing about the name that follows a dot. A FACET of a project object keeps its
+    owner (`Заявки.Ссылка`), the shape `_type_scope_of` gives an inferred one: the reference
+    side of a project catalog is a facet of the project, not a bare platform word, and the
+    reference member of such a receiver is spelled by the facet table, not by the property
+    dictionary.
     """
     position = index + 1
     if position >= len(toks) or toks[position].kind != "OP" or toks[position].value != ":":
         return ""
     position += 1
-    name = ""
+    parts: list[str] = []
     while position < len(toks):
         tok = toks[position]
         if tok.kind == "IDENT":
-            name = tok.value
+            parts.append(tok.value)
             position += 1
             if (
                 position < len(toks) and toks[position].kind == "OP"
@@ -512,8 +547,113 @@ def _declared_type(toks: list, index: int) -> str:
             ):
                 position += 1
                 continue
-        return name
-    return name
+        break
+    if not parts:
+        return ""
+    return _project_facet(parts, project_names) or parts[-1]
+
+
+def _project_facet(parts: list[str], project_names: frozenset[str]) -> str:
+    """`Owner.Facet` when the name ends in a project object and a facet suffix, else ""."""
+    if (
+        len(parts) >= 2 and parts[-2] in project_names
+        and platform_map.facet_suffix_english(parts[-1])
+    ):
+        return f"{parts[-2]}.{parts[-1]}"
+    return ""
+
+
+def _is_project_facet(type_scope: str, project_names: frozenset[str]) -> bool:
+    """Whether a type scope names a facet of a project object - `Заявки.Ссылка` and kin."""
+    owner, dot, suffix = type_scope.rpartition(".")
+    return bool(dot) and bool(_project_facet([owner, suffix], project_names))
+
+
+def _loaded_facet(toks: list, index: int, locals_so_far: dict[str, str],
+                  project_names: frozenset[str]) -> str:
+    """The object facet a local declared at `index` holds when its value is a LOAD.
+
+    `знч Объект = Найденная.ЗагрузитьОбъект()!` where `Найденная` is a local typed by the
+    reference facet of a project object: the platform's entity protocol answers the object
+    facet of the same object for that call - the type catalog spells the load of a catalog
+    reference as `Справочник.Ссылка.ЗагрузитьОбъект(): Справочник.Объект?` - and the
+    project's facets follow the same protocol. Only that one shape is read - the receiver a
+    local this method already typed, the call one the reference facets alone declare (see
+    platform_map.reference_only_members); anything else keeps the empty type, as before.
+    """
+    position = index + 1
+    if position >= len(toks) or toks[position].kind != "OP" or toks[position].value != "=":
+        return ""
+    position += 1
+    if position >= len(toks) or toks[position].kind != "IDENT":
+        return ""
+    receiver = locals_so_far.get(toks[position].value, "")
+    owner, dot, suffix = receiver.rpartition(".")
+    if not dot or suffix != platform_map.REFERENCE_FACET or not _is_project_facet(receiver, project_names):
+        return ""
+    if not _load_follows(toks, position):
+        return ""
+    return f"{owner}.{platform_map.OBJECT_FACET}"
+
+
+def _load_follows(toks: list, index: int) -> bool:
+    """Whether the token at `index` is followed by a call of a member only a reference has.
+
+    `X.ЗагрузитьОбъект(` right after the token, an unwrap or a null-safe mark in between
+    allowed (`X!.ЗагрузитьОбъект(`, `X?.ЗагрузитьОбъект(`): the load of the record behind a
+    reference, which no other type of the catalog declares.
+    """
+    position = index + 1
+    if position < len(toks) and toks[position].kind == "OP" and toks[position].value in ("!", "?"):
+        position += 1
+    if position >= len(toks) or toks[position].kind != "OP" or toks[position].value != ".":
+        return False
+    position += 1
+    if position >= len(toks) or toks[position].kind != "IDENT":
+        return False
+    if toks[position].value not in platform_map.reference_only_members():
+        return False
+    position += 1
+    return position < len(toks) and toks[position].kind == "OP" and toks[position].value == "("
+
+
+#: The chain roots that address the components of a form: a member there is a property of the
+#: component, spelled by the ui vocabulary, whatever its name means elsewhere.
+_COMPONENT_ROOTS = ("Компоненты", "Components")
+
+
+def _reference_reading(toks: list, index: int, after_dot: bool, type_scope: str,
+                       chain_root: str, project_names: frozenset[str]) -> str:
+    """How the receiver tells the reference member at `index` from the link property.
+
+    The reference member after a dot is two different words: the REFERENCE of the record
+    behind a facet of a project object (`Строка.Ссылка.ЗагрузитьОбъект()`, `Объект.Ссылка`),
+    which the facet table spells `Reference`, and the PROPERTY of a label, a picture, a
+    favorites item or an open-by-link event - a hyperlink, spelled `Link` by the property
+    dictionary. The flat compiler dictionary knows the property alone, so a receiver holding
+    a project facet came out with a member no reference has, and the build refused it.
+
+    The receiver decides. "facet": one typed by a facet of a project object - declared,
+    inferred, or loaded from a reference (see _loaded_facet) - carries the facet word.
+    "load": one of no known type carries it only when the chain goes on to load the record -
+    `LoadObject` is a member the reference facets alone declare, so the word before it
+    is a reference whatever the receiver. Everything else answers "" and keeps the flat
+    reading, `Link`: a hyperlink is reached through an untyped local too, and a member
+    standing alone - returned, compared, passed - tells the two apart by nothing the tokens
+    carry. Where the dictionary stands in each case is Resolver.identifier's business. A
+    chain rooted at the components of a form is not judged here at all - there the ui
+    vocabulary answers. A receiver typed by a platform type is not judged here either: its
+    own member table answers before this reading (`Событие.Ссылка` of an open-by-link event
+    is `Link` by the table of that event).
+    """
+    tok = toks[index]
+    if not after_dot or tok.value != platform_map.REFERENCE_FACET or chain_root in _COMPONENT_ROOTS:
+        return ""
+    if _is_project_facet(type_scope, project_names):
+        return "facet"
+    if not type_scope and _load_follows(toks, index):
+        return "load"
+    return ""
 
 
 @dataclasses.dataclass
@@ -687,7 +827,8 @@ def _member_by_owner(scope: str, type_scope: str, name: str) -> str | None:
 
 def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at=None,
                      scope: str = "", type_scope: str = "", static_root: bool = False,
-                     chain_root: str = "", receiver_is_local: bool = False) -> None:
+                     chain_root: str = "", receiver_is_local: bool = False,
+                     reference: str = "") -> None:
     if in_query:
         keyword = platform_map.query_keyword_english(tok.value)
         if keyword:
@@ -750,7 +891,7 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
     else:
         replacement, plane = resolver.identifier(
             tok.value, after_dot=after_dot, scope=scope, type_scope=type_scope,
-            static_root=static_root,
+            static_root=static_root, reference=reference,
         )
     if plane == "user":
         report.user_done += 1

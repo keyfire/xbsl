@@ -1851,11 +1851,6 @@ SEEDS: list[Seed] = [
                                  "    val Object = Line.Reference.LoadObject()!\n;\n",
         },
         tokens=_LOAD_TOKENS,
-        known="the translator spells the member `.Ссылка` after a variable as Link – the "
-              "property of the compiler dictionary – while the rule and the facet dictionary "
-              "read the row's own reference member as Reference; the hand-written tree passes, "
-              "so the rule is right and the translated tree invents. Closing this needs the "
-              "translator to tell the reference member of a row from the link property.",
     ),
     Seed(
         rule="code/member-kind-mismatch",
@@ -2089,11 +2084,6 @@ SEEDS: list[Seed] = [
         },
         english={"States.yaml": _ENUM_EN, "Settings.yaml": _CONSTANTS_EN.format(value="States.Open")},
         tokens=_CONSTANTS_TOKENS,
-        known="the translator leaves a qualified default (`Состояния.Открыт`) as written while "
-              "it translates the bare value, so the translated tree names an enumeration the "
-              "tree no longer has and the rule cannot resolve it; the hand-written tree is "
-              "reported. Closing this needs the translator to translate the qualified default "
-              "the way it translates the bare one.",
     ),
     Seed(
         rule="yaml/builtin-property-name",

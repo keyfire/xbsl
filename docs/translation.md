@@ -27,12 +27,17 @@ metamodel class declares, so the same word can differ by node; an enumeration va
 inside its own enumeration (globally one Russian word answers to several English ones); a type
 expression keeps its shape and its facets (`.Ссылка` -> `.Reference`) - in yaml and in the code
 alike, wherever the parser reads a type (a parameter, a declaration, a constructor, a cast, a
-type argument), while the same word after a dot elsewhere is a member; inside `Query{ ... }`
+type argument), while the same word after a dot elsewhere is a member - the reference member of
+a receiver that holds a facet of a project object, or whose chain goes on to load the record, is
+the facet word too (`Reference`), the link property of a label or a picture is `Link`; a value of
+a union-typed property that spells a member of the union (`Auto` of `Auto|Number`) is that member,
+spelled by the platform's type pairs; inside `Query{ ... }`
 blocks the query vocabulary answers instead of the general one. A name the data cannot spell
 stays as written and is reported as a data gap - the translator never guesses.
 
 **The project half comes from the dictionary.** Everything the project itself named - objects,
-methods, attributes, form components, dictionary keys, resource files - and every Cyrillic
+methods, attributes, form components, dictionary keys, resource files, an enumeration default
+bare or qualified by its enumeration (`States.Open`) - and every Cyrillic
 comment line is translated by people. Three planes:
 
 ```yaml

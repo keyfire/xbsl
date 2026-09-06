@@ -16,8 +16,10 @@ values, and the value's type decides what happens to it:
 
 Below the metamodel's reach - the component tree of a form - the ui schema takes over: a
 node's `Type` key names the component, the component's property record tells text from name from
-enumeration. A key or value neither source can type falls back to a short table of known
-identifier-valued keys, and everything else is left alone as data.
+enumeration, and a value spelling a member of the property's type union (`Auto` of
+`Авто|Число`) is that member, spelled by the platform's type pairs. A key or value neither
+source can type falls back to a short table of known identifier-valued keys, and everything
+else is left alone as data.
 
 A dictionary of localized strings is special-cased: the keys of the `Strings`/`Templates` sections are the
 project's own tokens, the values are localized data.
@@ -330,15 +332,22 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
         report.note_text_kept(value, line, col)
 
 
-def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:
-    value = node.value
-    if not isinstance(value, str) or not has_cyrillic(value):
-        return
+def _enum_spelling(value: str, enum_name: str | None, resolver, report) -> str | None:
+    """The English spelling of one enumeration value: its enumeration's table, then the
+    dictionary (a project enumeration has no platform table); None when neither answers."""
     replacement = platform_map.enum_value_english(enum_name or "", value)
     if replacement is None:
         replacement = resolver.dictionary.token(value)
         if replacement:
             report.user_done += 1
+    return replacement
+
+
+def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:
+    value = node.value
+    if not isinstance(value, str) or not has_cyrillic(value):
+        return
+    replacement = _enum_spelling(value, enum_name, resolver, report)
     if replacement:
         _set_scalar(node, replacement, edits)
     else:
@@ -346,25 +355,35 @@ def _enum_scalar(node, enum_name: str | None, resolver, report, edits) -> None:
         report.note_platform(value, line, col)
 
 
-def _enum_default_name(vnode, sibling_type: str, resolver) -> str | None:
-    """The PROJECT enumeration a default value is an element of, by the sibling `Type`, or None.
+def _enum_default_parts(vnode, sibling_type: str, resolver) -> tuple[str, str] | None:
+    """(the PROJECT enumeration a default belongs to, the element name in it) or None.
 
     Narrow on purpose. The type is read the way `yaml/enum-default-value` reads it - a bare
     project name, the nullable marker aside (`Готовность`, `Готовность?`, `Готовность ?`); a
     union, a generic and a qualified name are left to the rule's own silence, so that the two
-    never disagree on where an element name stands. The value has to be a single Cyrillic word
-    the dictionary knows: a default the dictionary cannot name is left where it is - a data
-    string that merely looks like an element name is never touched.
+    never disagree on where an element name stands. The value is the bare element name, or
+    the element qualified by the very enumeration the type names (`Готовность.Скрытая`) - the
+    one qualified form the rule reports, and the rule can only report it on the English tree
+    when both halves move; a value qualified by any other name is not a default the rule
+    reads, and the translator leaves it alone the same way. The element has to be a single
+    Cyrillic word the dictionary knows: a default the dictionary cannot name is left where it
+    is - a data string that merely looks like an element name is never touched.
     """
     if not isinstance(vnode, yaml.ScalarNode):
         return None
     value = vnode.value
-    if not isinstance(value, str) or not has_cyrillic(value) or " " in value or "." in value:
+    if not isinstance(value, str) or not has_cyrillic(value) or " " in value:
         return None
     name = bare_type_name(sibling_type or "")
     if not name or not has_cyrillic(name) or name not in resolver.project_names:
         return None
-    return name if resolver.dictionary.token(value) else None
+    qualifier, dot, element = value.partition(".")
+    if dot:
+        if qualifier != name or not element or "." in element:
+            return None
+    else:
+        element = value
+    return (name, element) if resolver.dictionary.token(element) else None
 
 
 def _enum_default_edit(key: str, vnode, sibling_type: str, resolver, report, edits) -> bool:
@@ -374,15 +393,47 @@ def _enum_default_edit(key: str, vnode, sibling_type: str, resolver, report, edi
     calls it a plain object, the property class of an interface component knows nothing beyond
     the name and the type. Left to the generic walk, the value stayed Russian next to a
     translated enumeration, and the build refused the pair ("Неизвестный элемент перечисления")
-    - or the linter did, on the English tree, with `yaml/enum-default-value`.
+    - or the linter did, on the English tree, with `yaml/enum-default-value`. A default
+    qualified by its enumeration moves in both halves: the enumeration by the dictionary, as
+    the project name it is, the element the way the bare default moves.
     """
     if key not in ("ЗначениеПоУмолчанию", "DefaultValue"):
         return False
-    enum_name = _enum_default_name(vnode, sibling_type, resolver)
-    if enum_name is None:
+    parts = _enum_default_parts(vnode, sibling_type, resolver)
+    if parts is None:
         return False
-    _enum_scalar(vnode, enum_name, resolver, report, edits)
+    enum_name, element = parts
+    if element == vnode.value:
+        _enum_scalar(vnode, enum_name, resolver, report, edits)
+        return True
+    qualifier = resolver.dictionary.token(enum_name)
+    line, col = _at(vnode)
+    if qualifier is None:
+        report.note_token(enum_name, line, col)
+        return True
+    report.user_done += 1
+    spelling = _enum_spelling(element, enum_name, resolver, report)
+    if spelling is None:
+        report.note_platform(element, line, col)
+        return True
+    _set_scalar(vnode, f"{qualifier}.{spelling}", edits)
     return True
+
+
+def _union_literal(value: str, types: list[str]) -> str | None:
+    """The English spelling of a value that IS a member of the property's type union, or None.
+
+    `MaxWidth` is typed `Авто|Число`, `Tooltip` is `Авто|Строка`: the automatic value is not
+    an element of some enumeration but a type of its own standing in the union, and a scalar
+    spelling it names that type. The platform reads it that way in either language, so left
+    in Russian it turns into data on the English side - a string where a size was meant. The
+    spelling is the platform's own pair for the type (`Auto`), the same table the schema's
+    unions are spelled from; a value naming no member of the union is not this case and goes
+    on to the other readings.
+    """
+    if not has_cyrillic(value) or value not in types:
+        return None
+    return platform_map.type_english(value)
 
 
 def _boolean_scalar(node, edits) -> bool:
@@ -786,6 +837,10 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
         types = [str(t) for t in (record.get("types") or [])]
         if record.get("event"):
             _identifier_value(vnode, resolver, report, edits)
+            return
+        literal = _union_literal(value, types)
+        if literal:
+            _set_scalar(vnode, literal, edits)
             return
         if record.get("enum"):
             _enum_scalar(vnode, types[-1] if types else None, resolver, report, edits)
