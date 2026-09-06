@@ -401,6 +401,121 @@ _CASE_QUERY_RU = ("    знч Итог = Запрос{\n        ВЫБРАТЬ �
 _CASE_QUERY_EN = ("    val Result = Query{\n        SELECT CASE WHEN Application.Name IS NULL THEN \"\"\n"
                   "            ELSE Application.Name END\n        FROM Applications AS Application\n    }\n")
 _CATALOG_QUERY_TOKENS = {**_QUERY_TOKENS, "Заявка": "Application"}
+#: The form module's handlers: the click handler of the button markup and the closing one.
+_HANDLER_TOKENS = {**_BUTTON_TOKENS, "Ерунда": "Nonsense", "Сохранить": "Save",
+                   "ПередЗакрытием": "BeforeClose"}
+_CLICK_RU = "метод Нажатие(Источник: Кнопка, Событие: СобытиеПриНажатии)\n"
+_CLICK_EN = "method Click(Source: Button, Event: OnClickEvent)\n"
+_LOAD_TOKENS = {"Заявки": "Applications", "Проба": "Probe", "Строчка": "Line", "Основание": "Basis",
+                "Итог": "Result", "СсылкаЗаявки": "ApplicationReference"}
+#: A table column over a list row; `{kind}` is the column kind.
+_BADGE_COLUMN_RU = ("    Содержимое:\n        Тип: Таблица<СтрокаСписка>\n        Колонки:\n            -\n"
+                    "                Тип: СтандартнаяКолонкаТаблицы<СтрокаСписка>\n                Вид: {kind}\n"
+                    "                Изображение: =ДанныеСтроки.Иконка\n")
+_BADGE_COLUMN_EN = ("    Content:\n        Type: Table<ListRow>\n        Columns:\n            -\n"
+                    "                Type: StandardTableColumn<ListRow>\n                Kind: {kind}\n"
+                    "                Image: =RowData.Icon\n")
+_BADGE_TOKENS = {**_FORM_TOKENS, "СтрокаСписка": "ListRow", "Иконка": "Icon"}
+#: A titled value choice; `{kind}` is the switcher kind line or nothing.
+_SWITCHER_RU = ("    Содержимое:\n        Тип: ВыборЗначения<Строка?>\n        Имя: Режим\n"
+                "        Заголовок: Режим показа\n{kind}")
+_SWITCHER_EN = ("    Content:\n        Type: ValueChoice<String?>\n        Name: Mode\n"
+                "        Title: Режим показа\n{kind}")
+_SWITCHER_TOKENS = {**_FORM_TOKENS, "Режим": "Mode"}
+#: The additional commands of the form; `{items}` is the item list.
+_COMMANDS_RU = ("    ДополнительныеКоманды:\n        Тип: ФрагментКомандногоИнтерфейса\n"
+                "        Элементы:\n{items}")
+_COMMANDS_EN = "    AdditionalCommands:\n        Type: CommandInterfaceFragment\n        Items:\n{items}"
+_TOGGLE_RU = ("            -\n                Тип: ОбычнаяКоманда\n                Видимость: =не ПоказыватьВсе\n"
+              "                Обработчик: Показать\n            -\n                Тип: ОбычнаяКоманда\n"
+              "                Видимость: {second}\n                Обработчик: Скрыть\n")
+_TOGGLE_EN = ("            -\n                Type: UsualCommand\n                Visible: =not ShowAll\n"
+              "                Handler: Show\n            -\n                Type: UsualCommand\n"
+              "                Visible: {second}\n                Handler: Hide\n")
+_TOGGLE_TOKENS = {**_FORM_TOKENS, "ПоказыватьВсе": "ShowAll", "Показать": "Show", "Скрыть": "Hide",
+                  "ЕстьПраво": "HasRight"}
+#: A list form and the table shapes the dynamic-list rules judge.
+_LIST_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f17
+Имя: СписокЗаявок
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: ФормаСписка<Неопределено>
+"""
+_LIST_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f17
+Name: ApplicationList
+VisibilityScope: InProject
+Inherits:
+    Type: ListForm<Undefined>
+"""
+_LIST_FORM_TOKENS = {"Заявки": "Applications", "СписокЗаявок": "ApplicationList", "Список": "List",
+                     "Подпись": "Caption"}
+_DYNLIST_COLUMN_RU = ("    Содержимое:\n        Тип: Таблица<ДинамическийСписок<Заявки>>\n        Имя: Список\n"
+                      "        Колонки:\n            -\n"
+                      "                Тип: СтандартнаяКолонкаТаблицы<СтрокаДинамическогоСписка<Заявки>>\n"
+                      "                Значение: {value}\n")
+_DYNLIST_COLUMN_EN = ("    Content:\n        Type: Table<DynamicList<Applications>>\n        Name: List\n"
+                      "        Columns:\n            -\n"
+                      "                Type: StandardTableColumn<DynamicListRow<Applications>>\n"
+                      "                Value: {value}\n")
+#: A constants set with one constant over the project enumeration; `{value}` is its default.
+_CONSTANTS_RU = """\
+ВидЭлемента: НаборКонстант
+Ид: 1d1f5c60-0000-4000-8000-000000000f14
+Имя: Настройки
+ОбластьВидимости: ВПроекте
+Константы:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f15
+        Имя: Состояние
+        Тип: Состояния?
+        ЗначениеПоУмолчанию: {value}
+"""
+_CONSTANTS_EN = """\
+ElementKind: ConstantsSet
+Id: 1d1f5c60-0000-4000-8000-000000000f14
+Name: Settings
+VisibilityScope: InProject
+Constants:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f15
+        Name: State
+        Type: States?
+        DefaultValue: {value}
+"""
+_CONSTANTS_TOKENS = {"Состояния": "States", "Открыт": "Open", "Настройки": "Settings",
+                     "Состояние": "State"}
+#: A component extending the standard card and declaring one property of its own; `{name}`
+#: is the property name.
+_CARD_PROPERTY_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f18
+Имя: КарточкаЗаявки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: СтандартнаяКарточка
+Свойства:
+    -
+        Имя: {name}
+        Тип: Строка
+"""
+_CARD_PROPERTY_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f18
+Name: ApplicationCard
+VisibilityScope: InProject
+Inherits:
+    Type: StandardCard
+Properties:
+    -
+        Name: {name}
+        Type: String
+"""
+_CARD_PROPERTY_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "КрупныйЗаголовок": "LargeTitle",
+                         "Заголовок": "Title"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -1588,6 +1703,414 @@ SEEDS: list[Seed] = [
             "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _ISNULL_QUERY_EN + ";\n",
         },
         tokens=_CATALOG_QUERY_TOKENS,
+    ),
+    # --- Form modules: the components root, the handler names and the stdlib members the
+    # module may spell either way.
+    Seed(
+        rule="code/unknown-form-component",
+        expect=CLEAN,
+        note="a component the paired markup declares, reached through the components root – "
+             "the root and the name key are dictionary words",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_RU,
+            "ФормаЗаявки.xbsl": "@НаКлиенте\n" + _CLICK_RU + "    Компоненты.Отправить.Видимость = Ложь\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_EN,
+            "ApplicationForm.xbsl": "@OnClient\n" + _CLICK_EN + "    Components.Send.Visible = False\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-form-component",
+        expect=FINDING,
+        note="a name the markup does not declare is reported",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_RU,
+            "ФормаЗаявки.xbsl": "@НаКлиенте\n" + _CLICK_RU + "    Компоненты.Ерунда.Видимость = Ложь\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_EN,
+            "ApplicationForm.xbsl": "@OnClient\n" + _CLICK_EN + "    Components.Nonsense.Visible = False\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/server-call-from-handler",
+        expect=CLEAN,
+        note="a client handler calling a server method opened to the client – the annotations "
+             "are read in both spellings",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_RU,
+            "ФормаЗаявки.xbsl": _CLICK_RU + "    Сохранить()\n;\n\n"
+                                "@НаСервере @ДоступноСКлиента\nметод Сохранить()\n    возврат\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_EN,
+            "ApplicationForm.xbsl": _CLICK_EN + "    Save()\n;\n\n"
+                                    "@OnServer @AvailableFromClient\nmethod Save()\n    return\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/server-call-from-handler",
+        expect=FINDING,
+        note="the same call to a server method not opened to the client is reported – the handler "
+             "is told by the event key of the markup",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_RU,
+            "ФормаЗаявки.xbsl": _CLICK_RU + "    Сохранить()\n;\n\n"
+                                "@НаСервере\nметод Сохранить()\n    возврат\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_EN,
+            "ApplicationForm.xbsl": _CLICK_EN + "    Save()\n;\n\n"
+                                    "@OnServer\nmethod Save()\n    return\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/close-in-before-close",
+        expect=CLEAN,
+        note="the close call in another handler – only the closing handler is judged, by its "
+             "platform name",
+        files={
+            "ФормаЗаявки.yaml": _BUTTON_RU,
+            "ФормаЗаявки.xbsl": "@Обработчик\n" + _CLICK_RU + "    Закрыть(Истина)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _BUTTON_EN,
+            "ApplicationForm.xbsl": "@Handler\n" + _CLICK_EN + "    Close(True)\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/close-in-before-close",
+        expect=FINDING,
+        note="the close call in the closing handler's own flow is reported – the handler name and "
+             "the call are platform words",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": "@Обработчик\nметод ПередЗакрытием(Событие: ПараметрыЗакрытияФормы)\n"
+                                "    Закрыть(Истина)\n;\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": "@Handler\nmethod BeforeClose(Event: FormCloseParams)\n"
+                                    "    Close(True)\n;\n",
+        },
+        tokens=_HANDLER_TOKENS,
+    ),
+    Seed(
+        rule="code/load-object-unwrap",
+        expect=CLEAN,
+        note="a load through a bare variable – a reference held in a variable is alive by "
+             "construction",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(СсылкаЗаявки: Заявки.Ссылка)\n"
+                           "    знч Объект = СсылкаЗаявки.ЗагрузитьОбъект()!\n;\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": "method Probe(ApplicationReference: Applications.Reference)\n"
+                                 "    val Object = ApplicationReference.LoadObject()!\n;\n",
+        },
+        tokens=_LOAD_TOKENS,
+    ),
+    Seed(
+        rule="code/load-object-unwrap",
+        expect=FINDING,
+        note="a force-unwrapped load of a reference stored in a field of a row is reported – the "
+             "load member is a dictionary word",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Строчка: Заявки.Ссылка)\n"
+                           "    знч Итог = Строчка.Основание!.ЗагрузитьОбъект()!.Наименование\n;\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": "method Probe(Line: Applications.Reference)\n"
+                                 "    val Result = Line.Basis!.LoadObject()!.Name\n;\n",
+        },
+        tokens=_LOAD_TOKENS,
+    ),
+    Seed(
+        rule="code/load-object-unwrap",
+        expect=CLEAN,
+        note="a load through the row's own reference member – the member is the reference facet "
+             "in both spellings",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Строчка: Заявки.Ссылка)\n"
+                           "    знч Объект = Строчка.Ссылка.ЗагрузитьОбъект()!\n;\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": "method Probe(Line: Applications.Reference)\n"
+                                 "    val Object = Line.Reference.LoadObject()!\n;\n",
+        },
+        tokens=_LOAD_TOKENS,
+        known="the translator spells the member `.Ссылка` after a variable as Link – the "
+              "property of the compiler dictionary – while the rule and the facet dictionary "
+              "read the row's own reference member as Reference; the hand-written tree passes, "
+              "so the rule is right and the translated tree invents. Closing this needs the "
+              "translator to tell the reference member of a row from the link property.",
+    ),
+    Seed(
+        rule="code/member-kind-mismatch",
+        expect=CLEAN,
+        note="a stdlib method called the way it is declared",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаСервере\nметод Проба()\n    знч Пояс = ЧасовойПояс.Текущий()\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnServer\nmethod Probe()\n    val Zone = TimeZone.Current()\n;\n",
+        },
+        tokens={**_ENVIRONMENT_TOKENS, "Пояс": "Zone"},
+    ),
+    Seed(
+        rule="code/member-kind-mismatch",
+        expect=FINDING,
+        note="a stdlib method read as a constant is reported – the member kinds come from the "
+             "catalog",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": "@НаСервере\nметод Проба()\n    знч Пояс = ЧасовойПояс.Текущий\n;\n",
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": "@OnServer\nmethod Probe()\n    val Zone = TimeZone.Current\n;\n",
+        },
+        tokens={**_ENVIRONMENT_TOKENS, "Пояс": "Zone"},
+    ),
+    # --- Markup vocabulary: column kinds, switcher kinds, command kinds and list shapes are
+    # names of the ui schema; the enumeration default is a metamodel contract.
+    Seed(
+        rule="yaml/badge-column-image",
+        expect=CLEAN,
+        note="an image on a picture column – the column kind is an enumeration of the schema",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _BADGE_COLUMN_RU.format(kind="Картинка")},
+        english={"ApplicationForm.yaml": _FORM_EN + _BADGE_COLUMN_EN.format(kind="Picture")},
+        tokens=_BADGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/badge-column-image",
+        expect=FINDING,
+        note="an image on a badge column is dropped by the renderer – reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _BADGE_COLUMN_RU.format(kind="Значок")},
+        english={"ApplicationForm.yaml": _FORM_EN + _BADGE_COLUMN_EN.format(kind="Badge")},
+        tokens=_BADGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/value-choice-title",
+        expect=CLEAN,
+        note="a title on a value choice drawn the default way – only the explicit switcher loses it",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _SWITCHER_RU.format(kind="")},
+        english={"ApplicationForm.yaml": _FORM_EN + _SWITCHER_EN.format(kind="")},
+        tokens=_SWITCHER_TOKENS,
+    ),
+    Seed(
+        rule="yaml/value-choice-title",
+        expect=FINDING,
+        note="a title on an explicit switcher is reported – the kind key and its value are schema "
+             "names",
+        files={
+            "ФормаЗаявки.yaml":
+                _FORM_RU + _SWITCHER_RU.format(kind="        ВидОтображенияПереключателя: Переключатель\n"),
+        },
+        english={
+            "ApplicationForm.yaml":
+                _FORM_EN + _SWITCHER_EN.format(kind="        SwitcherDisplayKind: Switcher\n"),
+        },
+        tokens=_SWITCHER_TOKENS,
+    ),
+    Seed(
+        rule="yaml/inline-command-name",
+        expect=CLEAN,
+        note="an inline command without a name – the shape the apply accepts",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + _COMMANDS_RU.format(
+                items="            -\n                Тип: ОбычнаяКоманда\n                Обработчик: Нажатие\n"),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _COMMANDS_EN.format(
+                items="            -\n                Type: UsualCommand\n                Handler: Click\n"),
+        },
+        tokens=_BUTTON_TOKENS,
+    ),
+    Seed(
+        rule="yaml/inline-command-name",
+        expect=FINDING,
+        note="an inline command carrying a name is reported – the command kinds come from the "
+             "term dictionary",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + _COMMANDS_RU.format(
+                items="            -\n                Тип: ОбычнаяКоманда\n                Имя: Отправка\n"
+                      "                Обработчик: Нажатие\n"),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _COMMANDS_EN.format(
+                items="            -\n                Type: UsualCommand\n                Name: Sending\n"
+                      "                Handler: Click\n"),
+        },
+        tokens={**_BUTTON_TOKENS, "Отправка": "Sending"},
+    ),
+    Seed(
+        rule="yaml/toggle-command-pair",
+        expect=CLEAN,
+        note="two commands with unrelated visibilities – no toggle",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + _COMMANDS_RU.format(items=_TOGGLE_RU.format(second="=ЕстьПраво")),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _COMMANDS_EN.format(items=_TOGGLE_EN.format(second="=HasRight")),
+        },
+        tokens=_TOGGLE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/toggle-command-pair",
+        expect=FINDING,
+        note="two usual commands whose visibilities negate each other are reported – the command "
+             "kind and the visibility key are dictionary words",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + _COMMANDS_RU.format(items=_TOGGLE_RU.format(second="=ПоказыватьВсе")),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + _COMMANDS_EN.format(items=_TOGGLE_EN.format(second="=ShowAll")),
+        },
+        tokens=_TOGGLE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/ref-input-auto-commands",
+        expect=CLEAN,
+        note="a reference input with an explicit, empty command fragment – no platform button",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: ПолеВвода<Заявки.Ссылка?>\n"
+                                "        Имя: Основание\n        Команды:\n"
+                                "            Тип: ФрагментКомандногоИнтерфейса\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Edit<Applications.Reference?>\n"
+                                    "        Name: Basis\n        Commands:\n"
+                                    "            Type: CommandInterfaceFragment\n",
+        },
+        tokens={**_FORM_TOKENS, "Основание": "Basis"},
+    ),
+    Seed(
+        rule="yaml/ref-input-auto-commands",
+        expect=FINDING,
+        note="a reference input leaving its commands to the platform is reported – the facet is "
+             "read in both spellings",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: ПолеВвода<Заявки.Ссылка?>\n"
+                                "        Имя: Основание\n",
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN + "    Content:\n        Type: Edit<Applications.Reference?>\n"
+                                    "        Name: Basis\n",
+        },
+        tokens={**_FORM_TOKENS, "Основание": "Basis"},
+    ),
+    Seed(
+        rule="yaml/list-form-needs-dynlist",
+        expect=CLEAN,
+        note="a list form over a dynamic list – the form and the list types are catalog names",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + "    Содержимое:\n        Тип: Таблица<ДинамическийСписок>\n"
+                                 "        Имя: Список\n",
+        },
+        english={
+            "ApplicationList.yaml": _LIST_FORM_EN + "    Content:\n        Type: Table<DynamicList>\n"
+                                    "        Name: List\n",
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/list-form-needs-dynlist",
+        expect=FINDING,
+        note="a list form over an array table alone is reported – its navigation item vanishes",
+        files={
+            "СписокЗаявок.yaml": _LIST_FORM_RU + "    Содержимое:\n"
+                                 "        Тип: Таблица<ИсточникДанныхМассив<Строка>>\n        Имя: Список\n",
+        },
+        english={
+            "ApplicationList.yaml": _LIST_FORM_EN + "    Content:\n"
+                                    "        Type: Table<ArrayDataSource<String>>\n        Name: List\n",
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-column-sort-lost",
+        expect=CLEAN,
+        note="a column bound to a field of the row – the sortable form",
+        files={
+            "СписокЗаявок.yaml":
+                _LIST_FORM_RU + _DYNLIST_COLUMN_RU.format(value="=ДанныеСтроки.Данные.Наименование"),
+        },
+        english={
+            "ApplicationList.yaml": _LIST_FORM_EN + _DYNLIST_COLUMN_EN.format(value="=RowData.Data.Name"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-column-sort-lost",
+        expect=FINDING,
+        note="a computed column of a table over a dynamic list is reported – the list and row "
+             "types are catalog names",
+        files={
+            "СписокЗаявок.yaml":
+                _LIST_FORM_RU + _DYNLIST_COLUMN_RU.format(value="=Подпись(ДанныеСтроки.Данные.Наименование)"),
+        },
+        english={
+            "ApplicationList.yaml":
+                _LIST_FORM_EN + _DYNLIST_COLUMN_EN.format(value="=Caption(RowData.Data.Name)"),
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/enum-default-value",
+        expect=CLEAN,
+        note="a bare enumeration value as the default – the shape the platform declares",
+        files={"Состояния.yaml": _ENUM_RU, "Настройки.yaml": _CONSTANTS_RU.format(value="Открыт")},
+        english={"States.yaml": _ENUM_EN, "Settings.yaml": _CONSTANTS_EN.format(value="Open")},
+        tokens=_CONSTANTS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/enum-default-value",
+        expect=FINDING,
+        note="a default qualified by the enumeration name is reported – the default key is a "
+             "metamodel name",
+        files={
+            "Состояния.yaml": _ENUM_RU,
+            "Настройки.yaml": _CONSTANTS_RU.format(value="Состояния.Открыт"),
+        },
+        english={"States.yaml": _ENUM_EN, "Settings.yaml": _CONSTANTS_EN.format(value="States.Open")},
+        tokens=_CONSTANTS_TOKENS,
+        known="the translator leaves a qualified default (`Состояния.Открыт`) as written while "
+              "it translates the bare value, so the translated tree names an enumeration the "
+              "tree no longer has and the rule cannot resolve it; the hand-written tree is "
+              "reported. Closing this needs the translator to translate the qualified default "
+              "the way it translates the bare one.",
+    ),
+    Seed(
+        rule="yaml/builtin-property-name",
+        expect=CLEAN,
+        note="a property of the component's own, named apart from the base component's members",
+        files={"КарточкаЗаявки.yaml": _CARD_PROPERTY_RU.format(name="КрупныйЗаголовок")},
+        english={"ApplicationCard.yaml": _CARD_PROPERTY_EN.format(name="LargeTitle")},
+        tokens=_CARD_PROPERTY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/builtin-property-name",
+        expect=FINDING,
+        note="a property named after a built-in member of the base component is reported – the "
+             "members of the card come from the ui schema in both spellings",
+        files={"КарточкаЗаявки.yaml": _CARD_PROPERTY_RU.format(name="Заголовок")},
+        english={"ApplicationCard.yaml": _CARD_PROPERTY_EN.format(name="Title")},
+        tokens=_CARD_PROPERTY_TOKENS,
     ),
 ]
 
