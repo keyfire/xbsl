@@ -82,3 +82,26 @@ def test_the_name_shadow_survives_windows_line_endings(tmp_path):
     d = _lint(tmp_path, "@НаСервере\nметод Ф()\n    знч Х = ЧасовойПояс.Текущий\n;\n")
 
     assert d == []
+
+
+def _lint_english(tmp_path, module: str):
+    (tmp_path / "Module.yaml").write_text(
+        "ElementKind: CommonModule\nName: Module\nEnvironment: Server\n", encoding="utf-8")
+    (tmp_path / "Module.xbsl").write_text(module, encoding="utf-8")
+    return [d for d in engine.run(discover([str(tmp_path)]), select={RULE})]
+
+
+def test_the_english_spelling_is_judged_too(tmp_path):
+    """A translated module reaches the member through the English spelling of the type and
+    of the member alike; the kinds table is keyed by the catalog's Russian names, and both
+    are taken back through the term dictionary – the rule used to go silent right there."""
+    d = _lint_english(tmp_path, "@OnServer\nmethod F()\n    val Zone = TimeZone.Current\n;\n")
+
+    assert len(d) == 1 and "Current" in d[0].message
+
+
+def test_the_english_right_form_is_silent(tmp_path):
+    """The control: the method called compiles, in either spelling."""
+    d = _lint_english(tmp_path, "@OnServer\nmethod F()\n    val Zone = TimeZone.Current()\n;\n")
+
+    assert d == []

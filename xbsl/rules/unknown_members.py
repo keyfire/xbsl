@@ -140,6 +140,39 @@ def _member_kinds() -> dict[str, dict[str, str]]:
     return _kinds_cache
 
 
+@lru_cache(maxsize=None)
+def _member_kind(type_name: str, member: str) -> str | None:
+    """The declared kind of a member reached through a type name, in either spelling.
+
+    The kinds table is keyed the way the catalog stores it – the Russian type and member
+    names – while a translated module reaches the same member through the English spelling
+    of both. The type is taken back to its catalog name through the term dictionary and the
+    member through the pairing the existence check relies on; a member no vocabulary pairs
+    is not judged, the same silence the neighbouring rule keeps.
+    """
+    kinds = _member_kinds()
+    table = None
+    for spelling in (type_name, terms.russian(type_name, "types"),
+                     terms.common_russian(type_name)):
+        table = kinds.get(spelling) if spelling else None
+        if table:
+            break
+    if not table:
+        return None
+    if member in table:
+        return table[member]
+    if not _is_latin(member):
+        return None
+    for russian, kind in table.items():
+        if member in (_member_english(type_name, russian),
+                      terms.member_english_of(type_name, russian)):
+            return kind
+    return None
+
+
+dataset.register_reset(_member_kind.cache_clear)
+
+
 def _nominal(tref: P.TypeRef | None) -> str | None:
     """The single type name of a declaration: plain, a one-dot facet or a generic head, or None.
 
@@ -789,7 +822,6 @@ def _static_mapper(source: SourceFile) -> dict | None:
     found: list[tuple[str | None, str, str, int, int]] = []
     pending: list[tuple[str, str, str, int, int]] = []
     kinds: list[tuple[str | None, str, str, str, int, int]] = []
-    kinds_by_type = _member_kinds()
     for method in methods:
         scope = _StaticScope()
         for p in method.params:
@@ -832,7 +864,7 @@ def _static_mapper(source: SourceFile) -> dict | None:
             if use.name in members or use.name in _COMMON_MEMBERS:
                 # The member exists; what may still be wrong is HOW it is reached. The
                 # platform refuses a method read without parentheses and a property called.
-                declared = kinds_by_type.get(type_name, {}).get(use.name)
+                declared = _member_kind(type_name, use.name)
                 wanted = "method" if id(use) in called else "property"
                 if declared is not None and declared != wanted:
                     if lm is None:
