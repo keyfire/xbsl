@@ -1845,6 +1845,39 @@ _STARTER_ITEMS = {
     "Ресурсы": ("Ресурс1", ("Число", "Number")),
 }
 
+#: Field kinds of a register that a caller mixes up: its data lives in `Dimensions` and
+#: `Resources`, and an attribute asked of a register that holds resources and no attributes
+#: opened a NEW `Attributes` section without a word - the field was then moved by hand, UUID
+#: and all. Kind -> the kind whose section would have taken the item beside its kin.
+_SIBLING_FIELD_KINDS = {"реквизит": "ресурс", "ресурс": "реквизит"}
+
+
+def _new_section_notes(
+    text: str, kind: str, field_kind: str, name: str, file_name: str, lang: str,
+) -> list[str]:
+    """Notes for an item that opens a section the file did not have.
+
+    Only for the kinds that keep their fields in several sections: a catalog has one place
+    for an attribute, and creating it is what the caller expects, while a register's new
+    section lands at the end of the file, far from `Dimensions` and `Resources` - so the note
+    states the creation, and when the sibling section already exists, names the field kind
+    that would have placed the item there, beside the existing fields.
+    """
+    sibling_kind = _SIBLING_FIELD_KINDS.get(field_kind)
+    if sibling_kind is None or sibling_kind not in KIND_SECTIONS.get(kind, ()):
+        return []
+    section = _SECTION_SPECS[field_kind]["section"]
+    notes = [
+        f"Секции {spelled_key(section, lang)} в {file_name} не было – заведена в конце файла"
+    ]
+    sibling = _SECTION_SPECS[sibling_kind]["section"]
+    if _section_bounds(text, sibling, top_level=True) is not None:
+        notes.append(
+            f"Соседняя секция {spelled_key(sibling, lang)} уже есть – field_kind "
+            f"'{sibling_kind}' положил бы {name} в неё, рядом с существующими полями"
+        )
+    return notes
+
 
 def _starter_item_span(text: str, section: str) -> tuple[int, int, int] | None:
     """(start, end, indent) of the section's placeholder while it is still untouched.
@@ -1917,6 +1950,10 @@ def op_add_field(
     `Uniqueness` and `Autonumbering`, a regular attribute does not; the keys the operation
     writes itself (Name, Type, Id) are refused there. A nested block goes in as a dict or as
     dotted keys, a list property as a list - see _checked_props.
+
+    The item joins the end of the section of its kind. A section the file lacks is created at
+    the end of the file; for a register, which keeps its fields in several sections, notes say
+    so and point at the sibling section that already exists - see _new_section_notes.
     """
     yaml_path = Path(yaml_path)
     name = _check_identifier(name, "элемента")
@@ -1999,6 +2036,10 @@ def op_add_field(
     starter = _starter_item_span(text, spec["section"])
     notes: list[str] = []
     if starter is None:
+        # The item joins the end of an existing section; a section the file lacks is created
+        # (at the end of the file), and a register hears about it - see _new_section_notes.
+        if _section_bounds(text, spec["section"], top_level=True) is None:
+            notes.extend(_new_section_notes(text, kind, field_kind, name, yaml_path.name, lang))
         edit = insert_item_edit(text, spec["section"], lines, nl, top_level=True, lang=lang)
     else:
         start, end, indent = starter

@@ -61,6 +61,13 @@ differently depending on the class (the enumeration values section is `Items` th
 `Elements` elsewhere) keeps the original spelling in both reading and writing instead of being
 guessed at. Values (types, access methods) are yours and are written as given.
 
+`add-field` puts a new item at the end of the section of its kind and creates the section only
+when the file has none. A register keeps its data in `Dimensions` and `Resources`, so an
+attribute asked of a register that holds resources and no attributes lands in a new
+`Attributes` section at the end of the file – notes say so and name the kind that would have
+placed the field beside the existing ones (a resource here; the other way round for a resource
+asked where only attributes exist).
+
 Forms are generated with real content: input fields per attribute (including the standard
 `Name` / `Number` / `Date` fields and hierarchy support), `DynamicList` columns, `TabularParts`
 tables, a report form with parameters; the form is registered in the `Interface` section of its

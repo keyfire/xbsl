@@ -680,7 +680,11 @@ def meta_add_field(
     a stub field to replace), параметр-запроса (Отчет) or строка / шаблон (ЛокализованныеСтроки:
     key-value mapping sections, `type` carries the VALUE, defaulting to the key itself).
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
-    the object's kind are rejected.
+    the object's kind are rejected. The item joins the end of the section of its kind; a
+    section the file lacks is created at the end of the file, and for a register `notes` say
+    so - naming, when the sibling data section already exists (`Resources` while a "реквизит"
+    is asked, and the other way round), the field_kind that would have placed the item beside
+    the existing fields.
 
     type – the item's type, "Строка" when omitted. A BUILT-IN attribute is added by its
     name ("Номер" / "Дата" of a document, "Код" / "Наименование" / "Владелец" of a catalog)
