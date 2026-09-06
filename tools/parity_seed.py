@@ -188,6 +188,129 @@ _INPUT_RU = _FORM_RU + "    Содержимое:\n        Тип: ПолеВв�
 _INPUT_EN = _FORM_EN + "    Content:\n        Type: Edit<String>\n        Name: Field\n        OnChange: Change\n"
 _INPUT_TOKENS = {**_FORM_TOKENS, "Поле": "Field", "Изменение": "Change", "Источник": "Source",
                  "Событие": "Event"}
+#: A number attribute of the catalog – a regular attribute, judged by the keys of its own class.
+_NUMBER_ATTRIBUTE_RU = """\
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f0b
+        Имя: Сумма
+        Тип: Число
+"""
+_NUMBER_ATTRIBUTE_EN = """\
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f0b
+        Name: Amount
+        Type: Number
+"""
+_NUMBER_ATTRIBUTE_TOKENS = {"Заявки": "Applications", "Сумма": "Amount"}
+#: A reference attribute pointing back at the catalog, with the on-delete action that is legal
+#: only on an owner deleted outright.
+_DELETE_CURRENT_RU = """\
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f0b
+        Имя: Основание
+        Тип: Справочник.Заявки.Ссылка?
+        ПриУдаленииОбъектаПоСсылке: УдалятьТекущий
+"""
+_DELETE_CURRENT_EN = """\
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f0b
+        Name: Basis
+        Type: Catalog.Applications.Reference?
+        OnReferencedObjectDeletion: DeleteCurrent
+"""
+_DELETE_CURRENT_TOKENS = {"Заявки": "Applications", "Основание": "Basis"}
+#: A common module of both environments – where a query block needs the server annotation.
+_COMMON_MODULE_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f0c
+Имя: Вычисления
+ОбластьВидимости: ВПроекте
+Окружение: КлиентИСервер
+"""
+_COMMON_MODULE_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000f0c
+Name: Calculations
+VisibilityScope: InProject
+Environment: ClientAndServer
+"""
+_QUERY_RU = "    знч Итог = Запрос{\n        ВЫБРАТЬ ПЕРВЫЕ 1 Наименование ИЗ Справочник.Заявки\n    }\n"
+_QUERY_EN = "    val Result = Query{\n        SELECT TOP 1 Name FROM Catalog.Applications\n    }\n"
+_QUERY_TOKENS = {"Заявки": "Applications", "Вычисления": "Calculations", "Пересчитать": "Recount",
+                 "Итог": "Result"}
+#: An event log event without the importance line – the seeds append it, or not.
+_EVENT_RU = """\
+ВидЭлемента: СобытиеЖурналаСобытий
+Ид: 1d1f5c60-0000-4000-8000-000000000f0d
+Имя: ЗаявкаПринята
+ОбластьВидимости: ВПроекте
+ВидСобытия: Информация
+"""
+_EVENT_EN = """\
+ElementKind: EventLogEvent
+Id: 1d1f5c60-0000-4000-8000-000000000f0d
+Name: ApplicationAccepted
+VisibilityScope: InProject
+EventKind: Information
+"""
+_EVENT_PROPERTY_RU = "Важность: Обычная\nСвойства:\n    -\n        Имя: {name}\n        Тип: {type}\n"
+_EVENT_PROPERTY_EN = "Importance: Normal\nProperties:\n    -\n        Name: {name}\n        Type: {type}\n"
+_EVENT_TOKENS = {"ЗаявкаПринята": "ApplicationAccepted", "Состояния": "States", "Открыт": "Open",
+                 "Причина": "Reason", "Состояние": "State"}
+#: A catalog with a tabular section and the object form over it – the rows' collection the
+#: tabular member rule resolves from the project's own yaml.
+_TASKS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f0e
+Имя: Задачи
+ОбластьВидимости: ВПроекте
+ТабличныеЧасти:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f0f
+        Имя: Шаги
+        Реквизиты:
+            -
+                Ид: 1d1f5c60-0000-4000-8000-000000000f10
+                Имя: Шаг
+                Тип: Строка
+"""
+_TASKS_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f0e
+Name: Tasks
+VisibilityScope: InProject
+TabularParts:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f0f
+        Name: Steps
+        Attributes:
+            -
+                Id: 1d1f5c60-0000-4000-8000-000000000f10
+                Name: Step
+                Type: String
+"""
+_TASK_CARD_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f11
+Имя: КарточкаЗадачи
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: ФормаОбъекта<Задачи.Объект>
+"""
+_TASK_CARD_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f11
+Name: TaskCard
+VisibilityScope: InProject
+Inherits:
+    Type: ObjectForm<Tasks.Object>
+"""
+_TASK_TOKENS = {"Задачи": "Tasks", "Шаги": "Steps", "Шаг": "Step", "КарточкаЗадачи": "TaskCard",
+                "Проверить": "Check", "Всего": "Total"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -720,6 +843,166 @@ SEEDS: list[Seed] = [
             "Applications.xbsl": "method Probe()\n    Message(\"Привет\")\n;\n",
         },
         tokens={"Заявки": "Applications", "Проба": "Probe"},
+    ),
+    # --- Rules keyed by platform names the file may spell either way: the class of an
+    # attribute, a deletion mode, the contract of an event, the environment of a module, the
+    # rows of a tabular section.
+    Seed(
+        rule="yaml/unknown-attribute-property",
+        expect=CLEAN,
+        note="a key the attribute's own class declares – the metamodel spells it Russian and "
+             "records the English next to it",
+        files={"Заявки.yaml": _CATALOG_RU + _NUMBER_ATTRIBUTE_RU + "        ДлинаЦелойЧасти: 12\n"},
+        english={
+            "Applications.yaml": _CATALOG_EN + _NUMBER_ATTRIBUTE_EN + "        IntegerPartLength: 12\n",
+        },
+        tokens=_NUMBER_ATTRIBUTE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/unknown-attribute-property",
+        expect=FINDING,
+        note="a key of ANOTHER attribute class (the built-in name's length on a number) is "
+             "reported",
+        files={"Заявки.yaml": _CATALOG_RU + _NUMBER_ATTRIBUTE_RU + "        Длина: 12\n"},
+        english={"Applications.yaml": _CATALOG_EN + _NUMBER_ATTRIBUTE_EN + "        Length: 12\n"},
+        tokens=_NUMBER_ATTRIBUTE_TOKENS,
+    ),
+    Seed(
+        rule="code/query-needs-server",
+        expect=CLEAN,
+        note="a query block under the server annotation in a module of both environments – the "
+             "annotation and the environment value are read in both spellings",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "@НаСервере\nметод Пересчитать()\n" + _QUERY_RU + ";\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "@OnServer\nmethod Recount()\n" + _QUERY_EN + ";\n",
+        },
+        tokens=_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="code/query-needs-server",
+        expect=FINDING,
+        note="the same query block in a method without the annotation is reported",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "метод Пересчитать()\n" + _QUERY_RU + ";\n",
+        },
+        english={
+            "Applications.yaml": _CATALOG_EN,
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": "method Recount()\n" + _QUERY_EN + ";\n",
+        },
+        tokens=_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/delete-current-needs-immediate",
+        expect=CLEAN,
+        note="the on-delete action on an owner deleted outright – the mode and the action are "
+             "enumeration values of the metamodel",
+        files={"Заявки.yaml": _CATALOG_RU + "РежимУдаления: Немедленно\n" + _DELETE_CURRENT_RU},
+        english={
+            "Applications.yaml": _CATALOG_EN + "DeletionMode: Immediately\n" + _DELETE_CURRENT_EN,
+        },
+        tokens=_DELETE_CURRENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/delete-current-needs-immediate",
+        expect=FINDING,
+        note="the same action on an owner that never names its mode – the default only marks – "
+             "is reported",
+        files={"Заявки.yaml": _CATALOG_RU + _DELETE_CURRENT_RU},
+        english={"Applications.yaml": _CATALOG_EN + _DELETE_CURRENT_EN},
+        tokens=_DELETE_CURRENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/event-needs-importance",
+        expect=CLEAN,
+        note="an event that declares its importance – the key and the value are metamodel names",
+        files={"ЗаявкаПринята.yaml": _EVENT_RU + "Важность: Обычная\n"},
+        english={"ApplicationAccepted.yaml": _EVENT_EN + "Importance: Normal\n"},
+        tokens=_EVENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/event-needs-importance",
+        expect=FINDING,
+        note="an event silent about its importance leaves it to every constructor – reported on "
+             "the line declaring the kind",
+        files={"ЗаявкаПринята.yaml": _EVENT_RU},
+        english={"ApplicationAccepted.yaml": _EVENT_EN},
+        tokens=_EVENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/event-property-type",
+        expect=CLEAN,
+        note="a property typed by a member of the closed list – the list is resolved into both "
+             "spellings through the term dictionary",
+        files={
+            "ЗаявкаПринята.yaml": _EVENT_RU + _EVENT_PROPERTY_RU.format(name="Причина", type="Строка"),
+        },
+        english={
+            "ApplicationAccepted.yaml":
+                _EVENT_EN + _EVENT_PROPERTY_EN.format(name="Reason", type="String"),
+        },
+        tokens=_EVENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/event-property-type",
+        expect=FINDING,
+        note="a property typed by a project enumeration – outside the closed list – is reported",
+        files={
+            "Состояния.yaml": _ENUM_RU,
+            "ЗаявкаПринята.yaml":
+                _EVENT_RU + _EVENT_PROPERTY_RU.format(name="Состояние", type="Состояния"),
+        },
+        english={
+            "States.yaml": _ENUM_EN,
+            "ApplicationAccepted.yaml":
+                _EVENT_EN + _EVENT_PROPERTY_EN.format(name="State", type="States"),
+        },
+        tokens=_EVENT_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-tabular-member",
+        expect=CLEAN,
+        note="an array member on the rows of a tabular section, reached through the form's data "
+             "object – the section is resolved from the project's own yaml",
+        files={
+            "Задачи.yaml": _TASKS_RU,
+            "КарточкаЗадачи.yaml": _TASK_CARD_RU,
+            "КарточкаЗадачи.xbsl": "метод Проверить()\n    знч Всего = Объект.Шаги.Размер()\n;\n",
+        },
+        english={
+            "Tasks.yaml": _TASKS_EN,
+            "TaskCard.yaml": _TASK_CARD_EN,
+            "TaskCard.xbsl": "method Check()\n    val Total = Object.Steps.Size()\n;\n",
+        },
+        tokens=_TASK_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-tabular-member",
+        expect=FINDING,
+        note="a member the array does not have (the other platform's Count) is reported",
+        files={
+            "Задачи.yaml": _TASKS_RU,
+            "КарточкаЗадачи.yaml": _TASK_CARD_RU,
+            "КарточкаЗадачи.xbsl": "метод Проверить()\n    знч Всего = Объект.Шаги.Количество()\n;\n",
+        },
+        english={
+            "Tasks.yaml": _TASKS_EN,
+            "TaskCard.yaml": _TASK_CARD_EN,
+            "TaskCard.xbsl": "method Check()\n    val Total = Object.Steps.Count()\n;\n",
+        },
+        tokens=_TASK_TOKENS,
+        known="the rule inherits the Latin silencer of code/unknown-member: a member spelled in "
+              "Latin is not judged at all, and the array members of the catalog are Russian "
+              "alone. Closing this needs the member vocabulary completed – the same gap as the "
+              "unknown-member seed above, not a change to the rule.",
     ),
 ]
 
