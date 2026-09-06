@@ -27,6 +27,18 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   member dictionary and two behind the translator.
 
 ### Fixed
+- **The translator spells the reference member of a project facet `Reference`**
+  (`Line.Reference.LoadObject()!`): a receiver typed by a facet of a project object – declared,
+  inferred, or loaded from a reference – carries the facet word, and an untyped one carries it
+  when the chain goes on to `LoadObject`; the link property of a label or a picture stays `Link`,
+  and an entry qualified by the receiver still answers first.
+- **A default qualified by its own enumeration moves in both halves** (`DefaultValue:
+  States.Open`) where the sibling `Type` names a project enumeration – the shape
+  `yaml/enum-default-value` reports, which the English tree could not carry while the value
+  stayed Russian.
+- **`Auto` on a union-typed property is translated** (`MaxWidth: Auto`, `Height: Auto`,
+  `Tooltip: Auto`): a value spelling a member of the property's union is that member, spelled
+  by the platform's type pairs, not data.
 - **`yaml/ref-needs-nullable` recognizes a reference type by the English facet spelling too**
   (`Applications.Reference`): the yaml branch kept the Russian facet in its pattern and its gate,
   so a translated description passed without a finding.
