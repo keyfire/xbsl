@@ -21,8 +21,8 @@ sidebar:
 python tools/extract_docs.py --dist "$ELEMENT_DIST"
 ```
 
-Рантайм-API `xbsl.docs` (`search`, `page`, `tree`, `for_symbol`, `asset`) читает `docs.sqlite`;
-если базы нет, поиск просто пуст. На нём работают инструменты MCP (ниже) и – в дальнейшем – панель
+Рантайм-API `xbsl.docs` (`search`, `page`, `tree`, `for_symbol`, `asset`, а также чистые
+`sections` и `summarize` над HTML страницы) читает `docs.sqlite`; если базы нет, поиск просто пуст. На нём работают инструменты MCP (ниже) и – в дальнейшем – панель
 справки в расширении VS Code.
 
 ## Версии Элемента

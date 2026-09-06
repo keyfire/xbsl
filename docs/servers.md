@@ -72,13 +72,13 @@ from a worktree then names the other checkout, whose clean answer looks like you
 | Tool | What it does |
 |---|---|
 | `docs_search(query, limit)` | full-text search over the 1C:Element documentation |
-| `docs_page(id)` | a documentation page by the id returned by the two other tools |
-| `docs_symbol(name)` | the page for a symbol by name (a type or a member) |
+| `docs_page(id, brief, section)` | a documentation page by the id returned by the two other tools; `brief` – the head alone: a summary and the section names instead of the text, `section` – the head plus one section of the article (Properties, Methods, Constructors, ...; an unknown name answers with the names to choose from) |
+| `docs_symbol(name, brief, section)` | the page for a symbol by name (a type or a member), with the same `brief` and `section` modes |
 | `type_members(name)` | the members of a stdlib type in one compact answer – what can follow the dot; cheaper than a page when only the member list matters |
 | `ui_schema(component, brief, property)` | the ui schema of an interface component: the designer's palette and its typed properties |
 | `metadata_schema(kind, sections, names)` | the properties an element of a given `ElementKind` may declare |
 
-The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](/platform-data#documentation-search)); the two schema tools read the generated language data.
+The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](/platform-data#documentation-search)); the two schema tools read the generated language data. A type page runs to thousands of characters – the constructors, every property, the inherited lists – so the whole article is for reading it: `brief` answers "which page is it and what is it about", `section` answers one question about it.
 
 **Translating the sources** (see [Translating a project](/translation))
 

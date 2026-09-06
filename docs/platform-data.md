@@ -22,8 +22,9 @@ distribution, like the language data.
 python tools/extract_docs.py --dist "$ELEMENT_DIST"
 ```
 
-The runtime API `xbsl.docs` (`search`, `page`, `tree`, `for_symbol`, `asset`) reads
-`docs.sqlite`; with no database the search is simply empty. It powers the MCP tools (below) and –
+The runtime API `xbsl.docs` (`search`, `page`, `tree`, `for_symbol`, `asset`, plus the pure
+`sections` and `summarize` over a page's HTML) reads `docs.sqlite`; with no database the search
+is simply empty. It powers the MCP tools (below) and –
 later – the reference panel in the VS Code extension.
 
 ## Element versions

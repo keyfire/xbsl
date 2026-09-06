@@ -20,8 +20,6 @@ import argparse
 import difflib
 import inspect
 import os
-import re
-from html import unescape
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +30,6 @@ from xbsl import (
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
-
-_TAGS_RE = re.compile(r"<[^>]+>")
 
 # mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
 # became MCPServer in mcp.server.mcpserver, and the old module is gone rather than aliased -
@@ -268,13 +264,39 @@ def lint_source(
     return payload
 
 
-def _page_as_text(doc_id: str | None) -> dict:
-    """A documentation page with a plain-text (not HTML) extract - the form a model reads best."""
+def _page_as_text(doc_id: str | None, brief: bool = False, section: str = "") -> dict:
+    """A documentation page as plain text (not HTML) in the shape asked for - whole, brief, or one section.
+
+    Whole: the record with the article as `text`. Brief: the record without the url and the
+    text, a `summary` (the opening of the description) and the `sections` names instead - the
+    page of a type runs to thousands of characters, and "which page is it and what is it about"
+    does not need them. A `section` (the title compared case-insensitively, the English name
+    of a standard section accepted) answers with the record, the matched `section` and the
+    text of that section alone; an unknown one answers with an error and the names to choose
+    from rather than with nothing. `section` wins over `brief`. Empty object without a page.
+    """
     page = docs.page(doc_id) if doc_id else None
     if page is None:
         return {}
     page = dict(page)
-    page["text"] = unescape(_TAGS_RE.sub(" ", page.pop("html"))).strip()
+    html = page.pop("html") or ""
+    if section:
+        found = docs.find_section(html, section)
+        if found is None:
+            return {
+                "error": i18n.t("docs.section-not-found", section=section),
+                "id": page.get("id"),
+                "sections": [title for title, _ in docs.sections(html)],
+            }
+        page["section"], body = found
+        page["text"] = docs.plain_text(body)
+        return page
+    if brief:
+        page.pop("url", None)
+        page["summary"] = docs.summarize(html)
+        page["sections"] = [title for title, _ in docs.sections(html)]
+        return page
+    page["text"] = docs.plain_text(html)
     return page
 
 
@@ -293,23 +315,38 @@ def docs_search(query: str, limit: int = 10) -> list[dict]:
 
 
 @mcp.tool()
-def docs_page(id: str) -> dict:
+def docs_page(id: str, brief: bool = False, section: str = "") -> dict:
     """Read a documentation page by its id (obtained from docs_search or docs_symbol).
 
     Returns id, kind, title, qualified name, availability and the article as plain text.
     Empty object if there is no such page (or the docs data is not installed).
+
+    The whole article is for reading the page; for a type it runs to thousands of characters
+    (the constructors, every property, the inherited lists). When the question is smaller,
+    ask for less. `brief=True` answers with the head alone: the same fields, a `summary` (the
+    opening of the description) and the `sections` names instead of the text - "which page is
+    it and what is it about". `section="Properties"` answers with the head plus the text of
+    that one section - "what type does the property have": the title is compared
+    case-insensitively, and the English names of the standard sections (Description,
+    Constructors, Properties, Methods, Events, Examples, Inherited methods, ...) are taken as
+    well as the pages' own Russian headings. An unknown section answers {"error", "id",
+    "sections"} so the next call can pick a real one; `section` wins over `brief`.
     """
-    return _page_as_text(id)
+    return _page_as_text(id, brief=brief, section=section)
 
 
 @mcp.tool()
-def docs_symbol(name: str) -> dict:
+def docs_symbol(name: str, brief: bool = False, section: str = "") -> dict:
     """Find the documentation page for a symbol by name (a type or member, e.g. "Массив", "Запрос").
 
-    Prefers an exact title match, then a qualified-name match, then the top search hit. Returns the
-    same shape as docs_page, or an empty object if nothing matches.
+    Prefers an exact title match, then a qualified-name match; it does not guess - when
+    nothing matches, the answer is an empty object and docs_search is the way to candidates.
+    Returns the same shape as docs_page, with the same `brief` and `section` modes: the whole
+    page is for reading it, `brief=True` for "which page is it and what is it about", and
+    `section="Properties"` (or another standard section, the pages' Russian heading works
+    too) for one question about it.
     """
-    return _page_as_text(docs.for_symbol(name))
+    return _page_as_text(docs.for_symbol(name), brief=brief, section=section)
 
 
 @mcp.tool()

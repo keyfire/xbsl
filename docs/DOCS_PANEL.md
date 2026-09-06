@@ -53,8 +53,9 @@ the rest of the extension keeps working.
 The same reference is available outside the editor:
 
 - **MCP** - `docs_search` (full-text search), `docs_page` (an article by id), `docs_symbol` (the
-  page for a type or member name). This is how an AI agent verifies the platform API without
-  going online.
+  page for a type or member name); the two page tools also answer briefly (`brief` – the summary
+  and the section names) or with one section (`section`) when the whole article is more than
+  the question needs. This is how an AI agent verifies the platform API without going online.
 - **LSP** - the `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree` and
   `xbsl/hoverDoc` requests: any LSP-capable editor can build its own panel on top of them.
 

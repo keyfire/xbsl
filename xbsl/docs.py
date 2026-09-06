@@ -21,12 +21,62 @@ import sqlite3
 from html import unescape
 from pathlib import Path
 
-from xbsl import dataset
+from xbsl import dataset, i18n
+
+MESSAGES = {
+    "docs.section-not-found": {
+        "ru": "Раздела '{section}' на странице нет.",
+        "en": "The page has no section '{section}'.",
+    },
+}
+i18n.register(MESSAGES)
 
 _DB_NAME = "docs.sqlite"
 # Plain-text extraction for a short page summary (the metadata-tree category tooltip).
 _TAG_RE = re.compile(r"<[^>]+>")
 _WS_RE = re.compile(r"\s+")
+# A section boundary of a cleaned page: an h2 heading, or an h1 after the page's own (the
+# index pages open a second h1 for their type list); h3/h4 stay inside their section.
+_SECTION_RE = re.compile(r"<h([12])\b[^>]*>(.*?)</h\1>", re.S)
+# The head of a page - what stands before the first section - answers to this name.
+HEAD_TITLE = "Описание"
+# The head of a reference page opens with the qualified name and the availability, both in code.
+_CODE_PREAMBLE_RE = re.compile(r"^\s*<p>(?:\s*<code>[^<]*</code>\s*)+</p>")
+# The same preamble as text, for a page cleaned without the code markup: an optional qualified
+# name (one token) and the availability line, anchored to the start so that prose that happens
+# to mention availability later is left alone.
+_TEXT_PREAMBLE_RE = re.compile(r"^(?:\S+\s+)?Доступность:\s*\S+\s+")
+# A paragraph that is nothing but a bold caption opens the blocks after the description
+# (the comparison, the literals, the key and the hash) - facts, not prose.
+_BOLD_CAPTION_RE = re.compile(r"<p>\s*<strong>[^<]*</strong>\s*</p>")
+# A topic keeps its description under this heading rather than in the head.
+_TOPIC_DESCRIPTION = "Общее описание"
+_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+# English names of the standard sections of a reference page. The pages carry Russian headings
+# only, so an English request is matched through this table - a translation of the fixed set
+# of headings the reference uses, not a platform dictionary; the Russian spelling is compared
+# case-insensitively as it is.
+SECTION_ALIASES = {
+    "description": HEAD_TITLE,
+    "type hierarchy": "Иерархия типа",
+    "hierarchy": "Иерархия типа",
+    "inheritance hierarchy": "Иерархия наследования",
+    "constructors": "Конструкторы",
+    "properties": "Свойства",
+    "methods": "Методы",
+    "events": "События",
+    "elements": "Элементы",
+    "fields": "Поля",
+    "literals": "Литералы",
+    "parameters": "Параметры",
+    "syntax": "Синтаксис",
+    "examples": "Примеры",
+    "example": "Пример",
+    "see also": "См. также",
+    "inherited methods": "Список унаследованных методов",
+    "inherited properties": "Список унаследованных свойств",
+    "inherited events": "Список унаследованных событий",
+}
 # Query token: letters (incl. Cyrillic), digits, underscore - everything else is dropped for FTS5.
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 # Images live as files next to the database (`<version>/assets/...`), mime is derived from the extension.
@@ -231,22 +281,109 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
         con.close()
 
 
-def _summarize(html: str) -> str:
-    """One-sentence description from a page's cleaned HTML (pure - no database).
+def plain_text(html: str) -> str:
+    """Cleaned HTML as plain text: tags dropped, entities decoded, line breaks kept (pure).
 
-    Reference (stdlib) pages read "Title Qualified Доступность: <avail> <description>. ..."; a
-    topic reads "Title Общее описание <description>. ...". We take the sentence right after that
-    marker; failing both markers, the first sentence, capped. Empty when there is no text.
+    The line breaks matter: a constructor signature in a code block lists one parameter per
+    line, and folded into one line it stops being readable. `_text` is the folded form for
+    titles and summaries.
     """
-    text = _WS_RE.sub(" ", unescape(_TAG_RE.sub(" ", html or ""))).strip()
-    if not text:
-        return ""
-    m = re.search(r"Доступность:\s*\S+\s+(.+?\.)(?:\s|$)", text)
-    if not m:
-        m = re.search(r"Общее описание\s+(.+?\.)(?:\s|$)", text)
-    if m:
-        return m.group(1).strip()
-    return re.split(r"(?<=\.)\s", text, maxsplit=1)[0].strip()[:240]
+    return unescape(_TAG_RE.sub(" ", html or "")).strip()
+
+
+def _text(html: str) -> str:
+    """Plain text with the whitespace folded - a title or a sentence of prose."""
+    return _WS_RE.sub(" ", unescape(_TAG_RE.sub(" ", html or ""))).strip()
+
+
+def sections(html: str) -> list[tuple[str, str]]:
+    """The page split by its section headings: [(title, html)], the head first (pure - no database).
+
+    A reference page reads: the h1 title, the qualified name and the availability, the
+    description, then h2 sections (the constructors, properties, methods, the inherited lists)
+    with the members as h3 inside them. The head - what stands between the page's own h1 and the
+    first section - comes first under HEAD_TITLE; every section's html starts at its heading.
+    A page without section headings is its head alone. Titles are plain text.
+    """
+    html = html or ""
+    headings = list(_SECTION_RE.finditer(html))
+    start = 0
+    if headings and headings[0].group(1) == "1" and not html[: headings[0].start()].strip():
+        start = headings[0].end()  # the page's own title is not a section
+        headings = headings[1:]
+    first = headings[0].start() if headings else len(html)
+    out = [(HEAD_TITLE, html[start:first].strip())]
+    for index, heading in enumerate(headings):
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(html)
+        out.append((_text(heading.group(2)), html[heading.start():end].strip()))
+    return out
+
+
+def find_section(html: str, name: str) -> tuple[str, str] | None:
+    """The section `name` of the page - (title, html) - or None when there is no such section.
+
+    The title is compared case-insensitively; an English name of a standard section
+    (SECTION_ALIASES) is taken as well. HEAD_TITLE / "description" answers with the head.
+    """
+    wanted = (name or "").strip().lower()
+    wanted = SECTION_ALIASES.get(wanted, wanted).lower()
+    if not wanted:
+        return None
+    for title, body in sections(html):
+        if title.lower() == wanted:
+            return title, body
+    return None
+
+
+def description(html: str) -> str:
+    """The description of a page as folded plain text, without the preamble (pure - no database).
+
+    Read from the head: the qualified name and the availability that open a reference page
+    are dropped, and so is everything from the first bold caption on (the comparison, the
+    literals - facts that are not prose). A topic that keeps its description under a first
+    general-description heading (_TOPIC_DESCRIPTION) is read from that section. Empty when
+    the page has no text.
+    """
+    for title, body in sections(html):
+        if title == HEAD_TITLE:
+            body = _CODE_PREAMBLE_RE.sub("", body, count=1)
+        elif title == _TOPIC_DESCRIPTION:
+            body = _SECTION_RE.sub("", body, count=1)  # the heading itself
+        else:
+            break  # a section that is not the description - the head was empty
+        text = _TEXT_PREAMBLE_RE.sub("", _text(_BOLD_CAPTION_RE.split(body, maxsplit=1)[0]))
+        if text:
+            return text
+    return ""
+
+
+def summarize(html: str, limit: int = 300) -> str:
+    """The opening of the description: whole sentences within `limit` characters (pure).
+
+    Sentences are taken from `description` while they fit; when not even the first one does,
+    it is cut at a word boundary and marked with "...". A non-positive limit lifts the cut.
+    Empty when the page has no description.
+    """
+    text = description(html)
+    if not text or limit <= 0:
+        return text
+    taken = ""
+    for sentence in _SENTENCE_RE.split(text):
+        candidate = f"{taken} {sentence}" if taken else sentence
+        if len(candidate) > limit:
+            break
+        taken = candidate
+    if taken:
+        return taken
+    head = text[:limit]
+    cut = head.rsplit(" ", 1)[0] if " " in head else head
+    return cut.rstrip(" ,;:") + "..."
+
+
+def _summarize(html: str) -> str:
+    """One-sentence description from a page's cleaned HTML (pure - no database) - the tooltip's line."""
+    text = description(html)
+    return _SENTENCE_RE.split(text, maxsplit=1)[0][:240] if text else ""
 
 
 def summary(doc_id: str, version: str | None = None) -> str:
