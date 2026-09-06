@@ -106,6 +106,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     match: (r) => r === "code/module-var-not-const",
     page: "topics/variable-declaration-statement",
   },
+  // The finding is a name REPEATING another inside one scope: the page about name
+  // scopes shows this very case (a `пер` under a parameter of the same name), not
+  // the page about how a declaration is written.
+  { match: (r) => r === "code/param-redeclared", page: "topics/name-scope" },
   { match: (r) => r === "code/loop-header", page: "topics/for-in-loop", anchor: "синтаксис" },
   { match: (r) => r === "code/invalid-string-escape", page: "topics/escape-sequence" },
   { match: (r) => r === "code/ternary-and-or", page: "topics/question-mark-operation", anchor: "синтаксис" },

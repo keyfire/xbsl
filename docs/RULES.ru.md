@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 190.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 191.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -132,6 +132,7 @@ sidebar:
 | `code/param-type-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Параметр без типа и без значения по умолчанию [доки](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/duplicate-annotation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Повторная аннотация у объявления (точный повтор имени без аргументов; аннотации копятся до ближайшего объявления, и комментарий между ними их не разделяет) – компилятор такой модуль отвергает [доки](https://1cmycloud.com/docs/help/topics/annotations/) |
 | `code/module-var-not-const` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Объявление `пер` / `знч` / `исп` на уровне МОДУЛЯ – там живёт только константа, выражение вне тела метода компилятор отвергает, и применение откатывает проект [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| `code/param-redeclared` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Объявление `знч` / `пер` / `исп` в теле метода с именем его же параметра, вложенные блоки (цикл, ветка, `попытка`) включительно – метод одна область видимости вместе с параметрами, компилятор отвечает "Переменная с именем X уже определена" при применении, и проект откатывается; переменные цикла и `поймать`, параметры лямбд и тела полных лямбд не судятся [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `code/loop-header` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Неверный заголовок цикла 'для' [доки](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
 | `code/invalid-string-escape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Недопустимая управляющая последовательность в строковом литерале (`\'`, регексные `\d`) – компилятор отвергает такой литерал; валидны `\н \в \т \\ \" \% \$ \ю<код>` и латинские написания [доки](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
 | `code/unused-local` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Неиспользуемая локальная переменная |

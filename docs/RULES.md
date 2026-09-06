@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 190 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 191 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -134,6 +134,7 @@ are off by default (accumulated debt, `info`): enable them with `--select style`
 | `code/param-type-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Parameter without a type and without a default value [docs](https://1cmycloud.com/docs/help/topics/methods-in-built-in-script-language/) |
 | `code/duplicate-annotation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Duplicate annotation on a declaration (an exact argument-free repeat of the name; annotations pile up until the nearest declaration, and a comment between them does not separate them) – the compiler rejects such a module [docs](https://1cmycloud.com/docs/help/topics/annotations/) |
 | `code/module-var-not-const` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `var` / `val` / `use` declaration at MODULE level - only a constant lives there, an expression outside a method body is refused by the compiler and the apply rolls the project back [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| `code/param-redeclared` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `val` / `var` / `use` inside a method body with the name of the method's own parameter, nested blocks (a loop, a branch, `try`) included – a method is one scope with its parameters in it, the compiler answers "a variable named X is already defined" at the apply and the project rolls back; loop and catch variables, lambda parameters and full-form lambda bodies are not judged [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `code/loop-header` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Malformed 'for' loop header [docs](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
 | `code/invalid-string-escape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Invalid escape sequence in a string literal (`\'`, regex-style `\d`) - the compiler rejects such a literal; valid are `\н \в \т \\ \" \% \$ \ю<code>` and the Latin spellings [docs](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
 | `code/unused-local` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Unused local variable |
