@@ -26,6 +26,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   hand-written English twin now; four known gaps are marked with their reasons, two behind the
   member dictionary and two behind the translator.
 
+### Changed
+- **`meta_add_field` names a section it creates and points at the sibling one** (`add-field` and
+  the LSP `xbsl/metaAddField` alike). A register keeps its data in `Dimensions` and `Resources`,
+  and an attribute asked of a register holding resources and no attributes used to open a new
+  `Attributes` section at the end of the file without a word – the field was then moved by hand,
+  UUID and all. The section is still created, but `notes` say so and name the field kind (a
+  resource here, and the other way round) that would have placed the item beside the existing
+  fields; an item of an existing section still joins its end, which a test now holds.
+
 ### Fixed
 - **The translator spells the reference member of a project facet `Reference`**
   (`Line.Reference.LoadObject()!`): a receiver typed by a facet of a project object – declared,
