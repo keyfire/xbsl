@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## Unreleased
+## 2026-09-06 – 0.94.0
 
 ### Added
 - **`code/param-redeclared`: a local `val` / `var` / `use` with the name of the method's own
