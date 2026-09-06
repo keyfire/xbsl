@@ -1764,7 +1764,9 @@
     "@vscode/vsce": "^3",
     "esbuild": "^0.23",
     "ovsx": "^0.9",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vscode-oniguruma": "^2.0.1",
+    "vscode-textmate": "^9.3.2"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1",
