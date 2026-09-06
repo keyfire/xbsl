@@ -63,6 +63,42 @@ def test_input_field_nullable_argument_not_flagged(tmp_path):
     assert not _has(d)
 
 
+@pytest.mark.needs_data
+def test_english_facet_flagged(tmp_path):
+    """A translated description spells the facet the platform's way – the Russian word alone
+    went blind there, exactly as the code half of the family once did."""
+    d = _run(
+        tmp_path,
+        "ElementKind: Catalog\nName: Letters\nAttributes:\n"
+        "    -\n        Name: Owner\n        Type: Organizations.Reference\n",
+        name="Letters.yaml",
+    )
+    assert len(d) == 1 and "Organizations.Reference?" in d[0].message
+    assert (d[0].line, d[0].col) == (6, 15)
+
+
+@pytest.mark.needs_data
+def test_english_nullable_facet_not_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ElementKind: Catalog\nName: Letters\nAttributes:\n"
+        "    -\n        Name: Owner\n        Type: Organizations.Reference?\n",
+        name="Letters.yaml",
+    )
+    assert not _has(d)
+
+
+@pytest.mark.needs_data
+def test_english_input_field_argument_flagged(tmp_path):
+    d = _run(
+        tmp_path,
+        "ElementKind: InterfaceComponent\nName: F\nContent:\n"
+        "    -\n        Name: Field\n        Type: Edit<Organizations.Reference>\n",
+        name="F.yaml",
+    )
+    assert len(d) == 1 and "Edit<Organizations.Reference?>" in d[0].message
+
+
 def test_component_property_flagged(tmp_path):
     d = _run(
         tmp_path,

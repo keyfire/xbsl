@@ -154,13 +154,29 @@ MESSAGES = {
 }
 i18n.register(MESSAGES)
 
-#: A plain dotted chain of at least two segments ending in `Ссылка` – the reference shape.
-_YAML_REF_RE = re.compile(
-    r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*"
-    r"(?:\.[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)*\.Ссылка"
-)
-_YAML_BARE_RE = re.compile(rf"^\s*({_YAML_REF_RE.pattern})\s*$")
-_YAML_INPUT_RE = re.compile(rf"^\s*(ПолеВвода|Edit)\s*<\s*({_YAML_REF_RE.pattern})\s*>\s*$")
+_IDENT_RE = r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*"
+
+
+@lru_cache(maxsize=1)
+def _yaml_patterns() -> tuple[re.Pattern, re.Pattern, re.Pattern]:
+    """(the chain, a bare value, an input-field value) – the yaml shapes of a reference.
+
+    A plain dotted chain of at least two segments ending in the reference facet. The facet is
+    taken in both spellings from the platform dictionary, so the patterns are built once the
+    data is known rather than at import: a translated description spells the chain with the
+    English facet, and the Russian word alone went blind there – the same gap the code half
+    of the family had closed before.
+    """
+    facet = "|".join(re.escape(name) for name in sorted(_reference_facets()))
+    ref = rf"{_IDENT_RE}(?:\.{_IDENT_RE})*\.(?:{facet})"
+    return (
+        re.compile(ref),
+        re.compile(rf"^\s*({ref})\s*$"),
+        re.compile(rf"^\s*(ПолеВвода|Edit)\s*<\s*({ref})\s*>\s*$"),
+    )
+
+
+dataset.register_reset(_yaml_patterns.cache_clear)
 #: An input field with ANY argument – the union check parses the inside itself.
 _YAML_INPUT_ANY_RE = re.compile(r"^\s*(ПолеВвода|Edit)\s*<\s*(.+?)\s*>\s*$")
 #: A union alternative the rule understands: a plain dotted chain, optionally nullable.
@@ -333,7 +349,7 @@ def _union_needs_nullable(text: str) -> bool:
             return False
         if not _YAML_UNION_ALT_RE.match(alt):
             return False
-        if _YAML_REF_RE.fullmatch(alt):
+        if _yaml_patterns()[0].fullmatch(alt):
             has_ref = True
     return has_ref
 
@@ -346,10 +362,11 @@ def _yaml_ref_shape(value: str) -> tuple[str, int, str, str] | None:
     in English the same way, and advising the Russian spelling there would send the author
     looking for a key that must not be in their sources.
     """
-    m = _YAML_BARE_RE.match(value)
+    _chain, bare, field = _yaml_patterns()
+    m = bare.match(value)
     if m:
         return m.group(1), m.start(1), "yaml/ref-needs-nullable.bare", ""
-    m = _YAML_INPUT_RE.match(value)
+    m = field.match(value)
     if m:
         return m.group(2), m.start(2), "yaml/ref-needs-nullable.input", m.group(1)
     m = _YAML_INPUT_ANY_RE.match(value)
@@ -404,7 +421,9 @@ def _is_required(entries: dict) -> bool:
 
 @rule("yaml/ref-needs-nullable", "yaml/ref-needs-nullable.title", "A", severity=Severity.ERROR)
 def yaml_ref_needs_nullable(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "yaml" or not _HAVE_YAML or ".Ссылка" not in source.text:
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return
+    if not any(f".{facet}" in source.text for facet in _reference_facets()):
         return  # the fast path: composing the graph is a second parse of the file
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
