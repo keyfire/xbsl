@@ -12,6 +12,17 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`yaml/list-scroll-without-loading`: the list is scrolled, yet the scrolling loads
+  nothing.** `Navigation: None` means not "no pagination" but "no loading": the rows come
+  in a single `PageSize` portion and the tail of the data is unreachable - the
+  `ListNavigation` documentation says so outright while the compiler stays silent. Judged
+  is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
+  navigation is `None`" on the components the ui schema gives a `Navigation` property to;
+  an expression in the value and a list that promises no scroll are left alone.
+
 ## 2026-09-06 – 0.94.0
 
 ### Added
