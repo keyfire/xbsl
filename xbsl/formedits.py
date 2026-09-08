@@ -1034,8 +1034,17 @@ def _insert_property_edit(form: Form, node: Node, lines0: list[str]) -> TextEdit
     return TextEdit(pos, pos, fragment)
 
 
-def _fragment_lines(value_yaml: str) -> list[str]:
-    """The composite fragment as dedented lines; must parse as yaml on its own."""
+def _fragment_lines(value_yaml: str) -> tuple[list[str], bool]:
+    """The composite fragment as dedented lines, plus whether it is a FLOW collection.
+
+    Flow-ness is what decides where the fragment goes, and it is not the same question as
+    the line count. `[Товар]` is a flow collection and reads correctly written after the
+    key; a one-entry MAPPING is not - `НастройкиРедактирования: Тип: X` is a file yaml
+    refuses to read at all ("mapping values are not allowed here"), and the edit was
+    rejected with that very message while the block form would have been fine. A one-line
+    block is not an exotic case either: the editing settings of a switch have no properties
+    of their own, so a single entry is the only form that value ever takes.
+    """
     if not value_yaml or not value_yaml.strip():
         raise FormModelError("Пустой yaml-фрагмент значения")
     try:
@@ -1052,15 +1061,16 @@ def _fragment_lines(value_yaml: str) -> list[str]:
     while lines and not lines[-1].strip():
         lines.pop()
     common = min(len(ln) - len(ln.lstrip(" ")) for ln in lines if ln.strip())
-    return [ln[common:] if ln.strip() else "" for ln in lines]
+    return [ln[common:] if ln.strip() else "" for ln in lines], bool(composed.flow_style)
 
 
 def set_property(text: str, node_id: str, key: str, value: str | None = None,
                  value_yaml: str | None = None) -> EditResult:
     """Set or replace a property: a scalar/binding via value, a composite via value_yaml.
 
-    A single-line value_yaml (a flow collection) is written inline after the key; a
-    multi-line one becomes a nested block one indentation step deeper.
+    A FLOW value_yaml on one line is written inline after the key; everything else becomes
+    a nested block one indentation step deeper - a one-entry mapping included, which is the
+    only form some composite values ever take.
     """
     form = parse_form(text)
     node = get_component(form, node_id)
@@ -1082,8 +1092,8 @@ def set_property(text: str, node_id: str, key: str, value: str | None = None,
             else:
                 edits = [_insert_property_edit(form, node, lines0)]
     else:
-        frag = _fragment_lines(value_yaml)
-        if len(frag) == 1:
+        frag, flow = _fragment_lines(value_yaml)
+        if flow and len(frag) == 1:
             lines0 = [f"{key}: {frag[0]}"]
         else:
             lines0 = [f"{key}:"] + [" " * step + ln if ln else "" for ln in frag]

@@ -104,7 +104,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   unknown, the import of the subsystem holding it is not called unused, and the
   `@ClientAvailable` declarations of the paired module are not called unused either. One
   real finding remains – `yaml/valid` on the breakage itself.
-### Fixed
 - **The orphan pass reads a comment the way the translator writes it.** It used a regex of
   its own that took one space off the marker, so a doc comment (`///`) came back with a
   slash glued to the text, a `##` line with a hash, and a block comment was not read at
@@ -117,6 +116,40 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   live dictionary of a real project holds two literals in the shape. They were invisible to
   the table, to the orphan pass and to the writer, which would have added a key that is
   already in the file; the writer now replaces and removes both lines as one entry.
+- **`meta_add_form` writes the captions of a generated form through the project's
+  dictionary.** A generated form used to arrive with its captions as literals – the form's
+  own one plus every table column – and on a bilingual project that is eight findings of
+  `conventions/untranslated-visible-literal` on one object, rewritten by hand right after
+  generating. What is written instead comes from the sources rather than from a choice: of
+  303 table columns of a live project 300 carry a caption (the three that do not are picture
+  columns), every one of them is a `$Dictionary.Key` reference, and the key is the field's
+  own name. So the reference goes in – and the keys it needs join the subsystem's dictionary
+  in the same operation, echoed into the translations that dictionary already has, because a
+  reference to a key nobody declares is worse than a literal: the apply fails and the stand
+  rolls back. The dictionary has to be the one lying beside the object (another subsystem's
+  would need an `Import` the form does not carry), the project has to declare two
+  localization languages, and a name the dictionary spends on a TEMPLATE stays a literal – a
+  reference resolves against the strings alone. Without such a dictionary nothing changes.
+- **`meta_new_object` writes the base of a component the way the project spells its types.**
+  The `base` key is documented in English words, so `base="Group"` is the natural thing to
+  pass – and a Russian project got `Type: Group` in its yaml, a line rewritten by hand every
+  time: the linter says nothing about it and the compiler only speaks at deploy. The base is
+  now written in the language of the project both ways, and whether it names a FORM – the
+  bases that need the form-template wrapper – is decided on one spelling, so an English form
+  base no longer loses the wrapper either.
+- **`meta_set_component_property` writes a one-entry composite as a block.** Only a FLOW
+  collection now goes inline after the key; a fragment shaped `Key: value` becomes a nested
+  block. Written inline it produced `EditingSettings: Type: SwitchEditingSettings`, which
+  yaml refuses to read at all, and the whole edit came back with the parser's "mapping
+  values are not allowed here" - the block had to be typed by hand. One entry is not an
+  exotic case: the editing settings of a switch (a checkbox in a table cell) have no
+  properties of their own, so that is the only form the value takes.
+- **An escaped `base` is read as the brackets it stands for.** `base="Form&lt;Boolean?&gt;"`
+  used to go into the yaml exactly as it arrived: the file looks finished, and the compiler
+  meets the garbage only at deploy. The escaping comes from the CLIENT of the tool rather
+  than from a person's hands, so it is undone instead of reported – and what is left of a
+  mangled value afterwards, anything that is not a type expression, is refused rather than
+  written into the file.
 
 ## 2026-09-06 – 0.94.0
 

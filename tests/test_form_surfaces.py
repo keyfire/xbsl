@@ -238,6 +238,17 @@ def test_mcp_set_component_property(mcp_module, form_file):
     res = mcp_module.meta_set_component_property(str(form_file), LABEL, "Шрифт")
     assert "АбсолютныйШрифт" not in form_file.read_text(encoding="utf-8")
 
+    # A composite value of ONE line goes in as a block, not inline: written after the key it
+    # made the file unparseable and the whole edit came back refused.
+    res = mcp_module.meta_set_component_property(
+        str(form_file), BUTTON, "НастройкиРедактирования",
+        value_yaml="Тип: НастройкиРедактированияПереключателя",
+    )
+    assert "error" not in res
+    text = form_file.read_text(encoding="utf-8")
+    assert "НастройкиРедактирования: Тип:" not in text
+    assert "НастройкиРедактирования:\n" in text
+
     err = mcp_module.meta_set_component_property(str(form_file), LABEL, "Содержимое",
                                                  value="х")
     assert "слот" in err["error"]

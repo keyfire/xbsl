@@ -728,7 +728,10 @@ def meta_new_object(
     base – for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
-    scaffold used to be rewritten by hand for it.
+    scaffold used to be rewritten by hand for it. Either spelling is accepted and the yaml
+    gets the one the project writes its types in (a Russian project gets `Тип: Группа`);
+    pass the brackets as they are - escaped ones (`&lt;`) are undone, anything else that is
+    not a type expression is refused rather than written into the file.
     """
     root_dir = _base(root)
     return _meta(
@@ -966,6 +969,13 @@ def meta_add_form(
     (same form file), so passing both is an error. card_min_width – grid column width
     (default 400, 250 with a photo); card_placeholder – image expression used when the photo
     is empty, e.g. "Ресурс{Аккаунт.svg}.Ссылка".
+
+    Captions go through the project's dictionary: when the subsystem folder holds ONE
+    LocalizedStrings element and the project declares two localization languages, the form's
+    caption and every column caption are written as `$Dictionary.Name` and the keys the
+    references need are added to that dictionary (and echoed into the translations it already
+    has) in the same operation – a reference to a key nobody declares fails the apply. Without
+    such a dictionary the captions stay literals, as before.
 
     Existing form files are skipped unless overwrite=true.
     """
@@ -1375,8 +1385,10 @@ def meta_set_component_property(
 
     value - a scalar or a binding ("=Объект.Поле", "$Строки.Ключ"): quoted automatically
     when yaml requires it. value_yaml - a composite value as a ready yaml fragment, e.g.
-    "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)" (single-line flow fragments are written
-    inline). Passing NEITHER removes the key (a composite value goes with its whole
+    "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)"; it becomes a nested block, a fragment of
+    ONE entry included ("Тип: НастройкиРедактированияПереключателя" - some composites have
+    no properties of their own), while a flow collection on one line ("[Товар]") is written
+    inline after the key. Passing NEITHER removes the key (a composite value goes with its whole
     block). Slot keys (Содержимое etc.) are rejected - children are edited with the
     component tools. A new property lands right after Тип.
     """

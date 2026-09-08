@@ -75,6 +75,13 @@ tables, a report form with parameters; the form is registered in the `Interface`
 owner. `--dry-run` prints the changes (with full file texts) without writing – this is how
 the VS Code extension applies them through its own undo-friendly edits.
 
+The captions of the form and of its columns go through the project's dictionary: when the
+subsystem folder holds ONE `LocalizedStrings` element and the descriptor declares two
+localization languages, a caption is written as `$Dictionary.Name` and the keys those
+references need join the dictionary – and the translations it already has – in the same
+operation (a reference to a key nobody declares fails the apply). Without such a dictionary
+the caption stays a literal.
+
 `--forms list-cards` builds the list form as a card grid instead of a table: a `CustomList`
 whose `RowsContainer` is a `MatrixGroup`, plus a generated `ListRow<Name>` row component named
 after the object. The card takes a `Title`, a photo (an attribute of type `BinaryObject.Reference`

@@ -734,6 +734,27 @@ def test_set_property_inline_flow_fragment():
     assert "РасчетРазрешенийПо: [Товар]" in res.new_text
 
 
+def test_set_property_one_line_mapping_is_a_block():
+    """A one-entry mapping is a BLOCK, not an inline value - see _fragment_lines.
+
+    Written after the key it produced `Ключ: Тип: Значение`, and the edit came back refused
+    with the parser's own "mapping values are not allowed here"; the block the caller meant
+    had to be typed by hand. The editing settings of a switch have no properties of their
+    own, so one entry is the only form that value takes.
+    """
+    res = formedits.set_property(
+        FORM, BUTTON, "НастройкиРедактирования",
+        value_yaml="Тип: НастройкиРедактированияПереключателя",
+    )
+    form = parse_form(res.new_text)
+    node = form.nodes[BUTTON]
+    block = res.new_text[props(node)["НастройкиРедактирования"].span.start:
+                         props(node)["НастройкиРедактирования"].span.end]
+    assert block.splitlines()[0].strip() == "НастройкиРедактирования:"
+    assert block.splitlines()[1].strip() == "Тип: НастройкиРедактированияПереключателя"
+    assert props(node)["НастройкиРедактирования"].kind == "composite"
+
+
 def test_set_property_replace_keeps_trailing_comment():
     with_comment = FORM.replace(
         "                                    Заголовок: Оплатить\n",
