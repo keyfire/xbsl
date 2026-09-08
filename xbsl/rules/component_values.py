@@ -609,7 +609,13 @@ def _owned_mappings(root):
 
 @lru_cache(maxsize=1)
 def _object_props() -> dict[str, frozenset[str]]:
-    """{component: properties whose type union includes Объект}, empty without a schema."""
+    """{component: properties whose type union includes `Object`}, empty without a schema.
+
+    The component is keyed under BOTH spellings, the way the sibling table above is: the
+    caller looks the name up as the file writes it, and a table of Russian keys alone left
+    every English form unjudged - `Type: Label` matched nothing. The property names stay
+    Russian on purpose: the caller reads them off `_scalar_entries`, which canonicalizes.
+    """
     schema = dataset.load_ui_schema()
     if not schema:
         return {}
@@ -621,6 +627,9 @@ def _object_props() -> dict[str, frozenset[str]]:
         )
         if names:
             table[component] = names
+            english = terms.english(component, "types") or terms.common_english(component)
+            if english:
+                table[english] = names
     return table
 
 

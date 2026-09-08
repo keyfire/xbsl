@@ -27,13 +27,13 @@ import re
 from collections.abc import Iterable
 from functools import cache, lru_cache
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
-from xbsl.rules.unknown_members import _COMMON_MEMBERS, _walk_body, _walk_expr
+from xbsl.rules.unknown_members import _common_member_forms, _walk_body, _walk_expr
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
@@ -84,13 +84,19 @@ def _row_own_members() -> frozenset[str]:
     is the documented shape. While the rule knew the data member alone, that shape read as a
     field the list does not have. Taken from the data, so a member added by a platform build
     needs no edit here; without the data the set is empty and the rule keeps its own guards.
+
+    The catalog keeps members in Russian, and a translated module writes the same member in
+    English - so each name is paired FORWARD through the dictionary. A member the dictionary
+    does not pair keeps its Russian spelling alone; nothing here is invented.
     """
     try:
         catalog = dataset.load_json("stdlib.json")
     except Exception:  # noqa: BLE001 - no data, the rule still has _DATA_MEMBERS
         return frozenset()
     record = (catalog.get("type_members") or {}).get("СтрокаДинамическогоСписка") or {}
-    return frozenset(record.get("properties", ()) or ()) | frozenset(record.get("methods", ()) or ())
+    own = frozenset(record.get("properties", ()) or ()) | frozenset(record.get("methods", ()) or ())
+    english = (terms.common_english(name) for name in own)
+    return own | frozenset(name for name in english if name)
 
 
 dataset.register_reset(_row_own_members.cache_clear)
@@ -226,7 +232,8 @@ def _row_fields_mapper(source: SourceFile) -> dict | None:
             if not isinstance(use.obj, P.Name):
                 continue
             row = scope.types.get(use.obj.name)
-            if (row is None or use.name in _DATA_MEMBERS or use.name in _COMMON_MEMBERS
+            if (row is None or use.name in _DATA_MEMBERS
+                    or use.name in _common_member_forms()
                     or use.name in _row_own_members()):
                 continue
             line, col = lm.linecol(use.start)

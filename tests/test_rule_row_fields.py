@@ -2,6 +2,8 @@
 
 import builtins
 
+import pytest
+
 from xbsl import engine
 
 _RULE = "code/unknown-row-field"
@@ -185,3 +187,29 @@ def test_an_unknown_field_is_still_reported_next_to_the_key():
         ";\n"
     )
     assert len(d) == 1 and "НетТакого" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_object_protocol_is_allowed_in_english():
+    """`ToString` is the object protocol, not a field the list forgot to select.
+
+    The protocol set is written in Russian, so a translated module used to get an error on
+    legal code; the English half is paired through the dictionary.
+    """
+    d = _lint(
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
+        "    Ф(Строка.ToString())\n"
+        ";\n"
+    )
+    assert d == [], [x.message for x in d]
+
+
+@pytest.mark.needs_data
+def test_the_english_key_member_is_allowed():
+    # the row type's own members come from the catalog in Russian; `Key` is the same member
+    d = _lint(
+        "метод Открыть(Строка: СтрокаДинамическогоСписка<СписокЗадач.СтрокаСписка>)\n"
+        "    Ф(Строка.Key)\n"
+        ";\n"
+    )
+    assert d == [], [x.message for x in d]

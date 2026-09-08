@@ -79,11 +79,23 @@ MESSAGES = {
         "en": "Enumeration name '{name}' starts with '{prefix}' – when the choice is equal, "
               "'{n[Вид]}' is used: '{suggestion}'.",
     },
+    "naming/enum-vid.bad-suffix": {
+        "ru": "Имя перечисления '{name}' заканчивается словом '{prefix}' – при равнозначном "
+              "выборе используется '{n[Вид]}': '{suggestion}'.",
+        "en": "Enumeration name '{name}' ends with '{prefix}' – when the choice is equal, "
+              "'{n[Вид]}' is used: '{suggestion}'.",
+    },
     "naming/kind-in-name.title": {"ru": "Вид элемента в его имени", "en": "Element kind inside its name"},
     "naming/kind-in-name.found": {
         "ru": "Имя '{name}' начинается с названия вида ('{prefix}') – вид не включают в имя: '{suggestion}'.",
         "en": "The name '{name}' starts with its kind ('{prefix}') – the kind is not part of the name: "
               "'{suggestion}'.",
+    },
+    "naming/kind-in-name.found-suffix": {
+        "ru": "Имя '{name}' заканчивается названием вида ('{prefix}') – вид не включают в имя: "
+              "'{suggestion}'.",
+        "en": "The name '{name}' ends with its kind ('{prefix}') – the kind is not part of the "
+              "name: '{suggestion}'.",
     },
     "naming/filler-word.title": {"ru": "Слово-пустышка в имени", "en": "Filler word in a name"},
     "naming/filler-word.found": {
@@ -475,6 +487,24 @@ def _english_affixes() -> dict[str, str]:
 
 dataset.register_reset(_english_affixes.cache_clear)
 
+
+@lru_cache(maxsize=1)
+def _english_kind_prefixes() -> dict[str, str]:
+    """Kind word -> its English spelling, for the words the dictionary pairs.
+
+    Same source and same reservation as the affixes above: a word the data does not pair is
+    absent here, so an English name carrying it is not judged rather than judged by a guess.
+    """
+    out: dict[str, str] = {}
+    for word in set(KIND_PREFIXES.values()):
+        english = terms.common_english(word)
+        if english:
+            out[word] = english
+    return out
+
+
+dataset.register_reset(_english_kind_prefixes.cache_clear)
+
 _CYRILLIC_LETTER_RE = re.compile(r"[А-Яа-яЁё]")
 # HTTP service: words that are not part of the name.
 HTTP_FORBIDDEN = ("Api", "Web", "Апи", "Веб")
@@ -587,6 +617,24 @@ def latin_term(source: SourceFile) -> Iterable[Diagnostic]:
                     word=word, name=ref.name, suggestion=ref.name.replace(word, original, 1))
 
 
+@lru_cache(maxsize=1)
+def _enum_vid_english() -> tuple[tuple[str, str], ...]:
+    """(the kind word to avoid, the one to use) in English, both spellings from the data.
+
+    A pair the dictionary does not state is left out rather than invented - the plural has no
+    English spelling there, so an English plural is not judged at all.
+    """
+    out = []
+    for bad, good in (("Типы", "Виды"), ("Тип", "Вид")):
+        bad_english, good_english = terms.common_english(bad), terms.common_english(good)
+        if bad_english and good_english:
+            out.append((bad_english, good_english))
+    return tuple(out)
+
+
+dataset.register_reset(_enum_vid_english.cache_clear)
+
+
 @rule("naming/enum-vid", "naming/enum-vid.title", "D", severity=Severity.WARNING)
 def enum_vid(source: SourceFile) -> Iterable[Diagnostic]:
     """1.5: an enumeration is named with the word "Вид", not "Тип" (ВидЗадачи, not ТипЗадачи)."""
@@ -595,6 +643,18 @@ def enum_vid(source: SourceFile) -> Iterable[Diagnostic]:
         return
     ref = _object_name(_names(source))
     if ref is None:
+        return
+    # An ENGLISH name carries the same kind word as a SUFFIX - the head of an English compound
+    # is its last word, the fact naming/number and naming/prefix-by-kind already rely on - so
+    # the tail is read there. Judged by the Russian prefix alone, the rule saw nothing at all
+    # in a translated project.
+    if not _CYRILLIC_LETTER_RE.search(ref.name):
+        for bad, good in _enum_vid_english():
+            if ref.name.endswith(bad) and len(ref.name) > len(bad):
+                yield _diag(source, ref, "naming/enum-vid", "naming/enum-vid.bad-suffix",
+                            name=ref.name, prefix=bad,
+                            suggestion=ref.name[: -len(bad)] + good)
+                return
         return
     for prefix in ("Типы", "Тип"):
         rest = ref.name[len(prefix):]
@@ -627,6 +687,15 @@ def kind_in_name(source: SourceFile) -> Iterable[Diagnostic]:
     prefix = KIND_PREFIXES.get(vid)
     if not prefix:
         return
+    if not _CYRILLIC_LETTER_RE.search(ref.name):
+        # An English name carries the kind word as a SUFFIX, the way naming/prefix-by-kind
+        # reads it; judged by the Russian prefix alone, the rule saw nothing in a translated
+        # project. A kind word the dictionary does not pair is not judged in English at all.
+        english = _english_kind_prefixes().get(prefix)
+        if english and ref.name.endswith(english) and len(ref.name) > len(english):
+            yield _diag(source, ref, "naming/kind-in-name", "naming/kind-in-name.found-suffix",
+                        name=ref.name, prefix=english, suggestion=ref.name[: -len(english)])
+        return
     rest = ref.name[len(prefix):]
     if ref.name.startswith(prefix) and rest[:1].isupper():
         yield _diag(source, ref, "naming/kind-in-name", "naming/kind-in-name.found",
@@ -647,6 +716,27 @@ def filler_word(source: SourceFile) -> Iterable[Diagnostic]:
                     word=word, name=ref.name)
 
 
+@lru_cache(maxsize=1)
+def _module_suffix_forms() -> tuple[str, ...]:
+    """The environment suffixes in both spellings, longest first, the English half from the data.
+
+    An English name carries the same word (`ExchangeClientAndServer`), and the rule looked for
+    the Russian spelling alone - a translated project went unjudged. The order keeps the
+    compound before its parts, so the whole word is named in the message; a word the dictionary
+    does not pair contributes its Russian spelling alone.
+    """
+    forms: list[str] = []
+    for suffix in MODULE_SUFFIXES:
+        forms.append(suffix)
+        english = terms.common_english(suffix)
+        if english:
+            forms.append(english)
+    return tuple(forms)
+
+
+dataset.register_reset(_module_suffix_forms.cache_clear)
+
+
 @rule("naming/module-suffix", "naming/module-suffix.title", "D", severity=Severity.WARNING)
 def module_suffix(source: SourceFile) -> Iterable[Diagnostic]:
     """Section 3: a common module name carries no environment suffix (ОбменДаннымиКлиентИСервер)."""
@@ -656,7 +746,7 @@ def module_suffix(source: SourceFile) -> Iterable[Diagnostic]:
     ref = _object_name(_names(source))
     if ref is None:
         return
-    for suffix in MODULE_SUFFIXES:
+    for suffix in _module_suffix_forms():
         if ref.name.endswith(suffix) and len(ref.name) > len(suffix):
             yield _diag(source, ref, "naming/module-suffix", "naming/module-suffix.found",
                         name=ref.name, suffix=suffix, suggestion=ref.name[: -len(suffix)])

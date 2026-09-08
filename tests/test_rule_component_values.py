@@ -345,6 +345,25 @@ def test_non_object_property_not_judged(tmp_path, ui_root):
     assert not _run_bare(tmp_path, "        ВидОтображения: Баннер\n")
 
 
+@pytest.mark.needs_data
+def test_english_component_is_judged(tmp_path):
+    """The same node written in English is judged too - real names, real dictionaries.
+
+    The component table used to be keyed by the Russian name alone, so `Type: Label` matched
+    nothing and every translated form went unjudged. The fake schema above cannot carry this
+    check: the English spelling of a component comes from the distribution's own dictionary.
+    """
+    src = tmp_path / "bare-en"
+    src.mkdir(exist_ok=True)
+    (src / "F.yaml").write_text(
+        "ElementKind: InterfaceComponent\nName: F\nContent:\n"
+        "    -\n        Type: Label\n        Value: Subtotal\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(src)]), select={_BARE_RULE})
+    assert len(d) == 1 and d[0].rule_id == _BARE_RULE
+
+
 def test_nested_object_value_not_flagged(tmp_path, ui_root):
     # a mapping under the property is a literal with its type spelled out
     d = _run_bare(

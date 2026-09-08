@@ -516,6 +516,722 @@ Properties:
 """
 _CARD_PROPERTY_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "КрупныйЗаголовок": "LargeTitle",
                          "Заголовок": "Title"}
+#: A dynamic list whose source joins a second table. `{main}` and `{joined}` are the argument
+#: expressions of the main and of the joined table - only the second one is a runtime refusal.
+_JOINED_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f19
+Имя: РеестрЗаявок
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Таблица<ДинамическийСписок>
+        Имя: Список
+        Источник:
+            ОсновнаяТаблица:
+                Таблица: Заявки
+                Аргументы:
+                    -
+                        Тип: АргументТаблицыВыражение
+                        Имя: Раздел
+                        Выражение: '{main}'
+            ПрисоединенныеТаблицы:
+                -
+                    Тип: ПрисоединеннаяТаблица
+                    Таблица: Отметки
+                    Псевдоним: Отметка
+                    Аргументы:
+                        -
+                            Тип: АргументТаблицыВыражение
+                            Имя: Раздел
+                            Выражение: '{joined}'
+"""
+_JOINED_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f19
+Name: ApplicationRegistry
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Table<DynamicList>
+        Name: List
+        Source:
+            MainTable:
+                Table: Applications
+                Arguments:
+                    -
+                        Type: TableArgumentExpression
+                        Name: Section
+                        Expression: '{main}'
+            JoinedTables:
+                -
+                    Type: JoinedTable
+                    Table: Marks
+                    Alias: Mark
+                    Arguments:
+                        -
+                            Type: TableArgumentExpression
+                            Name: Section
+                            Expression: '{joined}'
+"""
+_JOINED_TOKENS = {"Заявки": "Applications", "РеестрЗаявок": "ApplicationRegistry",
+                  "Список": "List", "Отметки": "Marks", "Отметка": "Mark", "Раздел": "Section"}
+#: A catalog of two attributes, the set the automatic list row type carries.
+_MARKS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f1a
+Имя: Отметки
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1b
+        Имя: Срок
+        Тип: Строка
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1c
+        Имя: Сумма
+        Тип: Число
+"""
+_MARKS_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f1a
+Name: Marks
+VisibilityScope: InProject
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f1b
+        Name: Deadline
+        Type: String
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f1c
+        Name: Amount
+        Type: Number
+"""
+#: A list over the object's automatic row type; `{extra}` is the second selected field or nothing.
+#: The tail segment of the chain has no English pair anywhere in the platform's dictionaries,
+#: so both spellings write it the same - that is what the rule's own table says.
+_AUTO_LIST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f1d
+Имя: РеестрОтметок
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Таблица<ДинамическийСписок<Отметки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>
+        Имя: Список
+        Источник:
+            ОсновнаяТаблица:
+                Таблица: Отметки
+            Поля:
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Срок
+{extra}"""
+_AUTO_LIST_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f1d
+Name: MarkRegistry
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Table<DynamicList<Marks.AutomaticListForm.ДанныеСтрокиСписка>>
+        Name: List
+        Source:
+            MainTable:
+                Table: Marks
+            Fields:
+                -
+                    Type: DynamicListField
+                    Expression: Deadline
+{extra}"""
+_AUTO_FIELD_RU = ("                -\n                    Тип: ПолеДинамическогоСписка\n"
+                  "                    Выражение: Сумма\n")
+_AUTO_FIELD_EN = ("                -\n                    Type: DynamicListField\n"
+                  "                    Expression: Amount\n")
+_AUTO_LIST_TOKENS = {"Отметки": "Marks", "РеестрОтметок": "MarkRegistry", "Список": "List",
+                     "Срок": "Deadline", "Сумма": "Amount"}
+#: The project description – the only place the compatibility mode is written.
+_PROJECT_RU = """\
+Ид: 1d1f5c60-0000-4000-8000-000000000f1e
+Поставщик: acme
+Имя: Проба
+Версия: 1.0.0
+РежимСовместимости: {mode}
+"""
+_PROJECT_EN = """\
+Id: 1d1f5c60-0000-4000-8000-000000000f1e
+Vendor: acme
+Name: Probe
+Version: 1.0.0
+CompatibilityMode: {mode}
+"""
+#: A picture carrying a property the schema dates 9.0 – newer than an 8.0 project.
+_PICTURE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f1f
+Имя: ЗначокЗаявки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Картинка
+        Имя: Значок
+        ОтображатьПодсказку: Всегда
+"""
+_PICTURE_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f1f
+Name: ApplicationBadge
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Picture
+        Name: Badge
+        DisplayTooltip: Always
+"""
+_PICTURE_TOKENS = {"Проба": "Probe", "ЗначокЗаявки": "ApplicationBadge", "Значок": "Badge"}
+#: A label whose value is an object-typed property; `{value}` is a bare word or a binding.
+_LABEL_VALUE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f20
+Имя: КарточкаИтога
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Имя: Подытог
+        Тип: Строка
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Надпись
+        Имя: Подпись
+        Значение: {value}
+"""
+_LABEL_VALUE_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f20
+Name: TotalCard
+VisibilityScope: InProject
+Properties:
+    -
+        Name: Subtotal
+        Type: String
+Inherits:
+    Type: Form
+    Content:
+        Type: Label
+        Name: Caption
+        Value: {value}
+"""
+_LABEL_VALUE_TOKENS = {"КарточкаИтога": "TotalCard", "Подытог": "Subtotal", "Подпись": "Caption"}
+#: A form declaring a dynamic list whose row type carries two fields: one taken straight and
+#: one taken THROUGH A REFERENCE, which types it `<тип>|Null`; the guarded twin is next to it.
+_ROW_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f21
+Имя: ПанельОтметок
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f22
+        Имя: Список
+        Тип: ДинамическийСписок<ПанельОтметок.СтрокаСписка>
+        ЗначениеПоУмолчанию:
+            ИмяТипаДанныхСтроки: СтрокаСписка
+            ОсновнаяТаблица:
+                Таблица: Отметки
+            Поля:
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Срок
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Раздел.Сумма
+                    Псевдоним: СуммаРаздела
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Раздел.Сумма.ЗаменитьNull(0)
+                    Псевдоним: ЗащищеннаяСумма
+"""
+_ROW_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f21
+Name: MarkPanel
+VisibilityScope: InProject
+Properties:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f22
+        Name: List
+        Type: DynamicList<MarkPanel.ListRow>
+        DefaultValue:
+            RowDataTypeName: ListRow
+            MainTable:
+                Table: Marks
+            Fields:
+                -
+                    Type: DynamicListField
+                    Expression: Deadline
+                -
+                    Type: DynamicListField
+                    Expression: Section.Amount
+                    Alias: SectionAmount
+                -
+                    Type: DynamicListField
+                    Expression: Section.Amount.ReplaceNull(0)
+                    Alias: GuardedAmount
+"""
+#: A handler reading one member off the row; `{field}` is the member.
+_ROW_READ_RU = ("метод Показать(ДанныеСтроки: СтрокаДинамическогоСписка<ПанельОтметок.СтрокаСписка>)\n"
+                "    знч Строчка = ДанныеСтроки.Данные\n"
+                "    знч Итог = Строчка.{field}\n;\n")
+_ROW_READ_EN = ("method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
+                "    val Line = RowData.Data\n"
+                "    val Result = Line.{field}\n;\n")
+#: The same handler filling a typed structure field from the row; `{field}` is the row member.
+_ROW_FILL_RU = ("структура Сводка\n    знч Сумма: Число = 0\n;\n"
+                "метод Показать(ДанныеСтроки: СтрокаДинамическогоСписка<ПанельОтметок.СтрокаСписка>)\n"
+                "    знч Строчка = ДанныеСтроки.Данные\n"
+                "    знч Итог = новый Сводка(Сумма = Строчка.{field})\n;\n")
+_ROW_FILL_EN = ("structure Summary\n    val Amount: Number = 0\n;\n"
+                "method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
+                "    val Line = RowData.Data\n"
+                "    val Result = new Summary(Amount = Line.{field})\n;\n")
+_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
+               "Срок": "Deadline", "Сумма": "Amount", "СуммаРаздела": "SectionAmount",
+               "ЗащищеннаяСумма": "GuardedAmount", "Строчка": "Line", "Сводка": "Summary",
+               "Итог": "Result", "Показать": "Show"}
+#: A structure declared in a common module, read from another module through a typed variable.
+_STRUCT_DECL_RU = "структура Сводка\n    знч Сумма: Число = 0\n    знч Срок: Строка = \"\"\n;\n"
+_STRUCT_DECL_EN = "structure Summary\n    val Amount: Number = 0\n    val Deadline: String = \"\"\n;\n"
+_STRUCT_READ_RU = "метод Проба(Свод: Вычисления.Сводка)\n    знч Итог = Свод.{field}\n;\n"
+_STRUCT_READ_EN = "method Probe(Digest: Calculations.Summary)\n    val Result = Digest.{field}\n;\n"
+_STRUCT_TOKENS = {"Вычисления": "Calculations", "Сводка": "Summary", "Сумма": "Amount",
+                  "Срок": "Deadline", "Свод": "Digest", "Проба": "Probe", "Итог": "Result",
+                  "Заявки": "Applications", "Остаток": "Balance"}
+#: A method open to the client; `{extra}` adds the context annotation, or nothing.
+_CLIENT_AVAILABLE_RU = ("@НаСервере @ДоступноСКлиента{extra}\n"
+                        "метод Прочитать(): Строка\n    возврат \"\"\n;\n")
+_CLIENT_AVAILABLE_EN = ("@OnServer @AvailableFromClient{extra}\n"
+                        "method Read(): String\n    return \"\"\n;\n")
+#: The client side of the pair: a component method that names the server method, or does not.
+#: The local name carries no token of its own, so its English half is the dictionary's.
+_CLIENT_CALL_RU = "метод Отобразить()\n    знч Итог = Серверный.Прочитать()\n;\n"
+_CLIENT_CALL_EN = "method Display()\n    val Total = ServerSide.Read()\n;\n"
+_CLIENT_IDLE_RU = "метод Отобразить()\n    знч Итог = \"\"\n;\n"
+_CLIENT_IDLE_EN = "method Display()\n    val Total = \"\"\n;\n"
+#: An enumeration named after the kind word the standard picks, or after the one it rejects.
+_ENUM_NAME_RU = """\
+ВидЭлемента: Перечисление
+Ид: 1d1f5c60-0000-4000-8000-000000000f23
+Имя: {name}
+ОбластьВидимости: ВПроекте
+Элементы:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f24
+        Имя: Основной
+"""
+_ENUM_NAME_EN = """\
+ElementKind: Enumeration
+Id: 1d1f5c60-0000-4000-8000-000000000f23
+Name: {name}
+VisibilityScope: InProject
+Items:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f24
+        Name: Main
+"""
+_ENUM_NAME_TOKENS = {"ВидЗаявки": "ApplicationKind", "ТипЗаявки": "ApplicationType",
+                     "Основной": "Main"}
+#: A common module named with the environment in its name, or without it.
+_MODULE_NAME_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f25
+Имя: {name}
+ОбластьВидимости: ВПроекте
+Окружение: КлиентИСервер
+"""
+_MODULE_NAME_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000f25
+Name: {name}
+VisibilityScope: InProject
+Environment: ClientAndServer
+"""
+_MODULE_NAME_TOKENS = {"Обмен": "Exchange", "ОбменКлиентИСервер": "ExchangeClientAndServer"}
+#: A standard card whose background is bound to a method of the paired module.
+_CARD_BINDING_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f26
+Имя: КарточкаОтметки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: СтандартнаяКарточка
+    Фон: =ФонКарточки()
+"""
+_CARD_BINDING_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f26
+Name: MarkCard
+VisibilityScope: InProject
+Inherits:
+    Type: StandardCard
+    Background: =CardBackground()
+"""
+_CARD_BINDING_RETURN_RU = "метод ФонКарточки(): {type}\n    возврат {value}\n;\n"
+_CARD_BINDING_RETURN_EN = "method CardBackground(): {type}\n    return {value}\n;\n"
+_CARD_BINDING_TOKENS = {"КарточкаОтметки": "MarkCard", "ФонКарточки": "CardBackground"}
+#: A form template whose content slot is typed as a list; `{dash}` opens a list item or nothing.
+_SLOT_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f27
+Имя: ШаблонОтметки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: ПроизвольныйШаблонФормы
+        Содержимое:
+            Тип: Группа
+            Имя: Блок
+            Содержимое:
+{item}"""
+_SLOT_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f27
+Name: MarkTemplate
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: CustomFormTemplate
+        Content:
+            Type: Group
+            Name: Block
+            Content:
+{item}"""
+_SLOT_ITEM_RU = "                Тип: Надпись\n                Имя: Подпись\n"
+_SLOT_ITEM_EN = "                Type: Label\n                Name: Caption\n"
+_SLOT_LIST_RU = "                -\n                    Тип: Надпись\n                    Имя: Подпись\n"
+_SLOT_LIST_EN = "                -\n                    Type: Label\n                    Name: Caption\n"
+_SLOT_TOKENS = {"ШаблонОтметки": "MarkTemplate", "Блок": "Block", "Подпись": "Caption"}
+#: A label carrying a hint; `{hint}` is the hint text, the length is what the rule judges.
+_HINT_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f28
+Имя: ПодписьОтметки
+ОбластьВидимости: ВПроекте
+Содержимое:
+    -
+        Тип: Надпись
+        Заголовок: Отметка
+        Подсказка: {hint}
+"""
+_HINT_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f28
+Name: MarkCaption
+VisibilityScope: InProject
+Content:
+    -
+        Type: Label
+        Title: Отметка
+        Tooltip: {hint}
+"""
+_HINT_TOKENS = {"ПодписьОтметки": "MarkCaption", "Отметка": "Mark"}
+#: A component derived from the popup window, and a form that places it or only declares it.
+_POPUP_DERIVED_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f29
+Имя: СобственнаяПодсказка
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: ВсплывающийКомпонент
+    ЗакрыватьПриНажатииСнаружи: Истина
+"""
+_POPUP_DERIVED_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f29
+Name: OwnTooltip
+VisibilityScope: InProject
+Inherits:
+    Type: PopupComponent
+    CloseOnClickOutside: True
+"""
+_POPUP_HOST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f2a
+Имя: СтраницаОтметки
+ОбластьВидимости: ВПроекте
+{declaration}Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: {placed}
+        Имя: Блок
+"""
+_POPUP_HOST_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f2a
+Name: MarkPage
+VisibilityScope: InProject
+{declaration}Inherits:
+    Type: Form
+    Content:
+        Type: {placed}
+        Name: Block
+"""
+_POPUP_DECLARATION_RU = "Свойства:\n    -\n        Имя: Окно\n        Тип: СобственнаяПодсказка?\n"
+_POPUP_DECLARATION_EN = "Properties:\n    -\n        Name: Window\n        Type: OwnTooltip?\n"
+_POPUP_TOKENS = {"СобственнаяПодсказка": "OwnTooltip", "СтраницаОтметки": "MarkPage",
+                 "Блок": "Block", "Окно": "Window"}
+#: An insert whose height is bound; `{height}` is a computed expression or a bare path.
+_BOUND_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f2b
+Имя: ФормаОтметки
+ОбластьВидимости: ВПроекте
+Содержимое:
+    -
+        Тип: КонтейнерHtml
+        Имя: Блок
+        Высота: {height}
+"""
+_BOUND_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f2b
+Name: MarkForm
+VisibilityScope: InProject
+Content:
+    -
+        Type: HtmlContainer
+        Name: Block
+        Height: {height}
+"""
+_BOUND_ASSIGN_RU = "метод Показать()\n    Компоненты.Блок.Высота = 640\n;\n"
+_BOUND_ASSIGN_EN = "method Show()\n    Components.Block.Height = 640\n;\n"
+_BOUND_TOKENS = {"ФормаОтметки": "MarkForm", "Блок": "Block", "ВысотаБлока": "BlockHeight",
+                 "Показать": "Show", "Отступ": "Indent"}
+#: A component declaring a property its own module assigns, and the instances that bind it.
+_PICKER_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f2c
+Имя: ПолеОттенка
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Имя: Оттенок
+        Тип: Строка
+"""
+_PICKER_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f2c
+Name: ShadeField
+VisibilityScope: InProject
+Properties:
+    -
+        Name: Shade
+        Type: String
+"""
+_PICKER_MODULE_RU = "метод Выбрать()\n    Оттенок = \"FFFFFF\"\n;\n"
+_PICKER_MODULE_EN = "method Choose()\n    Shade = \"FFFFFF\"\n;\n"
+_PICKER_HOST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f2d
+Имя: ПанельОттенков
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Группа
+    Содержимое:
+        -
+            Тип: ПолеОттенка
+            Оттенок: {value}
+"""
+_PICKER_HOST_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f2d
+Name: ShadePanel
+VisibilityScope: InProject
+Inherits:
+    Type: Group
+    Content:
+        -
+            Type: ShadeField
+            Shade: {value}
+"""
+_PICKER_TOKENS = {"ПолеОттенка": "ShadeField", "Оттенок": "Shade", "Выбрать": "Choose",
+                  "ПанельОттенков": "ShadePanel", "ВычислитьОттенок": "ComputeShade",
+                  "ПоказанныйОттенок": "ShownShade"}
+#: A dynamic list with one filter item; `{use}` is the declared state of that item.
+_FILTER_LIST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f2e
+Имя: СписокОтметок
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Имя: Данные
+        Тип: ДинамическийСписок
+        ЗначениеПоУмолчанию:
+            ОсновнаяТаблица:
+                Таблица: Отметки
+            Фильтр:
+                Тип: ГруппаЭлементовФильтра
+                Элементы:
+                    -
+                        Тип: ЭлементФильтра
+                        Поле: Раздел
+                        Использовать: {use}
+"""
+_FILTER_LIST_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f2e
+Name: MarkList
+VisibilityScope: InProject
+Properties:
+    -
+        Name: Data
+        Type: DynamicList
+        DefaultValue:
+            MainTable:
+                Table: Marks
+            Filter:
+                Type: FilterItemGroup
+                Items:
+                    -
+                        Type: FilterItem
+                        Field: Section
+                        Use: {use}
+"""
+#: The paired module switching that filter item on - the second half of the race.
+_FILTER_CODE_RU = ("@Обработчик\nметод ПослеСоздания()\n"
+                   "    для Элемент из Данные.Фильтр.Элементы\n"
+                   "        (Элемент как ЭлементФильтра).Использовать = Истина\n    ;\n;\n")
+_FILTER_CODE_EN = ("@Handler\nmethod AfterCreate()\n"
+                   "    for Item in Data.Filter.Items\n"
+                   "        (Item as FilterItem).Use = True\n    ;\n;\n")
+#: The property and the handler are names the PROJECT declares, so the dictionary carries
+#: them as tokens - a platform pair does not apply to a name of the project's own.
+_FILTER_TOKENS = {"СписокОтметок": "MarkList", "Отметки": "Marks", "Раздел": "Section",
+                  "Данные": "Data", "ПослеСоздания": "AfterCreate"}
+#: A query literal over the catalog; `{value}` is how the condition takes its value.
+_PARAM_QUERY_RU = ("метод Собрать()\n    знч Итог = Запрос{{\n"
+                   "        ВЫБРАТЬ Наименование ИЗ Справочник.Отметки ГДЕ Раздел = {value}\n"
+                   "    }}\n;\n")
+_PARAM_QUERY_EN = ("method Collect()\n    val Total = Query{{\n"
+                   "        SELECT Name FROM Catalog.Marks WHERE Section = {value}\n"
+                   "    }}\n;\n")
+_PARAM_TOKENS = {"Отметки": "Marks", "Собрать": "Collect", "Раздел": "Section",
+                 "Срок": "Deadline", "Сумма": "Amount"}
+#: An element whose name repeats its own kind, or does not; `{kind}` and `{name}` vary.
+_KIND_NAME_RU = """\
+ВидЭлемента: {kind}
+Ид: 1d1f5c60-0000-4000-8000-000000000f2f
+Имя: {name}
+ОбластьВидимости: ВПроекте
+Представление: Просроченные отметки
+"""
+_KIND_NAME_EN = """\
+ElementKind: {kind}
+Id: 1d1f5c60-0000-4000-8000-000000000f2f
+Name: {name}
+VisibilityScope: InProject
+Presentation: Просроченные отметки
+"""
+_KIND_NAME_TOKENS = {"ПросроченныеОтметки": "OverdueMarks",
+                     "ОтчетПросроченныеОтметки": "OverdueMarksReport"}
+#: A list over an entity that declares no hierarchy, wired to the row-editing event.
+_ROW_EDIT_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f30
+Имя: ТаблицаОтметок
+ОбластьВидимости: ВПроекте
+Содержимое:
+    -
+        Тип: Таблица<ДинамическийСписок<{entity}>>
+        Имя: Список
+        ПриРедактированииСтроки: СтрокаПриРедактировании
+"""
+_ROW_EDIT_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f30
+Name: MarkTable
+VisibilityScope: InProject
+Content:
+    -
+        Type: Table<DynamicList<{entity}>>
+        Name: List
+        OnRowEdit: RowOnEdit
+"""
+_HIER_CATALOG_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f31
+Имя: Разделы
+ОбластьВидимости: ВПроекте
+Иерархический: Истина
+"""
+_HIER_CATALOG_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f31
+Name: Sections
+VisibilityScope: InProject
+Hierarchical: True
+"""
+_ROW_EDIT_TOKENS = {"Отметки": "Marks", "Разделы": "Sections", "ТаблицаОтметок": "MarkTable",
+                    "Список": "List", "СтрокаПриРедактировании": "RowOnEdit",
+                    "Срок": "Deadline", "Сумма": "Amount"}
+#: A picture whose image is bound; `{value}` either calls a server member or reads a field.
+_IMAGE_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f32
+Имя: ПлиткаОтметки
+ОбластьВидимости: ВПроекте
+Содержимое:
+    -
+        Тип: Картинка
+        Имя: Значок
+        Изображение: {value}
+"""
+_IMAGE_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f32
+Name: MarkTile
+VisibilityScope: InProject
+Content:
+    -
+        Type: Picture
+        Name: Badge
+        Image: {value}
+"""
+_IMAGE_TOKENS = {"Отметки": "Marks", "ПлиткаОтметки": "MarkTile", "Значок": "Badge",
+                 "ЗначокПоКоду": "BadgeByCode", "Код": "Code", "ДанныеСтроки": "RowData"}
+#: A catalog whose boolean attribute is named the way the standard wants, or negated.
+_BOOLEAN_CATALOG_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f33
+Имя: Отметки
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f34
+        Имя: {name}
+        Тип: Булево
+"""
+_BOOLEAN_CATALOG_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f33
+Name: Marks
+VisibilityScope: InProject
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f34
+        Name: {name}
+        Type: Boolean
+"""
+_BOOLEAN_TOKENS = {"Отметки": "Marks", "Успешно": "Successful", "НетОшибок": "NoErrors"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -2101,6 +2817,642 @@ SEEDS: list[Seed] = [
         files={"КарточкаЗаявки.yaml": _CARD_PROPERTY_RU.format(name="Заголовок")},
         english={"ApplicationCard.yaml": _CARD_PROPERTY_EN.format(name="Title")},
         tokens=_CARD_PROPERTY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-joined-table-param",
+        expect=CLEAN,
+        note="a list parameter in the MAIN table's argument – the legal half, next to a joined "
+             "table whose own argument is a literal",
+        files={"РеестрЗаявок.yaml": _JOINED_RU.format(main="&Раздел", joined="1")},
+        english={"ApplicationRegistry.yaml": _JOINED_EN.format(main="&Section", joined="1")},
+        tokens=_JOINED_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-joined-table-param",
+        expect=FINDING,
+        note="the same parameter inside the JOINED table's argument is reported – the joined "
+             "key, the arguments key and the expression key are all metamodel names",
+        files={"РеестрЗаявок.yaml": _JOINED_RU.format(main="1", joined="&Раздел")},
+        english={"ApplicationRegistry.yaml": _JOINED_EN.format(main="1", joined="&Section")},
+        tokens=_JOINED_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-missing-field",
+        expect=CLEAN,
+        note="a list over the automatic row type selecting every attribute of its object",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "РеестрОтметок.yaml": _AUTO_LIST_RU.format(extra=_AUTO_FIELD_RU),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkRegistry.yaml": _AUTO_LIST_EN.format(extra=_AUTO_FIELD_EN),
+        },
+        tokens=_AUTO_LIST_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-missing-field",
+        expect=FINDING,
+        note="the same list missing one attribute is reported – the row-type chain and the "
+             "fields key are read from the platform's own names",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "РеестрОтметок.yaml": _AUTO_LIST_RU.format(extra=""),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkRegistry.yaml": _AUTO_LIST_EN.format(extra=""),
+        },
+        tokens=_AUTO_LIST_TOKENS,
+    ),
+    Seed(
+        rule="yaml/property-since-compat",
+        expect=CLEAN,
+        note="a property of the mode the project declares – the mode key lives in the project "
+             "description, which carries no element kind",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "ЗначокЗаявки.yaml": _PICTURE_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="9.0"),
+                 "ApplicationBadge.yaml": _PICTURE_EN},
+        tokens=_PICTURE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/property-since-compat",
+        expect=FINDING,
+        note="the same property under an older mode is reported – the component and the "
+             "property are spelled by the ui schema in both scripts",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="8.0"), "ЗначокЗаявки.yaml": _PICTURE_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="8.0"),
+                 "ApplicationBadge.yaml": _PICTURE_EN},
+        tokens=_PICTURE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/bare-object-value",
+        expect=CLEAN,
+        note="an object-typed value written as a binding – the shape the platform accepts",
+        files={"КарточкаИтога.yaml": _LABEL_VALUE_RU.format(value="=Подытог")},
+        english={"TotalCard.yaml": _LABEL_VALUE_EN.format(value="=Subtotal")},
+        tokens=_LABEL_VALUE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/bare-object-value",
+        expect=FINDING,
+        note="the same value as a bare word is rejected outright – the component whose "
+             "property is object-typed is named by the ui schema",
+        files={"КарточкаИтога.yaml": _LABEL_VALUE_RU.format(value="Подытог")},
+        english={"TotalCard.yaml": _LABEL_VALUE_EN.format(value="Subtotal")},
+        tokens=_LABEL_VALUE_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="a field the list selects, reached through the row's data member",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Срок"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Deadline"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=FINDING,
+        note="the reference itself instead of the alias the list gives it is reported – the row "
+             "type annotation and the data member are read in both spellings",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Раздел"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Section"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="the object protocol on a row – a member every instance carries, no list declares it",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="ВСтроку()"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="ToString()"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="the row type's own key member – the documented way to the reference behind a row",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Ключ"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Key"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=CLEAN,
+        note="a field the list already guards with the null replacement fills a typed field",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_FILL_RU.format(field="ЗащищеннаяСумма"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_FILL_EN.format(field="GuardedAmount"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=FINDING,
+        note="the unguarded twin of the same field is reported – the guard is recognised by "
+             "the member name, which the platform spells both ways",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_FILL_RU.format(field="СуммаРаздела"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=CLEAN,
+        note="a field the structure declares, read through a parameter of that structure's type",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="Сумма"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="Amount"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=FINDING,
+        note="a field the structure does not declare is reported – the member set comes from "
+             "the project's own declaration, so both scripts have one to compare against",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="Остаток"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="Balance"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=CLEAN,
+        note="the object protocol on a structure – a member no declaration lists and every "
+             "instance carries",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="ВСтроку()"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="ToString()"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-needs-context",
+        expect=CLEAN,
+        note="a component method open to the client that keeps the instance context",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_AVAILABLE_RU.format(extra=" @Контекстный"),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_AVAILABLE_EN.format(extra=" @Contextual"),
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-needs-context",
+        expect=FINDING,
+        note="the same method without the context annotation is reported – both annotations "
+             "are read through the key forms of the term dictionary",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-unused",
+        expect=CLEAN,
+        note="a method open to the client that a component module calls",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_CALL_RU,
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_CALL_EN,
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-unused",
+        expect=FINDING,
+        note="the same method that no client place names is reported – which kinds count as "
+             "client comes from the metamodel, the annotation from the term dictionary",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_IDLE_RU,
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_IDLE_EN,
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="naming/enum-vid",
+        expect=CLEAN,
+        note="an enumeration named with the kind word the standard picks",
+        files={"ВидЗаявки.yaml": _ENUM_NAME_RU.format(name="ВидЗаявки")},
+        english={"ApplicationKind.yaml": _ENUM_NAME_EN.format(name="ApplicationKind")},
+        tokens=_ENUM_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/enum-vid",
+        expect=FINDING,
+        note="the same enumeration named with the word the standard rejects is reported – the "
+             "kind word leads in Russian and trails in English",
+        files={"ТипЗаявки.yaml": _ENUM_NAME_RU.format(name="ТипЗаявки")},
+        english={"ApplicationType.yaml": _ENUM_NAME_EN.format(name="ApplicationType")},
+        tokens=_ENUM_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/module-suffix",
+        expect=CLEAN,
+        note="a common module whose name says nothing about its environment",
+        files={"Обмен.yaml": _MODULE_NAME_RU.format(name="Обмен")},
+        english={"Exchange.yaml": _MODULE_NAME_EN.format(name="Exchange")},
+        tokens=_MODULE_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/module-suffix",
+        expect=FINDING,
+        note="the same module carrying the environment in its name is reported – the "
+             "environment values are an enumeration of the term dictionary",
+        files={"ОбменКлиентИСервер.yaml": _MODULE_NAME_RU.format(name="ОбменКлиентИСервер")},
+        english={
+            "ExchangeClientAndServer.yaml":
+                _MODULE_NAME_EN.format(name="ExchangeClientAndServer"),
+        },
+        tokens=_MODULE_NAME_TOKENS,
+    ),
+    Seed(
+        rule="yaml/binding-needs-auto",
+        expect=CLEAN,
+        note="a binding whose method returns the union the property declares",
+        files={
+            "КарточкаОтметки.yaml": _CARD_BINDING_RU,
+            "КарточкаОтметки.xbsl": _CARD_BINDING_RETURN_RU.format(type="Авто|Цвет", value="Авто"),
+        },
+        english={
+            "MarkCard.yaml": _CARD_BINDING_EN,
+            "MarkCard.xbsl": _CARD_BINDING_RETURN_EN.format(type="Auto|Color", value="Auto"),
+        },
+        tokens=_CARD_BINDING_TOKENS,
+    ),
+    Seed(
+        rule="yaml/binding-needs-auto",
+        expect=FINDING,
+        note="the same binding returning the empty value is reported – the property union and "
+             "its nullable flag come from the ui schema",
+        files={
+            "КарточкаОтметки.yaml": _CARD_BINDING_RU,
+            "КарточкаОтметки.xbsl":
+                _CARD_BINDING_RETURN_RU.format(type="Цвет?", value="Неопределено"),
+        },
+        english={
+            "MarkCard.yaml": _CARD_BINDING_EN,
+            "MarkCard.xbsl": _CARD_BINDING_RETURN_EN.format(type="Color?", value="Undefined"),
+        },
+        tokens=_CARD_BINDING_TOKENS,
+    ),
+    Seed(
+        rule="yaml/slot-needs-list",
+        expect=CLEAN,
+        note="a list in a slot the schema types as a list",
+        files={"ШаблонОтметки.yaml": _SLOT_RU.format(item=_SLOT_LIST_RU)},
+        english={"MarkTemplate.yaml": _SLOT_EN.format(item=_SLOT_LIST_EN)},
+        tokens=_SLOT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/slot-needs-list",
+        expect=FINDING,
+        note="one component where the same slot wants a list is reported – whether a slot is a "
+             "list is the schema's word, not the property name's",
+        files={"ШаблонОтметки.yaml": _SLOT_RU.format(item=_SLOT_ITEM_RU)},
+        english={"MarkTemplate.yaml": _SLOT_EN.format(item=_SLOT_ITEM_EN)},
+        tokens=_SLOT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/hint-too-long",
+        expect=CLEAN,
+        note="a hint the renderer shows in full",
+        files={"ПодписьОтметки.yaml": _HINT_RU.format(hint="а" * 200)},
+        english={"MarkCaption.yaml": _HINT_EN.format(hint="а" * 200)},
+        tokens=_HINT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/hint-too-long",
+        expect=FINDING,
+        note="a hint the renderer cuts off is reported – the hint key is a schema property, "
+             "spelled both ways",
+        files={"ПодписьОтметки.yaml": _HINT_RU.format(hint="а" * 400)},
+        english={"MarkCaption.yaml": _HINT_EN.format(hint="а" * 400)},
+        tokens=_HINT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/popup-in-markup",
+        expect=CLEAN,
+        note="the derived popup only DECLARED as a property – the shape the cure produces",
+        files={
+            "СобственнаяПодсказка.yaml": _POPUP_DERIVED_RU,
+            "СтраницаОтметки.yaml":
+                _POPUP_HOST_RU.format(declaration=_POPUP_DECLARATION_RU, placed="Надпись"),
+        },
+        english={
+            "OwnTooltip.yaml": _POPUP_DERIVED_EN,
+            "MarkPage.yaml":
+                _POPUP_HOST_EN.format(declaration=_POPUP_DECLARATION_EN, placed="Label"),
+        },
+        tokens=_POPUP_TOKENS,
+    ),
+    Seed(
+        rule="yaml/popup-in-markup",
+        expect=FINDING,
+        note="the same component PLACED in the markup is reported – the popup type and the "
+             "inheritance closure are read in both spellings",
+        files={
+            "СобственнаяПодсказка.yaml": _POPUP_DERIVED_RU,
+            "СтраницаОтметки.yaml":
+                _POPUP_HOST_RU.format(declaration="", placed="СобственнаяПодсказка"),
+        },
+        english={
+            "OwnTooltip.yaml": _POPUP_DERIVED_EN,
+            "MarkPage.yaml": _POPUP_HOST_EN.format(declaration="", placed="OwnTooltip"),
+        },
+        tokens=_POPUP_TOKENS,
+    ),
+    Seed(
+        rule="code/bound-property-assign",
+        expect=CLEAN,
+        note="a data binding assigned from code – a bare path is a two-way link",
+        files={
+            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(height="=Отступ"),
+            "ФормаОтметки.xbsl": _BOUND_ASSIGN_RU,
+        },
+        english={
+            "MarkForm.yaml": _BOUND_FORM_EN.format(height="=Indent"),
+            "MarkForm.xbsl": _BOUND_ASSIGN_EN,
+        },
+        tokens=_BOUND_TOKENS,
+    ),
+    Seed(
+        rule="code/bound-property-assign",
+        expect=FINDING,
+        note="a COMPUTED property assigned from code is reported – the components root and the "
+             "property are matched in both spellings",
+        files={
+            "ФормаОтметки.yaml": _BOUND_FORM_RU.format(height="=ВысотаБлока()"),
+            "ФормаОтметки.xbsl": _BOUND_ASSIGN_RU,
+        },
+        english={
+            "MarkForm.yaml": _BOUND_FORM_EN.format(height="=BlockHeight()"),
+            "MarkForm.xbsl": _BOUND_ASSIGN_EN,
+        },
+        tokens=_BOUND_TOKENS,
+    ),
+    Seed(
+        rule="yaml/computed-binding-assigned",
+        expect=CLEAN,
+        note="the instance binds the assigned property with a bare path – the legal shape",
+        files={
+            "ПолеОттенка.yaml": _PICKER_RU,
+            "ПолеОттенка.xbsl": _PICKER_MODULE_RU,
+            "ПанельОттенков.yaml": _PICKER_HOST_RU.format(value="=ПоказанныйОттенок"),
+        },
+        english={
+            "ShadeField.yaml": _PICKER_EN,
+            "ShadeField.xbsl": _PICKER_MODULE_EN,
+            "ShadePanel.yaml": _PICKER_HOST_EN.format(value="=ShownShade"),
+        },
+        tokens=_PICKER_TOKENS,
+    ),
+    Seed(
+        rule="yaml/computed-binding-assigned",
+        expect=FINDING,
+        note="the only instance computes the property its component assigns – reported; the "
+             "component kind is a metamodel name and the markup keys are schema names",
+        files={
+            "ПолеОттенка.yaml": _PICKER_RU,
+            "ПолеОттенка.xbsl": _PICKER_MODULE_RU,
+            "ПанельОттенков.yaml": _PICKER_HOST_RU.format(value="=ВычислитьОттенок(\"accent\")"),
+        },
+        english={
+            "ShadeField.yaml": _PICKER_EN,
+            "ShadeField.xbsl": _PICKER_MODULE_EN,
+            "ShadePanel.yaml": _PICKER_HOST_EN.format(value="=ComputeShade(\"accent\")"),
+        },
+        tokens=_PICKER_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-disabled",
+        expect=CLEAN,
+        note="a filter declared ENABLED next to the same assignment – the cure itself",
+        files={
+            "СписокОтметок.yaml": _FILTER_LIST_RU.format(use="Истина"),
+            "СписокОтметок.xbsl": _FILTER_CODE_RU,
+        },
+        english={
+            "MarkList.yaml": _FILTER_LIST_EN.format(use="True"),
+            "MarkList.xbsl": _FILTER_CODE_EN,
+        },
+        tokens=_FILTER_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-filter-disabled",
+        expect=FINDING,
+        note="the same filter declared disabled while the module switches it on is reported – "
+             "the use key and the member after the dot are one name in both spellings",
+        files={
+            "СписокОтметок.yaml": _FILTER_LIST_RU.format(use="Ложь"),
+            "СписокОтметок.xbsl": _FILTER_CODE_RU,
+        },
+        english={
+            "MarkList.yaml": _FILTER_LIST_EN.format(use="False"),
+            "MarkList.xbsl": _FILTER_CODE_EN,
+        },
+        tokens=_FILTER_TOKENS,
+    ),
+    Seed(
+        rule="query/named-parameter",
+        expect=CLEAN,
+        note="a query literal taking its value by interpolation – the shape the literal accepts",
+        files={"Отметки.yaml": _MARKS_RU, "Отметки.xbsl": _PARAM_QUERY_RU.format(value="%Раздел")},
+        english={"Marks.yaml": _MARKS_EN, "Marks.xbsl": _PARAM_QUERY_EN.format(value="%Section")},
+        tokens=_PARAM_TOKENS,
+    ),
+    Seed(
+        rule="query/named-parameter",
+        expect=FINDING,
+        note="the named parameter of the query language inside a literal is reported – the "
+             "literal is recognised by the query keyword, spelled both ways",
+        files={"Отметки.yaml": _MARKS_RU, "Отметки.xbsl": _PARAM_QUERY_RU.format(value="&Раздел")},
+        english={"Marks.yaml": _MARKS_EN, "Marks.xbsl": _PARAM_QUERY_EN.format(value="&Section")},
+        tokens=_PARAM_TOKENS,
+    ),
+    Seed(
+        rule="naming/kind-in-name",
+        expect=CLEAN,
+        note="a report named without its kind word",
+        files={"ПросроченныеОтметки.yaml":
+               _KIND_NAME_RU.format(kind="Отчет", name="ПросроченныеОтметки")},
+        english={"OverdueMarks.yaml":
+                 _KIND_NAME_EN.format(kind="Report", name="OverdueMarks")},
+        tokens=_KIND_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/kind-in-name",
+        expect=FINDING,
+        note="the same report carrying its kind in the name is reported – the kind word leads "
+             "in Russian and trails in English",
+        files={"ОтчетПросроченныеОтметки.yaml":
+               _KIND_NAME_RU.format(kind="Отчет", name="ОтчетПросроченныеОтметки")},
+        english={"OverdueMarksReport.yaml":
+                 _KIND_NAME_EN.format(kind="Report", name="OverdueMarksReport")},
+        tokens=_KIND_NAME_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-row-editing",
+        expect=CLEAN,
+        note="the event on a list over a HIERARCHICAL entity – node rows are what it is "
+             "documented for",
+        files={
+            "Разделы.yaml": _HIER_CATALOG_RU,
+            "ТаблицаОтметок.yaml": _ROW_EDIT_RU.format(entity="Разделы"),
+        },
+        english={
+            "Sections.yaml": _HIER_CATALOG_EN,
+            "MarkTable.yaml": _ROW_EDIT_EN.format(entity="Sections"),
+        },
+        tokens=_ROW_EDIT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-row-editing",
+        expect=FINDING,
+        note="the same event over a flat entity is reported – the event key and the hierarchy "
+             "key are both metamodel names",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "ТаблицаОтметок.yaml": _ROW_EDIT_RU.format(entity="Отметки"),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkTable.yaml": _ROW_EDIT_EN.format(entity="Marks"),
+        },
+        tokens=_ROW_EDIT_TOKENS,
+    ),
+    Seed(
+        rule="code/image-binding-server-call",
+        expect=CLEAN,
+        note="the image handed over WITH the row – a field, not a call: the cure itself",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "ПлиткаОтметки.yaml": _IMAGE_FORM_RU.format(value="=ДанныеСтроки.Данные.Срок"),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkTile.yaml": _IMAGE_FORM_EN.format(value="=RowData.Data.Deadline"),
+        },
+        tokens={**_IMAGE_TOKENS, "Срок": "Deadline", "Сумма": "Amount"},
+    ),
+    Seed(
+        rule="code/image-binding-server-call",
+        expect=FINDING,
+        note="the same image fetched by a call into an element module is reported – which "
+             "components declare the image property is the ui schema's word",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "ПлиткаОтметки.yaml": _IMAGE_FORM_RU.format(value="=Отметки.ЗначокПоКоду(\"a\")"),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkTile.yaml": _IMAGE_FORM_EN.format(value="=Marks.BadgeByCode(\"a\")"),
+        },
+        tokens={**_IMAGE_TOKENS, "Срок": "Deadline", "Сумма": "Amount"},
+    ),
+    Seed(
+        rule="naming/boolean-name",
+        expect=CLEAN,
+        note="a boolean attribute named after the true value of the flag",
+        files={"Отметки.yaml": _BOOLEAN_CATALOG_RU.format(name="Успешно")},
+        english={"Marks.yaml": _BOOLEAN_CATALOG_EN.format(name="Successful")},
+        tokens=_BOOLEAN_TOKENS,
+    ),
+    Seed(
+        rule="naming/boolean-name",
+        expect=FINDING,
+        note="the negated twin of the same attribute is reported",
+        files={"Отметки.yaml": _BOOLEAN_CATALOG_RU.format(name="НетОшибок")},
+        english={"Marks.yaml": _BOOLEAN_CATALOG_EN.format(name="NoErrors")},
+        tokens=_BOOLEAN_TOKENS,
+        known="the check is blind on an English tree twice over, and only the first half can be "
+              "closed from the data: the sections and the type are read by their Russian keys "
+              "alone (pairable), while the naming words the verdict rests on are Russian "
+              "GRAMMAR, not platform names - the negation particles and the assertion prefixes "
+              "have no English spelling in any dictionary of the distribution, and the noun "
+              "test is Russian morphology. Stating the English words is the owner's decision "
+              "about the standard, not a lookup, so the gap is planted rather than guessed.",
     ),
 ]
 

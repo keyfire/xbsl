@@ -11,6 +11,8 @@ COMPUTED expression - a call, a ternary, arithmetic - is not assignable.
 
 from pathlib import Path
 
+import pytest
+
 from xbsl import engine
 
 FORM_YAML = """\
@@ -99,3 +101,22 @@ def test_module_without_a_pair_is_silent(tmp_path):
     module = tmp_path / "Одинокий.xbsl"
     module.write_text("метод Ф()\n    Компоненты.Вставка.Высота = 640\n;\n", encoding="utf-8")
     assert engine.run([module], select={"code/bound-property-assign"}) == []
+
+
+@pytest.mark.needs_data
+def test_english_pair_is_judged(tmp_path):
+    """A translated pair: the markup key and the module member are one property.
+
+    The markup keys are stored under the metamodel's own name, so a module writing the
+    property in English used to match nothing at all.
+    """
+    (tmp_path / "Form.yaml").write_text(
+        "ElementKind: InterfaceComponent\nName: Form\nContent:\n"
+        "  - ElementKind: HtmlContainer\n    Name: Insert\n"
+        "    Height: =Device.IsPhone()?820:528\n",
+        encoding="utf-8",
+    )
+    module = tmp_path / "Form.xbsl"
+    module.write_text("method F()\n    Components.Insert.Height = 640\n;\n", encoding="utf-8")
+    diags = engine.run([module], select={"code/bound-property-assign"})
+    assert len(diags) == 1 and "Height" in diags[0].message
