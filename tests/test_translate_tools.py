@@ -69,7 +69,10 @@ def test_found_below_is_bounded_and_skips_hidden_directories(tmp_path):
 # --- the MCP tools -------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("tool", ["translate_status", "translate_gaps", "translate_entries"])
+@pytest.mark.parametrize(
+    "tool",
+    ["translate_status", "translate_gaps", "translate_entries", "translate_unused"],
+)
 def test_translate_tools_refuse_a_root_without_a_dictionary(mcp_module, tmp_path, tool):
     project = _project(tmp_path)
     answer = getattr(mcp_module, tool)(str(project))
@@ -132,3 +135,118 @@ def test_cli_report_names_the_dictionary_it_used(tmp_path, capsys):
     captured = capsys.readouterr()
     assert code == 0 and captured.err == ""
     assert json.loads(captured.out)["dictionary"] == str(folder)
+
+
+# --- the page says what it left out --------------------------------------------------------
+
+
+def _many_gaps(project: Path, count: int) -> None:
+    """A project with more untranslated names than one page carries."""
+    for number in range(count):
+        (project / f"Объект{number}.yaml").write_text(
+            "ВидЭлемента: Справочник\n"
+            f"Ид: cccccccc-1111-2222-3333-{number:012d}\nИмя: Объект{number}\n",
+            encoding="utf-8",
+        )
+
+
+@pytest.mark.needs_data
+def test_translate_gaps_says_the_page_is_not_the_whole_list(mcp_module, tmp_path):
+    """`total: 72` beside fifty rows and nothing else reads as a complete answer.
+
+    A dictionary built from such a page was short by twenty-two entries, and the strict pass
+    found them after the merge - so the cut is stated: `truncated`, how many rows are left,
+    and a hint naming the ways to the rest.
+    """
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor")
+    _many_gaps(project, 12)
+
+    page = mcp_module.translate_gaps(str(project), limit=5)
+
+    assert page["truncated"] is True
+    assert page["shown"] == 5 and page["total"] > 5
+    assert page["remaining"] == page["total"] - 5
+    assert "offset=5" in page["hint"] and "--missing" in page["hint"]
+
+
+@pytest.mark.needs_data
+def test_a_page_that_holds_everything_says_so(mcp_module, tmp_path):
+    """The negative control: no cut, no warning, and no `remaining` to act on."""
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor")
+
+    page = mcp_module.translate_gaps(str(project), limit=0)
+
+    assert page["truncated"] is False
+    assert page["shown"] == page["total"]
+    assert "hint" not in page and "remaining" not in page
+
+
+@pytest.mark.needs_data
+def test_the_entries_page_is_marked_too(mcp_module, tmp_path):
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    (folder / "020-more.yaml").write_text(
+        "version: 1\nlanguage: en\ntokens:\n    Шаг: Step\n    Этап: Stage\n",
+        encoding="utf-8",
+    )
+
+    page = mcp_module.translate_entries(str(project), limit=1)
+
+    assert page["truncated"] is True and page["remaining"] == 2
+    assert "offset=1" in page["hint"]
+
+
+# --- the orphan tool -----------------------------------------------------------------------
+
+
+@pytest.mark.needs_data
+def test_translate_unused_names_the_pairs_the_project_dropped(mcp_module, tmp_path):
+    """The MCP side of `--unused`: what the dictionary still says and the project has not."""
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    (folder / "020-more.yaml").write_text(
+        "version: 1\nlanguage: en\ntokens:\n    СнятоеИмя: RemovedName\n",
+        encoding="utf-8",
+    )
+
+    answer = mcp_module.translate_unused(str(project))
+
+    assert {row["key"] for row in answer["unused"]} == {"СнятоеИмя"}
+    assert answer["dictionary"] == str(folder)
+
+
+@pytest.mark.needs_data
+def test_translate_unused_writes_nothing_unless_prune_is_asked_for(mcp_module, tmp_path):
+    """Listing is the default: this is the one direction where a misreading destroys a word."""
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    extra = folder / "020-more.yaml"
+    extra.write_text(
+        "version: 1\nlanguage: en\ntokens:\n    СнятоеИмя: RemovedName\n", encoding="utf-8")
+    before = extra.read_text(encoding="utf-8")
+
+    listed = mcp_module.translate_unused(str(project))
+    assert "removed" not in listed
+    assert extra.read_text(encoding="utf-8") == before
+
+    pruned = mcp_module.translate_unused(str(project), prune=True)
+    assert pruned["removed"] == 1
+    assert "СнятоеИмя" not in extra.read_text(encoding="utf-8")
+
+
+@pytest.mark.needs_data
+def test_translate_unused_filters_by_the_name_of_what_was_deleted(mcp_module, tmp_path):
+    """The question a deletion asks is about ITS names, not about the whole history."""
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    (folder / "020-more.yaml").write_text(
+        "version: 1\nlanguage: en\ntokens:\n"
+        "    СнятыйКомпонент: RemovedComponent\n    ДругоеСнятое: OtherRemoved\n",
+        encoding="utf-8",
+    )
+
+    answer = mcp_module.translate_unused(str(project), filter="СнятыйКомпонент")
+
+    assert {row["key"] for row in answer["unused"]} == {"СнятыйКомпонент"}

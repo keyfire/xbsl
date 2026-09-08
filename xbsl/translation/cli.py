@@ -95,8 +95,9 @@ MESSAGES = {
         "en": "dictionary updated: {changed} changed, {added} added, {removed} removed",
     },
     "translate.help.unused": {
-        "ru": "показать пары словаря, ключей которых в проекте больше нет",
-        "en": "list the dictionary entries whose key the project no longer carries",
+        "ru": "показать пары словаря, ключей которых в проекте больше нет (то же: --stale)",
+        "en": "list the dictionary entries whose key the project no longer carries"
+              " (same thing: --stale)",
     },
     "translate.help.prune": {
         "ru": "снять найденные --unused пары из словаря (правит файлы словаря)",
@@ -297,7 +298,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--coverage", action="store_true", help=i18n.t("translate.help.coverage"))
     parser.add_argument("--gaps", action="store_true", help=i18n.t("translate.help.gaps"))
     parser.add_argument("--entries", action="store_true", help=i18n.t("translate.help.entries"))
-    parser.add_argument("--unused", action="store_true", help=i18n.t("translate.help.unused"))
+    parser.add_argument("--unused", "--stale", action="store_true",
+                        help=i18n.t("translate.help.unused"))
     parser.add_argument("--prune", action="store_true", help=i18n.t("translate.help.prune"))
     parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))

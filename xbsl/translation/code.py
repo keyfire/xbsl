@@ -967,9 +967,16 @@ _BLOCK_FIRST_RE = re.compile(r"^(/\*+\s*)(.*?)(\s*(?:\*+/)?\s*)$")
 _BLOCK_LINE_RE = re.compile(r"^(\s*\*?\s*)(.*?)(\s*(?:\*+/)?\s*)$")
 
 
-def _comment_edits(tok, base, resolver, report, edits) -> None:
-    if not has_cyrillic(tok.value):
-        return
+def comment_payloads(tok) -> list[tuple[int, int, str]]:
+    """(offset inside the token, the line index, the payload) for one comment token.
+
+    The payload is the text a `phrases` entry is keyed by - the marker and the decoration
+    around it taken off. Shared rather than private, because a SECOND reading of the same
+    thing is what the orphan pass needs, and two readings drift: an imitation that took one
+    space off a `//` line answered a doc comment (`///`) with a slash glued to the text, and
+    every pair written from such a comment would then have read as an orphan.
+    """
+    out: list[tuple[int, int, str]] = []
     offset = 0
     for index, line in enumerate(tok.value.splitlines(keepends=True)):
         body = line.rstrip("\r\n")
@@ -980,17 +987,25 @@ def _comment_edits(tok, base, resolver, report, edits) -> None:
         else:
             match = _BLOCK_LINE_RE.match(body)
         if match:
-            payload = match.group(2)
-            if has_cyrillic(payload):
-                start = base + tok.start + offset + match.start(2)
-                translated = resolver.dictionary.phrase(payload)
-                if translated is not None:
-                    report.phrases_done += 1
-                    if translated != payload:
-                        edits.append((start, start + len(payload), translated))
-                else:
-                    report.note_phrase(payload, tok.line + index, tok.col if index == 0 else 1)
+            out.append((offset + match.start(2), index, match.group(2)))
         offset += len(line)
+    return out
+
+
+def _comment_edits(tok, base, resolver, report, edits) -> None:
+    if not has_cyrillic(tok.value):
+        return
+    for offset, index, payload in comment_payloads(tok):
+        if not has_cyrillic(payload):
+            continue
+        start = base + tok.start + offset
+        translated = resolver.dictionary.phrase(payload)
+        if translated is not None:
+            report.phrases_done += 1
+            if translated != payload:
+                edits.append((start, start + len(payload), translated))
+        else:
+            report.note_phrase(payload, tok.line + index, tok.col if index == 0 else 1)
 
 
 # --- strings ----------------------------------------------------------------------------

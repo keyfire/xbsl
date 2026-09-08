@@ -947,6 +947,24 @@ _CORE_MESSAGES = {
         "ru": "язык перевода: Русский/Английский или код Ru/En",
         "en": "the translation language: Russian/English or the Ru/En code",
     },
+    "cli.help.scaf.set-localization": {
+        "ru": "записать строку локализации во все языки сразу: в элемент и в его переводы",
+        "en": "write one localized string into every language at once: the element and its"
+              " translations",
+    },
+    "cli.help.scaf.sl-name": {
+        "ru": "ключ строки локализации (одно слово)",
+        "en": "the key of the localized string (one word)",
+    },
+    "cli.help.scaf.sl-value": {
+        "ru": "текст на языке: --value Русский=Текст --value En=Text (можно несколько раз)",
+        "en": "the text in one language: --value Russian=Text --value En=Text (repeatable)",
+    },
+    "cli.help.scaf.sl-section": {
+        "ru": "секция: Строки или Шаблоны (по умолчанию – та, где ключ уже есть, иначе Строки)",
+        "en": "the section: Strings or Templates (default - the one the key already lives in,"
+              " else Strings)",
+    },
     "cli.help.scaf.localization-info": {
         "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization)",
         "en": "the languages and translations of a LocalizedStrings element "

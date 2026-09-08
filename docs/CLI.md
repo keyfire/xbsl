@@ -510,6 +510,29 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 | `-h, --help` | show this help message and exit |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
+### `xbsl set-localization`
+
+```bash
+usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--dry-run]
+                             yaml_path name
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `yaml_path` | the yaml of the LocalizedStrings element |
+| `name` | the key of the localized string (one word) |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--value ЯЗЫК=ТЕКСТ` | the text in one language: `--value` Russian=Text `--value` En=Text (repeatable) |
+| `--section SECTION` | the section: Strings or Templates (default - the one the key already lives in, else Strings) |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
 ### `xbsl set-field-property`
 
 ```bash

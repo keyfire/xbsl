@@ -3758,6 +3758,154 @@ def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> Scaff
     return result
 
 
+#: The mapping sections of a localized-strings element, in the order they are looked into:
+#: Rows holds the plain texts, Templates the ones with substitutions (the "Локализация"
+#: documentation). Named here the way the scaffolding names everything - in Russian, the
+#: spelling the writer falls back to; either spelling is accepted from a caller.
+_LOCALIZATION_SECTIONS = ("Строки", "Шаблоны")
+
+
+def op_set_localization(yaml_path: Path, name: str, values: dict, *,
+                        section: str = "", reader=None) -> ScaffoldResult:
+    """Write one localized STRING - the key and its text in every language at once.
+
+    `op_add_localization` adds a LANGUAGE; a row had nothing. So a new caption was typed into
+    the element and again into its English twin, and the two files drifted apart in silence -
+    nothing but a pair of eyes compares them. Here one call writes the default-language text
+    into the element and each other language into its own translation file, and a language
+    the caller says nothing about still gets the row (with the default text and a note),
+    because a key missing from a translation is a gap the translator meets much later.
+
+    `values` names a language any way the language reasonably holds it (the descriptor
+    spelling in either project language, or the folder code) and maps it to the text.
+    `section` picks Rows or Templates in either spelling; left out, the key keeps the
+    section it already lives in, and a new one goes to Rows.
+    """
+    yaml_path = Path(yaml_path)
+    text, nl = _localized_strings_source(yaml_path, reader)
+    # The key is written bare, the way the files of a live project write theirs, so it has to
+    # survive being written that way: whitespace, a colon or a leading hash would make the
+    # next load read something else - or nothing - where the row was.
+    name = (name or "").strip()
+    if not re.fullmatch(r"[^\s:#]+", name):
+        raise ScaffoldError(
+            f"Имя строки локализации '{name}' не годится в ключ: одно слово без двоеточия"
+        )
+    if not isinstance(values, dict) or not values:
+        raise ScaffoldError(
+            "Нужны значения по языкам: values={\"Русский\": \"Текст\", \"En\": \"Text\"}"
+        )
+    texts = {_language_folder(code): str(value) for code, value in values.items()}
+    lang = yaml_language(text, yaml_path.parent)
+    element_name_ = element_name(text, yaml_path.stem)
+    _languages, declared = _descriptor_languages(yaml_path)
+    default = declared or _language_folder(lang)
+    section = (_localization_section(section) if section
+               else _section_of_key(text, name) or _LOCALIZATION_SECTIONS[0])
+
+    translations = _translation_files(yaml_path, element_name_)
+    unknown = sorted(set(texts) - {default} - set(translations))
+    if unknown:
+        raise ScaffoldError(
+            "Нет файла перевода для языка "
+            + ", ".join(_LANGUAGE_BY_FOLDER.get(code, code) for code in unknown)
+            + " – сначала добавьте язык (add-localization / meta_add_localization)"
+        )
+
+    base = texts.get(default, _section_entries(text).get(name, ""))
+    if not base:
+        raise ScaffoldError(
+            f"Нет значения на языке по умолчанию ({_LANGUAGE_BY_FOLDER.get(default, default)}): "
+            f"элемент несёт сам текст, переводы – только замену"
+        )
+    result = ScaffoldResult()
+    new_text, cursor = _set_localized_row(text, section, name, base, nl, lang)
+    result.changes.append(FileChange(yaml_path, new_text, created=False, cursor=cursor))
+    for code, target in sorted(translations.items()):
+        if code == default:
+            continue  # the default language IS the element; a file of it would be a copy
+        try:
+            other, other_nl = _load_for_edit(target, reader)
+        except ScaffoldError:
+            continue
+        written = texts.get(code)
+        if written is None:
+            # Not named by the caller: the row still has to appear, or the translation is a
+            # key short and the gap surfaces only when somebody reads both files side by side.
+            if name in _section_entries(other):
+                continue
+            written = base
+            result.notes.append(
+                f"Ключ {name} дописан в перевод {target.parent.name}/{target.name} значением "
+                "языка по умолчанию – замените его переводом"
+            )
+        result.changes.append(FileChange(
+            target, _set_localized_row(other, section, name, written, other_nl, lang)[0],
+            created=False,
+        ))
+    return result
+
+
+def _localization_section(section: str) -> str:
+    """The canonical name of a mapping section, from either spelling of it."""
+    for canonical in _LOCALIZATION_SECTIONS:
+        if section in key_forms(canonical):
+            return canonical
+    raise ScaffoldError(
+        f"Секции '{section}' у локализованных строк нет; есть: "
+        + ", ".join(_LOCALIZATION_SECTIONS)
+    )
+
+
+def _section_of_key(text: str, name: str) -> str:
+    """The mapping section this key already lives in, or "" - a key keeps its section."""
+    for section in _LOCALIZATION_SECTIONS:
+        bounds = _section_bounds(text, section, top_level=True)
+        if bounds is None:
+            continue
+        _, header_line_end, body_end = bounds
+        if re.search(rf"^[ \t]+{re.escape(name)}:", text[header_line_end:body_end], re.M):
+            return section
+    return ""
+
+
+def _translation_files(yaml_path: Path, name: str) -> dict[str, Path]:
+    """{folder code: the translation file} the element already has."""
+    return {
+        lang_dir.name: lang_dir / f"{name}.yaml"
+        for base in _localization_dirs(yaml_path.parent)
+        for lang_dir in sorted(base.iterdir())
+        if lang_dir.is_dir() and (lang_dir / f"{name}.yaml").is_file()
+    }
+
+
+def _set_localized_row(text: str, section: str, key: str, value: str, nl: str,
+                       lang: str) -> tuple[str, tuple[int, int]]:
+    """The file text with `key: value` written into `section` - replaced, added or started.
+
+    Quoting is the writer's business, as everywhere else here: a value is written bare while
+    it survives being read back bare, so the generated lines look like the hand-written ones
+    around them.
+    """
+    written = value if _survives_bare(value) else json.dumps(value, ensure_ascii=False)
+    bounds = _section_bounds(text, section, top_level=True)
+    if bounds is None:
+        tail = "" if (not text or text.endswith(("\n", "\r"))) else nl
+        header = spelled_key(section, lang)
+        new_text = f"{text}{tail}{header}:{nl}    {key}: {written}{nl}"
+        return new_text, _cursor_at(new_text, new_text.rindex(f"{key}: {written}"))
+    _, header_line_end, body_end = bounds
+    existing = re.search(rf"^([ \t]+){re.escape(key)}:[ \t]*(.*?)[ \t]*\r?$",
+                         text[header_line_end:body_end], re.M)
+    if existing is None:
+        new_text = text[:body_end] + f"{nl}    {key}: {written}" + text[body_end:]
+        return new_text, _cursor_at(new_text, body_end + len(nl) + 4)
+    start = header_line_end + existing.start()
+    end = header_line_end + existing.end()
+    new_text = text[:start] + f"{existing.group(1)}{key}: {written}" + text[end:]
+    return new_text, _cursor_at(new_text, start)
+
+
 # --- operations: report -------------------------------------------------------------------
 
 

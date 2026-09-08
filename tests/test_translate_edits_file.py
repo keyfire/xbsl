@@ -134,3 +134,65 @@ def test_a_key_with_a_colon_and_a_space_still_needs_quoting(tmp_path):
     batch.write_text("tokens:\n    Ключ: значение: хвост\n", encoding="utf-8")
     edits = entries.read_edits_file(batch)
     assert edits == [{"key": "Ключ", "value": "значение: хвост", "kind": "token"}]
+
+
+# -- the explicit key form: `? key` on one line, `: value` on the next ----------
+
+
+def _explicit(tmp_path, key: str, value: str):
+    path = tmp_path / "dict.yaml"
+    path.write_text(
+        f"version: 1\nlanguage: en\ntokens:\n    Задачи: Tasks\n"
+        f"literals:\n  ? {key}\n  : {value}\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_the_explicit_key_form_is_read(tmp_path):
+    """`? key` / `: value` is what a dumper writes for a long key - and nobody chooses it.
+
+    PyYAML switches to the form past a certain key length, so a dictionary file carries it
+    without anyone deciding to: the live dictionary of a real project holds two literals in
+    that shape. Read as ordinary lines they matched nothing, and the pairs were invisible to
+    every reader at once - the table, the orphan pass, and the writer, which would then ADD
+    a key that is already in the file.
+    """
+    path = _explicit(tmp_path, '"описание"', '"description"')
+
+    rows = entries.read_entries(path)
+
+    assert [(r.kind, r.key, r.value) for r in rows if r.kind == "literal"] == [
+        ("literal", "описание", "description")]
+
+
+def test_an_explicit_entry_is_rewritten_as_one_whole(tmp_path):
+    """Both lines go, or a stray `: value` is left where the entry was."""
+    path = _explicit(tmp_path, '"описание"', '"description"')
+
+    entries.write_entries(
+        path, [{"key": "описание", "value": "the description", "kind": "literal"}])
+
+    text = path.read_text(encoding="utf-8")
+    assert 'описание: "the description"' in text
+    assert "\n  : " not in text and "\n  ? " not in text
+    assert [(r.key, r.value) for r in entries.read_entries(path) if r.kind == "literal"] == [
+        ("описание", "the description")]
+
+
+def test_an_explicit_entry_is_removed_whole(tmp_path):
+    path = _explicit(tmp_path, '"описание"', '"description"')
+
+    entries.write_entries(path, [{"key": "описание", "value": "", "kind": "literal"}])
+
+    text = path.read_text(encoding="utf-8")
+    assert "описание" not in text and "description" not in text
+    assert "Задачи: Tasks" in text
+
+
+def test_a_key_line_without_its_value_line_is_not_an_entry(tmp_path):
+    """Half of the form is not a pair, and reading it as one would invent a translation."""
+    path = tmp_path / "dict.yaml"
+    path.write_text("version: 1\nliterals:\n  ? \"описание\"\n", encoding="utf-8")
+
+    assert entries.read_entries(path) == []

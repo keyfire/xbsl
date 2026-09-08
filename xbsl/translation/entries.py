@@ -43,6 +43,18 @@ MESSAGES = {
         "en": "no entries found in the edits file: it needs tokens/phrases/literals"
               " sections in the dictionary format, or a JSON list",
     },
+    "translate.page.truncated": {
+        "ru": "показаны не все строки, осталось ещё {remaining}:"
+              " следующая страница – offset={next_offset}, limit=0 отдаёт список целиком.",
+        "en": "not every row is shown, {remaining} more to go:"
+              " the next page is offset={next_offset}, limit=0 answers with the whole list.",
+    },
+    "translate.page.gaps-file": {
+        "ru": " Весь остаток разом – заготовкой словаря в файл:"
+              " xbsl translate <root> --missing <файл>.",
+        "en": " The whole remainder at once - as a dictionary stub in a file:"
+              " xbsl translate <root> --missing <file>.",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -70,6 +82,18 @@ _ENTRY_RE = re.compile(
 #: written that way loads and translates; a reader that refused it would show an empty table
 #: over a full file, and the writer would then add a key that is already there.
 _SECTION_RE = re.compile(r"^(tokens|phrases|literals):[ \t]*(?:#.*)?$")
+
+#: The EXPLICIT key form of yaml - `? <key>` on one line, `: <value>` on the next. A dumper
+#: writes a long key that way on its own (PyYAML does it past 128 characters), so a dictionary
+#: file may carry it without anyone choosing it: the live dictionary of the site holds two
+#: literals in this shape. Read as ordinary lines they matched nothing, and the entries were
+#: invisible to every reader - the table, the orphan pass and the writer alike, which would
+#: then ADD a key that is already there.
+_EXPLICIT_KEY_RE = re.compile(
+    r"^(?P<indent>[ \t]+)\?[ \t]+"
+    r"(?:\"(?P<dq>(?:[^\"\\]|\\.)*)\"|'(?P<sq>(?:[^']|'')*)'|(?P<plain>\S.*?))[ \t]*$"
+)
+_EXPLICIT_VALUE_RE = re.compile(r"^[ \t]+:[ \t]*(?P<value>.*?)[ \t]*$")
 
 #: The section a row of each kind lives in - the table speaks of kinds, the file of sections.
 SECTION_OF_KIND = {"token": "tokens", "phrase": "phrases", "literal": "literals"}
@@ -125,6 +149,10 @@ class Entry:
     file: str            # the dictionary file the entry lives in
     line: int            # 1-based
     scope: str = ""      # the owner of a qualified key (`<Owner>.<Name>`), empty for a plain one
+    #: How many physical lines the entry occupies from `line` on. One for an ordinary
+    #: `key: value`, two for the explicit form (`? key` / `: value`) - the writer replaces
+    #: and removes the whole span, or half of an explicit entry would be left behind.
+    span: int = 1
 
     def as_dict(self) -> dict:
         return {
@@ -154,6 +182,28 @@ class Gap:
         }
 
 
+def page_of(rows: list, limit: int, offset: int = 0, *, gaps: bool = False
+            ) -> tuple[list, dict]:
+    """One page of `rows`, plus the fields that say what the page LEFT OUT.
+
+    A page used to arrive as `total: 72` beside exactly fifty rows and nothing else. The shape
+    reads as a complete answer, and a dictionary built from one was short by twenty-two
+    entries - found by the strict pass after the merge, when the batch was long written. So
+    the cut is stated rather than implied: `truncated`, how many rows are left, and the two
+    ways to get them (the next `offset`, or `limit=0` for the lot).
+    """
+    page = rows[offset:offset + limit] if limit else rows[offset:]
+    seen = offset + len(page)
+    remaining = len(rows) - seen
+    fields = {"total": len(rows), "shown": len(page), "offset": offset,
+              "truncated": remaining > 0}
+    if remaining > 0:
+        hint = i18n.t("translate.page.truncated", remaining=remaining, next_offset=seen)
+        fields["remaining"] = remaining
+        fields["hint"] = (hint + i18n.t("translate.page.gaps-file")) if gaps else hint
+    return page, fields
+
+
 def read_entries(dictionary_path: Path) -> list[Entry]:
     """Every entry of the dictionary, with the file and line it stands on."""
     files = (
@@ -167,7 +217,11 @@ def read_entries(dictionary_path: Path) -> list[Entry]:
         except OSError:
             continue
         section = ""
-        for number, raw in enumerate(text.splitlines(), 1):
+        rows = text.splitlines()
+        skip_to = 0
+        for number, raw in enumerate(rows, 1):
+            if number < skip_to:
+                continue
             header = _SECTION_RE.match(raw)
             if header:
                 section = header.group(1)
@@ -177,19 +231,32 @@ def read_entries(dictionary_path: Path) -> list[Entry]:
                 continue
             if not section or not raw.strip() or raw.lstrip().startswith("#"):
                 continue
+            explicit = _EXPLICIT_KEY_RE.match(raw)
+            if explicit is not None:
+                value_line = rows[number] if number < len(rows) else ""
+                paired = _EXPLICIT_VALUE_RE.match(value_line)
+                if paired is None:
+                    continue  # a key without its value line is not an entry yet
+                key = _key_of(explicit)
+                if key:
+                    out.append(_entry(key, _unquote(paired.group("value")),
+                                      section, file, number, span=2))
+                skip_to = number + 2
+                continue
             m = _ENTRY_RE.match(raw)
             if m is None:
                 continue
             key = _key_of(m)
             if not key:
                 continue
-            scope = key.partition(".")[0] if (section == "tokens" and "." in key) else ""
-            out.append(Entry(
-                key=key, value=_unquote(m.group("value")),
-                kind=KIND_OF_SECTION[section],
-                file=str(file), line=number, scope=scope,
-            ))
+            out.append(_entry(key, _unquote(m.group("value")), section, file, number))
     return out
+
+
+def _entry(key: str, value: str, section: str, file: Path, line: int, span: int = 1) -> Entry:
+    scope = key.partition(".")[0] if (section == "tokens" and "." in key) else ""
+    return Entry(key=key, value=value, kind=KIND_OF_SECTION[section],
+                 file=str(file), line=line, scope=scope, span=span)
 
 
 def _key_of(m: re.Match) -> str:
@@ -216,10 +283,58 @@ def _unquote(value: str) -> str:
 
 #: A name as the language writes it: letters of either alphabet, digits and the underscore.
 _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*")
-#: A comment line of either source kind: `//` in a module, `#` in yaml.
-_COMMENT_RE = re.compile(r"(?:^|\s)(?://|#)[ \t]?(.*)$")
 #: The body of a double-quoted literal, escaping kept as the source writes it.
 _LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
+
+
+def _comment_bodies(path: Path, text: str) -> set[str]:
+    """Every comment payload of one file, spelled the way the TRANSLATOR keys a phrase.
+
+    The two readings have to agree character for character or a LIVE pair reads as an orphan -
+    the one mistake `--prune` would act on. So this is not an imitation: a module is taken
+    through the lexer and its comment tokens through `code.comment_payloads`, the very
+    function the translating pass calls, block comments and `///` decoration included. A
+    private regex of this module did neither, and answered a doc comment with a slash glued
+    to the text.
+
+    A yaml file is read by its own pattern from EVERY `#` on the line, without the "inside a
+    scalar" test the translator makes: the extra bodies that yields cost nothing (an entry
+    stays in place), while a missed one costs a translation. The same reading serves a module
+    the lexer cannot take - such a file translates to nothing anyway, so anything it yields
+    is a bonus in the safe direction.
+    """
+    from xbsl.translation import code as code_module
+    from xbsl.translation import yamlfile as yaml_module
+
+    if path.suffix == ".yaml":
+        return _marked_bodies(text, "#", yaml_module._COMMENT_TEXT_RE)
+    if path.suffix not in (".xbsl", ".xbql"):
+        return set()  # json carries keys and data, never a comment
+    from xbsl import engine, lexer
+
+    try:
+        tokens = lexer.tokenize(engine.load(path).text)
+    except Exception:  # a module the translating pass cannot read either
+        return _marked_bodies(text, "//", code_module._LINE_COMMENT_RE)
+    return {
+        payload
+        for token in tokens if token.kind == "COMMENT"
+        for _offset, _index, payload in code_module.comment_payloads(token)
+    }
+
+
+def _marked_bodies(text: str, marker: str, pattern: re.Pattern) -> set[str]:
+    """Payloads read straight off the lines, from every marker position on each."""
+    out: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.rstrip("\r\n")
+        at = line.find(marker)
+        while at != -1:
+            found = pattern.match(line[at:])
+            if found:
+                out.add(found.group(2))
+            at = line.find(marker, at + 1)
+    return out
 
 
 def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
@@ -239,6 +354,11 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
     lines: set[str] = set()
     literals: set[str] = set()
     for path in project_module._iter_files(root, dictionary):
+        # The PATH is translated too - every folder and file name goes through the same token
+        # plane - so a name that only ever stands in a path is used. A resource referenced by
+        # its file name alone (an icon next to the yaml that names it) is exactly that case.
+        for part in path.relative_to(root).parts:
+            names.update(_WORD_RE.findall(part))
         if path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
             continue
         try:
@@ -247,10 +367,7 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
             continue
         names.update(_WORD_RE.findall(text))
         literals.update(_LITERAL_RE.findall(text))
-        for raw in text.splitlines():
-            found = _COMMENT_RE.search(raw)
-            if found:
-                lines.add(found.group(1).strip())
+        lines.update(_comment_bodies(path, text))
     return names, lines, literals
 
 
@@ -425,14 +542,17 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
             index = entry.line - 1
             if index >= len(lines):
                 continue
+            # The explicit form (`? key` / `: value`) occupies two lines, and both go: half
+            # of it left behind is a stray mapping key the next load refuses.
+            span = min(max(entry.span, 1), len(lines) - index)
             value = str(edit.get("value") or "")
             if not value:
-                del lines[index]
+                del lines[index:index + span]
                 removed += 1
                 continue
             indent = re.match(r"^[ \t]*", lines[index]).group(0)
             newline = "\r\n" if lines[index].endswith("\r\n") else "\n"
-            lines[index] = f"{indent}{scalar(entry.key)}: {scalar(value)}{newline}"
+            lines[index:index + span] = [f"{indent}{scalar(entry.key)}: {scalar(value)}{newline}"]
             changed += 1
             if value != entry.value:
                 rewritten.append({
