@@ -120,7 +120,7 @@ from xbsl.rules import semantics
 from xbsl.rules.enum_values import _binding_values, _name_values
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.undefined_names import _IMPLICIT
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, unreadable_object, value_of
 from xbsl.rules.yaml_types import _parse_type_string, _type_values, _value_positions
 
 MESSAGES = {
@@ -659,7 +659,12 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
                 "name": name if isinstance(name, str) else source.path.parent.name,
             }
         data, err = _parsed(source)
-        if err is not None or not isinstance(data, dict) or not object_kind(data):
+        if err is not None:
+            # The file did not parse, but the element it declares still lives in this
+            # subsystem: dropping it makes an import of the subsystem read as unused.
+            unread = unreadable_object(source)
+            return {"k": "el", "path": str(source.path), "name": unread} if unread else None
+        if not isinstance(data, dict) or not object_kind(data):
             return None
         name = value_of(data, "Имя")
         return {"k": "el", "path": str(source.path),

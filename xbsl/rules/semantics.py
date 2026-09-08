@@ -46,7 +46,9 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import tokens
 from xbsl.rules._syntax import code_tokens
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, object_kind,
+                                    object_name_fast as _object_name_fast,
+                                    value_of)
 
 MESSAGES = {
     "code/unknown-type.title": {
@@ -97,25 +99,6 @@ def _stdlib_names() -> frozenset[str]:
 # Python even with libyaml).
 # The yaml of the platform is bilingual: shipped code carries English keys too
 # (the ElementKind/Name spelling in real code), so both spellings are recognized.
-_TOP_KIND_RE = re.compile(r"^(?:ВидЭлемента|ElementKind):", re.M)
-_TOP_NAME_RE = re.compile(r"^(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$", re.M)
-_MISSING = object()
-
-
-def _object_name_fast(s: SourceFile) -> str | None:
-    """The metadata-object name (a file with ВидЭлемента) without a full yaml parse, cached."""
-    cached = s.cache.get("object_name_fast", _MISSING)
-    if cached is not _MISSING:
-        return cached
-    name = None
-    if _TOP_KIND_RE.search(s.text):
-        m = _TOP_NAME_RE.search(s.text)
-        if m and m.group(2):
-            name = m.group(2)
-    s.cache["object_name_fast"] = name
-    return name
-
-
 def _project_object_names(sources: list[SourceFile]) -> set[str]:
     names: set[str] = set()
     for s in sources:
