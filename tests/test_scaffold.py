@@ -2070,8 +2070,9 @@ def test_object_info_of_an_english_object(tmp_path):
     subsystem = _make_english_project(tmp_path)
     info = scaffold.object_info(tmp_path, name="Tasks")
     assert info["kind"] == "Справочник"
-    # The standard Наименование is added because this catalog does not declare it.
-    assert [f["name"] for f in info["fields"]] == ["Наименование", "DueDate"]
+    # The standard Наименование is added because this catalog does not declare it - and it
+    # arrives under the spelling of the FILE, so an English project gets `Name`.
+    assert [f["name"] for f in info["fields"]] == ["Name", "DueDate"]
     assert info["tabulars"] == [{"name": "Steps", "fields": [{"name": "Step", "type": "String"}]}]
     # The same object addressed by file - the other entry point into the same reading.
     by_path = scaffold.object_info(tmp_path, yaml_path=subsystem / "Tasks.yaml")
@@ -2113,7 +2114,7 @@ def test_object_info_of_an_english_register(tmp_path):
     )
     info = scaffold.object_info(tmp_path, name="Sales")
     assert info["kind"] == "РегистрНакопления"
-    assert [f["name"] for f in info["fields"]] == ["Период", "Регистратор", "Product", "Amount"]
+    assert [f["name"] for f in info["fields"]] == ["Period", "Recorder", "Product", "Amount"]
     # A turnover register has no ВидЗаписи - reading the value in either spelling decides it.
     assert info["register"]["needs_record_type"] is False
 
@@ -2303,12 +2304,18 @@ def test_generated_form_stays_russian_in_a_russian_project(tmp_path):
 
 
 @pytest.mark.needs_data
-def test_untranslated_enum_values_are_named_in_the_notes(tmp_path):
-    """Значения интерфейсных перечислений данные пишут только по-русски – об этом говорят."""
+def test_an_enumerated_value_is_written_in_english_and_needs_no_note(tmp_path):
+    """The value of an interface enumeration has a dictionary of its own (uiterms).
+
+    It used to have none here: the term tables know type NAMES, so a generated English form
+    carried `WidthInColumns: Одинарная` and the notes apologised for it. Now the value is
+    spelled from the schema, and the note is left for values the data really cannot pair.
+    """
     directory = _make_english_project(tmp_path)
     result = scaffold.op_add_form(directory, name="Tasks", forms=("object",))
-    notes = " ".join(result.notes)
-    assert "Одинарная" in notes and "нет в данных платформы" in notes
+    text = next(c.content for c in result.changes if str(c.path).endswith("ObjectForm.yaml"))
+    assert "WidthInColumns: Single" in text
+    assert not [note for note in result.notes if "нет в данных платформы" in note]
 
 
 @pytest.mark.needs_data

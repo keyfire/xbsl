@@ -106,6 +106,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the entry, and pruning says how many of the removed entries carried one - after the commit
   that text lives on only in the git history.
 ### Fixed
+- **An English project gets English names where the tool invents them too.** A standard
+  attribute (the `Name` of a catalog, the `Period` and `Recorder` of a register) used to be
+  completed in Russian and reached the generated forms, because the language pass protects
+  field names as the author's. The completion is now written in the spelling of the FILE,
+  together with the hierarchy attribute and the facet of its type, and the value of an
+  interface enumeration comes from its own dictionary (`WidthInColumns: Single`). The facet
+  table also joined the shared translation of type expressions: after a dot stands a facet,
+  and the property vocabulary calls the same word something else.
 - **The type of a new item is read the way a component base is.** `meta_add_field` and
   `op_add_field` undo markup escapes in the type value, refuse what is not a type at
   all, and write the type in the spelling of the PROJECT (an English name lands in

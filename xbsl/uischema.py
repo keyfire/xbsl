@@ -333,8 +333,51 @@ def canonical_property(name: str) -> str:
     return _english_properties().get(name, name)
 
 
+@lru_cache(maxsize=1)
+def _property_value_aliases() -> dict[str, dict[str, str]]:
+    """{property: {Russian value: English}} for properties whose values are an enumeration.
+
+    A generated form template is written in Russian and put into the project's language
+    afterwards; the KEYS have their dictionaries, and the values of a type-name kind are
+    covered by the term tables - an enumeration VALUE was covered by neither, so an English
+    project used to receive lines like `WidthInColumns: Одинарная`.
+
+    Keyed by property rather than by enumeration because that is what the writer of a template
+    line has in hand. A property whose components disagree about the spelling of one value is
+    dropped for that value rather than guessed - the same rule the facet table follows.
+    """
+    schema = dataset.load_ui_schema()
+    if not schema:
+        return {}
+    enums = schema.get("enums") or {}
+    table: dict[str, dict[str, str]] = {}
+    dropped: set[tuple[str, str]] = set()
+    for rec in (schema.get("components") or {}).values():
+        for prop, info in (rec.get("props") or {}).items():
+            for member in info.get("types") or ():
+                name = str(member).strip().rstrip("?")
+                if name not in enums:
+                    continue
+                for russian, english in enum_value_aliases(name).items():
+                    if (prop, russian) in dropped:
+                        continue
+                    known = table.setdefault(prop, {}).get(russian)
+                    if known is not None and known != english:
+                        del table[prop][russian]
+                        dropped.add((prop, russian))
+                        continue
+                    table[prop][russian] = english
+    return table
+
+
+def enum_value_english(prop: str, value: str) -> str | None:
+    """The English spelling of an enumeration VALUE standing at `prop`, or None."""
+    return _property_value_aliases().get(canonical_property(prop), {}).get(value)
+
+
 def _reset() -> None:
     _ui_terms.cache_clear()
+    _property_value_aliases.cache_clear()
     _outside_component.cache_clear()
     _outside_names.cache_clear()
     _english_components.cache_clear()

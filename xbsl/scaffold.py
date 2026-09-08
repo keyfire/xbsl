@@ -31,7 +31,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, metamodel, terms
+from xbsl import dataset, engine, fixer, metamodel, terms, uischema
 
 #: The platform accepts BOTH spellings of the service file names - its converter checks the
 #: pairs itself (`Проект`/`Project`, `Подсистема`/`Subsystem`). The Russian name stays
@@ -193,6 +193,17 @@ def spelled_property(name: str, lang: str) -> str:
 _LINE_KEY_RE = re.compile(rf"^([ \t]*(?:-[ \t]*)?)([{_WORD}]+):(.*)$")
 
 
+def named_in(name: str, lang: str) -> str:
+    """A standard attribute name in the project's language (`Наименование` is `Name`).
+
+    The scaffolding invents these names: they are not in the yaml, and the language pass
+    protects them as the AUTHOR's, so a Russian one used to survive into an English project
+    and its forms (`Name: Наименование`, `Value: =Object.Наименование`). The pair comes from
+    the platform's own dictionary; a name without a pair stays as it is.
+    """
+    return field_forms(name)[-1] if lang == "en" else name
+
+
 def object_module_path(yaml_path: Path, lang: str = "ru") -> Path:
     """The object module next to an element yaml: `<Имя>.Объект.xbsl` / `<Name>.Object.xbsl`.
 
@@ -257,7 +268,11 @@ def spelled_type(value: str, lang: str, keep: frozenset[str] = frozenset()) -> s
         token = match.group(0)
         if token in keep:
             return token
-        return terms.common_english(token) or terms.english(token, "types") or token
+        # The facet dictionary is the last source and the narrowest: after a dot a type
+        # expression names a FACET, and the property vocabulary calls the same word something
+        # else (`Ссылка` is `Reference` as a facet and `Link` as a property).
+        return (terms.common_english(token) or terms.english(token, "types")
+                or terms.facet_suffix_english(token) or token)
 
     return _TOKEN_RE.sub(replace, value)
 
@@ -302,7 +317,13 @@ def spelled_template(lines: list[str], lang: str, keep: frozenset[str] = frozens
             out.append(spelled_type(line, lang, keep) if line.lstrip().startswith("- ") else line)
             continue
         key = m.group(2) if m.group(2) in keep else spelled_property(m.group(2), lang)
-        out.append(f"{m.group(1)}{key}:{spelled_type(m.group(3), lang, keep)}")
+        # A value that is an element of the property's ENUMERATION has its own dictionary:
+        # the term tables know type names, not values, and without this an English project
+        # received lines like `WidthInColumns: Одинарная`.
+        bare = m.group(3).strip()
+        enum = None if bare in keep else uischema.enum_value_english(m.group(2), bare)
+        value = f" {enum}" if enum else spelled_type(m.group(3), lang, keep)
+        out.append(f"{m.group(1)}{key}:{value}")
     return out
 
 
@@ -1341,8 +1362,12 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
     standard_source = register.get("standard_fields") or _STANDARD_FIELDS.get(hit.kind, [])
     # A standard attribute the object declares itself is not added a second time - in either
     # spelling: an English catalog declares `Name`, and that IS `Наименование`.
+    # The names the tool completes are written in the language of the FILE: an English
+    # catalog gets `Name`, not `Наименование` - see named_in.
+    info_lang = yaml_language(text, hit.path.parent)
     standard = [
-        f for f in standard_source if not declared.intersection(field_forms(f["name"]))
+        {**f, "name": named_in(f["name"], info_lang), "type": typed_in(f["type"], info_lang)}
+        for f in standard_source if not declared.intersection(field_forms(f["name"]))
     ]
     fields = standard + fields
 
@@ -1377,6 +1402,8 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
     return {
         "path": str(hit.path),
         "kind": hit.kind,
+        # The language of the object's own file: the generators write what they invent in it.
+        "lang": info_lang,
         "name": hit.name,
         "subsystem": hit.subsystem,
         "namespace": hit.namespace,
@@ -4124,9 +4151,14 @@ def _form_fields(info: dict) -> list[dict]:
     fields = list(info["fields"])
     if info["is_hierarchical"]:
         # The system hierarchy attribute: absent from the object yaml, needed in the form.
+        # Both its name and the facet of its type are the tool's words, so both are written
+        # in the language of the object - see named_in.
         obj = info["name"]
-        after = 1 if fields and fields[0]["name"] == "Наименование" else 0
-        fields.insert(after, {"name": "Родитель", "type": f"{obj}.Ссылка?"})
+        lang = info.get("lang", "ru")
+        titles = field_forms("Наименование")
+        after = 1 if fields and fields[0]["name"] in titles else 0
+        fields.insert(after, {"name": named_in("Родитель", lang),
+                              "type": typed_in(f"{obj}.Ссылка?", lang, frozenset({obj}))})
     return fields
 
 
@@ -4348,9 +4380,11 @@ def processing_form_yaml(info: dict, uid: str) -> str:
 
 def _list_sort_field(info: dict, fields: list[str]) -> str | None:
     """Default list sort field: Дата for a document, otherwise Наименование."""
-    if info["kind"] == "Документ" and "Дата" in fields:
-        return "Дата"
-    return "Наименование" if "Наименование" in fields else None
+    if info["kind"] == "Документ":
+        date = next((f for f in field_forms("Дата") if f in fields), None)
+        if date:
+            return date
+    return next((f for f in field_forms("Наименование") if f in fields), None)
 
 
 def list_form_yaml(info: dict, uid: str) -> str:
@@ -4495,7 +4529,7 @@ def _card_roles(fields: list[dict]) -> dict:
     photo = next((f for f in fields if _is_photo_type(f["type"])), None)
     rest = [f for f in fields if f is not photo]
     title = (
-        next((f for f in rest if f["name"] == "Наименование"), None)
+        next((f for f in rest if f["name"] in field_forms("Наименование")), None)
         or next((f for f in rest if f["type"] in ("Строка", "")), None)
         or (rest[0] if rest else None)
     )
