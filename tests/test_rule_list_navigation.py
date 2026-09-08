@@ -122,3 +122,41 @@ def test_project_component_is_not_judged(tmp_path):
         Навигация: Отсутствует
 """
     assert not _lint(tmp_path, text)
+
+
+def test_fix_writes_the_loading_value(tmp_path):
+    diags = _lint(tmp_path, _form({"ПрокруткаПоВертикали": "Истина", "Навигация": "Отсутствует"}))
+    assert diags[0].fix is not None
+    assert diags[0].fix.new == "ПодгрузкаПриПрокрутке"
+
+
+def test_fix_keeps_the_qualifier(tmp_path):
+    diags = _lint(
+        tmp_path,
+        _form({"ПрокруткаПоВертикали": "Истина", "Навигация": "НавигацияВСписке.Отсутствует"}),
+    )
+    assert diags[0].fix.new == "НавигацияВСписке.ПодгрузкаПриПрокрутке"
+
+
+def test_fix_follows_the_english_spelling(tmp_path):
+    text = """ElementKind: InterfaceComponent
+Ид: 66666666-6666-6666-6666-666666666666
+Name: ФормаПробы
+Inherits:
+    Type: Form
+    Content:
+        Type: Table<ArrayDataSource<СтрокаПробы>>
+        Name: СписокПробы
+        VerticalScroll: True
+        Navigation: None
+"""
+    diags = _lint(tmp_path, text)
+    assert diags[0].fix.new == "LoadingOnScroll"
+
+
+def test_fix_lands_on_the_value_span(tmp_path):
+    diags = _lint(tmp_path, _form({"ПрокруткаПоВертикали": "Истина", "Навигация": "Отсутствует"}))
+    fix = diags[0].fix
+    # Offsets index the text as the engine decoded it, newlines kept as written on disk.
+    written = (tmp_path / "ФормаПробы.yaml").read_bytes().decode("utf-8")
+    assert written[fix.start:fix.end] == "Отсутствует"

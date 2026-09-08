@@ -26,8 +26,10 @@ Judged is exactly that pair, on a component the ui schema gives a `Navigation` p
 
 An expression in `Navigation` itself is skipped - the value is then unknown to a file rule.
 
-The cure is one line, `Navigation: LoadingOnScroll`; `LoadingButton` works too when an
-explicit "Show more" is wanted.
+The cure is one line, `Navigation: LoadingOnScroll`, and the rule carries it as an autofix
+in the spelling of the value it replaces (a qualifier the author wrote is kept). Where a
+list wants an explicit "Show more" button instead, `LoadingButton` is the other answer -
+hence the fix is offered, not applied silently.
 """
 
 from __future__ import annotations
@@ -36,7 +38,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 
 from xbsl import dataset, i18n, uischema
-from xbsl.diagnostics import Diagnostic, Severity
+from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.yaml_schema import (
     _composed,
@@ -77,6 +79,9 @@ _SCROLL_KEYS = ("ПрокруткаПоВертикали", "VerticalScroll")
 _NONE_VALUES = frozenset({"Отсутствует", "None"})
 #: A scroll explicitly turned off - the author promises nothing, either spelling.
 _FALSE_VALUES = frozenset({"Ложь", "False"})
+#: The enumeration the navigation values belong to, and the value the fix writes.
+_NAVIGATION_ENUM = "НавигацияВСписке"
+_LOADING_VALUE = "ПодгрузкаПриПрокрутке"
 
 
 @lru_cache(maxsize=1)
@@ -127,6 +132,22 @@ def _plain_value(node) -> str | None:
     return value or None
 
 
+def _loading_spelled(written: str) -> str:
+    """`LoadingOnScroll` in the spelling of the value being replaced.
+
+    The English name of the value comes from the data (per enumeration - the same Russian word
+    answers to different English ones elsewhere), and a qualifier the author wrote is kept as
+    written: `ListNavigation.None` becomes `ListNavigation.LoadingOnScroll`.
+    """
+    qualifier, _, value = written.rpartition(".")
+    if value.isascii():
+        aliases = uischema.enum_value_aliases(_NAVIGATION_ENUM)
+        target = aliases.get(_LOADING_VALUE) or _LOADING_VALUE
+    else:
+        target = _LOADING_VALUE
+    return f"{qualifier}.{target}" if qualifier else target
+
+
 @rule(
     "yaml/list-scroll-without-loading", "yaml/list-scroll-without-loading.title", "A",
     severity=Severity.WARNING,
@@ -166,9 +187,17 @@ def list_scroll_without_loading(source: SourceFile) -> Iterable[Diagnostic]:
         if scrolled is None or scrolled in _FALSE_VALUES:
             continue  # the list explicitly does not scroll
         value_node = navigation[1]
+        start, end = value_node.start_mark.index, value_node.end_mark.index
+        # The fix replaces the value in place, and only when the raw slice IS that value:
+        # a quoted or otherwise decorated scalar is reported without one.
+        fix = (
+            TextEdit(start, end, _loading_spelled(written))
+            if source.text[start:end] == written else None
+        )
         yield Diagnostic(
             source.rel,
             value_node.start_mark.line + 1, value_node.start_mark.column + 1,
             "yaml/list-scroll-without-loading", Severity.WARNING,
             i18n.t("yaml/list-scroll-without-loading.none"),
+            fix=fix,
         )
