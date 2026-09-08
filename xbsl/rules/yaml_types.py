@@ -44,7 +44,8 @@ from xbsl.rules.semantics import (
     _row_type_names,
     _stdlib_names,
 )
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, object_kind, unreadable_object,
+                                    value_of)
 
 MESSAGES = {
     "yaml/unknown-type.title": {
@@ -229,7 +230,12 @@ def _yaml_type_mapper(source: SourceFile) -> dict | None:
         return {"k": "lib", "names": lib_names}
     data, err = _parsed(source)
     kind = object_kind(data)
-    if err is not None or not isinstance(data, dict) or not kind:
+    if err is not None:
+        # An unreadable object is not an absent one: without its name every type built on it
+        # reads as unknown, and one broken file answers with a flood of phantom findings.
+        name = unreadable_object(source)
+        return {"k": "unread", "name": name} if name else None
+    if not isinstance(data, dict) or not kind:
         return None
     nm = value_of(data, "Имя", kind)
     # The row type a dynamic list names for itself (ИмяТипаДанныхСтроки) is a member of
@@ -273,8 +279,11 @@ def unknown_yaml_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     objects: dict[str, dict] = {}
     all_local: set[str] = set()
     from_libs: set[str] = set()
+    unread: set[str] = set()
     for fact in facts.values():
-        if fact["k"] == "lib":
+        if fact["k"] == "unread":
+            unread.add(fact["name"])
+        elif fact["k"] == "lib":
             from_libs.update(fact["names"])
         elif fact["k"] == "y" and fact["name"]:
             objects[fact["name"]] = {
@@ -287,7 +296,9 @@ def unknown_yaml_type(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         rec = objects.get(fact["owner"])
         if rec is not None:
             rec["members"].update(fact["local_types"])
-    known = set(stdlib) | set(objects) | all_local | from_libs
+    # `unread` names are known but not readable: the type root passes, the member check
+    # below skips them on its own (they have no record in `objects`).
+    known = set(stdlib) | set(objects) | all_local | from_libs | unread
     checked = _checked_kinds()
     for rel, fact in facts.items():
         if fact["k"] != "y":

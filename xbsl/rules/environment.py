@@ -98,7 +98,8 @@ from xbsl.parser import parse
 from xbsl.rules._syntax import code_tokens
 from xbsl.rules.enum_values import _shadowed_names
 from xbsl.rules.handlers import _handler_re, _IDENT_RE
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, object_kind, unreadable_object,
+                                    value_of)
 
 MESSAGES = {
     "code/client-available-unused.title": {
@@ -1303,13 +1304,22 @@ def _client_use_mapper(source: SourceFile) -> dict | None:
     if not _HAVE_YAML:
         return None
     if source.kind == "yaml":
+        words = sorted(set(_WORDS_RE.findall(source.text)))
+        if unreadable_object(source) is not None:
+            # The file did not parse: its words are still readable (they are text), its
+            # environment is not - so the pair is marked unreadable and its declarations are
+            # left unjudged instead of being called unused. The unknown environment counts
+            # as CLIENT here: this rule reports "nobody names it", and a file we could not
+            # read is no evidence of that - the words of its module keep counting.
+            return {"k": "y", "stem": _pair_stem(source.rel), "client": True,
+                    "bad": True, "words": words}
         data = _parsed_object(source)
         if data is None:
             return None
         # A yaml wires handlers by name, and the interface it describes is client code.
-        return {"k": "y", "stem": _pair_stem(source.rel),
+        return {"k": "y", "stem": _pair_stem(source.rel), "bad": False,
                 "client": bool(object_kind(data) in _CLIENT_ENV_KINDS or _client_environment(data)),
-                "words": sorted(set(_WORDS_RE.findall(source.text)))}
+                "words": words}
     if source.kind != "xbsl":
         return None
     available = frozenset(terms.key_forms("ДоступноСКлиента"))
@@ -1364,6 +1374,7 @@ def _client_use_mapper(source: SourceFile) -> dict | None:
 )
 def client_available_unused(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     client_stems = {f["stem"] for f in facts.values() if f["k"] == "y" and f["client"]}
+    unread_stems = {f["stem"] for f in facts.values() if f["k"] == "y" and f.get("bad")}
     named_by_client: set[str] = set()
     for fact in facts.values():
         if fact["k"] == "y":
@@ -1375,6 +1386,8 @@ def client_available_unused(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     for rel, fact in facts.items():
         if fact["k"] != "x":
             continue
+        if fact["stem"] in unread_stems:
+            continue  # the pair did not parse - the names it wires are unknown, not absent
         for name, line, col in fact["decls"]:
             if name not in named_by_client:
                 yield Diagnostic(

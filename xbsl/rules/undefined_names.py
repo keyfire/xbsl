@@ -264,6 +264,9 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         name = value_of(data, "Имя", kind)
         return {
             "k": "y",
+            # The file did not parse: what it declares stays unknown, and a module judged
+            # against an EMPTY scope drowns in phantom names - see yaml_schema.unreadable_object.
+            "bad": err is not None,
             "dir": directory,
             "file": fname,
             "fast_name": fast_name,
@@ -443,6 +446,8 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         pair = by_dir.get((fact["dir"], fact["pair"]))
         extras: set[str] = set()
         if pair is not None:
+            if pair["bad"]:
+                continue  # the pair is unreadable: its own yaml/valid is the finding to read
             if pair["ext"]:
                 continue  # an external namespace in the yaml Импорт - the same blind spot
             kind = pair["element_kind"]

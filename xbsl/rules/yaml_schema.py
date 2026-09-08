@@ -188,6 +188,41 @@ def _parsed(source: SourceFile):
     return source.cache["yaml"], source.cache["yaml_error"]
 
 
+_TOP_KIND_RE = re.compile(r"^(?:ВидЭлемента|ElementKind):", re.M)
+_TOP_NAME_RE = re.compile(r"^(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$", re.M)
+_MISSING = object()
+
+
+def object_name_fast(s: SourceFile) -> str | None:
+    """The metadata-object name (a file with ВидЭлемента) without a full yaml parse, cached."""
+    cached = s.cache.get("object_name_fast", _MISSING)
+    if cached is not _MISSING:
+        return cached
+    name = None
+    if _TOP_KIND_RE.search(s.text):
+        m = _TOP_NAME_RE.search(s.text)
+        if m and m.group(2):
+            name = m.group(2)
+    s.cache["object_name_fast"] = name
+    return name
+
+def unreadable_object(source: SourceFile) -> str | None:
+    """The object a yaml declares when the file itself did not parse - the name alone.
+
+    A file that fails to parse is not an EMPTY file: the object it declares is still there,
+    and its name is still readable by a regex. A rule that judges names against the project
+    model has to treat such an object as UNKNOWABLE rather than unknown - otherwise one
+    stray character buries the report. Measured over a real project: one broken component
+    yaml gave 175 `code/undefined-name`, one broken catalog yaml gave 63 `yaml/unknown-type`
+    plus 31 `query/unknown-table` - phantoms around a single real finding. The parse failure
+    has a diagnostic of its own (`yaml/valid`), and that is the one the reader needs.
+    """
+    if source.kind != "yaml":
+        return None
+    _data, err = _parsed(source)
+    return object_name_fast(source) if err is not None else None
+
+
 def _id_lines(source: SourceFile) -> list[tuple[str, int, int]]:
     """List of (Ид value, line, column) for every 'Ид:' line in the file."""
     key = "id_lines"

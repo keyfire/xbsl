@@ -39,6 +39,19 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   navigation is `None`" on the components the ui schema gives a `Navigation` property to;
   an expression in the value and a list that promises no scroll are left alone.
 
+### Fixed
+- **One unreadable yaml no longer buries the report under phantom findings.** A file that
+  failed to parse used to drop out of the project model entirely, and the object it declares
+  became an unknown name for every rule at once. Measured over a live project: a broken
+  component gave 239 findings instead of 49 (175 of them `code/undefined-name`), a broken
+  catalog 180 instead of 50 (63 `yaml/unknown-type`, 34 `code/undefined-name`, 31
+  `query/unknown-table`, 2 `code/unused-import`). Such an object is now known by NAME and
+  unreadable at the same time: `code/undefined-name` leaves the paired module alone (its
+  scope is unknown, not empty), a type root and a query table built on it are not called
+  unknown, the import of the subsystem holding it is not called unused, and the
+  `@ClientAvailable` declarations of the paired module are not called unused either. One
+  real finding remains – `yaml/valid` on the breakage itself.
+
 ## 2026-09-06 – 0.94.0
 
 ### Added

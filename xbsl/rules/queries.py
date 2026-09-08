@@ -40,7 +40,8 @@ from xbsl.rules._syntax import (
     query_block_tokens,
     query_ranges,
 )
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, object_kind, unreadable_object,
+                                    value_of)
 
 MESSAGES = {
     "query/unknown-table.title": {
@@ -346,6 +347,11 @@ def _query_table_mapper(source: SourceFile) -> dict | None:
         got = _catalog_slice(source)
         if got:
             return {"k": "y", "slice": got}
+        # A file that did not parse has no slice, but the table it declares still exists:
+        # judging its name as unknown turns one broken yaml into a flood of findings.
+        unread = unreadable_object(source)
+        if unread:
+            return {"k": "unread", "name": unread}
         coords = libs.project_coordinates(source.text)
         return {"k": "p", "coords": list(coords)} if coords else None
     if source.kind != "xbsl":
@@ -364,10 +370,13 @@ def _query_table_mapper(source: SourceFile) -> dict | None:
 def unknown_query_table(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     catalog: dict[str, dict] = {}
     own: set[tuple[str, str]] = set()
+    unread: set[str] = set()
     for fact in facts.values():
         if fact["k"] == "y":
             name, rec = fact["slice"]
             catalog[name] = rec
+        elif fact["k"] == "unread":
+            unread.add(fact["name"])
         elif fact["k"] == "p":
             own.add(tuple(fact["coords"]))
     if not catalog:
@@ -383,6 +392,8 @@ def unknown_query_table(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             name = ".".join(v for v, _l, _c in segs)
             if root_value in _entity_tables():
                 continue  # an entity of the platform, its structure is not the project's
+            if root_value in unread:
+                continue  # the object's yaml did not parse - its tables are unknowable
             rec = catalog.get(root_value)
             if len(segs) == 1:
                 if rec is None:
