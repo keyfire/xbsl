@@ -24,7 +24,14 @@ Zero-false-positive guards:
 - a bare structure name that a stdlib type also carries is skipped: the linter would have to
   know which one the compiler picks, and that guess is not worth a false error;
 - the structure's own methods count as members, so `Карточка.Заполнить()` is not a finding;
-- Latin member spellings are left alone, like the sibling member rules.
+- a member of the object protocol is allowed in either spelling - that set is the only
+  vocabulary this rule borrows, and it is paired through the dictionary.
+
+Unlike the sibling member rules, a LATIN member is judged here. Those rules compare against
+the platform catalog, which stores members in Russian, so a Latin access there has no stated
+twin to compare with; this rule compares against the PROJECT's own declaration, written in
+the same script as the access - and skipping Latin members left every translated project
+unjudged.
 
 Project scope by necessity: the declaration usually lives in another file. The mapper
 publishes both halves per file - the structures declared in it and the accesses seen in it -
@@ -44,7 +51,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
-from xbsl.rules.unknown_members import _COMMON_MEMBERS, _is_latin, _stdlib_members
+from xbsl.rules.unknown_members import _common_member_forms, _stdlib_members
 
 MESSAGES = {
     "code/unknown-structure-field.title": {
@@ -175,7 +182,7 @@ def _accesses(source: SourceFile) -> list[dict]:
             if not isinstance(node, P.Member) or not isinstance(node.obj, P.Name):
                 continue
             name = node.obj.name
-            if name in ambiguous or name not in typed or _is_latin(node.name):
+            if name in ambiguous or name not in typed:
                 continue
             line, col = lm.linecol(node.start)
             out.append({
@@ -231,7 +238,7 @@ def unknown_structure_field(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             if key is None:
                 continue
             members = structures[key]
-            if access["member"] in members or access["member"] in _COMMON_MEMBERS:
+            if access["member"] in members or access["member"] in _common_member_forms():
                 continue
             hint = difflib.get_close_matches(access["member"], members, n=1, cutoff=0.7)
             structure = f"{key[0]}.{key[1]}"

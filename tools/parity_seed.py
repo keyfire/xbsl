@@ -729,6 +729,101 @@ Inherits:
         Value: {value}
 """
 _LABEL_VALUE_TOKENS = {"КарточкаИтога": "TotalCard", "Подытог": "Subtotal", "Подпись": "Caption"}
+#: A form declaring a dynamic list whose row type carries two fields: one taken straight and
+#: one taken THROUGH A REFERENCE, which types it `<тип>|Null`; the guarded twin is next to it.
+_ROW_FORM_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f21
+Имя: ПанельОтметок
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f22
+        Имя: Список
+        Тип: ДинамическийСписок<ПанельОтметок.СтрокаСписка>
+        ЗначениеПоУмолчанию:
+            ИмяТипаДанныхСтроки: СтрокаСписка
+            ОсновнаяТаблица:
+                Таблица: Отметки
+            Поля:
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Срок
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Раздел.Сумма
+                    Псевдоним: СуммаРаздела
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Раздел.Сумма.ЗаменитьNull(0)
+                    Псевдоним: ЗащищеннаяСумма
+"""
+_ROW_FORM_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f21
+Name: MarkPanel
+VisibilityScope: InProject
+Properties:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f22
+        Name: List
+        Type: DynamicList<MarkPanel.ListRow>
+        DefaultValue:
+            RowDataTypeName: ListRow
+            MainTable:
+                Table: Marks
+            Fields:
+                -
+                    Type: DynamicListField
+                    Expression: Deadline
+                -
+                    Type: DynamicListField
+                    Expression: Section.Amount
+                    Alias: SectionAmount
+                -
+                    Type: DynamicListField
+                    Expression: Section.Amount.ReplaceNull(0)
+                    Alias: GuardedAmount
+"""
+#: A handler reading one member off the row; `{field}` is the member.
+_ROW_READ_RU = ("метод Показать(ДанныеСтроки: СтрокаДинамическогоСписка<ПанельОтметок.СтрокаСписка>)\n"
+                "    знч Строчка = ДанныеСтроки.Данные\n"
+                "    знч Итог = Строчка.{field}\n;\n")
+_ROW_READ_EN = ("method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
+                "    val Line = RowData.Data\n"
+                "    val Result = Line.{field}\n;\n")
+#: The same handler filling a typed structure field from the row; `{field}` is the row member.
+_ROW_FILL_RU = ("структура Сводка\n    знч Сумма: Число = 0\n;\n"
+                "метод Показать(ДанныеСтроки: СтрокаДинамическогоСписка<ПанельОтметок.СтрокаСписка>)\n"
+                "    знч Строчка = ДанныеСтроки.Данные\n"
+                "    знч Итог = новый Сводка(Сумма = Строчка.{field})\n;\n")
+_ROW_FILL_EN = ("structure Summary\n    val Amount: Number = 0\n;\n"
+                "method Show(RowData: DynamicListRow<MarkPanel.ListRow>)\n"
+                "    val Line = RowData.Data\n"
+                "    val Result = new Summary(Amount = Line.{field})\n;\n")
+_ROW_TOKENS = {"ПанельОтметок": "MarkPanel", "Отметки": "Marks", "Список": "List",
+               "Срок": "Deadline", "Сумма": "Amount", "СуммаРаздела": "SectionAmount",
+               "ЗащищеннаяСумма": "GuardedAmount", "Строчка": "Line", "Сводка": "Summary",
+               "Итог": "Result", "Показать": "Show"}
+#: A structure declared in a common module, read from another module through a typed variable.
+_STRUCT_DECL_RU = "структура Сводка\n    знч Сумма: Число = 0\n    знч Срок: Строка = \"\"\n;\n"
+_STRUCT_DECL_EN = "structure Summary\n    val Amount: Number = 0\n    val Deadline: String = \"\"\n;\n"
+_STRUCT_READ_RU = "метод Проба(Свод: Вычисления.Сводка)\n    знч Итог = Свод.{field}\n;\n"
+_STRUCT_READ_EN = "method Probe(Digest: Calculations.Summary)\n    val Result = Digest.{field}\n;\n"
+_STRUCT_TOKENS = {"Вычисления": "Calculations", "Сводка": "Summary", "Сумма": "Amount",
+                  "Срок": "Deadline", "Свод": "Digest", "Проба": "Probe", "Итог": "Result",
+                  "Заявки": "Applications", "Остаток": "Balance"}
+#: A method open to the client; `{extra}` adds the context annotation, or nothing.
+_CLIENT_AVAILABLE_RU = ("@НаСервере @ДоступноСКлиента{extra}\n"
+                        "метод Прочитать(): Строка\n    возврат \"\"\n;\n")
+_CLIENT_AVAILABLE_EN = ("@OnServer @AvailableFromClient{extra}\n"
+                        "method Read(): String\n    return \"\"\n;\n")
+#: The client side of the pair: a component method that names the server method, or does not.
+#: The local name carries no token of its own, so its English half is the dictionary's.
+_CLIENT_CALL_RU = "метод Отобразить()\n    знч Итог = Серверный.Прочитать()\n;\n"
+_CLIENT_CALL_EN = "method Display()\n    val Total = ServerSide.Read()\n;\n"
+_CLIENT_IDLE_RU = "метод Отобразить()\n    знч Итог = \"\"\n;\n"
+_CLIENT_IDLE_EN = "method Display()\n    val Total = \"\"\n;\n"
 
 SEEDS: list[Seed] = [
     Seed(
@@ -2398,6 +2493,214 @@ SEEDS: list[Seed] = [
         files={"КарточкаИтога.yaml": _LABEL_VALUE_RU.format(value="Подытог")},
         english={"TotalCard.yaml": _LABEL_VALUE_EN.format(value="Subtotal")},
         tokens=_LABEL_VALUE_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="a field the list selects, reached through the row's data member",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Срок"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Deadline"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=FINDING,
+        note="the reference itself instead of the alias the list gives it is reported – the row "
+             "type annotation and the data member are read in both spellings",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Раздел"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Section"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="the object protocol on a row – a member every instance carries, no list declares it",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="ВСтроку()"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="ToString()"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-row-field",
+        expect=CLEAN,
+        note="the row type's own key member – the documented way to the reference behind a row",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_READ_RU.format(field="Ключ"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_READ_EN.format(field="Key"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=CLEAN,
+        note="a field the list already guards with the null replacement fills a typed field",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_FILL_RU.format(field="ЗащищеннаяСумма"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_FILL_EN.format(field="GuardedAmount"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/row-field-null",
+        expect=FINDING,
+        note="the unguarded twin of the same field is reported – the guard is recognised by "
+             "the member name, which the platform spells both ways",
+        files={
+            "ПанельОтметок.yaml": _ROW_FORM_RU,
+            "ПанельОтметок.xbsl": _ROW_FILL_RU.format(field="СуммаРаздела"),
+        },
+        english={
+            "MarkPanel.yaml": _ROW_FORM_EN,
+            "MarkPanel.xbsl": _ROW_FILL_EN.format(field="SectionAmount"),
+        },
+        tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=CLEAN,
+        note="a field the structure declares, read through a parameter of that structure's type",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="Сумма"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="Amount"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=FINDING,
+        note="a field the structure does not declare is reported – the member set comes from "
+             "the project's own declaration, so both scripts have one to compare against",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="Остаток"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="Balance"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-structure-field",
+        expect=CLEAN,
+        note="the object protocol on a structure – a member no declaration lists and every "
+             "instance carries",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": _STRUCT_DECL_RU,
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": _STRUCT_READ_RU.format(field="ВСтроку()"),
+        },
+        english={
+            "Calculations.yaml": _COMMON_MODULE_EN,
+            "Calculations.xbsl": _STRUCT_DECL_EN,
+            "Applications.yaml": _CATALOG_EN,
+            "Applications.xbsl": _STRUCT_READ_EN.format(field="ToString()"),
+        },
+        tokens=_STRUCT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-needs-context",
+        expect=CLEAN,
+        note="a component method open to the client that keeps the instance context",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_AVAILABLE_RU.format(extra=" @Контекстный"),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_AVAILABLE_EN.format(extra=" @Contextual"),
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-needs-context",
+        expect=FINDING,
+        note="the same method without the context annotation is reported – both annotations "
+             "are read through the key forms of the term dictionary",
+        files={
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+        },
+        english={
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-unused",
+        expect=CLEAN,
+        note="a method open to the client that a component module calls",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_CALL_RU,
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_CALL_EN,
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/client-available-unused",
+        expect=FINDING,
+        note="the same method that no client place names is reported – which kinds count as "
+             "client comes from the metamodel, the annotation from the term dictionary",
+        files={
+            "Серверный.yaml": _SERVER_MODULE_RU,
+            "Серверный.xbsl": _CLIENT_AVAILABLE_RU.format(extra=""),
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": _CLIENT_IDLE_RU,
+        },
+        english={
+            "ServerSide.yaml": _SERVER_MODULE_EN,
+            "ServerSide.xbsl": _CLIENT_AVAILABLE_EN.format(extra=""),
+            "ApplicationForm.yaml": _FORM_EN,
+            "ApplicationForm.xbsl": _CLIENT_IDLE_EN,
+        },
+        tokens=_ENVIRONMENT_TOKENS,
     ),
 ]
 

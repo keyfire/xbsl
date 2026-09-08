@@ -175,13 +175,49 @@ def test_unknown_module_not_judged(tmp_path):
     assert not hits
 
 
-def test_latin_member_not_judged(tmp_path):
+def test_latin_member_is_judged(tmp_path):
+    """A Latin member is judged too - the member set is the project's own declaration.
+
+    The sibling member rules skip Latin accesses because they compare against the platform
+    catalog, which stores members in Russian; here the comparison is against a declaration
+    written in the same script as the access, and skipping Latin left every translated
+    project unjudged.
+    """
     hits = _lint_dir(
         tmp_path, {
         "Каталог.xbsl": CATALOG,
         "Потребитель.xbsl": (
             "метод Показать(Карточка: Каталог.КарточкаДанные)\n"
             "    Сообщить(Карточка.title)\n"
+            ";\n"
+        ),
+    })
+    assert len(hits) == 1 and "title" in hits[0].message
+
+
+def test_latin_member_the_declaration_carries_is_silent(tmp_path):
+    # a serialization contract names its fields in Latin, and the declaration says so
+    hits = _lint_dir(
+        tmp_path, {
+        "Каталог.xbsl": "структура Ответ\n    пер access_token: Строка\n;\n",
+        "Потребитель.xbsl": (
+            "метод Показать(Ответ: Каталог.Ответ)\n"
+            "    Сообщить(Ответ.access_token)\n"
+            ";\n"
+        ),
+    })
+    assert not hits
+
+
+@pytest.mark.needs_data
+def test_object_protocol_is_allowed_in_english(tmp_path):
+    # `ToString` is the object protocol, paired to its Russian half through the dictionary
+    hits = _lint_dir(
+        tmp_path, {
+        "Каталог.xbsl": CATALOG,
+        "Потребитель.xbsl": (
+            "метод Показать(Карточка: Каталог.КарточкаДанные)\n"
+            "    Сообщить(Карточка.ToString())\n"
             ";\n"
         ),
     })

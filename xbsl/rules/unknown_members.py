@@ -66,6 +66,22 @@ i18n.register(MESSAGES)
 # Undocumented members seen on every instance (the object protocol).
 _COMMON_MEMBERS = frozenset({"ПолучитьТип", "ВСтроку", "Представление"})
 
+
+@lru_cache(maxsize=1)
+def _common_member_forms() -> frozenset[str]:
+    """The object protocol in BOTH spellings, the English half taken from the dictionary.
+
+    A rule that owns its member set - the fields of a dynamic-list row, the members of a
+    project structure - still has to let the protocol through, and the set above is Russian
+    alone: on a translated tree `ToString()` read as a member nobody declares, which is a
+    false error on legal code. Without the data the set stays Russian, as everywhere else.
+    """
+    english = (terms.common_english(name) for name in _COMMON_MEMBERS)
+    return _COMMON_MEMBERS | frozenset(name for name in english if name)
+
+
+dataset.register_reset(_common_member_forms.cache_clear)
+
 # A plain name or a one-dot facet name (ДвоичныйОбъект.Ссылка).
 _NOMINAL_RE = re.compile(r"[А-Яа-яЁёA-Za-z0-9_]+(?:\.[А-Яа-яЁёA-Za-z0-9_]+)?")
 
