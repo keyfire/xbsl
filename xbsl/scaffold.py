@@ -2654,6 +2654,11 @@ def _survives_bare(value: str) -> bool:
     return isinstance(parsed, dict) and parsed.get("k") == value
 
 
+def _has_mapping_key(body: str, key: str) -> bool:
+    """Is `key` already an entry of this mapping-section body?"""
+    return re.search(rf"^[ \t]+{re.escape(key)}:", body, re.M) is not None
+
+
 def _add_mapping_entry(
     yaml_path: Path, text: str, nl: str, kind: str, field_kind: str,
     map_spec: dict, key: str, value: str,
@@ -2681,7 +2686,7 @@ def _add_mapping_entry(
     if bounds is not None:
         _, header_line_end, body_end = bounds
         body = text[header_line_end:body_end]
-        if re.search(rf"^[ \t]+{re.escape(key)}:", body, re.M):
+        if _has_mapping_key(body, key):
             raise ScaffoldError(f"Ключ '{key}' уже есть в секции {section} файла {yaml_path.name}")
         new_text = text[:body_end] + f"{nl}    {key}: {entry_value}" + text[body_end:]
     else:
@@ -2691,15 +2696,15 @@ def _add_mapping_entry(
     cursor = _cursor_at(new_text, new_text.index(f"{key}: {entry_value}"))
     changes = [FileChange(yaml_path, new_text, created=False, cursor=cursor)]
     notes: list[str] = []
-    _echo_into_translations(yaml_path, section, key, entry_value, nl, changes, notes)
+    _echo_into_translations(yaml_path, section, [(key, entry_value)], nl, changes, notes)
     return ScaffoldResult(changes, notes=notes)
 
 
 def _echo_into_translations(
-    yaml_path: Path, section: str, key: str, entry_value: str, nl: str,
+    yaml_path: Path, section: str, entries: list[tuple[str, str]], nl: str,
     changes: list, notes: list[str],
 ) -> None:
-    """Repeat the new pair in the translation files the element already has.
+    """Repeat the new pairs in the translation files the element already has.
 
     A translation repeats the sections of its element key for key, and a key present in the
     element and missing from a translation is a gap the translator only meets later. The
@@ -2709,6 +2714,10 @@ def _echo_into_translations(
     A translation file carries no element kind of its own (only the two mapping sections), so
     the ordinary add operation refuses it; that is why the echo lives here rather than in a
     second call the caller has to know about.
+
+    Several pairs land in ONE change per file: a change carries the whole new text, so a
+    change per key would compute each of them from the text before all the others and only
+    the last key written would survive.
     """
     for folder in _localization_dirs(yaml_path.parent):
         for target in sorted(folder.glob(f"*/{yaml_path.name}")):
@@ -2720,13 +2729,17 @@ def _echo_into_translations(
             if bounds is None:
                 continue
             _, header_line_end, body_end = bounds
-            if re.search(rf"^[ \t]+{re.escape(key)}:", text[header_line_end:body_end], re.M):
+            body = text[header_line_end:body_end]
+            fresh = [(key, value) for key, value in entries if not _has_mapping_key(body, key)]
+            if not fresh:
                 continue
+            block = "".join(f"{nl}    {key}: {value}" for key, value in fresh)
             changes.append(FileChange(
-                target, text[:body_end] + f"{nl}    {key}: {entry_value}" + text[body_end:],
-                created=False,
+                target, text[:body_end] + block + text[body_end:], created=False,
             ))
-            notes.append(f"Ключ {key} дописан в перевод {target.parent.name}/{target.name} "
+            what = (f"Ключ {fresh[0][0]} дописан" if len(fresh) == 1
+                    else "Ключи " + ", ".join(key for key, _ in fresh) + " дописаны")
+            notes.append(f"{what} в перевод {target.parent.name}/{target.name} "
                          "значением языка по умолчанию – замените его переводом")
 
 
@@ -3757,15 +3770,23 @@ def _is_localized_strings(text: str) -> bool:
     return False
 
 
-def _section_entries(text: str) -> dict[str, str]:
+#: The two sections of a localization dictionary, in both spellings. They share ONE namespace
+#: (the platform refuses a name it sees twice), but a `$Dictionary.Key` reference resolves
+#: against the strings alone - so who declares a key decides whether it can be referenced.
+_STRING_SECTIONS = ("Строки", "Strings")
+_TEMPLATE_SECTIONS = ("Шаблоны", "Templates")
+
+
+def _section_entries(text: str, sections: tuple[str, ...] = ()) -> dict[str, str]:
     """`Rows`/`Templates` of a localization yaml as {key: text}, comments and blanks dropped.
 
     A plain scan rather than a yaml parse: the file is flat by definition (one level of
     `key: value`), and the scan keeps the surrounding quotes off the value the way the platform
-    reads them.
+    reads them. Both sections by default - which is the namespace a new key has to be unique
+    in; `sections` narrows the answer to one of them.
     """
     out: dict[str, str] = {}
-    for section in ("Строки", "Шаблоны", "Strings", "Templates"):
+    for section in sections or (_STRING_SECTIONS + _TEMPLATE_SECTIONS):
         bounds = _section_bounds(text, section, top_level=True)
         if bounds is None:
             continue
@@ -4652,6 +4673,120 @@ FORM_KINDS = ("object", "list", "list-cards", "record", "report", "processing")
 RECORD_FORM_KINDS = ("РегистрСведений",)
 
 
+# --- captions of a generated form ----------------------------------------------------------
+#
+# The generators write ONE visible property, `Title` - the form's own caption and the caption
+# of every table column; everything else in a generated file is a name, a type or an
+# expression. Written as a literal into a project that localizes, each of them is a finding of
+# conventions/untranslated-visible-literal, and rewriting them by hand was the first thing
+# done after generating (eight findings on one object of a live project).
+#
+# What is written instead was settled by the sources rather than chosen. Dropping the caption
+# is not an option: of 303 table columns of a live project 300 carry one, and the three that
+# do not are picture columns with nothing to caption. Every one of those captions is a
+# `$Dictionary.Key` reference whose key is the field's own name, valued with that same name -
+# so the reference is exactly what a person writes here, and the tool can both write it and
+# fill the dictionary it points at. A reference to a key that does not exist is worse than a
+# literal - the apply fails and the stand rolls back - which is why the entries go in with
+# the reference, in the same operation.
+
+
+def caption_dictionary(directory: Path, reader=None) -> Path | None:
+    """The LocalizedStrings element the forms of `directory` may reference, or None.
+
+    The SAME folder, not the project: a dictionary of another subsystem needs that subsystem
+    in the element's `Import`, and a reference the imports do not cover fails the apply. A
+    project keeps one dictionary per subsystem, which is what makes the folder rule enough.
+
+    None when the project declares fewer than two localization languages (there is nothing to
+    localize, and a reference would be indirection nobody asked for), when the folder holds no
+    dictionary, and when it holds SEVERAL - which of them a caption belongs to is the author's
+    decision, and guessing it would scatter the keys.
+    """
+    directory = Path(directory)
+    read = reader or _read
+    dictionaries = [
+        path for path in sorted(directory.glob("*.yaml"))
+        if _is_localized_strings(read(path))
+    ]
+    if len(dictionaries) != 1:
+        return None
+    languages, _default = _descriptor_languages(dictionaries[0])
+    return dictionaries[0] if len(languages) > 1 else None
+
+
+def _caption_line_re(lang: str) -> re.Pattern:
+    """`Заголовок: Имя` lines - the caption written as a bare name, in the project's key."""
+    key = re.escape(spelled_property("Заголовок", lang))
+    return re.compile(rf"^([ \t]*){key}:[ \t]*([A-Za-zА-Яа-яЁё_][{_WORD}]*)[ \t]*$", re.M)
+
+
+def _captions_through_dictionary(text: str, dictionary: str, lang: str,
+                                 taken: frozenset[str]) -> tuple[str, list[str], list[str]]:
+    """(the text with its captions referenced, the keys to declare, the names left alone).
+
+    Only a caption that is a bare NAME is rewritten, and that is the whole set the generators
+    write: the object's name for the form itself, the field's name for a column. A caption
+    that is an expression (`=Отчет.Представление`), a reference already, or a phrase is left
+    alone - a phrase has no name to key it by, and inventing one would put a word of the
+    tool's own into the project's dictionary.
+
+    `taken` are the names the dictionary spends on TEMPLATES. A reference resolves against
+    the strings alone, so pointing at one of those would fail the apply
+    (yaml/localization-ref-to-template), and the two sections share one namespace, so a
+    string of the same name cannot be added either: such a caption stays a literal.
+    """
+    keys: list[str] = []
+    skipped: list[str] = []
+
+    def replace(match: re.Match) -> str:
+        name = match.group(2)
+        if name in taken:
+            if name not in skipped:
+                skipped.append(name)
+            return match.group(0)
+        if name not in keys:
+            keys.append(name)
+        return f"{match.group(1)}{spelled_property('Заголовок', lang)}: ${dictionary}.{name}"
+
+    return _caption_line_re(lang).sub(replace, text), keys, skipped
+
+
+def _dictionary_entries(dict_path: Path, keys: list[str], reader=None) -> ScaffoldResult:
+    """The dictionary change that makes the caption references resolvable.
+
+    A key the dictionary already declares is REUSED rather than duplicated: both sections
+    share one namespace, and a repeated name is refused by the apply. Its text stays as the
+    project wrote it - the caption of a field named like an existing key is the same word,
+    and a second key for it would be a name of the tool's own invention.
+    """
+    result = ScaffoldResult()
+    text, nl = _load_for_edit(dict_path, reader)
+    declared = _section_entries(text)
+    fresh = [(key, key) for key in keys if key not in declared]
+    if not fresh:
+        return result
+    lang = yaml_language(text, dict_path.parent)
+    section = "Строки"
+    bounds = _section_bounds(text, section, top_level=True)
+    block = "".join(f"{nl}    {key}: {value}" for key, value in fresh)
+    if bounds is not None:
+        _, _header_line_end, body_end = bounds
+        new_text = text[:body_end] + block + text[body_end:]
+    else:
+        tail = "" if (not text or text.endswith("\n")) else nl
+        new_text = text + f"{tail}{spelled_key(section, lang)}:{block}{nl}"
+    changes = [FileChange(dict_path, new_text, created=False)]
+    notes = [
+        f"В словарь {dict_path.name} добавлены ключи заголовков: "
+        + ", ".join(key for key, _ in fresh)
+    ]
+    _echo_into_translations(dict_path, section, fresh, nl, changes, notes)
+    result.changes.extend(changes)
+    result.notes.extend(notes)
+    return result
+
+
 def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = None,
                 forms: list[str] | None = None, overwrite: bool = False,
                 card_min_width: int | None = None, card_placeholder: str | None = None,
@@ -4665,6 +4800,10 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
     СтрокаСписка<Объект>. card_min_width sets the grid column width (400 by default,
     250 with a photo), card_placeholder is a placeholder image expression. An existing
     form is not overwritten without overwrite - a note goes into notes instead.
+
+    Captions are written through the subsystem's dictionary where there is one to write
+    through (see _localize_captions and caption_dictionary): the keys the references need
+    join the dictionary in the same operation.
     """
     info = object_info(Path(root), name=name, yaml_path=yaml_path)
     text_of_owner = (reader or _read)(Path(info["path"]))
@@ -4757,6 +4896,7 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         made.append(form)
         if form == "list-cards":
             _add_card_row(info, owner_path, overwrite, card_placeholder, result)
+    _localize_captions(result, owner_path, lang, reader)
     if made:
         text, nl = text_of_owner, _dominant_nl(text_of_owner)
         # The card list form is registered like a regular one: the same <Объект>ФормаСписка file.
@@ -4765,6 +4905,49 @@ def op_add_form(root: Path, name: str | None = None, yaml_path: Path | None = No
         if new_text != text:
             result.changes.append(FileChange(owner_path, new_text, created=False))
     return result
+
+
+def _localize_captions(result: ScaffoldResult, owner_path: Path, lang: str, reader=None) -> None:
+    """Captions of the files just generated pointed at the project's dictionary.
+
+    Run over the FINISHED texts, after they have been put into the project's language: a
+    reference is not a platform name and must not go through the spelling pass, which would
+    translate both the dictionary and the key.
+
+    Every change collected so far is a generated file - the owner's own yaml is registered
+    after this - so there is nothing here to tell apart. Without a dictionary in the folder
+    the captions stay literals: that is what the tool has always written, and the linter says
+    so where it matters.
+    """
+    dictionary = caption_dictionary(owner_path.parent, reader)
+    if dictionary is None:
+        return
+    dictionary_text = (reader or _read)(dictionary)
+    name = element_name(dictionary_text, dictionary.stem)
+    taken = frozenset(_section_entries(dictionary_text, _TEMPLATE_SECTIONS))
+    keys: list[str] = []
+    left: list[str] = []
+    rewritten: list[FileChange] = []
+    for change in result.changes:
+        text, found, skipped = _captions_through_dictionary(change.content, name, lang, taken)
+        for key in found:
+            if key not in keys:
+                keys.append(key)
+        for key in skipped:
+            if key not in left:
+                left.append(key)
+        rewritten.append(FileChange(change.path, text, change.created, change.cursor))
+    if left:
+        result.notes.append(
+            f"Заголовки {', '.join(left)} оставлены литералами: в словаре {dictionary.name} "
+            "эти имена заняты шаблонами, а ссылка ищет ключ только среди строк"
+        )
+    if not keys:
+        return
+    result.changes[:] = rewritten
+    entries = _dictionary_entries(dictionary, keys, reader)
+    result.changes.extend(entries.changes)
+    result.notes.extend(entries.notes)
 
 
 def _add_card_row(info: dict, owner_path: Path, overwrite: bool, placeholder: str | None,

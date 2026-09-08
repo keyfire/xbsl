@@ -867,6 +867,13 @@ def meta_add_form(
     (default 400, 250 with a photo); card_placeholder – image expression used when the photo
     is empty, e.g. "Ресурс{Аккаунт.svg}.Ссылка".
 
+    Captions go through the project's dictionary: when the subsystem folder holds ONE
+    LocalizedStrings element and the project declares two localization languages, the form's
+    caption and every column caption are written as `$Dictionary.Name` and the keys the
+    references need are added to that dictionary (and echoed into the translations it already
+    has) in the same operation – a reference to a key nobody declares fails the apply. Without
+    such a dictionary the captions stay literals, as before.
+
     Existing form files are skipped unless overwrite=true.
     """
     base = _base(root)

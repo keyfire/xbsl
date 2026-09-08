@@ -28,6 +28,20 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   an expression in the value and a list that promises no scroll are left alone.
 
 ### Fixed
+- **`meta_add_form` writes the captions of a generated form through the project's
+  dictionary.** A generated form used to arrive with its captions as literals – the form's
+  own one plus every table column – and on a bilingual project that is eight findings of
+  `conventions/untranslated-visible-literal` on one object, rewritten by hand right after
+  generating. What is written instead comes from the sources rather than from a choice: of
+  303 table columns of a live project 300 carry a caption (the three that do not are picture
+  columns), every one of them is a `$Dictionary.Key` reference, and the key is the field's
+  own name. So the reference goes in – and the keys it needs join the subsystem's dictionary
+  in the same operation, echoed into the translations that dictionary already has, because a
+  reference to a key nobody declares is worse than a literal: the apply fails and the stand
+  rolls back. The dictionary has to be the one lying beside the object (another subsystem's
+  would need an `Import` the form does not carry), the project has to declare two
+  localization languages, and a name the dictionary spends on a TEMPLATE stays a literal – a
+  reference resolves against the strings alone. Without such a dictionary nothing changes.
 - **`meta_new_object` writes the base of a component the way the project spells its types.**
   The `base` key is documented in English words, so `base="Group"` is the natural thing to
   pass – and a Russian project got `Type: Group` in its yaml, a line rewritten by hand every
