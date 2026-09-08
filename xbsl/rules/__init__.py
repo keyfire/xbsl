@@ -9,6 +9,7 @@ modules that need to be imported (and thereby activated).
 from . import (  # noqa: F401
     component_props,
     duplicate_subtree,
+    list_navigation,
     project,
     structure,
     unused_components,

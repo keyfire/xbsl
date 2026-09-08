@@ -246,6 +246,10 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "yaml/list-form-needs-dynlist", page: "topics/list-form-component" },
   { match: (r) => r === "yaml/badge-column-image", page: "topics/standard-table-column-component" },
   { match: (r) => r === "yaml/popup-in-markup", page: "topics/popup-component" },
+  {
+    match: (r) => r === "yaml/list-scroll-without-loading",
+    page: "topics/custom-list-component",
+  },
   { match: (r) => r === "code/load-object-unwrap", page: "topics/data-deletion" },
   {
     match: (r) => r === "code/permission-right-not-computable",

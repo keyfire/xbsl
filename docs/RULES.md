@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added; the live list at
-runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 191 rules.
+runtime is `xbsl --list-rules` (or the MCP `list_rules`). Currently there are 192 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -95,6 +95,7 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The `{{vendor}}/{{name}}` path diverged from the descriptor – a build refuses the project before compiling [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while ANOTHER component of the ui schema does (`Checkbox` + `PlaceholderText`, a property of `Edit`) - apply rejects the markup node as an unknown property; a name no component declares is left alone, the documentation does not list the yaml keys in full [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup (an inline command-interface fragment or a single-command property) - the apply refuses the node ("a command name is allowed only in command-interface-fragment project elements") and rolls back; reach the command through the handler parameter, or move the fragment into a project element of its own [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A vertically scrolled list with `Navigation: None`: the rows come in a single `PageSize` portion, the scrolling moves through that portion alone and the tail of the data is unreachable - the list search still finds a row the scrolling never shows; the cure is `Navigation: LoadingOnScroll`. A list that promises no scroll (`False` or the property absent) and an expression in `Navigation` are left alone [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
 
 ### Tier B - text and conventions
 

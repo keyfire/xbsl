@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 191.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 192.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -93,6 +93,7 @@ sidebar:
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у ДРУГОГО компонента ui-схемы есть (`Флажок` + `ЗамещающийТекст` – свойство `ПолеВвода`): применение отвечает `Неизвестное свойство`; имя, которого нет ни у одного компонента, не трогается – документация перечисляет ключи yaml не полностью [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке (инлайновый фрагмент командного интерфейса или команда-свойство): применение отвергает узел ("Имя команды разрешено задавать только в элементах проекта типа фрагмент командного интерфейса") и стенд откатывается; к команде обращаются через параметр обработчика, а имя даёт только фрагмент отдельным элементом проекта [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией `РазмерСтраницы`, прокрутка крутит только её, и хвост данных недостижим – запись находится поиском списка, но не прокруткой; лечение – `Навигация: ПодгрузкаПриПрокрутке`. Список, который прокрутку не обещает (`Ложь` или свойства нет), и выражение в `Навигации` не судятся [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
 
 ### Тир B – текст и соглашения
 
