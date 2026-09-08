@@ -87,6 +87,7 @@ The three `docs_*` tools need the `docs.sqlite` database (see [Documentation sea
 | `translate_status(root)` | the coverage and what is left - the cheap check before deciding anything; a root without a dictionary is refused, the answer naming where one is looked for |
 | `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row; the answer names the `dictionary` it read |
 | `translate_entries(root, kind, filter, limit, offset)` | what the dictionary already says, with the file and line of each entry |
+| `translate_unused(root, kind, filter, limit, offset, prune)` | the opposite question: what the DICTIONARY still says and the project no longer has. Deleting a component leaves its names and comment lines behind for good, and nothing else reports them; `prune` removes exactly the page it answers with, and is off by default |
 | `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place, or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format or the JSON list), `comment` is the head line a newly created file gets |
 
 The four answer in PAGES over one engine core, so filling a dictionary of thousands of
@@ -116,6 +117,7 @@ entries never means reading the files.
 | `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |
 | `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | generate forms for an object and register them in its `Interface` |
 | `meta_add_localization(yaml_path, language)` | add a translation file to a localized-strings element |
+| `meta_set_localization(yaml_path, name, values, section)` | write ONE localized string into every language at once - the default-language text into the element, each other language into its own translation file; a language the call says nothing about still gets the row, with the default text and a note |
 | `meta_localization_info(yaml_path)` | the localization picture: declared languages and what is still untranslated |
 
 **Form components – the designer, scripted**

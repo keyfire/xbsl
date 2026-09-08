@@ -15,6 +15,28 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **`meta_set_localization` / `xbsl set-localization`: one localized string, every language
+  at once.** `meta_add_localization` adds a LANGUAGE; a ROW had nothing, so a caption was
+  typed into the `LocalizedStrings` element and again into its English twin, and the two
+  files drifted apart with nothing but a pair of eyes to compare them. One call now writes
+  the default-language text into the element and every other language into its own
+  `Localization/<Code>/<Name>.yaml`, correcting a row that is already there in place. A
+  language named without a translation file is refused, naming the tool that adds one; an
+  existing language the call says nothing about still gets the row, with the default text
+  and a note, so no translation is left a key short. The section is kept where the key
+  already lives (`Rows` for a new one), and either spelling of it is accepted.
+- **`translate_unused`: the orphan pass is an MCP tool, not only a flag.** What the
+  dictionary still says and the project no longer has was reachable from the console alone;
+  an agent that had just deleted a component had to shell out for it. `filter` narrows the
+  answer to the names of THAT component rather than the whole history of the project, and
+  `prune` - off by default, and named apart from the listing on purpose - removes exactly
+  the page the tool answers with. `--stale` is accepted as the CLI spelling of `--unused`.
+- **A page says what it left out.** `translate_gaps` answered `total: 72` beside exactly
+  fifty rows and marked the cut nowhere; a dictionary built from that page was short by
+  twenty-two entries, found by the strict pass after the merge. Every paged translation
+  answer now carries `truncated`, `shown`, `remaining` and a `hint` naming the next
+  `offset`, `limit=0` for the whole list and - for the gaps - `--missing`, which writes the
+  entire remainder to a file.
 - **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
   carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
   replaces, a qualifier kept. Until now the editor offered only silencing it in the
@@ -26,6 +48,20 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
   navigation is `None`" on the components the ui schema gives a `Navigation` property to;
   an expression in the value and a list that promises no scroll are left alone.
+
+### Fixed
+- **The orphan pass reads a comment the way the translator writes it.** It used a regex of
+  its own that took one space off the marker, so a doc comment (`///`) came back with a
+  slash glued to the text, a `##` line with a hash, and a block comment was not read at
+  all - every phrase written from such a comment would have been reported as an orphan,
+  which is the one mistake `--prune` acts on. The payload now comes from
+  `code.comment_payloads`, the function the translating pass itself calls. A name is also
+  looked for in the FILE NAMES, since a folder and a file go through the same token plane.
+- **The dictionary reader sees a key written in the explicit yaml form.** A dumper writes a
+  long key as `? key` on one line and `: value` on the next, and nobody chooses that - the
+  live dictionary of a real project holds two literals in the shape. They were invisible to
+  the table, to the orphan pass and to the writer, which would have added a key that is
+  already in the file; the writer now replaces and removes both lines as one entry.
 
 ## 2026-09-06 – 0.94.0
 

@@ -34,6 +34,7 @@ xbsl add-form . --name <object> --forms list-cards     # list form as a card gri
 xbsl new-object <subsystem-dir> <http-service-kind> <name> --routes "GET /, POST /, GET /{id}"
 xbsl add-route  <service>.yaml "DELETE /{id}"          # url template + handler stub
 xbsl add-method <module>.xbsl <method> --annotations <annotation> --after <existing-method>
+xbsl set-localization <strings>.yaml <key> --value <language>=<text> ...  # one row, every language
 xbsl add-subsystem vendor/App <name>
 xbsl add-dependency . acme CurrencyConverter 2.0       # attach a library to the project
 xbsl rename-object . <old-name> <new-name>             # rename files + update references
@@ -81,6 +82,17 @@ switches the card to `CustomCard`, with the image above the caption) and up to t
 fields, dates formatted; notes report what landed on the card and what did not.
 `--card-min-width` sets the grid column width (default 400, 250 with a photo) and
 `--card-placeholder` the image shown when the photo is empty.
+
+`set-localization` writes ONE localized string into every language at once: the text of
+the default language goes into the `LocalizedStrings` element itself (that is where the
+platform keeps it), every other one into its own `Localization/<Code>/<Name>.yaml`. It was
+the missing half of `add-localization`, which adds a LANGUAGE: a caption used to be typed
+into the element and again into its English twin, and the two files drifted apart with
+nothing but a pair of eyes to compare them. A language named without a translation file is
+refused (add the language first); an existing language the call says nothing about still
+gets the row - with the default text and a note - so no translation is left a key short.
+A key keeps the section it already lives in, and a new one goes to `Rows` unless
+`--section` says `Templates`.
 
 `add-dependency` attaches a library – it writes the `Libraries` section of the project descriptor
 (`Name`, `Vendor`, `Version`). The version is the library's **release** version: a release is issued

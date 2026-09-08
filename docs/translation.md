@@ -230,6 +230,7 @@ xbsl translate e1c/app --entries --filter Задач            # what the dicti
 xbsl translate e1c/app --table --limit 0                   # all three: entries, gaps, totals
 xbsl translate e1c/app --set правки.yaml                   # apply a batch file (see below)
 xbsl translate e1c/app --unused                            # entries the project no longer uses
+xbsl translate e1c/app --stale --filter ПодсказкаТарифа     # the same, about the names of one deleted component
 ```
 
 `--table` answers all three questions in one pass, and that is what it exists for: the editor table asks exactly those three, and asked apart they are two identical walks over the sources in two processes plus a third reading of the same dictionary.
@@ -249,9 +250,15 @@ and the page apply to the removal as well; a page cut by `--limit` is called out
 removing "everything" while looking at fifty rows of three thousand is not what the flag looks
 like it does.
 
+`--stale` is the same flag under the name the question is usually asked by. `--filter` is
+what makes the answer a worklist: after a deletion the question is about the names of THAT
+component, not about the whole history of the project.
+
 The reading is textual, and the direction of its error is the point: a name that also occurs in
 prose may be counted as used, which merely leaves an entry in place, but a LIVE entry is never
-called an orphan. A qualified key (`<Owner>.<Name>`) is judged by both halves - the sources
+called an orphan. A comment line is keyed by the translator's own payload reading, markers and
+decoration taken off exactly as the writing pass takes them, and a name is looked for in the
+FILE NAMES as well - a folder and a file go through the same token plane. A qualified key (`<Owner>.<Name>`) is judged by both halves - the sources
 spell them apart, and reading the dotted text as one name would call every such entry an orphan.
 
 `--gaps` shows the count, the first places to look at and `suggestion` - the platform's own
@@ -259,7 +266,7 @@ spelling where it has one. A suggestion is a hint, never an answer: a name the p
 declared may deliberately need a different word, and an INTERNAL platform name (a metadata
 class such as `CodeAttrMd`) is never offered at all.
 
-**The MCP tools** are the same four, for an agent that fills the dictionary:
+**The MCP tools** are the same five, for an agent that fills the dictionary:
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
@@ -268,8 +275,17 @@ class such as `CodeAttrMd`) is never offered at all.
   answer when the full rows would not;
 - `translate_entries` - what the dictionary already says, with the file and line of each
   entry, so a new word stays consistent with the accepted ones;
+- `translate_unused` - the opposite question: what the dictionary still says and the
+  project no longer has; `filter` narrows it to the names of one deleted component, and
+  `prune` (off by default) removes exactly the page the tool answers with;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
+
+Every page states what it left out. `total: 72` beside exactly fifty rows reads as a
+complete answer, and a dictionary built from one was short by twenty-two entries - found
+by the strict pass after the merge. So a cut page carries `truncated: true`, `remaining`
+and a `hint` naming the next `offset`, `limit=0` for the whole list and - for the gaps -
+`--missing`, which writes the entire remainder to a file as a dictionary stub.
 
 A new entry lands in `090-manual.yaml` (or the file named by `target`), while an entry that
 already exists is corrected where it lives - the writer never duplicates a key, and a
