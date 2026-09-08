@@ -9,6 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.6
+
+### Added
+- **The `yaml/property-shadows-module` finding links to the documentation.** Its code in the
+  Problems panel is now a link to the section on addressing a module by its name - the very
+  ground the rule stands on: a form property named like a common module shadows it, and the
+  compiler reads the existing `Module.Method()` calls as calls on the property's value.
+
 ## 0.67.5
 
 ### Added

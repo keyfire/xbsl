@@ -166,6 +166,7 @@ def test_the_explicit_key_form_is_read(tmp_path):
         ("literal", "описание", "description")]
 
 
+@pytest.mark.needs_data
 def test_an_explicit_entry_is_rewritten_as_one_whole(tmp_path):
     """Both lines go, or a stray `: value` is left where the entry was."""
     path = _explicit(tmp_path, '"описание"', '"description"')
@@ -180,6 +181,7 @@ def test_an_explicit_entry_is_rewritten_as_one_whole(tmp_path):
         ("описание", "the description")]
 
 
+@pytest.mark.needs_data
 def test_an_explicit_entry_is_removed_whole(tmp_path):
     path = _explicit(tmp_path, '"описание"', '"description"')
 

@@ -40,6 +40,7 @@ def test_a_composite_type_keeps_its_alternatives(tmp_path):
     assert _added(tmp_path, "Значение", "Строка|Число|?")["Значение"] == "Строка|Число|?"
 
 
+@pytest.mark.needs_data
 def test_a_type_given_in_english_is_written_in_the_project_language(tmp_path):
     assert _added(tmp_path, "Вес", "Number")["Вес"] == "Число"
 

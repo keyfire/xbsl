@@ -19,7 +19,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-09-08 – 0.95.0, 0.96.0
+## 2026-09-09 – 0.97.0
 
 ### Added
 - **The `xbsl new-object` command takes a `--base` key.** The base type of an interface
@@ -94,17 +94,6 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   enumerations, common modules and the kind inside a name. Every seed carries a
   hand-written English twin; the known gaps are three now - two behind the member catalog,
   the third behind the Russian words of the naming standard.
-- **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
-  carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
-  replaces, a qualifier kept. Until now the editor offered only silencing it in the
-  baseline.
-- **`yaml/list-scroll-without-loading`: the list is scrolled, yet the scrolling loads
-  nothing.** `Navigation: None` means not "no pagination" but "no loading": the rows come
-  in a single `PageSize` portion and the tail of the data is unreachable - the
-  `ListNavigation` documentation says so outright while the compiler stays silent. Judged
-  is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
-  navigation is `None`" on the components the ui schema gives a `Navigation` property to;
-  an expression in the value and a list that promises no scroll are left alone.
 
 ### Changed
 - **The stale baseline entries are read out with their reasons.** An entry's `reason` is prose
@@ -112,6 +101,7 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the message without it. `--stale-baseline` and `--prune-baseline` now print the reason under
   the entry, and pruning says how many of the removed entries carried one - after the commit
   that text lives on only in the git history.
+
 ### Fixed
 - **An English project gets English names where the tool invents them too.** A standard
   attribute (the `Name` of a catalog, the `Period` and `Recorder` of a register) used to be
@@ -212,6 +202,21 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   code spells it, so `Height: =...` in the yaml and `Components.Block.Height = 640` in the
   module never met and a translated pair went unjudged. The property from the code is
   folded to the canonical name before the lookup.
+
+## 2026-09-08 – 0.95.0, 0.96.0
+
+### Added
+- **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
+  carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
+  replaces, a qualifier kept. Until now the editor offered only silencing it in the
+  baseline.
+- **`yaml/list-scroll-without-loading`: the list is scrolled, yet the scrolling loads
+  nothing.** `Navigation: None` means not "no pagination" but "no loading": the rows come
+  in a single `PageSize` portion and the tail of the data is unreachable - the
+  `ListNavigation` documentation says so outright while the compiler stays silent. Judged
+  is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
+  navigation is `None`" on the components the ui schema gives a `Navigation` property to;
+  an expression in the value and a list that promises no scroll are left alone.
 
 ## 2026-09-06 – 0.94.0
 

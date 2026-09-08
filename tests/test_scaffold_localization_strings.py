@@ -198,6 +198,7 @@ def test_the_section_can_be_named(element: Path):
     assert _loaded(element)["Шаблоны"]["Привет"] == "Здравствуйте, %0!"
 
 
+@pytest.mark.needs_data
 def test_the_section_is_taken_in_either_spelling(element: Path):
     """The platform is bilingual, and a project may be written either way."""
     _set(element, "Привет", {"Русский": "Здравствуйте, %0!"}, section="Templates")

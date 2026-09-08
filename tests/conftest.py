@@ -56,6 +56,7 @@ _DATA_DEPENDENT = {
     "test_rule_reserved",
     "test_index",
     "test_baseline",
+    "test_unreadable_yaml",  # the rules read the stdlib catalog and the ui schema
     "test_rule_query_tables",
     "test_rule_query_in_composite",
     "test_rule_query_named_parameter",  # the rule tokenizes the module
