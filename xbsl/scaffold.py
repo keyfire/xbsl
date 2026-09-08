@@ -741,6 +741,11 @@ _MARKUP_ESCAPES = (("&lt;", "<"), ("&gt;", ">"))
 #: arrive as the caller meant it.
 _TYPE_EXPRESSION = re.compile(rf"^[{_WORD}<>,.?: \t]+$")
 
+#: The same for a FIELD type, where the alternative bar is legal too (a composite type
+#: like a string or a number): a base type cannot be composite, so the stricter one
+#: keeps the bar out.
+_FIELD_TYPE_EXPRESSION = re.compile(rf"^[{_WORD}<>,.?:| \t]+$")
+
 
 def unescaped_markup(value: str) -> str:
     """`&lt;` / `&gt;` back to the brackets they stand for.
@@ -756,7 +761,7 @@ def unescaped_markup(value: str) -> str:
     return value
 
 
-def _type_expression(value: str, what: str) -> str:
+def _type_expression(value: str, what: str, pattern: re.Pattern = _TYPE_EXPRESSION) -> str:
     """A type expression as the platform writes it: markup escapes undone, the rest verified.
 
     The verification is the other half of the unescaping: whatever the transport mangled
@@ -764,7 +769,7 @@ def _type_expression(value: str, what: str) -> str:
     name, and the caller has to see that now - not as a rolled-back deploy.
     """
     value = unescaped_markup(value).strip()
-    if not value or not _TYPE_EXPRESSION.match(value):
+    if not value or not pattern.match(value):
         raise ScaffoldError(
             f"Недопустимое значение {what}: '{value}' – ожидается тип "
             "(имя, при необходимости с параметрами в угловых скобках), например "
@@ -2251,6 +2256,12 @@ def _item_type(
     - an open type with no default (`Owner` - the owner is the author's choice) needs an
       explicit type and says so.
     """
+    if type_:
+        # The type arrives from a CLIENT (MCP, the editor), so it can carry markup escapes
+        # and the spelling of another language - the two traps the component base had. The
+        # value of a mapping section (a localized string) never reaches here: that branch
+        # returns earlier, and there `&` and `;` are legal text.
+        type_ = typed_in(_type_expression(type_, "типа элемента", _FIELD_TYPE_EXPRESSION), lang)
     cls = metamodel.item_class(kind, path) if metamodel.available() else None
     if not cls or not metamodel.dispatch_name(cls):
         return type_ or "Строка"

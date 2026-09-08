@@ -93,6 +93,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the entry, and pruning says how many of the removed entries carried one - after the commit
   that text lives on only in the git history.
 ### Fixed
+- **The type of a new item is read the way a component base is.** `meta_add_field` and
+  `op_add_field` undo markup escapes in the type value, refuse what is not a type at
+  all, and write the type in the spelling of the PROJECT (an English name lands in
+  Russian inside a Russian project). A composite type with its alternatives still
+  passes whole. The value of a mapping section (a localized string) is not put through
+  this check: there an ampersand and a semicolon are legal text.
 - **One unreadable yaml no longer buries the report under phantom findings.** A file that
   failed to parse used to drop out of the project model entirely, and the object it declares
   became an unknown name for every rule at once. Measured over a live project: a broken
