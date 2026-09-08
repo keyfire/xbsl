@@ -262,6 +262,35 @@ def spelled_type(value: str, lang: str, keep: frozenset[str] = frozenset()) -> s
     return _TOKEN_RE.sub(replace, value)
 
 
+def russian_type(value: str, keep: frozenset[str] = frozenset()) -> str:
+    """The mirror of spelled_type: platform names inside a VALUE spelled in Russian.
+
+    Deliberately NARROWER than the forward direction. Going to English a token is looked up
+    in the compiler dictionary first, because there is nothing else to answer for a form slot
+    or a component property; coming back, that same dictionary answers `Table` with the
+    reread command and `Number` with the document-number word - names of another role that
+    would corrupt an author's element spelled like an English type. So only what the platform
+    knows as a TYPE is turned around, and everything else is left as it stands: `Group`
+    arrives as the platform's own name for a group, `Goods` stays `Goods`. `keep` is never
+    translated.
+    """
+    if not value:
+        return value
+
+    def replace(match: re.Match) -> str:
+        token = match.group(0)
+        if token in keep:
+            return token
+        return terms.russian(token, "types") or token
+
+    return _TOKEN_RE.sub(replace, value)
+
+
+def typed_in(value: str, lang: str, keep: frozenset[str] = frozenset()) -> str:
+    """A type expression in the language the project writes its types in - either way."""
+    return spelled_type(value, lang, keep) if lang == "en" else russian_type(value, keep)
+
+
 def spelled_template(lines: list[str], lang: str, keep: frozenset[str] = frozenset()) -> list[str]:
     """Template lines fully in the given language: keys, and platform names in the values."""
     if lang != "en":
@@ -702,7 +731,49 @@ _FORM_BASES = ("Форма", "ФормаОбъекта", "ФормаСписка
                "ФормаОбработки")
 
 
-def _component_base_lines(base: str) -> list[str]:
+#: The markup escapes a type expression arrives in when the caller speaks through a transport
+#: that escapes brackets. An `&` is not part of any type expression, so undoing these is
+#: unambiguous - and what is left of one afterwards is refused by _type_expression.
+_MARKUP_ESCAPES = (("&lt;", "<"), ("&gt;", ">"))
+
+#: What a type expression is made of: names, the generic brackets and their comma, the
+#: namespace dot, the nullable mark. Nothing else - a stray character means the value did not
+#: arrive as the caller meant it.
+_TYPE_EXPRESSION = re.compile(rf"^[{_WORD}<>,.?: \t]+$")
+
+
+def unescaped_markup(value: str) -> str:
+    """`&lt;` / `&gt;` back to the brackets they stand for.
+
+    A generic base used to be written into the yaml exactly as it came: `base="Форма&lt;Булево?&gt;"`
+    produced `Тип: Форма&lt;Булево?&gt;`, a file that looks finished and that the compiler
+    only rejects at deploy time. The escaping comes from the CLIENT of the tool, not from a
+    person's hands, so it does not read as a typo either - which is why it is undone here
+    rather than reported.
+    """
+    for escaped, char in _MARKUP_ESCAPES:
+        value = value.replace(escaped, char)
+    return value
+
+
+def _type_expression(value: str, what: str) -> str:
+    """A type expression as the platform writes it: markup escapes undone, the rest verified.
+
+    The verification is the other half of the unescaping: whatever the transport mangled
+    beyond the two brackets (a leftover `&amp;`, a quote, a newline) has no place in a type
+    name, and the caller has to see that now - not as a rolled-back deploy.
+    """
+    value = unescaped_markup(value).strip()
+    if not value or not _TYPE_EXPRESSION.match(value):
+        raise ScaffoldError(
+            f"Недопустимое значение {what}: '{value}' – ожидается тип "
+            "(имя, при необходимости с параметрами в угловых скобках), например "
+            "\"Группа\" или \"ФормаСписка<Неопределено>\""
+        )
+    return value
+
+
+def _component_base_lines(base: str, lang: str = "ru") -> list[str]:
     """The `Inherits` block of an interface component built on `base`.
 
     The scaffold used to write one base for every component - a form with a template wrapper -
@@ -713,17 +784,24 @@ def _component_base_lines(base: str) -> list[str]:
     A form base keeps the template wrapper (`Form.Content` is typed `FormTemplate?`, so a
     group cannot sit there directly); any other base is written as it is - its content is the
     author's business, and inventing it would be inventing markup.
+
+    The base is written in the language the project spells its types in, the same way the
+    header keys around it are: the key is documented in English words, so `base="Group"`
+    is the natural thing to pass, and a `Тип: Group` in a Russian project was fixed by hand
+    every time. Which base is a FORM is decided on the Russian spelling of it, so the
+    template wrapper is not lost when the caller names the base in the other language.
     """
+    base = typed_in(_type_expression(base, "базового типа (base)"), lang)
     head = base.split("<", 1)[0].strip()
-    lines = ["Наследует:", f"    Тип: {base.strip()}"]
-    if head in _FORM_BASES:
-        return lines + [
+    lines = ["Наследует:", f"    Тип: {base}"]
+    if russian_type(head) in _FORM_BASES:
+        return lines + spelled_template([
             "    Содержимое:",
             "        Тип: ПроизвольныйШаблонФормы",
             "        Содержимое:",
             "            Тип: Группа",
             "            Компоновка: Вертикальная",
-        ]
+        ], lang)
     return lines
 
 
@@ -1797,13 +1875,14 @@ def op_new_object(
             _new_report(yaml_path, name, report or {}, result, scope), yaml_path, presentation
         )
 
+    lang = project_language(directory)
     extra = _expand_extra(spec.extra, name)
     if base:
         if kind != "КомпонентИнтерфейса":
             raise ScaffoldError(
                 f"Базовый тип (base) задаётся только у вида КомпонентИнтерфейса, а не у {kind}"
             )
-        extra = _component_base_lines(base)
+        extra = _component_base_lines(base, lang)
     if environment:
         extra = [line for line in extra if not line.startswith("Окружение:")]
         extra.append(f"Окружение: {environment}")
@@ -1814,7 +1893,7 @@ def op_new_object(
         extra += ["КонтрольДоступа:", f"    {_PERMISSIONS_KEY}:",
                   f"        {ACCESS_DEFAULT_RIGHT}: {access}"]
     content = new_object_yaml(
-        kind, new_uuid(), name, scope or spec.scope, extra, project_language(directory),
+        kind, new_uuid(), name, scope or spec.scope, extra, lang,
         presentation=presentation,
     )
     result.changes.append(FileChange(yaml_path, content, created=True))
@@ -1825,7 +1904,7 @@ def op_new_object(
         )
     if spec.object_module_stub:
         result.changes.append(FileChange(
-            object_module_path(yaml_path, project_language(directory)),
+            object_module_path(yaml_path, lang),
             spec.object_module_stub.format(name=name), created=True,
         ))
     if spec.note:

@@ -652,7 +652,10 @@ def meta_new_object(
     base – for an InterfaceComponent, what the component inherits: "Form" (the default, with
     the form-template wrapper), "Group", "StandardCard", "CustomComponent", a generic like
     "ListForm<Undefined>" - a group is the most common base in a real project, and the default
-    scaffold used to be rewritten by hand for it.
+    scaffold used to be rewritten by hand for it. Either spelling is accepted and the yaml
+    gets the one the project writes its types in (a Russian project gets `Тип: Группа`);
+    pass the brackets as they are - escaped ones (`&lt;`) are undone, anything else that is
+    not a type expression is refused rather than written into the file.
     """
     root_dir = _base(root)
     return _meta(

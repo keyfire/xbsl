@@ -27,6 +27,21 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   navigation is `None`" on the components the ui schema gives a `Navigation` property to;
   an expression in the value and a list that promises no scroll are left alone.
 
+### Fixed
+- **`meta_new_object` writes the base of a component the way the project spells its types.**
+  The `base` key is documented in English words, so `base="Group"` is the natural thing to
+  pass – and a Russian project got `Type: Group` in its yaml, a line rewritten by hand every
+  time: the linter says nothing about it and the compiler only speaks at deploy. The base is
+  now written in the language of the project both ways, and whether it names a FORM – the
+  bases that need the form-template wrapper – is decided on one spelling, so an English form
+  base no longer loses the wrapper either.
+- **An escaped `base` is read as the brackets it stands for.** `base="Form&lt;Boolean?&gt;"`
+  used to go into the yaml exactly as it arrived: the file looks finished, and the compiler
+  meets the garbage only at deploy. The escaping comes from the CLIENT of the tool rather
+  than from a person's hands, so it is undone instead of reported – and what is left of a
+  mangled value afterwards, anything that is not a type expression, is refused rather than
+  written into the file.
+
 ## 2026-09-06 – 0.94.0
 
 ### Added
