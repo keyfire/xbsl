@@ -487,7 +487,7 @@ def _abbrev_core(name: str, m: re.Match) -> str:
     "ЗапросыКМССервер" the abbreviation is КМС, and "С" starts "Сервер". After that the group
     may be down to a single letter - that is not an abbreviation but a preposition or
     conjunction glued to a word: "ДоступКПриложениям", "КнопкаЗаписатьИЗакрыть",
-    "ОбращенияВПоддержку".
+    "ЗаметкиВАрхиве".
     """
     group = m.group(0)
     tail = name[m.end():m.end() + 1]

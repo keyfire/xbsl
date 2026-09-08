@@ -113,7 +113,7 @@ def test_abbreviation_caps(name, suggestion):
 
 
 @pytest.mark.parametrize("name", [
-    "ДоступКПриложениям", "КнопкаЗаписатьИЗакрыть", "ОбращенияВПоддержку",
+    "ДоступКПриложениям", "КнопкаЗаписатьИЗакрыть", "ЗаметкиВАрхиве",
 ])
 def test_abbreviation_ignores_prepositions(name):
     # A single capital before a word is a preposition or a conjunction, not an abbreviation.
