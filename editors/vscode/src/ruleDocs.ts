@@ -22,6 +22,7 @@ const CONCAT = "topics/string-concatenation";
 const METHODS = "topics/methods-in-built-in-script-language";
 const EXEC = "topics/module-execution";
 const MODULAR = "topics/modular-development";
+const ADDRESSING = "topics/addressing-module";
 const STATIC = "topics/static-methods";
 const ENUM = "topics/enumeration-properties";
 const IMAGES = "topics/image-library";
@@ -159,6 +160,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "видимость-языковых-конструкций",
   },
   { match: (r) => r === "yaml/missing-import", page: MODULAR, anchor: "импорт-пространств-имен" },
+  { match: (r) => r === "yaml/property-shadows-module", page: ADDRESSING },
   { match: (r) => r === "yaml/presentation-field", page: "topics/element-view" },
   {
     match: (r) => r === "yaml/foreign-not-public" || r === "code/foreign-not-public",

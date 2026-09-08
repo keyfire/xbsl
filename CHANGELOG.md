@@ -15,6 +15,18 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **`yaml/property-shadows-module`: a component property named after a common module of
+  the project.** The property name hides the module across the whole component, and the
+  `Module.Method()` accesses written before it are read as members of the property value:
+  the apply fails with an unknown-method error, the stand rolls back to the previous build,
+  and the complaints point at the component file carrying the real method names - the module
+  looks broken while it is merely hidden. The rule names the clash at the property
+  declaration, in both spellings of the sources. Only a common module is judged, and only
+  one reachable by the bare name - the component's own subsystem, or one its yaml imports;
+  a namesake catalog, enumeration or component is left alone, because such a name is used
+  in a TYPE position, which a property does not take over. There is no autofix on purpose:
+  the cure is a rename, and the name is written in the markup, in the paired module and
+  outside the component as well.
 - **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
   carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
   replaces, a qualifier kept. Until now the editor offered only silencing it in the
