@@ -12,9 +12,13 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-09-08 – 0.95.0
+## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
+  carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
+  replaces, a qualifier kept. Until now the editor offered only silencing it in the
+  baseline.
 - **`yaml/list-scroll-without-loading`: the list is scrolled, yet the scrolling loads
   nothing.** `Navigation: None` means not "no pagination" but "no loading": the rows come
   in a single `PageSize` portion and the tail of the data is unreachable - the
