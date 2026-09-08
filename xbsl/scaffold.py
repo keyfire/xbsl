@@ -194,7 +194,7 @@ _LINE_KEY_RE = re.compile(rf"^([ \t]*(?:-[ \t]*)?)([{_WORD}]+):(.*)$")
 
 
 def named_in(name: str, lang: str) -> str:
-    """A standard attribute name in the project's language (`Наименование` is `Name`).
+    """A standard attribute name in the project's language (`Name` in an English one).
 
     The scaffolding invents these names: they are not in the yaml, and the language pass
     protects them as the AUTHOR's, so a Russian one used to survive into an English project
@@ -270,7 +270,7 @@ def spelled_type(value: str, lang: str, keep: frozenset[str] = frozenset()) -> s
             return token
         # The facet dictionary is the last source and the narrowest: after a dot a type
         # expression names a FACET, and the property vocabulary calls the same word something
-        # else (`Ссылка` is `Reference` as a facet and `Link` as a property).
+        # else: the same word is `Reference` as a facet and `Link` as a property.
         return (terms.common_english(token) or terms.english(token, "types")
                 or terms.facet_suffix_english(token) or token)
 
@@ -1363,7 +1363,7 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
     # A standard attribute the object declares itself is not added a second time - in either
     # spelling: an English catalog declares `Name`, and that IS `Наименование`.
     # The names the tool completes are written in the language of the FILE: an English
-    # catalog gets `Name`, not `Наименование` - see named_in.
+    # catalog gets `Name`, not the Russian spelling - see named_in.
     info_lang = yaml_language(text, hit.path.parent)
     standard = [
         {**f, "name": named_in(f["name"], info_lang), "type": typed_in(f["type"], info_lang)}

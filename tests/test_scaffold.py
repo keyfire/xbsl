@@ -2070,7 +2070,7 @@ def test_object_info_of_an_english_object(tmp_path):
     subsystem = _make_english_project(tmp_path)
     info = scaffold.object_info(tmp_path, name="Tasks")
     assert info["kind"] == "Справочник"
-    # The standard Наименование is added because this catalog does not declare it - and it
+    # The standard `Name` attribute is added because this catalog does not declare it - and it
     # arrives under the spelling of the FILE, so an English project gets `Name`.
     assert [f["name"] for f in info["fields"]] == ["Name", "DueDate"]
     assert info["tabulars"] == [{"name": "Steps", "fields": [{"name": "Step", "type": "String"}]}]
