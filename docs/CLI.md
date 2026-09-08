@@ -40,11 +40,11 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
 | `--write-baseline FILE` | instead of a report, write all current findings to a baseline file (freeze the debt; paths in the file are relative to its directory) |
 | `--no-baseline` | do not look for a baseline file next to the sources (by default a discovered .xbsllint-baseline is applied on its own) |
-| `--stale-baseline` | list the baseline entries that no longer suppress anything (together with `--baseline`) |
-| `--prune-baseline` | list the stale baseline entries and remove them from the file (together with `--baseline`; the counts of live entries are left alone) |
+| `--stale-baseline` | list the baseline entries that no longer suppress anything, with their reasons (together with `--baseline`) |
+| `--prune-baseline` | list the stale baseline entries with their reasons and remove them from the file (together with `--baseline`; the file's order and the counts of live entries are left alone) |
 | `--fix` | fix mechanical findings in place (trailing spaces, typographic characters, line endings) and report the rest; only unambiguous fixes |
 | `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
-| `--list-rules` | print the list of rules and exit |
+| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does |
 | `--where` | show the Element data root (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |

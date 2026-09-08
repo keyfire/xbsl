@@ -56,7 +56,7 @@ from functools import lru_cache
 
 from xbsl import dataset, i18n, uischema
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.rules.yaml_schema import (
     _composed,
     _HAVE_YAML,
@@ -136,15 +136,25 @@ MESSAGES = {
               "'{n[Тип]}: {arg}', the field '{field}<{arg}>'; 'not set' is expressed by the "
               "empty date '{arg}{{}}'.",
     },
+    "yaml/hint-too-long.param.limit": {
+        "ru": "предел подсказки в символах: длиннее платформа обрезает текст при отрисовке",
+        "en": "the hint limit in characters: past it the platform cuts the text when rendering",
+    },
+    "yaml/hint-too-long.param.margin": {
+        "ru": "запас над пределом, с которого правило заговаривает: у самой границы исход "
+              "зависит от шрифта и ширины",
+        "en": "the margin over the limit at which the rule speaks: right at the border the "
+              "outcome depends on the font and the width",
+    },
 }
 i18n.register(MESSAGES)
 
 # The measured cut-off of the hint (a live project, the session-categories tooltip).
-HINT_LIMIT = 290
+HINT_LIMIT = rule_param("yaml/hint-too-long", "limit", 290, "yaml/hint-too-long.param.limit")
 
 # The margin over the limit at which the rule speaks: closer to the limit the outcome depends on
 # the font and the width, and a text that may still fit must not be reported.
-HINT_MARGIN = 20
+HINT_MARGIN = rule_param("yaml/hint-too-long", "margin", 20, "yaml/hint-too-long.param.margin")
 
 _SIZE_KEYS = ("Высота", "Ширина")
 

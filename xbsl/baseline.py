@@ -355,6 +355,11 @@ def without_entries(data: dict, entries: list[dict]) -> dict:
     Only whole identities are removed, never a part of a count: an entry is either spent by
     the run or gone. Emptied rule and file nests go with them, so a pruned baseline of a
     clean project is an empty `files` rather than a tree of husks.
+
+    An entry's `reason` goes with it - it is a sentence about THAT finding, and the finding
+    is gone. Every surface therefore reads the reasons out before removing them (the CLI
+    prints them under the entries, the MCP `baseline_prune` returns them), and after the
+    commit the text lives on in the history of the file.
     """
     drop = {(e["path"], e["rule"], e["message"]) for e in entries}
     files: dict = {}

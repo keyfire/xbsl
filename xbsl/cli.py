@@ -1071,21 +1071,38 @@ def _check_main(argv: list[str]) -> int:
 
     from xbsl.engine import RULES, active_rules, load, make_source, run_sources
 
+    select = _parse_set(args.select)
+    ignore = _parse_set(args.ignore)
+    enable = _parse_set(args.enable)
+
     if args.list_rules:
-        for r in sorted(RULES, key=lambda x: (x.tier, x.id)):
+        # Narrowed the way a run is: `--list-rules --select code/duplicate-method-body`
+        # answers about one rule (an id, a group or a tier letter) instead of making the
+        # reader carry the whole registry to find one line.
+        listed = active_rules(select, ignore, enable) if select or ignore else list(RULES)
+        for r in sorted(listed, key=lambda x: (x.tier, x.id)):
             mark = "   " if r.enabled_by_default else "off"
             print(f"{r.tier} {mark} {r.id:30} {r.severity.value:7} {r.title}")
             # A bare "off" leaves the reader guessing whether the rule is broken, noisy or
             # simply not for them - so a disabled rule states its reason right here.
             if r.off_reason_text:
                 print(f"       {i18n.t('cli.rule-off')}: {r.off_reason_text}")
-        if not RULES:
-            print(i18n.t("cli.no-rules"))
+            # The value the rule judges by, said out loud: it used to be a constant in the
+            # sources, and the only way to learn it was to rewrite the code around a guess
+            # and re-run the linter over the whole project.
+            for p in r.params:
+                print("       " + i18n.t(
+                    "cli.rule-param", name=p.name, value=p.value, default=p.default,
+                    env=p.env, doc=p.doc,
+                ))
+        if not listed:
+            # An empty answer to a selection is a mistyped key, not an empty registry -
+            # the two used to read the same, and "no rules registered yet" sent the reader
+            # looking for a broken installation.
+            keys = sorted((select or set()) | (ignore or set()) | (enable or set()))
+            print(i18n.t("cli.no-rules-selected", keys=", ".join(keys), total=len(RULES))
+                  if RULES else i18n.t("cli.no-rules"))
         return 0
-
-    select = _parse_set(args.select)
-    ignore = _parse_set(args.ignore)
-    enable = _parse_set(args.enable)
     # The rule set of this run, named in every report: two installations answering
     # differently about one tree differ here first, and the report must say so itself.
     active = active_rules(select, ignore, enable)
@@ -1191,12 +1208,22 @@ def _check_main(argv: list[str]) -> int:
                     "cli.baseline-stale-entry", path=entry["path"], rule=entry["rule"],
                     count=entry["count"], message=entry["message"],
                 ), file=sys.stderr)
+                # The reason is prose a human wrote about a deliberate exclusion, not a
+                # counter the tool keeps - it is read out before the entry goes.
+                if entry.get("reason"):
+                    print(i18n.t("cli.baseline-stale-reason", reason=entry["reason"]),
+                          file=sys.stderr)
         if args.prune_baseline:
             target = Path(args.baseline)
             if stale:
                 baseline.save(target, baseline.without_entries(data, stale))
             print(i18n.t("cli.baseline-pruned", path=target, removed=len(stale)),
                   file=sys.stderr)
+            # Removing a reasoned entry removes the sentence with it: the file is under
+            # version control, and after the commit that text is only in the history.
+            reasoned = sum(1 for entry in stale if entry.get("reason"))
+            if reasoned:
+                print(i18n.t("cli.baseline-pruned-reasons", count=reasoned), file=sys.stderr)
 
     if args.format == "json":
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.

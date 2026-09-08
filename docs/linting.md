@@ -43,6 +43,24 @@ at runtime – `xbsl --list-rules`, which also counts in the rules and severity 
 installed plugins. The tier overview is in the README; below is what the deeper
 tiers actually verify.
 
+A rule that judges by a NUMBER prints that number. `--list-rules` narrows the same way a run
+does, so one rule can be asked about on its own:
+
+```sh
+xbsl --list-rules --select code/duplicate-method-body
+# D     code/duplicate-method-body     warning The method body is repeated in another file
+#        parameter min-lines = 5 (default 5, env XBSL_CODE_DUPLICATE_METHOD_BODY_MIN_LINES) - ...
+```
+
+The parameter is declared where the rule uses it, so the listing cannot drift from the value the
+rule works with. Every parameter is overridable by an environment variable named after it:
+`XBSL_` plus the rule id and the parameter name, everything but letters and digits turned into
+`_`. The listing prints the value in force AND the default, an unreadable value keeps the
+default and says so, and a run whose parameters are off their defaults names them in its
+provenance – the `params` key of the json summary and a line of the text summary – because a
+threshold changed by the environment changes the findings. The MCP `list_rules(select=...)`
+answers with the same records under `params`.
+
 The type rules of tier D cover every type position in code (`new`, `as` casts, annotations,
 signatures) and every `Type:` key in yaml (unions `A|B|?`, generics, nullable): the root must
 be a known type – stdlib, a project object, a module-declared local type or a global type of a
@@ -108,6 +126,15 @@ a narrowing `--select`, by being off by default, by being unknown to the install
 produces no findings by construction, and calling its entries stale would declare the debt
 paid without looking. Those are counted apart ("baseline entries not checked", the
 `baseline_not_checked` key in json), and `--prune-baseline` leaves them alone.
+
+The stale entries are NAMED, not just counted. `--stale-baseline` lists them - path, rule,
+count, message and, on a line of its own, the `reason` the entry carries; `--format json`
+carries the same records in `summary.baseline_stale_entries`, and so does the MCP `lint_paths`
+answer. `--prune-baseline` lists them and removes them from the file, keeping its order and
+format (it is a committed file, and a re-sorted rewrite is an unreadable diff) and saying how
+many of the removed entries carried a reason - after the commit that text lives on only in the
+git history. The MCP side of the same act is the `baseline_prune` tool (with `dry_run` to see
+what would go); removing is never a by-product of an ordinary check.
 
 `xbsl baseline add <paths> --rule <rule> [--reason ...]` freezes one finding at a time: it runs
 the named rule over the given paths and appends only the findings the baseline does not cover

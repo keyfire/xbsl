@@ -31,7 +31,7 @@ from collections.abc import Iterable
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.lexer import tokens
 
 MESSAGES = {
@@ -54,6 +54,12 @@ MESSAGES = {
         "en": "A secret literal: the '{prefix}' prefix is a {vendor} key. Keep it in the "
               "application settings ({n[Параметры.ПолучитьПараметр]}); a key already committed is "
               "compromised - removing it from the code is not enough, it has to be revoked.",
+    },
+    "security/hardcoded-secret.param.min-literal-length": {
+        "ru": "минимальная длина строкового литерала, который вообще рассматривается как "
+              "секрет: короче – настройка или заглушка",
+        "en": "the shortest string literal the rule weighs as a secret at all: below that it "
+              "is a setting or a stand-in",
     },
 }
 i18n.register(MESSAGES)
@@ -105,7 +111,10 @@ _VENDORS = (
     ("y0_", "Яндекс OAuth"),
 )
 
-_MIN_LENGTH = 16
+_MIN_LENGTH = rule_param(
+    "security/hardcoded-secret", "min-literal-length", 16,
+    "security/hardcoded-secret.param.min-literal-length",
+)
 # The alphabet secrets are written in. Cyrillic in a value means prose or a setting name,
 # never a key.
 _SECRET_ALPHABET = re.compile(r"^[A-Za-z0-9_+/=.\-]+$")
