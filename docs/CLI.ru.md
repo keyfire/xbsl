@@ -316,7 +316,7 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
-                       [--dry-run]
+                       [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -339,6 +339,7 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--routes ROUTES` | маршруты HttpСервис: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | описание отчёта (JSON: source, rows, columns, measures) |
 | `--presentation PRESENTATION` | Представление – заголовок элемента (без него первый же линт даёт naming/presentation) |
+| `--base BASE` | базовый тип компонента интерфейса (Группа, ФормаОбъекта&lt;Товар.Объект&gt;); только для вида КомпонентИнтерфейса |
 | `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
 
 ### `xbsl add-field`

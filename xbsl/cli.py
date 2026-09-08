@@ -584,6 +584,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--routes", help=i18n.t("cli.help.scaf.new-object-routes"))
     p.add_argument("--report", help=i18n.t("cli.help.scaf.new-object-report"))
     p.add_argument("--presentation", help=i18n.t("cli.help.scaf.no-presentation"))
+    p.add_argument("--base", help=i18n.t("cli.help.scaf.no-base"))
 
     p = sub.add_parser("add-field", help=i18n.t("cli.help.scaf.add-field"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
@@ -793,7 +794,7 @@ def _scaffold_main(argv: list[str]) -> int:
             result = scaffold.op_new_object(
                 Path(args.directory), args.kind, args.name,
                 scope=args.scope, environment=args.environment, access=args.access,
-                routes=args.routes, presentation=args.presentation,
+                routes=args.routes, presentation=args.presentation, base=args.base,
                 report=json.loads(args.report) if args.report else None,
             )
         elif args.command == "add-field":

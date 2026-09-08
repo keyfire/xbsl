@@ -316,7 +316,7 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
                        [--routes ROUTES] [--report REPORT] [--presentation PRESENTATION]
-                       [--dry-run]
+                       [--base BASE] [--dry-run]
                        directory kind name
 ```
 
@@ -339,6 +339,7 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 | `--routes ROUTES` | HttpService routes: "GET /, POST /, GET /{id}" |
 | `--report REPORT` | report description (JSON: source, rows, columns, measures) |
 | `--presentation PRESENTATION` | Presentation – the element caption (without it the very first lint answers naming/presentation) |
+| `--base BASE` | the base type of an interface component (Group, ObjectForm&lt;Goods.Object&gt;); the InterfaceComponent kind only |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-field`

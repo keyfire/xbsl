@@ -22,6 +22,10 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **The `xbsl new-object` command takes a `--base` key.** The base type of an interface
+  component could only be given through MCP and the LSP; from the command line the
+  component had to be finished by hand. The value goes through the same checks as on the
+  other surfaces.
 - **`yaml/property-shadows-module`: a component property named after a common module of
   the project.** The property name hides the module across the whole component, and the
   `Module.Method()` accesses written before it are read as members of the property value:

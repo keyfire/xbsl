@@ -250,3 +250,18 @@ def test_the_summary_names_the_engine_and_the_rule_set(tmp_path, capsys):
     err = capsys.readouterr().err
     assert f"xbsl {__version__}" in err
     assert f"{summary['rules']['active']} из {summary['rules']['total']}" in err
+
+
+def test_new_object_takes_a_component_base(tmp_path, capsys):
+    """The base of an interface component is reachable from the command line too.
+
+    Until this key the base could only be given through MCP and the LSP, so the command
+    line answered a component with the wrong shape - and the spelling of the value is the
+    project's, as everywhere else in the scaffolding.
+    """
+    cli.main(["new-object", str(tmp_path), "КомпонентИнтерфейса", "Плашка",
+              "--base", "Group", "--dry-run"])
+    payload = json.loads(capsys.readouterr().out)
+    content = payload["files"][0]["content"]
+    assert "Наследует:" in content
+    assert "Тип: Группа" in content

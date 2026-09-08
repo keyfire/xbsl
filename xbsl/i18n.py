@@ -935,6 +935,12 @@ _CORE_MESSAGES = {
         "en": "Presentation – the element caption (without it the very first lint answers "
               "naming/presentation)",
     },
+    "cli.help.scaf.no-base": {
+        "ru": "базовый тип компонента интерфейса (Группа, ФормаОбъекта<Товар.Объект>); "
+              "только для вида КомпонентИнтерфейса",
+        "en": "the base type of an interface component (Group, ObjectForm<Goods.Object>); "
+              "the InterfaceComponent kind only",
+    },
     "cli.help.scaf.add-localization": {
         "ru": "добавить файл перевода (раздел Локализация) к элементу ЛокализованныеСтроки",
         "en": "add a translation file (the Localization section) to a LocalizedStrings element",
