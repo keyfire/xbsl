@@ -91,6 +91,12 @@ MESSAGES = {
         "en": "The name '{name}' starts with its kind ('{prefix}') – the kind is not part of the name: "
               "'{suggestion}'.",
     },
+    "naming/kind-in-name.found-suffix": {
+        "ru": "Имя '{name}' заканчивается названием вида ('{prefix}') – вид не включают в имя: "
+              "'{suggestion}'.",
+        "en": "The name '{name}' ends with its kind ('{prefix}') – the kind is not part of the "
+              "name: '{suggestion}'.",
+    },
     "naming/filler-word.title": {"ru": "Слово-пустышка в имени", "en": "Filler word in a name"},
     "naming/filler-word.found": {
         "ru": "'{word}' в имени '{name}' – без этого слова смысл не меняется, уберите его "
@@ -481,6 +487,24 @@ def _english_affixes() -> dict[str, str]:
 
 dataset.register_reset(_english_affixes.cache_clear)
 
+
+@lru_cache(maxsize=1)
+def _english_kind_prefixes() -> dict[str, str]:
+    """Kind word -> its English spelling, for the words the dictionary pairs.
+
+    Same source and same reservation as the affixes above: a word the data does not pair is
+    absent here, so an English name carrying it is not judged rather than judged by a guess.
+    """
+    out: dict[str, str] = {}
+    for word in set(KIND_PREFIXES.values()):
+        english = terms.common_english(word)
+        if english:
+            out[word] = english
+    return out
+
+
+dataset.register_reset(_english_kind_prefixes.cache_clear)
+
 _CYRILLIC_LETTER_RE = re.compile(r"[А-Яа-яЁё]")
 # HTTP service: words that are not part of the name.
 HTTP_FORBIDDEN = ("Api", "Web", "Апи", "Веб")
@@ -662,6 +686,15 @@ def kind_in_name(source: SourceFile) -> Iterable[Diagnostic]:
         return
     prefix = KIND_PREFIXES.get(vid)
     if not prefix:
+        return
+    if not _CYRILLIC_LETTER_RE.search(ref.name):
+        # An English name carries the kind word as a SUFFIX, the way naming/prefix-by-kind
+        # reads it; judged by the Russian prefix alone, the rule saw nothing in a translated
+        # project. A kind word the dictionary does not pair is not judged in English at all.
+        english = _english_kind_prefixes().get(prefix)
+        if english and ref.name.endswith(english) and len(ref.name) > len(english):
+            yield _diag(source, ref, "naming/kind-in-name", "naming/kind-in-name.found-suffix",
+                        name=ref.name, prefix=english, suggestion=ref.name[: -len(english)])
         return
     rest = ref.name[len(prefix):]
     if ref.name.startswith(prefix) and rest[:1].isupper():

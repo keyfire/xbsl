@@ -212,6 +212,18 @@ def test_kind_in_name_report():
     assert "ЗависшиеЗадачи" in d[0].message
 
 
+@pytest.mark.needs_data
+def test_kind_in_name_english_judged_by_its_tail():
+    # the kind word leads a Russian name and trails an English one
+    d = _lint_english(_KIND, "Report", "StuckTasksReport")
+    assert len(d) == 1 and "StuckTasks" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_kind_in_name_english_clean_silent():
+    assert _lint_english(_KIND, "Report", "StuckTasks") == []
+
+
 def test_kind_in_name_clean_silent():
     assert _lint(_KIND, "Отчет", "ЗависшиеЗадачи") == []
 

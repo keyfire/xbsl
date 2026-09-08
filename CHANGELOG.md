@@ -15,12 +15,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
-- **Parity seeds cover 73 rules with 145 seeds (up from 120 seeds on 62 rules).** The batch
-  went to the rules that match text against the platform's vocabularies: the joined tables
-  and the fields of a dynamic list, the compatibility mode, an object-typed value, the
-  fields of a list row and of a project structure, the client-availability annotations, and
-  the names of enumerations and common modules. Every seed carries a hand-written English
-  twin; the known gaps are still two, both behind the member catalog.
+- **Parity seeds cover 85 rules with 169 seeds (up from 120 seeds on 62 rules).** The batch
+  went to the rules that match text against the platform's vocabularies: the joined tables,
+  the fields and the filter of a dynamic list, the compatibility mode, an object-typed
+  value, a list-typed slot, the hint length, a popup component in the markup, bindings and
+  computed properties, the fields of a list row and of a project structure, the
+  client-availability annotations, a parameter inside a query literal, and the names of
+  enumerations, common modules and the kind inside a name. Every seed carries a
+  hand-written English twin; the known gaps are three now - two behind the member catalog,
+  the third behind the Russian words of the naming standard.
 - **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
   carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
   replaces, a qualifier kept. Until now the editor offered only silencing it in the
@@ -49,13 +52,19 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   on the legal `Line.ToString()`; the English half comes from the dictionary. The row type's
   own members (`Data`, `Key`) are paired there as well - the catalog keeps them in Russian
   while a translated module writes `Key`.
-- **`naming/enum-vid` and `naming/module-suffix` read an English name.** The kind word leads
-  a Russian name and trails an English one (`ApplicationType`), and a common module's
-  environment suffix is spelled in English by the dictionary pair
-  (`ExchangeClientAndServer`). Both rules looked for the Russian spelling alone and stayed
-  silent on a translated tree; the English pair comes from the dictionary, and a form the
-  dictionary does not name (the plural of the kind word) is left unjudged rather than
-  invented.
+- **`naming/enum-vid`, `naming/module-suffix` and `naming/kind-in-name` read an English
+  name.** The kind word leads a Russian name and trails an English one (`ApplicationType`,
+  `StuckTasksReport`), and a common module's environment suffix is spelled in English by
+  the dictionary pair (`ExchangeClientAndServer`). All three rules looked for the Russian
+  spelling alone and stayed silent on a translated tree; the English pair comes from the
+  dictionary, and a form the dictionary does not name (the plural of the kind word, the
+  word for a register) is left unjudged rather than invented. The messages have their own
+  wording for the tail - "ends with" rather than "starts with".
+- **`code/bound-property-assign` matches an English pair of files.** The markup keys are
+  kept under the canonical name while the property from the module was looked up as the
+  code spells it, so `Height: =...` in the yaml and `Components.Block.Height = 640` in the
+  module never met and a translated pair went unjudged. The property from the code is
+  folded to the canonical name before the lookup.
 
 ## 2026-09-06 – 0.94.0
 

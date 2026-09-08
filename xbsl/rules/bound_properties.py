@@ -25,7 +25,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, i18n, terms
+from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, make_source, rule
 from xbsl.lexer import Token
@@ -149,7 +149,13 @@ def bound_property_assign(source: SourceFile) -> Iterable[Diagnostic]:
         if bound is None:  # the pair is read only when the module has a candidate
             bound = _bound_properties(Path(source.path).with_suffix(".yaml"))
         name, prop = target
-        line = bound.get(name, {}).get(prop)
+        # The markup keys are stored CANONICALLY (`_scalar_entries` folds `Height` to the
+        # metamodel's own name), so a property written in English in the module has to be
+        # folded the same way before the lookup - otherwise a translated pair matched nothing.
+        properties = bound.get(name, {})
+        line = properties.get(prop)
+        if line is None:
+            line = properties.get(uischema.canonical_property(prop))
         if line is None:
             continue
         yield Diagnostic(
