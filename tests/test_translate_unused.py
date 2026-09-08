@@ -185,3 +185,92 @@ def test_a_clean_dictionary_says_so(tmp_path: Path, capsys):
     _code, lines = _run(capsys, [str(root), "--dictionary", str(dictionary), "--unused"])
 
     assert any("пар без места в проекте нет" in line for line in lines), lines
+
+
+# -- what a phrase is keyed by, and where a name may stand ----------------------
+
+
+def _module(root: Path, name: str, body: str) -> None:
+    (root / name).write_text(body, encoding="utf-8")
+
+
+def test_a_doc_comment_is_keyed_the_way_the_translator_keys_it(tmp_path: Path):
+    """`///` and `##` are markers, not text - and a private reading of them cost a live pair.
+
+    The orphan pass used a regex of its own that took ONE space off the marker: a doc comment
+    came back with a slash glued to the text, so the entry the translating pass had written
+    matched nothing here and read as an orphan - the one mistake `--prune` acts on.
+    """
+    root, dictionary = _project(tmp_path)
+    _module(root, "Модуль.xbsl", "/// Строка документирующего комментария.\nметод А()\n;\n")
+    (root / "Прочее.yaml").write_text(
+        "ВидЭлемента: Справочник\nИмя: Прочее\n## Строка комментария в две решётки.\n",
+        encoding="utf-8",
+    )
+    dictionary.write_text(
+        dictionary.read_text(encoding="utf-8")
+        + "    Строка документирующего комментария.: A line of a doc comment.\n"
+        + "    Строка комментария в две решётки.: A line under a double hash.\n",
+        encoding="utf-8",
+    )
+
+    keys = {row.key for row in _unused(root, dictionary)}
+
+    assert "Строка документирующего комментария." not in keys
+    assert "Строка комментария в две решётки." not in keys
+
+
+def test_a_block_comment_line_is_read_as_a_comment(tmp_path: Path):
+    """A block comment translates like any other, so its lines are live pairs as well."""
+    root, dictionary = _project(tmp_path)
+    _module(root, "Модуль.xbsl", "/*\n * Строка блочного комментария.\n */\nметод А()\n;\n")
+    dictionary.write_text(
+        dictionary.read_text(encoding="utf-8")
+        + "    Строка блочного комментария.: A line of a block comment.\n",
+        encoding="utf-8",
+    )
+
+    keys = {row.key for row in _unused(root, dictionary)}
+
+    assert "Строка блочного комментария." not in keys
+
+
+def test_a_slash_star_inside_a_comment_does_not_swallow_the_file(tmp_path: Path):
+    """`usr/idea/*` written inside a `//` line is a path, not the start of a block.
+
+    A textual reading took it for one and read every line after it as a block line - which
+    turned four hundred live comment pairs of a real project into orphans at once.
+    """
+    root, dictionary = _project(tmp_path)
+    _module(
+        root, "Модуль.xbsl",
+        "// Работает на группе методов usr/idea/* сервиса.\n"
+        "// Следующая строка комментария.\nметод А()\n;\n",
+    )
+    dictionary.write_text(
+        dictionary.read_text(encoding="utf-8")
+        + "    Следующая строка комментария.: The next comment line.\n",
+        encoding="utf-8",
+    )
+
+    keys = {row.key for row in _unused(root, dictionary)}
+
+    assert "Следующая строка комментария." not in keys
+
+
+def test_a_name_that_only_stands_in_a_file_name_is_used(tmp_path: Path):
+    """Folder and file names go through the same token plane, so a path is a place too."""
+    root, dictionary = _project(tmp_path)
+    (root / "Ресурсы").mkdir()
+    (root / "Ресурсы" / "ЗначокЗадачи.svg").write_bytes(b"<svg/>")
+    dictionary.write_text(
+        dictionary.read_text(encoding="utf-8").replace(
+            "    Реквизиты: Attributes\n",
+            "    Реквизиты: Attributes\n    ЗначокЗадачи: TaskIcon\n    Ресурсы: Resources\n",
+        ),
+        encoding="utf-8",
+    )
+
+    keys = {row.key for row in _unused(root, dictionary)}
+
+    assert "ЗначокЗадачи" not in keys and "Ресурсы" not in keys
