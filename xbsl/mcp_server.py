@@ -1275,8 +1275,10 @@ def meta_set_component_property(
 
     value - a scalar or a binding ("=Объект.Поле", "$Строки.Ключ"): quoted automatically
     when yaml requires it. value_yaml - a composite value as a ready yaml fragment, e.g.
-    "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)" (single-line flow fragments are written
-    inline). Passing NEITHER removes the key (a composite value goes with its whole
+    "Тип: АбсолютныйЦвет\\nЗначение: RGB(F4F6F7)"; it becomes a nested block, a fragment of
+    ONE entry included ("Тип: НастройкиРедактированияПереключателя" - some composites have
+    no properties of their own), while a flow collection on one line ("[Товар]") is written
+    inline after the key. Passing NEITHER removes the key (a composite value goes with its whole
     block). Slot keys (Содержимое etc.) are rejected - children are edited with the
     component tools. A new property lands right after Тип.
     """
