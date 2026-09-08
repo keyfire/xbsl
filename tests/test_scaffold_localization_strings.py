@@ -112,3 +112,108 @@ def test_without_translations_nothing_extra_is_written(element: Path):
 
     assert [c.path for c in result.changes] == [element]
     assert result.notes == []
+
+
+# --- one row, every language -----------------------------------------------------------
+
+
+def _set(path: Path, name: str, values: dict, **kwargs):
+    result = scaffold.op_set_localization(path, name, values, **kwargs)
+    _write(result)
+    return result
+
+
+def _translation(element: Path) -> Path:
+    return element.parent / "Локализация" / "En" / "Тексты.yaml"
+
+
+def test_one_call_writes_both_languages(element: Path):
+    """The item itself: a row used to be typed into the element and again into its twin."""
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    _set(element, "Заголовок", {"Русский": "Личный кабинет", "En": "Personal account"})
+
+    assert _loaded(element)["Строки"]["Заголовок"] == "Личный кабинет"
+    assert _loaded(_translation(element))["Строки"]["Заголовок"] == "Personal account"
+
+
+def test_an_existing_row_is_corrected_in_place_in_both(element: Path):
+    _add(element, "строка", "Заголовок", "Старый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    _set(element, "Заголовок", {"Ru": "Новый текст", "English": "The new text"})
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert _loaded(element)["Строки"]["Заголовок"] == "Новый текст"
+    assert text.count("Заголовок:") == 1, "the row is corrected, not doubled"
+    assert _loaded(_translation(element))["Строки"]["Заголовок"] == "The new text"
+
+
+def test_a_language_the_call_says_nothing_about_still_gets_the_row(element: Path):
+    """A key missing from a translation is a gap the translator meets much later."""
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    result = _set(element, "Заголовок", {"Русский": "Личный кабинет"})
+
+    assert _loaded(_translation(element))["Строки"]["Заголовок"] == "Личный кабинет"
+    assert any("Заголовок" in note for note in result.notes)
+
+
+def test_a_language_without_a_translation_file_is_refused(element: Path):
+    with pytest.raises(scaffold.ScaffoldError) as exc:
+        scaffold.op_set_localization(element, "Заголовок", {"En": "Personal account"})
+
+    assert "add-localization" in str(exc.value)
+
+
+def test_the_default_language_must_carry_the_text(element: Path):
+    """The element holds the text itself; a translation is only a replacement of it."""
+    _write(scaffold.op_add_localization(element, "En"))
+
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization(element, "Заголовок", {"En": "Personal account"})
+
+
+def test_quoting_is_the_writers_business_here_too(element: Path):
+    _set(element, "Переходы", {"Русский": "Рекламных переходов посетителей: $0."})
+
+    assert _loaded(element)["Строки"]["Переходы"] == "Рекламных переходов посетителей: $0."
+
+
+def test_a_key_keeps_the_section_it_lives_in(element: Path):
+    _add(element, "шаблон", "Привет", "Привет, %0!")
+
+    _set(element, "Привет", {"Русский": "Здравствуйте, %0!"})
+
+    loaded = _loaded(element)
+    assert loaded["Шаблоны"]["Привет"] == "Здравствуйте, %0!"
+    assert "Привет" not in (loaded.get("Строки") or {})
+
+
+def test_the_section_can_be_named(element: Path):
+    _set(element, "Привет", {"Русский": "Здравствуйте, %0!"}, section="Шаблоны")
+
+    assert _loaded(element)["Шаблоны"]["Привет"] == "Здравствуйте, %0!"
+
+
+def test_the_section_is_taken_in_either_spelling(element: Path):
+    """The platform is bilingual, and a project may be written either way."""
+    _set(element, "Привет", {"Русский": "Здравствуйте, %0!"}, section="Templates")
+
+    assert _loaded(element)["Шаблоны"]["Привет"] == "Здравствуйте, %0!"
+
+
+def test_an_unknown_section_and_an_unknown_language_are_refused(element: Path):
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization(element, "Привет", {"Русский": "Текст"}, section="Строчки")
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization(element, "Привет", {"Французский": "Bonjour"})
+
+
+@pytest.mark.parametrize("name", ["Два слова", "Ключ:", "#Ключ", "", "  "])
+def test_a_key_that_would_not_survive_being_written_bare_is_refused(element: Path, name: str):
+    """The row is written unquoted, like the hand-written ones - so the key has to hold."""
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization(element, name, {"Русский": "Текст"})

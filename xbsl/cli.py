@@ -320,7 +320,8 @@ def _apply_fixes(sources, diagnostics, args) -> int:
 #: sharing a parser (_scaffold_parser) and a handler (_scaffold_main) across every name.
 _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
-    "add-subsystem", "add-dependency", "add-localization", "set-field-property",
+    "add-subsystem", "add-dependency", "add-localization", "set-localization",
+    "set-field-property",
     "rename-object", "delete-object", "set-access", "object-info", "project-info",
     "localization-info", "form-tree", "form-edit", "form-handlers",
 )
@@ -612,6 +613,13 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
     p.add_argument("language", help=i18n.t("cli.help.scaf.al-language"))
 
+    p = sub.add_parser("set-localization", help=i18n.t("cli.help.scaf.set-localization"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
+    p.add_argument("name", help=i18n.t("cli.help.scaf.sl-name"))
+    p.add_argument("--value", action="append", metavar="ЯЗЫК=ТЕКСТ",
+                   help=i18n.t("cli.help.scaf.sl-value"))
+    p.add_argument("--section", default="", help=i18n.t("cli.help.scaf.sl-section"))
+
     p = sub.add_parser("localization-info", help=i18n.t("cli.help.scaf.localization-info"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
 
@@ -802,6 +810,11 @@ def _scaffold_main(argv: list[str]) -> int:
             result = scaffold.op_add_route(Path(args.yaml_path), args.routes)
         elif args.command == "add-localization":
             result = scaffold.op_add_localization(Path(args.yaml_path), args.language)
+        elif args.command == "set-localization":
+            result = scaffold.op_set_localization(
+                Path(args.yaml_path), args.name, _props(args.value) or {},
+                section=args.section,
+            )
         elif args.command == "localization-info":
             print(json.dumps(
                 scaffold.localization_info(Path(args.yaml_path)), ensure_ascii=False,
