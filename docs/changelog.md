@@ -19,13 +19,429 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-08-30 – 0.86.2
+## 2026-09-08 – 0.95.0, 0.96.0
+
+### Added
+- **`yaml/property-shadows-module`: a component property named after a common module of
+  the project.** The property name hides the module across the whole component, and the
+  `Module.Method()` accesses written before it are read as members of the property value:
+  the apply fails with an unknown-method error, the stand rolls back to the previous build,
+  and the complaints point at the component file carrying the real method names - the module
+  looks broken while it is merely hidden. The rule names the clash at the property
+  declaration, in both spellings of the sources. Only a common module is judged, and only
+  one reachable by the bare name - the component's own subsystem, or one its yaml imports;
+  a namesake catalog, enumeration or component is left alone, because such a name is used
+  in a TYPE position, which a property does not take over. There is no autofix on purpose:
+  the cure is a rename, and the name is written in the markup, in the paired module and
+  outside the component as well.
+- **A rule now says the value it judges by, and the listing can be asked about one rule.**
+  `--list-rules` and the MCP `list_rules` gave the id, the title, the tier, the severity and
+  the "on by default" flag; the threshold itself lived as a constant in the sources, and
+  learning it meant rewriting the code around a guess and re-running the linter over the whole
+  project - a method body cut to six lines was reported, the same body at four was not, and two
+  full runs bought a number the tool already knew. Seven parameters are declared where the rules
+  use them - `code/duplicate-method-body` (min-lines), `yaml/duplicate-subtree` (min-nodes),
+  `style/line-length` (max-length), `code/parse-error` (max-per-file), `yaml/hint-too-long`
+  (limit, margin), `security/hardcoded-secret` (min-literal-length) - and travel with the rule:
+  the value in force, the default, a one-line description and the environment variable that
+  overrides it (`XBSL_` plus the rule id and the parameter name). `xbsl --list-rules --select
+  code/duplicate-method-body` and `list_rules(select=...)` answer about one rule instead of the
+  whole registry, an unreadable override keeps the default and says so, and a run whose
+  parameters are off their defaults names them in its provenance - a threshold changed by the
+  environment changes the findings. A selection that matches nothing now says so instead of
+  claiming an empty registry - the old line sent the reader looking for a broken install.
+- **The stale baseline entries are named in the MCP answer, and `baseline_prune` removes
+  them.** The summary of `lint_paths` said `baseline_stale: 9` and stopped there: which nine
+  could only be found by taking the file apart with a script of one's own, sorting the entries
+  by the prose of their `reason`, and nothing in a session could remove them. The entries now
+  travel with the count in `summary.baseline_stale_entries` (path, rule, message, count,
+  reason), exactly as the CLI json carries them, and the new `baseline_prune` tool removes
+  exactly those, keeping the file's order and format and answering with every entry it took
+  (`dry_run` shows what would go). Removing stays a deliberate act: an ordinary check never
+  touches the file.
+- **`meta_set_localization` / `xbsl set-localization`: one localized string, every language
+  at once.** `meta_add_localization` adds a LANGUAGE; a ROW had nothing, so a caption was
+  typed into the `LocalizedStrings` element and again into its English twin, and the two
+  files drifted apart with nothing but a pair of eyes to compare them. One call now writes
+  the default-language text into the element and every other language into its own
+  `Localization/<Code>/<Name>.yaml`, correcting a row that is already there in place. A
+  language named without a translation file is refused, naming the tool that adds one; an
+  existing language the call says nothing about still gets the row, with the default text
+  and a note, so no translation is left a key short. The section is kept where the key
+  already lives (`Rows` for a new one), and either spelling of it is accepted.
+- **`translate_unused`: the orphan pass is an MCP tool, not only a flag.** What the
+  dictionary still says and the project no longer has was reachable from the console alone;
+  an agent that had just deleted a component had to shell out for it. `filter` narrows the
+  answer to the names of THAT component rather than the whole history of the project, and
+  `prune` - off by default, and named apart from the listing on purpose - removes exactly
+  the page the tool answers with. `--stale` is accepted as the CLI spelling of `--unused`.
+- **A page says what it left out.** `translate_gaps` answered `total: 72` beside exactly
+  fifty rows and marked the cut nowhere; a dictionary built from that page was short by
+  twenty-two entries, found by the strict pass after the merge. Every paged translation
+  answer now carries `truncated`, `shown`, `remaining` and a `hint` naming the next
+  `offset`, `limit=0` for the whole list and - for the gaps - `--missing`, which writes the
+  entire remainder to a file.
+- **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
+  carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
+  replaces, a qualifier kept. Until now the editor offered only silencing it in the
+  baseline.
+- **`yaml/list-scroll-without-loading`: the list is scrolled, yet the scrolling loads
+  nothing.** `Navigation: None` means not "no pagination" but "no loading": the rows come
+  in a single `PageSize` portion and the tail of the data is unreachable - the
+  `ListNavigation` documentation says so outright while the compiler stays silent. Judged
+  is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
+  navigation is `None`" on the components the ui schema gives a `Navigation` property to;
+  an expression in the value and a list that promises no scroll are left alone.
 
 ### Changed
+- **The stale baseline entries are read out with their reasons.** An entry's `reason` is prose
+  a human wrote about a deliberate exclusion, and the listing printed the path, the rule and
+  the message without it. `--stale-baseline` and `--prune-baseline` now print the reason under
+  the entry, and pruning says how many of the removed entries carried one - after the commit
+  that text lives on only in the git history.
+### Fixed
+- **One unreadable yaml no longer buries the report under phantom findings.** A file that
+  failed to parse used to drop out of the project model entirely, and the object it declares
+  became an unknown name for every rule at once. Measured over a live project: a broken
+  component gave 239 findings instead of 49 (175 of them `code/undefined-name`), a broken
+  catalog 180 instead of 50 (63 `yaml/unknown-type`, 34 `code/undefined-name`, 31
+  `query/unknown-table`, 2 `code/unused-import`). Such an object is now known by NAME and
+  unreadable at the same time: `code/undefined-name` leaves the paired module alone (its
+  scope is unknown, not empty), a type root and a query table built on it are not called
+  unknown, the import of the subsystem holding it is not called unused, and the
+  `@ClientAvailable` declarations of the paired module are not called unused either. One
+  real finding remains – `yaml/valid` on the breakage itself.
+- **The orphan pass reads a comment the way the translator writes it.** It used a regex of
+  its own that took one space off the marker, so a doc comment (`///`) came back with a
+  slash glued to the text, a `##` line with a hash, and a block comment was not read at
+  all - every phrase written from such a comment would have been reported as an orphan,
+  which is the one mistake `--prune` acts on. The payload now comes from
+  `code.comment_payloads`, the function the translating pass itself calls. A name is also
+  looked for in the FILE NAMES, since a folder and a file go through the same token plane.
+- **The dictionary reader sees a key written in the explicit yaml form.** A dumper writes a
+  long key as `? key` on one line and `: value` on the next, and nobody chooses that - the
+  live dictionary of a real project holds two literals in the shape. They were invisible to
+  the table, to the orphan pass and to the writer, which would have added a key that is
+  already in the file; the writer now replaces and removes both lines as one entry.
+- **`meta_add_form` writes the captions of a generated form through the project's
+  dictionary.** A generated form used to arrive with its captions as literals – the form's
+  own one plus every table column – and on a bilingual project that is eight findings of
+  `conventions/untranslated-visible-literal` on one object, rewritten by hand right after
+  generating. What is written instead comes from the sources rather than from a choice: of
+  303 table columns of a live project 300 carry a caption (the three that do not are picture
+  columns), every one of them is a `$Dictionary.Key` reference, and the key is the field's
+  own name. So the reference goes in – and the keys it needs join the subsystem's dictionary
+  in the same operation, echoed into the translations that dictionary already has, because a
+  reference to a key nobody declares is worse than a literal: the apply fails and the stand
+  rolls back. The dictionary has to be the one lying beside the object (another subsystem's
+  would need an `Import` the form does not carry), the project has to declare two
+  localization languages, and a name the dictionary spends on a TEMPLATE stays a literal – a
+  reference resolves against the strings alone. Without such a dictionary nothing changes.
+- **`meta_new_object` writes the base of a component the way the project spells its types.**
+  The `base` key is documented in English words, so `base="Group"` is the natural thing to
+  pass – and a Russian project got `Type: Group` in its yaml, a line rewritten by hand every
+  time: the linter says nothing about it and the compiler only speaks at deploy. The base is
+  now written in the language of the project both ways, and whether it names a FORM – the
+  bases that need the form-template wrapper – is decided on one spelling, so an English form
+  base no longer loses the wrapper either.
+- **`meta_set_component_property` writes a one-entry composite as a block.** Only a FLOW
+  collection now goes inline after the key; a fragment shaped `Key: value` becomes a nested
+  block. Written inline it produced `EditingSettings: Type: SwitchEditingSettings`, which
+  yaml refuses to read at all, and the whole edit came back with the parser's "mapping
+  values are not allowed here" - the block had to be typed by hand. One entry is not an
+  exotic case: the editing settings of a switch (a checkbox in a table cell) have no
+  properties of their own, so that is the only form the value takes.
+- **An escaped `base` is read as the brackets it stands for.** `base="Form&lt;Boolean?&gt;"`
+  used to go into the yaml exactly as it arrived: the file looks finished, and the compiler
+  meets the garbage only at deploy. The escaping comes from the CLIENT of the tool rather
+  than from a person's hands, so it is undone instead of reported – and what is left of a
+  mangled value afterwards, anything that is not a type expression, is refused rather than
+  written into the file.
+
+## 2026-09-06 – 0.94.0
+
+### Added
+- **`code/param-redeclared`: a local `val` / `var` / `use` with the name of the method's own
+  parameter.** The compiler answers "a variable named X is already defined" only at the server
+  apply, and the stand rolls back; the linter reports the clash at the declaration, nested blocks
+  included, in both spellings. Loop and catch variables, lambda parameters and lambda bodies are
+  not judged: the corpora carry none.
+- **`docs_symbol` and `docs_page` answer briefly or with one section.** A type page runs to ten
+  thousand characters – the constructors, every property, the inherited lists – while "which page
+  is it and what is it about" needs the head alone: `brief=True` returns the summary and the
+  section names, `section="Properties"` the head plus that one section (the pages' own Russian
+  headings work too); an unknown section answers with the names to choose from.
+- **Parity seeds cover 62 rules with 120 seeds (41 seeds on 23 rules before).** The rules that
+  judge text by the platform dictionaries – attribute properties, form components, module
+  environments, the query language, sizes and layout – each carry a Russian case and a
+  hand-written English twin now; four known gaps are marked with their reasons, two behind the
+  member dictionary and two behind the translator.
+
+### Changed
+- **`meta_add_field` names a section it creates and points at the sibling one** (`add-field` and
+  the LSP `xbsl/metaAddField` alike). A register keeps its data in `Dimensions` and `Resources`,
+  and an attribute asked of a register holding resources and no attributes used to open a new
+  `Attributes` section at the end of the file without a word – the field was then moved by hand,
+  UUID and all. The section is still created, but `notes` say so and name the field kind (a
+  resource here, and the other way round) that would have placed the item beside the existing
+  fields; an item of an existing section still joins its end, which a test now holds.
+
+### Fixed
+- **The translator spells the reference member of a project facet `Reference`**
+  (`Line.Reference.LoadObject()!`): a receiver typed by a facet of a project object – declared,
+  inferred, or loaded from a reference – carries the facet word, and an untyped one carries it
+  when the chain goes on to `LoadObject`; the link property of a label or a picture stays `Link`,
+  and an entry qualified by the receiver still answers first.
+- **A default qualified by its own enumeration moves in both halves** (`DefaultValue:
+  States.Open`) where the sibling `Type` names a project enumeration – the shape
+  `yaml/enum-default-value` reports, which the English tree could not carry while the value
+  stayed Russian.
+- **`Auto` on a union-typed property is translated** (`MaxWidth: Auto`, `Height: Auto`,
+  `Tooltip: Auto`): a value spelling a member of the property's union is that member, spelled
+  by the platform's type pairs, not data.
+- **`yaml/ref-needs-nullable` recognizes a reference type by the English facet spelling too**
+  (`Applications.Reference`): the yaml branch kept the Russian facet in its pattern and its gate,
+  so a translated description passed without a finding.
+- **`code/member-kind-mismatch` judges the member kind in the English spelling of the type and
+  the member** (`TimeZone.Current` without brackets): the kind table is keyed by the catalog's
+  Russian names, and both sides are now brought to them through the dictionary.
+
+## 2026-09-05 – 0.93.0
+
+### Added
+- **`meta_add_form` makes an information register's record form (`forms=["record"]`).** A register
+  has no object form - what gets edited is its RECORD, and the `RecordForm<Register.Record>` with
+  fields for the dimensions and resources had to be written by hand; the object-form refusal now
+  names the record form instead of the list form alone.
+- **`meta_new_object` takes the base of an interface component (`base`).** The scaffold always
+  inherited a form with a template, while the most common base in a live project is `Group`
+  (31 against 7 for a bare form): the whole `Inherits` block was rewritten by hand.
+- **`yaml/slot-needs-list` (tier D, error) - a slot declared as a list, holding a single
+  component.** A component written under `Content:` without the dash is not a list of one:
+  the yaml parses, every key exists, and the apply is what refuses the markup - on the server,
+  rolling the project back to the previous build. The shape is judged by the ui schema rather
+  than by the property name: on a form template the same slot legally holds one component.
+
+## 2026-09-04 – 0.92.0
+
+### Added
+- **`code/member-kind-mismatch` (tier D, error) - a stdlib method read as a property, and a
+  property called as a method.** The member exists; the form of the access is wrong, and the
+  apply refuses the project with `Unknown constant` or `Unknown method`, neither of which
+  names the kind or the cure.
+- **`code/unknown-form-component` (tier D, error, file scope) - an access to a component the
+  form markup does not declare.** `Components.X` is the static map the markup gives, so a name
+  without a counterpart there does not exist: the apply refuses the project, and until then
+  nothing sees it - the name outlives a component taken out of the markup.
+- **`code/server-annotation-in-client-module` (tier D, error) - the mirror of the client
+  annotation check.** A module with `Environment: Client` carrying `@OnServer` compiles for the
+  server, where its own type does not exist, and the apply refuses every such method with a
+  message that names neither the environment nor the module.
+- **`xbsl translate --unused` names the entries the project no longer uses; `--prune` removes
+  them.** Deleting code leaves its names and comment lines behind, and nothing reported them:
+  the strict pass judges what is not covered, and the entries table shows where a pair is
+  declared, not whether anything uses it.
+- **The `xbsl translate` report says when the dictionary has fallen behind the sources** - how
+  many files were changed after it and which is the newest (`dictionary_behind` in json).
+  Modification times are what is compared, so the mark stays a note and never changes the
+  verdict.
+
+### Fixed
+- **The project's name shadow was lost on CRLF files.** The pattern that collects the yaml
+  names ended at the end-of-line anchor, and in multiline mode that matches before the line
+  feed. An empty shadow means false findings from an error-level rule: a project object named
+  like a platform type was reported as an unknown member.
+- **An unknown `kind` is refused instead of answering with an empty list.** The section name in
+  the plural matched nothing and the answer came back empty - indistinguishable from "the
+  dictionary covers everything", and a run that trusted it left the gaps to the strict pass.
+- **`translate --set` names the entries it overwrote.** The report carried only a count, and
+  finding which existing keys got a new value meant diffing the dictionary.
+- **A localized string carrying a character yaml reads specially no longer breaks the file.**
+  What is quoted is what would not read back bare; an ordinary phrase stays unquoted. A new
+  string also reaches the translation files with the default-language value.
+- **The first dimension of a register takes the place of the placeholder instead of landing
+  beside it**, and the `Length` of a standard field is checked by the tool: the platform limit
+  used to be caught by the linter on the next run, over a file the tool had already written.
+- **`yaml/valid` names a ternary written with spaces.** YAML reads that as the start of a
+  nested mapping, and the complaint lands on a line that has no mapping in it.
+- **A client common module is caught at any server-side consumer, not only an HTTP service**,
+  and three environment checks became errors: the matrix was put through the compiler, and
+  every miss is a compile failure that rolls the whole project back.
+- **The build number is recorded only for the version it belongs to.** Extracting under a
+  borrowed name recorded that the directory holds a build of a version it was never taken from.
+
+## 2026-09-02 – 0.89.0, 0.90.0, 0.91.0
+
+### Added
+- **`meta_add_field` knows the built-in attributes.** `Number` and `Date` of a document, `Code`,
+  `Name` and `Owner` of a catalog are judged by their own descriptor class - the way
+  `metadata_schema` already dispatched them - so `Length`, `Uniqueness` and the `Autonumbering`
+  block are accepted instead of being refused as unknown properties of a regular attribute,
+  and `type` may be omitted where the class fixes it. Property values take a nested block as a
+  dict or a dotted key and a list as a sequence (CLI `--prop`, LSP and MCP alike); a block of a
+  class the metamodel does not describe is refused by name as a known limitation.
+  `meta_set_field_property` takes the same shapes and replaces a nested block whole.
+- **`lint_paths` takes `root` like the `meta_*` tools do.** Relative `paths` and `baseline`
+  resolve against the caller's root rather than the server's working directory, so a session
+  in a git worktree no longer checks the other checkout and reads its clean answer as its own;
+  the diagnostics carry absolute paths and the summary names the `root`.
+- **`code/foreign-not-public` (tier D, error, project-wide) – the code side of
+  `yaml/foreign-not-public`.** A module reaching an element of another subsystem left at
+  `VisibilityScope: InSubsystem` (or with no scope at all – the default) was refused by the
+  compiler on deploy while the linter stayed silent: `code/missing-import` deliberately leaves a
+  non-public target alone. Written type positions and the roots of `Module.Method()` chains are
+  judged; the project module belongs to no subsystem and is foreign to every one.
+- **`xbsl baseline add <paths> --rule <rule> [--reason ...]`** appends only the new findings of
+  one rule: a new file takes its sorted place, nothing else moves, recorded reasons stay, a
+  repeated call changes nothing; `--format json` answers `{baseline, added, findings, written}`.
+  Saving keeps the file's line endings and BOM; a new file is written with LF.
+- **Every `meta_*` MCP tool takes `root`** – the caller's root: relative paths resolve against
+  it instead of the server's working directory, and answers carry absolute paths plus `root`.
+- **Parity seeds: 27 new seeds over 14 rules** that judge by the platform vocabularies; a seed's
+  English twin is written by hand from the data and the translator's output is checked as a
+  third tree.
+
+### Changed
+- **The visibility rules read bindings and qualified names.** A probe applied on a server
+  refused a binding to a non-public element of another subsystem, a qualified
+  `Subsystem::Element` binding and a qualified call from code with the same
+  `Type "..." is invisible due to visibility modifier` the type positions get, so
+  `yaml/foreign-not-public` now judges the roots of binding chains (less what the paired
+  module declares) and qualified names in bindings and type positions, and
+  `code/foreign-not-public` judges qualified names too - by the subsystem they name.
+  The import rules keep leaving the qualified form alone: it needs no import.
+- **`xbsl translate` ends with a verdict line**, `READY` / `NOT READY: tokens N, phrases M` –
+  the tail of a log no longer reads as success with hundreds of gaps; the json report carries
+  `ready`, the exit code is unchanged.
+- **The translation tools refuse a root without a dictionary** and name where one is looked for
+  (and where it sits when below the root); `translate_gaps` reports `dictionary`. The CLI does
+  the same: `--gaps` without a dictionary refuses, the report writes `dictionary` into its JSON.
+- **The baseline is judged only within the requested paths:** entries of other files are not
+  checked, never stale (an MCP request for two files answered "0 suppressed, 76 stale" on a
+  clean project). `baseline_not_checked` splits into `_rules` and `_paths`.
+- **The summary names what judged:** `engine`, `plugins` with versions, `rules {active, total,
+  plugin}` in the CLI json and MCP answers, a "Run set" line in text.
+- **The terms extractor files members declared by Constants classes under their type** and adds
+  class-declared type pairs – the data needs regenerating to pick them up.
+
+### Fixed
+- **Two parity gaps closed: `yaml/unexpected-type-argument` and `yaml/enum-needs-nullable`
+  judge an English tree as they judge a Russian one.** The first gated on the `Тип:` key alone
+  and canonized neither the component nor the type head, and would have reported the English
+  default as a stranger; now the key, the component, the property and the head are canonized
+  and the argument is compared with the default name by name in either spelling. The second
+  recognized the input field by a hand-written `InputField`, which no serializer writes: the
+  platform spells it `Edit`, and the spellings come from the data. `code/reserved-name` now
+  reports the capitalized `Type` too - a live apply refused it like `Тип` and `type`. 41 parity
+  seeds, 0 disagreements, 1 known gap left (the member catalog).
+- **The term extractor fills the gaps of the common table with the terms classes state.** The
+  built-in code attribute had no common spelling: a dozen classes state the term `Code`, and
+  the neighbourhood reading refuses `Code` as an English candidate because a class-file
+  attribute is named so. With the pair absent, `yaml/unknown-attribute-property` tolerated the
+  keys of the code attribute on every ASCII-named attribute of an English tree - `Length` on a
+  number went unreported. A stated term answers only where the neighbourhood settled nothing,
+  so the settled spellings stay; data rebuilt with the fix carries the pair.
+- **A name inside a type expression of the code is translated as a type.** The token walk
+  did not tell a type position from a member access, and `.Ссылка` typing a parameter, a
+  declaration, a constructor, a cast or a type argument came out as the property `Link`
+  instead of the facet `Reference` - the English tree did not compile, and a parity seed of
+  `code/unknown-ns-object` had to be marked as known. The spans of the type expressions now
+  come from the parser, and a name inside one resolves the way a yaml type does.
+- **A member of a local declared without a type is spelled by the inferred type** (constructor,
+  cast, literal), through the owner table walked up the base types (`Remove` on a map);
+  `code/unknown-member` accepts the ancestor's spelling.
+- **The default of a field typed by a project enumeration is translated inside interface
+  component properties too**, the type read the way `yaml/enum-default-value` reads it.
+- **Two English-tree blind spots:** `code/global-unavailable` did not recognize a global by its
+  English spelling, `yaml/unknown-type` never read the `Type:` key.
+
+## 2026-08-30 – 0.86.2, 0.87.0, 0.88.0, 0.88.1, 0.88.2
+
+### Added
+- **The type catalog is completed from what the reference pages never describe.** The
+  distribution describes the stdlib twice, and the language server's markdown holds more types:
+  16 Std types lived only there, the whole `Favorites` branch among them, whose every call read
+  as an undefined name. The structure comes from the markdown, the Russian spellings of members
+  from what the shipped classes declare.
+- **`classcode.declared_terms` - a pair read together with the field it is stored into.** The
+  NAME of the static field tells what kind of member it is (`LINK_PROPERTY_TERM`,
+  `SWITCH_SCREEN_METHOD_TERM`); the pair alone tells neither property from method nor a method's
+  parameter from a member.
+- **`yaml/duplicate-key` (tier A, error) and `code/duplicate-annotation` (tier C, error) -
+  duplicates only the server compilation used to show.** A scalar key set twice in one YAML
+  mapping is silently collapsed by the loader - the last value wins, the merged node passes
+  every schema check, and the deploy used to be the first to fail; the rule reads the composed
+  tree where the duplicates are still visible, flags the repeat and names the line of the first
+  occurrence (the `<<` merge key and non-scalar keys are not judged). A duplicate annotation on
+  one declaration - the "Annotation ... is already placed" error - also used to surface only on
+  deploy.
+- **Three rules over the dynamic list declaration.** `yaml/dynlist-joined-table-param` (error) -
+  parameters and bindings in the joined tables: the list fails at runtime while the compiler
+  stays silent; `yaml/list-form-needs-dynlist` (error) - a `ListForm` with an array-sourced
+  table and no dynamic list: the navigation item silently disappears;
+  `yaml/dynlist-filter-disabled` (warning, project-wide) - a filter declared off and enabled by
+  the paired module: the first-render race, the first frame shows the whole table.
+- **Property combinations half of which the platform silently does not draw.**
+  `yaml/badge-column-image` (warning) - an `Image` on a column with `Kind: Badge`: the value is
+  drawn as tag pills, and the picture is documented only for `Kind: Picture`;
+  `yaml/value-choice-title` (warning) - a `Title` on a `ValueChoice` with an explicit
+  `Switcher` kind is not drawn and the field stays unlabeled; `yaml/popup-in-markup` (warning,
+  project-wide) - a popup component, the raw type or a project descendant through the
+  `Inherits` closure, placed in the yaml markup: the content is drawn in the form flow before
+  the window opens, and the cure is to build the window in code (a new `PopupComponent` plus
+  `OpenInPopupWindow`); `yaml/col-width-needs-no-stretch` (info, off by default) - a numeric
+  table-column width without an explicit `HorizontalStretch`: when the column stretches the
+  width acts as a share rather than pixels - a sibling of the `size-needs-no-stretch` family,
+  switched on pointwise when the symptom shows on screen.
+- **`yaml/enum-default-value` (tier D, error, project-wide) and `yaml/event-property-type`
+  (tier D, error).** The `DefaultValue` of a field typed by a project enumeration must be the
+  bare name of a declared value: the type-prefixed spelling (`LabelVisibility.Invisible`) and
+  an unknown name used to slip past the linter and were refused only at apply time ("an unknown
+  enumeration item"); on an English tree the rule also catches a Russian value a translator
+  left next to English items. An `EventLogEvent` property type outside the platform's closed
+  list is refused by the server compilation at the price of a deploy; the list comes from the
+  metamodel, and the message names the allowed types and advises writing variant values as
+  string codes listed in the property's `Description`.
+- **`code/load-object-unwrap` (tier D, warning) and `code/image-binding-server-call` (tier D,
+  info, project-wide) - data does not arrive the way the code reads.** A force-unwrap "!" of a
+  `LoadObject()` result on a reference taken from a field of another record or of a
+  tabular-section row - a dangling reference after a physical deletion fails the whole pass,
+  and the result must be checked for Undefined. An `Image` property binding whose call
+  resolves - directly or transitively - into a server method: the image arrives by its own
+  server round-trip after the rows are drawn and is requested again on every redraw; the cure
+  is a field of a joined table or client-side data.
+- **`code/permission-right-not-computable` (tier D, error, project-wide).** A permission
+  granted by the permission-computing handler must be declared computable in the entity's
+  yaml - otherwise the build applies and the permission recomputation fails at runtime;
+  permissions are collected from `AccessPermission` constructors transitively over project
+  calls, and delegation into a shared rights module is shown bound to the entity.
+
+### Changed
+- **Rule fixtures and the examples in the documentation now speak the demo project's vocabulary**
+  (0.88.1). Names in an example have to read on their own rather than point at someone else's
+  solution; the rule tables of both editions were brought to the same vocabulary along the way.
 - **The package description names translation, the MCP server and the extension - in English.**
   The PyPI summary listed the linter, LSP, documentation and scaffolding - a set the toolkit had
   outgrown - and was the only Russian one among the neighbouring packages, while heading an
   English README. The keywords gained `mcp` and `translation`.
+- **`yaml/missing-import` now reads the chain roots in markup bindings.** A
+  `=ForeignModule.Method()` call in a property binding reaches a foreign subsystem the way a
+  type position does, but without an import line the refusal used to come only from the server
+  compilation at the price of a deploy; everything that explains the name on its own - the
+  declarations of this yaml, of the paired module, the implicit platform names - is subtracted.
+- **`yaml/empty-group-sized` now also catches a size binding (`Height: =...`) on an empty group
+  without a `Name`.** An unnamed spacer with a computed size reads as an empty group and used to
+  stay silent; named empty containers filled from code are not flagged.
+
+### Fixed
+- **The default of an enumeration-typed field now moves with its enumeration** (0.88.2). The
+  metamodel types `DefaultValue` as a plain object, so the element name stayed Russian next to a
+  translated enumeration and the build refused the pair with "Неизвестный элемент перечисления" -
+  visible only at apply time. Judged narrowly: the field's type has to be a bare project name and
+  the value a word the dictionary knows.
+- **`--data-dir` did not reach the parallel workers.** The pinned root lives in a process global,
+  and a spawned worker starts without it and took the INSTALLED data: the run read a dataset
+  other than the one it was asked for, and said nothing about it.
 
 ## 2026-08-28 – 0.83.0, 0.84.0, 0.85.0, 0.86.0, 0.86.1
 
