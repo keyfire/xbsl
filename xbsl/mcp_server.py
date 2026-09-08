@@ -785,6 +785,33 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
 
 @mcp.tool()
 @_documents_root
+def meta_set_localization(yaml_path: str, name: str, values: dict[str, str],
+                          section: str = "", root: str | None = None) -> dict:
+    """Write ONE localized string into every language at once - the element and its translations.
+
+    meta_add_localization adds a LANGUAGE; a row had nothing, so a caption was typed into the
+    element and again into its English twin, and the two files drifted apart with nothing but
+    a pair of eyes to compare them.
+
+    yaml_path – the LocalizedStrings element (the translations sit under Localization/<Code>);
+    name      – the key of the string, one word;
+    values    – {language: text}. A language is named any way it reasonably holds it -
+                Russian/English in either project spelling, or the folder code Ru/En. The
+                default language's text goes into the ELEMENT (that is where the platform
+                keeps it), every other one into its own translation file. A language named
+                here without a translation file is refused, naming meta_add_localization;
+                an existing language the call says nothing about still gets the row, with
+                the default text and a note, so no translation is left a key short.
+    section   – Rows or Templates, in either spelling; left out, the key keeps the section
+                it already lives in and a new one goes to Rows.
+    """
+    base = _base(root)
+    return _meta(base, scaffold.op_set_localization, _under(base, yaml_path), name,
+                 dict(values or {}), section=section)
+
+
+@mcp.tool()
+@_documents_root
 def meta_localization_info(yaml_path: str, root: str | None = None) -> dict:
     """The localization picture of a LocalizedStrings element: the declared languages, the
     default one, the translations already present and the candidate languages a translation
@@ -1401,6 +1428,9 @@ def translate_gaps(
     compact – each row is only {key, kind, count}: the shape of a translator's worklist.
     A full page of hundreds of gaps does not fit an answer - places and suggestions are
     the bulk - while the keys alone do; ask for one full row by `filter` when needed.
+    A page that does not carry everything says so: `truncated` is true, `remaining` counts
+    what is left and `hint` names the ways to it. A dictionary built from a page taken for
+    the whole answer is short exactly by what the page dropped.
     Every full row carries the count, up to a few places to look at, and `suggestion` - the
     platform's own spelling where it has one. A suggestion is a HINT, not an answer: a name
     the project declared may need a different word; a literal never carries one, because
@@ -1423,8 +1453,8 @@ def translate_gaps(
         gap for gap in entries_module.gaps_of_project(project, dictionary)
         if (kind in ("any", gap.kind)) and (not needle or needle in gap.key.casefold())
     ]
-    page = rows[offset:offset + limit] if limit else rows[offset:]
-    out = {"total": len(rows), "dictionary": str(translate_cli.dictionary_path_for(project))}
+    page, paging = entries_module.page_of(rows, limit, offset, gaps=True)
+    out = {**paging, "dictionary": str(translate_cli.dictionary_path_for(project))}
     if compact:
         out["gaps"] = [{"key": gap.key, "kind": gap.kind, "count": gap.count} for gap in page]
         return out
@@ -1450,6 +1480,8 @@ def translate_entries(
     filter – a substring of the key OR of the value (look up a root before inventing a word);
     kind   – 'token', 'phrase', 'literal' or 'any'.
     Every row names the file and line it lives on, so an entry can be corrected in place.
+    A page that does not carry everything says so: `truncated`, `remaining` and a `hint`
+    naming the next `offset`.
     """
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
@@ -1467,9 +1499,71 @@ def translate_entries(
         if (kind in ("any", entry.kind))
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
-    page = rows[offset:offset + limit] if limit else rows[offset:]
-    return {"total": len(rows), "dictionary": str(path),
+    page, paging = entries_module.page_of(rows, limit, offset)
+    return {**paging, "dictionary": str(path),
             "entries": [entry.as_dict() for entry in page]}
+
+
+@mcp.tool()
+def translate_unused(
+    root: str,
+    kind: str = "any",
+    filter: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    prune: bool = False,
+) -> dict:
+    """The opposite of translate_gaps: what the DICTIONARY still says and the project has not.
+
+    Deleting a component leaves its names and its comment lines in the dictionary for good,
+    and nothing else reports them: the strict pass judges what is NOT covered, and
+    translate_entries shows where a pair is declared, not whether anything uses it. Finding
+    them took a throwaway script over the dictionary keys, twice, and both runs were wrong -
+    a substring reading called a stale comment line live (the old line is contained in the
+    new one whole), and keys written in single quotes were never looked at.
+
+    root   – the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at);
+    kind   – 'token' (names), 'phrase' (comment lines), 'literal' or 'any';
+    filter – a substring of the key OR of the value: the way to ask about the names of one
+             component that has just been deleted rather than about the whole history;
+    limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
+    prune  – REMOVE the listed entries from the dictionary files. Off by default and named
+             separately from the listing on purpose: this is the one direction where a
+             mistaken reading destroys a translation. It removes exactly the page it
+             answers with, so `kind`, `filter` and the page apply to the removal too.
+
+    The reading is textual, and the direction of its error is the point: a name that also
+    occurs in prose may be counted as used, which merely leaves an entry in place, but a LIVE
+    entry is never called an orphan. Comment lines are read through the translator's own
+    payload reading, so the two sides spell a phrase alike; a qualified key (`<Owner>.<Name>`)
+    is judged by both halves, since the sources spell them apart.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    refusal = entries_module.kind_refusal(kind)
+    if refusal:
+        return {"error": refusal}
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    needle = (filter or "").casefold()
+    rows = [
+        entry for entry in entries_module.unused_entries(project, path, dictionary)
+        if (kind in ("any", entry.kind))
+        and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
+    ]
+    page, paging = entries_module.page_of(rows, limit, offset)
+    out = {**paging, "dictionary": str(path),
+           "unused": [entry.as_dict() for entry in page]}
+    if prune and page:
+        removed = entries_module.write_entries(
+            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
+        )
+        out["removed"] = removed["removed"]
+    return out
 
 
 @mcp.tool()
