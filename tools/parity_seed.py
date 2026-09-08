@@ -516,6 +516,219 @@ Properties:
 """
 _CARD_PROPERTY_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "КрупныйЗаголовок": "LargeTitle",
                          "Заголовок": "Title"}
+#: A dynamic list whose source joins a second table. `{main}` and `{joined}` are the argument
+#: expressions of the main and of the joined table - only the second one is a runtime refusal.
+_JOINED_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f19
+Имя: РеестрЗаявок
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Таблица<ДинамическийСписок>
+        Имя: Список
+        Источник:
+            ОсновнаяТаблица:
+                Таблица: Заявки
+                Аргументы:
+                    -
+                        Тип: АргументТаблицыВыражение
+                        Имя: Раздел
+                        Выражение: '{main}'
+            ПрисоединенныеТаблицы:
+                -
+                    Тип: ПрисоединеннаяТаблица
+                    Таблица: Отметки
+                    Псевдоним: Отметка
+                    Аргументы:
+                        -
+                            Тип: АргументТаблицыВыражение
+                            Имя: Раздел
+                            Выражение: '{joined}'
+"""
+_JOINED_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f19
+Name: ApplicationRegistry
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Table<DynamicList>
+        Name: List
+        Source:
+            MainTable:
+                Table: Applications
+                Arguments:
+                    -
+                        Type: TableArgumentExpression
+                        Name: Section
+                        Expression: '{main}'
+            JoinedTables:
+                -
+                    Type: JoinedTable
+                    Table: Marks
+                    Alias: Mark
+                    Arguments:
+                        -
+                            Type: TableArgumentExpression
+                            Name: Section
+                            Expression: '{joined}'
+"""
+_JOINED_TOKENS = {"Заявки": "Applications", "РеестрЗаявок": "ApplicationRegistry",
+                  "Список": "List", "Отметки": "Marks", "Отметка": "Mark", "Раздел": "Section"}
+#: A catalog of two attributes, the set the automatic list row type carries.
+_MARKS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f1a
+Имя: Отметки
+ОбластьВидимости: ВПроекте
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1b
+        Имя: Срок
+        Тип: Строка
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1c
+        Имя: Сумма
+        Тип: Число
+"""
+_MARKS_EN = """\
+ElementKind: Catalog
+Id: 1d1f5c60-0000-4000-8000-000000000f1a
+Name: Marks
+VisibilityScope: InProject
+Attributes:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f1b
+        Name: Deadline
+        Type: String
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f1c
+        Name: Amount
+        Type: Number
+"""
+#: A list over the object's automatic row type; `{extra}` is the second selected field or nothing.
+#: The tail segment of the chain has no English pair anywhere in the platform's dictionaries,
+#: so both spellings write it the same - that is what the rule's own table says.
+_AUTO_LIST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f1d
+Имя: РеестрОтметок
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Таблица<ДинамическийСписок<Отметки.АвтоматическаяФормаСписка.ДанныеСтрокиСписка>>
+        Имя: Список
+        Источник:
+            ОсновнаяТаблица:
+                Таблица: Отметки
+            Поля:
+                -
+                    Тип: ПолеДинамическогоСписка
+                    Выражение: Срок
+{extra}"""
+_AUTO_LIST_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f1d
+Name: MarkRegistry
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Table<DynamicList<Marks.AutomaticListForm.ДанныеСтрокиСписка>>
+        Name: List
+        Source:
+            MainTable:
+                Table: Marks
+            Fields:
+                -
+                    Type: DynamicListField
+                    Expression: Deadline
+{extra}"""
+_AUTO_FIELD_RU = ("                -\n                    Тип: ПолеДинамическогоСписка\n"
+                  "                    Выражение: Сумма\n")
+_AUTO_FIELD_EN = ("                -\n                    Type: DynamicListField\n"
+                  "                    Expression: Amount\n")
+_AUTO_LIST_TOKENS = {"Отметки": "Marks", "РеестрОтметок": "MarkRegistry", "Список": "List",
+                     "Срок": "Deadline", "Сумма": "Amount"}
+#: The project description – the only place the compatibility mode is written.
+_PROJECT_RU = """\
+Ид: 1d1f5c60-0000-4000-8000-000000000f1e
+Поставщик: acme
+Имя: Проба
+Версия: 1.0.0
+РежимСовместимости: {mode}
+"""
+_PROJECT_EN = """\
+Id: 1d1f5c60-0000-4000-8000-000000000f1e
+Vendor: acme
+Name: Probe
+Version: 1.0.0
+CompatibilityMode: {mode}
+"""
+#: A picture carrying a property the schema dates 9.0 – newer than an 8.0 project.
+_PICTURE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f1f
+Имя: ЗначокЗаявки
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Картинка
+        Имя: Значок
+        ОтображатьПодсказку: Всегда
+"""
+_PICTURE_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f1f
+Name: ApplicationBadge
+VisibilityScope: InProject
+Inherits:
+    Type: Form
+    Content:
+        Type: Picture
+        Name: Badge
+        DisplayTooltip: Always
+"""
+_PICTURE_TOKENS = {"Проба": "Probe", "ЗначокЗаявки": "ApplicationBadge", "Значок": "Badge"}
+#: A label whose value is an object-typed property; `{value}` is a bare word or a binding.
+_LABEL_VALUE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f20
+Имя: КарточкаИтога
+ОбластьВидимости: ВПроекте
+Свойства:
+    -
+        Имя: Подытог
+        Тип: Строка
+Наследует:
+    Тип: Форма
+    Содержимое:
+        Тип: Надпись
+        Имя: Подпись
+        Значение: {value}
+"""
+_LABEL_VALUE_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000f20
+Name: TotalCard
+VisibilityScope: InProject
+Properties:
+    -
+        Name: Subtotal
+        Type: String
+Inherits:
+    Type: Form
+    Content:
+        Type: Label
+        Name: Caption
+        Value: {value}
+"""
+_LABEL_VALUE_TOKENS = {"КарточкаИтога": "TotalCard", "Подытог": "Subtotal", "Подпись": "Caption"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -2101,6 +2314,90 @@ SEEDS: list[Seed] = [
         files={"КарточкаЗаявки.yaml": _CARD_PROPERTY_RU.format(name="Заголовок")},
         english={"ApplicationCard.yaml": _CARD_PROPERTY_EN.format(name="Title")},
         tokens=_CARD_PROPERTY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-joined-table-param",
+        expect=CLEAN,
+        note="a list parameter in the MAIN table's argument – the legal half, next to a joined "
+             "table whose own argument is a literal",
+        files={"РеестрЗаявок.yaml": _JOINED_RU.format(main="&Раздел", joined="1")},
+        english={"ApplicationRegistry.yaml": _JOINED_EN.format(main="&Section", joined="1")},
+        tokens=_JOINED_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-joined-table-param",
+        expect=FINDING,
+        note="the same parameter inside the JOINED table's argument is reported – the joined "
+             "key, the arguments key and the expression key are all metamodel names",
+        files={"РеестрЗаявок.yaml": _JOINED_RU.format(main="1", joined="&Раздел")},
+        english={"ApplicationRegistry.yaml": _JOINED_EN.format(main="1", joined="&Section")},
+        tokens=_JOINED_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-missing-field",
+        expect=CLEAN,
+        note="a list over the automatic row type selecting every attribute of its object",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "РеестрОтметок.yaml": _AUTO_LIST_RU.format(extra=_AUTO_FIELD_RU),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkRegistry.yaml": _AUTO_LIST_EN.format(extra=_AUTO_FIELD_EN),
+        },
+        tokens=_AUTO_LIST_TOKENS,
+    ),
+    Seed(
+        rule="yaml/dynlist-missing-field",
+        expect=FINDING,
+        note="the same list missing one attribute is reported – the row-type chain and the "
+             "fields key are read from the platform's own names",
+        files={
+            "Отметки.yaml": _MARKS_RU,
+            "РеестрОтметок.yaml": _AUTO_LIST_RU.format(extra=""),
+        },
+        english={
+            "Marks.yaml": _MARKS_EN,
+            "MarkRegistry.yaml": _AUTO_LIST_EN.format(extra=""),
+        },
+        tokens=_AUTO_LIST_TOKENS,
+    ),
+    Seed(
+        rule="yaml/property-since-compat",
+        expect=CLEAN,
+        note="a property of the mode the project declares – the mode key lives in the project "
+             "description, which carries no element kind",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "ЗначокЗаявки.yaml": _PICTURE_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="9.0"),
+                 "ApplicationBadge.yaml": _PICTURE_EN},
+        tokens=_PICTURE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/property-since-compat",
+        expect=FINDING,
+        note="the same property under an older mode is reported – the component and the "
+             "property are spelled by the ui schema in both scripts",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="8.0"), "ЗначокЗаявки.yaml": _PICTURE_RU},
+        english={"Project.yaml": _PROJECT_EN.format(mode="8.0"),
+                 "ApplicationBadge.yaml": _PICTURE_EN},
+        tokens=_PICTURE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/bare-object-value",
+        expect=CLEAN,
+        note="an object-typed value written as a binding – the shape the platform accepts",
+        files={"КарточкаИтога.yaml": _LABEL_VALUE_RU.format(value="=Подытог")},
+        english={"TotalCard.yaml": _LABEL_VALUE_EN.format(value="=Subtotal")},
+        tokens=_LABEL_VALUE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/bare-object-value",
+        expect=FINDING,
+        note="the same value as a bare word is rejected outright – the component whose "
+             "property is object-typed is named by the ui schema",
+        files={"КарточкаИтога.yaml": _LABEL_VALUE_RU.format(value="Подытог")},
+        english={"TotalCard.yaml": _LABEL_VALUE_EN.format(value="Subtotal")},
+        tokens=_LABEL_VALUE_TOKENS,
     ),
 ]
 
