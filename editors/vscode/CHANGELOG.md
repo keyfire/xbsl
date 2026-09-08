@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.5
+
+### Added
+- **The `yaml/list-scroll-without-loading` diagnostic links to the documentation.** Its code in the
+  Problems panel is now a link to the list component page, like every other rule backed by a
+  documentation section.
+
 ## 0.67.4
 
 ### Fixed
