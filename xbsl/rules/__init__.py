@@ -68,6 +68,7 @@ from . import (  # noqa: F401
     image_binding,
     load_object,
     local_visibility,
+    name_shadowing,
     naming,
     ns_objects,
     popup_markup,
