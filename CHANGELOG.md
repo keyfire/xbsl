@@ -15,6 +15,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **Parity seeds cover 73 rules with 145 seeds (up from 120 seeds on 62 rules).** The batch
+  went to the rules that match text against the platform's vocabularies: the joined tables
+  and the fields of a dynamic list, the compatibility mode, an object-typed value, the
+  fields of a list row and of a project structure, the client-availability annotations, and
+  the names of enumerations and common modules. Every seed carries a hand-written English
+  twin; the known gaps are still two, both behind the member catalog.
 - **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
   carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
   replaces, a qualifier kept. Until now the editor offered only silencing it in the
@@ -26,6 +32,30 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
   navigation is `None`" on the components the ui schema gives a `Navigation` property to;
   an expression in the value and a list that promises no scroll are left alone.
+
+### Fixed
+- **`yaml/bare-object-value` judges an English component too.** The table of components with
+  object-typed properties was keyed by the Russian name, so `Type: Label` matched nothing
+  and a bare word in the value was never reported on a translated tree. The component is
+  keyed under both spellings now, the way the sibling table of the same module has long been.
+- **`code/unknown-structure-field` judges a member written in Latin.** The exception was
+  inherited from the sibling member rules, where it guards the platform catalog stored in
+  Russian; here the member set comes from the project's own declaration - written in the
+  same script as the access - and a translated project went unjudged entirely. A Latin
+  member the declaration does not carry is reported now; a serialization-contract field
+  (`access_token`) is in the declaration and stays silent.
+- **The object protocol is recognised in both spellings.** `GetType`, `ToString` and
+  `Presentation` were written in Russian alone, and `code/unknown-row-field` raised an error
+  on the legal `Line.ToString()`; the English half comes from the dictionary. The row type's
+  own members (`Data`, `Key`) are paired there as well - the catalog keeps them in Russian
+  while a translated module writes `Key`.
+- **`naming/enum-vid` and `naming/module-suffix` read an English name.** The kind word leads
+  a Russian name and trails an English one (`ApplicationType`), and a common module's
+  environment suffix is spelled in English by the dictionary pair
+  (`ExchangeClientAndServer`). Both rules looked for the Russian spelling alone and stayed
+  silent on a translated tree; the English pair comes from the dictionary, and a form the
+  dictionary does not name (the plural of the kind word) is left unjudged rather than
+  invented.
 
 ## 2026-09-06 – 0.94.0
 

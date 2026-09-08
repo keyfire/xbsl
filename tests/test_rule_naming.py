@@ -180,6 +180,29 @@ def test_enum_vid_only_for_enumerations():
     assert _lint(_ENUM_VID, "Справочник", "ТипыОплат") == []
 
 
+def _lint_english(rule_id, kind, name):
+    """The same, over a description written in English - the platform reads it either way."""
+    source = engine.load_text(
+        f"{name}.yaml", f"ElementKind: {kind}\nId: {_ID}\nName: {name}\n",
+    )
+    return engine.run_sources([source], select={rule_id})
+
+
+@pytest.mark.needs_data
+def test_enum_vid_english_name_judged_by_its_tail():
+    """An English name carries the kind word as a SUFFIX - the head of a compound is last.
+
+    Judged by the Russian prefix alone, the rule saw nothing in a translated project.
+    """
+    d = _lint_english(_ENUM_VID, "Enumeration", "PaymentType")
+    assert len(d) == 1 and "PaymentKind" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_enum_vid_english_correct_name_silent():
+    assert _lint_english(_ENUM_VID, "Enumeration", "PaymentKind") == []
+
+
 # --- 1.8 the element kind in the name -----------------------------------------------------------
 
 def test_kind_in_name_report():
@@ -270,6 +293,18 @@ def test_module_suffix_clean_silent():
 def test_module_suffix_only_for_common_modules():
     # The environment postfix concerns only common modules: on a Справочник it is part of the name.
     assert _lint(_MODULE, "Справочник", "ОбщееКлиент") == []
+
+
+@pytest.mark.needs_data
+def test_module_suffix_english_name_judged():
+    # the environment words come from the dictionary, so an English name is read the same way
+    d = _lint_english(_MODULE, "CommonModule", "DataExchangeClientAndServer")
+    assert len(d) == 1 and "DataExchange" in d[0].message
+
+
+@pytest.mark.needs_data
+def test_module_suffix_english_clean_silent():
+    assert _lint_english(_MODULE, "CommonModule", "DataExchange") == []
 
 
 # --- the number of a name by element kind (morphology needed) ------------------------------------

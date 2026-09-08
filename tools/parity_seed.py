@@ -824,6 +824,45 @@ _CLIENT_CALL_RU = "метод Отобразить()\n    знч Итог = Се
 _CLIENT_CALL_EN = "method Display()\n    val Total = ServerSide.Read()\n;\n"
 _CLIENT_IDLE_RU = "метод Отобразить()\n    знч Итог = \"\"\n;\n"
 _CLIENT_IDLE_EN = "method Display()\n    val Total = \"\"\n;\n"
+#: An enumeration named after the kind word the standard picks, or after the one it rejects.
+_ENUM_NAME_RU = """\
+ВидЭлемента: Перечисление
+Ид: 1d1f5c60-0000-4000-8000-000000000f23
+Имя: {name}
+ОбластьВидимости: ВПроекте
+Элементы:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f24
+        Имя: Основной
+"""
+_ENUM_NAME_EN = """\
+ElementKind: Enumeration
+Id: 1d1f5c60-0000-4000-8000-000000000f23
+Name: {name}
+VisibilityScope: InProject
+Items:
+    -
+        Id: 1d1f5c60-0000-4000-8000-000000000f24
+        Name: Main
+"""
+_ENUM_NAME_TOKENS = {"ВидЗаявки": "ApplicationKind", "ТипЗаявки": "ApplicationType",
+                     "Основной": "Main"}
+#: A common module named with the environment in its name, or without it.
+_MODULE_NAME_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f25
+Имя: {name}
+ОбластьВидимости: ВПроекте
+Окружение: КлиентИСервер
+"""
+_MODULE_NAME_EN = """\
+ElementKind: CommonModule
+Id: 1d1f5c60-0000-4000-8000-000000000f25
+Name: {name}
+VisibilityScope: InProject
+Environment: ClientAndServer
+"""
+_MODULE_NAME_TOKENS = {"Обмен": "Exchange", "ОбменКлиентИСервер": "ExchangeClientAndServer"}
 
 SEEDS: list[Seed] = [
     Seed(
@@ -2701,6 +2740,43 @@ SEEDS: list[Seed] = [
             "ApplicationForm.xbsl": _CLIENT_IDLE_EN,
         },
         tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="naming/enum-vid",
+        expect=CLEAN,
+        note="an enumeration named with the kind word the standard picks",
+        files={"ВидЗаявки.yaml": _ENUM_NAME_RU.format(name="ВидЗаявки")},
+        english={"ApplicationKind.yaml": _ENUM_NAME_EN.format(name="ApplicationKind")},
+        tokens=_ENUM_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/enum-vid",
+        expect=FINDING,
+        note="the same enumeration named with the word the standard rejects is reported – the "
+             "kind word leads in Russian and trails in English",
+        files={"ТипЗаявки.yaml": _ENUM_NAME_RU.format(name="ТипЗаявки")},
+        english={"ApplicationType.yaml": _ENUM_NAME_EN.format(name="ApplicationType")},
+        tokens=_ENUM_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/module-suffix",
+        expect=CLEAN,
+        note="a common module whose name says nothing about its environment",
+        files={"Обмен.yaml": _MODULE_NAME_RU.format(name="Обмен")},
+        english={"Exchange.yaml": _MODULE_NAME_EN.format(name="Exchange")},
+        tokens=_MODULE_NAME_TOKENS,
+    ),
+    Seed(
+        rule="naming/module-suffix",
+        expect=FINDING,
+        note="the same module carrying the environment in its name is reported – the "
+             "environment values are an enumeration of the term dictionary",
+        files={"ОбменКлиентИСервер.yaml": _MODULE_NAME_RU.format(name="ОбменКлиентИСервер")},
+        english={
+            "ExchangeClientAndServer.yaml":
+                _MODULE_NAME_EN.format(name="ExchangeClientAndServer"),
+        },
+        tokens=_MODULE_NAME_TOKENS,
     ),
 ]
 
