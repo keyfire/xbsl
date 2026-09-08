@@ -16,7 +16,7 @@ from collections.abc import Iterable
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.rules._syntax import (
     code_tokens,
     in_query,
@@ -71,10 +71,17 @@ MESSAGES = {
         "ru": "Запятая в начале перенесённой строки – запятые остаются в конце строк.",
         "en": "Comma at the start of a wrapped line – commas stay at the end of the lines.",
     },
+    "style/line-length.param.max-length": {
+        "ru": "предельная длина строки в символах; по ней же переносит строки команда "
+              "translate",
+        "en": "the line length limit in characters; the translate command wraps lines by it "
+              "as well",
+    },
 }
 i18n.register(MESSAGES)
 
-MAX_LINE = 120
+#: The line length the platform's style document sets; the translation rewrap follows it.
+MAX_LINE = rule_param("style/line-length", "max-length", 120, "style/line-length.param.max-length")
 
 _INDENT_RE = re.compile(r"^[ \t]*")
 

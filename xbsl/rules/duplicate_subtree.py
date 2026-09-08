@@ -34,7 +34,7 @@ from functools import lru_cache
 
 from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
 
 try:
@@ -59,11 +59,19 @@ MESSAGES = {
               "renamed. Pull out a shared component, or the fix will have to go into every "
               "copy.",
     },
+    "yaml/duplicate-subtree.param.min-nodes": {
+        "ru": "минимальный размер поддерева в узлах, с которого одинаковая форма перестаёт "
+              "быть совпадением вёрстки",
+        "en": "the smallest subtree the rule judges, in nodes: below that one and the same "
+              "shape is a coincidence of the layout",
+    },
 }
 i18n.register(MESSAGES)
 
 #: The size from which sameness stops being a coincidence of the layout - measured, see above.
-_MIN_NODES = 40
+_MIN_NODES = rule_param(
+    "yaml/duplicate-subtree", "min-nodes", 40, "yaml/duplicate-subtree.param.min-nodes",
+)
 
 #: A dictionary of localized strings: the translation file repeats its shape by definition.
 _SKIPPED_KIND = "ЛокализованныеСтроки"

@@ -252,6 +252,60 @@ def test_stale_entries_are_listed(tmp_path, capsys):
     assert err.count("устаревшая запись") == 1
 
 
+def _seed_stale_with_reason(bl, reason, extra_path="Ушедший.xbsl"):
+    """A stale entry that carries the prose a human wrote about the exclusion."""
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    data["files"][extra_path] = {
+        "whitespace/trailing": {"Хвостовые пробелы.": {"count": 2, "reason": reason}},
+    }
+    bl.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
+def test_stale_listing_reads_out_the_reason(tmp_path, capsys):
+    """The reason is a sentence a human wrote - it is shown, not summed up into a count."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale_with_reason(bl, "решение владельца: выравнивание таблицы делаем пробелами")
+
+    cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "причина записи: решение владельца: выравнивание таблицы делаем пробелами" in err
+
+
+def test_prune_says_how_many_reasons_it_takes_with_it(tmp_path, capsys):
+    """Dropping a reasoned entry drops a human sentence - the run says so before it is gone."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale_with_reason(bl, "правило спорит с контрактом сериализации")
+
+    cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "правило спорит с контрактом сериализации" in err  # read out before it goes
+    assert "несли причину: 1" in err
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    assert "Ушедший.xbsl" not in data["files"]
+
+
+def test_prune_without_reasons_says_nothing_about_them(tmp_path, capsys):
+    """A line about reasons in a run that removed none teaches nobody anything."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    cli.main(["--baseline", str(bl), "--prune-baseline", *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "удалено записей: 1" in err and "несли причину" not in err
+
+
 def test_prune_removes_only_stale_entries(tmp_path, capsys):
     f = tmp_path / "Ч.xbsl"
     f.write_text(_TRAILING, encoding="utf-8")

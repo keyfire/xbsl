@@ -17,7 +17,7 @@ from collections.abc import Iterable
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, is_query_file, rule
+from xbsl.engine import SourceFile, is_query_file, rule, rule_param
 from xbsl.lexer import linemap
 from xbsl.parser import parse
 
@@ -30,11 +30,19 @@ MESSAGES = {
         "ru": "... и ещё {count} синтаксических ошибок в этом файле",
         "en": "... and {count} more syntax errors in this file",
     },
+    "code/parse-error.param.max-per-file": {
+        "ru": "сколько синтаксических ошибок файла называется поимённо; дальше файл считается "
+              "сломанным целиком и остаток сворачивается в одну строку",
+        "en": "how many syntax errors of a file are named one by one; past that the file "
+              "counts as broken outright and the rest is folded into one line",
+    },
 }
 i18n.register(MESSAGES)
 
 # Past this many errors the file counts as broken outright - the rest is only noise.
-_MAX_PER_FILE = 10
+_MAX_PER_FILE = rule_param(
+    "code/parse-error", "max-per-file", 10, "code/parse-error.param.max-per-file",
+)
 
 
 @rule("code/parse-error", "code/parse-error.title", "C", severity=Severity.ERROR)

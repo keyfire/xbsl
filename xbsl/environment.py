@@ -52,23 +52,52 @@ def rule_set(active: list) -> dict:
     }
 
 
+def rule_params(active: list) -> list[dict]:
+    """The parameters of the run's rules that are NOT at their default value.
+
+    A threshold changed by an environment variable changes the findings, and a run that
+    judged by another number must say so - the same reason the rule set is named. Only the
+    overridden ones travel: on the defaults the list is empty and the key does not appear.
+    """
+    return [
+        {"rule": p.rule_id, **p.as_dict()}
+        for r in active for p in r.params if p.overridden
+    ]
+
+
 def provenance(active: list) -> dict:
     """What judged a report: the engine version, the plugins and the rule set.
 
     Goes into the summary of every check (the CLI json, the MCP answer), so that two
     environments answering differently about one tree show the difference in the answer
-    itself rather than after a second round of `--version` on both sides.
+    itself rather than after a second round of `--version` on both sides. A rule parameter
+    moved off its default joins them, under `params`.
     """
-    return {"engine": __version__, "plugins": plugins.installed(), "rules": rule_set(active)}
+    info = {"engine": __version__, "plugins": plugins.installed(), "rules": rule_set(active)}
+    params = rule_params(active)
+    if params:
+        info["params"] = params
+    return info
 
 
 def provenance_note(info: dict) -> str:
-    """The same as one line of the text summary."""
+    """The same as one line of the text summary.
+
+    A run whose rule parameters were moved off their defaults gets a second line: the
+    numbers a rule judged by belong in the report as much as the rule set does.
+    """
     listed = ", ".join(f"{p['name']} {p['version']}" for p in info["plugins"])
-    return i18n.t(
+    note = i18n.t(
         "cli.run-set", engine=info["engine"], plugins=listed or i18n.t("cli.plugins-none"),
         **info["rules"],
     )
+    params = info.get("params")
+    if params:
+        changed = "; ".join(
+            f"{p['rule']} {p['name']} = {p['value']} ({p['default']})" for p in params
+        )
+        note += "\n" + i18n.t("cli.run-params", params=changed)
+    return note
 
 
 def note() -> str:

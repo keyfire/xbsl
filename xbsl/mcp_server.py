@@ -91,9 +91,20 @@ def _forbid_unknown_arguments() -> None:
 
 
 @mcp.tool()
-def list_rules() -> list[dict]:
-    """List the available linter rules (id, title, tier, scope, severity)."""
-    return [r.as_dict() for r in sorted(RULES, key=lambda x: (x.tier, x.id))]
+def list_rules(select: list[str] | None = None, ignore: list[str] | None = None) -> list[dict]:
+    """List the available linter rules (id, title, tier, scope, severity).
+
+    select – answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
+    ignore – leave these out. Without either one the whole registry is listed.
+
+    A rule that judges by a NUMBER also carries `params`: for each one the `name`, the
+    `value` in force here, the `default` it ships with, the `env` variable that overrides it
+    and a one-line `doc`. Ask for the rule by id when that is what you need - the threshold
+    used to be found by rewriting the code around a guess and re-running the linter.
+    """
+    chosen, excluded = _as_set(select), _as_set(ignore)
+    listed = active_rules(chosen, excluded) if chosen or excluded else list(RULES)
+    return [r.as_dict() for r in sorted(listed, key=lambda x: (x.tier, x.id))]
 
 
 @mcp.tool()
@@ -136,6 +147,10 @@ def _through_baseline(
         "baselined": suppressed,
         "baseline_unused": unused,
         "baseline_stale": len(stale),
+        # NAMED, not just counted, exactly as the CLI json names them: a summary saying
+        # "baseline_stale: 9" and nothing else left the reader to take the file apart with
+        # a script of their own, sorting the entries by the prose of their `reason`.
+        "baseline_stale_entries": stale,
     }
     not_checked = baseline_data.not_checked_entries(data, rules, roots)
     if not_checked:
@@ -213,6 +228,8 @@ def lint_paths(
     Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
+    The stale entries are also NAMED, in `baseline_stale_entries`: {path, rule, message,
+    count, reason} each - `baseline_prune` removes exactly these.
     Entries this server could not judge - their rule is not in its set (an older plugin, a
     narrower selection) or their file is not among the requested paths - are counted apart
     as `baseline_not_checked` (split into `_rules` and `_paths`) and are NOT called stale.
@@ -239,6 +256,65 @@ def lint_paths(
     payload["summary"].update(extra)
     payload["summary"]["root"] = str(base)
     return payload
+
+
+@mcp.tool()
+@_documents_root
+def baseline_prune(
+    paths: list[str],
+    select: list[str] | None = None,
+    ignore: list[str] | None = None,
+    enable: list[str] | None = None,
+    baseline: str | None = None,
+    dry_run: bool = False,
+    root: str | None = None,
+) -> dict:
+    """Remove the baseline entries this run no longer needs (the CLI `--prune-baseline`).
+
+    An entry is stale when its finding is gone - the code was fixed, the rule changed, the
+    file moved. Removing it is a DELIBERATE act, never a by-product of a check: this tool
+    is the only place where an ordinary lint call cannot touch the file.
+
+    paths / select / ignore / enable / baseline - as in `lint_paths`; the rule set and the
+    requested paths decide what may be judged at all. Entries of a rule this server does not
+    carry, and of files outside the requested paths, are NOT stale and are left alone -
+    pruning after a narrow run would drop the record of a debt nobody looked at.
+    dry_run - report what would go and leave the file untouched.
+
+    Returns {baseline, stale, removed: [{path, rule, message, count, reason}], written,
+    not_checked}. `reason` is the sentence a human wrote about the exclusion - it is
+    reported back before it disappears; the file's own order and format survive the rewrite
+    (it is committed, and a reordered rewrite is an unreadable diff).
+    """
+    base = _base(root)
+    asked = [str(_under(base, p)) for p in paths]
+    named = _under(base, baseline)
+    files, requested = discover_with_context(asked)
+    chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
+    diags = _filter_requested(
+        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+    )
+    counted = requested if requested is not None else files
+    found = Path(named) if named else baseline_data.discover(counted)
+    if found is None:
+        return {"error": i18n.t("cli.baseline-none-to-extend"), "root": str(base)}
+    data = baseline_data.load(found)
+    rules = {r.id for r in active_rules(*chosen)}
+    roots = baseline_data.roots_of([Path(p) for p in asked], found.parent)
+    _kept, _suppressed, _unused, stale = baseline_data.apply(
+        diags, data, found.parent, rules, roots,
+    )
+    written = bool(stale) and not dry_run
+    if written:
+        baseline_data.save(found, baseline_data.without_entries(data, stale))
+    return {
+        "baseline": str(found),
+        "stale": len(stale),
+        "removed": stale,
+        "written": written,
+        "not_checked": len(baseline_data.not_checked_entries(data, rules, roots)),
+        "root": str(base),
+    }
 
 
 @mcp.tool()

@@ -62,9 +62,10 @@ from a worktree then names the other checkout, whose clean answer looks like you
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root)` | check files and directories on disk (relative paths – against `root`, the summary names it); the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root)` | check files and directories on disk (relative paths – against `root`, the summary names it); the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too; the stale entries are named in `summary.baseline_stale_entries`, not merely counted); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
-| `list_rules()` | the rules available here: id, title, tier, scope, severity |
+| `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go |
+| `list_rules(select, ignore)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry |
 | `version_info()` | the environment answering: engine, interpreter, data version, plugins – tells apart two environments that answer differently on the same file |
 
 **Platform reference and schemas**

@@ -3,9 +3,10 @@
 Copy-paste between modules is the kind of duplication that survives review: each file reads
 fine on its own, and the second copy is found only when a fix has to be applied twice. The
 rule compares the NORMALIZED body - comments and blank lines dropped, indentation collapsed -
-so a reformatted copy is still a copy, and it judges only bodies of at least five such lines:
-below that the coincidence of two short bodies (a guard clause, a one-line delegation) is
-ordinary.
+so a reformatted copy is still a copy, and it judges only bodies of at least `min-lines` such
+lines (five by default): below that the coincidence of two short bodies (a guard clause, a
+one-line delegation) is ordinary. The threshold is a declared parameter - `--list-rules` and
+the MCP listing print it, so it is read rather than guessed at by re-running the linter.
 
 Two narrowings, both measured:
 
@@ -35,7 +36,7 @@ from functools import lru_cache
 from xbsl import dataset, i18n, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, rule, rule_param
 from xbsl.lexer import linemap
 from xbsl.parser import parse
 
@@ -56,11 +57,20 @@ MESSAGES = {
         "ru": " и ещё в {count} местах",
         "en": " and in {count} more places",
     },
+    "code/duplicate-method-body.param.min-lines": {
+        "ru": "минимальная длина тела в нормализованных строках (без комментариев, пустых "
+              "строк и отступов), с которой правило судит: короче – совпадение обычное дело",
+        "en": "the shortest body the rule judges, in normalized lines (comments, blank lines "
+              "and indentation dropped): below that two bodies coincide by ordinary chance",
+    },
 }
 i18n.register(MESSAGES)
 
 #: The shortest body worth reporting, in normalized lines.
-MIN_LINES = 5
+MIN_LINES = rule_param(
+    "code/duplicate-method-body", "min-lines", 5,
+    "code/duplicate-method-body.param.min-lines",
+)
 _COMMENT_RE = re.compile(r"//.*")
 
 

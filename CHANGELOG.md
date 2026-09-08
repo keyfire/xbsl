@@ -15,6 +15,31 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-08 – 0.95.0, 0.96.0
 
 ### Added
+- **A rule now says the value it judges by, and the listing can be asked about one rule.**
+  `--list-rules` and the MCP `list_rules` gave the id, the title, the tier, the severity and
+  the "on by default" flag; the threshold itself lived as a constant in the sources, and
+  learning it meant rewriting the code around a guess and re-running the linter over the whole
+  project - a method body cut to six lines was reported, the same body at four was not, and two
+  full runs bought a number the tool already knew. Seven parameters are declared where the rules
+  use them - `code/duplicate-method-body` (min-lines), `yaml/duplicate-subtree` (min-nodes),
+  `style/line-length` (max-length), `code/parse-error` (max-per-file), `yaml/hint-too-long`
+  (limit, margin), `security/hardcoded-secret` (min-literal-length) - and travel with the rule:
+  the value in force, the default, a one-line description and the environment variable that
+  overrides it (`XBSL_` plus the rule id and the parameter name). `xbsl --list-rules --select
+  code/duplicate-method-body` and `list_rules(select=...)` answer about one rule instead of the
+  whole registry, an unreadable override keeps the default and says so, and a run whose
+  parameters are off their defaults names them in its provenance - a threshold changed by the
+  environment changes the findings. A selection that matches nothing now says so instead of
+  claiming an empty registry - the old line sent the reader looking for a broken install.
+- **The stale baseline entries are named in the MCP answer, and `baseline_prune` removes
+  them.** The summary of `lint_paths` said `baseline_stale: 9` and stopped there: which nine
+  could only be found by taking the file apart with a script of one's own, sorting the entries
+  by the prose of their `reason`, and nothing in a session could remove them. The entries now
+  travel with the count in `summary.baseline_stale_entries` (path, rule, message, count,
+  reason), exactly as the CLI json carries them, and the new `baseline_prune` tool removes
+  exactly those, keeping the file's order and format and answering with every entry it took
+  (`dry_run` shows what would go). Removing stays a deliberate act: an ordinary check never
+  touches the file.
 - **The `yaml/list-scroll-without-loading` finding comes with a quick fix.** The rule now
   carries an autofix: the value becomes `LoadingOnScroll` in the spelling of the one it
   replaces, a qualifier kept. Until now the editor offered only silencing it in the
@@ -26,6 +51,13 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   is the pair "a scroll is promised (`VerticalScroll` other than `False`) and the
   navigation is `None`" on the components the ui schema gives a `Navigation` property to;
   an expression in the value and a list that promises no scroll are left alone.
+
+### Changed
+- **The stale baseline entries are read out with their reasons.** An entry's `reason` is prose
+  a human wrote about a deliberate exclusion, and the listing printed the path, the rule and
+  the message without it. `--stale-baseline` and `--prune-baseline` now print the reason under
+  the entry, and pruning says how many of the removed entries carried one - after the commit
+  that text lives on only in the git history.
 
 ## 2026-09-06 – 0.94.0
 

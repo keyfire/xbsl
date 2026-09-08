@@ -115,6 +115,131 @@ def test_lint_paths_does_not_call_an_unchecked_entry_stale(tmp_path, monkeypatch
         sys.modules.pop("xbsl.mcp_server", None)
 
 
+def test_list_rules_answers_about_one_rule_with_its_parameters(monkeypatch):
+    """Reading one threshold used to mean pulling all two hundred rules - and not finding it."""
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(select=["code/duplicate-method-body"])
+
+        assert [r["id"] for r in listed] == ["code/duplicate-method-body"]
+        param = listed[0]["params"][0]
+        assert param["name"] == "min-lines"
+        assert param["value"] == 5 and param["default"] == 5
+        assert param["env"] == "XBSL_CODE_DUPLICATE_METHOD_BODY_MIN_LINES"
+        assert param["doc"].strip()
+        # a rule that judges by no number carries no empty list through the answer
+        plain = next(r for r in m.list_rules() if r["id"] == "code/blocks")
+        assert "params" not in plain
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def _project_with_stale_entry(tmp_path, reason="решение владельца: так и задумано"):
+    """A project whose baseline holds one live entry and one stale entry with a reason."""
+    project = tmp_path / "acme" / "Проба"
+    project.mkdir(parents=True)
+    f = project / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / ".xbsllint-baseline"
+    cli.main(["--write-baseline", str(bl), "--ignore", _NO_PAIR[0], str(f)])
+    data = json.loads(bl.read_text(encoding="utf-8"))
+    data["files"]["acme/Проба/Ушедший.xbsl"] = {
+        "whitespace/trailing": {"Хвостовые пробелы.": {"count": 2, "reason": reason}},
+    }
+    bl.write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return project, bl
+
+
+def test_lint_paths_names_the_stale_entries(tmp_path, monkeypatch):
+    """The summary said `baseline_stale: 9` and stopped there.
+
+    Which nine it was could only be found by taking the file apart with a script of one's
+    own, sorting the entries by the prose of their `reason`. The entries travel with the
+    count now, the same way the CLI json carries them.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        project, _bl = _project_with_stale_entry(tmp_path)
+
+        res = m.lint_paths([str(project)], ignore=_NO_PAIR)
+
+        summary = res["summary"]
+        assert summary["baseline_stale"] == 1
+        entry = summary["baseline_stale_entries"][0]
+        assert entry["path"] == "acme/Проба/Ушедший.xbsl"
+        assert entry["rule"] == "whitespace/trailing" and entry["count"] == 2
+        assert entry["reason"] == "решение владельца: так и задумано"
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_baseline_prune_removes_the_stale_entries_and_reports_their_reasons(
+    tmp_path, monkeypatch,
+):
+    """Removing is a tool of its own: a check never touches the file by itself."""
+    m = _with_stub(monkeypatch)
+    try:
+        project, bl = _project_with_stale_entry(tmp_path)
+        before = bl.read_text(encoding="utf-8")
+
+        res = m.baseline_prune([str(project)], ignore=_NO_PAIR)
+
+        assert res["stale"] == 1 and res["written"] is True
+        assert res["removed"][0]["reason"] == "решение владельца: так и задумано"
+        data = json.loads(bl.read_text(encoding="utf-8"))
+        assert "acme/Проба/Ушедший.xbsl" not in data["files"]
+        # the live entry keeps its place, its count and the shape of the file
+        assert data["files"]["acme/Проба/Ч.xbsl"]["whitespace/trailing"]
+        assert before.count("\r\n") == bl.read_text(encoding="utf-8").count("\r\n")
+        assert m.lint_paths([str(project)], ignore=_NO_PAIR)["summary"]["baseline_stale"] == 0
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_baseline_prune_dry_run_leaves_the_file_alone(tmp_path, monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        project, bl = _project_with_stale_entry(tmp_path)
+        before = bl.read_text(encoding="utf-8")
+
+        res = m.baseline_prune([str(project)], ignore=_NO_PAIR, dry_run=True)
+
+        assert res["stale"] == 1 and res["written"] is False
+        assert bl.read_text(encoding="utf-8") == before
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_baseline_prune_leaves_the_entries_it_could_not_check(tmp_path, monkeypatch):
+    """A rule outside this run's set is debt nobody looked at - pruning must not drop it."""
+    m = _with_stub(monkeypatch)
+    try:
+        project, bl = _project_with_stale_entry(tmp_path)
+
+        res = m.baseline_prune(
+            [str(project)], ignore=[*_NO_PAIR, "whitespace/trailing"],
+        )
+
+        assert res["stale"] == 0 and res["not_checked"] == 2 and res["written"] is False
+        data = json.loads(bl.read_text(encoding="utf-8"))
+        assert "acme/Проба/Ушедший.xbsl" in data["files"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_baseline_prune_says_when_there_is_no_baseline(tmp_path, monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        f = tmp_path / "Ч.xbsl"
+        f.write_text(_TRAILING, encoding="utf-8")
+
+        res = m.baseline_prune([str(f)], ignore=_NO_PAIR)
+
+        assert "error" in res and "--write-baseline" in res["error"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
 def test_lint_paths_can_be_asked_for_the_frozen_findings(tmp_path, monkeypatch):
     m = _with_stub(monkeypatch)
     try:

@@ -9,9 +9,13 @@ Tiers: 'A' structure/YAML, 'B' text/conventions, 'C' parser/code structure, 'D' 
 
 from __future__ import annotations
 
+import os
+import re
+import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TypeVar
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
@@ -160,7 +164,7 @@ class RuleInfo:
         return i18n.t(self.title_key)
 
     def as_dict(self) -> dict:
-        return {
+        out = {
             "id": self.id,
             "title": self.title,
             "tier": self.tier,
@@ -169,6 +173,13 @@ class RuleInfo:
             "enabled_by_default": self.enabled_by_default,
             "off_reason": self.off_reason_text,
         }
+        # Only a rule that HAS parameters carries the key: the listing of the whole
+        # registry travels through an agent's context, and two hundred empty lists there
+        # buy nothing.
+        params = [p.as_dict() for p in self.params]
+        if params:
+            out["params"] = params
+        return out
 
     @property
     def off_reason_text(self) -> str:
@@ -176,6 +187,11 @@ class RuleInfo:
         if self.enabled_by_default or not self.off_reason:
             return ""
         return i18n.t(self.off_reason)
+
+    @property
+    def params(self) -> list[RuleParam]:
+        """The values this rule judges by, in the order it declared them."""
+        return params_of(self.id)
 
 
 RULES: list[RuleInfo] = []
@@ -214,6 +230,105 @@ def rule(
         return fn
 
     return deco
+
+
+# --- Rule parameters -----------------------------------------------------------------
+#
+# The threshold a rule judges by used to be a constant nobody could see: `--list-rules` and
+# the MCP listing gave the id, the title, the tier, the severity and the "on by default"
+# flag, and the number itself was found by re-running the linter over the whole project
+# with the code rewritten around a guess. A parameter is now DECLARED where it is used -
+# the constant IS the declaration, so the listing and the rule cannot drift apart the way a
+# hand-kept table of thresholds would.
+
+
+@dataclass(frozen=True)
+class RuleParam:
+    """A value a rule judges by, declared next to the place that uses it.
+
+    `value` is what is in force in this process, `default` what the rule ships with; they
+    differ when the environment variable named by `env` is set. `doc_key` is a catalog key
+    (a literal string still works, like the rule titles).
+    """
+
+    rule_id: str
+    name: str
+    value: object
+    default: object
+    doc_key: str
+    env: str = ""
+
+    @property
+    def doc(self) -> str:
+        """The one-line description, translated at read time (as the rule titles are)."""
+        return i18n.t(self.doc_key)
+
+    @property
+    def overridden(self) -> bool:
+        return self.value != self.default
+
+    def as_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "value": self.value,
+            "default": self.default,
+            "env": self.env,
+            "doc": self.doc,
+        }
+
+
+PARAMS: list[RuleParam] = []
+
+_ParamValue = TypeVar("_ParamValue", int, float, str)
+
+_ENV_UNSAFE = re.compile(r"[^A-Za-z0-9]+")
+
+
+def param_env(rule_id: str, name: str) -> str:
+    """The environment variable that overrides one parameter: XBSL_<rule id>_<name>.
+
+    Derived rather than spelled out, so a parameter cannot be given a name that collides
+    with another rule's or drifts from the id it belongs to. The listing prints it, so
+    nobody has to reconstruct the rule by hand.
+    """
+    tail = _ENV_UNSAFE.sub("_", f"{rule_id}_{name}").strip("_").upper()
+    return f"XBSL_{tail}"
+
+
+def params_of(rule_id: str) -> list[RuleParam]:
+    """The parameters declared for one rule, in declaration order."""
+    return [p for p in PARAMS if p.rule_id == rule_id]
+
+
+def rule_param(rule_id: str, name: str, default: _ParamValue, doc: str) -> _ParamValue:
+    """Declare a parameter of a rule and return the value in force.
+
+    Used as the declaration of the constant itself:
+
+        MIN_LINES = rule_param("code/duplicate-method-body", "min-lines", 5,
+                               "code/duplicate-method-body.param.min-lines")
+
+    The value is read once, at import: the rule keeps a plain constant, and the listing
+    reports exactly what the rule works with. A re-declaration (a reloaded rule module, a
+    plugin taking a core rule over) replaces the earlier record instead of doubling it.
+
+    A malformed environment value does not stop the run - the default stands and the
+    mistake is said out loud, because a silently ignored override is a typo nobody notices.
+    """
+    env = param_env(rule_id, name)
+    value = default
+    raw = os.environ.get(env)
+    if raw is not None and raw.strip():
+        try:
+            value = type(default)(raw.strip())
+        except ValueError:
+            print(
+                i18n.t("engine.param-bad-value", env=env, value=raw.strip(), default=default),
+                file=sys.stderr,
+            )
+    PARAMS[:] = [p for p in PARAMS if (p.rule_id, p.name) != (rule_id, name)]
+    PARAMS.append(RuleParam(rule_id, name, value, default, doc, env))
+    return value
 
 
 # Rule id -> effective severity from plugin overrides ("off" entries end up as
