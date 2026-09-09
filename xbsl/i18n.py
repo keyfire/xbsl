@@ -181,6 +181,12 @@ _CORE_MESSAGES = {
         "ru": "Погашено базлайном: {suppressed}; устаревших записей базлайна: {unused}",
         "en": "Suppressed by the baseline: {suppressed}; stale baseline entries: {unused}",
     },
+    "cli.baseline-stale-hint": {
+        "ru": "Показать устаревшие записи: --stale-baseline; снять их из файла: "
+              "--prune-baseline",
+        "en": "Show the stale entries: --stale-baseline; remove them from the file: "
+              "--prune-baseline",
+    },
     "cli.baseline-not-checked": {
         "ru": "Записей базлайна не проверено: {count} – их правил не было в наборе этого "
               "прогона ({rules}) либо их файлы лежат вне проверенных путей ({paths}); "

@@ -252,6 +252,49 @@ def test_stale_entries_are_listed(tmp_path, capsys):
     assert err.count("устаревшая запись") == 1
 
 
+def test_summary_points_at_the_key_that_lists_the_stale_entries(tmp_path, capsys):
+    """A plain run counts the stale entries; the count is useless without the key to see them."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    cli.main(["--baseline", str(bl), *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "устаревших записей базлайна: 1" in err
+    assert "--stale-baseline" in err and "--prune-baseline" in err
+
+
+def test_the_hint_is_silent_when_the_entries_are_already_listed(tmp_path, capsys):
+    """--stale-baseline printed them just above - pointing at itself teaches nobody anything."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+    _seed_stale(bl)
+
+    cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "Показать устаревшие записи" not in err
+
+
+def test_a_baseline_without_stale_entries_gets_no_hint(tmp_path, capsys):
+    """Nothing is stale - a line about keys that would remove nothing is noise."""
+    f = tmp_path / "Ч.xbsl"
+    f.write_text(_TRAILING, encoding="utf-8")
+    bl = tmp_path / "baseline.json"
+    cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
+    capsys.readouterr()
+
+    cli.main(["--baseline", str(bl), *_NO_PAIR, str(tmp_path)])
+    err = capsys.readouterr().err
+    assert "устаревших записей базлайна: 0" in err
+    assert "--stale-baseline" not in err
+
+
 def _seed_stale_with_reason(bl, reason, extra_path="Ушедший.xbsl"):
     """A stale entry that carries the prose a human wrote about the exclusion."""
     data = json.loads(bl.read_text(encoding="utf-8"))

@@ -134,7 +134,9 @@ answer. `--prune-baseline` lists them and removes them from the file, keeping it
 format (it is a committed file, and a re-sorted rewrite is an unreadable diff) and saying how
 many of the removed entries carried a reason - after the commit that text lives on only in the
 git history. The MCP side of the same act is the `baseline_prune` tool (with `dry_run` to see
-what would go); removing is never a by-product of an ordinary check.
+what would go); removing is never a by-product of an ordinary check. An ordinary run that
+counted stale entries names both keys under its summary line: a count with no pointer used
+to send people looking by hand - rewriting the baseline and diffing the files.
 
 `xbsl baseline add <paths> --rule <rule> [--reason ...]` freezes one finding at a time: it runs
 the named rule over the given paths and appends only the findings the baseline does not cover

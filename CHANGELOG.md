@@ -89,6 +89,12 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the third behind the Russian words of the naming standard.
 
 ### Changed
+- **The run summary names the keys that list and remove the stale baseline entries.**
+  The "stale baseline entries: N" line was a count with nothing to do about it: finding
+  out WHAT went stale meant calling the MCP `lint_paths` or subtracting the live findings
+  from the keys of the file by hand. The run now prints `--stale-baseline` and
+  `--prune-baseline` under that line; with nothing stale, or right after those keys have
+  listed the entries, the hint stays silent.
 - **The stale baseline entries are read out with their reasons.** An entry's `reason` is prose
   a human wrote about a deliberate exclusion, and the listing printed the path, the rule and
   the message without it. `--stale-baseline` and `--prune-baseline` now print the reason under

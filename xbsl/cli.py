@@ -1285,6 +1285,11 @@ def _check_main(argv: list[str]) -> int:
                 i18n.t("cli.baseline-summary", suppressed=suppressed, unused=len(stale)),
                 file=sys.stderr,
             )
+            # A count nobody can act on sends people to rewrite the baseline and diff it:
+            # the run names the keys that list and remove the entries it just counted.
+            # Not said when the run already listed them - the answer is above.
+            if stale and not (args.stale_baseline or args.prune_baseline):
+                print(i18n.t("cli.baseline-stale-hint"), file=sys.stderr)
             # Said out loud only when there is something to say: a full run has nothing
             # here, and a line of zeros in every report teaches nobody anything.
             if not_checked:
