@@ -674,8 +674,12 @@ export function encodeFragmentScalar(value: string): string {
 }
 
 // The value_yaml fragment of a composite rebuilt from its scalar fields. A single field is
-// spelled as a flow mapping: the engine writes ONE-line fragments inline after the key, and
-// only a flow collection stays valid yaml there.
+// wrapped in a flow mapping for the sake of engines before 0.97.0: those wrote EVERY one-line
+// fragment inline after the key, and a block mapping cannot go there - `Настройки: Тип: X` is
+// yaml nobody reads, so the edit came back refused. Since 0.97.0 the engine writes a one-entry
+// mapping as a nested block and a plain line would do; the wrapper stays because the panel talks
+// to whatever engine is installed, and it remains correct on the new one too - a flow collection
+// is still the one thing written inline.
 export function buildCompositeYaml(fields: { key: string; value: string }[]): string {
   const lines = fields.map((f) => `${f.key}: ${encodeFragmentScalar(f.value)}`);
   if (lines.length === 1) {

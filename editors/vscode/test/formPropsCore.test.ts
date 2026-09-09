@@ -294,8 +294,9 @@ test("buildCompositeYaml: block for many fields, flow for a single one", () => {
     ]),
     "Тип: АбсолютныйШрифт\nРазмер: 28"
   );
-  // The engine writes a one-line fragment inline after the key, so it must be a flow
-  // collection to stay valid yaml there.
+  // An engine before 0.97.0 wrote every one-line fragment inline after the key, where only a
+  // flow collection is valid yaml; since 0.97.0 a one-entry mapping is written as a block, and
+  // the wrapper is kept only because the panel talks to whatever engine is installed.
   assert.strictEqual(
     buildCompositeYaml([{ key: "Данные", value: "=Объект.Шаги" }]),
     "{Данные: =Объект.Шаги}"
