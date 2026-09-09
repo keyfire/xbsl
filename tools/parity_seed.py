@@ -51,6 +51,7 @@ starts AGREEING it reports `fixed!` and fails, so a closed gap cannot keep a sta
 Usage:
 
     python tools/parity_seed.py                  # every seed
+    python tools/parity_seed.py --quiet          # only the seeds that disagree, and the summary
     python tools/parity_seed.py --rule structure/xbsl-pair
     python tools/parity_seed.py --uncovered      # rules no seed speaks for
     python tools/parity_seed.py --json
@@ -1232,6 +1233,227 @@ Attributes:
         Type: Boolean
 """
 _BOOLEAN_TOKENS = {"Отметки": "Marks", "Успешно": "Successful", "НетОшибок": "NoErrors"}
+
+#: --- Cross-subsystem references: a consumer subsystem and a supplier subsystem -----------
+#: The consumer declares the supplier as used; the supplier is private to the auto-interface.
+_SUB_USE_RU = "Использование:\n    - Склад\n"
+_SUB_PRIVATE_RU = "Интерфейс:\n    ВключатьВАвтоИнтерфейс: Ложь\n"
+_SUB_TOKENS = {"Учет": "Accounting", "Склад": "Warehouse"}
+_GOODS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f31
+Имя: Товары
+ОбластьВидимости: {vis}
+"""
+_CARD_HEAD_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f32
+Имя: Карточка
+"""
+_CARD_BODY_RU = """\
+Наследует:
+    Тип: Группа
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f33
+        Имя: Товар
+        Тип: Товары.Ссылка?
+"""
+_CROSS_TOKENS = {**_SUB_TOKENS, "Товары": "Goods", "Карточка": "Card", "Товар": "Product"}
+_CALC_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000f3a\nИмя: Расчеты\n"
+_CALC_TOKENS = {**_SUB_TOKENS, "Товары": "Goods", "Расчеты": "Calculations", "Первый": "First"}
+_DEADLINES_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f39
+Имя: СрокиТоваров
+ОбластьВидимости: {vis}
+"""
+_DEADLINES_XBSL_RU = "@ВПроекте\nметод БлижайшийСрок(): Дата?\n    возврат Неопределено\n;\n"
+_SUMMARY_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000f3b\nИмя: Сводка\nОбластьВидимости: ВПроекте\n"
+_SUMMARY_XBSL_RU = "импорт Склад\n\nметод СрокСводки(): Дата?\n    возврат СрокиТоваров.БлижайшийСрок()\n;\n"
+_VISIBILITY_TOKENS = {**_SUB_TOKENS, "СрокиТоваров": "GoodsDeadlines", "БлижайшийСрок": "NearestDeadline",
+                      "Сводка": "Summary", "СрокСводки": "SummaryDeadline"}
+
+#: --- Computed access control -----------------------------------------------------------
+_RECORDS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f34
+Имя: Записи
+КонтрольДоступа:
+    РасчетРазрешенийПо:
+        - Владелец
+    Разрешения:
+        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f35
+        Имя: Владелец
+        Тип: Строка
+"""
+_COMMON_HANDLER_RU = (
+    "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n"
+    "    возврат новый Массив<РазрешениеДоступа>()\n;\n\n"
+)
+
+
+def _per_object_ru(body: str) -> str:
+    """The per-object handler of the records catalog, reading the record through the
+    loop variable the platform's contract names (`Record`)."""
+    return (
+        "@Обработчик\n"
+        "метод ВычислитьРазрешенияДоступаДляОбъектов(Данные: ЧитаемыйМассив<Записи.Объект>)\n"
+        "    для Запись из Данные\n"
+        f"        {body}\n"
+        "    ;\n"
+        ";\n"
+    )
+
+
+_RECORDS_TOKENS = {"Записи": "Records", "Владелец": "Owner", "Данные": "Data"}
+_NOTES_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f36
+Имя: Заметки
+КонтрольДоступа:
+    Разрешения:
+        Чтение: {read}
+"""
+_NOTES_XBSL_RU = (
+    "метод ПрочитатьЗаметки()\n"
+    "    исп КонтекстДоступа.Дополнить(Тип<Заметки.Объект>, [Сущность.Право.Чтение])\n;\n"
+)
+_NOTES_TOKENS = {"Заметки": "Notes", "Работа": "Work", "ПрочитатьЗаметки": "ReadNotes"}
+_TRANSFERS_RU = """\
+ВидЭлемента: РегистрСведений
+Ид: 1d1f5c60-0000-4000-8000-000000000f37
+Имя: Переводы
+КонтрольДоступа:
+    Разрешения:
+        Чтение: РазрешеноВсем
+        ПоУмолчанию: РазрешенияВычисляются
+Измерения:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f38
+        Имя: Ключ
+        Тип: Строка
+"""
+_GRANT_RU = (
+    "@Обработчик\nметод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n"
+    "    возврат [новый РазрешениеДоступа([новый КлючДоступаЗаписей.Объект()],\n"
+    "        [{rights}])]\n;\n"
+)
+_TRANSFERS_TOKENS = {"Переводы": "Transfers", "Ключ": "Key"}
+
+#: --- Localized strings -------------------------------------------------------------------
+_STRINGS_RU = """\
+ВидЭлемента: ЛокализованныеСтроки
+Ид: 1d1f5c60-0000-4000-8000-000000000f3c
+Имя: Словарь
+ОбластьВидимости: ВПроекте
+Строки:
+{strings}Шаблоны:
+{templates}"""
+_STRINGS_DEFAULT_RU = _STRINGS_RU.format(
+    strings="    Приветствие: Привет\n", templates='    Расширена: "Расширена (до $0)"\n',
+)
+_LABEL_RU = _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Надпись\n        Значение: {value}\n"
+_STRINGS_TOKENS = {"Словарь": "Dictionary", "Приветствие": "Greeting", "Расширена": "Extended",
+                   "Готово": "Done", "Карточка": "Card"}
+
+#: --- Resources, components, modules ----------------------------------------------------
+_PICTURES_XBSL_RU = "метод Картинка(): ДвоичныйОбъект.Ссылка\n    возврат Ресурс{{{key}}}.Ссылка\n;\n"
+_PICTURES_TOKENS = {"Проба": "Probe", "Основное": "Main", "Своя": "Own", "Картинки": "Pictures",
+                    "Картинка": "Picture", "Пробная9": "Probe9"}
+_COMBINE_RU = "метод Сложить(А: Число, Б: Число = 0): Число\n    возврат А + Б\n;\n"
+_ARITY_TOKENS = {"Расчеты": "Calculations", "Сложить": "Combine", "А": "A", "Б": "B",
+                 "Проба": "Probe", "Служебный": "Internal", "Вызывающий": "Caller"}
+_TAB_YAML_RU = "ВидЭлемента: КомпонентИнтерфейса\nИд: 1d1f5c60-0000-4000-8000-000000000f3d\nИмя: Вкладка\n"
+_ROUTER_YAML_RU = (
+    "ВидЭлемента: КомпонентИнтерфейса\nИд: 1d1f5c60-0000-4000-8000-000000000f3e\nИмя: Маршрутизатор\n"
+    "Содержимое:\n    -\n        Тип: Вкладка\n        Имя: Вкладка\n"
+)
+_ROUTER_XBSL_RU = "метод Открыть()\n    Компоненты.Вкладка.Загрузить()\n;\n"
+_TAB_TOKENS = {"Вкладка": "Tab", "Маршрутизатор": "Router", "Загрузить": "Load", "Открыть": "Open"}
+_PANEL_RU = "ВидЭлемента: КомпонентИнтерфейса\nИд: 1d1f5c60-0000-4000-8000-000000000f3f\nИмя: Панель\n"
+_CABINET_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f40
+Имя: Кабинет
+Наследует:
+    Тип: ПроизвольноеКлиентскоеПриложение
+    Путь: cabinet
+    Содержимое:
+        -
+            Тип: Панель
+"""
+_HANDLING_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000f41\nИмя: РаботаСЗадачами\nОкружение: Клиент\n"
+_TASK_CARD_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f42
+Имя: КарточкаЗадачи
+Свойства:
+    -
+        Имя: {prop}
+        Тип: Массив<Строка>
+"""
+_GOODS_FIELDS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f43
+Имя: Товары
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f44
+        Имя: Метка
+        Тип: Строка
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f45
+        Имя: Бейдж
+        Тип: Строка|Число|?
+"""
+_FILTERS_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f46
+Имя: Фильтры
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f47
+        Имя: Бейдж
+        Тип: Строка|Число|?
+"""
+_IN_SUBQUERY_RU = (
+    "метод Проба(): Число\n"
+    "    знч Р = Запрос{{\n"
+    "        ВЫБРАТЬ 1\n"
+    "        ИЗ Товары КАК Т\n"
+    "        ГДЕ Т.{field} В (ВЫБРАТЬ Ф.Бейдж ИЗ Фильтры КАК Ф)\n"
+    "    }}.Выполнить()\n"
+    "    возврат 1\n"
+    ";\n"
+)
+_QUERY_TOKENS = {"Товары": "Goods", "Фильтры": "Filters", "Бейдж": "Badge", "Метка": "Tag",
+                 "Р": "R", "Т": "T", "Ф": "F", "Проба": "Probe", "Отборы": "Selections"}
+_CHECKS_TOKENS = {"Проверки": "Checks", "Проба": "Probe", "Флаг": "Flag"}
+_PRICES_RU = "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f48\nИмя: Цены\n"
+_PRICES_TOKENS = {"Цены": "Prices", "Заявки": "Applications", "Задачи": "Tasks", "Сумма": "Amount",
+                  "Товар_Цена": "Product_Price"}
+_DUPLICATE_BODY_RU = (
+    "{annotation}метод Собрать(): Число\n"
+    "    пер А = 1\n    пер Б = 2\n    пер В = 3\n    пер Г = 4\n"
+    "    возврат А + Б + В + Г\n;\n"
+)
+_DUPLICATE_TOKENS = {"Первый": "First", "Второй": "Second", "Собрать": "Assemble",
+                     "А": "A", "Б": "B", "В": "C", "Г": "D"}
+_DESCRIPTOR_RU = (
+    "Ид: 1d1f5c60-0000-4000-8000-000000000f49\n"
+    "Поставщик: Acme\nИмя: Проба\nВерсия: {version}\n{presentation}"
+    "РежимСовместимости: 9.0\n"
+)
+_DESCRIPTOR_PRESENTATION_RU = 'Представление: "Проба"\nПредставлениеПоставщика: "Акме"\n'
+_STRINGS_PARTNER_EN = (
+    "Строки:\n    Приветствие: Hello\n"
+    "Шаблоны:\n    Расширена: \"Extended (until $0)\"\n"
+)
+
 
 SEEDS: list[Seed] = [
     Seed(
@@ -3686,6 +3908,591 @@ SEEDS: list[Seed] = [
         },
         tokens={"Расчёты": "Calculations", "Отчёты": "Reports", "Служебный": "Internal", "Проба": "Probe"},
     ),
+    # --- computed access control -------------------------------------------------------
+    Seed(
+        rule="code/permission-field-not-declared",
+        expect=FINDING,
+        note="the per-object handler reads a field the yaml does not list as computed by",
+        files={"Записи.yaml": _RECORDS_RU,
+               "Записи.xbsl": _COMMON_HANDLER_RU + _per_object_ru("возврат Запись.Пользователь")},
+        tokens={**_RECORDS_TOKENS, "Пользователь": "User"},
+    ),
+    Seed(
+        rule="code/permission-field-not-declared",
+        expect=CLEAN,
+        note="the same handler reading the declared field",
+        files={"Записи.yaml": _RECORDS_RU,
+               "Записи.xbsl": _COMMON_HANDLER_RU + _per_object_ru("возврат Запись.Владелец")},
+        tokens=_RECORDS_TOKENS,
+    ),
+    Seed(
+        rule="code/access-context-read-noop",
+        expect=FINDING,
+        note="the context is extended with the read right of an object everyone may read",
+        files={"Заметки.yaml": _NOTES_RU.format(read="РазрешеноВсем"), "Работа.xbsl": _NOTES_XBSL_RU},
+        tokens=_NOTES_TOKENS,
+    ),
+    Seed(
+        rule="code/access-context-read-noop",
+        expect=CLEAN,
+        note="the same extension for an object whose reading is computed",
+        files={"Заметки.yaml": _NOTES_RU.format(read="РазрешенияВычисляются"), "Работа.xbsl": _NOTES_XBSL_RU},
+        tokens=_NOTES_TOKENS,
+    ),
+    Seed(
+        rule="code/permission-handlers-need-recalc",
+        expect=FINDING,
+        note="a permission handler declared while nothing recomputes the permissions",
+        files={"Записи.yaml": _RECORDS_RU, "Записи.xbsl": _COMMON_HANDLER_RU},
+        tokens=_RECORDS_TOKENS,
+    ),
+    Seed(
+        rule="code/permission-handlers-need-recalc",
+        expect=CLEAN,
+        note="the same handler with a recompute call elsewhere in the project",
+        files={"Записи.yaml": _RECORDS_RU, "Записи.xbsl": _COMMON_HANDLER_RU,
+               "Обновление.xbsl": "@ВПроекте\nметод Обновить()\n    Записи.ПересчитатьРазрешенияДоступа()\n;\n"},
+        tokens={**_RECORDS_TOKENS, "Обновление": "Update", "Обновить": "Refresh"},
+    ),
+    Seed(
+        rule="code/permission-right-not-computable",
+        expect=FINDING,
+        note="the handler hands out the read right the yaml settles statically",
+        files={"Переводы.yaml": _TRANSFERS_RU, "Переводы.xbsl": _GRANT_RU.format(rights="Сущность.Право.Чтение")},
+        tokens=_TRANSFERS_TOKENS,
+    ),
+    Seed(
+        rule="code/permission-right-not-computable",
+        expect=CLEAN,
+        note="the same handler handing out a computed right",
+        files={"Переводы.yaml": _TRANSFERS_RU, "Переводы.xbsl": _GRANT_RU.format(rights="Сущность.Право.Изменение")},
+        tokens=_TRANSFERS_TOKENS,
+    ),
+    # --- references across a subsystem boundary ----------------------------------------
+    Seed(
+        rule="yaml/foreign-not-public",
+        expect=FINDING,
+        note="a yaml type position reaching a private element of another subsystem",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПодсистеме"),
+               "Учет/Карточка.yaml": _CARD_HEAD_RU + "Импорт:\n    - Склад\n" + _CARD_BODY_RU},
+        tokens=_CROSS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/foreign-not-public",
+        expect=CLEAN,
+        note="the same reference once the element is public",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Карточка.yaml": _CARD_HEAD_RU + "Импорт:\n    - Склад\n" + _CARD_BODY_RU},
+        tokens=_CROSS_TOKENS,
+    ),
+    Seed(
+        rule="code/foreign-not-public",
+        expect=FINDING,
+        note="a module calling a private common module of another subsystem",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/СрокиТоваров.yaml": _DEADLINES_RU.format(vis="ВПодсистеме"),
+               "Склад/СрокиТоваров.xbsl": _DEADLINES_XBSL_RU,
+               "Учет/Сводка.yaml": _SUMMARY_RU, "Учет/Сводка.xbsl": _SUMMARY_XBSL_RU},
+        tokens=_VISIBILITY_TOKENS,
+    ),
+    Seed(
+        rule="code/foreign-not-public",
+        expect=CLEAN,
+        note="the same call once the module is public",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/СрокиТоваров.yaml": _DEADLINES_RU.format(vis="ВПроекте"),
+               "Склад/СрокиТоваров.xbsl": _DEADLINES_XBSL_RU,
+               "Учет/Сводка.yaml": _SUMMARY_RU, "Учет/Сводка.xbsl": _SUMMARY_XBSL_RU},
+        tokens=_VISIBILITY_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=FINDING,
+        note="a yaml reaching a public foreign element without importing its subsystem",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Карточка.yaml": _CARD_HEAD_RU + _CARD_BODY_RU},
+        tokens=_CROSS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=CLEAN,
+        note="the same reference with the subsystem imported",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Карточка.yaml": _CARD_HEAD_RU + "Импорт:\n    - Склад\n" + _CARD_BODY_RU},
+        tokens=_CROSS_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=FINDING,
+        note="a module naming a public foreign type without importing its subsystem",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "метод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=CLEAN,
+        note="the same module with the import line",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="code/unused-import",
+        expect=FINDING,
+        note="a module importing a subsystem its code never mentions",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый()\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="code/unused-import",
+        expect=CLEAN,
+        note="the same import with an element of the subsystem in a type position",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-subsystem-usage",
+        expect=FINDING,
+        note="a module imports a subsystem its own subsystem does not declare as used",
+        files={"Учет/Подсистема.yaml": _SUB_PRIVATE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-subsystem-usage",
+        expect=CLEAN,
+        note="the same import once the descriptor declares the usage",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU,
+               "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="yaml/localization-missing-import",
+        expect=FINDING,
+        note="an unqualified dictionary reference across a subsystem boundary without the import",
+        files={"Учет/Подсистема.yaml": "Имя: Учет\n", "Склад/Подсистема.yaml": "Имя: Склад\n",
+               "Учет/Словарь.yaml": _STRINGS_DEFAULT_RU,
+               "Учет/Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN,
+               "Склад/Карточка.yaml": _CARD_HEAD_RU + "Наследует:\n    Тип: Страница\n    Заголовок: $Словарь.Приветствие\n"},
+        tokens={**_SUB_TOKENS, **_STRINGS_TOKENS},
+    ),
+    Seed(
+        rule="yaml/localization-missing-import",
+        expect=CLEAN,
+        note="the same reference with the subsystem imported by the yaml itself",
+        files={"Учет/Подсистема.yaml": "Имя: Учет\n", "Склад/Подсистема.yaml": "Имя: Склад\n",
+               "Учет/Словарь.yaml": _STRINGS_DEFAULT_RU,
+               "Учет/Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN,
+               "Склад/Карточка.yaml": _CARD_HEAD_RU + "Импорт:\n    - Учет\n"
+                                       "Наследует:\n    Тип: Страница\n    Заголовок: $Словарь.Приветствие\n"},
+        tokens={**_SUB_TOKENS, **_STRINGS_TOKENS},
+    ),
+    # --- localized strings ---------------------------------------------------------------
+    Seed(
+        rule="yaml/localization-ref-to-template",
+        expect=FINDING,
+        note="a yaml reference to a key of the templates section",
+        files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN,
+               "Карточка.yaml": _LABEL_RU.format(value="$Словарь.Расширена")},
+        tokens=_STRINGS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/localization-ref-to-template",
+        expect=CLEAN,
+        note="the same reference to a key of the strings section",
+        files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN,
+               "Карточка.yaml": _LABEL_RU.format(value="$Словарь.Приветствие")},
+        tokens=_STRINGS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/placeholder-key-in-strings",
+        expect=FINDING,
+        note="a substitution left in the strings section",
+        files={"Словарь.yaml": _STRINGS_RU.format(strings='    Готово: "Расширена (до $0)"\n',
+                                                   templates="    Приветствие: Привет\n"),
+               "Локализация/En/Словарь.yaml": 'Строки:\n    Готово: "Extended (until $0)"\nШаблоны:\n    Приветствие: Hello\n'},
+        tokens=_STRINGS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/placeholder-key-in-strings",
+        expect=CLEAN,
+        note="the same substitution in the templates section",
+        files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN},
+        tokens=_STRINGS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/localization-key-unique",
+        expect=FINDING,
+        note="one key declared in both sections of a dictionary",
+        files={"Словарь.yaml": _STRINGS_RU.format(strings="    Приветствие: Привет\n",
+                                                   templates='    Приветствие: "Привет, $0"\n'),
+               "Локализация/En/Словарь.yaml": 'Строки:\n    Приветствие: Hello\nШаблоны:\n    Приветствие: "Hello, $0"\n'},
+        tokens=_STRINGS_TOKENS,
+    ),
+    Seed(
+        rule="yaml/localization-key-unique",
+        expect=CLEAN,
+        note="the two sections with distinct keys",
+        files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN},
+        tokens=_STRINGS_TOKENS,
+    ),
+    # --- resources, declarations, calls --------------------------------------------------
+    Seed(
+        rule="code/unknown-resource",
+        expect=FINDING,
+        note="a resource key that resolves to nothing - neither the project nor the platform library",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Пробная9.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-resource",
+        expect=CLEAN,
+        note="a key naming a file of the project's resources folder",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Своя.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
+    Seed(
+        rule="code/collection-field-needs-req",
+        expect=FINDING,
+        note="a structure field of a collection type with no argument-less constructor",
+        files={"Тело.xbsl": "структура Тело\n    пер Тексты: ЧитаемыйМассив<Строка>\n;\n"},
+        tokens={"Тело": "Body", "Тексты": "Texts"},
+    ),
+    Seed(
+        rule="code/collection-field-needs-req",
+        expect=CLEAN,
+        note="the same field made a constructor argument",
+        files={"Тело.xbsl": "структура Тело\n    обз пер Тексты: ЧитаемыйМассив<Строка>\n;\n"},
+        tokens={"Тело": "Body", "Тексты": "Texts"},
+    ),
+    Seed(
+        rule="code/var-needs-init",
+        expect=FINDING,
+        note="a variable declared by a type that has no constructor and no default",
+        files={"Работа.xbsl": "метод Проба()\n    пер Ответ: ОтветHttp\n    Сообщить(Ответ.КодСтатуса)\n;\n"},
+        tokens={"Работа": "Work", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/var-needs-init",
+        expect=CLEAN,
+        note="the same variable declared nullable",
+        files={"Работа.xbsl": "метод Проба()\n    пер Ответ: ОтветHttp?\n    Сообщить(1)\n;\n"},
+        tokens={"Работа": "Work", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/call-arity",
+        expect=FINDING,
+        note="a local call passing more arguments than the signature takes",
+        files={"Расчеты.xbsl": _COMBINE_RU + "\nметод Проба(): Число\n    возврат Сложить(1, 2, 3)\n;\n"},
+        tokens=_ARITY_TOKENS,
+    ),
+    Seed(
+        rule="code/call-arity",
+        expect=CLEAN,
+        note="the same call within the signature",
+        files={"Расчеты.xbsl": _COMBINE_RU + "\nметод Проба(): Число\n    возврат Сложить(1)\n;\n"},
+        tokens=_ARITY_TOKENS,
+    ),
+    Seed(
+        rule="code/call-arity-cross",
+        expect=FINDING,
+        note="a cross-module call passing more arguments than the target signature takes",
+        files={"Служебный.xbsl": _COMBINE_RU,
+               "Вызывающий.xbsl": "метод Проба(): Число\n    возврат Служебный.Сложить(1, 2, 3)\n;\n"},
+        tokens=_ARITY_TOKENS,
+    ),
+    Seed(
+        rule="code/call-arity-cross",
+        expect=CLEAN,
+        note="the same call within the signature",
+        files={"Служебный.xbsl": _COMBINE_RU,
+               "Вызывающий.xbsl": "метод Проба(): Число\n    возврат Служебный.Сложить(1, 2)\n;\n"},
+        tokens=_ARITY_TOKENS,
+    ),
+    Seed(
+        rule="code/url-params-partial-encoding",
+        expect=FINDING,
+        note="the partially encoding query-parameter method on a builder chain",
+        files={"Адреса.xbsl": 'метод Проба(): Строка\n    возврат Url.СБазовымUrl("http://x").СПараметрамиЗапроса("a=b").ВСтроку()\n;\n'},
+        tokens={"Адреса": "Addresses", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/url-params-partial-encoding",
+        expect=CLEAN,
+        note="the same chain without that method",
+        files={"Адреса.xbsl": 'метод Проба(): Строка\n    возврат Url.СБазовымUrl("http://x").ВСтроку()\n;\n'},
+        tokens={"Адреса": "Addresses", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/local-method-cross-component",
+        expect=FINDING,
+        note="a component method at the default visibility called through an instance from another component",
+        files={"Вкладка.yaml": _TAB_YAML_RU, "Вкладка.xbsl": "метод Загрузить()\n    возврат\n;\n",
+               "Маршрутизатор.yaml": _ROUTER_YAML_RU, "Маршрутизатор.xbsl": _ROUTER_XBSL_RU},
+        tokens=_TAB_TOKENS,
+    ),
+    Seed(
+        rule="code/local-method-cross-component",
+        expect=CLEAN,
+        note="the same call once the method is opened to the subsystem",
+        files={"Вкладка.yaml": _TAB_YAML_RU, "Вкладка.xbsl": "@ВПодсистеме\nметод Загрузить()\n    возврат\n;\n",
+               "Маршрутизатор.yaml": _ROUTER_YAML_RU, "Маршрутизатор.xbsl": _ROUTER_XBSL_RU},
+        tokens=_TAB_TOKENS,
+    ),
+    # --- components, modules, queries ----------------------------------------------------
+    Seed(
+        rule="yaml/unused-component",
+        expect=FINDING,
+        note="an interface component nothing places and nothing creates",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Панель.yaml": _PANEL_RU},
+        tokens={"Проба": "Probe", "Панель": "Panel", "Кабинет": "Cabinet"},
+    ),
+    Seed(
+        rule="yaml/unused-component",
+        expect=CLEAN,
+        note="the same component placed by the entry point of the application",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Панель.yaml": _PANEL_RU, "Кабинет.yaml": _CABINET_RU},
+        tokens={"Проба": "Probe", "Панель": "Panel", "Кабинет": "Cabinet"},
+    ),
+    Seed(
+        rule="yaml/property-shadows-module",
+        expect=FINDING,
+        note="an own property of a component named after a common module",
+        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_RU.format(prop="РаботаСЗадачами")},
+        tokens={"РаботаСЗадачами": "TaskHandling", "КарточкаЗадачи": "TaskCard", "Задачи": "Tasks"},
+    ),
+    Seed(
+        rule="yaml/property-shadows-module",
+        expect=CLEAN,
+        note="the same property under a name of its own",
+        files={"РаботаСЗадачами.yaml": _HANDLING_RU, "КарточкаЗадачи.yaml": _TASK_CARD_RU.format(prop="Задачи")},
+        tokens={"РаботаСЗадачами": "TaskHandling", "КарточкаЗадачи": "TaskCard", "Задачи": "Tasks"},
+    ),
+    Seed(
+        rule="query/in-subquery-composite",
+        expect=FINDING,
+        note="a composite-type field checked with IN over a subquery",
+        files={"Товары.yaml": _GOODS_FIELDS_RU, "Фильтры.yaml": _FILTERS_RU,
+               "Отборы.xbsl": _IN_SUBQUERY_RU.format(field="Бейдж")},
+        tokens=_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="query/in-subquery-composite",
+        expect=CLEAN,
+        note="the same condition over a field of one type",
+        files={"Товары.yaml": _GOODS_FIELDS_RU, "Фильтры.yaml": _FILTERS_RU,
+               "Отборы.xbsl": _IN_SUBQUERY_RU.format(field="Метка")},
+        tokens=_QUERY_TOKENS,
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=FINDING,
+        note="a method nothing in the project mentions",
+        files={"Работа.xbsl": "метод Лишний()\n;\n"},
+        tokens={"Работа": "Work", "Лишний": "Spare"},
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=CLEAN,
+        note="the same method as a handler the platform calls itself",
+        files={"Работа.xbsl": "@Обработчик\nметод Лишний()\n;\n"},
+        tokens={"Работа": "Work", "Лишний": "Spare"},
+    ),
+    Seed(
+        rule="code/duplicate-method-body",
+        expect=FINDING,
+        note="one method body written in two files",
+        files={"Первый.xbsl": _DUPLICATE_BODY_RU.format(annotation=""),
+               "Второй.xbsl": _DUPLICATE_BODY_RU.format(annotation="")},
+        tokens=_DUPLICATE_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-method-body",
+        expect=CLEAN,
+        note="the same body in two platform hooks - the normal shape of that contract",
+        files={"Первый.xbsl": _DUPLICATE_BODY_RU.format(annotation="@Обработчик\n"),
+               "Второй.xbsl": _DUPLICATE_BODY_RU.format(annotation="@Обработчик\n")},
+        tokens=_DUPLICATE_TOKENS,
+    ),
+    # --- conditions ------------------------------------------------------------------------
+    Seed(
+        rule="style/boolean-compare",
+        expect=FINDING,
+        note="a boolean parameter compared with the true keyword",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево)\n    если Флаг == Истина\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/boolean-compare",
+        expect=CLEAN,
+        note="the same parameter checked without a comparison",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево)\n    если Флаг\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/undefined-is",
+        expect=FINDING,
+        note="the undefined value checked with the type-test operator",
+        files={"Проверки.xbsl": "метод Проба(Значение: Строка?)\n    если Значение это Неопределено\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/undefined-is",
+        expect=CLEAN,
+        note="the same check written as a comparison",
+        files={"Проверки.xbsl": "метод Проба(Значение: Строка?)\n    если Значение == Неопределено\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/negated-is",
+        expect=FINDING,
+        note="the type-test operator negated on the outside",
+        files={"Проверки.xbsl": "метод Проба(Значение: Объект)\n    если не (Значение это Строка)\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/negated-is",
+        expect=CLEAN,
+        note="the same test negated on the inside",
+        files={"Проверки.xbsl": "метод Проба(Значение: Объект)\n    если Значение это не Строка\n        возврат\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    # --- names, identifiers, the descriptor -------------------------------------------------
+    Seed(
+        rule="naming/underscore",
+        expect=FINDING,
+        note="an underscore used as a separator in an element name",
+        files={"Товар_Цена.yaml": "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f4a\nИмя: Товар_Цена\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="naming/underscore",
+        expect=CLEAN,
+        note="a name without a separator",
+        files={"Цены.yaml": _PRICES_RU},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=FINDING,
+        note="a top-level element without its presentation",
+        files={"Цены.yaml": _PRICES_RU},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="naming/presentation",
+        expect=CLEAN,
+        note="the same element with the presentation filled in",
+        files={"Цены.yaml": _PRICES_RU + "Представление: Цены\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-required",
+        expect=FINDING,
+        note="an element declared without its identifier",
+        files={"Цены.yaml": "ВидЭлемента: Справочник\nИмя: Цены\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-required",
+        expect=CLEAN,
+        note="the same element with its identifier",
+        files={"Цены.yaml": _PRICES_RU},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-unique",
+        expect=FINDING,
+        note="two elements sharing one identifier",
+        files={"Цены.yaml": _PRICES_RU,
+               "Заявки.yaml": "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f48\nИмя: Заявки\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-unique",
+        expect=CLEAN,
+        note="the same two elements with identifiers of their own",
+        files={"Цены.yaml": _PRICES_RU,
+               "Заявки.yaml": "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f4c\nИмя: Заявки\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-uuid",
+        expect=FINDING,
+        note="an identifier that is not a uuid",
+        files={"Цены.yaml": "ВидЭлемента: Справочник\nИд: nope\nИмя: Цены\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/id-uuid",
+        expect=CLEAN,
+        note="a well-formed identifier",
+        files={"Цены.yaml": _PRICES_RU},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/name-matches-file",
+        expect=FINDING,
+        note="an element whose name differs from its file name",
+        files={"Заявки.yaml": "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f4c\nИмя: Задачи\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="yaml/name-matches-file",
+        expect=CLEAN,
+        note="the name and the file agree",
+        files={"Заявки.yaml": "ВидЭлемента: Справочник\nИд: 1d1f5c60-0000-4000-8000-000000000f4c\nИмя: Заявки\n"},
+        tokens=_PRICES_TOKENS,
+    ),
+    Seed(
+        rule="project/version",
+        expect=FINDING,
+        note="a project version of two numbers",
+        files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0", presentation=_DESCRIPTOR_PRESENTATION_RU)},
+        tokens={"Проба": "Probe"},
+    ),
+    Seed(
+        rule="project/version",
+        expect=CLEAN,
+        note="a semantic version of three numbers",
+        files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0.0", presentation=_DESCRIPTOR_PRESENTATION_RU)},
+        tokens={"Проба": "Probe"},
+    ),
+    Seed(
+        rule="project/presentation",
+        expect=FINDING,
+        note="a descriptor without the presentations",
+        files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0.0", presentation="")},
+        tokens={"Проба": "Probe"},
+    ),
+    Seed(
+        rule="project/presentation",
+        expect=CLEAN,
+        note="the same descriptor with both presentations",
+        files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0.0", presentation=_DESCRIPTOR_PRESENTATION_RU)},
+        tokens={"Проба": "Probe"},
+    ),
 ]
 
 
@@ -3794,6 +4601,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--uncovered", action="store_true", help="list the rules no seed speaks for and exit",
     )
+    parser.add_argument(
+        "--quiet", action="store_true",
+        help="print only the seeds that disagree (known gaps included) and the summary line",
+    )
     args = parser.parse_args(argv)
 
     if args.uncovered:
@@ -3824,8 +4635,12 @@ def main(argv: list[str] | None = None) -> int:
         ))
         return 1 if bad else 0
 
-    width = max(len(r["status"]) for r in results)
-    for result in results:
+    # A full run is one line per seed, and there are hundreds of them: read for the single
+    # number "disagreements: 0" it floods the log. `--quiet` keeps the lines that carry
+    # news - a disagreement, a known gap, a gap that closed - and the summary.
+    shown = [r for r in results if not args.quiet or r["status"] != "ok"]
+    width = max((len(r["status"]) for r in shown), default=0)
+    for result in shown:
         mark = result["status"].ljust(width)
         counts = f"ru={result['russian']} en={result['english']}"
         if result["translated"] is not None:

@@ -121,6 +121,18 @@ def _method_visibility(module: SourceFile) -> dict[str, set[str]]:
     return result
 
 
+@lru_cache(maxsize=1)
+def _components_forms() -> frozenset[str]:
+    """Both spellings of the components collection, the English one from the platform
+    dictionary: an English module reaches an instance through `Components.X.Y(...)`, and
+    while the Russian word alone was matched the rule was blind on such a tree."""
+    english = terms.common_english("Компоненты")
+    return frozenset({"Компоненты", *([english] if english else [])})
+
+
+dataset.register_reset(_components_forms.cache_clear)
+
+
 def _shadows(toks: list, name: str) -> bool:
     """The module binds the name somewhere: a declaration, an assignment, an annotation.
 
@@ -189,11 +201,12 @@ def _cross_component_mapper(source: SourceFile) -> dict | None:
         name: sorted(anns) for name, anns in _method_visibility(source).items()
     }
     calls: list[tuple[str, str, int, int]] = []
-    if not _shadows(toks, "Компоненты"):
+    components = _components_forms()
+    if not any(_shadows(toks, form) for form in components):
         owner = source.path.name[: -len(".xbsl")].split(".", 1)[0]
         n = len(toks)
         for i, t in enumerate(toks):
-            if t.kind != "IDENT" or t.value != "Компоненты" or i + 5 >= n:
+            if t.kind != "IDENT" or t.value not in components or i + 5 >= n:
                 continue
             if i > 0 and toks[i - 1].kind == "OP" and toks[i - 1].value == ".":
                 continue  # member of another object, not the components collection

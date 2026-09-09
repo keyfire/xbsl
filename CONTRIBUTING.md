@@ -98,6 +98,7 @@ own case instead:
 
 ```
 python tools/parity_seed.py                    # every seed
+python tools/parity_seed.py --quiet            # only the seeds that disagree, and the summary
 python tools/parity_seed.py --rule group/name  # one rule
 python tools/parity_seed.py --uncovered        # rules no seed speaks for
 ```
