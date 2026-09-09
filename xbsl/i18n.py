@@ -1156,6 +1156,10 @@ _CORE_MESSAGES = {
         "ru": "без записей свойств – только имена и идентификаторы плюс propertyCount",
         "en": "no property records - names and ids only, plus propertyCount",
     },
+    "cli.help.scaf.form-tree-brief": {
+        "ru": "скелет дерева: идентификатор, вид, тип, имя и слот узла – без спанов и свойств",
+        "en": "the skeleton: id, kind, type, name and slot per node - no spans, no properties",
+    },
     "cli.help.scaf.meta.node-id": {
         "ru": "УЗЕЛ",
         "en": "NODE",

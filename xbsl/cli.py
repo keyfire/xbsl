@@ -705,6 +705,8 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                    help=i18n.t("cli.help.scaf.form-tree-max-depth"))
     p.add_argument("--no-properties", action="store_true",
                    help=i18n.t("cli.help.scaf.form-tree-no-properties"))
+    p.add_argument("--brief", action="store_true",
+                   help=i18n.t("cli.help.scaf.form-tree-brief"))
 
     p = sub.add_parser("form-edit", help=i18n.t("cli.help.scaf.form-edit"))
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
@@ -902,18 +904,24 @@ def _scaffold_main(argv: list[str]) -> int:
                     raise ValueError("Укажите только один из флагов --node и --name")
                 depth = args.max_depth if args.max_depth and args.max_depth > 0 else None
                 shape = {"max_depth": depth, "properties": not args.no_properties}
+
+                def as_dict(node):
+                    if args.brief:
+                        return formmodel.node_skeleton(node, max_depth=depth)
+                    return formmodel.node_dict(node, **shape)
+
                 if args.name:
                     found = formmodel.find_by_name(form.root, args.name)
                     if not found:
                         raise ValueError(
                             f"Компонент с именем \"{args.name}\" в форме не найден"
                         )
-                    payload = {"roots": [formmodel.node_dict(n, **shape) for n in found]}
+                    payload = {"roots": [as_dict(n) for n in found]}
                 elif args.node:
                     node = formmodel.get_node(form, args.node)
-                    payload = {"root": formmodel.node_dict(node, **shape)}
+                    payload = {"root": as_dict(node)}
                 else:
-                    payload = {"root": formmodel.node_dict(form.root, **shape)}
+                    payload = {"root": as_dict(form.root)}
             print(json.dumps(payload, ensure_ascii=False))
             return 0
         elif args.command == "form-edit":

@@ -772,6 +772,43 @@ def node_dict(
     return d
 
 
+def node_skeleton(node: Node, *, max_depth: int | None = None) -> dict:
+    """The tree without its bulk: ids, kinds, types, names and slots - nothing else.
+
+    What a caller needs to ADDRESS a node is a few words per node: the id for the editing
+    tools, the type and the name to recognise it, the slot it stands in. The spans and the
+    property records are what make a real form's tree a quarter of a million characters, and
+    a session that only wanted the ids of the top groups read all of it to find them. The
+    skeleton answers that first question in a few kilobytes; `node_dict` answers the next one
+    on the branch found. `max_depth` cuts the descent the same way and reports
+    "childrenOmitted"; a node with no children carries no "children" key at all.
+    """
+    d: dict = {"id": node.id, "kind": node.kind}
+    if node.kind == "component":
+        d["type"] = node.type
+        if node.name:
+            d["name"] = node.name
+        if node.slot:
+            d["slot"] = node.slot
+    else:
+        d["name"] = node.name
+    if max_depth is not None and max_depth <= 0:
+        if node.children:
+            d["childrenOmitted"] = len(node.children)
+        return d
+    if node.children:
+        d["children"] = [
+            node_skeleton(c, max_depth=None if max_depth is None else max_depth - 1)
+            for c in node.children
+        ]
+    return d
+
+
+def node_count(node: Node) -> int:
+    """How many nodes the subtree holds, the root included."""
+    return 1 + sum(node_count(c) for c in node.children)
+
+
 def component_properties_dicts(form: Form) -> list[dict]:
     """The Свойства records for the tree surfaces ("componentProperties" - not tree nodes)."""
     return [p.as_dict() for p in form.component_properties]

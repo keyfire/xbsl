@@ -695,7 +695,7 @@ usage: xbsl localization-info [-h] yaml_path
 
 ```bash
 usage: xbsl form-tree [-h] [--at СМЕЩЕНИЕ] [--node УЗЕЛ] [--name ИМЯ] [--max-depth УРОВНЕЙ]
-                      [--no-properties]
+                      [--no-properties] [--brief]
                       yaml_path
 ```
 
@@ -715,6 +715,7 @@ usage: xbsl form-tree [-h] [--at СМЕЩЕНИЕ] [--node УЗЕЛ] [--name И�
 | `--name ИМЯ` | поддерево компонента с этим Имя; несколько совпадений приходят в "roots" |
 | `--max-depth УРОВНЕЙ` | сколько уровней раскрывать (0 – без предела); у обрезанного узла появляется childrenOmitted |
 | `--no-properties` | без записей свойств – только имена и идентификаторы плюс propertyCount |
+| `--brief` | скелет дерева: идентификатор, вид, тип, имя и слот узла – без спанов и свойств |
 
 ### `xbsl form-edit`
 

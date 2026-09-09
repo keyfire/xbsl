@@ -1184,6 +1184,7 @@ def meta_component_tree(
     name: str = "",
     max_depth: int = 0,
     properties: bool = True,
+    brief: bool = False,
     root: str | None = None,
 ) -> dict:
     """The node tree of an interface component (ВидЭлемента: КомпонентИнтерфейса).
@@ -1211,6 +1212,12 @@ def meta_component_tree(
       "childrenOmitted";
     * properties=False - names and ids only, each component reporting
       "propertyCount". This is the biggest cut: properties are most of the bytes.
+    * brief=True - the SKELETON: id, kind, type, name and slot per node, no spans and
+      no property records at all. A few kilobytes for a form whose full tree is
+      hundreds; enough to address any node in the editing tools, and the way to find
+      the branch worth reading in full. Composes with the other three.
+
+    A whole form whose tree is big carries a "hint" naming these knobs.
 
     componentProperties comes back with the whole form only - it belongs to the
     element, not to a node.
@@ -1226,22 +1233,43 @@ def meta_component_tree(
                 "file": str(path)}
     depth = None if not max_depth or max_depth < 0 else max_depth
     shape = {"max_depth": depth, "properties": bool(properties)}
+
+    def as_dict(node):
+        if brief:
+            return formmodel.node_skeleton(node, max_depth=depth)
+        return formmodel.node_dict(node, **shape)
+
     if name:
         found = formmodel.find_by_name(form.root, name)
         if not found:
             return {"error": f"Компонент с именем \"{name}\" в форме не найден", "file": str(path)}
-        return {"roots": [formmodel.node_dict(n, **shape) for n in found], "file": str(path)}
+        return {"roots": [as_dict(n) for n in found], "file": str(path)}
     if node_id:
         try:
             node = formmodel.get_node(form, node_id)
         except scaffold.ScaffoldError as exc:
             return {"error": str(exc), "file": str(path)}
-        return {"root": formmodel.node_dict(node, **shape), "file": str(path)}
-    return {
-        "root": formmodel.node_dict(form.root, **shape),
+        return {"root": as_dict(node), "file": str(path)}
+    out = {
+        "root": as_dict(form.root),
         "componentProperties": formmodel.component_properties_dicts(form),
         "file": str(path),
     }
+    nodes = formmodel.node_count(form.root)
+    if not brief and depth is None and nodes > _TREE_HINT_NODES:
+        # The whole tree of a real form ran to a quarter of a million characters, and the
+        # session that asked for it read all of that to learn the ids of a few groups. The
+        # knobs existed; the answer did not say so.
+        out["hint"] = (
+            f"the tree holds {nodes} nodes: brief=true answers with the skeleton (ids, "
+            "kinds, types, names, slots), node_id/name take one branch, max_depth cuts the "
+            "descent, properties=false drops the property records"
+        )
+    return out
+
+
+#: A whole tree bigger than this carries the hint about the narrowing knobs.
+_TREE_HINT_NODES = 60
 
 
 @mcp.tool()

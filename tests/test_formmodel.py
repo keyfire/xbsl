@@ -277,6 +277,22 @@ def test_node_dict_stops_at_max_depth():
     assert formmodel.node_dict(form.root)["children"][0]["children"]
 
 
+def test_node_skeleton_keeps_what_addresses_a_node():
+    """The skeleton is the tree a caller can navigate by: ids, kinds, types, names, slots -
+    no spans, no property records. A cut node still says what was left out."""
+    form = parse_form(FORM)
+    root = formmodel.node_skeleton(form.root)
+    assert set(root) == {"id", "kind", "type", "children"}
+    slot = root["children"][0]
+    assert slot["kind"] == "slot" and slot["name"] == "Содержимое" and "span" not in slot
+    button = formmodel.node_skeleton(form.nodes[BUTTON])
+    assert button["id"] == BUTTON and button["name"] == form.nodes[BUTTON].name
+    assert button["slot"] == "Содержимое" and "properties" not in button and "children" not in button
+    alone = formmodel.node_skeleton(form.root, max_depth=0)
+    assert "children" not in alone and alone["childrenOmitted"] == 1
+    assert formmodel.node_count(form.root) == len(form.nodes)
+
+
 def test_node_dict_without_properties_reports_their_number():
     """Properties are most of the bytes; dropped, they leave a count and the ids."""
     form = parse_form(FORM)

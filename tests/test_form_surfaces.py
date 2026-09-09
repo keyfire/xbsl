@@ -154,6 +154,34 @@ def test_mcp_component_tree_can_be_asked_for_in_parts(mcp_module, form_file):
     assert "не найден" in mcp_module.meta_component_tree(
         str(form_file), name="Нетакого"
     )["error"]
+
+
+def test_mcp_component_tree_skeleton(mcp_module, form_file, tmp_path):
+    """`brief` answers with what addresses a node and nothing else, and a big whole tree says
+    so itself: the knobs existed before, the answer never named them."""
+    skeleton = mcp_module.meta_component_tree(str(form_file), brief=True)
+    root = skeleton["root"]
+    assert set(root) <= {"id", "kind", "type", "name", "slot", "children", "childrenOmitted"}
+    assert "span" not in root and "properties" not in root and "propertyCount" not in root
+    button = mcp_module.meta_component_tree(str(form_file), node_id=BUTTON, brief=True)["root"]
+    assert button["id"] == BUTTON and button["name"] == "КнопкаОбновить" and "children" not in button
+    assert len(json.dumps(skeleton)) < len(json.dumps(
+        mcp_module.meta_component_tree(str(form_file), properties=False)))
+    assert "hint" not in mcp_module.meta_component_tree(str(form_file))  # a small form
+
+    big = tmp_path / "Большая.yaml"
+    buttons = "".join(
+        f"        -\n            Тип: Кнопка\n            Имя: Кнопка{i}\n" for i in range(70)
+    )
+    big.write_text(
+        "ВидЭлемента: КомпонентИнтерфейса\nИмя: Большая\nНаследует:\n    Тип: Форма\n"
+        "    Содержимое:\n" + buttons,
+        encoding="utf-8",
+    )
+    whole = mcp_module.meta_component_tree(str(big))
+    assert "brief=true" in whole["hint"] and "max_depth" in whole["hint"]
+    assert "hint" not in mcp_module.meta_component_tree(str(big), brief=True)
+    assert "hint" not in mcp_module.meta_component_tree(str(big), max_depth=1)
     assert "Узел не найден" in mcp_module.meta_component_tree(
         str(form_file), node_id="Наследует/Нет[9]"
     )["error"]
@@ -356,6 +384,10 @@ def test_cli_form_tree_narrowings(form_file, capsys):
 
     code, out = _run_cli(capsys, "form-tree", str(form_file), "--node", BUTTON)
     assert code == 0 and out["root"]["id"] == BUTTON
+
+    code, out = _run_cli(capsys, "form-tree", str(form_file), "--brief")
+    assert code == 0 and "span" not in out["root"] and out["root"]["kind"] == "component"
+    assert all("properties" not in n for n in out["root"].get("children", []))
 
     code, out = _run_cli(capsys, "form-tree", str(form_file), "--name", "Нетакого")
     assert code != 0 and "не найден" in out["error"]

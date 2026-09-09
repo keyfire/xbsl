@@ -125,7 +125,7 @@ entries never means reading the files.
 
 | Tool | What it does |
 |---|---|
-| `meta_component_tree(yaml_path, node_id, name, max_depth, properties)` | the node tree of an interface component; a big form can be taken in parts - a subtree (by node id or by its `Name`), a depth limit and without the property records |
+| `meta_component_tree(yaml_path, node_id, name, max_depth, properties, brief)` | the node tree of an interface component; a big form can be taken in parts - a subtree (by node id or by its `Name`), a depth limit, without the property records, or as the skeleton alone (`brief` - ids, kinds, types, names and slots, a few kilobytes for a tree of hundreds); a big whole tree carries a hint naming these knobs |
 | `meta_add_component(yaml_path, parent_id, slot, ...)` | insert a new component into a slot of the parent node |
 | `meta_insert_fragment(yaml_path, parent_id, slot, fragment, ...)` | paste a ready yaml block of one component (a copied subtree) into a slot |
 | `meta_move_component(yaml_path, node_id, new_parent_id, slot, ...)` | move a node into another (or the same) slot; the comments above it travel along |
