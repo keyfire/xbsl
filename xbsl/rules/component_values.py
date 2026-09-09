@@ -181,7 +181,18 @@ _LITERAL_MEMBERS = frozenset({"Авто"})
 
 #: Types whose nested node the compiler demands literally. Extend only
 #: with types shown to behave the same - see the module docstring on why the data cannot say.
-_LITERAL_TYPES = frozenset({"АбсолютныйШрифт", "АбсолютныйЦвет"})
+_LITERAL_TYPE_NAMES = ("АбсолютныйШрифт", "АбсолютныйЦвет")
+
+
+@lru_cache(maxsize=1)
+def _literal_types() -> frozenset[str]:
+    """Both spellings of the literal-only types, the English one from the type pairs: an
+    English tree writes `Type: AbsoluteFont`, and while the Russian names alone were matched
+    the rule was silent on it (found by a parity seed)."""
+    return frozenset(form for name in _LITERAL_TYPE_NAMES for form in terms.forms(name, "types"))
+
+
+dataset.register_reset(_literal_types.cache_clear)
 
 
 def _allowed_values(prop: dict, enums: dict) -> frozenset[str] | None:
@@ -342,7 +353,8 @@ def unknown_enum_value(source: SourceFile) -> Iterable[Diagnostic]:
 def no_expression_in_literal(source: SourceFile) -> Iterable[Diagnostic]:
     if source.kind != "yaml" or not _HAVE_YAML:
         return
-    if not any(t in source.text for t in _LITERAL_TYPES):
+    literal_types = _literal_types()
+    if not any(t in source.text for t in literal_types):
         return  # the fast path: no literal-typed node in this file at all
     data, err = _parsed(source)
     if err is not None or not _is_object(data):
@@ -356,7 +368,7 @@ def no_expression_in_literal(source: SourceFile) -> Iterable[Diagnostic]:
         if (
             type_entry is None
             or not isinstance(type_entry[1], yaml.ScalarNode)
-            or type_entry[1].value.strip() not in _LITERAL_TYPES
+            or type_entry[1].value.strip() not in literal_types
         ):
             continue
         owner = _owner_key(root, mapping)

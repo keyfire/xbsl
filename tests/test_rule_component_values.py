@@ -404,3 +404,21 @@ def test_english_value_of_a_set_the_data_does_not_pair_is_silent(tmp_path):
         "            Kind: Main\n",
     )
     assert list(run_sources([src], select={"yaml/unknown-enum-value"})) == []
+
+
+@pytest.mark.needs_data  # the English type name comes from the term pairs
+def test_expression_in_a_literal_typed_node_is_reported_in_english_too(tmp_path):
+    """The literal-only types are matched in both spellings: an English tree writes
+    `Type: AbsoluteFont`, and the rule used to stay silent on it."""
+    text = """ElementKind: InterfaceComponent
+Name: Card
+Content:
+    -
+        Type: Label
+        Name: Text
+        Font:
+            Type: AbsoluteFont
+            Size: =Mobile?28:40
+"""
+    d = _run_literal(tmp_path, text, name="Card.yaml")
+    assert len(d) == 1 and d[0].rule_id == _LITERAL_RULE and "AbsoluteFont" in d[0].message

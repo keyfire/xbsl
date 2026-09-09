@@ -30,8 +30,8 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   and the summary line - a full run is hundreds of `[ok]` lines read for one number.
 
 ### Fixed
-- **A local built by a static member of a platform type is typed.** `исп Поиск =
-  ЖурналСобытий.Найти(...)` and the event read off the result stayed untyped: the walk over the
+- **A local built by a static member of a platform type is typed.** `use Search =
+  EventLog.Find(...)` and the event read off the result stayed untyped: the walk over the
   declarations read no bare name as a type, so a member of such a local fell to the flat
   vocabulary - and to any dictionary entry spelled against the platform. The walk now keeps
   every name the method declares off the type-name shortcut and reads the rest as the types
@@ -39,6 +39,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 - **`code/local-method-cross-component` sees an English tree**: the components collection was
   matched by its Russian name alone, and `Components.X.Y(...)` was never judged. The English
   spelling comes from the platform dictionary. Found by a parity seed.
+- **`yaml/no-expression-in-literal` sees an English tree**: the literal-only types were listed
+  in Russian alone, and `Type: AbsoluteFont` with an expression in `Size` passed. Both
+  spellings now come from the type pairs. Found by a parity seed.
 - **The translator renames a subsystem descriptor's `Name` with its directory.** The value was
   left as data while the directory took the token, and on the translated tree every import
   naming the subsystem stopped matching it (`yaml/localization-missing-import` reported a

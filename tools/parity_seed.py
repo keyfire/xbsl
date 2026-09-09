@@ -4493,6 +4493,64 @@ SEEDS: list[Seed] = [
         files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0.0", presentation=_DESCRIPTOR_PRESENTATION_RU)},
         tokens={"Проба": "Probe"},
     ),
+    # --- visible text, literal-typed properties, the descriptor's identifiers --------------
+    Seed(
+        rule="typography/yo-in-text",
+        expect=FINDING,
+        note="the letter yo in a caption a user reads",
+        files={"Карточка.yaml": _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Кнопка\n        Заголовок: Ещё\n"},
+        tokens={"Карточка": "Card"},
+    ),
+    Seed(
+        rule="typography/yo-in-text",
+        expect=CLEAN,
+        note="the same caption spelled without it",
+        files={"Карточка.yaml": _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Кнопка\n        Заголовок: Еще\n"},
+        tokens={"Карточка": "Card"},
+    ),
+    Seed(
+        rule="yaml/no-expression-in-literal",
+        expect=FINDING,
+        note="an expression written into a property that takes a literal alone",
+        files={"Карточка.yaml": _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Текст\n"
+                                                 "        Шрифт:\n            Тип: АбсолютныйШрифт\n"
+                                                 "            Размер: =Мобильный?28:40\n"},
+        tokens={"Карточка": "Card", "Текст": "Text", "Мобильный": "Mobile"},
+    ),
+    Seed(
+        rule="yaml/no-expression-in-literal",
+        expect=CLEAN,
+        note="the same property with a literal",
+        files={"Карточка.yaml": _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Надпись\n        Имя: Текст\n"
+                                                 "        Шрифт:\n            Тип: АбсолютныйШрифт\n"
+                                                 "            Размер: 13\n"},
+        tokens={"Карточка": "Card", "Текст": "Text"},
+    ),
+    Seed(
+        rule="project/identifier",
+        expect=FINDING,
+        note="a vendor identifier starting in lower case",
+        files={"Проект.yaml": "Ид: 1d1f5c60-0000-4000-8000-000000000f49\nПоставщик: acme\nИмя: Проба\n"
+                              "Версия: 1.0.0\n" + _DESCRIPTOR_PRESENTATION_RU + "РежимСовместимости: 9.0\n"},
+        tokens={"Проба": "Probe"},
+    ),
+    Seed(
+        rule="project/identifier",
+        expect=CLEAN,
+        note="the identifiers as the standard wants them",
+        files={"Проект.yaml": _DESCRIPTOR_RU.format(version="1.0.0", presentation=_DESCRIPTOR_PRESENTATION_RU)},
+        tokens={"Проба": "Probe"},
+    ),
+    Seed(
+        rule="style/enum-name-vid",
+        expect=FINDING,
+        note="an enumeration named with the word for type instead of kind",
+        files={"Кнопки.xbsl": "перечисление ТипКнопки\n    Да\n;\n"},
+        tokens={"Кнопки": "Buttons", "ТипКнопки": "ButtonType", "Да": "Yes"},
+        known="the English standard puts the kind word LAST (ButtonType), and the rule matches the "
+              "prefix alone in either spelling - the shape naming/kind-in-name had before its fix. "
+              "Closing it is a change of the rule judged against the standard, not a lookup.",
+    ),
 ]
 
 

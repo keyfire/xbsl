@@ -19,6 +19,44 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`translate` judges the dictionary itself: an entry against the platform, a literal
+  against its key.** A real project lost its English build twice in one week while `--strict`
+  passed it at full coverage: `Важность: Severity` renamed the event's `Importance` wherever the
+  receiver's type was not known, and a presentation template translated with `%{AccountCode}`
+  named a field the event does not have. Both are problems now (the strict gate fails): an entry
+  that spells a platform member as the platform spells it nowhere is reported at the first place
+  a receiver of known type proves it, with the spelling to put in the entry; a named literal
+  whose substitutions differ from its key's after translation is reported with both lists. A word
+  the platform spells two ways (`Load`/`Upload`) is not judged - there is no one spelling to ask
+  for. Proven on the project: the dictionary that broke the build answers with exactly the two
+  defects, the repaired one with none.
+- **`tools/parity_seed.py --quiet`** prints only the seeds that disagree (known gaps included)
+  and the summary line - a full run is hundreds of `[ok]` lines read for one number.
+
+### Fixed
+- **A local built by a static member of a platform type is typed.** `use Search =
+  EventLog.Find(...)` and the event read off the result stayed untyped: the walk over the
+  declarations read no bare name as a type, so a member of such a local fell to the flat
+  vocabulary - and to any dictionary entry spelled against the platform. The walk now keeps
+  every name the method declares off the type-name shortcut and reads the rest as the types
+  they are; three corpora answer with the same findings as before.
+- **`code/local-method-cross-component` sees an English tree**: the components collection was
+  matched by its Russian name alone, and `Components.X.Y(...)` was never judged. The English
+  spelling comes from the platform dictionary. Found by a parity seed.
+- **`yaml/no-expression-in-literal` sees an English tree**: the literal-only types were listed
+  in Russian alone, and `Type: AbsoluteFont` with an expression in `Size` passed. Both
+  spellings now come from the type pairs. Found by a parity seed.
+- **The translator renames a subsystem descriptor's `Name` with its directory.** The value was
+  left as data while the directory took the token, and on the translated tree every import
+  naming the subsystem stopped matching it (`yaml/localization-missing-import` reported a
+  reference that was imported). Found by a parity seed.
+- **Parity seeds: 74 more, 129 rules covered** - computed access control, references across a
+  subsystem boundary, localized strings, resources, declarations, arity, conditions, names,
+  identifiers, the project descriptor.
+
 ## 2026-09-09 – 0.97.0, 0.98.0
 
 ### Added
