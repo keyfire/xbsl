@@ -15,6 +15,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-09 – 0.97.0
 
 ### Added
+- **`--list-rules --format json` answers with the rule catalogue as data.** The text
+  listing carries the parameters and the off reason on continuation lines, which a client
+  parsing the first line with a regex dropped - and that prose changes with the language of
+  the run. The key prints the same records the MCP `list_rules` tool answers with (`id`,
+  `tier`, `severity`, `off_reason`, `params`); the rules panel of the extension reads it.
 - **The `xbsl new-object` command takes a `--base` key.** The base type of an interface
   component could only be given through MCP and the LSP; from the command line the
   component had to be finished by hand. The value goes through the same checks as on the

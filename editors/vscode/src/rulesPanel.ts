@@ -8,6 +8,7 @@
 
 import * as vscode from "vscode";
 import { CatalogueEntry, RuleLevel, ruleCatalogue } from "./ruleConfig";
+import { RuleParam } from "./ruleCatalogueCore";
 import { ruleDoc } from "./ruleDocs";
 import { cspMeta, escapeHtml, inlineJson, makeNonce } from "./webviewShared";
 
@@ -28,6 +29,10 @@ interface Row {
   // The documentation page behind a rule backed by a standard - the same one the rule badge in
   // "Problems" opens. Without it the table names a requirement and leaves you to find its source.
   doc?: { page: string; anchor?: string };
+  // The numbers the rule judges by and why it ships off: prose the engine writes, shown where the
+  // rule is - looking for a threshold used to mean running `xbsl --list-rules` in a terminal.
+  params?: RuleParam[];
+  offReason?: string;
 }
 
 function target(scope: Scope): vscode.ConfigurationTarget {
@@ -92,6 +97,8 @@ export class RulesPanel {
         own: entry.level,
         offByDefault: entry.offByDefault,
         explicit: table[id],
+        params: entry.params,
+        offReason: entry.offReason,
       };
       row.inherited = row.explicit ? undefined : inheritedFor(row, table);
       const doc = ruleDoc(id);
@@ -166,6 +173,7 @@ export class RulesPanel {
       empty: vscode.l10n.t("The rule catalogue is empty - the engine did not answer `xbsl --list-rules`."),
       inherits: vscode.l10n.t("inherited from"),
       docs: vscode.l10n.t("reference"),
+      offBecause: vscode.l10n.t("off because"),
     };
     // The level in force for a row: its own key, then what it inherits, then the rule's default.
     // The dot is painted by it, so a rule switched off reads as grey without opening the list.
@@ -208,11 +216,24 @@ export class RulesPanel {
           `<select class="level" data-key="${escapeHtml(group)}">${options(table[group])}</select></td></tr>`;
         const items = inGroup
           .map((r) => {
+            // A rule that ships off says WHY on hover: without the sentence "off" reads as
+            // broken or noisy, and the reason lived only in a terminal listing.
+            const why = r.offReason ? ` title="${escapeHtml(t.offBecause)}: ${escapeHtml(r.offReason)}"` : "";
             const state = r.explicit
               ? `<span class="badge">${escapeHtml(r.explicit)}</span>`
               : r.inherited
                 ? `<span class="dim">${escapeHtml(t.inherits)} ${escapeHtml(r.inherited.from)}: ${escapeHtml(r.inherited.level)}</span>`
-                : `<span class="dim">${escapeHtml(r.own)}${r.offByDefault ? ", " + escapeHtml(t.offByDefault) : ""}</span>`;
+                : `<span class="dim"${why}>${escapeHtml(r.own)}${r.offByDefault ? ", " + escapeHtml(t.offByDefault) : ""}</span>`;
+            // The value the rule judges by, next to the rule: the number in force, the shipped
+            // default when it was overridden, and the env variable plus the sentence on hover.
+            const params = (r.params ?? [])
+              .map((p) => {
+                const changed = String(p.value) !== String(p.default);
+                const tail = changed ? ` <span class="dim">(${escapeHtml(t.byDefault)} ${escapeHtml(String(p.default))})</span>` : "";
+                const hint = escapeHtml([p.doc, p.env].filter(Boolean).join(" · "));
+                return `<span class="param" title="${hint}">${escapeHtml(p.name)} = ${escapeHtml(String(p.value))}${tail}</span>`;
+              })
+              .join("");
             const doc = r.doc
               ? `<a class="doc" href="#" data-page="${escapeHtml(r.doc.page)}" ` +
                 `data-anchor="${escapeHtml(r.doc.anchor ?? "")}">${escapeHtml(t.docs)}</a>`
@@ -222,7 +243,8 @@ export class RulesPanel {
               `data-text="${escapeHtml((r.id + " " + r.title).toLowerCase())}">` +
               `<td class="tier">${escapeHtml(r.tier)}</td>` +
               `<td class="id">${escapeHtml(r.id)}</td>` +
-              `<td class="title">${escapeHtml(r.title)} ${doc}<div class="state">${state}</div></td>` +
+              `<td class="title">${escapeHtml(r.title)} ${doc}<div class="state">${state}</div>` +
+              (params ? `<div class="params">${params}</div>` : "") + `</td>` +
               `<td class="lvl">${dot(effective(r))}` +
               `<select class="level" data-key="${escapeHtml(r.id)}">${options(r.explicit)}</select></td></tr>`
             );
@@ -258,6 +280,10 @@ export class RulesPanel {
   .dim { color: var(--vscode-descriptionForeground); }
   .right { text-align: right; }
   .state { font-size: 11px; margin-top: 2px; }
+  /* One line per parameter: the panel is a table of two hundred rules, and a rule that
+     judges by a number is the exception - it must read as a footnote, not a second title. */
+  .params { font-size: 11px; margin-top: 2px; color: var(--vscode-descriptionForeground); }
+  .param { margin-right: 10px; font-family: var(--vscode-editor-font-family); }
   .badge { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); padding: 0 6px; border-radius: 8px; }
   td.lvl { white-space: nowrap; }
   .lvl-icon { vertical-align: middle; margin-right: 7px; fill: var(--vscode-descriptionForeground); }

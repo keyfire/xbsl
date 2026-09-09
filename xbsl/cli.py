@@ -1094,6 +1094,15 @@ def _check_main(argv: list[str]) -> int:
         # answers about one rule (an id, a group or a tier letter) instead of making the
         # reader carry the whole registry to find one line.
         listed = active_rules(select, ignore, enable) if select or ignore else list(RULES)
+        if args.format == "json":
+            # The same records the MCP `list_rules` answers with: a client that needs the
+            # parameters of a rule reads them instead of parsing the prose below, whose
+            # continuation lines are language-dependent and were simply dropped.
+            _emit_report(json.dumps(
+                [r.as_dict() for r in sorted(listed, key=lambda x: (x.tier, x.id))],
+                ensure_ascii=False,
+            ), args.out)
+            return 0
         for r in sorted(listed, key=lambda x: (x.tier, x.id)):
             mark = "   " if r.enabled_by_default else "off"
             print(f"{r.tier} {mark} {r.id:30} {r.severity.value:7} {r.title}")

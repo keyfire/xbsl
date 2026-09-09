@@ -15,6 +15,7 @@
 import * as vscode from "vscode";
 import { spawn } from "child_process";
 import { isXbslSource } from "./report";
+import { CatalogueEntry, parseRuleCatalogue } from "./ruleCatalogueCore";
 
 export type RuleLevel = "off" | "error" | "warning" | "info" | "hint";
 const LEVELS: readonly RuleLevel[] = ["error", "warning", "info", "hint", "off"];
@@ -38,15 +39,10 @@ function groupsMap(resource?: vscode.Uri): Record<string, unknown> {
 // The rule catalogue of the engine: a rule id -> its tier letter. Needed to resolve a tier key
 // in xbsl.rules the same way a group key is resolved; the engine itself understands the letters
 // in its own arguments, but the overlay over already-received diagnostics happens here.
-// Filled once by `xbsl --list-rules` (a line is "A  group/rule  warning  title"); if the run
-// fails the map stays empty and tier keys simply do not colour anything - a missing catalogue
-// must not turn into missing diagnostics.
-export interface CatalogueEntry {
-  tier: string;
-  level: string;
-  title: string;
-  offByDefault: boolean;
-}
+// Filled once by `xbsl --list-rules --format json` (the parsing, with the text fallback for an
+// older engine, is in ruleCatalogueCore); if the run fails the map stays empty and tier keys
+// simply do not colour anything - a missing catalogue must not turn into missing diagnostics.
+export type { CatalogueEntry, RuleParam } from "./ruleCatalogueCore";
 
 const catalogue = new Map<string, CatalogueEntry>();
 let cataloguePrimed: Promise<void> | undefined;
@@ -66,22 +62,12 @@ export function primeRuleCatalogue(command: string, baseArgs: string[] = []): vo
   let done = () => undefined as void;
   cataloguePrimed = new Promise<void>((resolve) => (done = resolve));
   try {
-    const child = spawn(command, [...baseArgs, "--list-rules"], { windowsHide: true });
+    const child = spawn(command, [...baseArgs, "--list-rules", "--format", "json"], { windowsHide: true });
     child.stdout?.on("data", (chunk) => (out += String(chunk)));
     child.on("error", () => undefined);
     child.on("close", () => {
-      for (const line of out.split(/\r?\n/)) {
-        // "A  group/rule  warning  title", and a rule that is off by default carries an extra
-        // "off" column right after the tier: "D  off  group/rule  warning  title".
-        const m = /^([A-Z])\s+(off\s+)?(\S+\/\S+)\s+(\S+)\s*(.*)$/.exec(line);
-        if (m) {
-          catalogue.set(m[3], {
-            tier: m[1],
-            level: m[4],
-            title: (m[5] || "").trim(),
-            offByDefault: Boolean(m[2]),
-          });
-        }
+      for (const [id, entry] of parseRuleCatalogue(out)) {
+        catalogue.set(id, entry);
       }
       done();
     });

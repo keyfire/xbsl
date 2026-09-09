@@ -499,6 +499,7 @@
   "workspace settings": "настройки рабочей области",
   "Reset the table": "Сбросить таблицу",
   "by default": "по умолчанию",
+  "off because": "выключено, потому что",
   "off by default": "по умолчанию выключено",
   "the whole group": "всей группе",
   "The rule catalogue is empty - the engine did not answer `xbsl --list-rules`.": "Каталог правил пуст – движок не ответил на `xbsl --list-rules`.",

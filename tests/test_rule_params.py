@@ -12,6 +12,8 @@ so the listing and the rule cannot drift apart the way a hand-kept table of thre
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from xbsl import cli, engine, environment, i18n
@@ -162,6 +164,29 @@ def test_list_rules_without_a_selection_still_lists_everything(capsys):
     out = capsys.readouterr().out
     assert out.count("\n") >= len(engine.RULES)
     assert "code/duplicate-method-body" in out and "whitespace/trailing" in out
+
+
+@pytest.mark.needs_data
+def test_list_rules_answers_as_data_when_json_is_asked_for(capsys):
+    """The prose carries a parameter on a continuation line - a client parsing it lost them."""
+    code = cli.main(["--list-rules", "--format", "json",
+                     "--select", "code/duplicate-method-body"])
+    listed = json.loads(capsys.readouterr().out)
+
+    assert code == 0 and len(listed) == 1
+    rule = listed[0]
+    assert rule["id"] == "code/duplicate-method-body" and rule["tier"]
+    assert rule["params"][0]["name"] == "min-lines"
+    assert rule["params"][0]["value"] == rule["params"][0]["default"] == 5
+
+
+@pytest.mark.needs_data
+def test_the_json_listing_carries_the_off_reason(capsys):
+    """A rule ships off for a reason; the json client shows it where the rule is."""
+    cli.main(["--list-rules", "--format", "json", "--select", "yaml/duplicate-subtree"])
+    rule = json.loads(capsys.readouterr().out)[0]
+
+    assert rule["enabled_by_default"] is False and rule["off_reason"]
 
 
 @pytest.mark.needs_data

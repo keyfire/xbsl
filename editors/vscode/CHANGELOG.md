@@ -9,6 +9,19 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.67.7
+
+### Added
+- **The rules panel shows the values a rule judges by and why a rule ships off.** The
+  catalogue came from the engine's text listing, where a parameter and an off reason are
+  continuation lines - the panel parsed the first line with a regex and dropped the rest,
+  so a line-length cap or a secret threshold had to be found by running the linter in a
+  terminal. The panel now asks the engine for `--list-rules --format json`: under the
+  rule title stands `name = value` (with the shipped default when the value was
+  overridden, and the sentence and env variable on hover), and a rule that is off by
+  default explains why on hover. An older engine answers with the old text - it is
+  parsed as before, and no rule disappears from the panel.
+
 ## 0.67.6
 
 ### Added
