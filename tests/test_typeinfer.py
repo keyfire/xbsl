@@ -302,3 +302,33 @@ def test_a_local_declaration_wins_over_an_attribute_of_the_same_name():
     env = ti.method_env(method, own_properties={"Файл": "ДвоичныйОбъект.Ссылка?"},
                         at=text.index("Сообщить"))
     assert env.variables["Файл"] == ti.Inferred("Строка")
+
+
+def test_a_local_built_by_a_static_member_of_a_platform_type_is_typed():
+    """`исп Поиск = ЖурналСобытий.Найти(...)` - the receiver is a TYPE standing in a value
+    position, and the walk over the declarations reads it as one: the search result is
+    typed by the catalog, the event read off it as well, and a member of that event is then
+    judged by the event's own vocabulary instead of the flat one. A local named like a type
+    anywhere in the method is still never read as the type (the method-wide rule)."""
+    text = (
+        "метод Ф(Запрос: Строка)\n"
+        "    исп Поиск = ЖурналСобытий.Найти(ДатаНачала = Запрос)\n"
+        "    пока Поиск.Следующий()\n"
+        "        знч Событие = Поиск.Событие\n"
+        "        Сообщить(Событие.Важность)\n"
+        "    ;\n"
+        ";\n"
+    )
+    env = ti.method_env(_method(text))
+    assert env.variables["Поиск"].name == "РезультатПоискаСобытийЖурналаСобытий"
+    assert env.variables["Событие"].name == "СобытиеЖурналаСобытий"
+    assert "Поиск" not in env.shadowed and "Событие" not in env.shadowed
+
+    shadowing = (
+        "метод Ф()\n"
+        "    знч Результат = ЖурналСобытий.Найти()\n"
+        "    знч ЖурналСобытий = 1\n"
+        ";\n"
+    )
+    env = ti.method_env(_method(shadowing))
+    assert "Результат" not in env.variables and "Результат" in env.shadowed

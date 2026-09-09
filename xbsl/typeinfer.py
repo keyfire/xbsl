@@ -145,7 +145,17 @@ def method_env(method: object, *, type_names: bool = False,
 
     variables: dict[str, Inferred] = {}
     declared: set[str] = set()
-    env = TypeEnv(variables, returns=returns, this_type=this_type, type_names=False)
+    # The walk reads the initializers with the type names ON: a local built by a static
+    # member of a platform type (`ЖурналСобытий.Найти(...)`, the search result it answers, the
+    # event read off that result) is typed by the catalog only when the receiver is read as
+    # the type it names. Off, every such local stayed untyped, and a member read off it fell
+    # to the flat vocabulary - which is how a project dictionary entry spelled against the
+    # platform reached a translated tree unnoticed. What keeps the shortcut honest here is
+    # the SAME method-wide rule the result obeys: every name the method declares anywhere is
+    # collected first and kept off it, so a local named like a type is never read as one -
+    # not even in an initializer standing before that local's own declaration.
+    env = TypeEnv(variables, returns=returns, this_type=this_type, type_names=True,
+                  shadowed=_declared_names(method, own_properties))
     # (block start, block end, position, name) -> type; filtered by `at` at the end.
     scoped: list[tuple[int, int, int, str, Inferred]] = []
     method_span = (int(getattr(method, "start", 0)), int(getattr(method, "end", 0)))
@@ -224,6 +234,38 @@ def method_env(method: object, *, type_names: bool = False,
         variables = {name: got for name, (_s, _p, got) in visible.items()}
     return TypeEnv(variables, returns=returns, this_type=this_type,
                    type_names=type_names, shadowed=frozenset(declared) - set(variables))
+
+
+def _declared_names(method: object, own_properties: dict[str, str] | None = None) -> frozenset[str]:
+    """Every name the method declares anywhere - parameters, locals, loop variables, lambda
+    parameters - plus the own properties handed in: the set `method_env` keeps off the
+    type-name shortcut while it walks the declarations (see there)."""
+    import dataclasses
+
+    names: set[str] = set(own_properties or ())
+    for param in getattr(method, "params", ()) or ():
+        names.add(getattr(param, "name", ""))
+
+    def walk(node: object) -> None:
+        if isinstance(node, (list, tuple)):
+            for item in node:
+                walk(item)
+            return
+        if not isinstance(node, P.Node):
+            return
+        if isinstance(node, P.VarDecl):
+            names.add(node.name)
+        elif isinstance(node, (P.ForEach, P.ForTo)):
+            names.add(getattr(node, "var", ""))
+        elif isinstance(node, P.Lambda):
+            for param in getattr(node, "params", ()) or ():
+                names.add(getattr(param, "name", ""))
+        for f in dataclasses.fields(node):
+            walk(getattr(node, f.name, None))
+
+    walk(getattr(method, "body", None))
+    names.discard("")
+    return frozenset(names)
 
 
 def _statement_block(items: object) -> tuple[int, int] | None:
