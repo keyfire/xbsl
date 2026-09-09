@@ -123,6 +123,14 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   that text lives on only in the git history.
 
 ### Fixed
+- **The resource rules and the closeable one see an English tree.** Both blindnesses were found
+  by parity seeds and both were of one kind - a platform word known in Russian only.
+  `code/resource-bare-name` and `code/unknown-resource` looked for the literal `Ресурс{...}`
+  verbatim while a translated module writes `Resource{...}`: the pair of spellings now comes from
+  the platform's own dictionary. `code/unclosed-resource` ended its type inference at the first
+  member (`.Выполнить()` against `.Execute()`), because the catalog stores members in Russian -
+  the type name and the member name are now read in either spelling, and an unpaired member still
+  ends the inference silently.
 - **An English project gets English names where the tool invents them too.** A standard
   attribute (the `Name` of a catalog, the `Period` and `Recorder` of a register) used to be
   completed in Russian and reached the generated forms, because the language pass protects

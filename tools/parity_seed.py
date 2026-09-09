@@ -3454,6 +3454,104 @@ SEEDS: list[Seed] = [
               "test is Russian morphology. Stating the English words is the owner's decision "
               "about the standard, not a lookup, so the gap is planted rather than guessed.",
     ),
+    Seed(
+        rule="code/resource-bare-name",
+        expect=FINDING,
+        note="the Ресурсы root spelled out as the first segment of the key",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n"
+                           "    знч Значок = Ресурс{Ресурсы/Проба.svg}\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значок": "Icon"},
+    ),
+    Seed(
+        rule="code/resource-bare-name",
+        expect=CLEAN,
+        note="a key relative to the Ресурсы folder is the correct spelling",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n"
+                           "    знч Значок = Ресурс{Проба.svg}\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe", "Значок": "Icon"},
+    ),
+    Seed(
+        rule="code/unclosed-resource",
+        expect=FINDING,
+        note="a query result walked with an early break - the closeable stays open",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n"
+                           "    знч Выборка = Запрос{\n"
+                           "        ВЫБРАТЬ Заявка.Наименование ИЗ Заявки КАК Заявка\n"
+                           "    }.Выполнить()\n"
+                           "    для Запись из Выборка цикл\n"
+                           "        прервать\n"
+                           "    ;\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
+                "Выборка": "Selection", "Запись": "Record"},
+    ),
+    Seed(
+        rule="code/unclosed-resource",
+        expect=CLEAN,
+        note="the same loop over a resource held by `исп` closes on every exit path",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n"
+                           "    исп Выборка = Запрос{\n"
+                           "        ВЫБРАТЬ Заявка.Наименование ИЗ Заявки КАК Заявка\n"
+                           "    }.Выполнить()\n"
+                           "    для Запись из Выборка цикл\n"
+                           "        прервать\n"
+                           "    ;\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
+                "Выборка": "Selection", "Запись": "Record"},
+    ),
+    Seed(
+        rule="code/use-needs-closeable",
+        expect=CLEAN,
+        note="`исп` over a query result - a closeable by the catalog chain",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба()\n"
+                           "    исп Выборка = Запрос{\n"
+                           "        ВЫБРАТЬ Заявка.Наименование ИЗ Заявки КАК Заявка\n"
+                           "    }.Выполнить()\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
+                "Выборка": "Selection"},
+    ),
+    Seed(
+        rule="code/compare-with-localized",
+        expect=FINDING,
+        note="a branch on the TEXT of a presentation - silent on another language",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Заявка: Заявки.Ссылка)\n"
+                           "    если Заявка.Представление() == \"Новая\" тогда\n"
+                           "        возврат\n"
+                           "    ;\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
+                "Новая": "New"},
+    ),
+    Seed(
+        rule="code/compare-with-localized",
+        expect=CLEAN,
+        note="a branch on the value itself - the reference, not its text",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "Заявки.xbsl": "метод Проба(Заявка: Заявки.Ссылка, Образец: Заявки.Ссылка)\n"
+                           "    если Заявка == Образец тогда\n"
+                           "        возврат\n"
+                           "    ;\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
+                "Образец": "Sample"},
+    ),
 ]
 
 

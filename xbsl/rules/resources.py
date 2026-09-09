@@ -65,7 +65,7 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import docs, i18n
+from xbsl import docs, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import Token
@@ -110,6 +110,18 @@ _RESOURCE_DIRS = ("Ресурсы", "Resources")
 _UPLOADED_PREFIX = "inbase/"
 
 
+@lru_cache(maxsize=1)
+def _resource_words() -> frozenset[str]:
+    """Both spellings of the resource literal itself - the platform's own pair, not a guess.
+
+    The literal is written `Ресурс{...}` in a Russian project and `Resource{...}` in a
+    translated one; knowing only the Russian word left both rules of this module silent on an
+    English tree - found by a parity seed, which the Russian side reported and the English one
+    did not.
+    """
+    return frozenset(terms.key_forms("Ресурс"))
+
+
 def _resource_refs(toks: list[Token], text: str) -> Iterable[tuple[str, int, int]]:
     """(name inside the braces, line, column) for every `Ресурс{...}` of the module.
 
@@ -118,8 +130,9 @@ def _resource_refs(toks: list[Token], text: str) -> Iterable[tuple[str, int, int
     between the braces, not glued back from tokens: a name may hold characters the lexer
     splits (`adv-auto.svg`) or spaces it drops.
     """
+    words = _resource_words()
     for i, t in enumerate(toks):
-        if t.kind != "IDENT" or t.value != "Ресурс" or i + 1 >= len(toks):
+        if t.kind != "IDENT" or t.value not in words or i + 1 >= len(toks):
             continue
         opener = toks[i + 1]
         if opener.kind != "OP" or opener.value != "{":
@@ -136,7 +149,7 @@ def _resource_refs(toks: list[Token], text: str) -> Iterable[tuple[str, int, int
 
 @rule("code/resource-bare-name", "code/resource-bare-name.title", "C", severity=Severity.ERROR)
 def resource_bare_name(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "xbsl" or "Ресурс{" not in source.text:
+    if source.kind != "xbsl" or not any(w + "{" in source.text for w in _resource_words()):
         return
     for name, line, col in _resource_refs(code_tokens(source), source.text):
         # Subfolder keys are legal (resolved relative to Ресурсы, see the module
@@ -172,7 +185,7 @@ def _unknown_resource_mapper(source: SourceFile) -> dict | None:
         if source.path.name in ("Проект.yaml", "Project.yaml"):
             return {"root": str(source.path.parent)}
         return None
-    if source.kind != "xbsl" or "Ресурс{" not in source.text:
+    if source.kind != "xbsl" or not any(w + "{" in source.text for w in _resource_words()):
         return None
     refs = list(_resource_refs(code_tokens(source), source.text))
     return {"refs": refs} if refs else None

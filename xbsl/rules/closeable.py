@@ -54,7 +54,7 @@ import dataclasses
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms
 from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
@@ -176,9 +176,38 @@ def _chain_type(expr: P.Expr | None, scope: dict[str, str], returns: dict) -> st
     for link in reversed(links):
         if current is None:
             return None
-        raw = returns.get(current, {}).get(link)
+        raw = _member_return(returns, current, link)
         current = dataset.member_type_head(raw) if raw else None
     return current
+
+
+def _member_return(returns: dict, type_name: str, member: str) -> str | None:
+    """What a member returns, with the type and the member named in EITHER spelling.
+
+    The catalog is keyed the way the documentation is written - Russian - while a translated
+    module reaches the same member through the English spelling of both names, so the chain
+    ended at the first link and the rule went silent on a translated tree (a parity seed
+    reported the Russian side and not the English one). A member no vocabulary pairs ends the
+    inference as before: guessing there would cost a false positive.
+    """
+    table = None
+    russian = None
+    for spelling in (type_name, terms.russian(type_name, "types"),
+                     terms.common_russian(type_name)):
+        table = returns.get(spelling) if spelling else None
+        if table:
+            russian = spelling
+            break
+    if not table:
+        return None
+    if member in table:
+        return table[member]
+    if any(ord(c) > 127 for c in member):
+        return None  # a Russian member the table does not carry - nothing to pair
+    for name in table:
+        if member == terms.member_english_of(russian, name) or member == terms.common_english(name):
+            return table[name]
+    return None
 
 
 def _child_bodies(st: P.Stmt) -> list[list[P.Stmt]]:
