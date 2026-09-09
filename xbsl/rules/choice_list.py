@@ -26,8 +26,9 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules.yaml_schema import _HAVE_YAML, _is_object, _parsed, value_of
@@ -50,12 +51,34 @@ MESSAGES = {
 i18n.register(MESSAGES)
 
 _CHOICE = "ВыборЗначения"
+_CHOICE_LIST = "СписокВыбора"
 
 # Primitive data types that certainly are not enumerations: for these the platform cannot
-# build the list itself, so a static СписокВыбора is mandatory.
-_PRIMITIVES = frozenset({"Строка", "Число", "Дата", "Время", "ДатаВремя"})
+# build the list itself, so a static `ChoiceList` is mandatory. Both spellings of every name
+# come from the platform's own dictionary - a translated project writes `ValueChoice<String>`,
+# and the rule used to pass such a node by (found by a parity seed).
+_PRIMITIVES_RU = ("Строка", "Число", "Дата", "Время", "ДатаВремя")
 
-_ARRAY_RE = re.compile(r"^Массив<\s*([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)\s*>$")
+
+@lru_cache(maxsize=1)
+def _choice_names() -> tuple[str, ...]:
+    return terms.forms(_CHOICE, "types")
+
+
+@lru_cache(maxsize=1)
+def _primitives() -> frozenset[str]:
+    return frozenset(name for ru in _PRIMITIVES_RU for name in terms.forms(ru, "types"))
+
+
+@lru_cache(maxsize=1)
+def _array_re() -> re.Pattern[str]:
+    heads = "|".join(re.escape(name) for name in terms.forms("Массив", "types"))
+    return re.compile(rf"^(?:{heads})<\s*([A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*)\s*>$")
+
+
+dataset.register_reset(_choice_names.cache_clear)
+dataset.register_reset(_primitives.cache_clear)
+dataset.register_reset(_array_re.cache_clear)
 
 
 def _split_alternatives(param: str) -> list[str] | None:
@@ -88,9 +111,11 @@ def _requires_static_list(type_value: str) -> bool:
     (or Массив<примитив>); everything else – an enumeration, a project type, a bare
     ВыборЗначения – is skipped rather than guessed.
     """
-    if not (type_value.startswith(_CHOICE + "<") and type_value.endswith(">")):
+    head = next((name for name in _choice_names()
+                 if type_value.startswith(name + "<")), None)
+    if head is None or not type_value.endswith(">"):
         return False
-    param = type_value[len(_CHOICE) + 1:-1]
+    param = type_value[len(head) + 1:-1]
     alts = _split_alternatives(param)
     if alts is None:
         return False
@@ -100,9 +125,9 @@ def _requires_static_list(type_value: str) -> bool:
             continue
         if alt.endswith("?"):
             alt = alt[:-1].strip()
-        m = _ARRAY_RE.match(alt)
+        m = _array_re().match(alt)
         name = m.group(1) if m else alt
-        if name not in _PRIMITIVES:
+        if name not in _primitives():
             return False
         seen = True
     return seen
@@ -112,8 +137,14 @@ def _choice_nodes(node, out: list[tuple[str, bool]]) -> None:
     """(the Тип value, whether СписокВыбора is present) of every ВыборЗначения node, in document order."""
     if isinstance(node, dict):
         t = value_of(node, "Тип")
-        if isinstance(t, str) and (t == _CHOICE or t.startswith(_CHOICE + "<")):
-            out.append((t, "СписокВыбора" in node))
+        if isinstance(t, str) and any(t == name or t.startswith(name + "<")
+                                      for name in _choice_names()):
+            # The key is canonized rather than matched: the term dictionary pairs no
+            # spelling for it, while the ui schema does (`ChoiceList` is the English
+            # spelling it canonizes).
+            out.append((t, any(isinstance(key, str)
+                               and uischema.canonical_property(key) == _CHOICE_LIST
+                               for key in node)))
         for v in node.values():
             _choice_nodes(v, out)
     elif isinstance(node, list):

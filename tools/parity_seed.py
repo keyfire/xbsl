@@ -3552,6 +3552,74 @@ SEEDS: list[Seed] = [
         tokens={"Заявки": "Applications", "Заявка": "Application", "Проба": "Probe",
                 "Образец": "Sample"},
     ),
+    Seed(
+        rule="yaml/list-scroll-without-loading",
+        expect=FINDING,
+        note="a scrolled list whose navigation never asks for the next portion",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "СписокЗаявок.yaml": _LIST_FORM_RU
+                                 + "    Содержимое:\n"
+                                   "        Тип: Таблица<ДинамическийСписок<Заявки>>\n"
+                                   "        Имя: Список\n"
+                                   "        Навигация: Отсутствует\n"
+                                   "        ПрокруткаПоВертикали: Истина\n",
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/list-scroll-without-loading",
+        expect=CLEAN,
+        note="the same list loading the next portion as it scrolls",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "СписокЗаявок.yaml": _LIST_FORM_RU
+                                 + "    Содержимое:\n"
+                                   "        Тип: Таблица<ДинамическийСписок<Заявки>>\n"
+                                   "        Имя: Список\n"
+                                   "        Навигация: ПодгрузкаПриПрокрутке\n"
+                                   "        ПрокруткаПоВертикали: Истина\n",
+        },
+        tokens=_LIST_FORM_TOKENS,
+    ),
+    Seed(
+        rule="yaml/choice-needs-static-list",
+        expect=FINDING,
+        note="a value chooser with no static choice list - the form fails at initialisation",
+        files={
+            "КарточкаЗаявки.yaml": "ВидЭлемента: КомпонентИнтерфейса\n"
+                                 "Ид: 1d1f5c60-0000-4000-8000-000000000f18\n"
+                                 "Имя: КарточкаЗаявки\n"
+                                 "ОбластьВидимости: ВПроекте\n"
+                                 "Наследует:\n"
+                                 "    Тип: ПроизвольнаяФорма\n"
+                                 "    Содержимое:\n"
+                                 "        Тип: ВыборЗначения<Строка>\n"
+                                 "        Имя: Выбор\n",
+        },
+        tokens={"КарточкаЗаявки": "ApplicationCard", "Выбор": "Choice"},
+    ),
+    Seed(
+        rule="yaml/choice-needs-static-list",
+        expect=CLEAN,
+        note="the same chooser carrying the list right on the node",
+        files={
+            "КарточкаЗаявки.yaml": "ВидЭлемента: КомпонентИнтерфейса\n"
+                                 "Ид: 1d1f5c60-0000-4000-8000-000000000f18\n"
+                                 "Имя: КарточкаЗаявки\n"
+                                 "ОбластьВидимости: ВПроекте\n"
+                                 "Наследует:\n"
+                                 "    Тип: ПроизвольнаяФорма\n"
+                                 "    Содержимое:\n"
+                                 "        Тип: ВыборЗначения<Строка>\n"
+                                 "        Имя: Выбор\n"
+                                 "        СписокВыбора:\n"
+                                 "            - Первый\n"
+                                 "            - Второй\n",
+        },
+        tokens={"КарточкаЗаявки": "ApplicationCard", "Выбор": "Choice",
+                "Первый": "First", "Второй": "Second"},
+    ),
 ]
 
 

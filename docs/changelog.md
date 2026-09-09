@@ -123,6 +123,11 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   that text lives on only in the git history.
 
 ### Fixed
+- **`yaml/choice-needs-static-list` sees an English tree.** The rule looked for the component
+  and its primitive types by their Russian spellings (`ВыборЗначения<Строка>`) and for the list
+  key by one name: on a translated project it stayed silent about the real finding and reported
+  a node that does carry the list. The component, the primitives and `Массив` now come from the
+  platform dictionary, and the list key is canonized through the ui schema (`ChoiceList`).
 - **The resource rules and the closeable one see an English tree.** Both blindnesses were found
   by parity seeds and both were of one kind - a platform word known in Russian only.
   `code/resource-bare-name` and `code/unknown-resource` looked for the literal `Ресурс{...}`
