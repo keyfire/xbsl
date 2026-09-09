@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил; актуальный
-список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 193.
+список в рантайме – `xbsl --list-rules` (или MCP `list_rules`). Сейчас правил: 194.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -136,6 +136,7 @@ sidebar:
 | `code/param-redeclared` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Объявление `знч` / `пер` / `исп` в теле метода с именем его же параметра, вложенные блоки (цикл, ветка, `попытка`) включительно – метод одна область видимости вместе с параметрами, компилятор отвечает "Переменная с именем X уже определена" при применении, и проект откатывается; переменные цикла и `поймать`, параметры лямбд и тела полных лямбд не судятся [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
 | `code/loop-header` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Неверный заголовок цикла 'для' [доки](https://1cmycloud.com/docs/help/topics/for-in-loop/) |
 | `code/invalid-string-escape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Недопустимая управляющая последовательность в строковом литерале (`\'`, регексные `\d`) – компилятор отвергает такой литерал; валидны `\н \в \т \\ \" \% \$ \ю<код>` и латинские написания [доки](https://1cmycloud.com/docs/help/topics/escape-sequence/) |
+| `code/dead-interpolation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Удвоенный знак интерполяции перед скобкой (`%%{...}`, `$${...}`) - платформа читает пару как экранированный знак, выражение не вычисляется, и в значение уходит его текст; экранируйте первый знак (`\%%{...}`) или соберите строку конкатенацией [docs](https://1cmycloud.com/docs/help/topics/string-interpolation/) |
 | `code/unused-local` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Неиспользуемая локальная переменная |
 | `code/unused-loop-var` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Неиспользуемая переменная цикла |
 | `code/ref-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле-ссылка структуры без 'обз' [доки](https://1cmycloud.com/docs/help/topics/structure/) |

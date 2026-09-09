@@ -44,7 +44,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--prune-baseline` | list the stale baseline entries with their reasons and remove them from the file (together with `--baseline`; the file's order and the counts of live entries are left alone) |
 | `--fix` | fix mechanical findings in place (trailing spaces, typographic characters, line endings) and report the rest; only unambiguous fixes |
 | `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
-| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does. With `--format json` the same records the MCP `list_rules` tool answers with, for a client that would otherwise parse the prose |
+| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are answered as data |
 | `--where` | show the Element data root (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |

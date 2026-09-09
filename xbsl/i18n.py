@@ -335,9 +335,11 @@ _CORE_MESSAGES = {
     },
     "cli.help.list-rules": {
         "ru": "вывести список правил (с их параметрами и величинами) и выйти; вместе с "
-              "--select/--ignore список сужается так же, как набор прогона",
+              "--select/--ignore список сужается так же, как набор прогона; с --format json "
+              "те же записи отдаются машине",
         "en": "print the list of rules (with their parameters and values) and exit; together "
-              "with --select/--ignore the list narrows the way a run's rule set does",
+              "with --select/--ignore the list narrows the way a run's rule set does; with "
+              "--format json the same records are answered as data",
     },
     "cli.help.where": {
         "ru": "показать корень данных Элемента (путь, источник, версии) и выйти",

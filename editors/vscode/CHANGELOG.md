@@ -12,6 +12,9 @@
 ## 0.67.7
 
 ### Added
+- **The `code/dead-interpolation` badge links to the documentation.** The rule code in the
+  "Problems" panel is now a link to the string-interpolation page - the same page that
+  describes the escaping the finding is fixed with.
 - **The rules panel shows the values a rule judges by and why a rule ships off.** The
   catalogue came from the engine's text listing, where a parameter and an off reason are
   continuation lines - the panel parsed the first line with a regex and dropped the rest,

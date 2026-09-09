@@ -22,6 +22,15 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
 ## 2026-09-09 – 0.97.0
 
 ### Added
+- **`code/dead-interpolation`: a doubled interpolation sign kills the expression.** The
+  platform reads `"%%{Query}%"` as an escaped sign: the expression is never evaluated and
+  the value carries its TEXT - `%{Query}%`. Neither the compiler nor the linter said a word,
+  and a site's substring search silently matched nothing until reviewers of the platform read
+  the code. Measured on a probe project compiled by the platform: the compiler names the
+  unknown name inside `%{...}` and `${...}` (the control - the module did compile) and stays
+  silent inside `%%{...}` and `$${...}`, for both signs. The rule is a file rule at error
+  level, and its fix inserts the escape that was meant (`"\%%{Query}%"`); the correctly
+  escaped spelling is not a finding.
 - **`--list-rules --format json` answers with the rule catalogue as data.** The text
   listing carries the parameters and the off reason on continuation lines, which a client
   parsing the first line with a regex dropped - and that prose changes with the language of
