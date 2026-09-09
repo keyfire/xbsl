@@ -309,6 +309,24 @@ def member_of(owner: str, name: str) -> str | None:
     return terms.member_english_of(owner, name)
 
 
+@lru_cache(maxsize=None)
+def member_spellings(name: str) -> frozenset[str]:
+    """Every English spelling the platform gives the member `name`, whatever the owner.
+
+    The owner tables and the verified corrections together: what the compiler accepts for the
+    word SOMEWHERE. A dictionary entry outside this set names the member as no type of the
+    platform does, and the compiler refuses it on every platform receiver.
+    """
+    spellings = set(terms.member_spellings(name))
+    verified = _VERIFIED_MEMBER_SPELLINGS.get(name)
+    if verified:
+        spellings.add(verified)
+    flat = terms.common_english(name)
+    if flat:
+        spellings.add(flat)
+    return frozenset(spellings)
+
+
 def component_member_english(name: str) -> str | None:
     """The English spelling of a member reached through a form COMPONENT, or None.
 

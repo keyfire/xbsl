@@ -40,6 +40,7 @@ from xbsl.translation.code import (
     Edit,
     Resolver,
     apply_edits,
+    check_placeholders,
     has_cyrillic,
     prose_of,
     translate_expression,
@@ -291,7 +292,11 @@ def _template_scalar(node, resolver, report, edits) -> None:
     named = resolver.dictionary.literal(body) if body is not None else None
     if named is not None:
         report.note_literal_named(body)
-        _set_body(node, translate_interpolations(named, resolver, report, at=_at(node)), edits)
+        replacement = translate_interpolations(named, resolver, report, at=_at(node))
+        # The names inside the expressions are the event's own fields: a translation naming
+        # other ones presents a field the event does not have.
+        check_placeholders(body, replacement, resolver, report, _at(node))
+        _set_body(node, replacement, edits)
         return
     _set_scalar(node, translate_interpolations(value, resolver, report, at=_at(node)), edits)
     # Only the prose counts: a template whose Cyrillic sits inside the expressions alone has
@@ -943,12 +948,22 @@ def _walk_plain(node, resolver, report, edits) -> None:
             if _boolean_scalar(vnode, edits):
                 continue
             value = vnode.value
+            if key in _DESCRIPTOR_NAME_KEYS:
+                # The name a subsystem descriptor declares is the name of its directory, and
+                # the walk renames the directory by the token map: left here as data, the two
+                # drifted apart, and every import naming the subsystem stopped matching it.
+                _identifier_value(vnode, resolver, report, edits)
+                continue
             if isinstance(value, str) and has_cyrillic(value) and _IDENT_CHAIN_RE.match(value):
                 enum_hit = terms.english(value, "enums")
                 if enum_hit:
                     _set_scalar(vnode, enum_hit, edits)
                     continue
             _generic_scalar(vnode, resolver, report, edits)
+
+
+#: The name key of a descriptor, in either spelling: its value is an identifier.
+_DESCRIPTOR_NAME_KEYS = frozenset({"Имя", "Name"})
 
 
 # --- comments ---------------------------------------------------------------------------------

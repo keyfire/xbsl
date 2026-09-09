@@ -146,6 +146,35 @@ def member_english_of(owner: str, member: str) -> str | None:
     return inherited.pop() if len(inherited) == 1 else None
 
 
+def member_spellings(member: str) -> dict[str, list[str]]:
+    """{English spelling: [the English types declaring `member` under it]} across the platform.
+
+    The owner table read the other way round: not "how does THIS type spell the word" but
+    "which spellings does the word have at all". A word one type spells `Importance` and no
+    type spells otherwise has one answer here; `Загрузить` answers two (`Load`, `Upload`).
+    Empty for a word no type declares.
+    """
+    out: dict[str, list[str]] = {}
+    if not member:
+        return out
+    for owner, pairs in _members_by_owner().items():
+        english = pairs.get(member)
+        # An enumeration class of the distribution (`<Name>G5Enum`) lists its VALUES as
+        # members, and a value is not a member: the translator spells a value by the
+        # enumeration tables, never by this one. Counting `Succeeded` of a job-state
+        # enumeration as a spelling of the event's `Успешно` (`Succeed`) once hid a wrong
+        # dictionary entry behind an ambiguity that was not there.
+        if not english or _ENUM_CLASS_MARK in owner or _ENUM_CLASS_MARK in english:
+            continue
+        out.setdefault(english, []).append(owner)
+    return out
+
+
+#: The suffix the distribution gives its enumeration classes (`JobResultStatusG5Enum`); an
+#: English "spelling" carrying it is an extraction artifact of the same classes.
+_ENUM_CLASS_MARK = "G5Enum"
+
+
 _kinds: dict[str, str] | None = None
 
 

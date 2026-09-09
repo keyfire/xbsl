@@ -188,6 +188,18 @@ job wants before it publishes a translated build. Name COLLISIONS are such a pro
 different names of one namespace translated into one word is a build breaker (the platform
 refuses a repeated name), and only the translator can see it.
 
+Two more problems come from the dictionary itself, and both were found on a real project whose
+English build failed while the coverage stood at 100%. An entry that spells a platform member as
+the platform spells it nowhere (`Важность: Severity` against the event's `Importance`) is
+reported at the first place where a receiver of KNOWN type proves it: the platform spelling is
+taken there, but a receiver whose type nothing names gets the entry's word, and the compiler
+refuses it - the cure is the platform spelling in the entry. A word the platform itself spells
+two ways (`Загрузить` is `Load` on a binary object and `Upload` on the object storage) is not
+judged: an entry matching either names nothing wrong. And a named literal whose substitutions
+differ from its key's after translation (`%{AccountCode}` where the field translates to
+`SubscriberCode`) is reported with both lists: the names inside `%{...}` must translate the same
+fields, spelled in either language.
+
 ## In the editor
 
 The rule `conventions/missing-translation` (info, off by default, project scope) shows the same

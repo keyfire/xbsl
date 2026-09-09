@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
-from xbsl import engine, scaffold, terms
+from xbsl import engine, i18n, scaffold, terms
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
 from xbsl.translation.code import Resolver, has_cyrillic, translate_code
@@ -51,6 +51,32 @@ _FIXED_COMPONENTS = {
 
 #: The language names of the project descriptor, as the dictionary language codes them.
 _LANGUAGE_NAMES = {"en": "Английский", "ru": "Русский"}
+
+MESSAGES = {
+    "translate.problem.shadow": {
+        "ru": "{place}: запись словаря '{name}: {entry}' расходится с платформой – '{name}' у"
+              " {owner} пишется '{platform}'; здесь взято платформенное написание, а приёмник"
+              " без выведенного типа получит '{entry}', и компилятор его отвергнет. Замените"
+              " значение записи на '{platform}'{more}",
+        "en": "{place}: the dictionary entry '{name}: {entry}' contradicts the platform -"
+              " '{name}' of {owner} is spelled '{platform}'; the platform spelling is taken"
+              " here, and a receiver of no inferred type would get '{entry}', which the"
+              " compiler refuses. Set the entry to '{platform}'{more}",
+    },
+    "translate.problem.shadow-more": {
+        "ru": " (ещё мест: {count})",
+        "en": " (+{count} places)",
+    },
+    "translate.problem.placeholders": {
+        "ru": "{place}: литерал '{text}': подстановки перевода [{found}] не совпадают с"
+              " подстановками ключа после перевода [{expected}] – имена внутри %{{...}} должны"
+              " быть переводами тех же полей",
+        "en": "{place}: literal '{text}': the placeholders of the translation [{found}] differ"
+              " from the key's after translation [{expected}] - the names inside %{{...}} must"
+              " translate the same fields",
+    },
+}
+i18n.register(MESSAGES)
 
 
 @dataclass
@@ -173,6 +199,37 @@ class ProjectReport:
                     f"{rel}: {namespace} - '{translated}' <- {', '.join(sources)}"
                 )
 
+    def collect_dictionary_defects(self) -> None:
+        """Lift what the pass learned about the DICTIONARY itself into `problems`.
+
+        Two shapes, both build breakers of the tree the dictionary serves, so both fail the
+        strict gate: an entry the platform overruled at a receiver of known type (the entry
+        spells a platform member as the platform spells it nowhere - see FileReport.shadows),
+        and a named literal whose substitutions differ from its key's. One line per entry,
+        with the first place that proves it and the count of the rest: the cure is one line
+        of the dictionary, not a walk over the places.
+        """
+        by_entry: dict[tuple[str, str], list[tuple[str, int, str, str]]] = {}
+        for rel, report in sorted(self.files.items()):
+            for name, places in report.shadows.items():
+                for line, _col, entry, platform, owner in places:
+                    by_entry.setdefault((name, entry), []).append((rel, line, platform, owner))
+        for (name, entry), places in by_entry.items():
+            rel, line, platform, owner = places[0]
+            more = (i18n.t("translate.problem.shadow-more", count=len(places) - 1)
+                    if len(places) > 1 else "")
+            self.problems.append(i18n.t(
+                "translate.problem.shadow", place=f"{rel}:{line}", name=name, entry=entry,
+                platform=platform, owner=owner, more=more,
+            ))
+        for rel, report in sorted(self.files.items()):
+            for text, line, _col, expected, found in report.placeholder_mismatches:
+                preview = text if len(text) <= 60 else text[:57] + "..."
+                self.problems.append(i18n.t(
+                    "translate.problem.placeholders", place=f"{rel}:{line}", text=preview,
+                    expected=", ".join(expected), found=", ".join(found),
+                ))
+
 
 def _iter_files(root: Path, dictionary: Dictionary | None = None) -> list[Path]:
     """The files of the project under `root` - the dictionary that translates it excluded.
@@ -278,6 +335,7 @@ def translate_project(
 
     _apply_language_flip(root, outputs, swaps, dictionary, report)
     report.collect_collisions()
+    report.collect_dictionary_defects()
 
     if out is not None:
         _write_tree(out, outputs, report)

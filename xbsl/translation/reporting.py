@@ -56,6 +56,15 @@ class FileReport:
     #: names of one namespace translated into one word is a build-breaking defect of the
     #: dictionary (the platform refuses a repeated name), and only the translator can see it.
     collisions: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    #: {member name: [(line, col, the entry's spelling, the platform's, the owner type)]} -
+    #: dictionary entries the platform OVERRULED at a receiver of known type. The tree is
+    #: right at that place; a receiver whose type nothing names gets the entry's word, and
+    #: the compiler refuses it there - so the entry is the defect, and this is its evidence.
+    shadows: dict[str, list[tuple[int, int, str, str, str]]] = field(default_factory=dict)
+    #: [(literal text, line, col, the placeholders the KEY translates to, the ones the
+    #: translation carries)] - a named literal whose substitutions do not match its key's.
+    placeholder_mismatches: list[tuple[str, int, int, list[str], list[str]]] = field(
+        default_factory=list)
 
     def note_name(self, namespace: str, source: str, translated: str) -> None:
         """Register a translated name inside a namespace and detect a collision."""
@@ -125,6 +134,16 @@ class FileReport:
     def note_platform(self, name: str, line: int, col: int) -> None:
         self.platform_missing += 1
         self.missing_platform.setdefault(name, []).append((line, col))
+
+    def note_shadow(self, name: str, line: int, col: int, entry: str, platform: str,
+                    owner: str) -> None:
+        """A dictionary entry the platform's own spelling of a member overruled here."""
+        self.shadows.setdefault(name, []).append((line, col, entry, platform, owner))
+
+    def note_placeholders(self, text: str, line: int, col: int, expected: list[str],
+                          found: list[str]) -> None:
+        """A named literal whose translation carries other substitutions than its key."""
+        self.placeholder_mismatches.append((text, line, col, list(expected), list(found)))
 
     @property
     def covered(self) -> bool:

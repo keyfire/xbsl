@@ -864,6 +864,18 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         # was declared as or inferred to hold: its own vocabulary wins over the flat one,
         # which keeps a single spelling for a word two types spell apart.
         replacement, plane = platform_member, "platform"
+        entry = resolver.dictionary.token(tok.value, scope, type_scope)
+        if entry is not None and entry != platform_member \
+                and entry not in platform_map.member_spellings(tok.value):
+            # The project dictionary spells this member as the platform spells it NOWHERE.
+            # Here the platform wins and the tree is right; but a receiver whose type nothing
+            # names gets the entry's word, and the compiler refuses it there - a real project
+            # lost its English build to exactly this, twice. So the entry is reported as the
+            # defect it is, with the place that proves the contradiction. An entry that
+            # matches the spelling of ANOTHER owner of the same word (a word the platform
+            # spells two ways) is not judged: there is no one spelling to ask for.
+            line, col = at if at is not None else (tok.line, tok.col)
+            report.note_shadow(tok.value, line, col, entry, platform_member, type_scope or owner)
     elif after_dot and platform_map.enum_value_of(owner, tok.value):
         # `InformationConnotation.Normal` - a value belongs to ITS enumeration: globally one
         # Russian word answers to several English ones, and the flat dictionary hands out
@@ -1157,9 +1169,42 @@ def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
         # file: a wizard that checks its page code eight times is one place to look, not eight.
         report.warnings.append(("literal-data-value", line, col, body))
     replacement = translate_interpolations(translated, resolver, report, at=(line, col))
+    check_placeholders(body, replacement, resolver, report, (line, col))
     if replacement != body:
         edits.append((base + tok.start + 1, base + tok.end - 1, replacement))
     return True
+
+
+def placeholder_expressions(text: str) -> list[str]:
+    """The substitutions of a literal, in order: the expression of every full-form
+    interpolation with its whitespace collapsed, and every short-form name as it stands."""
+    spans, shorts = _interpolations(text)
+    out = [" ".join(text[start:end].split()) for start, end in spans]
+    out.extend(name for _offset, name in shorts)
+    return out
+
+
+def check_placeholders(
+    key: str, replacement: str, resolver: Resolver, report: FileReport, at: tuple[int, int],
+) -> None:
+    """A named literal must carry the substitutions of its key - translated or as written.
+
+    The prose of an entry is a person's, the names inside `%{...}` are the code's: a template
+    whose translation names `%{AccountCode}` while the field it stands for translates to
+    `SubscriberCode` compiles nowhere (a variable of that name does not exist) or, in a
+    presentation template, names a field the event does not have. The comparison is made on
+    what the pass would WRITE for either side: the key's substitutions translated the ordinary
+    way against the translation's after its own pass - so an entry may spell a name in either
+    language, and only a name that ends up different is a mismatch. Order does not matter: a
+    translation may put the substitutions where its grammar wants them.
+    """
+    if not any(sign in key or sign in replacement for sign in "%$"):
+        return
+    scratch = FileReport(path=report.path)  # the key's pass counts toward nothing
+    expected = placeholder_expressions(translate_interpolations(key, resolver, scratch, at=at))
+    found = placeholder_expressions(replacement)
+    if sorted(expected) != sorted(found):
+        report.note_placeholders(key, at[0], at[1], expected, found)
 
 
 def prose_of(text: str) -> str:
