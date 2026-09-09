@@ -3620,6 +3620,72 @@ SEEDS: list[Seed] = [
         tokens={"КарточкаЗаявки": "ApplicationCard", "Выбор": "Choice",
                 "Первый": "First", "Второй": "Second"},
     ),
+    Seed(
+        rule="code/per-object-permissions-need-common",
+        expect=FINDING,
+        note="per-object permissions without the common handler in the module",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "КонтрольДоступа:\n"
+                            "    Разрешения:\n"
+                            "        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n",
+            "Заявки.xbsl": "метод Проба()\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/per-object-permissions-need-common",
+        expect=CLEAN,
+        note="the same object whose module declares the common calculation",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "КонтрольДоступа:\n"
+                            "    Разрешения:\n"
+                            "        Чтение: РазрешенияВычисляютсяДляКаждогоОбъекта\n",
+            "Заявки.xbsl": "@Обработчик\n"
+                           "метод ВычислитьРазрешенияДоступа(): Массив<РазрешениеДоступа>\n"
+                           "    возврат []\n;\n",
+        },
+        tokens={"Заявки": "Applications"},
+    ),
+    Seed(
+        rule="code/local-method-cross-module",
+        expect=FINDING,
+        note="a method visible only in its own module called from another one",
+        files={
+            "Расчёты.yaml": "ВидЭлемента: ОбщийМодуль\n"
+                           "Ид: 1d1f5c60-0000-4000-8000-000000000f21\n"
+                           "Имя: Расчёты\n"
+                           "ОбластьВидимости: ВПроекте\n"
+                           "Окружение: КлиентИСервер\n",
+            "Расчёты.xbsl": "@Локальный\nметод Служебный()\n;\n",
+            "Отчёты.yaml": "ВидЭлемента: ОбщийМодуль\n"
+                           "Ид: 1d1f5c60-0000-4000-8000-000000000f22\n"
+                           "Имя: Отчёты\n"
+                           "ОбластьВидимости: ВПроекте\n"
+                           "Окружение: КлиентИСервер\n",
+            "Отчёты.xbsl": "метод Проба()\n    Расчёты.Служебный()\n;\n",
+        },
+        tokens={"Расчёты": "Calculations", "Отчёты": "Reports", "Служебный": "Internal", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/local-method-cross-module",
+        expect=CLEAN,
+        note="the same call once the method is opened to the subsystem",
+        files={
+            "Расчёты.yaml": "ВидЭлемента: ОбщийМодуль\n"
+                           "Ид: 1d1f5c60-0000-4000-8000-000000000f21\n"
+                           "Имя: Расчёты\n"
+                           "ОбластьВидимости: ВПроекте\n"
+                           "Окружение: КлиентИСервер\n",
+            "Расчёты.xbsl": "@ВПодсистеме\nметод Служебный()\n;\n",
+            "Отчёты.yaml": "ВидЭлемента: ОбщийМодуль\n"
+                           "Ид: 1d1f5c60-0000-4000-8000-000000000f22\n"
+                           "Имя: Отчёты\n"
+                           "ОбластьВидимости: ВПроекте\n"
+                           "Окружение: КлиентИСервер\n",
+            "Отчёты.xbsl": "метод Проба()\n    Расчёты.Служебный()\n;\n",
+        },
+        tokens={"Расчёты": "Calculations", "Отчёты": "Reports", "Служебный": "Internal", "Проба": "Probe"},
+    ),
 ]
 
 
