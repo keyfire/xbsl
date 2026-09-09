@@ -12,7 +12,7 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
-## 2026-09-09 – 0.97.0
+## 2026-09-09 – 0.97.0, 0.98.0
 
 ### Added
 - **`code/dead-interpolation`: a doubled interpolation sign kills the expression.** The
