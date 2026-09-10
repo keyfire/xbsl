@@ -12,6 +12,12 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+Every entry ends with a link to the pull request it came from -
+`([#12](https://github.com/keyfire/xbsl/pull/12))`. That is why changes come in through pull
+requests: an entry without such a link is unfinished, because the reader has no way from the line
+to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
+entry either - say what the behaviour was, not which class name was compared.
+
 ## Unreleased
 
 ### Added
