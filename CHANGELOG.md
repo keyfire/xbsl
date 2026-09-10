@@ -30,6 +30,17 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the change at hand.
 
 ### Fixed
+- **The languages of a project translate as the enumeration they are.**
+  `LocalizationLanguages: [Русский, Английский]` came out `[Russian, English]` only where the
+  project's own dictionary had been taught the word: the enumeration branch recognised only part
+  of the classes the distribution describes enumerations with, and the language properties are
+  described by another of them - so the English value was answered by the identifier plane by
+  accident (the platform knows the term) and the Russian one by nothing at all. `DefaultLanguage`
+  stayed data for the same reason, invisible because the language flip rewrites that line
+  afterwards. The branch now recognises every enumeration class of the distribution; the same
+  silence covered
+  the `SecurityProtocol` of a Kafka channel and the `Capabilities` of a mobile application.
+  Verified whole-tree on a live project: the English tree comes out byte for byte as before.
 - **A localized string says where the TEXT of a translation is written.** Adding a `строка`
   to a LocalizedStrings element echoes the key into every translation the element has, with
   the default-language text; the note said only "replace it", as if by hand, while

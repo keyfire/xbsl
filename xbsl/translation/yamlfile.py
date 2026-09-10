@@ -337,6 +337,23 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
         report.note_text_kept(value, line, col)
 
 
+def _is_enum_class(declared: str) -> bool:
+    """Does this declared type name an ENUMERATION of the platform?
+
+    The distribution suffixes an enumeration class with `Enum`, and most of them carry the
+    longer `G5Enum` - but not all, and testing for the longer suffix let the rest through as
+    data. The languages of a project are the case that showed it: `LocalizationLanguages` is a
+    list of `LanguageCmptEnum`, and its two values came out half translated - the English one
+    answered by the identifier plane by accident (the platform knows that term), the Russian
+    one by nothing at all. `DefaultLanguage` stayed data for the same reason, and was only
+    invisible because the language flip rewrites that line afterwards.
+
+    Neither property is typed `kind: enum` in the metamodel - one is a list of the class, the
+    other a block of it - so the enumeration branch is reached by the type name alone.
+    """
+    return declared.endswith("Enum")
+
+
 def _enum_spelling(value: str, enum_name: str | None, resolver, report) -> str | None:
     """The English spelling of one enumeration value: its enumeration's table, then the
     dictionary (a project enumeration has no platform table); None when neither answers."""
@@ -559,7 +576,7 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                 else:
                     _walk_component_mapping(item, resolver, report, edits, owner)
             elif isinstance(item, yaml.ScalarNode):
-                if item_cls.endswith("G5Enum"):
+                if _is_enum_class(item_cls):
                     _enum_scalar(item, item_cls, resolver, report, edits)
                 else:
                     _identifier_value(item, resolver, report, edits)
@@ -601,7 +618,7 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
         if isinstance(value, str) and has_cyrillic(value):
             _set_scalar(vnode, translate_type_expression(value, resolver, report, at=_at(vnode)), edits)
         return
-    if declared.endswith("G5Enum"):
+    if _is_enum_class(declared):
         _enum_scalar(vnode, declared, resolver, report, edits)
         return
     if declared in ("Term", "AttributeName"):

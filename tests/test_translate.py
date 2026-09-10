@@ -296,6 +296,28 @@ def test_yaml_localized_strings_and_translation_body():
     assert "    Save: Save the document" in out_body
 
 
+def test_project_languages_are_enumeration_values_of_the_platform():
+    """Both language properties are the platform's own enumeration, and no dictionary of a
+    project should have to spell them.
+
+    The enumeration branch keyed on the `G5Enum` suffix, and these two carry `LanguageCmptEnum`:
+    the list came out `[Русский, English]` - one value answered by the identifier plane by
+    accident, the other by nothing - and the default language stayed data. It was invisible on
+    a live project, which had added `Русский: Russian` to its own dictionary, and on the
+    English tree, where the language flip rewrites that line afterwards.
+    """
+    text = (
+        "Ид: ffeacdec-02d6-4f08-bcfa-be89e9a1861a\nИмя: Задачник\nПоставщик: Acme\n"
+        "ЯзыкиЛокализации: [Русский, Английский]\nЯзыкПоУмолчанию: Русский\n"
+    )
+
+    out, report = _yaml(text, tokens={"Задачник": "TaskBook"}, name="Проект.yaml")
+
+    assert "LocalizationLanguages: [Russian, English]" in out
+    assert "DefaultLanguage: Russian" in out
+    assert report.platform_missing == 0 and report.user_missing == 0
+
+
 def test_yaml_subsystem_descriptor():
     text = (
         "Использование:\n"
