@@ -683,6 +683,9 @@ def meta_new_project(
     root – the caller's repository root, an absolute path (a relative one is taken against
     the server's working directory, which a session started elsewhere does not share); the
     answer names it as `root` next to the absolute paths written.
+
+    See also: meta_add_subsystem for the next subsystem, meta_new_object for the first
+    objects in it, meta_add_dependency for a library the project uses.
     """
     base = _base(root)
     return _meta(
@@ -732,6 +735,9 @@ def meta_new_object(
     gets the one the project writes its types in (a Russian project gets `Тип: Группа`);
     pass the brackets as they are - escaped ones (`&lt;`) are undone, anything else that is
     not a type expression is refused rather than written into the file.
+
+    See also: meta_add_field for the object's own items, meta_add_form for its forms,
+    meta_add_route for the routes of an HttpService created without them.
     """
     root_dir = _base(root)
     return _meta(
@@ -788,8 +794,12 @@ def meta_add_field(
     {"ДлинаПрефикса": 2}}} - or dotted keys ({"Автонумерация.Префикс": "ЗА"}), checked the
     same way level by level; a list property ("СерииНумерации") is a list of scalars. A
     block the metamodel describes as opaque ("Представление") is refused with its class
-    named - it still goes into the yaml by hand. To change the properties of an item that
-    already exists use meta_set_field_property.
+    named - it still goes into the yaml by hand.
+
+    See also: meta_set_field_property for an item that already exists,
+    meta_set_localization for the TEXTS of a localized-string key (this tool writes the
+    key and the default-language text, every translation is written there),
+    meta_add_localization for a language the element does not have yet.
     """
     base = _base(root)
     return _meta(
@@ -839,6 +849,9 @@ def meta_add_route(yaml_path: str, routes: str = "", template: str = "", methods
     single `template` with its `methods` (comma separated) - the second is what "add a
     method to this template" looks like, and an EXISTING template is extended with the
     missing verbs only. The verbs: GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS.
+
+    See also: meta_new_object takes the routes of a service at creation time;
+    meta_add_method adds a method no route calls.
     """
     base = _base(root)
     if not routes:
@@ -860,6 +873,9 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
     language – Russian/English (either project spelling) or the folder code Ru/En. The
     language must be declared in LocalizationLanguages of the project descriptor and must
     differ from DefaultLanguage. Candidates come from meta_localization_info.
+
+    See also: meta_set_localization writes the TEXT of one string into every language at
+    once - this tool only adds the language and echoes the keys into it.
     """
     base = _base(root)
     return _meta(base, scaffold.op_add_localization, _under(base, yaml_path), language)
@@ -886,6 +902,10 @@ def meta_set_localization(yaml_path: str, name: str, values: dict[str, str],
                 the default text and a note, so no translation is left a key short.
     section   – Rows or Templates, in either spelling; left out, the key keeps the section
                 it already lives in and a new one goes to Rows.
+
+    See also: meta_add_field adds the KEY itself (with the default-language text),
+    meta_add_localization adds a language, meta_localization_info says which languages
+    and translations the element already has.
     """
     base = _base(root)
     return _meta(base, scaffold.op_set_localization, _under(base, yaml_path), name,
@@ -898,7 +918,11 @@ def meta_localization_info(yaml_path: str, root: str | None = None) -> dict:
     """The localization picture of a LocalizedStrings element: the declared languages, the
     default one, the translations already present and the candidate languages a translation
     can be added for (folder codes Ru/En with their display names). `file` names the
-    absolute path read."""
+    absolute path read.
+
+    See also: meta_add_localization adds one of the candidate languages,
+    meta_set_localization writes the text of a string into every language at once.
+    """
     base = _base(root)
     path = _under(base, yaml_path)
     try:
@@ -932,6 +956,9 @@ def meta_add_method(
     Placement: `after` or `before` name an existing method (mutually exclusive), otherwise the
     method is appended. `annotations` is a whitespace-separated list, `@` optional; `body` is a
     single line put in place of the `// TODO` stub.
+
+    See also: meta_add_handler for a method that answers an EVENT of a component - it
+    writes the binding in the yaml and the stub with the event's own parameters.
     """
     base = _base(root)
     return _meta(
@@ -981,6 +1008,9 @@ def meta_add_form(
     such a dictionary the captions stay literals, as before.
 
     Existing form files are skipped unless overwrite=true.
+
+    See also: meta_component_tree reads the generated form for editing, meta_add_handler
+    binds an event of a node to a method of the paired module.
     """
     base = _base(root)
     return _meta(
@@ -1086,6 +1116,8 @@ def meta_rename_object(
     object and its forms (defaults: the new name). yaml_path resolves ambiguity when several
     objects share old_name. dry_run=true returns the plan (renames, files, notes) without
     writing anything.
+
+    See also: meta_delete_object removes the same set of files instead of renaming it.
     """
     base = _base(root)
     try:
@@ -1119,6 +1151,9 @@ def meta_delete_object(
     absolute paths. yaml_path resolves ambiguity between namesakes. Deletion is irreversible,
     so dry_run defaults to TRUE - the first call returns the plan; repeat with
     dry_run=false to perform it.
+
+    See also: meta_rename_object when the object stays and only its name changes - it
+    rewrites the references instead of listing them.
     """
     base = _base(root)
     try:
@@ -1147,6 +1182,9 @@ def meta_add_subsystem(
 ) -> dict:
     """Create a subsystem: a folder with Подсистема.yaml. uses – names of other subsystems
     for the Использование block; representation – the navigation caption.
+
+    See also: meta_new_object creates an object INSIDE such a folder - the folder is what
+    its `directory` names; meta_project_info lists the subsystems already there.
     """
     base = _base(root)
     return _meta(
@@ -1295,6 +1333,9 @@ def meta_add_component(
     sibling node id. A missing slot is created; a slot holding a single nested mapping
     is converted to the "-" list form. The edit touches only the affected lines -
     formatting and comments elsewhere survive.
+
+    See also: meta_set_component_property sets the properties of the new node,
+    meta_add_handler binds its events, meta_insert_fragment pastes a ready subtree.
     """
     return _form_write(_base(root), yaml_path, "insert", {
         "parent": parent_id, "slot": slot, "type": type, "name": name,

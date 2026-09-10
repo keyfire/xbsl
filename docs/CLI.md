@@ -284,6 +284,8 @@ These commands create and edit sources: objects, fields, routes, methods, forms,
 
 ### `xbsl new-project`
 
+create a project: Project.yaml + Project.xbsl + a subsystem; see also add-subsystem and new- object, which fill the new project
+
 ```bash
 usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSION]
                         [--compatibility COMPATIBILITY] [--subsystem SUBSYSTEM] [--library]
@@ -312,6 +314,8 @@ usage: xbsl new-project [-h] [--representation REPRESENTATION] [--version VERSIO
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl new-object`
+
+create a configuration object (yaml + a module by kind); see also add-field for its items and add- form for its forms
 
 ```bash
 usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--access ACCESS]
@@ -344,6 +348,8 @@ usage: xbsl new-object [-h] [--scope SCOPE] [--environment ENVIRONMENT] [--acces
 
 ### `xbsl add-field`
 
+add an attribute/dimension/resource/value/tabular section; see also set-field-property for an item that already exists and set-localization for the texts of a LocalizedStrings string per language
+
 ```bash
 usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=ЗНАЧЕНИЕ] [--dry-run]
                       yaml_path field_kind name
@@ -369,6 +375,8 @@ usage: xbsl add-field [-h] [--type TYPE] [--tabular TABULAR] [--prop КЛЮЧ=З
 
 ### `xbsl add-route`
 
+add routes to an existing HttpService; see also new-object `--routes`, which takes the routes at creation time
+
 ```bash
 usage: xbsl add-route [-h] [--dry-run] yaml_path routes
 ```
@@ -388,6 +396,8 @@ usage: xbsl add-route [-h] [--dry-run] yaml_path routes
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl add-method`
+
+add a method to an .xbsl module without breaking annotations; see also form-handlers for a stub bound to a component event
 
 ```bash
 usage: xbsl add-method [-h] [--params PARAMS] [--returns RETURNS] [--annotations ANNOTATIONS]
@@ -417,6 +427,8 @@ usage: xbsl add-method [-h] [--params PARAMS] [--returns RETURNS] [--annotations
 
 ### `xbsl add-form`
 
+create the object's forms and register them in Interface; see also form-tree for the tree of the new form and form-handlers for its handlers
+
 ```bash
 usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
                      [--card-min-width CARD_MIN_WIDTH] [--card-placeholder CARD_PLACEHOLDER]
@@ -445,6 +457,8 @@ usage: xbsl add-form [-h] [--name NAME] [--path PATH] [--forms FORMS]
 
 ### `xbsl add-subsystem`
 
+create a subsystem (a folder + Subsystem.yaml); see also new-object, which creates an object inside such a folder
+
 ```bash
 usage: xbsl add-subsystem [-h] [--representation REPRESENTATION] [--no-auto-interface]
                           [--uses USES] [--dry-run]
@@ -470,6 +484,8 @@ usage: xbsl add-subsystem [-h] [--representation REPRESENTATION] [--no-auto-inte
 
 ### `xbsl add-dependency`
 
+attach a library to the project (the Библиотеки section of Project.yaml); see also project-info for the libraries already attached
+
 ```bash
 usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name version
 ```
@@ -493,6 +509,8 @@ usage: xbsl add-dependency [-h] [--path PATH] [--dry-run] root vendor name versi
 
 ### `xbsl add-localization`
 
+add a translation file (the Localization section) to a LocalizedStrings element; see also set- localization, which writes the text of a string into every language
+
 ```bash
 usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 ```
@@ -512,6 +530,8 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl set-localization`
+
+write one localized string into every language at once: the element and its translations; see also add-localization for a language and add-field for the string itself
 
 ```bash
 usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--dry-run]
@@ -536,6 +556,8 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 
 ### `xbsl set-field-property`
 
+set properties of an existing section item (a constant, an attribute ...); see also add-field to add one and rename-object to rename it
+
 ```bash
 usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular TABULAR] [--dry-run]
                                yaml_path field_kind name
@@ -559,6 +581,8 @@ usage: xbsl set-field-property [-h] --prop КЛЮЧ=ЗНАЧЕНИЕ [--tabular 
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl rename-object`
+
+rename an object (files, forms) and update references across the whole project; see also delete- object, which removes the same set of files
 
 ```bash
 usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
@@ -586,6 +610,8 @@ usage: xbsl rename-object [-h] [--new-presentation NEW_PRESENTATION]
 
 ### `xbsl delete-object`
 
+delete an object whole (the yaml+xbsl pair, forms, the list row) and list the remaining mentions; without `--apply` - the plan only; see also rename-object, which renames instead of removing
+
 ```bash
 usage: xbsl delete-object [-h] [--name NAME] [--path PATH] [--apply] [--dry-run] root
 ```
@@ -607,6 +633,8 @@ usage: xbsl delete-object [-h] [--name NAME] [--path PATH] [--apply] [--dry-run]
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl set-access`
+
+set the object's AccessControl.Разрешения; see also object-info for the current rights and the set this kind has
 
 ```bash
 usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
@@ -634,6 +662,8 @@ usage: xbsl set-access [-h] [--name NAME] [--path PATH] [--default DEFAULT]
 
 ### `xbsl object-info`
 
+object summary: attributes, tabular sections, forms, namespace
+
 ```bash
 usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 ```
@@ -653,6 +683,8 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 | `--path PATH` | the object's yaml (instead of `--name`) |
 
 ### `xbsl project-info`
+
+sources overview: projects, subsystems, objects
 
 ```bash
 usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] root
@@ -675,6 +707,8 @@ usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] ro
 
 ### `xbsl localization-info`
 
+the languages and translations of a LocalizedStrings element (candidates for add-localization; the texts are written by set-localization)
+
 ```bash
 usage: xbsl localization-info [-h] yaml_path
 ```
@@ -692,6 +726,8 @@ usage: xbsl localization-info [-h] yaml_path
 | `-h, --help` | show this help message and exit |
 
 ### `xbsl form-tree`
+
+interface component tree (nodes, slots, properties with spans); see also form-edit for edits by node id and form-handlers for their handlers
 
 ```bash
 usage: xbsl form-tree [-h] [--at OFFSET] [--node NODE] [--name NAME] [--max-depth LEVELS]
@@ -718,6 +754,8 @@ usage: xbsl form-tree [-h] [--at OFFSET] [--node NODE] [--name NAME] [--max-dept
 | `--brief` | the skeleton: id, kind, type, name and slot per node - no spans, no properties |
 
 ### `xbsl form-edit`
+
+form-designer operation: a pinpoint edit of an interface component's yaml; see also form-tree for the node ids the edits address
 
 ```bash
 usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name NAME]
@@ -761,6 +799,8 @@ usage: xbsl form-edit [-h] [--parent PARENT] [--slot SLOT] [--type TYPE] [--name
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
 ### `xbsl form-handlers`
+
+handlers of the component's paired module: a method list or a handler stub; see also form-tree for the node ids and add-method for a method outside any event
 
 ```bash
 usage: xbsl form-handlers [-h] [--node NODE] [--key KEY] [--method METHOD] [--signature SIGNATURE]
