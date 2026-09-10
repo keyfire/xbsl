@@ -55,6 +55,37 @@ MESSAGES = {
         "en": " The whole remainder at once - as a dictionary stub in a file:"
               " xbsl translate <root> --missing <file>.",
     },
+    "translate.unused.textual": {
+        "ru": "чтение сирот текстовое: ключ считается живым, пока его текст встречается в"
+              " исходниках, какими они лежат сейчас. Поэтому список без отбора описывает"
+              " ВЕСЬ накопленный словарь, а не вашу правку, и годится на просмотр, а не на"
+              " снятие целиком. Сироты одной правки – {option}: ключи, которые встречались"
+              " только в строках, снятых этой правкой.",
+        "en": "the orphan reading is textual: a key counts as live while its text occurs in"
+              " the sources as they stand. So a list without a filter describes the WHOLE"
+              " accumulated dictionary rather than your change - a list to read through, not"
+              " one to prune wholesale. The orphans of one change are {option}: the keys that"
+              " only ever occurred in the lines that change took out.",
+    },
+    "translate.since.no-git": {
+        "ru": "git не найден: режим сирот правки читает снятые строки по git diff",
+        "en": "git was not found: the change-orphans mode reads the removed lines from"
+              " git diff",
+    },
+    "translate.since.not-a-repo": {
+        "ru": "каталог {path} не в репозитории git: снятые строки взять неоткуда",
+        "en": "the directory {path} is not inside a git repository: there is nowhere to"
+              " read the removed lines from",
+    },
+    "translate.since.unknown-rev": {
+        "ru": "git не знает ревизии \"{rev}\": ожидается ветка, коммит или диапазон A..B",
+        "en": "git does not know the revision \"{rev}\": a branch, a commit or a range A..B"
+              " is expected",
+    },
+    "translate.since.diff-failed": {
+        "ru": "git diff по \"{rev}\" не выполнен: {error}",
+        "en": "git diff over \"{rev}\" failed: {error}",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -290,6 +321,9 @@ _LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
 def _comment_bodies(path: Path, text: str) -> set[str]:
     """Every comment payload of one file, spelled the way the TRANSLATOR keys a phrase.
 
+    The suffix decides the reading; the text is what the file holds. `_comment_bodies_of`
+    does the work, so the same reading serves a file on disk and the lines a diff took out.
+
     The two readings have to agree character for character or a LIVE pair reads as an orphan -
     the one mistake `--prune` would act on. So this is not an imitation: a module is taken
     through the lexer and its comment tokens through `code.comment_payloads`, the very
@@ -303,17 +337,35 @@ def _comment_bodies(path: Path, text: str) -> set[str]:
     the lexer cannot take - such a file translates to nothing anyway, so anything it yields
     is a bonus in the safe direction.
     """
+    if path.suffix in (".xbsl", ".xbql"):
+        from xbsl import engine
+
+        try:
+            text = engine.load(path).text
+        except Exception:  # unreadable through the loader - the raw text still reads
+            pass
+    return _comment_bodies_of(path.suffix, text)
+
+
+def _comment_bodies_of(suffix: str, text: str) -> set[str]:
+    """The same reading over TEXT alone: what a diff hands over has no file behind it.
+
+    A fragment is not a module - a removed block may open a comment it never closes - so the
+    lexer is given the text and its refusal is expected, not exceptional: the marker reading
+    takes over. Both directions of that error are harmless here, because the caller only ever
+    INTERSECTS this set with the orphans of the whole project.
+    """
     from xbsl.translation import code as code_module
     from xbsl.translation import yamlfile as yaml_module
 
-    if path.suffix == ".yaml":
+    if suffix == ".yaml":
         return _marked_bodies(text, "#", yaml_module._COMMENT_TEXT_RE)
-    if path.suffix not in (".xbsl", ".xbql"):
+    if suffix not in (".xbsl", ".xbql"):
         return set()  # json carries keys and data, never a comment
-    from xbsl import engine, lexer
+    from xbsl import lexer
 
     try:
-        tokens = lexer.tokenize(engine.load(path).text)
+        tokens = lexer.tokenize(text)
     except Exception:  # a module the translating pass cannot read either
         return _marked_bodies(text, "//", code_module._LINE_COMMENT_RE)
     return {
@@ -371,29 +423,162 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
     return names, lines, literals
 
 
-def unused_entries(root: Path, dictionary_path: Path, dictionary=None) -> list[Entry]:
+@dataclass
+class Removal:
+    """The surfaces a CHANGE took out of the sources, and what the diff behind them was.
+
+    A project that has lived a while carries thousands of orphans - a dictionary of thirty
+    thousand entries answered with three thousand of them - and every one is somebody's old
+    deletion. The list is a review list, not a worklist, and the orphans of the change at hand
+    are what a task actually has to clean up. Those are the entries whose key went missing
+    from the project AND stood on a line this change removed.
+    """
+
+    #: What the diff was taken against, as git resolved it (a commit, or the range as given).
+    base: str
+    #: How many files the diff names - zero means the change removed nothing readable.
+    files: int
+    names: set[str] = field(default_factory=set)
+    lines: set[str] = field(default_factory=set)
+    literals: set[str] = field(default_factory=set)
+
+
+def removed_surfaces(root: Path, since: str) -> Removal:
+    """Names, comment lines and literal bodies that `since` .. the sources on disk removed.
+
+    `since` is a branch or a commit - then the diff runs from where the branch parted from
+    HEAD to the WORKING TREE, so work not committed yet counts as part of the change - or a
+    range `A..B`, handed to git as written, which is how a change already merged is examined.
+
+    Raises ValueError naming what failed: no git, not a repository, an unknown revision.
+    """
+    since = (since or "").strip()
+    code, top, error = _git(root, "rev-parse", "--show-toplevel")
+    if code != 0:
+        raise ValueError(i18n.t("translate.since.not-a-repo", path=root))
+    toplevel = Path(top.strip())
+    if ".." in since:
+        spec = since
+    else:
+        code, _out, _error = _git(root, "rev-parse", "--verify", "--quiet", f"{since}^{{commit}}")
+        if code != 0:
+            raise ValueError(i18n.t("translate.since.unknown-rev", rev=since))
+        # The merge base, not the tip: a base branch that has moved on since the fork would
+        # otherwise report ITS new lines as lines this change removed.
+        code, merged, _error = _git(root, "merge-base", since, "HEAD")
+        spec = merged.strip() or since
+    code, diff, error = _git(
+        root, "diff", "--unified=0", "--no-color", "--no-ext-diff", "--find-renames",
+        spec, "--", ".",
+    )
+    if code != 0:
+        raise ValueError(i18n.t("translate.since.diff-failed", rev=since, error=error.strip()))
+    return _removal_of_diff(toplevel, spec, diff)
+
+
+def _git(root: Path, *args: str) -> tuple[int, str, str]:
+    """One git call under `root`: (exit code, stdout, stderr), both decoded as UTF-8.
+
+    The output is decoded here rather than by the subprocess machinery because the sources
+    are UTF-8 whatever the console codepage is, and a Windows shell would hand back mojibake
+    for every Cyrillic name in the diff. `core.quotepath=false` is the same point for the
+    PATHS: without it git escapes every non-Latin file name into octal.
+    """
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=str(root), capture_output=True, timeout=300,
+        )
+    except FileNotFoundError:
+        raise ValueError(i18n.t("translate.since.no-git")) from None
+    return (done.returncode,
+            done.stdout.decode("utf-8", "replace"),
+            done.stderr.decode("utf-8", "replace"))
+
+
+def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
+    """Read a unified diff for what it TOOK OUT, file by file.
+
+    The file headers are read only outside a hunk. Inside one, a removed line that begins
+    with `--` arrives as `--- ...` and is a line of source, not a header - reading it as a
+    header would attribute the rest of the hunk to nothing.
+    """
+    removed: dict[str, list[str]] = {}
+    seen: set[str] = set()
+    path = ""
+    in_hunk = False
+    for raw in diff.splitlines():
+        if raw.startswith("diff --git "):
+            path, in_hunk = "", False
+        elif raw.startswith("@@"):
+            in_hunk = True
+        elif not in_hunk and raw.startswith("--- "):
+            name = raw[4:].strip()
+            path = "" if name == "/dev/null" else name[2:] if name[:2] == "a/" else name
+            if path:
+                seen.add(path)
+        elif in_hunk and path and raw.startswith("-"):
+            removed.setdefault(path, []).append(raw[1:])
+    out = Removal(base=base, files=len(seen))
+    for rel, body in removed.items():
+        suffix = Path(rel).suffix
+        if suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
+            continue
+        text = "\n".join(body)
+        out.names.update(_WORD_RE.findall(text))
+        out.literals.update(_LITERAL_RE.findall(text))
+        out.lines.update(_comment_bodies_of(suffix, text))
+    for rel in seen:
+        # A file that is gone took its PATH with it, and a path is a place a name may live -
+        # the icon named by its file name alone is exactly that. A rename is the same event
+        # seen from the old side.
+        if not (toplevel / rel).exists():
+            for part in Path(rel).parts:
+                out.names.update(_WORD_RE.findall(part))
+    return out
+
+
+def unused_entries(root: Path, dictionary_path: Path, dictionary=None,
+                   removed: Removal | None = None) -> list[Entry]:
     """Dictionary entries whose key the project no longer carries anywhere.
 
     Deleting code leaves its names and comment lines behind in the dictionary, and nothing
     said so: `--strict` judges what is NOT covered, and the entries table shows where a pair
     is declared, not whether anything uses it. One task left 43 of them, found only by a
     throwaway script.
+
+    With `removed` the answer narrows to the orphans of ONE change: an entry is listed only
+    when what went missing from the project is what that change took out. The narrowing is an
+    intersection, never a shortcut - an entry the project still carries is not an orphan of
+    anybody's change - so a diff read too generously cannot cost a translation.
     """
     names, lines, literals = _surfaces(root, dictionary)
     out: list[Entry] = []
     for entry in read_entries(dictionary_path):
+        gone: list[str] = []
         if entry.kind == "phrase":
-            used = entry.key in lines
+            gone = [] if entry.key in lines else [entry.key]
+            missing = removed.lines if removed else None
         elif entry.kind == "literal":
-            used = entry.key in literals
+            gone = [] if entry.key in literals else [entry.key]
+            missing = removed.literals if removed else None
         else:
             # A qualified key (`<Owner>.<Name>`) gives one word to one owner, and the sources
             # spell the two halves apart: judging the dotted text as a name would call every
             # such entry an orphan. Both halves must still be there - an entry qualified by a
             # type the project no longer declares has nothing left to qualify.
-            used = all(part in names for part in entry.key.split("."))
-        if not used:
-            out.append(entry)
+            gone = [part for part in entry.key.split(".") if part not in names]
+            missing = removed.names if removed else None
+        if not gone:
+            continue
+        # The half that is gone is what the change must answer for: an entry orphaned because
+        # its OWNER was deleted belongs to the change that deleted the owner, whatever else
+        # the key still spells.
+        if missing is not None and not all(part in missing for part in gone):
+            continue
+        out.append(entry)
     return out
 
 

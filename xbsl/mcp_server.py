@@ -1625,6 +1625,7 @@ def translate_unused(
     root: str,
     kind: str = "any",
     filter: str = "",
+    since: str = "",
     limit: int = 50,
     offset: int = 0,
     prune: bool = False,
@@ -1644,6 +1645,13 @@ def translate_unused(
     kind   – 'token' (names), 'phrase' (comment lines), 'literal' or 'any';
     filter – a substring of the key OR of the value: the way to ask about the names of one
              component that has just been deleted rather than about the whole history;
+    since  – the orphans of ONE change, which is what a task cleaning up after itself asks:
+             only the keys that occurred nowhere but in the lines the change REMOVED. A
+             branch or a commit is read from the fork point with HEAD to the WORKING TREE, so
+             work not committed yet counts; a range `A..B` is handed to git as written, which
+             is how a change already merged is examined. Without it the answer covers the
+             whole accumulated dictionary - a live project answers with thousands of rows,
+             every one of them somebody's old deletion - and says so in `note`;
     limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
     prune  – REMOVE the listed entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
@@ -1671,9 +1679,15 @@ def translate_unused(
     if error:
         return {"error": error}
     path = translate_cli.dictionary_path_for(project)
+    removed = None
+    if since:
+        try:
+            removed = entries_module.removed_surfaces(project, since)
+        except ValueError as exc:
+            return {"error": str(exc)}
     needle = (filter or "").casefold()
     rows = [
-        entry for entry in entries_module.unused_entries(project, path, dictionary)
+        entry for entry in entries_module.unused_entries(project, path, dictionary, removed)
         if (kind in ("any", entry.kind))
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
@@ -1682,6 +1696,10 @@ def translate_unused(
     for entry in rows:
         counts[entry.kind] = counts.get(entry.kind, 0) + 1
     out = {**paging, "dictionary": str(path), "counts": counts}
+    if removed is not None:
+        out["since"] = {"base": removed.base, "files": removed.files}
+    elif not needle:
+        out["note"] = i18n.t("translate.unused.textual", option="since")
     if compact:
         out["unused"] = [
             {"key": e.key, "kind": e.kind, "file": e.file, "line": e.line} for e in page

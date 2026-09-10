@@ -10,6 +10,8 @@ The refusals need no Element data; the answers over a found dictionary translate
 """
 
 import json
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -33,6 +35,23 @@ def _project(repo: Path) -> Path:
         encoding="utf-8",
     )
     return project
+
+
+def _commit(repo: Path) -> str:
+    """The repository these tests diff against: everything written so far, in one commit."""
+    def git(*args: str) -> str:
+        done = subprocess.run(
+            ["git", "-c", "user.name=test", "-c", "user.email=test@example.com",
+             "-c", "commit.gpgsign=false", *args],
+            cwd=str(repo), capture_output=True, timeout=120,
+        )
+        assert done.returncode == 0, done.stderr.decode("utf-8", "replace")
+        return done.stdout.decode("utf-8", "replace")
+
+    git("init", "-q")
+    git("add", "-A")
+    git("commit", "-q", "-m", "base")
+    return git("rev-parse", "HEAD").strip()
 
 
 def _dictionary(next_to: Path) -> Path:
@@ -272,3 +291,47 @@ def test_translate_unused_compact_rows_and_counts_by_kind(mcp_module, tmp_path):
     full = mcp_module.translate_unused(str(project))
     assert full["counts"] == {"token": 1, "phrase": 1}
     assert "value" in full["unused"][0]
+
+
+@pytest.mark.needs_data
+def test_translate_unused_narrows_to_the_orphans_of_one_change(mcp_module, tmp_path):
+    """The question a task asks at its end is about ITS deletions, not about the history.
+
+    A live project answers the plain question with thousands of rows, and picking one's own
+    out of them took a call per name. `since` asks it once.
+    """
+    if not shutil.which("git"):
+        pytest.skip("git is not installed")
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    (folder / "020-more.yaml").write_text(
+        "version: 1\nlanguage: en\ntokens:\n"
+        "    СнятыйДавно: LongGone\n    СнятоеСейчас: RemovedNow\n",
+        encoding="utf-8",
+    )
+    (project / "Прочее.yaml").write_text(
+        "ВидЭлемента: Справочник\nИмя: СнятоеСейчас\n", encoding="utf-8")
+    base = _commit(tmp_path)
+    (project / "Прочее.yaml").unlink()
+
+    answer = mcp_module.translate_unused(str(project), since=base)
+
+    assert {row["key"] for row in answer["unused"]} == {"СнятоеСейчас"}
+    assert answer["since"]["base"] == base and "note" not in answer
+    plain = mcp_module.translate_unused(str(project))
+    assert {row["key"] for row in plain["unused"]} == {"СнятоеСейчас", "СнятыйДавно"}
+    assert "since" in plain["note"], "the plain answer says what its reading is worth"
+
+
+@pytest.mark.needs_data
+def test_translate_unused_refuses_a_revision_git_does_not_know(mcp_module, tmp_path):
+    """A misspelled branch must not read as "this change left nothing behind"."""
+    if not shutil.which("git"):
+        pytest.skip("git is not installed")
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor")
+    _commit(tmp_path)
+
+    answer = mcp_module.translate_unused(str(project), since="нет-такой-ветки")
+
+    assert "нет-такой-ветки" in answer["error"] and "unused" not in answer

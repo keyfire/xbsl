@@ -103,6 +103,20 @@ MESSAGES = {
         "ru": "снять найденные --unused пары из словаря (правит файлы словаря)",
         "en": "remove the entries --unused found (writes to the dictionary files)",
     },
+    "translate.help.since": {
+        "ru": "сироты ОДНОЙ правки: оставить в --unused только ключи, которые встречались"
+              " лишь в строках, снятых этой правкой. Ветка или коммит – diff от точки"
+              " расхождения до рабочего дерева (незакоммиченное тоже считается); диапазон"
+              " A..B передаётся git как написан",
+        "en": "the orphans of ONE change: keep in --unused only the keys that occurred"
+              " nowhere but in the lines that change removed. A branch or a commit diffs from"
+              " the fork point to the WORKING TREE (uncommitted work counts too); a range"
+              " A..B is handed to git as written",
+    },
+    "translate.since-header": {
+        "ru": "снятые строки прочитаны по git diff {base} (файлов в правке: {files})",
+        "en": "the removed lines come from git diff {base} ({files} files in the change)",
+    },
     "translate.unused-header": {
         "ru": "пар словаря без места в проекте: показано {shown} из {total}",
         "en": "dictionary entries with no place in the project: {shown} of {total} shown",
@@ -110,6 +124,10 @@ MESSAGES = {
     "translate.unused-none": {
         "ru": "пар без места в проекте нет: словарь описывает только то, что в нём есть",
         "en": "no entries without a place in the project: the dictionary describes what is there",
+    },
+    "translate.unused-none-since": {
+        "ru": "сирот у этой правки нет: снятые ей ключи словарь за собой не тянет",
+        "en": "this change left no orphans: the dictionary keeps nothing it took out",
     },
     "translate.pruned": {
         "ru": "снято пар: {removed}",
@@ -301,6 +319,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--unused", "--stale", action="store_true",
                         help=i18n.t("translate.help.unused"))
     parser.add_argument("--prune", action="store_true", help=i18n.t("translate.help.prune"))
+    parser.add_argument("--since", default="", help=i18n.t("translate.help.since"))
     parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
     parser.add_argument("--suggest", action="store_true", help=i18n.t("translate.help.suggest"))
@@ -678,15 +697,26 @@ def _list_unused(args, root: Path, loaded) -> int:
     `--prune` writes, so it removes exactly what it just listed - the same query, the same
     page. A page cut by `--limit` is called out: removing "everything" while looking at fifty
     of three thousand is not what the flag looks like it does.
+
+    `--since` narrows the answer to the orphans of one change, which is what a task cleaning
+    up after itself actually asks: a live project answered the plain question with three
+    thousand rows, every one of them somebody's old deletion.
     """
     from xbsl.translation import entries as entries_module
 
     path = _dictionary_path(args, root)
     if path is None:
         return _no_dictionary(root)
+    removed = None
+    if args.since:
+        try:
+            removed = entries_module.removed_surfaces(root, args.since)
+        except ValueError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
     needle = args.filter.casefold()
     rows = [
-        entry for entry in entries_module.unused_entries(root, path, loaded)
+        entry for entry in entries_module.unused_entries(root, path, loaded, removed)
         if (args.kind in ("any", entry.kind))
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
@@ -696,23 +726,34 @@ def _list_unused(args, root: Path, loaded) -> int:
         "dictionary": str(path), "total": total,
         "unused": [entry.as_dict() for entry in page],
     }
+    if removed is not None:
+        payload["since"] = {"base": removed.base, "files": removed.files}
+    elif not needle:
+        # Said in the answer rather than in the documentation: the number is large enough to
+        # read as a worklist, and the run that treats it as one prunes the project's history.
+        payload["note"] = i18n.t("translate.unused.textual", option="--since")
     if args.prune and page:
         removed = entries_module.write_entries(
             path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
         )
         payload["removed"] = removed["removed"]
-    return _emit(args, payload, page,
-                 lambda _rows: _render_unused(args, page, total, payload.get("removed")))
+    return _emit(args, payload, page, lambda _rows: _render_unused(args, page, total, payload))
 
 
-def _render_unused(args, page: list, total: int, removed) -> None:
+def _render_unused(args, page: list, total: int, payload: dict) -> None:
+    since = payload.get("since")
+    if since:
+        print(i18n.t("translate.since-header", base=since["base"][:12], files=since["files"]))
     if not total:
-        print(i18n.t("translate.unused-none"))
+        print(i18n.t("translate.unused-none-since" if since else "translate.unused-none"))
         return
     print(i18n.t("translate.unused-header", shown=len(page), total=total))
     for entry in page:
         print(f"  {entry.kind:7} {entry.key}  ->  {entry.value}   "
               f"{Path(entry.file).name}:{entry.line}")
+    if payload.get("note"):
+        print(payload["note"])
+    removed = payload.get("removed")
     if removed is not None:
         if len(page) < total:
             print(i18n.t("translate.prune-partial", shown=len(page), total=total))

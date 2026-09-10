@@ -12,6 +12,23 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## Unreleased
+
+### Added
+- **`translate_unused --since`: the orphans of ONE change.** A dictionary that has lived a
+  while answers the plain question with thousands of rows – a live project with 31 628 entries
+  reported 3 297 orphans, every one of them somebody's old deletion – and picking one's own out
+  of them took a call per name: nineteen calls for a single change. `--since <ref>` (`since` in
+  the MCP tool) keeps only the keys the project no longer spells anywhere AND that occurred
+  nowhere but in the lines the change removed, read from `git diff`; on that same change the
+  answer is 18 rows in one call. A branch or a commit is read from the fork point with HEAD to
+  the WORKING TREE, so work not committed yet counts; a range `A..B` is handed to git as
+  written. `--prune` beside it removes exactly that list – the narrowing is an intersection
+  with the orphans of the whole project, so a diff read generously cannot cost a live
+  translation. An answer with neither a filter nor `since` now says what its reading is worth:
+  the reading is textual, and the list describes the whole accumulated dictionary rather than
+  the change at hand.
+
 ## 2026-09-10 – 0.100.0
 
 ### Added

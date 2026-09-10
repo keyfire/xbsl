@@ -266,6 +266,21 @@ like it does.
 what makes the answer a worklist: after a deletion the question is about the names of THAT
 component, not about the whole history of the project.
 
+`--since` answers the question a task asks at its end: not what the dictionary has accumulated
+over the life of the project, but what ITS change left behind. The answer holds the keys the
+project no longer spells anywhere AND that occurred nowhere but in the lines that change
+removed; `--prune` beside it removes exactly those. A branch or a commit is read from the fork
+point with HEAD to the WORKING TREE, so work not committed yet counts as part of the change; a
+range `A..B` is handed to git as written, which is how a change already merged is examined.
+Measured on a live project: 3297 orphans without a filter, 18 of them the change's own - nine
+names and nine comment lines, in one call instead of nineteen calls with `--filter` a name at
+a time.
+
+The narrowing is an intersection, never a shortcut: a name the project still spells does not
+become an orphan however generously the diff reads. So an answer with neither a filter nor
+`--since` carries the caveat: the reading is textual, and the list describes the whole
+accumulated dictionary - one to read through, not one to prune wholesale.
+
 The reading is textual, and the direction of its error is the point: a name that also occurs in
 prose may be counted as used, which merely leaves an entry in place, but a LIVE entry is never
 called an orphan. A comment line is keyed by the translator's own payload reading, markers and
@@ -288,9 +303,11 @@ class such as `CodeAttrMd`) is never offered at all.
 - `translate_entries` - what the dictionary already says, with the file and line of each
   entry, so a new word stays consistent with the accepted ones;
 - `translate_unused` - the opposite question: what the dictionary still says and the
-  project no longer has; `filter` narrows it to the names of one deleted component,
-  `prune` (off by default) removes exactly the page the tool answers with, `compact` keeps
-  only the key, the kind, the file and the line, and `counts` sizes the orphans by kind;
+  project no longer has; `filter` narrows it to the names of one deleted component, `since`
+  to the orphans of ONE change (a branch, a commit or a range `A..B`), `prune` (off by
+  default) removes exactly the page the tool answers with, `compact` keeps only the key, the
+  kind, the file and the line, and `counts` sizes the orphans by kind; an answer with neither
+  `filter` nor `since` carries a `note` saying what its reading is worth;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 
