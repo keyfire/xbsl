@@ -47,8 +47,9 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   `meta_set_localization` (`set-localization`) writes every language in one call - so the note
   names it now. And a call aimed at the translation FILE was refused with "the kind ? has no
   section for 'строка'": a translation carries neither a kind nor the sections of an element,
-  and every check that asks it for one describes a file that does not exist. The refusal now
-  names what the file is, the element it translates and the call that writes the row.
+  and every check that asks it for one describes a file that does not exist. The refusal (of the
+  property editor as well) now names what the file is, the element it translates and the
+  call that writes the row.
 
 ## 2026-09-10 – 0.100.0
 

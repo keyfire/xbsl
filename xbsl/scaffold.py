@@ -2587,6 +2587,8 @@ def op_set_field_property(
         raise ScaffoldError("Не заданы свойства для установки")
     text, nl = _load_for_edit(yaml_path, reader)
     kind = element_kind(text) or "?"
+    if kind == "?":
+        _refuse_a_translation_file(yaml_path)
     lang = yaml_language(text, yaml_path.parent)
 
     if tabular and field_kind != "реквизит":

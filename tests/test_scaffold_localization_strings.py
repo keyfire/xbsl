@@ -141,6 +141,17 @@ def test_a_call_on_the_translation_file_names_the_element_and_the_call(element: 
     assert "Тексты.yaml" in said and "set-localization" in said
 
 
+def test_setting_a_property_on_a_translation_file_is_refused_the_same_way(element: Path):
+    """The same file meets the same kind check through the property editor."""
+    _write(scaffold.op_add_localization(element, "En"))
+
+    with pytest.raises(scaffold.ScaffoldError) as refusal:
+        scaffold.op_set_field_property(
+            _translation(element), "реквизит", "Первая", {"Представление": "First"})
+
+    assert "set-localization" in str(refusal.value)
+
+
 def test_an_ordinary_element_is_not_taken_for_a_translation(element: Path):
     """The control of the detection: it keys on the Localization/<Code>/ position alone."""
     assert scaffold.translation_element(element) is None
