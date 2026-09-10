@@ -29,7 +29,7 @@ entry either - say what the behaviour was, not which class name was compared.
   answered would have come out the same without it. A live dictionary of 31 989 entries holds
   22 of them, and removing all twenty-two left the English tree of 1 261 files byte for byte
   as before. The plain report says the number, `--redundant` and `translate_redundant` list
-  them with the file and line, `--prune` removes them.
+  them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ## 2026-09-10 – 0.100.0, 0.101.0
 
