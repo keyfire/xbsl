@@ -101,6 +101,13 @@ gets the row - with the default text and a note - so no translation is left a ke
 A key keeps the section it already lives in, and a new one goes to `Rows` unless
 `--section` says `Templates`.
 
+`add-field --kind строка` (`meta_add_field`) adds the KEY: it lands in the element and is
+echoed into the translations that already exist, with the default-language text, so that none
+of them is left a key short; the note names `set-localization`, which is what writes the text
+of a translation. A call on the translation FILE itself is refused - it carries neither a kind
+nor the sections of an element - and the refusal names the element the file belongs to and the
+same `set-localization`, instead of the former "the kind ? has no section for it".
+
 `add-dependency` attaches a library – it writes the `Libraries` section of the project descriptor
 (`Name`, `Vendor`, `Version`). The version is the library's **release** version: a release is issued
 in the control panel, and a build version with a suffix (`1.0-42`) is rejected. Different

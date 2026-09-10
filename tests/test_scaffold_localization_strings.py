@@ -114,6 +114,40 @@ def test_without_translations_nothing_extra_is_written(element: Path):
     assert result.notes == []
 
 
+def test_the_note_names_the_call_that_writes_the_translation(element: Path):
+    """The row lands in the translation with the DEFAULT text, and the note used to leave the
+    reader with "replace it" - as if by hand, while one call writes every language at once."""
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    result = _add(element, "строка", "Вторая", "Второй текст")
+
+    assert any("set-localization" in note for note in result.notes), result.notes
+
+
+def test_a_call_on_the_translation_file_names_the_element_and_the_call(element: Path):
+    """A translation carries no kind of its own, so the kind check used to answer
+    "У вида ? нет секции для 'строка'" - true, useless, and silent about where the text of a
+    translation is actually written.
+    """
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    with pytest.raises(scaffold.ScaffoldError) as refusal:
+        scaffold.op_add_field(_translation(element), "строка", "Вторая", type_="The second")
+
+    said = str(refusal.value)
+    assert "перевод" in said and "En" in said
+    assert "Тексты.yaml" in said and "set-localization" in said
+
+
+def test_an_ordinary_element_is_not_taken_for_a_translation(element: Path):
+    """The control of the detection: it keys on the Localization/<Code>/ position alone."""
+    assert scaffold.translation_element(element) is None
+    _write(scaffold.op_add_localization(element, "En"))
+    assert scaffold.translation_element(_translation(element)) == element
+
+
 # --- one row, every language -----------------------------------------------------------
 
 

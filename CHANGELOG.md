@@ -29,6 +29,16 @@ the Russian spellings are in the [Russian changelog](https://github.com/keyfire/
   the reading is textual, and the list describes the whole accumulated dictionary rather than
   the change at hand.
 
+### Fixed
+- **A localized string says where the TEXT of a translation is written.** Adding a `строка`
+  to a LocalizedStrings element echoes the key into every translation the element has, with
+  the default-language text; the note said only "replace it", as if by hand, while
+  `meta_set_localization` (`set-localization`) writes every language in one call - so the note
+  names it now. And a call aimed at the translation FILE was refused with "the kind ? has no
+  section for 'строка'": a translation carries neither a kind nor the sections of an element,
+  and every check that asks it for one describes a file that does not exist. The refusal now
+  names what the file is, the element it translates and the call that writes the row.
+
 ## 2026-09-10 – 0.100.0
 
 ### Added

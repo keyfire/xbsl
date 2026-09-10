@@ -2070,6 +2070,8 @@ def op_add_field(
     name = _check_identifier(name, "элемента")
     text, nl = _load_for_edit(yaml_path, reader)
     kind = element_kind(text) or "?"
+    if kind == "?":
+        _refuse_a_translation_file(yaml_path)
     # The item is written in the spelling of the file it goes into: a Russian island inside
     # an English object compiles, but the next reader has to know both to find anything.
     lang = yaml_language(text, yaml_path.parent)
@@ -2697,6 +2699,39 @@ def _has_mapping_key(body: str, key: str) -> bool:
     return re.search(rf"^[ \t]+{re.escape(key)}:", body, re.M) is not None
 
 
+def translation_element(yaml_path: Path) -> Path | None:
+    """The element a TRANSLATION file translates, or None when the file is not one.
+
+    A translation lies at `<where the element lies>/Localization/<Code>/<Name>.yaml` and
+    carries the two mapping sections alone - no kind, no Id, nothing an element has. So every
+    check that asks a file what kind it is answers "?" for one, and the refusals built on that
+    answer describe a file that does not exist rather than the one in hand.
+    """
+    yaml_path = Path(yaml_path)
+    parents = yaml_path.parents
+    if len(parents) < 3 or parents[1].name not in (_LOCALIZATION_DIR_RU, _LOCALIZATION_DIR_EN):
+        return None
+    return parents[2] / yaml_path.name
+
+
+def _refuse_a_translation_file(yaml_path: Path) -> None:
+    """Say what a translation file is and where its text is written - or say nothing.
+
+    The kind check answered "У вида ? нет секции для 'строка'; доступны: нет" on such a file:
+    true, useless, and silent about the fact that one call writes the key into the element and
+    into every translation at once.
+    """
+    element = translation_element(yaml_path)
+    if element is None:
+        return
+    raise ScaffoldError(
+        f"{yaml_path.name} – это перевод ({yaml_path.parent.name}) элемента "
+        f"{element.name}: у файла перевода нет ни вида, ни секций элемента. "
+        f"Строку пишут по самому элементу ({element}), и одним вызовом во все языки сразу: "
+        "set-localization / meta_set_localization с values по языкам"
+    )
+
+
 def _add_mapping_entry(
     yaml_path: Path, text: str, nl: str, kind: str, field_kind: str,
     map_spec: dict, key: str, value: str,
@@ -2736,6 +2771,14 @@ def _add_mapping_entry(
     notes: list[str] = []
     _echo_into_translations(yaml_path, section, [(key, entry_value)], nl, changes, notes)
     return ScaffoldResult(changes, notes=notes)
+
+
+#: What to do with a row that landed in a translation carrying the default-language text.
+#: Named in the note rather than left to the reader: the text of a translation is not typed
+#: into the file by hand as often as it is written by the call that keeps every language in
+#: step, and a note that only says "replace it" hides that call.
+_TRANSLATION_TEXT_HINT = ("замените его переводом: все языки разом пишет"
+                          " set-localization / meta_set_localization с values по языкам")
 
 
 def _echo_into_translations(
@@ -2778,7 +2821,7 @@ def _echo_into_translations(
             what = (f"Ключ {fresh[0][0]} дописан" if len(fresh) == 1
                     else "Ключи " + ", ".join(key for key, _ in fresh) + " дописаны")
             notes.append(f"{what} в перевод {target.parent.name}/{target.name} "
-                         "значением языка по умолчанию – замените его переводом")
+                         f"значением языка по умолчанию – {_TRANSLATION_TEXT_HINT}")
 
 
 def _add_operation_handler(
@@ -3975,7 +4018,7 @@ def op_set_localization(yaml_path: Path, name: str, values: dict, *,
             written = base
             result.notes.append(
                 f"Ключ {name} дописан в перевод {target.parent.name}/{target.name} значением "
-                "языка по умолчанию – замените его переводом"
+                f"языка по умолчанию – укажите его в values, чтобы записать перевод сразу"
             )
         result.changes.append(FileChange(
             target, _set_localized_row(other, section, name, written, other_nl, lang)[0],

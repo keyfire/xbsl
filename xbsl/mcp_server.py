@@ -757,7 +757,10 @@ def meta_add_field(
     параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
     (Обработка: also writes the @Обработчик method into the module), индекс (Имя + Поля with
     a stub field to replace), параметр-запроса (Отчет) or строка / шаблон (ЛокализованныеСтроки:
-    key-value mapping sections, `type` carries the VALUE, defaulting to the key itself).
+    key-value mapping sections, `type` carries the VALUE, defaulting to the key itself; the
+    key is echoed into the translations the element already has, with the DEFAULT-language
+    text - the text of a translation is written by meta_set_localization, which takes the
+    values by language, and a call aimed at a translation file itself is refused naming it).
     UUIDs, anchoring and indentation are handled here; duplicates and sections invalid for
     the object's kind are rejected. The item joins the end of the section of its kind; a
     section the file lacks is created at the end of the file, and for a register `notes` say
