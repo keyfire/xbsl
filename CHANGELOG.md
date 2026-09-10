@@ -18,6 +18,19 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+- **`translate --redundant`: the dictionary entries the platform answers itself.** An entry
+  that CONTRADICTS the platform has long been judged; one that REPEATS it was judged by
+  nobody - and such an entry translates nothing while hiding a gap in the platform data or in
+  the engine itself: the half-translated languages of a project stayed invisible behind
+  exactly such a pair. The pass is the judge: an entry is listed only when every place it
+  answered would have come out the same without it. A live dictionary of 31 989 entries holds
+  22 of them, and removing all twenty-two left the English tree of 1 261 files byte for byte
+  as before. The plain report says the number, `--redundant` and `translate_redundant` list
+  them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
+
 ## 2026-09-10 – 0.100.0, 0.101.0
 
 ### Added

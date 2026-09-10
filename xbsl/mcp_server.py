@@ -1718,6 +1718,63 @@ def translate_unused(
 
 
 @mcp.tool()
+def translate_redundant(
+    root: str,
+    filter: str = "",
+    limit: int = 50,
+    offset: int = 0,
+    prune: bool = False,
+) -> dict:
+    """Entries the PLATFORM answers itself - the pass comes out the same word for word without them.
+
+    The mirror of translate_unused: there a key the project no longer carries, here one it
+    carries where the platform's own tables spell the very same word. Such an entry is
+    invisible by construction - nothing is missing, nothing collides, the tree builds - and
+    that is exactly why it is worth naming: while it stands, whatever the platform data or
+    this engine fails to answer stays hidden behind it. One live dictionary spelled the
+    languages of its project that way, and the half-translated enumeration behind that pair
+    was found by a test on an empty dictionary, never by the project itself.
+
+    root   – the project directory (a root without a dictionary next to or above it is
+             refused with the places looked at);
+    filter – a substring of the key OR of the value;
+    limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
+    prune  – REMOVE the listed entries from the dictionary files (off by default; it removes
+             exactly the page it answers with).
+
+    The verdict is EVIDENCE, not a second reading of the tables: an entry is listed only when
+    every place it answered would have come out the same without it, which is the same ground
+    the dictionary defects of translate_status rest on. So this runs a full pass over the
+    project, while translate_unused reads the sources textually. An entry the project never
+    uses is not listed here at all - that is the orphan question, and translate_unused
+    answers it.
+    """
+    from xbsl.translation import cli as translate_cli
+    from xbsl.translation import entries as entries_module
+
+    project, dictionary, error = translate_cli.load_for_tools(root)
+    if error:
+        return {"error": error}
+    path = translate_cli.dictionary_path_for(project)
+    needle = (filter or "").casefold()
+    rows = [
+        entry for entry in entries_module.echoed_entries(project, path, dictionary)
+        if not needle or needle in entry.key.casefold() or needle in entry.value.casefold()
+    ]
+    page, paging = entries_module.page_of(rows, limit, offset)
+    out = {**paging, "dictionary": str(path),
+           "redundant": [entry.as_dict() for entry in page]}
+    if rows:
+        out["note"] = i18n.t("translate.redundant.note")
+    if prune and page:
+        removed = entries_module.write_entries(
+            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
+        )
+        out["removed"] = removed["removed"]
+    return out
+
+
+@mcp.tool()
 def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = "",
                   target: str = "", comment: str = "") -> dict:
     """Write entries into the dictionary: add new ones, correct existing ones, remove a value.

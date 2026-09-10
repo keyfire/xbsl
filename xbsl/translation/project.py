@@ -89,6 +89,12 @@ class ProjectReport:
     #: Fatal-for-the-tree problems: a path collision, a swap without the target language.
     problems: list[str] = field(default_factory=list)
     written: int = 0
+    #: {entry key: the platform's own spelling} - dictionary entries the PLATFORM answers
+    #: itself everywhere they were used. Not a problem of the tree: it comes out the same
+    #: without them. They are named because of what they HIDE - an entry that repeats the
+    #: platform keeps a hole in the platform data or in this engine out of sight, and the
+    #: half-translated languages of a project stayed invisible behind exactly one such pair.
+    echoed: dict[str, str] = field(default_factory=dict)
 
     def merged_missing_tokens(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
@@ -189,6 +195,9 @@ class ProjectReport:
             "collisions": sum(len(r.collided()) for r in self.files.values()),
             "data_keys": sum(r.data_keys for r in self.files.values()),
             "data_keys_missing": sum(r.data_keys_missing for r in self.files.values()),
+            # Counted apart from everything above: this is not a gap of the project and not a
+            # defect of the tree, but the size of the dictionary's own dead weight.
+            "echoed_entries": len(self.echoed),
         }
 
     def collect_collisions(self) -> None:
@@ -336,6 +345,14 @@ def translate_project(
     _apply_language_flip(root, outputs, swaps, dictionary, report)
     report.collect_collisions()
     report.collect_dictionary_defects()
+    # The last word on the entries the pass USED: an entry the platform answers itself at
+    # every place it answered. A key the project declares is left out whatever the tables
+    # say - there the platform is gated off and the entry is the only answer - which also
+    # covers the surfaces that read the dictionary without going through the resolver.
+    report.echoed = {
+        key: value for key, value in resolver.echoes().items()
+        if key.rpartition(".")[2] not in resolver.project_names
+    }
 
     if out is not None:
         _write_tree(out, outputs, report)

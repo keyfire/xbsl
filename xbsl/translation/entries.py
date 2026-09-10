@@ -582,6 +582,32 @@ def unused_entries(root: Path, dictionary_path: Path, dictionary=None,
     return out
 
 
+def echoed_entries(root: Path, dictionary_path: Path, dictionary=None,
+                   report=None) -> list[Entry]:
+    """Dictionary entries the PLATFORM answers itself - the pass comes out the same without them.
+
+    The opposite question to `unused_entries`: there a key the project no longer carries, here
+    one it carries where the platform's own tables spell the very same word. Such an entry is
+    invisible by construction - nothing is missing, nothing collides, the tree builds - and
+    that is what makes it worth naming: while it stands, whatever the platform data or this
+    engine fails to answer stays hidden behind it. The languages of a project were exactly
+    that: one pair `Русский: Russian` in a live dictionary, and the half-translated enumeration
+    behind it was found by a test on an empty dictionary, never by the project.
+
+    The verdict comes from the PASS, not from a second reading of the tables: an entry is
+    listed only when every place it answered would have been answered the same way without it
+    (see Resolver.echoes), which is the same evidence the shadow report rests on - there the
+    platform overrules the entry, here it repeats it. An entry the project never used is not
+    listed at all: that is the orphan question, and it has its own answer.
+    """
+    from xbsl.translation import project as project_module
+
+    if report is None:
+        report = project_module.translate_project(root, dictionary, None)
+    echoed = report.echoed
+    return [entry for entry in read_entries(dictionary_path) if entry.key in echoed]
+
+
 def gaps_of_project(root: Path, dictionary) -> list[Gap]:
     """What the translator leaves behind on this project, ready for the table."""
     from xbsl.translation import project as project_module

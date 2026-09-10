@@ -243,6 +243,7 @@ xbsl translate e1c/app --table --limit 0                   # all three: entries,
 xbsl translate e1c/app --set правки.yaml                   # apply a batch file (see below)
 xbsl translate e1c/app --unused                            # entries the project no longer uses
 xbsl translate e1c/app --stale --filter ПодсказкаТарифа     # the same, about the names of one deleted component
+xbsl translate e1c/app --redundant                         # entries the platform answers itself
 ```
 
 `--table` answers all three questions in one pass, and that is what it exists for: the editor table asks exactly those three, and asked apart they are two identical walks over the sources in two processes plus a third reading of the same dictionary.
@@ -288,12 +289,27 @@ decoration taken off exactly as the writing pass takes them, and a name is looke
 FILE NAMES as well - a folder and a file go through the same token plane. A qualified key (`<Owner>.<Name>`) is judged by both halves - the sources
 spell them apart, and reading the dotted text as one name would call every such entry an orphan.
 
+`--redundant` is the other mirror of `--gaps`: not a word the dictionary lacks, but a word it
+spells exactly as the PLATFORM spells it anyway. Such an entry breaks nothing - the tree comes
+out word for word the same without it - and that is what makes it worth listing: it answers in
+place of the platform data, so a hole in that data, or in this engine, stays hidden behind it.
+One live dictionary spelled the languages of its own project descriptor that way, and the
+half-translated enumeration behind that pair was found by a test on an empty dictionary, never
+by the project. The plain report says how many there are without being asked; `--prune` removes
+exactly the rows the flag just listed.
+
+Unlike `--unused`, this one runs the PASS, and its verdict is evidence rather than a second
+reading of the tables: an entry is listed only when EVERY place it answered would have come out
+the same without it. So a pair that carries one position of its own - a word the platform
+spells in one role and not in another - is never called redundant, and an entry the project
+never uses is not listed here at all: that is the orphan question, and `--unused` answers it.
+
 `--gaps` shows the count, the first places to look at and `suggestion` - the platform's own
 spelling where it has one. A suggestion is a hint, never an answer: a name the project
 declared may deliberately need a different word, and an INTERNAL platform name (a metadata
 class such as `CodeAttrMd`) is never offered at all.
 
-**The MCP tools** are the same five, for an agent that fills the dictionary:
+**The MCP tools** are the same six, for an agent that fills the dictionary:
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
@@ -308,6 +324,11 @@ class such as `CodeAttrMd`) is never offered at all.
   default) removes exactly the page the tool answers with, `compact` keeps only the key, the
   kind, the file and the line, and `counts` sizes the orphans by kind; an answer with neither
   `filter` nor `since` carries a `note` saying what its reading is worth;
+- `translate_redundant` - the entries the PLATFORM answers itself, which the pass would spell
+  the same way without them: the workarounds that hide a gap in the platform data or in the
+  engine. `filter` narrows it, `prune` (off by default) removes exactly the page it answers
+  with; unlike `translate_unused` it runs a full pass, because the verdict rests on the places
+  the entry actually answered;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 

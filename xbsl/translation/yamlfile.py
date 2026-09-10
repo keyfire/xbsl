@@ -202,6 +202,9 @@ def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
         replacement = resolver.dictionary.token(stem)
         if replacement:
             report.user_done += 1
+            # A file name is spelled by the dictionary alone - no platform table names the
+            # project's own resources - so the entry is what renames the file with it.
+            resolver.note_entry_only(stem, replacement)
             _set_scalar(node, f"{replacement}.{extension}", edits)
         else:
             line, col = _at(node)
@@ -358,10 +361,16 @@ def _enum_spelling(value: str, enum_name: str | None, resolver, report) -> str |
     """The English spelling of one enumeration value: its enumeration's table, then the
     dictionary (a project enumeration has no platform table); None when neither answers."""
     replacement = platform_map.enum_value_english(enum_name or "", value)
-    if replacement is None:
-        replacement = resolver.dictionary.token(value)
-        if replacement:
-            report.user_done += 1
+    if replacement is not None:
+        # The platform answers first here, so an entry spelling the value the same way is
+        # never even asked - and that is exactly the shape of an entry that hides a hole in
+        # the data: the languages of a project were carried by one such pair.
+        resolver.note_platform_win(value, replacement)
+        return replacement
+    replacement = resolver.dictionary.token(value)
+    if replacement:
+        report.user_done += 1
+        resolver.note_entry_only(value, replacement)
     return replacement
 
 
@@ -802,6 +811,9 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
             replacement = resolver.dictionary.token(key)
             if replacement:
                 report.user_done += 1
+                # Nothing of the platform names this key - it is a custom property or event
+                # of a project component - so the entry alone keeps it translated.
+                resolver.note_entry_only(key, replacement)
                 _set_scalar(knode, replacement, edits)
             else:
                 line, col = _at(knode)

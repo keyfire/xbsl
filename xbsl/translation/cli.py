@@ -100,8 +100,32 @@ MESSAGES = {
               " (same thing: --stale)",
     },
     "translate.help.prune": {
-        "ru": "снять найденные --unused пары из словаря (правит файлы словаря)",
-        "en": "remove the entries --unused found (writes to the dictionary files)",
+        "ru": "снять найденные --unused (или --redundant) пары из словаря (правит файлы словаря)",
+        "en": "remove the entries --unused (or --redundant) found (writes to the dictionary files)",
+    },
+    "translate.help.redundant": {
+        "ru": "показать пары словаря, на которые платформа отвечает сама тем же словом"
+              " (проход по проекту; такая пара прячет пробел данных или движка)",
+        "en": "list the dictionary entries the platform answers itself with the same word"
+              " (runs a pass; such an entry hides a gap in the data or in the engine)",
+    },
+    "translate.redundant-header": {
+        "ru": "пар, на которые платформа отвечает сама: показано {shown} из {total}",
+        "en": "entries the platform answers itself: {shown} of {total} shown",
+    },
+    "translate.redundant-none": {
+        "ru": "таких пар нет: словарь нигде не повторяет ответ платформы",
+        "en": "no such entries: the dictionary repeats the platform's answer nowhere",
+    },
+    "translate.summary-redundant": {
+        "ru": "платформа сама отвечает на пар словаря: {entries} (список – --redundant)",
+        "en": "entries the platform answers itself: {entries} (list them with --redundant)",
+    },
+    "translate.redundant.note": {
+        "ru": "пара, повторяющая ответ платформы, ничего не переводит – но прячет то, чего"
+              " платформа или движок не отвечают сами; снимайте её и смотрите, что вылезет",
+        "en": "an entry that repeats the platform translates nothing - but it hides whatever"
+              " the platform or the engine does not answer on its own; remove it and see",
     },
     "translate.help.since": {
         "ru": "сироты ОДНОЙ правки: оставить в --unused только ключи, которые встречались"
@@ -318,6 +342,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--entries", action="store_true", help=i18n.t("translate.help.entries"))
     parser.add_argument("--unused", "--stale", action="store_true",
                         help=i18n.t("translate.help.unused"))
+    parser.add_argument("--redundant", action="store_true",
+                        help=i18n.t("translate.help.redundant"))
     parser.add_argument("--prune", action="store_true", help=i18n.t("translate.help.prune"))
     parser.add_argument("--since", default="", help=i18n.t("translate.help.since"))
     parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
@@ -386,6 +412,8 @@ def cli_main(argv: list[str] | None = None) -> int:
         return _list_table(args, root, loaded)
     if args.entries:
         return _list_entries(args, root, loaded)
+    if args.redundant:
+        return _list_redundant(args, root, loaded)
     if args.unused or args.prune:
         return _list_unused(args, root, loaded)
     if args.gaps:
@@ -503,6 +531,7 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
         "missing_phrases": report.merged_missing_phrases(),
         "missing_literals": report.merged_missing_literals(),
         "platform_gaps": report.merged_platform_gaps(),
+        "redundant_entries": report.echoed,
         "renames": report.renames,
         "warnings": {
             rel: [list(w) for w in fr.warnings]
@@ -584,6 +613,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
         ))
     if totals["data_keys"]:
         print(i18n.t("translate.summary-data-keys", keys=totals["data_keys"]))
+    if totals["echoed_entries"]:
+        print(i18n.t("translate.summary-redundant", entries=totals["echoed_entries"]))
     if totals["warnings"]:
         # The details, not only the count: a warning asks a person to look at ONE place, and
         # a bare number sends them hunting for it with the json mode.
@@ -753,6 +784,62 @@ def _render_unused(args, page: list, total: int, payload: dict) -> None:
               f"{Path(entry.file).name}:{entry.line}")
     if payload.get("note"):
         print(payload["note"])
+    removed = payload.get("removed")
+    if removed is not None:
+        if len(page) < total:
+            print(i18n.t("translate.prune-partial", shown=len(page), total=total))
+        print(i18n.t("translate.pruned", removed=removed))
+
+
+def _list_redundant(args, root: Path, loaded) -> int:
+    """Pairs the PLATFORM answers itself; `--prune` takes them out.
+
+    The mirror of `--unused`: there a key the project has no place for, here one it has a
+    place for where the platform spells the same word anyway. Nothing breaks while such a
+    pair stands - that is the trouble with it: it answers in place of the platform data, and
+    whatever the data or this engine fails to spell stays hidden behind it until someone
+    happens to translate the project without a dictionary.
+
+    Unlike `--unused` this runs the PASS: the verdict is evidence, not a second reading of
+    the tables - an entry is listed only when every place it answered would have come out
+    the same without it.
+    """
+    from xbsl.translation import entries as entries_module
+
+    path = _dictionary_path(args, root)
+    if path is None:
+        return _no_dictionary(root)
+    needle = args.filter.casefold()
+    rows = [
+        entry for entry in entries_module.echoed_entries(root, path, loaded)
+        if (args.kind in ("any", entry.kind))
+        and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
+    ]
+    total = len(rows)
+    page = _page(rows, args)
+    payload = {
+        "dictionary": str(path), "total": total,
+        "redundant": [entry.as_dict() for entry in page],
+    }
+    if total:
+        payload["note"] = i18n.t("translate.redundant.note")
+    if args.prune and page:
+        removed = entries_module.write_entries(
+            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
+        )
+        payload["removed"] = removed["removed"]
+    return _emit(args, payload, page, lambda _rows: _render_redundant(args, page, total, payload))
+
+
+def _render_redundant(args, page: list, total: int, payload: dict) -> None:
+    if not total:
+        print(i18n.t("translate.redundant-none"))
+        return
+    print(i18n.t("translate.redundant-header", shown=len(page), total=total))
+    for entry in page:
+        print(f"  {entry.kind:7} {entry.key}  ->  {entry.value}   "
+              f"{Path(entry.file).name}:{entry.line}")
+    print(payload["note"])
     removed = payload.get("removed")
     if removed is not None:
         if len(page) < total:
