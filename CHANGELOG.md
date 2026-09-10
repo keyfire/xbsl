@@ -21,6 +21,13 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **The metadata tools point at each other.** A caller reads the description of ONE tool:
+  `meta_add_field` adds the key of a localized string with the default-language text, while
+  the text of every translation is written by `meta_set_localization` - and not learning that
+  cost a whole task, written out by hand. Neighbouring tools now carry a "see also" line, in
+  the MCP descriptions and in the CLI help alike, where a command's text became its
+  description as well: `xbsl add-field --help` printed the arguments and nothing about the
+  command itself. ([#4](https://github.com/keyfire/xbsl/pull/4))
 - **`translate --redundant`: the dictionary entries the platform answers itself.** An entry
   that CONTRADICTS the platform has long been judged; one that REPEATS it was judged by
   nobody - and such an entry translates nothing while hiding a gap in the platform data or in

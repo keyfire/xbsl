@@ -757,8 +757,10 @@ _CORE_MESSAGES = {
         "en": "1C:Element metadata scaffolding (output – JSON)",
     },
     "cli.help.scaf.new-project": {
-        "ru": "создать проект: Проект.yaml + Проект.xbsl + подсистема",
-        "en": "create a project: Project.yaml + Project.xbsl + a subsystem",
+        "ru": "создать проект: Проект.yaml + Проект.xbsl + подсистема; см. также add-subsystem и "
+              "new-object – чем наполняется новый проект",
+        "en": "create a project: Project.yaml + Project.xbsl + a subsystem; see also "
+              "add-subsystem and new-object, which fill the new project",
     },
     # -- scaffolding positionals and flags --
     "cli.help.scaf.arg.project-root": {
@@ -898,8 +900,10 @@ _CORE_MESSAGES = {
         "en": "operation",
     },
     "cli.help.scaf.new-object": {
-        "ru": "создать объект конфигурации (yaml + модуль по виду)",
-        "en": "create a configuration object (yaml + a module by kind)",
+        "ru": "создать объект конфигурации (yaml + модуль по виду); см. также add-field – его "
+              "реквизиты, add-form – его формы",
+        "en": "create a configuration object (yaml + a module by kind); see also add-field for "
+              "its items and add-form for its forms",
     },
     "cli.help.scaf.new-object-routes": {
         "ru": 'маршруты HttpСервис: "GET /, POST /, GET /{{id}}"',
@@ -910,16 +914,22 @@ _CORE_MESSAGES = {
         "en": "report description (JSON: source, rows, columns, measures)",
     },
     "cli.help.scaf.add-field": {
-        "ru": "добавить реквизит/измерение/ресурс/значение/ТЧ",
-        "en": "add an attribute/dimension/resource/value/tabular section",
+        "ru": "добавить реквизит/измерение/ресурс/значение/ТЧ; см. также set-field-property – "
+              "свойства уже существующего элемента, set-localization – тексты строки "
+              "ЛокализованныеСтроки по языкам",
+        "en": "add an attribute/dimension/resource/value/tabular section; see also "
+              "set-field-property for an item that already exists and set-localization for the "
+              "texts of a LocalizedStrings string per language",
     },
     "cli.help.scaf.add-field-tabular": {
         "ru": "имя табличной части (реквизит добавляется в неё)",
         "en": "tabular section name (the attribute is added into it)",
     },
     "cli.help.scaf.add-route": {
-        "ru": "добавить маршруты в существующий HttpСервис",
-        "en": "add routes to an existing HttpService",
+        "ru": "добавить маршруты в существующий HttpСервис; см. также new-object --routes – "
+              "маршруты сразу при создании сервиса",
+        "en": "add routes to an existing HttpService; see also new-object --routes, which takes "
+              "the routes at creation time",
     },
     "cli.help.scaf.field-prop": {
         "ru": "свойство элемента (можно повторять): ЗначениеПоУмолчанию=https://example.com, "
@@ -930,8 +940,10 @@ _CORE_MESSAGES = {
               "Autonumbering.Prefix=RQ",
     },
     "cli.help.scaf.set-field-property": {
-        "ru": "задать свойства существующего элемента секции (константы, реквизита ...)",
-        "en": "set properties of an existing section item (a constant, an attribute ...)",
+        "ru": "задать свойства существующего элемента секции (константы, реквизита ...); см. "
+              "также add-field – добавить элемент, rename-object – переименование",
+        "en": "set properties of an existing section item (a constant, an attribute ...); see "
+              "also add-field to add one and rename-object to rename it",
     },
     "cli.help.scaf.sfp-name": {
         "ru": "имя элемента в секции",
@@ -950,8 +962,10 @@ _CORE_MESSAGES = {
               "the InterfaceComponent kind only",
     },
     "cli.help.scaf.add-localization": {
-        "ru": "добавить файл перевода (раздел Локализация) к элементу ЛокализованныеСтроки",
-        "en": "add a translation file (the Localization section) to a LocalizedStrings element",
+        "ru": "добавить файл перевода (секция Локализация) в элемент ЛокализованныеСтроки; см. "
+              "также set-localization – текст строки сразу во всех языках",
+        "en": "add a translation file (the Localization section) to a LocalizedStrings element; "
+              "see also set-localization, which writes the text of a string into every language",
     },
     "cli.help.scaf.al-yaml": {
         "ru": "yaml элемента ЛокализованныеСтроки",
@@ -962,9 +976,11 @@ _CORE_MESSAGES = {
         "en": "the translation language: Russian/English or the Ru/En code",
     },
     "cli.help.scaf.set-localization": {
-        "ru": "записать строку локализации во все языки сразу: в элемент и в его переводы",
-        "en": "write one localized string into every language at once: the element and its"
-              " translations",
+        "ru": "записать строку локализации во все языки сразу: в элемент и в его переводы; см. "
+              "также add-localization – добавить язык, add-field – завести саму строку",
+        "en": "write one localized string into every language at once: the element and its "
+              "translations; see also add-localization for a language and add-field for the "
+              "string itself",
     },
     "cli.help.scaf.sl-name": {
         "ru": "ключ строки локализации (одно слово)",
@@ -980,13 +996,16 @@ _CORE_MESSAGES = {
               " else Strings)",
     },
     "cli.help.scaf.localization-info": {
-        "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization)",
-        "en": "the languages and translations of a LocalizedStrings element "
-              "(candidates for add-localization)",
+        "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization; "
+              "тексты пишет set-localization)",
+        "en": "the languages and translations of a LocalizedStrings element (candidates for "
+              "add-localization; the texts are written by set-localization)",
     },
     "cli.help.scaf.add-method": {
-        "ru": "добавить метод в модуль .xbsl, не разрывая аннотации",
-        "en": "add a method to an .xbsl module without breaking annotations",
+        "ru": "добавить метод в модуль .xbsl, не разрывая аннотации; см. также form-handlers – "
+              "заготовка обработчика события компонента",
+        "en": "add a method to an .xbsl module without breaking annotations; see also "
+              "form-handlers for a stub bound to a component event",
     },
     "cli.help.scaf.add-method-params": {
         "ru": "список параметров как в сигнатуре",
@@ -1013,8 +1032,10 @@ _CORE_MESSAGES = {
         "en": "a one-line body instead of the // TODO stub",
     },
     "cli.help.scaf.add-form": {
-        "ru": "создать формы объекта и зарегистрировать в Интерфейс",
-        "en": "create the object's forms and register them in Interface",
+        "ru": "создать формы объекта и зарегистрировать в Интерфейс; см. также form-tree – дерево "
+              "созданной формы, form-handlers – её обработчики",
+        "en": "create the object's forms and register them in Interface; see also form-tree for "
+              "the tree of the new form and form-handlers for its handlers",
     },
     "cli.help.scaf.yaml-vs-name": {
         "ru": "yaml объекта (вместо --name)",
@@ -1035,16 +1056,20 @@ _CORE_MESSAGES = {
         "en": 'placeholder image expression, e.g. "Resource{{Аккаунт.svg}}.Link"',
     },
     "cli.help.scaf.add-subsystem": {
-        "ru": "создать подсистему (папка + Подсистема.yaml)",
-        "en": "create a subsystem (a folder + Subsystem.yaml)",
+        "ru": "создать подсистему (папка + Подсистема.yaml); см. также new-object – объект "
+              "создаётся в каталоге подсистемы",
+        "en": "create a subsystem (a folder + Subsystem.yaml); see also new-object, which creates "
+              "an object inside such a folder",
     },
     "cli.help.scaf.add-subsystem-uses": {
         "ru": "имена подсистем через запятую",
         "en": "subsystem names, comma-separated",
     },
     "cli.help.scaf.add-dependency": {
-        "ru": "подключить библиотеку к проекту (раздел Библиотеки Проект.yaml)",
-        "en": "attach a library to the project (the Библиотеки section of Project.yaml)",
+        "ru": "подключить библиотеку к проекту (секция Библиотеки Проект.yaml); см. также "
+              "project-info – какие библиотеки уже подключены",
+        "en": "attach a library to the project (the Библиотеки section of Project.yaml); see also "
+              "project-info for the libraries already attached",
     },
     "cli.help.scaf.add-dependency-vendor": {
         "ru": "поставщик библиотеки",
@@ -1063,8 +1088,10 @@ _CORE_MESSAGES = {
         "en": "Project.yaml (when there are several projects under the root)",
     },
     "cli.help.scaf.rename-object": {
-        "ru": "переименовать объект (файлы, формы) и обновить ссылки по всему проекту",
-        "en": "rename an object (files, forms) and update references across the whole project",
+        "ru": "переименовать объект (файлы, формы) и обновить ссылки по всему проекту; см. также "
+              "delete-object – удалить объект целиком",
+        "en": "rename an object (files, forms) and update references across the whole project; "
+              "see also delete-object, which removes the same set of files",
     },
     "cli.help.scaf.rename-new-presentation": {
         "ru": "новое Представление/Заголовок (по умолчанию – новое имя)",
@@ -1080,9 +1107,11 @@ _CORE_MESSAGES = {
     },
     "cli.help.scaf.delete-object": {
         "ru": "удалить объект целиком (пара yaml+xbsl, формы, строка списка) и перечислить "
-              "оставшиеся упоминания; без --apply – только план",
+              "оставшиеся упоминания; без --apply – только план; см. также rename-object – "
+              "переименовать вместо удаления",
         "en": "delete an object whole (the yaml+xbsl pair, forms, the list row) and list the "
-              "remaining mentions; without --apply - the plan only",
+              "remaining mentions; without --apply - the plan only; see also rename-object, "
+              "which renames instead of removing",
     },
     "cli.help.scaf.delete-apply": {
         "ru": "выполнить удаление (без флага печатается план: удаление необратимо)",
@@ -1090,8 +1119,10 @@ _CORE_MESSAGES = {
               "irreversible)",
     },
     "cli.help.scaf.set-access": {
-        "ru": "задать КонтрольДоступа.Разрешения объекта",
-        "en": "set the object's AccessControl.Разрешения",
+        "ru": "задать КонтрольДоступа.Разрешения объекта; см. также object-info – текущие права и "
+              "их набор у этого вида",
+        "en": "set the object's AccessControl.Разрешения; see also object-info for the current "
+              "rights and the set this kind has",
     },
     "cli.help.scaf.set-access-default": {
         "ru": "способ для права ПоУмолчанию",
@@ -1132,8 +1163,10 @@ _CORE_MESSAGES = {
         "en": "no list of objects: the counts by kind alone",
     },
     "cli.help.scaf.form-tree": {
-        "ru": "дерево компонента интерфейса (узлы, слоты, свойства со спанами)",
-        "en": "interface component tree (nodes, slots, properties with spans)",
+        "ru": "дерево компонента интерфейса (узлы, слоты, свойства со спанами); см. также "
+              "form-edit – правки узлов по их ид, form-handlers – их обработчики",
+        "en": "interface component tree (nodes, slots, properties with spans); see also form-edit "
+              "for edits by node id and form-handlers for their handlers",
     },
     "cli.help.scaf.form-tree-at": {
         "ru": "вместо дерева вернуть узел по смещению в файле (синхронизация курсора)",
@@ -1177,8 +1210,10 @@ _CORE_MESSAGES = {
         "en": "OFFSET",
     },
     "cli.help.scaf.form-edit": {
-        "ru": "операция конструктора форм: точечная правка yaml компонента интерфейса",
-        "en": "form-designer operation: a pinpoint edit of an interface component's yaml",
+        "ru": "операция конструктора форм: точечная правка yaml компонента интерфейса; см. также "
+              "form-tree – ид узлов, которыми адресуются правки",
+        "en": "form-designer operation: a pinpoint edit of an interface component's yaml; see "
+              "also form-tree for the node ids the edits address",
     },
     "cli.help.scaf.fe-parent": {
         "ru": "id узла-контейнера (insert/insert-fragment)",
@@ -1253,8 +1288,10 @@ _CORE_MESSAGES = {
         "en": "the property's new Type (property-retype)",
     },
     "cli.help.scaf.form-handlers": {
-        "ru": "обработчики парного модуля компонента: список методов или заготовка обработчика",
-        "en": "handlers of the component's paired module: a method list or a handler stub",
+        "ru": "обработчики парного модуля компонента: список методов или заготовка обработчика; "
+              "см. также form-tree – ид узлов, add-method – метод вне события",
+        "en": "handlers of the component's paired module: a method list or a handler stub; see "
+              "also form-tree for the node ids and add-method for a method outside any event",
     },
     "cli.help.scaf.fh-node": {
         "ru": "id узла (создание обработчика; без --node/--key – список методов модуля)",

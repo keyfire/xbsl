@@ -564,7 +564,17 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("new-project", help=i18n.t("cli.help.scaf.new-project"))
+    def command(name: str) -> argparse.ArgumentParser:
+        """One subcommand, its text serving as both the list entry and the description.
+
+        `xbsl <command> --help` printed the arguments and nothing about the command itself,
+        so a pointer to the tool that finishes the job (a field and the TEXTS of its
+        translations are two commands) reached only the reader of the whole command list.
+        """
+        text = i18n.t(f"cli.help.scaf.{name}")
+        return sub.add_parser(name, help=text, description=text)
+
+    p = command("new-project")
     p.add_argument("root", help=i18n.t("cli.help.scaf.np-root"))
     p.add_argument("vendor", help=i18n.t("cli.help.scaf.np-vendor"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.np-name"))
@@ -574,7 +584,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--subsystem", default="Основное", help=i18n.t("cli.help.scaf.np-subsystem"))
     p.add_argument("--library", action="store_true", help=i18n.t("cli.help.scaf.np-library"))
 
-    p = sub.add_parser("new-object", help=i18n.t("cli.help.scaf.new-object"))
+    p = command("new-object")
     p.add_argument("directory", help=i18n.t("cli.help.scaf.no-directory"))
     p.add_argument("kind", help=i18n.t("cli.help.scaf.no-kind"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.no-name"))
@@ -586,7 +596,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--presentation", help=i18n.t("cli.help.scaf.no-presentation"))
     p.add_argument("--base", help=i18n.t("cli.help.scaf.no-base"))
 
-    p = sub.add_parser("add-field", help=i18n.t("cli.help.scaf.add-field"))
+    p = command("add-field")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
     # field_kind help lists the literal accepted kind names - Russian XBSL values, not prose.
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
@@ -597,7 +607,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--prop", action="append", metavar="КЛЮЧ=ЗНАЧЕНИЕ",
                    help=i18n.t("cli.help.scaf.field-prop"))
 
-    p = sub.add_parser("set-field-property", help=i18n.t("cli.help.scaf.set-field-property"))
+    p = command("set-field-property")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.af-yaml"))
     p.add_argument("field_kind", help=", ".join(("реквизит", "измерение", "ресурс", "значение",
                                                  "параметр", "поле", "константа")))
@@ -606,25 +616,25 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                    help=i18n.t("cli.help.scaf.field-prop"))
     p.add_argument("--tabular", help=i18n.t("cli.help.scaf.add-field-tabular"))
 
-    p = sub.add_parser("add-route", help=i18n.t("cli.help.scaf.add-route"))
+    p = command("add-route")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.ar-yaml"))
     p.add_argument("routes", help=i18n.t("cli.help.scaf.ar-routes"))
 
-    p = sub.add_parser("add-localization", help=i18n.t("cli.help.scaf.add-localization"))
+    p = command("add-localization")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
     p.add_argument("language", help=i18n.t("cli.help.scaf.al-language"))
 
-    p = sub.add_parser("set-localization", help=i18n.t("cli.help.scaf.set-localization"))
+    p = command("set-localization")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.sl-name"))
     p.add_argument("--value", action="append", metavar="ЯЗЫК=ТЕКСТ",
                    help=i18n.t("cli.help.scaf.sl-value"))
     p.add_argument("--section", default="", help=i18n.t("cli.help.scaf.sl-section"))
 
-    p = sub.add_parser("localization-info", help=i18n.t("cli.help.scaf.localization-info"))
+    p = command("localization-info")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
 
-    p = sub.add_parser("add-method", help=i18n.t("cli.help.scaf.add-method"))
+    p = command("add-method")
     p.add_argument("module_path", help=i18n.t("cli.help.scaf.am-module"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.am-name"))
     p.add_argument("--params", default="", help=i18n.t("cli.help.scaf.add-method-params"))
@@ -634,7 +644,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--before", help=i18n.t("cli.help.scaf.add-method-before"))
     p.add_argument("--body", help=i18n.t("cli.help.scaf.add-method-body"))
 
-    p = sub.add_parser("add-form", help=i18n.t("cli.help.scaf.add-form"))
+    p = command("add-form")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.af2-name"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
@@ -643,21 +653,21 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--card-placeholder", help=i18n.t("cli.help.scaf.add-form-card-placeholder"))
     p.add_argument("--overwrite", action="store_true", help=i18n.t("cli.help.scaf.af2-overwrite"))
 
-    p = sub.add_parser("add-subsystem", help=i18n.t("cli.help.scaf.add-subsystem"))
+    p = command("add-subsystem")
     p.add_argument("parent_dir", help=i18n.t("cli.help.scaf.as-parent"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.as-name"))
     p.add_argument("--representation", help=i18n.t("cli.help.scaf.as-representation"))
     p.add_argument("--no-auto-interface", action="store_true", help=i18n.t("cli.help.scaf.as-no-auto-interface"))
     p.add_argument("--uses", help=i18n.t("cli.help.scaf.add-subsystem-uses"))
 
-    p = sub.add_parser("add-dependency", help=i18n.t("cli.help.scaf.add-dependency"))
+    p = command("add-dependency")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("vendor", help=i18n.t("cli.help.scaf.add-dependency-vendor"))
     p.add_argument("name", help=i18n.t("cli.help.scaf.add-dependency-name"))
     p.add_argument("version", help=i18n.t("cli.help.scaf.add-dependency-version"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.add-dependency-path"))
 
-    p = sub.add_parser("rename-object", help=i18n.t("cli.help.scaf.rename-object"))
+    p = command("rename-object")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("old_name", help=i18n.t("cli.help.scaf.ro-old"))
     p.add_argument("new_name", help=i18n.t("cli.help.scaf.ro-new"))
@@ -665,13 +675,13 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--old-presentation", help=i18n.t("cli.help.scaf.rename-old-presentation"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.rename-path"))
 
-    p = sub.add_parser("delete-object", help=i18n.t("cli.help.scaf.delete-object"))
+    p = command("delete-object")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
     p.add_argument("--apply", action="store_true", help=i18n.t("cli.help.scaf.delete-apply"))
 
-    p = sub.add_parser("set-access", help=i18n.t("cli.help.scaf.set-access"))
+    p = command("set-access")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
@@ -680,19 +690,19 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                    help=i18n.t("cli.help.scaf.set-access-permission"))
     p.add_argument("--calc-by", help=i18n.t("cli.help.scaf.set-access-calc-by"))
 
-    p = sub.add_parser("object-info", help=i18n.t("cli.help.scaf.object-info"))
+    p = command("object-info")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
 
-    p = sub.add_parser("project-info", help=i18n.t("cli.help.scaf.project-info"))
+    p = command("project-info")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--kind", help=i18n.t("cli.help.scaf.project-info-kind"))
     p.add_argument("--subsystem", help=i18n.t("cli.help.scaf.project-info-subsystem"))
     p.add_argument("--brief", action="store_true",
                    help=i18n.t("cli.help.scaf.project-info-brief"))
 
-    p = sub.add_parser("form-tree", help=i18n.t("cli.help.scaf.form-tree"))
+    p = command("form-tree")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
     p.add_argument("--at", type=int, metavar=i18n.t("cli.help.scaf.meta.offset"),
                    help=i18n.t("cli.help.scaf.form-tree-at"))
@@ -708,7 +718,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--brief", action="store_true",
                    help=i18n.t("cli.help.scaf.form-tree-brief"))
 
-    p = sub.add_parser("form-edit", help=i18n.t("cli.help.scaf.form-edit"))
+    p = command("form-edit")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
     # A metavar instead of the choice list: sixteen values drown the usage line, so the
     # list goes into the description - the same shape as field_kind above.
@@ -740,7 +750,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
                    help=i18n.t("cli.help.scaf.fe-fragment-file"))
     p.add_argument("--new-type", help=i18n.t("cli.help.scaf.fe-new-type"))
 
-    p = sub.add_parser("form-handlers", help=i18n.t("cli.help.scaf.form-handlers"))
+    p = command("form-handlers")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
     p.add_argument("--node", help=i18n.t("cli.help.scaf.fh-node"))
     p.add_argument("--key", help=i18n.t("cli.help.scaf.fh-key"))

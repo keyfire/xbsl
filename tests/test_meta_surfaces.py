@@ -5,13 +5,15 @@ extra is not needed; the LSP part checks the handlers directly when pygls is ins
 otherwise it is skipped.
 """
 
+import argparse
 import inspect
 import json
+import re
 from pathlib import Path
 
 import pytest
 
-from xbsl import cli, scaffold
+from xbsl import cli, i18n, scaffold
 
 
 def test_mcp_meta_tools_registered(mcp_module):
@@ -378,6 +380,78 @@ def _elsewhere(tmp_path, monkeypatch) -> tuple[Path, Path]:
     root = tmp_path / "worktree"
     root.mkdir()
     return server_cwd, root
+
+
+# --- the pointers between neighbouring tools --------------------------------------------------
+#
+# A caller reads the description of the ONE tool it is about to use. meta_add_field writes the
+# key of a localized string and the default-language text, while the text of every translation
+# is written by meta_set_localization - and a caller that never heard of the second tool wrote
+# the translations by hand. So a tool that finishes another one's job says so, in the MCP
+# description and in the CLI help alike; these two hold the pointers to real tools and keep the
+# pair that burned from going one-way.
+
+#: The pairs that must be visible from BOTH sides, whatever else the prose says.
+_MUTUAL = (
+    ("meta_add_localization", "meta_set_localization"),
+    ("meta_set_localization", "meta_localization_info"),
+    ("meta_rename_object", "meta_delete_object"),
+)
+
+
+def _see_also(doc: str) -> str:
+    """The see-also paragraph of a docstring, "" when it has none."""
+    _head, marker, tail = (doc or "").partition("See also:")
+    return tail if marker else ""
+
+
+def test_mcp_see_also_lines_name_tools_that_exist(mcp_module):
+    tools = set(mcp_module.mcp.tools)
+    named = 0
+    for name, tool in mcp_module.mcp.tools.items():
+        if not name.startswith("meta_"):
+            continue
+        text = _see_also(tool.__doc__)
+        for word in re.findall(r"\bmeta_\w+", text):
+            assert word in tools, f"{name}: see also names a tool that does not exist: {word}"
+            assert word != name, f"{name}: see also points at itself"
+            named += 1
+    assert named >= 20, "the pointers between the meta tools have gone missing"
+
+
+def test_the_pair_that_burned_is_visible_from_both_sides(mcp_module):
+    """meta_add_field names the tool that writes the translations, and the localization tools
+    name each other: the one-way pointer is exactly what cost a task its translations."""
+    docs = {name: tool.__doc__ or "" for name, tool in mcp_module.mcp.tools.items()}
+
+    assert "meta_set_localization" in _see_also(docs["meta_add_field"])
+    for one, other in _MUTUAL:
+        assert other in _see_also(docs[one]), f"{one} does not point at {other}"
+        assert one in _see_also(docs[other]), f"{other} does not point back at {one}"
+
+
+def test_cli_help_carries_the_same_pointers():
+    """The same pairs in the CLI, where the help is also the command's DESCRIPTION: `xbsl
+    add-field --help` used to print the arguments and nothing about the command itself."""
+    i18n.set_lang("ru")
+    parser = cli._scaffold_parser()
+    described = {}
+    for action in parser._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            described = {name: sub.description for name, sub in action.choices.items()}
+    assert described, "the scaffold subcommands are gone"
+    for name, description in described.items():
+        assert description, f"{name}: no description in the help"
+    known = set(described)
+    for name, description in described.items():
+        _head, marker, tail = description.partition("см. также")
+        if not marker:
+            continue
+        for word in re.findall(r"\b[a-z]+-[a-z-]+\b", tail):
+            assert word in known, f"{name}: see also names an unknown command: {word}"
+    assert "set-localization" in described["add-field"]
+    assert "set-localization" in described["add-localization"]
+    assert "add-localization" in described["set-localization"]
 
 
 def test_every_meta_tool_takes_root_and_documents_it(mcp_module):
