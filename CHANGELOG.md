@@ -12,6 +12,15 @@ history in
 Entries here use the English spelling of platform metadata names (`Name`, `Code`, `Attributes`);
 the Russian spellings are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/CHANGELOG.ru.md).
 
+## 2026-09-10 – 0.100.0
+
+### Added
+- **`translate_unused` answers compactly and counts the orphans by kind.** `compact=true`
+  keeps only the key, the kind, the file and the line of each entry – a cleaning pass needs
+  the places, not the translations, and a page of sixty full rows cost five thousand
+  characters for nineteen needed keys – and every answer carries `counts` over the whole
+  filtered set, so the size of the cleaning is known before a page is read.
+
 ## 2026-09-09 – 0.97.0, 0.98.0, 0.99.0
 
 ### Added

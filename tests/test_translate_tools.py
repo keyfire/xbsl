@@ -250,3 +250,25 @@ def test_translate_unused_filters_by_the_name_of_what_was_deleted(mcp_module, tm
     answer = mcp_module.translate_unused(str(project), filter="СнятыйКомпонент")
 
     assert {row["key"] for row in answer["unused"]} == {"СнятыйКомпонент"}
+
+
+@pytest.mark.needs_data
+def test_translate_unused_compact_rows_and_counts_by_kind(mcp_module, tmp_path):
+    """A cleaning pass needs the keys and their places, not the translations: `compact`
+    drops the values, and `counts` sizes the work over the whole set before a page is read."""
+    project = _project(tmp_path)
+    folder = _dictionary(tmp_path / "vendor")
+    (folder / "020-more.yaml").write_text(
+        "version: 1\nlanguage: en\ntokens:\n    СнятоеИмя: RemovedName\n"
+        "phrases:\n    Снятая строка комментария.: \"A removed comment line.\"\n",
+        encoding="utf-8",
+    )
+
+    answer = mcp_module.translate_unused(str(project), compact=True, limit=1)
+
+    assert answer["counts"] == {"token": 1, "phrase": 1}
+    assert len(answer["unused"]) == 1
+    assert set(answer["unused"][0]) == {"key", "kind", "file", "line"}
+    full = mcp_module.translate_unused(str(project))
+    assert full["counts"] == {"token": 1, "phrase": 1}
+    assert "value" in full["unused"][0]

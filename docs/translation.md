@@ -288,8 +288,9 @@ class such as `CodeAttrMd`) is never offered at all.
 - `translate_entries` - what the dictionary already says, with the file and line of each
   entry, so a new word stays consistent with the accepted ones;
 - `translate_unused` - the opposite question: what the dictionary still says and the
-  project no longer has; `filter` narrows it to the names of one deleted component, and
-  `prune` (off by default) removes exactly the page the tool answers with;
+  project no longer has; `filter` narrows it to the names of one deleted component,
+  `prune` (off by default) removes exactly the page the tool answers with, `compact` keeps
+  only the key, the kind, the file and the line, and `counts` sizes the orphans by kind;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
 

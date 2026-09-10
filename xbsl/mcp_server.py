@@ -1628,6 +1628,7 @@ def translate_unused(
     limit: int = 50,
     offset: int = 0,
     prune: bool = False,
+    compact: bool = False,
 ) -> dict:
     """The opposite of translate_gaps: what the DICTIONARY still says and the project has not.
 
@@ -1647,7 +1648,12 @@ def translate_unused(
     prune  – REMOVE the listed entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
              mistaken reading destroys a translation. It removes exactly the page it
-             answers with, so `kind`, `filter` and the page apply to the removal too.
+             answers with, so `kind`, `filter` and the page apply to the removal too;
+    compact – each row is only {key, kind, file, line}: the values are the bulk of a
+             page, and a cleaning pass needs the keys and their places, not the
+             translations.
+    Every answer carries `counts` - the orphans by kind over the WHOLE filtered set, not
+    the page - so the size of a cleaning is known before any page is read.
 
     The reading is textual, and the direction of its error is the point: a name that also
     occurs in prose may be counted as used, which merely leaves an entry in place, but a LIVE
@@ -1672,8 +1678,16 @@ def translate_unused(
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
     page, paging = entries_module.page_of(rows, limit, offset)
-    out = {**paging, "dictionary": str(path),
-           "unused": [entry.as_dict() for entry in page]}
+    counts: dict[str, int] = {}
+    for entry in rows:
+        counts[entry.kind] = counts.get(entry.kind, 0) + 1
+    out = {**paging, "dictionary": str(path), "counts": counts}
+    if compact:
+        out["unused"] = [
+            {"key": e.key, "kind": e.kind, "file": e.file, "line": e.line} for e in page
+        ]
+    else:
+        out["unused"] = [entry.as_dict() for entry in page]
     if prune and page:
         removed = entries_module.write_entries(
             path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
