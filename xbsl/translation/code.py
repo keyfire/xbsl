@@ -86,6 +86,59 @@ class Resolver:
         #: exactly like one of them is usually COMPARED against that data, and translating
         #: the literal parts the comparison from values no translation ever touches.
         self.data_values = data_values
+        #: {entry key: the platform's own spelling} for the entries that answered where the
+        #: platform answers the same word, and the keys that answered where it does not.
+        #: An entry is judged an echo only when every place it answered agrees, so a word the
+        #: dictionary carries for a place of its own is never called redundant.
+        self.echoed: dict[str, str] = {}
+        self.needed: set[str] = set()
+
+    # --- the judgement of the entries the pass used ----------------------------------------
+    #
+    # The mirror image of the shadow report (see _identifier_edit): there an entry the
+    # platform OVERRULES, here one it merely REPEATS. Such an entry is a workaround nobody
+    # can see - the tree comes out the same without it - and while it stands it hides a hole
+    # in the engine that the platform data would fill: the languages of a project were
+    # spelled by exactly such an entry, and the gap behind it was found by a test on an empty
+    # dictionary, never by the live project.
+
+    def _judge_entry(self, name: str, hit: str, platform: str | None, *scopes: str) -> None:
+        """Compare an entry that answered with what the platform would have said instead.
+
+        `platform` is the reading the pass would take WITHOUT the entry - taken from the same
+        code the pass runs, never from a second reading of the tables, so the judgement cannot
+        drift from the behaviour it describes. None means nothing else answers there, and the
+        entry is what keeps the name translated.
+        """
+        key = name
+        for scope in scopes:
+            if scope and f"{scope}.{name}" in self.dictionary.tokens:
+                key = f"{scope}.{name}"
+                break
+        if platform is not None and platform == hit:
+            self.echoed.setdefault(key, platform)
+        else:
+            self.needed.add(key)
+
+    def note_platform_win(self, name: str, spelling: str) -> None:
+        """A place where the PLATFORM answered and the dictionary was not asked at all.
+
+        An entry spelling the word the same way did nothing here; one spelling it otherwise is
+        the shadow case, judged where it is reported.
+        """
+        entry = self.dictionary.tokens.get(name)
+        if entry is not None and entry == spelling:
+            self.echoed.setdefault(name, spelling)
+
+    def note_entry_only(self, name: str, hit: str, *scopes: str) -> None:
+        """A place where the dictionary answered and no platform table is consulted at all -
+        a resource file name, a custom property of a component: the entry is load-bearing."""
+        self._judge_entry(name, hit, None, *scopes)
+
+    def echoes(self) -> dict[str, str]:
+        """{entry key: the platform's own spelling} of the entries the platform answers itself."""
+        return {key: value for key, value in sorted(self.echoed.items())
+                if key not in self.needed}
 
     def dictionary_key(self, name: str, scope: str) -> tuple[str | None, str]:
         """A KEY of a localized-strings dictionary - the project dictionary answers alone.
@@ -97,6 +150,9 @@ class Resolver:
         """
         hit = self.dictionary.token(name, scope)
         if hit is not None:
+            # No platform table is consulted here at all, so the entry is what translates the
+            # key - it is never one of those the platform answers itself.
+            self.note_entry_only(name, hit, scope)
             return hit, "user"
         return None, "missing"
 
@@ -135,13 +191,27 @@ class Resolver:
         if reference == "facet":
             scoped = self.dictionary.scoped_token(name, scope, type_scope)
             if scoped is not None:
+                self._judge_entry(name, scoped, platform_map.facet_suffix_english(name),
+                                  scope, type_scope)
                 return scoped, "user"
             facet = platform_map.facet_suffix_english(name)
             if facet:
                 return facet, "platform"
         hit = self.dictionary.token(name, scope, type_scope)
         if hit is not None:
+            self._judge_entry(name, hit, self._platform_reading(name, after_dot, reference)[0],
+                              scope, type_scope)
             return hit, "user"
+        return self._platform_reading(name, after_dot, reference)
+
+    def _platform_reading(self, name: str, after_dot: bool, reference: str
+                          ) -> tuple[str | None, str]:
+        """What `identifier` answers when the dictionary says nothing - its own tail.
+
+        One body for two callers: the pass takes the reading from here, and the entry
+        judgement asks it the counterfactual question - what would stand here without the
+        entry - so a verdict about an entry cannot describe a resolution the pass never makes.
+        """
         if name in self.project_names:
             # The project's own name: no platform fallback, so the declaration and every
             # use of it move together - or stay together, waiting for one dictionary entry.
@@ -176,7 +246,12 @@ class Resolver:
         """
         hit = self.dictionary.token(name)
         if hit is not None:
+            self._judge_entry(name, hit, self._platform_type_reading(name, after_dot)[0])
             return hit, "user"
+        return self._platform_type_reading(name, after_dot)
+
+    def _platform_type_reading(self, name: str, after_dot: bool) -> tuple[str | None, str]:
+        """What `type_name` answers when the dictionary says nothing - its own tail."""
         if after_dot:
             # The facet is the platform's own word even when the project declares a name
             # just like it - a type expression would break if `.Ссылка` stayed Russian.
@@ -865,7 +940,12 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         # which keeps a single spelling for a word two types spell apart.
         replacement, plane = platform_member, "platform"
         entry = resolver.dictionary.token(tok.value, scope, type_scope)
-        if entry is not None and entry != platform_member \
+        if entry is not None and entry == platform_member:
+            # The entry says exactly what the platform says: it did nothing here, and if it
+            # does nothing anywhere else either, it is a workaround masking whatever the
+            # platform data would have answered on its own - see Resolver.note_platform_win.
+            resolver.note_platform_win(tok.value, platform_member)
+        elif entry is not None and entry != platform_member \
                 and entry not in platform_map.member_spellings(tok.value):
             # The project dictionary spells this member as the platform spells it NOWHERE.
             # Here the platform wins and the tree is right; but a receiver whose type nothing
@@ -881,6 +961,7 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         # Russian word answers to several English ones, and the flat dictionary hands out
         # whichever came last (the compiler then refuses the item).
         replacement, plane = platform_map.enum_value_of(owner, tok.value), "platform"
+        resolver.note_platform_win(tok.value, replacement)
     elif after_dot and chain_root in ("Компоненты", "Components"):
         # After `Components.` stands either a NODE of this form - a name the project gave -
         # or a built-in member of a component. The project's own name wins; for the rest the
@@ -896,6 +977,7 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         )
         if component:
             replacement, plane = component, "platform"
+            resolver.note_platform_win(tok.value, component)
         else:
             replacement, plane = resolver.identifier(
                 tok.value, after_dot=True, scope=scope, type_scope=type_scope,
