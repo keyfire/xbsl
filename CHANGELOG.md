@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-10 – 0.100.0, 0.101.0
 
 ### Added
 - **`translate_unused --since`: the orphans of ONE change.** A dictionary that has lived a
@@ -34,6 +34,11 @@ entry either - say what the behaviour was, not which class name was compared.
   translation. An answer with neither a filter nor `since` now says what its reading is worth:
   the reading is textual, and the list describes the whole accumulated dictionary rather than
   the change at hand.
+- **`translate_unused` answers compactly and counts the orphans by kind.** `compact=true`
+  keeps only the key, the kind, the file and the line of each entry – a cleaning pass needs
+  the places, not the translations, and a page of sixty full rows cost five thousand
+  characters for nineteen needed keys – and every answer carries `counts` over the whole
+  filtered set, so the size of the cleaning is known before a page is read.
 
 ### Fixed
 - **The languages of a project translate as the enumeration they are.**
@@ -56,15 +61,6 @@ entry either - say what the behaviour was, not which class name was compared.
   and every check that asks it for one describes a file that does not exist. The refusal (of the
   property editor as well) now names what the file is, the element it translates and the
   call that writes the row.
-
-## 2026-09-10 – 0.100.0
-
-### Added
-- **`translate_unused` answers compactly and counts the orphans by kind.** `compact=true`
-  keeps only the key, the kind, the file and the line of each entry – a cleaning pass needs
-  the places, not the translations, and a page of sixty full rows cost five thousand
-  characters for nineteen needed keys – and every answer carries `counts` over the whole
-  filtered set, so the size of the cleaning is known before a page is read.
 
 ## 2026-09-09 – 0.97.0, 0.98.0, 0.99.0
 
