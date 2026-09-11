@@ -454,6 +454,36 @@ def test_lint_paths_checks_with_the_rule_set_of_the_ci_job(tmp_path, monkeypatch
         sys.modules.pop("xbsl.mcp_server", None)
 
 
+def test_lint_paths_can_be_told_which_ci_job_to_judge_by(tmp_path, monkeypatch):
+    """A pipeline that checks a second tree runs the linter twice, by two different sets."""
+    from xbsl.engine import SEVERITY_OVERRIDES
+
+    off_by_default = "typography/yo-in-text"
+    if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
+        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "Форма.yaml").write_text(_YO_FORM, encoding="utf-8")
+        (tmp_path / ".gitlab-ci.yml").write_text(
+            "xbsl-lint:\n  script:\n    - xbsl project\n"
+            f"English to S3:\n  script:\n    - xbsl project --enable {off_by_default}\n",
+            encoding="utf-8",
+        )
+
+        first = m.lint_paths([str(project)], as_ci=True)
+        named = m.lint_paths([str(project)], as_ci_job="english")
+
+        assert not any(d["rule"] == off_by_default for d in first["diagnostics"])
+        assert first["summary"]["as_ci"]["jobs"] == ["English to S3"]
+        assert any(d["rule"] == off_by_default for d in named["diagnostics"])
+        assert named["summary"]["as_ci"]["job"] == "English to S3"
+        assert named["summary"]["as_ci"]["jobs"] == ["xbsl-lint"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
 def test_lint_paths_says_why_it_cannot_check_as_the_ci_job_does(tmp_path, monkeypatch):
     """No pipeline file - an explicit error, never a quieter verdict from a narrower set."""
     m = _with_stub(monkeypatch)

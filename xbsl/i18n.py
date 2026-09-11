@@ -298,6 +298,14 @@ _CORE_MESSAGES = {
               "flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) "
               "next to the project; the file can be named explicitly",
     },
+    "cli.help.as-ci-job": {
+        "ru": "какую джобу файла CI брать: пайплайн гоняет линтер не один раз, когда проект "
+              "проверяет второе дерево (перевод) своим набором; имя можно назвать частью "
+              "(--as-ci-job english), включает --as-ci",
+        "en": "which job of the CI file to take: a pipeline runs the linter more than once "
+              "when the project checks a second tree (a translation) by a set of its own; a "
+              "part of the name is enough (--as-ci-job english), implies --as-ci",
+    },
     "cli.help.baseline": {
         "ru": "гасить находки, замороженные в файле базлайна (создаётся --write-baseline); "
               "новые находки выводятся как обычно",
@@ -402,6 +410,10 @@ _CORE_MESSAGES = {
     "cli.help.meta.file": {
         "ru": "ФАЙЛ",
         "en": "FILE",
+    },
+    "cli.help.meta.job": {
+        "ru": "ДЖОБА",
+        "en": "JOB",
     },
     "cli.help.meta.version": {
         "ru": "ВЕРСИЯ",

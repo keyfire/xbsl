@@ -212,6 +212,7 @@ def lint_paths(
     no_baseline: bool = False,
     root: str | None = None,
     as_ci: bool = False,
+    as_ci_job: str | None = None,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -229,9 +230,14 @@ def lint_paths(
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
                   asks for. This is what a preflight needs - a project turns rules on in its
                   pipeline, and a run without them calls clean what the job fails on. The
-                  summary then carries `as_ci` {file, job, flags}; when there is no such
-                  file, or no xbsl command in it, the answer is {"error"} rather than a
-                  quieter verdict.
+                  summary then carries `as_ci` {file, job, flags, jobs}; when there is no
+                  such file, or no xbsl command in it, the answer is {"error"} rather than a
+                  quieter verdict;
+    as_ci_job   – WHICH job of that file to take (implies `as_ci`). A pipeline runs the
+                  linter twice as soon as the project checks a second tree - the sources in
+                  one job, what `translate` wrote in another - and those judge different
+                  sets. Without a name the first command wins and `as_ci.jobs` names the
+                  others; a part of the name is enough when only one job fits.
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
     Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
@@ -250,9 +256,9 @@ def lint_paths(
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
     job = None
-    if as_ci:
+    if as_ci or as_ci_job:
         try:
-            job = cijob.find(asked)
+            job = cijob.find(asked, job=as_ci_job)
         except cijob.CiLintError as exc:
             return {"error": str(exc)}
         select = list(select or []) + list(job.select)
@@ -280,6 +286,9 @@ def lint_paths(
     if job is not None:
         payload["summary"]["as_ci"] = {
             "file": str(job.path), "job": job.job, "flags": job.describe(),
+            # The jobs NOT taken: an agent comparing its verdict with a red pipeline has to
+            # know which of them it just reproduced.
+            "jobs": list(job.alternatives),
         }
     return payload
 

@@ -38,6 +38,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--ignore ID/GROUP/TIER` | exclude these rules (comma-separated or by repeating the flag: id, group or tier letter) |
 | `--enable ID/GROUP/TIER` | add rules disabled by default ON TOP of the standard set (`--select` replaces the set); the value forms are the same |
 | `--as-ci [FILE]` | run the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) next to the project; the file can be named explicitly |
+| `--as-ci-job JOB` | which job of the CI file to take: a pipeline runs the linter more than once when the project checks a second tree (a translation) by a set of its own; a part of the name is enough (`--as-ci-job` english), implies `--as-ci` |
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
 | `--write-baseline FILE` | instead of a report, write all current findings to a baseline file (freeze the debt; paths in the file are relative to its directory) |
 | `--no-baseline` | do not look for a baseline file next to the sources (by default a discovered .xbsllint-baseline is applied on its own) |
