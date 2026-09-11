@@ -33,7 +33,7 @@ entry either - say what the behaviour was, not which class name was compared.
   word. Flags add up (`--as-ci --enable X` is the job's set plus that rule), the baseline is
   resolved against the pipeline file, and with no pipeline or no `xbsl` command in it the run
   refuses with a line instead of quietly checking a narrower set. The same for an agent:
-  `lint_paths(as_ci=true)` and an `as_ci` field in the summary.
+  `lint_paths(as_ci=true)` and an `as_ci` field in the summary. ([#10](https://github.com/keyfire/xbsl/pull/10))
 
 ### Changed
 - **The hover and the documentation panel answer with a MEMBER's block, not with its type's
