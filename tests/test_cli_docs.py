@@ -149,7 +149,10 @@ def test_help_answers_within_timeout(command):
     out = subprocess.run(
         [sys.executable, "-m", "xbsllint", *command, "--help"],
         capture_output=True, text=True, encoding="utf-8", timeout=30,
-        cwd=ROOT, env=dict(os.environ, XBSL_LANG="ru", COLUMNS="100"),
+        # PYTHONIOENCODING: the help asked for here is Russian, and a child writing in the
+        # console code page would pass this check with replacement characters in its output.
+        cwd=ROOT, env=dict(os.environ, XBSL_LANG="ru", COLUMNS="100",
+                           PYTHONIOENCODING="utf-8"),
     )
     assert out.returncode == 0 and (out.stdout or "").strip()
 

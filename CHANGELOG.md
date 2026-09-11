@@ -86,6 +86,20 @@ entry either - say what the behaviour was, not which class name was compared.
   (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
 
 ### Fixed
+- **A Python process started from here is told what to encode its output in.** The convention
+  had one half kept and the other half nowhere: every call that reads a process as text names
+  `encoding="utf-8"`, but a Python child was started without `PYTHONIOENCODING`, and on Windows
+  such a child writes in the console code page while the parent decodes utf-8. The reader
+  thread of `subprocess` then dies INSIDE, `stdout` comes back as None, and the return code
+  goes on saying the run went well - nothing in the output says the text was lost. Four calls
+  were like that: the verification of a self-update, the generator of the Russian command
+  reference, the check of its help texts and a plugin probe. Two of them are saved today by the
+  callee - the CLI reconfigures its own streams to utf-8 - but a `-c` child has no such cover,
+  and a traceback carrying a Cyrillic path would have come back from the update check as an
+  empty string, which reads as "the package does not import". `tests/test_conventions.py` now
+  holds every process start of the repository to both halves, reading the sources with `ast`
+  rather than with a regular expression: a call is written `(run or subprocess.run)(...)`
+  wherever the tests need a seam. ([#17](https://github.com/keyfire/xbsl/pull/17))
 - **`translate --out --clean`: the orphans of an earlier pass leave the output tree.** The
   rewrite covers the files the pass produces and touches nothing else, so a source file that
   was RENAMED or removed left its old translation standing there - a build takes the directory
