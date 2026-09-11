@@ -176,6 +176,26 @@ file, a file held by another program) is named in the report with its reason rat
 the pass: the report is printed whole, the first five such files by name and the rest counted. A
 run that failed to write the tree exits non-zero even without `--strict` - the tree is its job.
 
+**`--clean`: the leftovers of an earlier pass.** The rewrite covers the files this pass
+produces and touches nothing else, so a source file that was RENAMED or removed leaves its old
+translation standing in the output tree - a build takes the directory whole, and the orphan
+ships with everything else. Worse, the leftover can stand exactly where a file now goes: a
+directory in the place of a file is the write error above. `--clean` takes out, before the
+write, everything this pass is not about to write:
+
+```sh
+xbsl translate e1c/app --out build --clean
+```
+
+It is opt-in because it removes files, and it is NOT a write into a temporary directory with a
+swap: the swap would have to delete the old tree anyway, it costs a second full copy of the
+project, and it breaks on the very conditions the write errors come from - another volume, a
+directory held open by a build. The refusal of a directory holding someone else's files stays
+the safety net above it: the cleaning happens only inside a directory that already IS a
+translated project, so `--clean` cannot become "erase whatever you were pointed at". A removal
+that fails is a named problem, exactly as a failed write is; the count of what was removed
+appears in the report (and in `removed` of the json) only when something was.
+
 ## Localized strings turn around
 
 A project that already carries the target language in its localization sections gets those

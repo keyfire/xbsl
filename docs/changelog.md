@@ -80,6 +80,22 @@ entry either - say what the behaviour was, not which class name was compared.
   (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
 
 ### Fixed
+- **`translate --out --clean`: the orphans of an earlier pass leave the output tree.** The
+  rewrite covers the files the pass produces and touches nothing else, so a source file that
+  was RENAMED or removed left its old translation standing there - a build takes the directory
+  whole, and the orphan shipped with everything else. The same leftover can stand exactly
+  where a file now goes, and then it breaks the write itself. `--clean` takes out, before
+  writing, everything the pass is not about to write. Opt-in rather than a write into a
+  temporary directory with a swap: the swap would have to delete the old tree anyway, it costs
+  a second full copy of the project, and it breaks on the very conditions the write errors come
+  from - another volume, a directory held open by a build. The refusal of a directory holding
+  someone else's files stays the safety net above it, so the cleaning happens only inside a
+  directory that already IS a translated project. On a live corpus of 1261 files a rename left
+  1262 files with both names standing; the same directory with `--clean` came back to 1261 and
+  matched a fresh write byte for byte, and the leftover directory that had failed one write of
+  the 1261 was gone with it. Files and directories are kept by different sets on purpose - a
+  leftover directory in the place of a file would otherwise look like something to keep.
+  ([#15](https://github.com/keyfire/xbsl/pull/15))
 - **`translate --out`: a refused write says so, instead of an empty log and exit code 1.** The
   writing step handled no errors and stood BEFORE the report was printed, so any trouble from
   the file system took the whole report with it: the command answered with code 1 and no output

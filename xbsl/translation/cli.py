@@ -252,6 +252,14 @@ MESSAGES = {
         "ru": "записано файлов: {count} -> {out}",
         "en": "files written: {count} -> {out}",
     },
+    "translate.cleaned": {
+        "ru": "убрано остатков прошлого прогона: {count}",
+        "en": "leftovers of earlier passes removed: {count}",
+    },
+    "translate.clean-without-out": {
+        "ru": "--clean без --out: чистить нечего, дерево никуда не пишется",
+        "en": "--clean without --out: there is nothing to clean, no tree is being written",
+    },
     "translate.stub-written": {
         "ru": "заготовка словаря: {path} (токенов {tokens}, фраз {phrases}, литералов {literals})",
         "en": "dictionary stub: {path} ({tokens} tokens, {phrases} phrases, {literals} literals)",
@@ -291,6 +299,16 @@ MESSAGES = {
     "translate.help.suggest": {
         "ru": "добить непереведённое внешним переводчиком: предложения, а не запись в словарь",
         "en": "fill the untranslated remainder with an external translator: suggestions, not writes",
+    },
+    "translate.help.clean": {
+        "ru": "перед записью убрать из каталога --out всё, чего этот прогон не пишет:"
+              " переименованный или снятый в исходнике файл иначе доживает в дереве от"
+              " прошлого прогона и уезжает в сборку, а остаток на месте нужного файла ломает"
+              " саму запись",
+        "en": "before writing, take out of the --out directory everything this pass does not"
+              " write: a file renamed or dropped in the sources otherwise survives there from"
+              " an earlier pass and ships with the build, and a leftover standing where a file"
+              " goes breaks the write itself",
     },
     "translate.help.suggest-out": {
         "ru": "записать предложения планом словаря рядом с остальными: каталог из пути отбрасывается,"
@@ -338,6 +356,7 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("root", help=i18n.t("translate.help.root"))
     parser.add_argument("--out", help=i18n.t("translate.help.out"))
+    parser.add_argument("--clean", action="store_true", help=i18n.t("translate.help.clean"))
     parser.add_argument("--dictionary", action="append", help=i18n.t("translate.help.dictionary"))
     parser.add_argument("--missing", help=i18n.t("translate.help.missing"))
     parser.add_argument("--coverage", action="store_true", help=i18n.t("translate.help.coverage"))
@@ -397,6 +416,10 @@ def cli_main(argv: list[str] | None = None) -> int:
     if not root.is_dir():
         print(i18n.t("translate.no-root", path=root), file=sys.stderr)
         return 2
+    if args.clean and not args.out:
+        # Silently ignoring it would leave the caller believing a stale tree was cleaned.
+        print(i18n.t("translate.clean-without-out"), file=sys.stderr)
+        return 2
 
     try:
         loaded, found = _load_dictionary(args.dictionary, root, dictionary_module)
@@ -435,6 +458,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         Path(args.out) if args.out else None,
         swap_localization=not args.no_localization_swap,
         layout="repository",
+        clean=args.clean,
     )
 
     missing_tokens = report.merged_missing_tokens()
@@ -545,6 +569,7 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
         "renames": report.renames,
         "out_dir": str(report.out_dir) if report.out_dir else None,
         "written": report.written,
+        "removed": report.removed,
         "write_failed": report.write_failed,
         "warnings": {
             rel: [list(w) for w in fr.warnings]
@@ -666,6 +691,10 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
     if args.out:
         print(i18n.t("translate.written", count=report.written,
                      out=report.out_dir if report.out_dir else args.out))
+        # Said only when it happened: a clean tree has nothing to report, and a line of
+        # zeroes after every pass is how a number stops being read.
+        if report.removed:
+            print(i18n.t("translate.cleaned", count=report.removed))
     # Last on purpose - whatever else the report prints, the tail of the log is the verdict.
     print(_verdict(report))
 
