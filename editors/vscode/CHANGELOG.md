@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## 0.67.7
+## 0.68.0
 
 ### Added
 - **The Problems panel can judge by the rule set of the project's CI job.** The terminal and
@@ -26,6 +26,17 @@
   whole page; a bare member name fell through to full-text search. The hover now shows
   the member's signature and what the call does, the **Documentation** link opens the
   page at its heading, and a name several types declare is offered as those types.
+
+### Fixed
+- **A parity setting took effect only after a window reload.** The `--as-ci` flag reaches the
+  LSP server as an argument, and the list of settings that restart the server did not know the
+  new keys: turned on in a live window, the setting changed nothing until the next reload - the
+  very trouble the list is kept for. `xbsl.linter.asCi` and `xbsl.linter.asCiJob` now restart
+  the server, as the other run flags do.
+
+## 0.67.7
+
+### Added
 - **The `code/dead-interpolation` badge links to the documentation.** The rule code in the
   "Problems" panel is now a link to the string-interpolation page - the same page that
   describes the escaping the finding is fixed with.
