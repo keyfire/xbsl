@@ -157,6 +157,39 @@ with the repository, so check the repo out), or depend on a package that ships t
 `xbsl.data` entry point (see [Extending](/servers#extending-your-own-rules-data-and-severities)) and
 just `pip install` it.
 
+### Locally - with the set the job runs
+
+A job's rule set is almost never the default one: a project turns its own rules on with
+`--enable` right in the pipeline. A local run knows nothing about them, and the difference is
+learned from a red job - a round trip one push long.
+
+`--as-ci` settles it: the `--select`/`--ignore`/`--enable` flags and the baseline are taken
+from the `xbsl` command in the pipeline file next to the project (`.gitlab-ci.yml` or a GitHub
+workflow; the file is looked up above the checked paths, or named outright -
+`--as-ci path/to/file`). The agreement holds by construction: it is the same list of rules,
+with no second list to keep in step.
+
+```sh
+xbsl e1c --as-ci            # the rule set of the job
+```
+
+The run opens by saying what it took:
+
+```
+Rule set as in CI: /repo/.gitlab-ci.yml, job xbsl-lint - --enable code/unused-method, ... --baseline .xbsllint-baseline
+```
+
+Flags add up: `--as-ci --enable style/line-length` is the job's set PLUS the rule being tried
+before it goes into the pipeline. The baseline path is resolved against the pipeline file, so a
+run started in a subdirectory opens the same file the job does. Transport - `--jobs`, `--format`,
+the paths - stays the run's own business: one folder is checked far more often than the whole tree.
+
+With no pipeline file, or no `xbsl` command in it, the run refuses with a message instead of
+quietly checking a narrower set: that silent difference is what cost the red job.
+
+The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and puts `as_ci`
+(file, job, flags) into the summary.
+
 ### GitHub Actions
 
 ```yaml

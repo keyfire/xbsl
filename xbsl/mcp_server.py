@@ -26,7 +26,7 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    formmodel, i18n, metamodel, report, scaffold, uischema,
+    cijob, formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
@@ -211,6 +211,7 @@ def lint_paths(
     baseline: str | None = None,
     no_baseline: bool = False,
     root: str | None = None,
+    as_ci: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -222,7 +223,15 @@ def lint_paths(
                   the way a project asks for its translation gaps or its typography;
     baseline    – a baseline file to apply; without it the project's own `.xbsllint-baseline`
                   is looked up above the checked files, exactly as the CLI does;
-    no_baseline – report the frozen findings too.
+    no_baseline – report the frozen findings too;
+    as_ci       – check with the rule set the project's CI job runs: the --select/--ignore/
+                  --enable flags and the baseline of the xbsl command in `.gitlab-ci.yml`
+                  (or a GitHub workflow) next to the project, ADDED to whatever this call
+                  asks for. This is what a preflight needs - a project turns rules on in its
+                  pipeline, and a run without them calls clean what the job fails on. The
+                  summary then carries `as_ci` {file, job, flags}; when there is no such
+                  file, or no xbsl command in it, the answer is {"error"} rather than a
+                  quieter verdict.
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
     Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
@@ -240,6 +249,19 @@ def lint_paths(
     base = _base(root)
     asked = [str(_under(base, p)) for p in paths]
     named = _under(base, baseline)
+    job = None
+    if as_ci:
+        try:
+            job = cijob.find(asked)
+        except cijob.CiLintError as exc:
+            return {"error": str(exc)}
+        select = list(select or []) + list(job.select)
+        ignore = list(ignore or []) + list(job.ignore)
+        enable = list(enable or []) + list(job.enable)
+        if named is None and not no_baseline:
+            adopted = job.baseline_file()
+            named = Path(adopted) if adopted else None
+            no_baseline = job.no_baseline
     files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     diags = _filter_requested(
@@ -255,6 +277,10 @@ def lint_paths(
     payload["summary"].update(environment.provenance(active))
     payload["summary"].update(extra)
     payload["summary"]["root"] = str(base)
+    if job is not None:
+        payload["summary"]["as_ci"] = {
+            "file": str(job.path), "job": job.job, "flags": job.describe(),
+        }
     return payload
 
 

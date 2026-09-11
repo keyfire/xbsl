@@ -290,6 +290,14 @@ _CORE_MESSAGES = {
         "en": "add rules disabled by default ON TOP of the standard set "
               "(--select replaces the set); the value forms are the same",
     },
+    "cli.help.as-ci": {
+        "ru": "гонять тот же набор правил, что джоба CI проекта: ключи --select/--ignore/"
+              "--enable и базлайн берутся из .gitlab-ci.yml (или воркфлоу GitHub) рядом с "
+              "проектом; можно назвать файл явно",
+        "en": "run the rule set the project's CI job runs: the --select/--ignore/--enable "
+              "flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) "
+              "next to the project; the file can be named explicitly",
+    },
     "cli.help.baseline": {
         "ru": "гасить находки, замороженные в файле базлайна (создаётся --write-baseline); "
               "новые находки выводятся как обычно",

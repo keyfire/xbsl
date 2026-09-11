@@ -20,14 +20,20 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
-### Fixed
-- **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
-  the translation tests - the second silently replaced the first, and the first had been dead
-  since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources
-  rather than the Python of the engine, and a helper nobody calls fails no assertion. The
-  duplicate is gone, and a walk of the whole checkout now holds every module to one definition
-  per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
-  top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
+### Added
+- **`--as-ci`: a local run with the rule set the project's job runs.** A project turns its own
+  rules on with `--enable` right in the pipeline, a local run knew nothing about them, and the
+  difference was learned from a red job - a round trip one push long. The flag reads the set
+  from the very `xbsl` command that CI runs (`.gitlab-ci.yml` or a GitHub workflow next to the
+  project; the file is looked up above the checked paths, or named outright): `--select`,
+  `--ignore`, `--enable` and the baseline - everything that changes the verdict - while
+  `--jobs`, `--format` and the paths stay the run's own. No second list of rules is kept in
+  step, so the agreement holds by construction. On a live project a plain run judged by 194
+  rules and found 2 findings, `--as-ci` by 200 and found 11 - what the job reports, word for
+  word. Flags add up (`--as-ci --enable X` is the job's set plus that rule), the baseline is
+  resolved against the pipeline file, and with no pipeline or no `xbsl` command in it the run
+  refuses with a line instead of quietly checking a narrower set. The same for an agent:
+  `lint_paths(as_ci=true)` and an `as_ci` field in the summary.
 
 ### Changed
 - **The hover and the documentation panel answer with a MEMBER's block, not with its type's
@@ -40,6 +46,15 @@ entry either - say what the behaviour was, not which class name was compared.
   types declare is not guessed - the panel offers those types with the member's block under
   each, and the hover stays silent. The resolution is shared with the MCP `docs_symbol` tool
   (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
+
+### Fixed
+- **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
+  the translation tests - the second silently replaced the first, and the first had been dead
+  since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources
+  rather than the Python of the engine, and a helper nobody calls fails no assertion. The
+  duplicate is gone, and a walk of the whole checkout now holds every module to one definition
+  per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
+  top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
 
 ## 2026-09-11 – 0.102.0
 

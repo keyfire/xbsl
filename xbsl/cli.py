@@ -11,7 +11,9 @@ from functools import partial
 from pathlib import Path
 from typing import NamedTuple
 
-from xbsl import __version__, baseline, dataset, engine, environment, i18n, plugins, report
+from xbsl import (
+    __version__, baseline, cijob, dataset, engine, environment, i18n, plugins, report,
+)
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
@@ -153,6 +155,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar=rule_selector,
         action="append",
         help=i18n.t("cli.help.enable"),
+    )
+    parser.add_argument(
+        "--as-ci",
+        nargs="?",
+        const="",
+        metavar=baseline_file,
+        help=i18n.t("cli.help.as-ci"),
     )
     parser.add_argument(
         "--baseline",
@@ -1102,6 +1111,26 @@ def _check_main(argv: list[str]) -> int:
         return 0
 
     from xbsl.engine import RULES, active_rules, load, make_source, run_sources
+
+    if args.as_ci is not None:
+        # "As in CI" is read from the pipeline file itself, never from a second list of rules
+        # kept in step by hand: the job's --enable flags are what a local pass was missing,
+        # and a mismatch is then impossible by construction.
+        try:
+            job = cijob.find(args.paths, args.as_ci or None)
+        except cijob.CiLintError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+        # Merged, not replaced: `--as-ci --enable style/line-length` is "the job's set plus
+        # this one", which is how a rule is tried out before it goes into the pipeline.
+        args.select = (args.select or []) + list(job.select)
+        args.ignore = (args.ignore or []) + list(job.ignore)
+        args.enable = (args.enable or []) + list(job.enable)
+        if not args.baseline and not args.no_baseline:
+            args.baseline = job.baseline_file()
+            args.no_baseline = job.no_baseline
+        if args.format == "text":
+            print(job.describe(), file=sys.stderr)
 
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)
