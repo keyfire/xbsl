@@ -21,6 +21,11 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **A setting of the CI parity now asks the LSP server for a restart.** The flag reaches the
+  server as an ARGUMENT, and the list of settings that re-argument it did not know the new
+  keys: switched on in a live window, `xbsl.linter.asCi` did nothing at all until the next
+  reload - the very failure that list exists to prevent.
+  ([#18](https://github.com/keyfire/xbsl/pull/18))
 - **Parity with CI in the editor: the Problems panel can judge by the job's rule set.** The
   terminal and an agent could already take it, the panel could not - so one tree got two
   verdicts, and the one that gates the merge request was the other one. `xbsl.linter.asCi`
