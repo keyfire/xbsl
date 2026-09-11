@@ -572,6 +572,101 @@ def test_the_failed_files_are_named_up_to_a_point_and_then_counted(tmp_path: Pat
     assert "6" in stopped.problems[-1]  # 11 failures, five named, six counted
 
 
+# --- --clean: the leftovers of an earlier pass ---------------------------------------------------
+
+
+def test_a_renamed_source_leaves_an_orphan_that_clean_takes_out(tmp_path: Path, capsys):
+    """The pain: the pass overwrites what it writes and touches nothing else.
+
+    A file renamed in the sources leaves its old translation standing in the output tree, a
+    build takes the directory whole, and the orphan deploys along with everything else.
+    """
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    resources = root / "Основное" / "Ресурсы"
+    resources.mkdir(parents=True)
+    (resources / "percent.svg").write_text("<svg/>", encoding="utf-8")
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    # by name, not by path: the directory of resources is a platform name, and whether it is
+    # spelled in English depends on data this test does not need
+    written = lambda name: sorted(p.as_posix() for p in out.rglob(name))
+
+    assert _cli(argv) == 0
+    assert len(written("percent.svg")) == 1
+
+    (resources / "percent.svg").rename(resources / "percent-sign.svg")
+    assert _cli(argv) == 0
+    capsys.readouterr()
+    # the repeat alone is not enough - both names stand there now
+    assert len(written("percent.svg")) == 1 and len(written("percent-sign.svg")) == 1
+
+    assert _cli([*argv, "--clean"]) == 0
+    assert "убрано остатков прошлого прогона: 1" in capsys.readouterr().out
+    assert written("percent.svg") == []
+    assert len(written("percent-sign.svg")) == 1
+
+
+def test_clean_makes_the_write_that_a_leftover_directory_used_to_break(tmp_path: Path, capsys):
+    """A directory standing where a file goes fails that write - and `--clean` is the cure.
+
+    Files and directories are kept by different sets exactly for this: judged by the file set
+    the leftover directory would look like something to keep, and the write would go on
+    failing.
+    """
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    assert _cli(argv) == 0
+
+    marker = out / "Acme" / "TaskBook" / "Project.yaml"
+    marker.unlink()
+    (marker / "занято").mkdir(parents=True)
+    (marker / "занято" / "stub.txt").write_text("x", encoding="utf-8")
+
+    assert _cli(argv) == 1  # the write fails, as it did before
+    assert "файл не записан" in capsys.readouterr().out
+
+    assert _cli([*argv, "--clean"]) == 0
+    assert marker.is_file()
+
+
+def test_clean_keeps_the_files_this_pass_writes(tmp_path: Path, capsys):
+    """A guard against the opposite failure: cleaning must not take out the tree itself."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    assert _cli(argv) == 0
+    before = sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file())
+
+    assert _cli([*argv, "--clean"]) == 0
+    capsys.readouterr()
+
+    assert sorted(p.relative_to(out).as_posix() for p in out.rglob("*") if p.is_file()) == before
+
+
+def test_clean_does_not_touch_a_directory_of_someone_else(tmp_path: Path, capsys):
+    """The occupancy guard stays the safety net: `--clean` is not "erase what you point at"."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out" / "Acme" / "TaskBook"
+    out.mkdir(parents=True)
+    (out / "README.txt").write_text("чужое", encoding="utf-8")
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--out", str(tmp_path / "out"),
+                 "--lang", "ru", "--clean"])
+
+    assert code == 1 and "каталог вывода занят чужими файлами" in capsys.readouterr().out
+    assert (out / "README.txt").read_text(encoding="utf-8") == "чужое"
+
+
+def test_clean_without_out_is_refused_rather_than_ignored(tmp_path: Path, capsys):
+    """Ignoring it would leave the caller believing a stale tree had been cleaned."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--lang", "ru", "--clean"])
+
+    assert code == 2 and "--clean" in capsys.readouterr().err
+
+
 # --- the linter rule -----------------------------------------------------------------------------
 
 

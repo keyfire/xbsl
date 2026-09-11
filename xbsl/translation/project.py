@@ -17,6 +17,7 @@ Without an output directory nothing is written - the walk still produces the ful
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -73,6 +74,10 @@ MESSAGES = {
         "ru": "по той же причине не записано ещё файлов: {count}",
         "en": "files not written for the same reason: {count} more",
     },
+    "translate.problem.clean-failed": {
+        "ru": "{path}: остаток прошлого прогона не удалён – {error}",
+        "en": "{path}: a leftover of an earlier run was not removed - {error}",
+    },
     "translate.problem.shadow": {
         "ru": "{place}: запись словаря '{name}: {entry}' расходится с платформой – '{name}' у"
               " {owner} пишется '{platform}'; здесь взято платформенное написание, а приёмник"
@@ -113,6 +118,11 @@ class ProjectReport:
     #: or a file could not be written. The command's job is the tree, so this decides the
     #: exit code on its own - a run that wrote nothing must not answer like a run that did.
     write_failed: bool = False
+    #: Files and directories of an earlier run that `--clean` took out of the output tree.
+    #: A source file that was RENAMED or removed leaves its old copy standing there, and a
+    #: build takes the directory whole - so the orphan deploys along with everything else,
+    #: and a directory standing where a file now goes fails the write outright.
+    removed: int = 0
     #: Where the tree was actually written - the PROJECT directory, which is not the `out`
     #: the caller named: a build demands `{repository}/{Vendor}/{Name}`, so an `out` that is
     #: a repository root gets those two directories under it (see `_destination`).
@@ -335,6 +345,7 @@ def translate_project(
     *,
     swap_localization: bool = True,
     layout: str = "project",
+    clean: bool = False,
 ) -> ProjectReport:
     """Translate the tree under `root`; write it under `out` when one is given.
 
@@ -343,6 +354,9 @@ def translate_project(
     `{Vendor}/{Name}` the TRANSLATED descriptor names: that is the layout a build demands
     (and the one `project/path-matches-descriptor` checks), so only a tree written that way
     deploys without being moved by hand. `report.out_dir` says where the files actually went.
+
+    `clean` removes what THIS pass does not write - see `_clean_tree`; without it a repeat
+    into the same directory only overwrites, and the orphans of an earlier run stay.
     """
     files = _iter_files(root, dictionary)
     resolver = Resolver(
@@ -399,7 +413,7 @@ def translate_project(
     }
 
     if out is not None:
-        _write_tree(_destination(out, outputs, layout), outputs, report)
+        _write_tree(_destination(out, outputs, layout), outputs, report, clean=clean)
     return report
 
 
@@ -688,7 +702,7 @@ def _destination(out: Path, outputs, layout: str) -> Path:
 _WRITE_PROBLEMS_SHOWN = 5
 
 
-def _write_tree(out: Path, outputs, report: ProjectReport) -> None:
+def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False) -> None:
     """Write the translated tree, and never die on the way: a failure is a reported problem.
 
     The pass costs minutes and its report is printed AFTERWARDS, so an exception raised here
@@ -707,6 +721,8 @@ def _write_tree(out: Path, outputs, report: ProjectReport) -> None:
             ))
             report.write_failed = True
             return
+    if clean:
+        _clean_tree(out, outputs, report)
     failures: list[tuple[Path, str]] = []
     for new_rel, (rel_str, translated, source) in sorted(outputs.items(), key=lambda kv: str(kv[0])):
         del rel_str
@@ -731,3 +747,70 @@ def _write_tree(out: Path, outputs, report: ProjectReport) -> None:
             count=len(failures) - _WRITE_PROBLEMS_SHOWN,
         ))
     report.write_failed = report.write_failed or bool(failures)
+
+
+def _clean_tree(out: Path, outputs, report: ProjectReport) -> None:
+    """Take out of `out` everything this pass is not about to write.
+
+    Why a repeat into the same directory is not enough: the pass overwrites the files it
+    produces and touches nothing else, so a source file that was RENAMED leaves its old
+    translation standing - the build takes the directory whole and the orphan deploys with
+    it. Worse, the leftover can stand exactly where a file now goes: a directory in the place
+    of a file fails that write outright, and the message blames the file system.
+
+    Deliberately NOT a write into a temporary directory with a swap at the end. The swap
+    would have to delete the old tree anyway, it costs a second full copy of the project, and
+    it breaks on the very conditions the write errors come from - another volume, a directory
+    held open by a build or an editor. The occupancy guard above stays the safety net: this
+    runs only inside a directory that already IS a translated project, so `--clean` cannot
+    become "erase whatever you were pointed at".
+
+    Bottom-up, so a directory is judged after its contents: a directory that keeps nothing of
+    this pass is empty by the time it is reached. Files and directories are kept by DIFFERENT
+    sets, and that is the whole point of the pair: a leftover directory standing at the path
+    of a file this pass writes is exactly the trouble - judged by the file set it would look
+    like something to keep, and the write would go on failing with "permission denied". A
+    file standing where a directory now goes is removed the same way.
+
+    A removal that fails is a reported problem, not the end of the pass: the tree is still
+    written, and the report says which leftover stayed and why.
+    """
+    if not out.exists():
+        return
+    files = {out / new_rel for new_rel in outputs}
+    directories: set[Path] = set()
+    for target in files:
+        parent = target.parent
+        while parent != out and parent not in directories:
+            directories.add(parent)
+            parent = parent.parent
+    failures: list[tuple[Path, str]] = []
+    for current, dirnames, filenames in os.walk(out, topdown=False):
+        here = Path(current)
+        for name in filenames:
+            path = here / name
+            if path not in files:
+                _remove(path.unlink, path, report, failures)
+        for name in dirnames:
+            path = here / name
+            if path not in directories:
+                _remove(path.rmdir, path, report, failures)
+    for path, error in failures[:_WRITE_PROBLEMS_SHOWN]:
+        report.problems.append(i18n.t(
+            "translate.problem.clean-failed", path=path, error=error))
+    if len(failures) > _WRITE_PROBLEMS_SHOWN:
+        report.problems.append(i18n.t(
+            "translate.problem.write-failed-more",
+            count=len(failures) - _WRITE_PROBLEMS_SHOWN,
+        ))
+
+
+def _remove(how, path: Path, report: ProjectReport,
+            failures: list[tuple[Path, str]]) -> None:
+    """One removal, counted."""
+    try:
+        how()
+    except OSError as exc:
+        failures.append((path, str(exc.strerror or exc)))
+        return
+    report.removed += 1
