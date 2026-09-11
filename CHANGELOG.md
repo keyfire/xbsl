@@ -46,7 +46,7 @@ entry either - say what the behaviour was, not which class name was compared.
   The two names come from the TRANSLATED descriptor, so a project whose own name is a
   Russian word lands under the English one; an `--out` that already ends in those two names
   is taken as the project directory itself and is not nested twice, and the log line says
-  where the files went.
+  where the files went. ([#5](https://github.com/keyfire/xbsl/pull/5))
 
 ## 2026-09-10 – 0.100.0, 0.101.0
 
