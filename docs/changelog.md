@@ -25,7 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-12 – 0.104.0
 
 ### Added
 - **The LSP server answers which rule set it judges by (`xbsl/ciStatus`).** `--as-ci` is taken
