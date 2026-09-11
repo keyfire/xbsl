@@ -497,20 +497,6 @@ def _rule_findings(paths):
     return [d.message for d in translation_gaps.missing_translation(facts)]
 
 
-def _rule_findings(paths):
-    """Run the project rule the way the engine does: mapper per file, then the reduce."""
-    from xbsl.rules import translation_gaps
-
-    translation_gaps._dictionary_at.cache_clear()
-    facts = {}
-    for path in paths:
-        source = engine.load(path)
-        fact = translation_gaps._gaps_mapper(source)
-        if fact is not None:
-            facts[source.rel] = fact
-    return [d.message for d in translation_gaps.missing_translation(facts)]
-
-
 def test_missing_translation_rule(tmp_path: Path):
     (tmp_path / "xbsl-translation").mkdir()
     (tmp_path / "xbsl-translation" / "dict.yaml").write_text(
