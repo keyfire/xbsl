@@ -18,6 +18,17 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+- **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
+  the translation tests - the second silently replaced the first, and the first had been dead
+  since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources
+  rather than the Python of the engine, and a helper nobody calls fails no assertion. The
+  duplicate is gone, and a walk of the whole checkout now holds every module to one definition
+  per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
+  top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
+
 ## 2026-09-11 – 0.102.0
 
 ### Added
