@@ -173,7 +173,7 @@ def camel_case(source: SourceFile) -> Iterable[Diagnostic]:
     """2.1: `ВходящееСообщение`, not `входящееСообщение` and not `Степень_Важности`.
 
     Structure fields and method parameters are not checked: their names are often dictated by
-    an external contract (Service Manager JSON keys – `access_token`, `Ref_Key`, `apptype_id`),
+    an external contract (JSON keys of a third-party service – `access_token`, `Ref_Key`),
     and cannot be renamed – serialization goes by field names.
     """
     if source.kind != "xbsl":
