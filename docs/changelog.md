@@ -66,7 +66,7 @@ entry either - say what the behaviour was, not which class name was compared.
   five files by name and the rest counted; the refusal of an occupied directory became a sentence
   in the report's language and says what to do. A run that failed to write the tree exits non-zero
   even without `--strict` - the tree is its job. A repeat into the same directory still simply
-  rewrites the tree.
+  rewrites the tree. ([#11](https://github.com/keyfire/xbsl/pull/11))
 - **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
   the translation tests - the second silently replaced the first, and the first had been dead
   since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources
