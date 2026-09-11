@@ -52,10 +52,12 @@ class FileReport:
     #: field / left as written because the dictionary has no entry for the field yet.
     data_keys: int = 0
     data_keys_missing: int = 0
-    #: Names that COLLIDED: {namespace: {translation: [the source names]}}. Two different
-    #: names of one namespace translated into one word is a build-breaking defect of the
-    #: dictionary (the platform refuses a repeated name), and only the translator can see it.
-    collisions: dict[str, dict[str, list[str]]] = field(default_factory=dict)
+    #: Names that COLLIDED: {namespace: {translation: [(the source name, line, col)]}}. Two
+    #: different names of one namespace translated into one word is a build-breaking defect of
+    #: the dictionary (the platform refuses a repeated name), and only the translator can see
+    #: it. The PLACE of each name is kept with it: the report used to name the method and
+    #: leave the reader to find two words among the fifteen it declares.
+    collisions: dict[str, dict[str, list[tuple[str, int, int]]]] = field(default_factory=dict)
     #: {member name: [(line, col, the entry's spelling, the platform's, the owner type)]} -
     #: dictionary entries the platform OVERRULED at a receiver of known type. The tree is
     #: right at that place; a receiver whose type nothing names gets the entry's word, and
@@ -66,14 +68,19 @@ class FileReport:
     placeholder_mismatches: list[tuple[str, int, int, list[str], list[str]]] = field(
         default_factory=list)
 
-    def note_name(self, namespace: str, source: str, translated: str) -> None:
-        """Register a translated name inside a namespace and detect a collision."""
-        seen = self.collisions.setdefault(namespace, {}).setdefault(translated, [])
-        if source not in seen:
-            seen.append(source)
+    def note_name(self, namespace: str, source: str, translated: str,
+                  line: int = 0, col: int = 0) -> None:
+        """Register a translated name inside a namespace, with its place, and detect a collision.
 
-    def collided(self) -> list[tuple[str, str, list[str]]]:
-        """[(namespace, translation, the source names)] where more than one name collided."""
+        The FIRST place of a name is the one kept: a local declared once and used ten times
+        collides at its declaration, and that is the line to edit.
+        """
+        seen = self.collisions.setdefault(namespace, {}).setdefault(translated, [])
+        if all(source != known for known, _line, _col in seen):
+            seen.append((source, line, col))
+
+    def collided(self) -> list[tuple[str, str, list[tuple[str, int, int]]]]:
+        """[(namespace, translation, [(source name, line, col)])] where more than one collided."""
         return [
             (namespace, translated, sources)
             for namespace, table in sorted(self.collisions.items())

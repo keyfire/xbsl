@@ -205,12 +205,20 @@ class ProjectReport:
         }
 
     def collect_collisions(self) -> None:
-        """Lift every name collision into `problems` - a translated tree with one would not apply."""
+        """Lift every name collision into `problems` - a translated tree with one would not apply.
+
+        Each colliding name carries its own place: the namespace alone named a method and left
+        the reader to find two words among the fifteen it declares, and the two are rarely
+        neighbours. A name whose place nothing recorded is printed bare rather than with a
+        zero, so a line number in the message is always a line of the file.
+        """
         for rel, report in sorted(self.files.items()):
             for namespace, translated, sources in report.collided():
-                self.problems.append(
-                    f"{rel}: {namespace} - '{translated}' <- {', '.join(sources)}"
+                places = ", ".join(
+                    f"{name} ({rel}:{line}:{col})" if line else name
+                    for name, line, col in sources
                 )
+                self.problems.append(f"{namespace} - '{translated}' <- {places}")
 
     def collect_dictionary_defects(self) -> None:
         """Lift what the pass learned about the DICTIONARY itself into `problems`.

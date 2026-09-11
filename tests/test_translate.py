@@ -1715,6 +1715,73 @@ def test_a_method_name_collision_is_reported_by_the_project_pass(tmp_path: Path)
     assert any("ServiceChanged" in problem for problem in report.problems), report.problems
 
 
+def test_a_collision_of_locals_names_the_place_of_both_names(tmp_path: Path):
+    """The message sends the reader to the two lines, not to a method with fifteen names in it.
+
+    Met live: "method:RolesString - 'Number' <- Номер, Число" named the method and nothing
+    else, and finding the two words among the declarations of that method was done by eye.
+    """
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl", """метод СтрокаРолей(Роли: Массив<Строка>): Строка
+    пер Номер = 0
+    пер Итог = ""
+    для Роль из Роли
+        пер Число = Роли.Размер()
+        Номер = Номер + Число
+    ;
+    возврат Итог
+;
+""")
+    report = translate_project(root, _dictionary({
+        "Модуль": "Module", "СтрокаРолей": "RolesString", "Роли": "Roles", "Роль": "Role",
+        "Номер": "Number", "Число": "Number", "Итог": "Total",
+    }), None)
+
+    assert report.problems == [
+        "method:СтрокаРолей - 'Number' <- Номер (Модуль.xbsl:2:9), Число (Модуль.xbsl:5:13)",
+    ]
+
+
+def test_a_collision_of_method_names_names_the_line_of_each_method(tmp_path: Path):
+    """The module namespace too: the two methods are pages apart in a real module."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Модуль.xbsl",
+           "метод УслугаИзменена()\n;\n\nметод СервисИзменен()\n;\n")
+    report = translate_project(root, _dictionary({
+        "Модуль": "Module",
+        "УслугаИзменена": "ServiceChanged", "СервисИзменен": "ServiceChanged",
+    }), None)
+
+    assert report.problems == [
+        "module - 'ServiceChanged' <- УслугаИзменена (Модуль.xbsl:1:7),"
+        " СервисИзменен (Модуль.xbsl:4:7)",
+    ]
+
+
+def test_a_collision_of_yaml_names_names_the_line_of_each_name(tmp_path: Path):
+    """A collection of one element: the places come from the yaml nodes."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Задачи.yaml", (
+        "ВидЭлемента: Справочник\n"
+        "Имя: Задачи\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Услуга\n"
+        "        Тип: Строка\n"
+        "    -\n"
+        "        Имя: Сервис\n"
+        "        Тип: Строка\n"
+    ))
+    report = translate_project(root, _dictionary({
+        "Задачи": "Tasks", "Услуга": "Service", "Сервис": "Service",
+    }), None)
+
+    assert report.problems == [
+        "Задачи.Реквизиты - 'Service' <- Услуга (Задачи.yaml:5:14),"
+        " Сервис (Задачи.yaml:8:14)",
+    ]
+
+
 def test_writing_a_value_already_taken_is_reported(tmp_path: Path):
     """The same answer at the moment a person types the word, one lookup instead of a project pass."""
     from xbsl.translation import entries
@@ -1840,7 +1907,12 @@ def test_two_fields_of_one_structure_under_one_word_are_a_problem(tmp_path: Path
         "Сервисы": "Services", "Услуги": "Services",
     }), None)
     assert any("structure:ДанныеЗаписи" in problem for problem in report.problems)
-    assert any("Сервисы, Услуги" in problem for problem in report.problems)
+    # Each colliding name carries its own place: the report sends the reader to the two lines
+    # rather than to a file with fifteen names in the block.
+    assert any(
+        "Сервисы (Модуль.xbsl:2:9), Услуги (Модуль.xbsl:3:9)" in problem
+        for problem in report.problems
+    ), report.problems
 
 
 def test_the_receiver_as_written_answers_before_its_type(tmp_path: Path):

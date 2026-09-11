@@ -199,7 +199,10 @@ translates its sources but keeps its language layout.
 `--strict` exits non-zero unless the coverage is complete and no problems were found - what a CI
 job wants before it publishes a translated build. Name COLLISIONS are such a problem: two
 different names of one namespace translated into one word is a build breaker (the platform
-refuses a repeated name), and only the translator can see it.
+refuses a repeated name), and only the translator can see it. Every colliding name is reported
+with its own place – `method:RolesString - 'Number' <- ... (Module.xbsl:2:9), ... (Module.xbsl:5:13)` –
+because a namespace on its own leaves the reader to find two words among the fifteen a method
+declares, and the two are rarely neighbours.
 
 Two more problems come from the dictionary itself, and both were found on a real project whose
 English build failed while the coverage stood at 100%. An entry that spells a platform member as

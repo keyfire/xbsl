@@ -571,13 +571,16 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
                     _dispatch_value(item, dispatch_key, target, edits)
                 # The items of one collection share a namespace: two names translated into
                 # one word is what the platform refuses on apply.
-                own_name = _mapping_value(item, "Имя")
+                name_node = _mapping_value_node(item, "Имя")
+                own_name = name_node.value if name_node is not None else None
                 if own_name and has_cyrillic(own_name):
                     # The very resolution the rewrite uses, qualifier included: a check that
                     # asked differently reported collisions the rewrite does not make.
                     translated, _plane = resolver.identifier(own_name, scope=owner)
                     if translated:
-                        report.note_name(f"{namespace}.{key}", own_name, translated)
+                        line, col = _at(name_node)
+                        report.note_name(f"{namespace}.{key}", own_name, translated,
+                                         line, col)
                 if target:
                     _walk_meta_mapping(item, target, metamodel.properties_of_class(target), None,
                                        resolver, report, edits, owner=owner,
@@ -645,11 +648,17 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
 
 def _mapping_value(node, key: str) -> str | None:
     """The scalar value of the given key of a mapping (`Name`, or a dispatch key)."""
+    found = _mapping_value_node(node, key)
+    return found.value if found is not None else None
+
+
+def _mapping_value_node(node, key: str):
+    """The scalar NODE of that key - the value with its place, for a report that names one."""
     wanted = (key, "Name") if key == "Имя" else (key,)
     for knode, vnode in node.value:
         if isinstance(knode, yaml.ScalarNode) and knode.value in wanted \
                 and isinstance(vnode, yaml.ScalarNode):
-            return vnode.value
+            return vnode
     return None
 
 
@@ -937,7 +946,9 @@ def _walk_localization_section(node, resolver, report, edits, scope: str = "") -
             # dictionaries may hold the same key, and the platform only refuses a repeat
             # inside one element. Calling that a collision sent people renaming keys that
             # never met.
-            report.note_name(f"localization:{scope or '?'}", knode.value, replacement)
+            line, col = _at(knode)
+            report.note_name(f"localization:{scope or '?'}", knode.value, replacement,
+                             line, col)
             _set_scalar(knode, replacement, edits)
         else:
             line, col = _at(knode)
