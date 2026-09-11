@@ -123,6 +123,17 @@ class ProjectReport:
     #: build takes the directory whole - so the orphan deploys along with everything else,
     #: and a directory standing where a file now goes fails the write outright.
     removed: int = 0
+    #: WHAT the clean judged to be a leftover, relative to the output directory - in the order
+    #: it was walked. Kept whether or not the removal happened, because that is the only way
+    #: to see the list BEFORE it is acted on: the first clean of a tree of a thousand files
+    #: was a blind step, and a count after the fact answers nothing about what went.
+    removals: list[str] = field(default_factory=list)
+    #: Whether the pass only SAID what it would do. Nothing is written, nothing is removed,
+    #: and `removed`/`written` stay at zero - `removals` and `planned` carry the answer.
+    dry_run: bool = False
+    #: How many files the tree would take - the size of what the pass built in memory. Equal
+    #: to `written` when everything went in, and the only count a dry run has.
+    planned: int = 0
     #: Where the tree was actually written - the PROJECT directory, which is not the `out`
     #: the caller named: a build demands `{repository}/{Vendor}/{Name}`, so an `out` that is
     #: a repository root gets those two directories under it (see `_destination`).
@@ -346,6 +357,7 @@ def translate_project(
     swap_localization: bool = True,
     layout: str = "project",
     clean: bool = False,
+    dry_run: bool = False,
 ) -> ProjectReport:
     """Translate the tree under `root`; write it under `out` when one is given.
 
@@ -357,6 +369,11 @@ def translate_project(
 
     `clean` removes what THIS pass does not write - see `_clean_tree`; without it a repeat
     into the same directory only overwrites, and the orphans of an earlier run stay.
+
+    `dry_run` takes the whole pass up to the writing and stops there: the tree is built, the
+    destination is judged, the leftovers are listed - and nothing is written or removed. That
+    is what makes a first `clean` reviewable: the answer to "what is about to go" arrives
+    before it goes, not as a count afterwards.
     """
     files = _iter_files(root, dictionary)
     resolver = Resolver(
@@ -413,7 +430,8 @@ def translate_project(
     }
 
     if out is not None:
-        _write_tree(_destination(out, outputs, layout), outputs, report, clean=clean)
+        _write_tree(_destination(out, outputs, layout), outputs, report,
+                    clean=clean, dry_run=dry_run)
     return report
 
 
@@ -702,7 +720,8 @@ def _destination(out: Path, outputs, layout: str) -> Path:
 _WRITE_PROBLEMS_SHOWN = 5
 
 
-def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False) -> None:
+def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False,
+                dry_run: bool = False) -> None:
     """Write the translated tree, and never die on the way: a failure is a reported problem.
 
     The pass costs minutes and its report is printed AFTERWARDS, so an exception raised here
@@ -710,8 +729,14 @@ def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False) 
     which reads as a broken dictionary rather than as a directory that cannot be written to.
     Every OS error is now named with its file and carried in `problems` - the run finishes,
     the report is printed, and `write_failed` tells the caller the tree is not there.
+
+    A dry run goes through the same judgements and stops before touching the disk: the
+    destination is checked for occupancy (the write WOULD be refused, and that is worth
+    knowing beforehand), the leftovers are listed, and nothing is written or removed.
     """
     report.out_dir = out
+    report.dry_run = dry_run
+    report.planned = len(outputs)
     if out.exists() and any(out.iterdir()):
         marker = any((out / name).exists() for name in (scaffold.PROJECT_FILE_EN, scaffold.PROJECT_FILE))
         if not marker:
@@ -722,7 +747,9 @@ def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False) 
             report.write_failed = True
             return
     if clean:
-        _clean_tree(out, outputs, report)
+        _clean_tree(out, outputs, report, dry_run=dry_run)
+    if dry_run:
+        return
     failures: list[tuple[Path, str]] = []
     for new_rel, (rel_str, translated, source) in sorted(outputs.items(), key=lambda kv: str(kv[0])):
         del rel_str
@@ -749,7 +776,7 @@ def _write_tree(out: Path, outputs, report: ProjectReport, clean: bool = False) 
     report.write_failed = report.write_failed or bool(failures)
 
 
-def _clean_tree(out: Path, outputs, report: ProjectReport) -> None:
+def _clean_tree(out: Path, outputs, report: ProjectReport, dry_run: bool = False) -> None:
     """Take out of `out` everything this pass is not about to write.
 
     Why a repeat into the same directory is not enough: the pass overwrites the files it
@@ -774,6 +801,11 @@ def _clean_tree(out: Path, outputs, report: ProjectReport) -> None:
 
     A removal that fails is a reported problem, not the end of the pass: the tree is still
     written, and the report says which leftover stayed and why.
+
+    Every leftover is NAMED in `report.removals` whether or not it is removed, and `dry_run`
+    stops at the naming. A first clean of a translated tree of a thousand files was otherwise
+    a blind step - the only account of it was a count printed after the fact, which answers
+    nothing about what a build just lost.
     """
     if not out.exists():
         return
@@ -790,11 +822,18 @@ def _clean_tree(out: Path, outputs, report: ProjectReport) -> None:
         for name in filenames:
             path = here / name
             if path not in files:
-                _remove(path.unlink, path, report, failures)
+                _leftover(path, out, report)
+                if not dry_run:
+                    _remove(path.unlink, path, report, failures)
         for name in dirnames:
             path = here / name
             if path not in directories:
-                _remove(path.rmdir, path, report, failures)
+                _leftover(path, out, report)
+                if not dry_run:
+                    # A directory is empty by now - its own leftovers went first, and a dry
+                    # run reaches here with the contents still in place. So it is named as a
+                    # directory that would go, and `rmdir` is the pass that actually does it.
+                    _remove(path.rmdir, path, report, failures)
     for path, error in failures[:_WRITE_PROBLEMS_SHOWN]:
         report.problems.append(i18n.t(
             "translate.problem.clean-failed", path=path, error=error))
@@ -803,6 +842,11 @@ def _clean_tree(out: Path, outputs, report: ProjectReport) -> None:
             "translate.problem.write-failed-more",
             count=len(failures) - _WRITE_PROBLEMS_SHOWN,
         ))
+
+
+def _leftover(path: Path, out: Path, report: ProjectReport) -> None:
+    """One leftover, named - relative to the output directory, the way the report reads."""
+    report.removals.append(path.relative_to(out).as_posix())
 
 
 def _remove(how, path: Path, report: ProjectReport,
