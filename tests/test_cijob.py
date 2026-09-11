@@ -35,6 +35,19 @@ build:
     - elemctl build
 """
 
+# A pipeline of a project that builds a SECOND tree: the sources in one job, what `translate`
+# wrote in another - and the second one judges a different set (no baseline of its own, a rule
+# switched off). Taking the first command describes the wrong tree.
+BILINGUAL = """xbsl-lint:
+  script:
+    - xbsl e1c --baseline .xbsllint-baseline --enable code/unused-method
+
+English to S3:
+  script:
+    - xbsl translate e1c --out build/en --strict
+    - xbsl build/en --no-baseline --ignore code/undefined-name
+"""
+
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -142,6 +155,49 @@ def test_a_project_without_a_pipeline_says_so(tmp_path: Path):
     assert ".gitlab-ci.yml" in str(exc.value)
 
 
+# --- which job, when the file runs the linter more than once ------------------------------------
+
+
+def test_without_a_name_the_first_job_wins_and_the_other_is_named(tmp_path: Path):
+    """The old behaviour stands - but the run stops pretending there was only one job."""
+    ci = cijob.read(_write(tmp_path / ".gitlab-ci.yml", BILINGUAL))
+    assert ci.job == "xbsl-lint" and ci.enable == ("code/unused-method",)
+    assert ci.alternatives == ("English to S3",)
+    assert "English to S3" in ci.hint() and "--as-ci-job" in ci.hint()
+
+
+def test_the_named_job_is_the_one_read(tmp_path: Path):
+    """Its literal command: no baseline, one rule off - nothing of the first job's set."""
+    ci = cijob.read(_write(tmp_path / ".gitlab-ci.yml", BILINGUAL), "English to S3")
+    assert ci.job == "English to S3"
+    assert ci.ignore == ("code/undefined-name",) and ci.no_baseline is True
+    assert ci.enable == () and ci.baseline is None
+    assert ci.paths == ("build/en",)  # the translated tree, not the sources
+    assert ci.alternatives == ("xbsl-lint",)
+
+
+def test_a_part_of_the_name_is_enough_while_it_fits_one_job(tmp_path: Path):
+    """A job name with spaces is tedious to quote; a half that fits two is refused, not guessed."""
+    path = _write(tmp_path / ".gitlab-ci.yml", BILINGUAL)
+    assert cijob.read(path, "english").job == "English to S3"
+    assert cijob.read(path, "ENGLISH TO S3").job == "English to S3"
+    with pytest.raises(cijob.CiLintError) as exc:
+        cijob.read(path, "s")  # both "xbsl-lint" and "English to S3" carry it
+    assert "xbsl-lint" in str(exc.value) and "English to S3" in str(exc.value)
+
+
+def test_a_job_the_file_does_not_have_names_the_ones_it_does(tmp_path: Path):
+    with pytest.raises(cijob.CiLintError) as exc:
+        cijob.read(_write(tmp_path / ".gitlab-ci.yml", BILINGUAL), "нет-такой")
+    assert "xbsl-lint" in str(exc.value) and "English to S3" in str(exc.value)
+
+
+def test_a_single_job_file_offers_no_alternatives(tmp_path: Path):
+    """Nothing to choose from - and nothing said about choosing."""
+    ci = cijob.read(_write(tmp_path / ".gitlab-ci.yml", GITLAB))
+    assert ci.alternatives == () and ci.hint() == ""
+
+
 def test_a_pipeline_that_runs_no_linter_says_so(tmp_path: Path):
     path = _write(tmp_path / ".gitlab-ci.yml", "build:\n  script:\n    - elemctl build\n")
     with pytest.raises(cijob.CiLintError) as exc:
@@ -212,6 +268,32 @@ def test_as_ci_without_a_pipeline_file_refuses_instead_of_checking_a_narrower_se
     _write(root / "ФормаОдин.yaml", _FORM.format(n=0, name="ФормаОдин", rows=_rows(3)))
     assert cli.main([str(root), "--as-ci"]) == 2
     assert ".gitlab-ci.yml" in capsys.readouterr().err
+
+
+@pytest.mark.needs_data
+def test_as_ci_job_picks_the_second_job_and_implies_as_ci(tmp_path: Path, capsys):
+    """`--as-ci-job` alone is enough: naming a job is asking for the job's set."""
+    root = _project_with_a_copied_subtree(tmp_path)
+    _write(tmp_path / ".gitlab-ci.yml",
+           "xbsl-lint:\n  script:\n    - xbsl project\n"
+           "English to S3:\n  script:\n    - xbsl project --enable yaml/duplicate-subtree\n")
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci"]) == 0
+    first = capsys.readouterr()
+    assert "yaml/duplicate-subtree" not in first.out  # the first job enables nothing
+    assert "--as-ci-job" in first.err  # ...but the run says the choice existed
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci-job", "english"]) == 0
+    second = capsys.readouterr()
+    assert "yaml/duplicate-subtree" in second.out
+    assert "English to S3" in second.err
+
+
+@pytest.mark.needs_data
+def test_a_job_that_is_not_in_the_file_refuses_by_name(tmp_path: Path, capsys):
+    root = _project_with_a_copied_subtree(tmp_path)
+    assert cli.main([str(root), "--as-ci-job", "no-such-job"]) == 2
+    assert "no-such-job" in capsys.readouterr().err
 
 
 @pytest.mark.needs_data

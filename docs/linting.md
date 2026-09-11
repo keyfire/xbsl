@@ -187,8 +187,28 @@ the paths - stays the run's own business: one folder is checked far more often t
 With no pipeline file, or no `xbsl` command in it, the run refuses with a message instead of
 quietly checking a narrower set: that silent difference is what cost the red job.
 
-The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and puts `as_ci`
-(file, job, flags) into the summary.
+**Which job, when the pipeline runs the linter twice.** A project that builds a second tree
+checks it in a second job - the sources in one, what `translate` wrote in another - and those
+two judge different sets (the translated tree has no baseline of its own and switches a rule
+off). Without a name the FIRST command wins, and the run says out loud that there was a
+choice:
+
+```
+The linter also runs in: English to S3 - choose one with --as-ci-job <name>
+```
+
+`--as-ci-job` takes that one (and implies `--as-ci`, so it is enough on its own). A part of
+the name is accepted while only one job fits - a name with spaces is tedious to quote:
+
+```sh
+xbsl build/en --as-ci-job english      # the set of the "English to S3" job
+```
+
+A half that fits two jobs is refused rather than guessed, and a name the file does not have
+answers with the names it does.
+
+The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and `as_ci_job`,
+and puts `as_ci` (file, job, flags, the other jobs) into the summary.
 
 ### GitHub Actions
 

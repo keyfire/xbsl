@@ -164,6 +164,11 @@ def build_parser() -> argparse.ArgumentParser:
         help=i18n.t("cli.help.as-ci"),
     )
     parser.add_argument(
+        "--as-ci-job",
+        metavar=i18n.t("cli.help.meta.job"),
+        help=i18n.t("cli.help.as-ci-job"),
+    )
+    parser.add_argument(
         "--baseline",
         metavar=baseline_file,
         help=i18n.t("cli.help.baseline"),
@@ -1112,12 +1117,12 @@ def _check_main(argv: list[str]) -> int:
 
     from xbsl.engine import RULES, active_rules, load, make_source, run_sources
 
-    if args.as_ci is not None:
+    if args.as_ci is not None or args.as_ci_job:
         # "As in CI" is read from the pipeline file itself, never from a second list of rules
         # kept in step by hand: the job's --enable flags are what a local pass was missing,
         # and a mismatch is then impossible by construction.
         try:
-            job = cijob.find(args.paths, args.as_ci or None)
+            job = cijob.find(args.paths, args.as_ci or None, args.as_ci_job)
         except cijob.CiLintError as exc:
             print(str(exc), file=sys.stderr)
             return 2
@@ -1131,6 +1136,11 @@ def _check_main(argv: list[str]) -> int:
             args.no_baseline = job.no_baseline
         if args.format == "text":
             print(job.describe(), file=sys.stderr)
+            # A pipeline that runs the linter twice checks two different trees by two
+            # different sets, and a run that took one of them without being asked must not
+            # let the reader believe there was only one.
+            if not args.as_ci_job and job.hint():
+                print(job.hint(), file=sys.stderr)
 
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)

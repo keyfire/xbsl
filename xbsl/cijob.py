@@ -18,6 +18,13 @@ is linting one file as often as the whole tree.
 The reader is format-agnostic on purpose: it walks the parsed YAML for the keys that hold
 shell commands (`script`, `before_script`, `after_script`, `run`), so a GitLab job and a
 GitHub Actions step are read by the same code.
+
+A pipeline runs the linter more than once as soon as a project builds a second tree: one job
+checks the sources, another checks what `translate` wrote, and those two judge DIFFERENT sets
+(the translated tree has no baseline of its own and switches a rule off). Taking the first
+command silently describes one of them, so the job can be named - `--as-ci-job <name>` - and
+a file with more than one is reported by `alternatives`, which is how a caller learns there
+was a choice at all.
 """
 
 from __future__ import annotations
@@ -51,6 +58,18 @@ MESSAGES = {
         "ru": "Набор правил как в CI: {path}, джоба {job} – своих ключей у команды нет",
         "en": "Rule set as in CI: {path}, job {job} - the command carries no flags of its own",
     },
+    "ci.other-jobs": {
+        "ru": "Линтер в этом файле гоняет ещё: {jobs} – выбрать: --as-ci-job <имя>",
+        "en": "The linter also runs in: {jobs} - choose one with --as-ci-job <name>",
+    },
+    "ci.no-job": {
+        "ru": "В {path} нет джобы {job} с командой xbsl; есть: {jobs}",
+        "en": "{path} has no job {job} running xbsl; it has: {jobs}",
+    },
+    "ci.ambiguous-job": {
+        "ru": "В {path} под '{job}' подходит несколько джоб: {jobs} – назовите одну целиком",
+        "en": "In {path} '{job}' fits several jobs: {jobs} - name one in full",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -82,6 +101,11 @@ class CiLint:
     no_baseline: bool = False
     #: The paths the job checks - reported, never imposed: a local run lints what it is asked to.
     paths: tuple[str, ...] = field(default=())
+    #: The OTHER jobs of the same file that run the linter, in document order. A run that was
+    #: not told which job to take says out loud that there was a choice: the second job of a
+    #: bilingual project judges a different tree by a different set, and a caller who never
+    #: learns it exists compares its verdict with the wrong one.
+    alternatives: tuple[str, ...] = field(default=())
 
     def baseline_file(self) -> str | None:
         """The job's baseline as a path a local run can open.
@@ -108,6 +132,12 @@ class CiLint:
         key = "ci.adopted" if flags else "ci.adopted-nothing"
         return i18n.t(key, path=self.path, job=self.job, flags=", ".join(flags))
 
+    def hint(self) -> str:
+        """The line about the jobs NOT taken, or empty when the file runs the linter once."""
+        if not self.alternatives:
+            return ""
+        return i18n.t("ci.other-jobs", jobs=", ".join(self.alternatives))
+
 
 def discover(start: Path | str) -> Path | None:
     """The pipeline file at `start` or above it - the way the baseline file is found."""
@@ -130,25 +160,61 @@ def discover(start: Path | str) -> Path | None:
     return None
 
 
-def read(path: Path | str) -> CiLint:
-    """The rule set of the first xbsl command in the pipeline file. Raises CiLintError."""
+def read(path: Path | str, job: str | None = None) -> CiLint:
+    """The rule set of an xbsl command in the pipeline file. Raises CiLintError.
+
+    Without `job` the FIRST command wins - the one a single-job pipeline has anyway. With it
+    the named job is taken, so a project that lints a second tree in a second job can ask for
+    that one; the name is matched as written, then case-blind, then as a part of a job name
+    when exactly one fits (`--as-ci-job english` for "English to S3" - a name with spaces is
+    tedious to quote, and a half-typed one that fits two jobs is refused, not guessed).
+    """
     path = Path(path)
     found = _commands(_load(path))
     if not found:
         raise CiLintError(i18n.t("ci.no-command", path=path))
-    job, argv = found[0]
-    return _flags(path, job, argv)
+    names = []
+    for name, _argv in found:
+        if name not in names:
+            names.append(name)
+    chosen = _pick(path, found, names, job)
+    return _flags(path, found[chosen][0], found[chosen][1],
+                  alternatives=tuple(n for n in names if n != found[chosen][0]))
 
 
-def find(paths: list[str] | tuple[str, ...], named: str | None = None) -> CiLint:
+def find(
+    paths: list[str] | tuple[str, ...],
+    named: str | None = None,
+    job: str | None = None,
+) -> CiLint:
     """The CI rule set for a run over `paths` - the named file, or the one found above them."""
     if named:
-        return read(named)
+        return read(named, job)
     for start in list(paths) or ["."]:
         found = discover(start)
         if found is not None:
-            return read(found)
+            return read(found, job)
     raise CiLintError(i18n.t("ci.no-file", names=", ".join(CI_FILES)))
+
+
+def _pick(path: Path, found: list[tuple[str, list[str]]], names: list[str],
+          job: str | None) -> int:
+    """The index in `found` of the command to take: the first one, or the named job's."""
+    if not job:
+        return 0
+    wanted = job.strip()
+    for match in (lambda name: name == wanted,
+                  lambda name: name.casefold() == wanted.casefold()):
+        hits = [index for index, (name, _) in enumerate(found) if match(name)]
+        if hits:
+            return hits[0]
+    fits = [name for name in names if wanted.casefold() in name.casefold()]
+    if len(fits) > 1:
+        raise CiLintError(i18n.t(
+            "ci.ambiguous-job", path=path, job=wanted, jobs=", ".join(fits)))
+    if fits:
+        return next(index for index, (name, _) in enumerate(found) if name == fits[0])
+    raise CiLintError(i18n.t("ci.no-job", path=path, job=wanted, jobs=", ".join(names)))
 
 
 def _load(path: Path) -> object:
@@ -231,7 +297,8 @@ def _is_check(argv: list[str]) -> bool:
     return first not in {command.name for command in COMMANDS}
 
 
-def _flags(path: Path, job: str, argv: list[str]) -> CiLint:
+def _flags(path: Path, job: str, argv: list[str],
+           alternatives: tuple[str, ...] = ()) -> CiLint:
     """The verdict-shaping flags of one command line; everything else is the caller's."""
     lists: dict[str, list[str]] = {"--select": [], "--ignore": [], "--enable": []}
     baseline: str | None = None
@@ -260,7 +327,7 @@ def _flags(path: Path, job: str, argv: list[str]) -> CiLint:
         path=path, job=job, argv=tuple(argv),
         select=tuple(lists["--select"]), ignore=tuple(lists["--ignore"]),
         enable=tuple(lists["--enable"]), baseline=baseline or None,
-        no_baseline=no_baseline, paths=tuple(paths),
+        no_baseline=no_baseline, paths=tuple(paths), alternatives=alternatives,
     )
 
 
