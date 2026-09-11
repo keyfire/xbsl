@@ -81,8 +81,8 @@ The xbsl LSP server (stdio)
 
 ```bash
 usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore IGNORE]
-                [--enable ENABLE] [--baseline BASELINE] [--templates TEMPLATES]
-                [--data-dir DATA_DIR] [--lang {ru,en}]
+                [--enable ENABLE] [--as-ci [AS_CI]] [--as-ci-job AS_CI_JOB] [--baseline BASELINE]
+                [--templates TEMPLATES] [--data-dir DATA_DIR] [--lang {ru,en}]
 ```
 
 **Options**
@@ -94,6 +94,8 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 | `--select SELECT` | these rules only (comma-separated) |
 | `--ignore IGNORE` | exclude these rules (comma-separated) |
 | `--enable ENABLE` | enable rules on top of the default set |
+| `--as-ci [AS_CI]` | judge by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from the xbsl command of the pipeline file (the file can be named); with no pipeline the settings' set stands and the reason goes to stderr |
+| `--as-ci-job AS_CI_JOB` | which job of the CI file to take (implies `--as-ci`); a part of the name is enough |
 | `--baseline BASELINE` | the baseline file (absolute or relative to the workspace folder) – the findings frozen there are suppressed; a missing file is not an error, it appears with the first exclusion |
 | `--templates TEMPLATES` | the code templates file (absolute or relative to the workspace folder) – it extends the builtin set and replaces templates of the same name |
 | `--data-dir DATA_DIR` | the Element data root (the folder with index.json) |

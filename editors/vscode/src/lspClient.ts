@@ -11,6 +11,7 @@ import {
   ServerOptions,
 } from "vscode-languageclient/node";
 import { baselineForLint } from "./excludeAction";
+import { ciJobArgs, ciSettings } from "./report";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { needsServerRestart } from "./lspRestartCore";
 import { applyOverride, engineRuleArgs } from "./ruleConfig";
@@ -113,6 +114,12 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   if (baselineArg) {
     args.push("--baseline", baselineArg);
   }
+
+  // The rule set of the project's CI job, when the settings ask for it. The server reads the
+  // pipeline file itself - the flag is all that crosses the boundary, so the panel, the
+  // terminal and the merge request judge by one list and not by three copies of it. The
+  // server never has a path argument after these, so no `--` is needed here.
+  args.push(...ciJobArgs({ command: plan.command, usePython: false, ...ciSettings(cfg) }));
 
   const serverOptions: ServerOptions = {
     command: plan.command,

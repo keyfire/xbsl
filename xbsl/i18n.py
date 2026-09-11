@@ -566,6 +566,19 @@ _CORE_MESSAGES = {
         "ru": "включить правила поверх набора по умолчанию",
         "en": "enable rules on top of the default set",
     },
+    "cli.help.lsp.as-ci": {
+        "ru": "судить тем же набором правил, что джоба CI проекта: ключи --select/--ignore/"
+              "--enable и базлайн берутся из команды xbsl в файле пайплайна (можно назвать "
+              "файл явно); пайплайна нет – набор настроек остаётся, причина пишется в stderr",
+        "en": "judge by the rule set the project's CI job runs: the --select/--ignore/--enable "
+              "flags and the baseline are taken from the xbsl command of the pipeline file "
+              "(the file can be named); with no pipeline the settings' set stands and the "
+              "reason goes to stderr",
+    },
+    "cli.help.lsp.as-ci-job": {
+        "ru": "какую джобу файла CI брать (включает --as-ci); имя можно назвать частью",
+        "en": "which job of the CI file to take (implies --as-ci); a part of the name is enough",
+    },
     "cli.help.lsp.baseline": {
         "ru": "файл базлайна (абсолютный или относительно папки воркспейса) – исключённые "
               "находки гасятся; отсутствующий файл не ошибка, он появится с первым исключением",

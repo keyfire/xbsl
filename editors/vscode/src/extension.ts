@@ -1,7 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
-import { LinterConfig, RawDiag, RawReport } from "./report";
+import { ciSettings, LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
 import { registerDebug } from "./debug";
 import { createFormDataModel, registerFormDataCommands } from "./formData";
@@ -102,6 +102,9 @@ function readSettings(resource?: vscode.Uri): Settings {
       ...engineRuleArgs(resource),
       // An existing baseline file: excluded findings are suppressed in every run.
       baseline: baselineForLint(resource),
+      // The rule set of the project's CI job instead of the defaults, read by the engine
+      // from the pipeline file: naming a job is asking for that job's set.
+      ...ciSettings(c),
     },
     run: c.get<"onType" | "onSave" | "off">("linter.run") || "onType",
     debounce: c.get<number>("linter.debounce") ?? 300,

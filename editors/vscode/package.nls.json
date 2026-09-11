@@ -88,6 +88,8 @@
   "config.linter.command": "The xbsl executable, when it is not on PATH. [Details](https://docs.keyfire.ru/xbsl/start)",
   "config.linter.pythonPath": "The Python interpreter to run the engine as a module. [Details](https://docs.keyfire.ru/xbsl/start)",
   "config.linter.dataDir": "The folder with the generated 1C:Element language data. [Details](https://docs.keyfire.ru/xbsl/start#language-data)",
+  "config.linter.asCi": "Judge by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from the `xbsl` command of the pipeline file (`.gitlab-ci.yml` or a GitHub workflow next to the project). Without it the Problems panel judges by the defaults while the merge request is gated by a different set. With no pipeline file the settings' own set stands and the reason is written to the XBSL output channel.",
+  "config.linter.asCiJob": "Which job of the pipeline file to take - a pipeline runs the linter twice as soon as the project checks a second tree (a translation), and those jobs judge different sets. A part of the name is enough while only one job fits. Setting it turns on `xbsl.linter.asCi`.",
   "config.linter.lang": "Language of the diagnostic messages.",
   "config.linter.lang.enum.0": "Follow the display language of the editor",
   "config.linter.lang.enum.1": "Russian",

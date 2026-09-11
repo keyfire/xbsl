@@ -12,6 +12,15 @@
 ## 0.67.7
 
 ### Added
+- **The Problems panel can judge by the rule set of the project's CI job.** The terminal and
+  an agent could already take it (`--as-ci`), the panel could not - so the same tree got two
+  verdicts and the one gating the merge request was the other one. `xbsl.linter.asCi` turns it
+  on and `xbsl.linter.asCiJob` names the job when the pipeline runs the linter twice (a project
+  that checks a translated tree runs two, by two different sets). The rule set is not copied
+  into the settings: the extension passes a flag and the engine reads the pipeline file, so
+  there is no second list to keep in step. The `xbsl.rules` table stays ON TOP of the job's
+  set, and with no pipeline file nothing breaks - the reason appears in the XBSL output channel
+  and the settings' own set stands.
 - **The hover and the documentation panel show a type member's block.** Over
   `Text.Substring` the hover said what the type String is and a right click opened its
   whole page; a bare member name fell through to full-text search. The hover now shows
