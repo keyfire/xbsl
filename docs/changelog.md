@@ -28,6 +28,19 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **`--as-ci-job`: which job to take, when the pipeline runs the linter twice.** A project
+  that builds a second tree checks it in a second job - the sources in one, what `translate`
+  wrote in another - and the two judge different sets: the translated tree has no baseline of
+  its own and switches a rule off. `--as-ci` took the FIRST `xbsl` command of the file, and
+  there was nothing to pick the other with, so a preflight for the second tree compared its
+  verdict with the wrong job. The job can now be named (`--as-ci-job english` implies
+  `--as-ci`, so it is enough on its own): the name is matched as written, then case-blind,
+  then as a part of one - a name with spaces is tedious to quote. A part that fits two jobs is
+  refused with both names rather than guessed, and a name the file does not have answers with
+  the names it does. A run that was NOT told which job to take prints a second line about the
+  ones it passed over, so the difference between the sets stops being silent. The same for an
+  agent: `lint_paths(as_ci_job=...)`, and the `as_ci` summary carries the other jobs in
+  `jobs`. ([#13](https://github.com/keyfire/xbsl/pull/13))
 - **`--as-ci`: a local run with the rule set the project's job runs.** A project turns its own
   rules on with `--enable` right in the pipeline, a local run knew nothing about them, and the
   difference was learned from a red job - a round trip one push long. The flag reads the set
