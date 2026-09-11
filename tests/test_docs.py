@@ -392,6 +392,18 @@ def _at(line: int, character: int) -> dict:
     return {"position": {"line": line, "character": character}}
 
 
+def _lsp_with_project_method(root: Path, code: str, name: str):
+    """The same one-module project, but the index KNOWS a method of that name in it."""
+    features, uri = _lsp_on(root, code)
+    from xbsl import lsp as lsp_module
+
+    lsp_module.STATE.lookup = lsp_module.IndexLookup({
+        "methods": [{"module": "Модуль", "name": name, "path": "Модуль.xbsl",
+                     "line": 1, "params": "()"}],
+    })
+    return features, uri
+
+
 def test_hover_doc_answers_a_member_with_its_own_block(members_root, tmp_path):
     """The hover used to describe the TYPE of the receiver - what the member does was a page away."""
     features, uri = _lsp_on(tmp_path / "project", "метод Проба()\n    возврат Строка.Подстрока(0, 3)\n;\n")
@@ -440,6 +452,44 @@ def test_docs_for_symbol_offers_the_types_that_declare_an_ambiguous_member(membe
     assert [hit["id"] for hit in answer["candidates"]] == [_STRING, _READABLE]
     assert "Первая перегрузка" in answer["candidates"][0]["snippet"]
     assert "Ищет в коллекции" in answer["candidates"][1]["snippet"]
+
+
+def test_a_name_the_project_declares_is_not_explained_by_the_platform(members_root, tmp_path):
+    """The gate of the project index: a `Substring` of one's own is not the platform's.
+
+    The main hover answers such a word with the project's card - the method, its signature,
+    its file - and the documentation block was put UNDER it, so the reader got the platform's
+    member of the same spelling explained beneath a method that has nothing to do with it.
+    """
+    features, uri = _lsp_with_project_method(
+        tmp_path / "project", "метод Подстрока()\n    возврат 1\n;\n", "Подстрока")
+
+    assert features["xbsl/hoverDoc"]({"uri": uri, **_at(0, 8)}) == {"pageId": None, "symbol": None}
+
+
+def test_the_panel_offers_candidates_for_a_project_name_instead_of_a_member_block(
+    members_root, tmp_path,
+):
+    """Not silence: the word may genuinely have a page, it is just not the answer here."""
+    features, uri = _lsp_with_project_method(
+        tmp_path / "project", "метод Подстрока()\n    возврат 1\n;\n", "Подстрока")
+
+    answer = features["xbsl/docsForSymbol"]({"uri": uri, **_at(0, 8)})
+
+    assert answer["page"] is None and answer["member"] == ""
+    assert [hit["id"] for hit in answer["candidates"]] == [_STRING]
+
+
+def test_a_platform_member_the_project_does_not_declare_is_explained_as_before(
+    members_root, tmp_path,
+):
+    """The control: the gate must not silence the hover over a name of the platform itself."""
+    features, uri = _lsp_with_project_method(
+        tmp_path / "project", "метод Проба()\n    возврат Строка.Подстрока(0, 3)\n;\n", "Проба")
+
+    answer = features["xbsl/hoverDoc"]({"uri": uri, **_at(1, 22)})
+
+    assert answer["pageId"] == _STRING and answer["symbol"] == "Подстрока"
 
 
 def test_docs_for_symbol_still_searches_for_a_name_no_page_carries(members_root, tmp_path):

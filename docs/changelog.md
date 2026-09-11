@@ -68,6 +68,19 @@ entry either - say what the behaviour was, not which class name was compared.
   `lint_paths(as_ci=true)` and an `as_ci` field in the summary. ([#10](https://github.com/keyfire/xbsl/pull/10))
 
 ### Changed
+- **A name the PROJECT declares is not explained by a platform member of the same spelling.**
+  The project and the platform share a lot of words - a module of one's own has a `Write` as
+  readily as the platform does - and the main hover already answered such a name with the
+  project's own card: the method, its signature, the file it lives in. The documentation block
+  was then added UNDER that card, so the reader got a platform member that has nothing to do
+  with the method in front of him. The gate is the project index itself rather than a second
+  list of what counts as a project name: whatever the hover answers with - an object, a method
+  of the module, a component of the form, a tabular section, a value of an enumeration - is the
+  project's answer, and the two cannot drift apart. The panel no longer says "no symbol under
+  the cursor" where there plainly is one either: over a name of the project (and over a local
+  variable, whose gate is older) it now offers the search over that word - the word may
+  genuinely have a page, it is simply not the answer to "what is this name here".
+  ([#16](https://github.com/keyfire/xbsl/pull/16))
 - **The hover and the documentation panel answer with a MEMBER's block, not with its type's
   page.** The engine could find a member by name; the editor did not use it: over
   `Text.Substring` the hover said what the type String is ("A sequence of characters"), and a

@@ -42,6 +42,17 @@ the line under it; for everything else with no page of its own the candidates ar
 the receiver before the dot**: `ScheduledJob.Configure` prefers the scheduled job pages over a
 guide topic of the same name.
 
+A name the PROJECT declares is never explained by a platform member of the same spelling. The
+project and the platform share a lot of words - a module of one's own has a `Write` as readily
+as the platform does - and the main hover answers such a name with the project's own card: the
+method, its signature, the file it lives in. The documentation block used to be added under
+that card, so the reader got a platform member that has nothing to do with the method in front
+of him. The gate is the project index itself, not a second list of what counts as a project
+name: whatever the hover answers with - an object, a method of the module, a component of the
+form, a tabular section, a value of an enumeration - is the project's answer, and the block
+stays out of it. The panel still offers the search over that word: it may genuinely have a
+page, it is simply not the answer to "what is this name here".
+
 ## What you need
 
 - **LSP mode** (`pip install "xbsl[lsp]"`): the server holds the documentation database, the
