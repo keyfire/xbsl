@@ -28,6 +28,16 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **The LSP server answers which rule set it judges by (`xbsl/ciStatus`).** `--as-ci` is taken
+  once, at startup, and said out loud in one line on stderr - the output channel of the editor,
+  which is not where anyone looks while reading a finding. The silent half is worse: with no
+  pipeline file the server does NOT refuse (that would cost the whole editing session) and goes
+  on judging by the rules it was given, while the reader believes the panel and the merge
+  request agree. The request answers what came of it - taken or not, which job, out of which
+  file (and which `include:` brought it), the baseline, the other jobs, the includes left
+  unread - and the ready-made lines in the server's own language, the same ones the channel
+  carries. The extension shows it in the status bar.
+  ([#22](https://github.com/keyfire/xbsl/pull/22))
 - **`translate --dry-run`: see what the pass would write and clean, before it does.** The
   first `--clean` of a translated tree was a blind step - there was nothing to show what would
   be taken out, and the only account of it was a count printed after the removal, which
