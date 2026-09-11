@@ -1141,6 +1141,10 @@ def _check_main(argv: list[str]) -> int:
             # let the reader believe there was only one.
             if not args.as_ci_job and job.hint():
                 print(job.hint(), file=sys.stderr)
+            # Said whatever job was asked for: a pipeline whose jobs come from a template
+            # nobody fetched has a blind spot, and only the reader knows if it matters.
+            if job.note():
+                print(job.note(), file=sys.stderr)
 
     select = _parse_set(args.select)
     ignore = _parse_set(args.ignore)
