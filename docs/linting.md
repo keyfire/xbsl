@@ -187,6 +187,30 @@ the paths - stays the run's own business: one folder is checked far more often t
 With no pipeline file, or no `xbsl` command in it, the run refuses with a message instead of
 quietly checking a narrower set: that silent difference is what cost the red job.
 
+**A pipeline is rarely one file.** GitLab's `include:` brings the jobs in from elsewhere, and a
+project on a shared template keeps the lint job exactly there - so a reader of the root file
+alone answered "runs no xbsl command" about a pipeline that runs one. The local files of the
+repository are followed: `include: ci/lint.yml`, `include: {local: /ci/lint.yml}`, lists of
+either, and the patterns GitLab expands there (`ci/*.yml`). A nested include resolves against
+the root of the checkout, as GitLab resolves it, and a job defined both in the root file and in
+an include is the root file's - the same precedence the pipeline itself has. The adopted line
+then names the file the command actually stands in:
+
+```
+Rule set as in CI: /repo/.gitlab-ci.yml (include /repo/ci/lint.yml), job xbsl-lint - --enable code/unused-method
+```
+
+What is NOT fetched is everything outside the checkout - a remote URL, a GitLab template, a file
+of another project, a component. That needs the network and usually a token, and a linter
+downloading a URL out of a config file behind the caller's back is a surprise, not a feature. It
+is named instead (a local include the checkout does not have is named the same way), so a job
+that stays invisible has its reason printed next to it, and the refusal above carries the list
+as well:
+
+```
+Includes left unread (they need the network or another repository): template: Jobs/SAST.gitlab-ci.yml
+```
+
 **Which job, when the pipeline runs the linter twice.** A project that builds a second tree
 checks it in a second job - the sources in one, what `translate` wrote in another - and those
 two judge different sets (the translated tree has no baseline of its own and switches a rule

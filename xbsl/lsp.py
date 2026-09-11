@@ -1923,6 +1923,8 @@ def _adopt_ci(args: argparse.Namespace) -> None:
     print(job.describe(), file=sys.stderr)
     if not args.as_ci_job and job.hint():
         print(job.hint(), file=sys.stderr)
+    if job.note():
+        print(job.note(), file=sys.stderr)
 
 
 def main() -> None:

@@ -18,6 +18,25 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+- **Parity with CI reads the `include:` of GitLab.** A pipeline is rarely one file: the
+  includes bring the jobs in from elsewhere, and a project on a shared template keeps the lint
+  job exactly there - so a reader of the root file alone answered "runs no xbsl command" about
+  a pipeline that runs one, and the local pass went on judging by a set of its own. The local
+  files of the repository are now followed in every shape GitLab writes them (a string,
+  `local:`, lists of either, the `ci/*.yml` patterns); a nested include is resolved against the
+  root of the checkout, as GitLab resolves it, and a job declared both in the root file and in
+  an include is the root file's. What lies OUTSIDE the checkout - a remote URL, a template,
+  another project, a component - is not fetched: that needs the network and usually a token,
+  and a linter downloading a URL out of a config file behind the caller's back is a surprise.
+  Those are named instead - in the line about the adopted set, in the summary of the MCP tool
+  and in the "runs no xbsl command" refusal - so a job that stays invisible has its reason
+  printed next to it. The adopted line now names the file the command actually stands in,
+  while the baseline is still resolved against the ROOT file: the job runs in its checkout.
+  ([#19](https://github.com/keyfire/xbsl/pull/19))
+
 ## 2026-09-11 – 0.102.0, 0.103.0
 
 ### Added

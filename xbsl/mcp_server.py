@@ -289,6 +289,10 @@ def lint_paths(
             # The jobs NOT taken: an agent comparing its verdict with a red pipeline has to
             # know which of them it just reproduced.
             "jobs": list(job.alternatives),
+            # Where the command actually stands, when an `include:` brought it in - and the
+            # includes nobody fetched, so a job that is missing from `jobs` has a reason.
+            "source": str(job.source) if job.source else None,
+            "unread_includes": list(job.unread),
         }
     return payload
 

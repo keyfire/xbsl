@@ -205,6 +205,140 @@ def test_a_pipeline_that_runs_no_linter_says_so(tmp_path: Path):
     assert str(path) in str(exc.value)
 
 
+# --- include: the pipeline is rarely one file ----------------------------------------------------
+
+
+def test_a_job_declared_in_an_included_file_is_found(tmp_path: Path):
+    """The shape a project on a shared template has: the root file only includes."""
+    _write(tmp_path / ".gitlab-ci.yml", "include:\n  - local: /ci/lint.yml\nstages:\n  - lint\n")
+    _write(tmp_path / "ci" / "lint.yml",
+           "xbsl-lint:\n  script:\n    - xbsl e1c --enable code/unused-method\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml")
+
+    assert ci.job == "xbsl-lint" and ci.enable == ("code/unused-method",)
+    assert ci.source == tmp_path / "ci" / "lint.yml"
+    assert str(ci.source) in ci.describe()  # the file to open is not the one that was read
+
+
+def test_the_baseline_of_an_included_job_is_resolved_against_the_checkout(tmp_path: Path):
+    """The job runs in the checkout of the ROOT file - its baseline lies there, not in ci/."""
+    _write(tmp_path / ".gitlab-ci.yml", "include: ci/lint.yml\n")
+    _write(tmp_path / "ci" / "lint.yml",
+           "lint:\n  script:\n    - xbsl e1c --baseline .xbsllint-baseline\n")
+
+    assert cijob.read(tmp_path / ".gitlab-ci.yml").baseline_file() == \
+        str(tmp_path / ".xbsllint-baseline")
+
+
+def test_a_nested_include_is_resolved_against_the_same_root(tmp_path: Path):
+    """GitLab resolves every local include against the repository root, however deep."""
+    _write(tmp_path / ".gitlab-ci.yml", "include:\n  - local: /ci/base.yml\n")
+    _write(tmp_path / "ci" / "base.yml", "include:\n  - local: /ci/jobs/lint.yml\n")
+    _write(tmp_path / "ci" / "jobs" / "lint.yml",
+           "lint:\n  script:\n    - xbsl e1c --enable yaml/duplicate-subtree\n")
+
+    assert cijob.read(tmp_path / ".gitlab-ci.yml").enable == ("yaml/duplicate-subtree",)
+
+
+def test_a_pattern_include_takes_every_file_it_matches(tmp_path: Path):
+    """`ci/*.yml` is how a project that keeps a job per file writes it."""
+    _write(tmp_path / ".gitlab-ci.yml", "include:\n  - local: ci/*.yml\n")
+    _write(tmp_path / "ci" / "build.yml", "build:\n  script:\n    - elemctl build\n")
+    _write(tmp_path / "ci" / "lint.yml", "lint:\n  script:\n    - xbsl e1c --select code\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml")
+
+    assert ci.job == "lint" and ci.select == ("code",)
+
+
+def test_the_root_file_wins_over_what_it_includes(tmp_path: Path):
+    """GitLab's own precedence, and the first command is what an unnamed run takes."""
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include:\n  - local: /ci/lint.yml\nlint:\n  script:\n    - xbsl e1c --select a/own\n")
+    _write(tmp_path / "ci" / "lint.yml",
+           "lint:\n  script:\n    - xbsl e1c --select b/template\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml")
+
+    assert ci.select == ("a/own",) and ci.source is None
+
+
+def test_a_job_of_an_included_file_can_be_named(tmp_path: Path):
+    """Everything the reader learned is one list: --as-ci-job does not care where a job lay."""
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include: ci/english.yml\nxbsl-lint:\n  script:\n    - xbsl e1c\n")
+    _write(tmp_path / "ci" / "english.yml",
+           "English to S3:\n  script:\n    - xbsl build/en --no-baseline\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml", "english")
+
+    assert ci.job == "English to S3" and ci.no_baseline is True
+    assert ci.alternatives == ("xbsl-lint",)
+
+
+def test_an_include_that_needs_the_network_is_named_not_fetched(tmp_path: Path):
+    """A linter that downloads a URL out of a config file is a surprise, not a feature."""
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include:\n"
+           "  - remote: https://example.test/ci.yml\n"
+           "  - template: Jobs/SAST.gitlab-ci.yml\n"
+           "  - project: group/templates\n"
+           "    ref: main\n"
+           "    file: /lint.yml\n"
+           "  - local: /ci/lint.yml\n")
+    _write(tmp_path / "ci" / "lint.yml", "lint:\n  script:\n    - xbsl e1c\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml")
+
+    assert ci.job == "lint"
+    assert ci.unread == (
+        "remote: https://example.test/ci.yml",
+        "template: Jobs/SAST.gitlab-ci.yml",
+        "project: group/templates@main /lint.yml",
+    )
+    assert "https://example.test/ci.yml" in ci.note()
+
+
+def test_a_pipeline_whose_jobs_all_live_elsewhere_says_what_it_could_not_read(tmp_path: Path):
+    """The refusal used to blame the file; the reason is that nobody fetched the template."""
+    path = _write(tmp_path / ".gitlab-ci.yml",
+                  "include:\n  - template: Jobs/Lint.gitlab-ci.yml\nstages:\n  - lint\n")
+
+    with pytest.raises(cijob.CiLintError) as exc:
+        cijob.read(path)
+
+    assert "Jobs/Lint.gitlab-ci.yml" in str(exc.value)
+
+
+def test_a_local_include_the_checkout_does_not_have_is_named_too(tmp_path: Path):
+    """The likeliest reason a job cannot be found - and not a reason to lose the rest."""
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include:\n  - local: /ci/missing.yml\nlint:\n  script:\n    - xbsl e1c\n")
+
+    ci = cijob.read(tmp_path / ".gitlab-ci.yml")
+
+    assert ci.job == "lint"
+    assert len(ci.unread) == 1 and "missing.yml" in ci.unread[0]
+
+
+def test_an_include_loop_does_not_hang_the_reader(tmp_path: Path):
+    """Two templates including each other is a mistake to survive, not to spin on."""
+    _write(tmp_path / ".gitlab-ci.yml", "include: ci/one.yml\n")
+    _write(tmp_path / "ci" / "one.yml",
+           "include: ci/two.yml\nlint:\n  script:\n    - xbsl e1c\n")
+    _write(tmp_path / "ci" / "two.yml", "include: ci/one.yml\n")
+
+    assert cijob.read(tmp_path / ".gitlab-ci.yml").job == "lint"
+
+
+def test_a_file_without_includes_carries_nothing_new(tmp_path: Path):
+    """The plain case stays plain: no source, no unread line, no extra noise."""
+    ci = cijob.read(_write(tmp_path / ".gitlab-ci.yml", GITLAB))
+
+    assert ci.source is None and ci.unread == () and ci.note() == ""
+
+
 # --- the run itself: what the project checks and what a local pass used to miss ------------------
 
 _FORM = """\
@@ -287,6 +421,23 @@ def test_as_ci_job_picks_the_second_job_and_implies_as_ci(tmp_path: Path, capsys
     second = capsys.readouterr()
     assert "yaml/duplicate-subtree" in second.out
     assert "English to S3" in second.err
+
+
+@pytest.mark.needs_data
+def test_a_run_takes_the_set_of_a_job_that_lives_in_an_included_file(tmp_path: Path, capsys):
+    """End to end: the root file only includes, and the local pass still judges as the job."""
+    root = _project_with_a_copied_subtree(tmp_path)
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include:\n  - local: /ci/lint.yml\n  - template: Jobs/SAST.gitlab-ci.yml\n")
+    _write(tmp_path / "ci" / "lint.yml",
+           "xbsl-lint:\n  script:\n    - xbsl project --enable yaml/duplicate-subtree\n")
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci"]) == 0
+
+    out = capsys.readouterr()
+    assert "yaml/duplicate-subtree" in out.out
+    assert "ci" in out.err and "lint.yml" in out.err  # the file the job actually stands in
+    assert "Jobs/SAST.gitlab-ci.yml" in out.err  # ...and the blind spot of the reader
 
 
 @pytest.mark.needs_data
