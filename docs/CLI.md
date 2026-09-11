@@ -37,6 +37,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--select ID/GROUP/TIER` | check only these rules (comma-separated or by repeating the flag: id, group – the part of the id before '/' (e.g. style) – or a tier letter A/B/C/D) |
 | `--ignore ID/GROUP/TIER` | exclude these rules (comma-separated or by repeating the flag: id, group or tier letter) |
 | `--enable ID/GROUP/TIER` | add rules disabled by default ON TOP of the standard set (`--select` replaces the set); the value forms are the same |
+| `--as-ci [FILE]` | run the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) next to the project; the file can be named explicitly |
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
 | `--write-baseline FILE` | instead of a report, write all current findings to a baseline file (freeze the debt; paths in the file are relative to its directory) |
 | `--no-baseline` | do not look for a baseline file next to the sources (by default a discovered .xbsllint-baseline is applied on its own) |

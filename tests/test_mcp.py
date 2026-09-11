@@ -414,6 +414,57 @@ def test_lint_paths_resolves_a_relative_baseline_against_the_root(tmp_path, monk
         sys.modules.pop("xbsl.mcp_server", None)
 
 
+_YO_FORM = (
+    "ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: aaaaaaaa-1111-2222-3333-444444444444\n"
+    "Имя: Форма\nТип: Форма\nЗаголовок: Показать удалённые\n"
+)
+
+
+def test_lint_paths_checks_with_the_rule_set_of_the_ci_job(tmp_path, monkeypatch):
+    """A preflight has to judge what the job judges - that is what `as_ci` reads it for.
+
+    The project turns a rule on in its pipeline; an agent that lints without it reports
+    clean, and the merge request fails on the same tree an hour later.
+    """
+    from xbsl.engine import SEVERITY_OVERRIDES
+
+    off_by_default = "typography/yo-in-text"
+    if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
+        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+    m = _with_stub(monkeypatch)
+    try:
+        project = tmp_path / "project"
+        project.mkdir()
+        (project / "Форма.yaml").write_text(_YO_FORM, encoding="utf-8")
+        (tmp_path / ".gitlab-ci.yml").write_text(
+            f"xbsl-lint:\n  script:\n    - xbsl project --enable {off_by_default}\n",
+            encoding="utf-8",
+        )
+
+        plain = m.lint_paths([str(project)])
+        as_ci = m.lint_paths([str(project)], as_ci=True)
+
+        assert not any(d["rule"] == off_by_default for d in plain["diagnostics"])
+        assert any(d["rule"] == off_by_default for d in as_ci["diagnostics"])
+        assert as_ci["summary"]["as_ci"]["job"] == "xbsl-lint"
+        assert as_ci["summary"]["as_ci"]["file"] == str(tmp_path / ".gitlab-ci.yml")
+        assert "as_ci" not in plain["summary"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_lint_paths_says_why_it_cannot_check_as_the_ci_job_does(tmp_path, monkeypatch):
+    """No pipeline file - an explicit error, never a quieter verdict from a narrower set."""
+    m = _with_stub(monkeypatch)
+    try:
+        answer = m.lint_paths([str(tmp_path)], as_ci=True)
+        assert ".gitlab-ci.yml" in answer["error"]
+        assert "diagnostics" not in answer
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
 def test_lint_paths_can_add_a_rule_that_is_off_by_default(tmp_path, monkeypatch):
     """`select` answers with one rule alone; `enable` adds it on top of the defaults - the
     way a project asks for its translation gaps without losing everything else."""
