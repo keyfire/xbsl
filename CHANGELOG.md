@@ -39,6 +39,16 @@ entry either - say what the behaviour was, not which class name was compared.
   them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ### Changed
+- **`docs_symbol` finds the MEMBERS of a type, and takes either spelling.** A member has no
+  page of its own - it is a heading inside the type that declares it - so asking for one by
+  name answered with an empty object, and the semantics of an argument (the second one being
+  the END position, not a length) cost a round of deploying to learn. A member now answers
+  with the record of that type's page plus the block of that member alone, every overload of
+  it joined; a name several types declare answers with their list and how to ask again
+  (`Type.Member`, or type_members), and a qualified name whose type only INHERITS the member
+  is followed to the ancestor that declares it. English spellings work throughout - `Array`
+  used to find nothing either, the pages being written in Russian. The index is built over
+  the reference pages once and rebuilt when the database is. ([#6](https://github.com/keyfire/xbsl/pull/6))
 - **`translate --out` writes a repository, not a loose pile of files.** A build takes a
   project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
   while the command laid the descriptor straight into the directory it was given - so the

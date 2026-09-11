@@ -47,6 +47,15 @@ def _write_docs(root: Path, pages, tree=()) -> Path:
     """Assemble a docs.sqlite (+ the version index) under `root`; returns the version directory."""
     ver_dir = root / _VER
     ver_dir.mkdir()
+    _write_db(ver_dir, pages, tree)
+    (root / "index.json").write_text(
+        '{"available": ["%s"], "default": "%s"}' % (_VER, _VER), encoding="utf-8"
+    )
+    return ver_dir
+
+
+def _write_db(ver_dir: Path, pages, tree=()) -> None:
+    """(Re)write the database of a version directory - the rebuild the extractor does in place."""
     con = sqlite3.connect(ver_dir / "docs.sqlite")
     con.executescript(ex._SCHEMA)
     for p in pages:
@@ -56,10 +65,6 @@ def _write_docs(root: Path, pages, tree=()) -> Path:
     con.executemany("INSERT INTO tree VALUES(?,?,?,?,?,?,?)", tree)
     con.commit()
     con.close()
-    (root / "index.json").write_text(
-        '{"available": ["%s"], "default": "%s"}' % (_VER, _VER), encoding="utf-8"
-    )
-    return ver_dir
 
 
 @pytest.fixture
@@ -228,3 +233,133 @@ def test_summarize_pure():
     # No marker: the first sentence, tags stripped.
     assert docs._summarize("<p>Просто первое предложение. Второе.</p>") == "Просто первое предложение."
     assert docs._summarize("") == ""
+
+
+# --- members of a type: they have no page of their own -----------------------------------------
+
+_STRING = "stdlib/element/xbsl/Std/String_ru"
+_READABLE = "stdlib/element/xbsl/Std/Collections/ReadableArray_ru"
+_ARRAY_PAGE = "stdlib/element/xbsl/Std/Collections/ArrayLike_ru"
+_MEMBER_PAGES = [
+    (_STRING, "type", "Строка", "Стд::Строка", "КлиентИСервер", f"https://host/{_STRING}/",
+     "<h1>Строка</h1><p>Строка символов.</p>"
+     "<h2>Конструкторы</h2><h3>Строка</h3><p>Собирает строку.</p>"
+     "<h2>Методы</h2>"
+     "<h3>Подстрока</h3><p>Подстрока(От: Число, До: Число): Строка</p>"
+     "<h4>Примеры</h4><p>Пример подстроки.</p>"
+     "<h3>Найти</h3><p>Первая перегрузка.</p>"
+     "<h3>Найти</h3><p>Вторая перегрузка.</p>"
+     "<h2>Список унаследованных методов</h2><h3>Объект</h3><p>ВСтроку</p>",
+     "Строка подстрока найти"),
+    (_READABLE, "type", "ЧитаемыйМассив", "Стд::Коллекции::ЧитаемыйМассив", "КлиентИСервер",
+     f"https://host/{_READABLE}/",
+     "<h1>ЧитаемыйМассив</h1><p>Коллекция.</p>"
+     "<h2>Методы</h2><h3>Найти</h3><p>Ищет в коллекции.</p><h3>Размер</h3><p>Размер(): Число</p>",
+     "ЧитаемыйМассив найти размер"),
+    (_ARRAY_PAGE, "type", "Массив", "Стд::Коллекции::Массив", "КлиентИСервер",
+     f"https://host/{_ARRAY_PAGE}/",
+     "<h1>Массив</h1><p>Массив значений.</p>"
+     "<h2>Список унаследованных методов</h2><h3>ЧитаемыйМассив</h3><p>Размер</p>",
+     "Массив значений"),
+]
+
+
+@pytest.fixture
+def members_root(tmp_path):
+    """A data directory whose pages carry members the way the reference pages do."""
+    ver_dir = _write_docs(tmp_path, _MEMBER_PAGES)
+    (ver_dir / "stdlib.json").write_text(
+        '{"meta": {}, "type_members": {}, "bases": {"Массив": ["ЧитаемыйМассив"]}}',
+        encoding="utf-8")
+    dataset.set_data_root(tmp_path)
+    yield tmp_path
+    dataset.set_data_root(None)
+
+
+def test_member_places_names_the_type_that_declares_the_member(members_root):
+    assert docs.member_places("Подстрока") == ("Подстрока", [("Строка", _STRING)])
+    assert docs.member_places("Найти")[1] == [
+        ("Строка", _STRING), ("ЧитаемыйМассив", _READABLE),
+    ]
+    assert docs.member_places("такого-члена-нет") == ("такого-члена-нет", [])
+
+
+def test_an_inherited_list_and_a_constructor_are_not_members(members_root):
+    """The h3 of an inherited list names the ANCESTOR, and a constructor repeats the type."""
+    assert docs.member_places("Объект")[1] == []
+    assert docs.member_places("ЧитаемыйМассив")[1] == []
+    assert docs.member_places("Строка")[1] == []
+    # A type that only INHERITS the member is not among the places either.
+    assert [title for title, _ in docs.member_places("Размер")[1]] == ["ЧитаемыйМассив"]
+
+
+def test_an_english_spelling_finds_the_member_the_pages_spell_in_russian(members_root, monkeypatch):
+    monkeypatch.setattr("xbsl.terms.common_russian",
+                        lambda name: {"Substring": "Подстрока"}.get(name))
+    assert docs.member_places("Substring") == ("Подстрока", [("Строка", _STRING)])
+
+
+def test_member_block_joins_the_overloads_and_keeps_the_examples(members_root):
+    page = docs.page(_STRING)
+    title, body = docs.member_block(page["html"], "Подстрока")
+    assert title == "Подстрока"
+    assert "Пример подстроки" in body  # an h4 belongs to its member
+    assert "Первая перегрузка" not in body  # the next member does not
+
+    _title, both = docs.member_block(page["html"], "Найти")
+    assert "Первая перегрузка" in both and "Вторая перегрузка" in both
+    assert docs.member_block(page["html"], "Объект") is None  # the inherited list again
+
+
+def test_the_member_index_is_read_again_when_the_database_is_rebuilt(members_root):
+    """A long-lived server must not answer from an index built over the previous file."""
+    assert docs.member_places("Подстрока")[1] == [("Строка", _STRING)]
+    (members_root / _VER / "docs.sqlite").unlink()
+    _write_db(members_root / _VER, [
+        (_STRING, "type", "Строка", "Стд::Строка", "КлиентИСервер", f"https://host/{_STRING}/",
+         "<h1>Строка</h1><h2>Методы</h2><h3>Обрезать</h3><p>Обрезает.</p>", "Строка обрезать"),
+    ])
+    assert docs.member_places("Подстрока")[1] == []
+    assert docs.member_places("Обрезать")[1] == [("Строка", _STRING)]
+
+
+def test_for_symbol_takes_the_english_spelling_of_a_type(members_root, monkeypatch):
+    monkeypatch.setattr("xbsl.terms.russian", lambda name, section: None)
+    monkeypatch.setattr("xbsl.terms.common_russian",
+                        lambda name: {"String": "Строка"}.get(name))
+    assert docs.for_symbol("String") == _STRING
+    assert docs.for_symbol("Строка") == _STRING
+    assert docs.for_symbol("Nothing") is None
+
+
+# --- the same through the MCP tool --------------------------------------------------------------
+
+
+def test_docs_symbol_answers_with_the_member_block(members_root, mcp_module):
+    answer = mcp_module.docs_symbol("Подстрока")
+    assert answer["id"] == _STRING and answer["title"] == "Строка"
+    assert answer["member"] == "Подстрока"
+    assert "Подстрока(От: Число, До: Число): Строка" in answer["text"]
+    assert "<" not in answer["text"]
+    assert "html" not in answer
+
+
+def test_docs_symbol_lists_the_owners_of_a_member_several_types_declare(members_root, mcp_module):
+    answer = mcp_module.docs_symbol("Найти")
+    assert answer["owners"] == ["Строка", "ЧитаемыйМассив"]
+    assert "type_members" in answer["note"]
+    assert "text" not in answer
+
+    narrowed = mcp_module.docs_symbol("Строка.Найти")
+    assert narrowed["id"] == _STRING and "Первая перегрузка" in narrowed["text"]
+
+
+def test_docs_symbol_follows_a_qualified_member_to_the_type_that_declares_it(members_root, mcp_module):
+    """`Массив.Размер` is documented on the ancestor - answering with nothing hid it."""
+    answer = mcp_module.docs_symbol("Массив.Размер")
+    assert answer["id"] == _READABLE
+    assert answer["member"] == "Размер" and "Размер(): Число" in answer["text"]
+
+
+def test_docs_symbol_still_answers_with_nothing_for_a_name_nobody_declares(members_root, mcp_module):
+    assert mcp_module.docs_symbol("такого-нигде-нет") == {}

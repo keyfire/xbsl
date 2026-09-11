@@ -26,7 +26,7 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    formmodel, i18n, metamodel, report, scaffold, uischema,
+    formmodel, i18n, metamodel, report, scaffold, terms, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
@@ -411,18 +411,83 @@ def docs_page(id: str, brief: bool = False, section: str = "") -> dict:
     return _page_as_text(id, brief=brief, section=section)
 
 
+def _member_as_text(name: str) -> dict:
+    """A MEMBER by name: the page of the type that declares it, that member's block as text.
+
+    A member has no page of its own, so `docs.for_symbol` answers with nothing for one - and
+    the tool used to stop there, which left the semantics of an argument to be learned from a
+    failed deploy. A name several types declare is not guessed at: the answer names them and
+    how to ask again. `Type.Member` narrows, and a type that only INHERITS the member narrows
+    to the ancestor that declares it - that is where the documentation is.
+    """
+    hint, dot, tail = name.strip().rpartition(".")
+    member, owners = docs.member_places(tail if dot else name.strip())
+    if not owners:
+        return {}
+    if dot and hint:
+        owners = _declaring_for(owners, hint) or owners
+    if len(owners) > 1:
+        return {
+            "member": member,
+            "owners": [title for title, _ in owners],
+            "note": i18n.t("docs.member-of-many", member=member, count=len(owners),
+                           owner=min(owners, key=lambda place: len(place[0]))[0]),
+        }
+    page = docs.page(owners[0][1])
+    found = docs.member_block((page or {}).get("html") or "", member)
+    if page is None or found is None:  # pragma: no cover - the index is built from that page
+        return {}
+    page = dict(page)
+    page.pop("html", None)
+    page["member"], body = found
+    page["text"] = docs.plain_text(body)
+    return page
+
+
+def _declaring_for(owners: list[tuple[str, str]], hint: str) -> list[tuple[str, str]]:
+    """The places of the type `hint` names, or of the ancestor that declares the member for it.
+
+    `Array.Size` names a type that only inherits the member: the page that documents it is the
+    ancestor's, and answering with the whole list of unrelated owners instead would bury it.
+    """
+    spellings = {form.lower() for form in (hint, terms.russian(hint, "types"),
+                                           terms.common_russian(hint)) if form}
+    direct = [place for place in owners if place[0].lower() in spellings]
+    if direct:
+        return direct
+    try:
+        bases = dataset.load_json("stdlib.json").get("bases") or {}
+    except dataset.DatasetError:  # pragma: no cover - no data, no inheritance to read
+        return []
+    ancestors = {name.lower() for spelling in (hint, terms.russian(hint, "types"),
+                                               terms.common_russian(hint)) if spelling
+                 for name in bases.get(spelling) or ()}
+    return [place for place in owners if place[0].lower() in ancestors]
+
+
 @mcp.tool()
 def docs_symbol(name: str, brief: bool = False, section: str = "") -> dict:
-    """Find the documentation page for a symbol by name (a type or member, e.g. "Массив", "Запрос").
+    """Find the documentation of a symbol by name - a TYPE ("Array", "Query") or a MEMBER
+    of one ("Substring", "String.Find").
 
-    Prefers an exact title match, then a qualified-name match; it does not guess - when
-    nothing matches, the answer is an empty object and docs_search is the way to candidates.
-    Returns the same shape as docs_page, with the same `brief` and `section` modes: the whole
-    page is for reading it, `brief=True` for "which page is it and what is it about", and
-    `section="Properties"` (or another standard section, the pages' Russian heading works
-    too) for one question about it.
+    A type answers with its page, in the same shape as docs_page and with the same `brief`
+    and `section` modes: the whole page is for reading it, `brief=True` for "which page is it
+    and what is it about", `section="Properties"` (or another standard section, the pages'
+    Russian heading works too) for one question about it.
+
+    A member has no page of its own - it is documented inside the type that declares it - and
+    answers with that page's record plus `member` and the `text` of that member alone, every
+    overload of it joined; `brief` and `section` do not apply there, the block being one
+    member's worth of text already. A member several types declare answers {"member",
+    "owners", "note"} instead of guessing: ask again as "Type.Member", or read type_members.
+
+    Either spelling of a name works (`Array`, `Substring`). It does not guess - when nothing
+    matches, the answer is an empty object and docs_search is the way to candidates.
     """
-    return _page_as_text(docs.for_symbol(name), brief=brief, section=section)
+    page_id = docs.for_symbol(name)
+    if page_id:
+        return _page_as_text(page_id, brief=brief, section=section)
+    return _member_as_text(name)
 
 
 @mcp.tool()
