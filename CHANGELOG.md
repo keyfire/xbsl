@@ -39,7 +39,7 @@ entry either - say what the behaviour was, not which class name was compared.
   heading, and `Array.Size` leads to the ancestor that declares the method. A name several
   types declare is not guessed - the panel offers those types with the member's block under
   each, and the hover stays silent. The resolution is shared with the MCP `docs_symbol` tool
-  (`docs.member_doc`), so the editor and an agent answer alike.
+  (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
 
 ## 2026-09-11 – 0.102.0
 
