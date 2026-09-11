@@ -357,6 +357,66 @@ def member_block(html: str, member: str) -> tuple[str, str] | None:
     return (title, "\n".join(blocks)) if blocks else None
 
 
+def member_doc(name: str, version: str | None = None) -> dict:
+    """The documentation of a MEMBER by a (possibly qualified) name - one answer for every surface.
+
+    `Substring` and `String.Find` alike: the hint narrows to the type it names or to the
+    ancestor that DECLARES the member for it, because that is the page documenting it. The
+    shapes of the answer are three, and a caller words each one in its own way:
+
+      {}                                  nothing declares the name;
+      {"member", "owners"}                several types declare it - the caller asks again,
+                                          or offers the owners to choose from;
+      {"member", "anchor", "block", "page"}  the page record of the declaring type, the html
+                                          of the member's block and the heading id to scroll to.
+
+    The MCP tool turns the block into text, the LSP into a hover summary and a docs-panel
+    anchor - before this, each surface answered a member with whatever full-text search
+    happened to rank first.
+    """
+    hint, dot, tail = (name or "").strip().rpartition(".")
+    member, owners = member_places(tail if dot else (name or "").strip(), version)
+    if not owners:
+        return {}
+    if dot and hint:
+        owners = _declaring_places(owners, hint) or owners
+    if len(owners) > 1:
+        return {"member": member, "owners": [title for title, _ in owners]}
+    rec = page(owners[0][1], version)
+    found = member_block((rec or {}).get("html") or "", member)
+    if rec is None or found is None:  # pragma: no cover - the index is built from that page
+        return {}
+    title, block = found
+    return {"member": title, "anchor": _heading_anchor(block), "block": block, "page": rec}
+
+
+def _heading_anchor(block: str) -> str:
+    """The id of the block's own heading - what an editor panel scrolls to. Empty when it has none."""
+    match = re.search(r"<h3\b[^>]*\bid=\"([^\"]+)\"", block or "")
+    return match.group(1) if match else ""
+
+
+def _declaring_places(owners: list[tuple[str, str]], hint: str) -> list[tuple[str, str]]:
+    """The places of the type `hint` names, or of the ancestor that declares the member for it.
+
+    `Массив.Размер` names a type that only inherits the member: the page that documents it is
+    the ancestor's, and answering with the whole list of unrelated owners instead would bury it.
+    """
+    spellings = {form.lower() for form in (hint, terms.russian(hint, "types"),
+                                           terms.common_russian(hint)) if form}
+    direct = [place for place in owners if place[0].lower() in spellings]
+    if direct:
+        return direct
+    try:
+        bases = dataset.load_json("stdlib.json").get("bases") or {}
+    except dataset.DatasetError:  # pragma: no cover - no data, no inheritance to read
+        return []
+    ancestors = {ancestor.lower() for spelling in (hint, terms.russian(hint, "types"),
+                                                   terms.common_russian(hint)) if spelling
+                 for ancestor in bases.get(spelling) or ()}
+    return [place for place in owners if place[0].lower() in ancestors]
+
+
 def _member_index(version: str | None = None) -> dict[str, tuple[tuple[str, str], ...]]:
     """The member index of the data version, built once per file and rebuilt when it changes."""
     if not available(version):

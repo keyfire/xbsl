@@ -245,7 +245,7 @@ _MEMBER_PAGES = [
      "<h1>Строка</h1><p>Строка символов.</p>"
      "<h2>Конструкторы</h2><h3>Строка</h3><p>Собирает строку.</p>"
      "<h2>Методы</h2>"
-     "<h3>Подстрока</h3><p>Подстрока(От: Число, До: Число): Строка</p>"
+     "<h3 id=\"подстрока\">Подстрока</h3><p>Подстрока(От: Число, До: Число): Строка</p>"
      "<h4>Примеры</h4><p>Пример подстроки.</p>"
      "<h3>Найти</h3><p>Первая перегрузка.</p>"
      "<h3>Найти</h3><p>Вторая перегрузка.</p>"
@@ -269,7 +269,10 @@ def members_root(tmp_path):
     """A data directory whose pages carry members the way the reference pages do."""
     ver_dir = _write_docs(tmp_path, _MEMBER_PAGES)
     (ver_dir / "stdlib.json").write_text(
-        '{"meta": {}, "type_members": {}, "bases": {"Массив": ["ЧитаемыйМассив"]}}',
+        '{"meta": {}, "bases": {"Массив": ["ЧитаемыйМассив"]}, "type_members": '
+        '{"Строка": {"methods": ["Подстрока", "Найти"]},'
+        ' "ЧитаемыйМассив": {"methods": ["Найти", "Размер"]},'
+        ' "Массив": {"methods": ["Размер"]}}}',
         encoding="utf-8")
     dataset.set_data_root(tmp_path)
     yield tmp_path
@@ -363,3 +366,84 @@ def test_docs_symbol_follows_a_qualified_member_to_the_type_that_declares_it(mem
 
 def test_docs_symbol_still_answers_with_nothing_for_a_name_nobody_declares(members_root, mcp_module):
     assert mcp_module.docs_symbol("такого-нигде-нет") == {}
+
+
+# --- and through the LSP: the editor shows the same block ---------------------------------------
+
+def _lsp_on(root: Path, code: str):
+    """(the server's custom features, the document uri) for a one-module project at `root`."""
+    pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    from xbsl import lsp as lsp_module
+
+    root.mkdir(parents=True, exist_ok=True)
+    path = root / "Модуль.xbsl"
+    path.write_text(code, encoding="utf-8")
+    server = lsp_module._make_server()
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(root)))
+    lsp_module.STATE.lookup = lsp_module.IndexLookup({})
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    return getattr(fm, "features", fm), uris.from_fs_path(str(path))
+
+
+def _at(line: int, character: int) -> dict:
+    return {"position": {"line": line, "character": character}}
+
+
+def test_hover_doc_answers_a_member_with_its_own_block(members_root, tmp_path):
+    """The hover used to describe the TYPE of the receiver - what the member does was a page away."""
+    features, uri = _lsp_on(tmp_path / "project", "метод Проба()\n    возврат Строка.Подстрока(0, 3)\n;\n")
+    answer = features["xbsl/hoverDoc"]({"uri": uri, **_at(1, 22)})
+    assert answer["pageId"] == _STRING
+    assert answer["symbol"] == "Подстрока"
+    assert "Подстрока(От: Число, До: Число): Строка" in answer["summary"]
+    assert answer["anchor"] == "подстрока"  # the panel opens the page AT the member
+
+
+def test_hover_doc_follows_an_inherited_member_to_the_type_that_declares_it(members_root, tmp_path):
+    """`Массив.Размер` is documented on the ancestor: the heir's page says nothing about it."""
+    features, uri = _lsp_on(tmp_path / "project", "метод Проба()\n    возврат Массив.Размер()\n;\n")
+    answer = features["xbsl/hoverDoc"]({"uri": uri, **_at(1, 20)})
+    assert answer["pageId"] == _READABLE and answer["symbol"] == "Размер"
+    assert "Размер(): Число" in answer["summary"]
+    assert answer["anchor"] == ""  # that page writes its headings without ids
+
+
+def test_hover_doc_keeps_the_page_of_a_type(members_root, tmp_path):
+    """A TYPE is not a member of anything - its own page still answers, as before."""
+    features, uri = _lsp_on(tmp_path / "project", "// Массив\n")
+    answer = features["xbsl/hoverDoc"]({"uri": uri, **_at(0, 5)})
+    assert answer["pageId"] == _ARRAY_PAGE and answer["symbol"] == "Массив"
+
+
+def test_hover_doc_does_not_guess_a_member_several_types_declare(members_root, tmp_path):
+    features, uri = _lsp_on(tmp_path / "project", "// Найти\n")
+    assert features["xbsl/hoverDoc"]({"uri": uri, **_at(0, 5)}) == {"pageId": None, "symbol": None}
+
+
+def test_docs_for_symbol_opens_the_page_at_the_member(members_root, tmp_path):
+    """A bare member name used to fall through to full-text candidates - the word ranks by accident."""
+    features, uri = _lsp_on(tmp_path / "project", "// Подстрока\n")
+    answer = features["xbsl/docsForSymbol"]({"uri": uri, **_at(0, 6)})
+    assert (answer["page"] or {})["id"] == _STRING
+    assert answer["member"] == "Подстрока" and answer["anchor"] == "подстрока"
+    assert answer["candidates"] == []
+
+
+def test_docs_for_symbol_offers_the_types_that_declare_an_ambiguous_member(members_root, tmp_path):
+    """The candidates are the DECLARING types, each with that member's block as the snippet."""
+    features, uri = _lsp_on(tmp_path / "project", "// Найти\n")
+    answer = features["xbsl/docsForSymbol"]({"uri": uri, **_at(0, 5)})
+    assert answer["page"] is None and answer["member"] == "Найти"
+    assert [hit["id"] for hit in answer["candidates"]] == [_STRING, _READABLE]
+    assert "Первая перегрузка" in answer["candidates"][0]["snippet"]
+    assert "Ищет в коллекции" in answer["candidates"][1]["snippet"]
+
+
+def test_docs_for_symbol_still_searches_for_a_name_no_page_carries(members_root, tmp_path):
+    features, uri = _lsp_on(tmp_path / "project", "// Значений\n")
+    answer = features["xbsl/docsForSymbol"]({"uri": uri, **_at(0, 5)})
+    assert answer["page"] is None and answer["member"] == ""
+    assert [hit["id"] for hit in answer["candidates"]] == [_ARRAY_PAGE]

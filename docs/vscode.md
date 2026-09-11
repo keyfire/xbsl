@@ -671,14 +671,18 @@ source** link to the same page on the docs site. A page's sections are nested un
 internal links navigate within the same tab, and opening a page reveals it in the Contents tree.
 
 **Documentation for the symbol.** Right-click a type or variable in an `.xbsl` file – *XBSL:
-documentation for the symbol* – to open its page. For a type its reference page opens directly; for a
-method or an ambiguous name a pick-list of candidates is shown, ranked by the receiver before the dot
-(so `Job.Setup` prefers the scheduled-job pages, not a guide topic).
+documentation for the symbol* – to open its page. For a type its reference page opens directly; a
+MEMBER of a type has no page of its own, so the page of the type that DECLARES it opens, scrolled
+to the member's block (`Array.Size` leads to the ancestor that declares the method). When several
+unrelated types declare the same name, they are offered to choose from, each with that member's
+block as the line under it; for other names with no page of their own the pick-list is ranked by
+the receiver before the dot (so `Job.Setup` prefers the scheduled-job pages, not a guide topic).
 
-**Where the other entry points lead.** Hovering a name in an `.xbsl` shows the type description and
-a **Documentation** link; in the form designer the *Open documentation* action sits on a palette
-item (a short description also rides in its tooltip). Both open the page in this same panel –
-reading up on an unfamiliar component costs no trip out of the editor.
+**Where the other entry points lead.** Hovering a name in an `.xbsl` shows the description and a
+**Documentation** link: over a member of a type that is the call's signature and what it does, and
+the link opens the page right at it. In the form designer the *Open documentation* action sits on a
+palette item (a short description also rides in its tooltip). Both open the page in this same panel
+– reading up on an unfamiliar component costs no trip out of the editor.
 
 **F12 falls back to the page.** Go to Definition is answered from the project index, so a member of
 the platform has no source to jump to – there the key opens the documentation page instead of

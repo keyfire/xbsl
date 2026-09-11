@@ -11,14 +11,18 @@ import { lspRequest } from "./lspClient";
 interface HoverDoc {
   pageId: string | null;
   symbol: string | null;
-  //: The first sentence of the page - what the type IS, shown above the link.
+  //: The first sentence of the page - what the type IS, shown above the link. For a MEMBER
+  //: it is the opening of the member's own block: its signature and what the call does.
   summary?: string | null;
+  //: Heading id of a member's block - the link then opens the page at the member, not at its top.
+  anchor?: string | null;
 }
 
-// The command link target: xbsl.docs.open(id) opens the page in the docs panel. Arguments ride
-// as a JSON array in the query, url-encoded.
-export function docsCommandUri(pageId: string): vscode.Uri {
-  return vscode.Uri.parse(`command:xbsl.docs.open?${encodeURIComponent(JSON.stringify([pageId]))}`);
+// The command link target: xbsl.docs.open(id, anchor?) opens the page in the docs panel.
+// Arguments ride as a JSON array in the query, url-encoded.
+export function docsCommandUri(pageId: string, anchor?: string): vscode.Uri {
+  const args = anchor ? [pageId, anchor] : [pageId];
+  return vscode.Uri.parse(`command:xbsl.docs.open?${encodeURIComponent(JSON.stringify(args))}`);
 }
 
 export function registerHoverDocs(context: vscode.ExtensionContext): void {
@@ -34,7 +38,7 @@ export function registerHoverDocs(context: vscode.ExtensionContext): void {
       // The description first, the link under it: a hover that only offers to read elsewhere
       // makes the reader travel for something a sentence could have answered.
       const summary = (res.summary ?? "").trim();
-      const link = `[$(book) ${vscode.l10n.t("Documentation")}](${docsCommandUri(res.pageId).toString()})`;
+      const link = `[$(book) ${vscode.l10n.t("Documentation")}](${docsCommandUri(res.pageId, res.anchor ?? undefined).toString()})`;
       const md = new vscode.MarkdownString(
         summary ? `${summary}\n\n${link}` : link,
         true // supportThemeIcons
