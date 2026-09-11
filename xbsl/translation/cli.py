@@ -260,6 +260,27 @@ MESSAGES = {
         "ru": "--clean без --out: чистить нечего, дерево никуда не пишется",
         "en": "--clean without --out: there is nothing to clean, no tree is being written",
     },
+    "translate.dry-run-without-out": {
+        "ru": "--dry-run без --out: прогон и так ничего не пишет – показывать нечего",
+        "en": "--dry-run without --out: the pass writes nothing anyway - there is nothing"
+              " to show",
+    },
+    "translate.dry-run": {
+        "ru": "СУХОЙ ПРОГОН: ничего не записано и не убрано",
+        "en": "DRY RUN: nothing written and nothing removed",
+    },
+    "translate.would-write": {
+        "ru": "будет записано файлов: {count} -> {out}",
+        "en": "files to be written: {count} -> {out}",
+    },
+    "translate.would-clean": {
+        "ru": "будет убрано остатков прошлого прогона: {count}",
+        "en": "leftovers of earlier passes to be removed: {count}",
+    },
+    "translate.cleaned-more": {
+        "ru": "  ...и ещё {count}",
+        "en": "  ...and {count} more",
+    },
     "translate.stub-written": {
         "ru": "заготовка словаря: {path} (токенов {tokens}, фраз {phrases}, литералов {literals})",
         "en": "dictionary stub: {path} ({tokens} tokens, {phrases} phrases, {literals} literals)",
@@ -310,6 +331,15 @@ MESSAGES = {
               " an earlier pass and ships with the build, and a leftover standing where a file"
               " goes breaks the write itself",
     },
+    "translate.help.dry-run": {
+        "ru": "показать, что прогон сделает с каталогом --out, и не делать: перечень того,"
+              " что уберёт --clean, и число файлов, которые будут записаны. Первая чистка"
+              " дерева в тысячу файлов иначе делается вслепую – счётчик печатается уже после",
+        "en": "say what the pass would do to the --out directory and do none of it: the list"
+              " of what --clean would remove and how many files would be written. A first"
+              " clean of a tree of a thousand files is otherwise a blind step - the count is"
+              " printed after the fact",
+    },
     "translate.help.suggest-out": {
         "ru": "записать предложения планом словаря рядом с остальными: каталог из пути отбрасывается,"
               " берётся только имя файла, и оно ложится внутрь каталога словаря (например 080-machine.yaml);"
@@ -357,6 +387,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("root", help=i18n.t("translate.help.root"))
     parser.add_argument("--out", help=i18n.t("translate.help.out"))
     parser.add_argument("--clean", action="store_true", help=i18n.t("translate.help.clean"))
+    parser.add_argument("--dry-run", dest="dry_run", action="store_true",
+                        help=i18n.t("translate.help.dry-run"))
     parser.add_argument("--dictionary", action="append", help=i18n.t("translate.help.dictionary"))
     parser.add_argument("--missing", help=i18n.t("translate.help.missing"))
     parser.add_argument("--coverage", action="store_true", help=i18n.t("translate.help.coverage"))
@@ -420,6 +452,11 @@ def cli_main(argv: list[str] | None = None) -> int:
         # Silently ignoring it would leave the caller believing a stale tree was cleaned.
         print(i18n.t("translate.clean-without-out"), file=sys.stderr)
         return 2
+    if args.dry_run and not args.out:
+        # Without a tree to write there is nothing a dry run could describe: the pass already
+        # touches nothing, and answering as if the flag had done something would be a lie.
+        print(i18n.t("translate.dry-run-without-out"), file=sys.stderr)
+        return 2
 
     try:
         loaded, found = _load_dictionary(args.dictionary, root, dictionary_module)
@@ -459,6 +496,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         swap_localization=not args.no_localization_swap,
         layout="repository",
         clean=args.clean,
+        dry_run=args.dry_run,
     )
 
     missing_tokens = report.merged_missing_tokens()
@@ -570,6 +608,11 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
         "out_dir": str(report.out_dir) if report.out_dir else None,
         "written": report.written,
         "removed": report.removed,
+        # What a dry run has instead of the two counters above: the size of the tree it would
+        # write, and every leftover it would take out - the whole list, not the first screen.
+        "dry_run": report.dry_run,
+        "planned": report.planned,
+        "removals": report.removals,
         "write_failed": report.write_failed,
         "warnings": {
             rel: [list(w) for w in fr.warnings]
@@ -585,6 +628,21 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
             for key, done, total in report.coverage_by_object()
         ]
     return out
+
+
+#: How many leftovers are named in the text report before the count takes over. The first
+#: clean of a translated tree can have hundreds of them, and a report drowned in one list is
+#: a report nobody reads to the verdict; the json payload carries all of them.
+_REMOVALS_SHOWN = 20
+
+
+def _print_removals(report) -> None:
+    """The leftovers by name, capped - what `--clean` took out, or would."""
+    for path in report.removals[:_REMOVALS_SHOWN]:
+        print(f"  {path}")
+    rest = len(report.removals) - _REMOVALS_SHOWN
+    if rest > 0:
+        print(i18n.t("translate.cleaned-more", count=rest))
 
 
 def _newest_mtime(paths) -> float:
@@ -689,12 +747,24 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
             literals=len(missing_literals),
         ))
     if args.out:
-        print(i18n.t("translate.written", count=report.written,
-                     out=report.out_dir if report.out_dir else args.out))
-        # Said only when it happened: a clean tree has nothing to report, and a line of
-        # zeroes after every pass is how a number stops being read.
-        if report.removed:
-            print(i18n.t("translate.cleaned", count=report.removed))
+        where = report.out_dir if report.out_dir else args.out
+        if report.dry_run:
+            # The header first, and in capitals: the lines below read exactly like those of a
+            # pass that wrote the tree, and a log skimmed from the middle must not be able to
+            # take one for the other.
+            print(i18n.t("translate.dry-run"))
+            print(i18n.t("translate.would-write", count=report.planned, out=where))
+            if report.removals:
+                print(i18n.t("translate.would-clean", count=len(report.removals)))
+        else:
+            print(i18n.t("translate.written", count=report.written, out=where))
+            # Said only when it happened: a clean tree has nothing to report, and a line of
+            # zeroes after every pass is how a number stops being read.
+            if report.removed:
+                print(i18n.t("translate.cleaned", count=report.removed))
+        # The leftovers BY NAME, in both modes: a count answers nothing about what a build
+        # just lost, and the first clean of a thousand-file tree is where that matters most.
+        _print_removals(report)
     # Last on purpose - whatever else the report prints, the tail of the log is the verdict.
     print(_verdict(report))
 

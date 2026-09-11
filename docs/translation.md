@@ -194,7 +194,29 @@ directory held open by a build. The refusal of a directory holding someone else'
 the safety net above it: the cleaning happens only inside a directory that already IS a
 translated project, so `--clean` cannot become "erase whatever you were pointed at". A removal
 that fails is a named problem, exactly as a failed write is; the count of what was removed
-appears in the report (and in `removed` of the json) only when something was.
+appears in the report (and in `removed` of the json) only when something was, and every
+leftover is named under it - a count answers nothing about what a build just lost.
+
+**`--dry-run`: see it before it happens.** The first clean of a translated tree is otherwise a
+blind step. The flag takes the pass up to the writing and stops: the tree is built, the
+destination is judged - an occupied directory is refused here as it would be for real - and the
+leftovers are listed, while nothing is written and nothing is removed.
+
+```sh
+xbsl translate e1c/app --out build --clean --dry-run
+```
+
+```
+DRY RUN: nothing written and nothing removed
+files to be written: 1261 -> build/Acme/TaskBook
+leftovers of earlier passes to be removed: 2
+  Forms/OldForm.yaml
+  Main/Resources/percent.svg
+```
+
+The text report names the first twenty and counts the rest; the json payload carries `dry_run`,
+`planned` (the size of the tree the pass would write) and `removals` - all of them. Without
+`--out` there is no tree to describe and the flag is refused rather than ignored.
 
 ## Localized strings turn around
 

@@ -667,6 +667,103 @@ def test_clean_without_out_is_refused_rather_than_ignored(tmp_path: Path, capsys
     assert code == 2 and "--clean" in capsys.readouterr().err
 
 
+def test_a_clean_says_which_leftovers_it_took_out(tmp_path: Path, capsys):
+    """A count answers nothing about what a build just lost - the names do."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    assert _cli(argv) == 0
+    orphan = next(out.rglob("Project.yaml")).parent / "Забытый.yaml"
+    orphan.write_text("Ид: x\n", encoding="utf-8")
+    capsys.readouterr()
+
+    assert _cli([*argv, "--clean"]) == 0
+
+    said = capsys.readouterr().out
+    assert "убрано остатков прошлого прогона: 1" in said and "Забытый.yaml" in said
+
+
+def test_a_dry_run_names_the_leftovers_and_takes_nothing_out(tmp_path: Path, capsys):
+    """The whole point: the answer to "what is about to go" arrives BEFORE it goes.
+
+    The first clean of a translated tree is a blind step otherwise - the only account of it
+    was a count printed after the fact.
+    """
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    assert _cli(argv) == 0
+    orphan = next(out.rglob("Project.yaml")).parent / "Забытый.yaml"
+    orphan.write_text("Ид: x\n", encoding="utf-8")
+    capsys.readouterr()
+
+    assert _cli([*argv, "--clean", "--dry-run"]) == 0
+
+    said = capsys.readouterr().out
+    assert "СУХОЙ ПРОГОН" in said and "Забытый.yaml" in said
+    assert "будет убрано остатков прошлого прогона: 1" in said
+    assert orphan.is_file()  # named, not taken
+
+    assert _cli([*argv, "--clean"]) == 0
+    assert not orphan.exists()  # ...and the real pass takes exactly what was named
+
+
+def test_a_dry_run_writes_no_tree_at_all(tmp_path: Path, capsys):
+    """Not only the removals: a first pass gets to see its size before it lands anywhere."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--out", str(out),
+                 "--lang", "ru", "--dry-run"])
+
+    said = capsys.readouterr().out
+    assert code == 0 and "будет записано файлов:" in said
+    assert not out.exists()
+
+
+def test_a_dry_run_of_an_occupied_directory_says_the_write_would_be_refused(
+    tmp_path: Path, capsys,
+):
+    """The occupancy guard is exactly what a dry run is for: it answers before the minutes."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out" / "Acme" / "TaskBook"
+    out.mkdir(parents=True)
+    (out / "README.txt").write_text("чужое", encoding="utf-8")
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--out", str(tmp_path / "out"),
+                 "--lang", "ru", "--clean", "--dry-run"])
+
+    assert code == 1 and "каталог вывода занят чужими файлами" in capsys.readouterr().out
+    assert (out / "README.txt").read_text(encoding="utf-8") == "чужое"
+
+
+def test_the_json_report_of_a_dry_run_carries_every_leftover(tmp_path: Path, capsys):
+    """The text report caps the list at a screenful; a machine reader gets all of it."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+    assert _cli(argv) == 0
+    (next(out.rglob("Project.yaml")).parent / "Забытый.yaml").write_text("Ид: x\n",
+                                                                        encoding="utf-8")
+    capsys.readouterr()
+
+    assert _cli([*argv, "--clean", "--dry-run", "--format", "json"]) == 0
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["dry_run"] is True and payload["planned"] > 0
+    assert payload["written"] == 0 and payload["removed"] == 0
+    assert payload["removals"] == ["Забытый.yaml"]
+
+
+def test_a_dry_run_without_out_is_refused(tmp_path: Path, capsys):
+    """Nothing is written anyway - answering as if the flag had shown something would be a lie."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--lang", "ru", "--dry-run"])
+
+    assert code == 2 and "--dry-run" in capsys.readouterr().err
+
+
 # --- the linter rule -----------------------------------------------------------------------------
 
 
