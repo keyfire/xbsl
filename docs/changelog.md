@@ -55,7 +55,7 @@ entry either - say what the behaviour was, not which class name was compared.
   (`Type.Member`, or type_members), and a qualified name whose type only INHERITS the member
   is followed to the ancestor that declares it. English spellings work throughout - `Array`
   used to find nothing either, the pages being written in Russian. The index is built over
-  the reference pages once and rebuilt when the database is.
+  the reference pages once and rebuilt when the database is. ([#6](https://github.com/keyfire/xbsl/pull/6))
 - **`translate --out` writes a repository, not a loose pile of files.** A build takes a
   project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
   while the command laid the descriptor straight into the directory it was given - so the
