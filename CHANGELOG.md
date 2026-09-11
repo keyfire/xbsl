@@ -45,7 +45,7 @@ entry either - say what the behaviour was, not which class name was compared.
   rarely neighbours: finding them was done by eye. Every colliding name now carries the file,
   the line and the column of its own declaration, so the line of the report is a place to
   jump to. The same for all four namespaces the pass watches: the locals of a method, the
-  methods of a module, the fields of a structure and the names of a yaml collection.
+  methods of a module, the fields of a structure and the names of a yaml collection. ([#7](https://github.com/keyfire/xbsl/pull/7))
 - **`docs_symbol` finds the MEMBERS of a type, and takes either spelling.** A member has no
   page of its own - it is a heading inside the type that declares it - so asking for one by
   name answered with an empty object, and the semantics of an argument (the second one being
