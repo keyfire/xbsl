@@ -352,8 +352,10 @@ def collect_token_edits(
         if kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
             struct_name = ""
             pending_field = False
-            local_names = _method_locals(toks, index, resolver.project_names)
-            method_name = _next_ident(toks, index)
+            local_places: dict[str, tuple[int, int]] = {}
+            local_names = _method_locals(toks, index, resolver.project_names, local_places)
+            method_token = _next_ident_token(toks, index)
+            method_name = method_token.value if method_token is not None else ""
             method_types = (inferred_locals or {}).get(method_name)
             # A declaration that names no type is typed by its value, where the inference can
             # name one; a type the source writes stands as written.
@@ -367,7 +369,8 @@ def collect_token_edits(
             for local in sorted(local_names):
                 translated, _plane = resolver.identifier(local)
                 if translated:
-                    report.note_name(f"method:{method_name}", local, translated)
+                    line, col = at if at is not None else local_places.get(local, (0, 0))
+                    report.note_name(f"method:{method_name}", local, translated, line, col)
             # The METHODS of one module share a namespace of their own, and the language has
             # no overloading: two of them under one name is a module the compiler refuses.
             # Met live - two Russian words that English spells alike, and the tree went out
@@ -375,7 +378,8 @@ def collect_token_edits(
             if method_name:
                 translated, _plane = resolver.identifier(method_name, scope=root_scope)
                 if translated:
-                    report.note_name("module", method_name, translated)
+                    line, col = at if at is not None else (method_token.line, method_token.col)
+                    report.note_name("module", method_name, translated, line, col)
         if kind == "OP" and tok.value == "@":
             # An ANNOTATION opens the namespace of its own arguments: `@ProjectUpdate(Number =
             # 20)` names a parameter of the annotation, not a word of the project.
@@ -430,7 +434,9 @@ def collect_token_edits(
                 # word already English collides with a Russian one translated into it just
                 # as two Russian ones collide with each other.
                 translated, _plane = resolver.identifier(tok.value, scope=field_of)
-                report.note_name(f"structure:{field_of}", tok.value, translated or tok.value)
+                line, col = at if at is not None else (tok.line, tok.col)
+                report.note_name(f"structure:{field_of}", tok.value, translated or tok.value,
+                                 line, col)
             if not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
                 _type_identifier_edit(tok, base, prev_dot, resolver, report, edits, at)
             elif not tok.value.isascii():
@@ -529,19 +535,29 @@ def _is_named_argument(toks: list, index: int) -> bool:
 
 def _next_ident(toks: list, index: int) -> str:
     """The identifier right after the token at `index`, or an empty string."""
+    token = _next_ident_token(toks, index)
+    return token.value if token is not None else ""
+
+
+def _next_ident_token(toks: list, index: int):
+    """The identifier token right after the token at `index`, or None - the place, not the word."""
     position = index + 1
     while position < len(toks):
         if toks[position].kind == "IDENT":
-            return toks[position].value
+            return toks[position]
         if toks[position].kind != "KEYWORD":
-            return ""
+            return None
         position += 1
-    return ""
+    return None
 
 
 def _method_locals(toks: list, start: int, project_names: frozenset[str] = frozenset(),
+                   places: dict[str, tuple[int, int]] | None = None,
                    ) -> dict[str, str]:
     """{name: the type its declaration names} for the method that begins at `start`.
+
+    `places`, when given, is filled with {name: (line, col)} of the DECLARATION of each name -
+    the line a collision report sends the reader to, and the line to edit.
 
     Two things are read off one walk. The NAMES tell a local named after a platform type from
     the type itself. The TYPE opens the namespace a member is looked up in: `Root.Услуги`
@@ -573,6 +589,8 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
             prev = toks[index - 1]
             if prev.kind == "OP" and prev.value in ("(", ","):
                 out[tok.value] = _declared_type(toks, index, project_names)
+                if places is not None:
+                    places.setdefault(tok.value, (tok.line, tok.col))
         index += 1
     # The body: declarations and loop variables, up to the closing `;` of the method.
     while index < len(toks):
@@ -591,6 +609,8 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
                     _declared_type(toks, position, project_names)
                     or _loaded_facet(toks, position, out, project_names)
                 )
+                if places is not None:
+                    places.setdefault(name, (toks[position].line, toks[position].col))
         index += 1
     return out
 
