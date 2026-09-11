@@ -61,6 +61,14 @@ MESSAGES = {
         "ru": "Не прочитать {path}: {error}",
         "en": "Cannot read {path}: {error}",
     },
+    "ci.named-directory": {
+        "ru": "--as-ci берёт ФАЙЛ пайплайна, а {path} – каталог. Проверить его набором из CI:"
+              " xbsl {path} --as-ci (ключ пишется ПОСЛЕ путей); файл пайплайна внутри каталога"
+              " называют полным именем",
+        "en": "--as-ci takes the pipeline FILE, and {path} is a directory. To check it with"
+              " the CI rule set: xbsl {path} --as-ci (the flag goes AFTER the paths); a"
+              " pipeline file inside the directory is named in full",
+    },
     "ci.no-command": {
         "ru": "В {path} нет команды xbsl – набор правил брать неоткуда",
         "en": "{path} runs no xbsl command - there is no rule set to take",
@@ -220,8 +228,16 @@ def read(path: Path | str, job: str | None = None) -> CiLint:
     that one; the name is matched as written, then case-blind, then as a part of a job name
     when exactly one fits (`--as-ci-job english` for "English to S3" - a name with spaces is
     tedious to quote, and a half-typed one that fits two jobs is refused, not guessed).
+
+    A DIRECTORY named here is the typo the flag invites: `--as-ci` takes an optional file name,
+    so `xbsl --as-ci e1c` hands it the tree that was meant to be checked, leaving the run to
+    lint the current directory - and the reader got "cannot read e1c" from the file system,
+    which says nothing about the mistake. The refusal names the flag's subject and the form
+    that works instead of letting the file system speak for it.
     """
     path = Path(path)
+    if path.is_dir():
+        raise CiLintError(i18n.t("ci.named-directory", path=path))
     documents, unread = _documents(path)
     found: list[tuple[str, list[str], Path]] = [
         (name, argv, where)

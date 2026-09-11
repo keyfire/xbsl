@@ -20,6 +20,16 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Fixed
+- **A directory named after `--as-ci` is refused with the form that works.** The flag takes an
+  OPTIONAL file name, so `xbsl --as-ci e1c` hands it the tree that was meant to be checked: no
+  positional path is left, the run lints the current directory, and the reader gets the file
+  system's "cannot read e1c" - which says nothing about the mistake. The refusal now names the
+  flag's subject (the pipeline FILE), the command that works (`xbsl e1c --as-ci`, the flag
+  after the paths) and the fact that a pipeline file inside a directory is named in full. It
+  lives in the reader, so the CLI, the LSP server and the MCP tool all answer the same way.
+  ([#20](https://github.com/keyfire/xbsl/pull/20))
+
 ### Added
 - **Parity with CI reads the `include:` of GitLab.** A pipeline is rarely one file: the
   includes bring the jobs in from elsewhere, and a project on a shared template keeps the lint

@@ -187,6 +187,12 @@ the paths - stays the run's own business: one folder is checked far more often t
 With no pipeline file, or no `xbsl` command in it, the run refuses with a message instead of
 quietly checking a narrower set: that silent difference is what cost the red job.
 
+The name after the flag is the pipeline FILE, and the optional value is a trap worth knowing:
+`xbsl --as-ci e1c` hands the flag the tree that was meant to be checked, and the run then lints
+the current directory instead. A directory named there is refused with the form that works -
+`xbsl e1c --as-ci`, the flag after the paths - rather than with the file system's "is a
+directory".
+
 **A pipeline is rarely one file.** GitLab's `include:` brings the jobs in from elsewhere, and a
 project on a shared template keeps the lint job exactly there - so a reader of the root file
 alone answered "runs no xbsl command" about a pipeline that runs one. The local files of the
