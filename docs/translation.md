@@ -168,6 +168,14 @@ directory itself and is not nested a second time, so the path people wrote by ha
 existed keeps working. A tree with no descriptor - a fragment translated on its own - is written
 where it was asked for. The log line names the directory the files actually went to.
 
+A second run into the same directory simply rewrites the tree: the directory is recognised by
+its descriptor (`Project.yaml`/`Проект.yaml`). A directory holding SOMEONE ELSE'S files is not
+touched at all - the run says which directory it is and what to do about it. A single file that
+could not be written (a leftover of an earlier run: a directory where a file goes, a read-only
+file, a file held by another program) is named in the report with its reason rather than killing
+the pass: the report is printed whole, the first five such files by name and the rest counted. A
+run that failed to write the tree exits non-zero even without `--strict` - the tree is its job.
+
 ## Localized strings turn around
 
 A project that already carries the target language in its localization sections gets those

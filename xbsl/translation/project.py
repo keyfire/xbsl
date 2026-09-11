@@ -53,6 +53,26 @@ _FIXED_COMPONENTS = {
 _LANGUAGE_NAMES = {"en": "Английский", "ru": "Русский"}
 
 MESSAGES = {
+    "translate.problem.out-occupied": {
+        "ru": "{path}: каталог вывода занят чужими файлами – это не переведённый проект"
+              " (нет {marker}), и ничего не записано. Укажите пустой каталог в --out или"
+              " уберите из этого всё лишнее",
+        "en": "{path}: the output directory holds files of someone else - it is not a"
+              " translated project (no {marker}), and nothing was written. Name an empty"
+              " directory in --out, or clear this one",
+    },
+    "translate.problem.write-failed": {
+        "ru": "{path}: файл не записан – {error}. Чаще всего на этом месте лежит остаток"
+              " прошлого прогона (каталог вместо файла, файл только для чтения) или файл"
+              " занят другой программой",
+        "en": "{path}: the file was not written - {error}. Usually what stands there is a"
+              " leftover of an earlier run (a directory where a file goes, a read-only file)"
+              " or the file is held by another program",
+    },
+    "translate.problem.write-failed-more": {
+        "ru": "по той же причине не записано ещё файлов: {count}",
+        "en": "files not written for the same reason: {count} more",
+    },
     "translate.problem.shadow": {
         "ru": "{place}: запись словаря '{name}: {entry}' расходится с платформой – '{name}' у"
               " {owner} пишется '{platform}'; здесь взято платформенное написание, а приёмник"
@@ -89,6 +109,10 @@ class ProjectReport:
     #: Fatal-for-the-tree problems: a path collision, a swap without the target language.
     problems: list[str] = field(default_factory=list)
     written: int = 0
+    #: Whether the tree asked for was NOT written whole: the output directory was occupied,
+    #: or a file could not be written. The command's job is the tree, so this decides the
+    #: exit code on its own - a run that wrote nothing must not answer like a run that did.
+    write_failed: bool = False
     #: Where the tree was actually written - the PROJECT directory, which is not the `out`
     #: the caller named: a build demands `{repository}/{Vendor}/{Name}`, so an `out` that is
     #: a repository root gets those two directories under it (see `_destination`).
@@ -659,20 +683,51 @@ def _destination(out: Path, outputs, layout: str) -> Path:
     return out / vendor / name
 
 
+#: How many failed files are named before the count takes over - a directory that cannot
+#: be written to fails on every file of the tree.
+_WRITE_PROBLEMS_SHOWN = 5
+
+
 def _write_tree(out: Path, outputs, report: ProjectReport) -> None:
+    """Write the translated tree, and never die on the way: a failure is a reported problem.
+
+    The pass costs minutes and its report is printed AFTERWARDS, so an exception raised here
+    took the whole report with it: the command answered with an exit code and an empty log,
+    which reads as a broken dictionary rather than as a directory that cannot be written to.
+    Every OS error is now named with its file and carried in `problems` - the run finishes,
+    the report is printed, and `write_failed` tells the caller the tree is not there.
+    """
     report.out_dir = out
     if out.exists() and any(out.iterdir()):
         marker = any((out / name).exists() for name in (scaffold.PROJECT_FILE_EN, scaffold.PROJECT_FILE))
         if not marker:
-            report.problems.append(f"{out}: not empty and not a translated project; nothing written")
+            report.problems.append(i18n.t(
+                "translate.problem.out-occupied", path=out,
+                marker=f"{scaffold.PROJECT_FILE_EN}/{scaffold.PROJECT_FILE}",
+            ))
+            report.write_failed = True
             return
+    failures: list[tuple[Path, str]] = []
     for new_rel, (rel_str, translated, source) in sorted(outputs.items(), key=lambda kv: str(kv[0])):
         del rel_str
         target = out / new_rel
-        target.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(translated, bytes):
-            target.write_bytes(translated)
-        else:
+        if isinstance(translated, str):
             bom = bool(source and source.had_bom)
-            target.write_bytes(translated.encode("utf-8-sig" if bom else "utf-8"))
+            translated = translated.encode("utf-8-sig" if bom else "utf-8")
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(translated)
+        except OSError as exc:
+            failures.append((target, str(exc.strerror or exc)))
+            continue
         report.written += 1
+    # A directory that cannot be written to fails on every file of the tree, and twelve
+    # hundred identical lines bury the report that explains the rest of the pass.
+    for target, error in failures[:_WRITE_PROBLEMS_SHOWN]:
+        report.problems.append(i18n.t("translate.problem.write-failed", path=target, error=error))
+    if len(failures) > _WRITE_PROBLEMS_SHOWN:
+        report.problems.append(i18n.t(
+            "translate.problem.write-failed-more",
+            count=len(failures) - _WRITE_PROBLEMS_SHOWN,
+        ))
+    report.write_failed = report.write_failed or bool(failures)

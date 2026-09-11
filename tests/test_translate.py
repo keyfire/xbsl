@@ -480,6 +480,98 @@ def test_the_cli_writes_a_repository_and_says_where(tmp_path: Path, capsys):
                if line.startswith("записано файлов: ")]
     assert written and str(out / "Acme" / "TaskBook") in written[0], written
 
+
+# --- writing into a directory that is not empty --------------------------------------------------
+
+def _cli(argv: list[str]) -> int:
+    from xbsl.translation import cli as translate_cli
+
+    return translate_cli.cli_main(argv)
+
+
+def _project_and_dictionary(tmp_path: Path) -> tuple[Path, Path]:
+    root = tmp_path / "src" / "Acme" / "Задачник"
+    _mini_project(root)
+    dictionary = tmp_path / "dictionary.yaml"
+    dictionary.write_text(
+        "version: 1\nlanguage: en\ntokens:\n    Задачник: TaskBook\n    Основное: Main\n",
+        encoding="utf-8")
+    return root, dictionary
+
+
+def test_a_second_run_into_the_same_out_rewrites_the_tree(tmp_path: Path, capsys):
+    """The repeat itself is fine: the directory carries the project marker, so it is overwritten."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    argv = [str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru"]
+
+    assert _cli(argv) == 0
+    assert _cli(argv) == 0
+    capsys.readouterr()
+    assert (out / "Acme" / "TaskBook" / "Project.yaml").is_file()
+
+
+def test_an_output_directory_of_someone_else_is_refused_in_words(tmp_path: Path, capsys):
+    """Nothing is written over a stranger's files - and the report says which directory and why."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out" / "Acme" / "TaskBook"
+    out.mkdir(parents=True)
+    (out / "README.txt").write_text("чужое", encoding="utf-8")
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--out", str(tmp_path / "out"),
+                 "--lang", "ru"])
+
+    text = capsys.readouterr().out
+    assert code == 1  # the tree is the job of the run: it was not written
+    assert "каталог вывода занят чужими файлами" in text and str(out) in text
+    assert (out / "README.txt").read_text(encoding="utf-8") == "чужое"
+
+
+def test_a_file_that_cannot_be_written_is_named_and_the_report_survives(tmp_path: Path, capsys):
+    """The pain of the backlog: an exception here answered with an exit code and an EMPTY log.
+
+    A leftover of an earlier run - a directory standing where a file goes - used to raise out of
+    the write step, and the whole report (coverage, the untranslated remainder) died with it.
+    """
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out" / "Acme" / "TaskBook"
+    out.mkdir(parents=True)
+    (out / "Project.yaml").mkdir()  # the marker is there, but a file cannot take its place
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--out", str(tmp_path / "out"),
+                 "--lang", "ru"])
+
+    text = capsys.readouterr().out
+    assert code == 1
+    assert "файл не записан" in text and "Project.yaml" in text
+    assert "записано файлов: " in text  # the report itself is printed, not lost
+    assert (out / "Main" / "Subsystem.yaml").is_file()  # the rest of the tree still went out
+
+
+def test_the_failed_files_are_named_up_to_a_point_and_then_counted(tmp_path: Path):
+    """A directory nobody can write to fails on every file - the lines must not bury the report."""
+    from xbsl.translation import project as project_module
+
+    root, _dict = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+    report = translate_project(root, _layout_dictionary(), out, layout="repository")
+    assert report.written and not report.write_failed
+
+    broken = tmp_path / "broken"
+    broken.mkdir()
+    (broken / "Project.yaml").write_text("Id: x\n", encoding="utf-8")  # the marker: writing goes on
+    outputs = {Path("Project.yaml"): ("Проект.yaml", "Id: x\n", None)}
+    for index in range(11):
+        outputs[Path(f"f{index}.yaml")] = (f"ф{index}.yaml", "x", None)
+        (broken / f"f{index}.yaml").mkdir()  # a directory where each file goes
+    stopped = project_module.ProjectReport(root=root)
+    project_module._write_tree(broken, outputs, stopped)
+
+    assert stopped.write_failed and stopped.written == 1  # only the marker itself went out
+    assert len(stopped.problems) == project_module._WRITE_PROBLEMS_SHOWN + 1
+    assert "6" in stopped.problems[-1]  # 11 failures, five named, six counted
+
+
 # --- the linter rule -----------------------------------------------------------------------------
 
 
