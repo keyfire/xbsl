@@ -18,15 +18,22 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from functools import lru_cache
 from html import unescape
 from pathlib import Path
 
-from xbsl import dataset, i18n
+from xbsl import dataset, i18n, terms
 
 MESSAGES = {
     "docs.section-not-found": {
         "ru": "Раздела '{section}' на странице нет.",
         "en": "The page has no section '{section}'.",
+    },
+    "docs.member-of-many": {
+        "ru": "'{member}' объявлен у нескольких типов ({count}); спросите"
+              " '{owner}.{member}' или посмотрите type_members {owner}.",
+        "en": "'{member}' is declared by several types ({count}); ask for"
+              " '{owner}.{member}' or look at type_members {owner}.",
     },
 }
 i18n.register(MESSAGES)
@@ -77,6 +84,15 @@ SECTION_ALIASES = {
     "inherited properties": "Список унаследованных свойств",
     "inherited events": "Список унаследованных событий",
 }
+#: The sections whose h3 headings are the type's OWN members. The inherited lists are left
+#: out on purpose - their h3 name the ANCESTOR, not a member, and a member is documented where
+#: it is declared; so are the constructors, whose heading repeats the name of the type itself.
+MEMBER_SECTIONS = frozenset({
+    "Свойства", "Методы", "События", "Элементы", "Поля", "Динамические свойства",
+})
+# Any heading down to h3: the member index and the member block both walk the same boundaries
+# (h1/h2 open a section, h3 opens a member), while h4 stays inside its member.
+_HEADING_RE = re.compile(r"<h([123])\b[^>]*>(.*?)</h\1>", re.S)
 # Query token: letters (incl. Cyrillic), digits, underscore - everything else is dropped for FTS5.
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 # Images live as files next to the database (`<version>/assets/...`), mime is derived from the extension.
@@ -256,6 +272,10 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     The qualifier match is REFERENCE pages only: a topic's `qualified` is whatever `Std::...`
     its text happened to mention first (the topic about breakpoints quotes `Std::Array::Add`),
     so matching topics that way documents a name with an unrelated article.
+
+    The pages are Russian, the platform is bilingual: a name that finds nothing is tried once
+    more under its Russian spelling, so `Array` answers with the page of the type it names
+    instead of with nothing at all.
     """
     if not name:
         return None
@@ -264,21 +284,123 @@ def for_symbol(name: str, version: str | None = None) -> str | None:
     if con is None:
         return None
     try:
-        exact = con.execute(
-            "SELECT id FROM pages WHERE title = ? "
-            "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
-            (name,),
-        ).fetchone()
-        if exact:
-            return exact["id"]
-        byq = con.execute(
-            "SELECT id FROM pages WHERE qualified LIKE ? AND id LIKE 'stdlib/%' "
-            "ORDER BY length(qualified) LIMIT 1",
-            (f"%::{name}",),
-        ).fetchone()
-        return byq["id"] if byq else None
+        found = _page_of(con, name)
+        if found is not None:
+            return found
+        russian = terms.russian(name, "types") or terms.common_russian(name)
+        return _page_of(con, russian) if russian and russian != name else None
     finally:
         con.close()
+
+
+def _page_of(con: sqlite3.Connection, name: str) -> str | None:
+    """The page id for one exact spelling: an exact title, then a reference qualifier."""
+    exact = con.execute(
+        "SELECT id FROM pages WHERE title = ? "
+        "ORDER BY id LIKE 'stdlib/%' DESC, length(qualified) LIMIT 1",
+        (name,),
+    ).fetchone()
+    if exact:
+        return exact["id"]
+    byq = con.execute(
+        "SELECT id FROM pages WHERE qualified LIKE ? AND id LIKE 'stdlib/%' "
+        "ORDER BY length(qualified) LIMIT 1",
+        (f"%::{name}",),
+    ).fetchone()
+    return byq["id"] if byq else None
+
+
+def member_places(name: str, version: str | None = None) -> tuple[str, list[tuple[str, str]]]:
+    """(the spelling the PAGES use, [(type, page id)] of the types that DECLARE the member).
+
+    A member has no page of its own - it is an h3 heading inside the type that declares it -
+    so asking for one by name used to answer with nothing at all, and the semantics of an
+    argument cost a deploy to find out. Only the OWN sections of a page count: the inherited
+    lists repeat a member under every heir, and it is documented where it is declared.
+
+    Both spellings are taken, and the first half of the answer is the one the pages are
+    written in: an English name comes back as the Russian one the headings carry, and the
+    block of the member is looked up under that. Empty for a name no type declares.
+    """
+    index = _member_index(version)
+    for spelling in (name, terms.common_russian(name) if name else None):
+        if spelling and spelling in index:
+            return spelling, list(index[spelling])
+    return name, []
+
+
+def member_block(html: str, member: str) -> tuple[str, str] | None:
+    """(the heading as the page writes it, the html of the member's block) - pure, no database.
+
+    Every OVERLOAD of the member is joined: the page opens an h3 of its own for each, and one
+    of them alone would document one signature out of three. The block runs to the next
+    heading of any level down to h3, so the examples and the exceptions of a member (h4) stay
+    with it. None when the page documents no such member of its own.
+    """
+    wanted = (member or "").strip().lower()
+    if not wanted:
+        return None
+    headings = list(_HEADING_RE.finditer(html or ""))
+    section: str | None = None
+    title = ""
+    blocks: list[str] = []
+    for index, heading in enumerate(headings):
+        text = _text(heading.group(2))
+        if heading.group(1) != "3":
+            section = text if text in MEMBER_SECTIONS else None
+            continue
+        if section is None or text.lower() != wanted:
+            continue
+        end = headings[index + 1].start() if index + 1 < len(headings) else len(html)
+        title = title or text
+        blocks.append(html[heading.start():end].strip())
+    return (title, "\n".join(blocks)) if blocks else None
+
+
+def _member_index(version: str | None = None) -> dict[str, tuple[tuple[str, str], ...]]:
+    """The member index of the data version, built once per file and rebuilt when it changes."""
+    if not available(version):
+        return {}
+    path = Path(dataset.data_file(_DB_NAME, version))
+    try:
+        stat = path.stat()
+    except OSError:  # pragma: no cover - the file vanished between the check and the stat
+        return {}
+    return _member_index_cached(str(path), stat.st_mtime, stat.st_size)
+
+
+@lru_cache(maxsize=4)
+def _member_index_cached(path: str, mtime: float, size: int) -> dict[str, tuple[tuple[str, str], ...]]:
+    """{member: ((type, page id), ...)} over every reference page of a type.
+
+    Keyed by the file's own stamp the way the library archives are (libs.py): the database is
+    regenerated in place by the extractor, and a long-lived server must not keep answering
+    from an index built over the previous one. The walk reads 1151 pages in a tenth of a
+    second, so it is done whole rather than guessed at with a full-text query, which would
+    also match the pages that merely MENTION the word.
+    """
+    del mtime, size  # the stamp is the cache key, nothing else
+    index: dict[str, list[tuple[str, str]]] = {}
+    con = sqlite3.connect(Path(path).as_uri() + "?mode=ro", uri=True)
+    con.row_factory = sqlite3.Row
+    try:
+        rows = con.execute("SELECT id, title, html FROM pages WHERE kind = 'type'").fetchall()
+    finally:
+        con.close()
+    for row in rows:
+        section: str | None = None
+        for heading in _HEADING_RE.finditer(row["html"] or ""):
+            text = _text(heading.group(2))
+            if heading.group(1) != "3":
+                section = text if text in MEMBER_SECTIONS else None
+                continue
+            if section is None:
+                continue
+            place = (row["title"], row["id"])
+            places = index.setdefault(text, [])
+            if place not in places:
+                places.append(place)
+    return {name: tuple(sorted(places)) for name, places in index.items()}
 
 
 def plain_text(html: str) -> str:

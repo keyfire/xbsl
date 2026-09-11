@@ -74,7 +74,7 @@ from a worktree then names the other checkout, whose clean answer looks like you
 |---|---|
 | `docs_search(query, limit)` | full-text search over the 1C:Element documentation |
 | `docs_page(id, brief, section)` | a documentation page by the id returned by the two other tools; `brief` – the head alone: a summary and the section names instead of the text, `section` – the head plus one section of the article (Properties, Methods, Constructors, ...; an unknown name answers with the names to choose from) |
-| `docs_symbol(name, brief, section)` | the page for a symbol by name (a type or a member), with the same `brief` and `section` modes |
+| `docs_symbol(name, brief, section)` | the documentation of a symbol by name, in either spelling: a TYPE answers with its page and the same `brief` and `section` modes, a MEMBER (`Подстрока`, `Строка.Найти`) with the block of that member alone, every overload joined - a member has no page of its own. A member several types declare answers with their names and how to ask again |
 | `type_members(name)` | the members of a stdlib type in one compact answer – what can follow the dot; cheaper than a page when only the member list matters |
 | `ui_schema(component, brief, property)` | the ui schema of an interface component: the designer's palette and its typed properties |
 | `metadata_schema(kind, sections, names)` | the properties an element of a given `ElementKind` may declare |
