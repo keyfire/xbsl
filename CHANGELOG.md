@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-11 – 0.102.0, 0.103.0
 
 ### Added
 - **A setting of the CI parity now asks the LSP server for a restart.** The flag reaches the
@@ -64,6 +64,22 @@ entry either - say what the behaviour was, not which class name was compared.
   resolved against the pipeline file, and with no pipeline or no `xbsl` command in it the run
   refuses with a line instead of quietly checking a narrower set. The same for an agent:
   `lint_paths(as_ci=true)` and an `as_ci` field in the summary. ([#10](https://github.com/keyfire/xbsl/pull/10))
+- **The metadata tools point at each other.** A caller reads the description of ONE tool:
+  `meta_add_field` adds the key of a localized string with the default-language text, while
+  the text of every translation is written by `meta_set_localization` - and not learning that
+  cost a whole task, written out by hand. Neighbouring tools now carry a "see also" line, in
+  the MCP descriptions and in the CLI help alike, where a command's text became its
+  description as well: `xbsl add-field --help` printed the arguments and nothing about the
+  command itself. ([#4](https://github.com/keyfire/xbsl/pull/4))
+- **`translate --redundant`: the dictionary entries the platform answers itself.** An entry
+  that CONTRADICTS the platform has long been judged; one that REPEATS it was judged by
+  nobody - and such an entry translates nothing while hiding a gap in the platform data or in
+  the engine itself: the half-translated languages of a project stayed invisible behind
+  exactly such a pair. The pass is the judge: an entry is listed only when every place it
+  answered would have come out the same without it. A live dictionary of 31 989 entries holds
+  22 of them, and removing all twenty-two left the English tree of 1 261 files byte for byte
+  as before. The plain report says the number, `--redundant` and `translate_redundant` list
+  them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ### Changed
 - **A name the PROJECT declares is not explained by a platform member of the same spelling.**
@@ -89,6 +105,31 @@ entry either - say what the behaviour was, not which class name was compared.
   types declare is not guessed - the panel offers those types with the member's block under
   each, and the hover stays silent. The resolution is shared with the MCP `docs_symbol` tool
   (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
+- **A translation collision names the PLACE of both names.** The report said which namespace
+  two names met in - a method, a structure, a collection of a yaml element - and stopped
+  there, while the method in question declared a dozen and a half names and the two are
+  rarely neighbours: finding them was done by eye. Every colliding name now carries the file,
+  the line and the column of its own declaration, so the line of the report is a place to
+  jump to. The same for all four namespaces the pass watches: the locals of a method, the
+  methods of a module, the fields of a structure and the names of a yaml collection. ([#7](https://github.com/keyfire/xbsl/pull/7))
+- **`docs_symbol` finds the MEMBERS of a type, and takes either spelling.** A member has no
+  page of its own - it is a heading inside the type that declares it - so asking for one by
+  name answered with an empty object, and the semantics of an argument (the second one being
+  the END position, not a length) cost a round of deploying to learn. A member now answers
+  with the record of that type's page plus the block of that member alone, every overload of
+  it joined; a name several types declare answers with their list and how to ask again
+  (`Type.Member`, or type_members), and a qualified name whose type only INHERITS the member
+  is followed to the ancestor that declares it. English spellings work throughout - `Array`
+  used to find nothing either, the pages being written in Russian. The index is built over
+  the reference pages once and rebuilt when the database is. ([#6](https://github.com/keyfire/xbsl/pull/6))
+- **`translate --out` writes a repository, not a loose pile of files.** A build takes a
+  project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
+  while the command laid the descriptor straight into the directory it was given - so the
+  translated tree of a live project could not be deployed until someone moved it by hand.
+  The two names come from the TRANSLATED descriptor, so a project whose own name is a
+  Russian word lands under the English one; an `--out` that already ends in those two names
+  is taken as the project directory itself and is not nested twice, and the log line says
+  where the files went. ([#5](https://github.com/keyfire/xbsl/pull/5))
 
 ### Fixed
 - **A Python process started from here is told what to encode its output in.** The convention
@@ -140,53 +181,6 @@ entry either - say what the behaviour was, not which class name was compared.
   duplicate is gone, and a walk of the whole checkout now holds every module to one definition
   per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
   top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
-
-## 2026-09-11 – 0.102.0
-
-### Added
-- **The metadata tools point at each other.** A caller reads the description of ONE tool:
-  `meta_add_field` adds the key of a localized string with the default-language text, while
-  the text of every translation is written by `meta_set_localization` - and not learning that
-  cost a whole task, written out by hand. Neighbouring tools now carry a "see also" line, in
-  the MCP descriptions and in the CLI help alike, where a command's text became its
-  description as well: `xbsl add-field --help` printed the arguments and nothing about the
-  command itself. ([#4](https://github.com/keyfire/xbsl/pull/4))
-- **`translate --redundant`: the dictionary entries the platform answers itself.** An entry
-  that CONTRADICTS the platform has long been judged; one that REPEATS it was judged by
-  nobody - and such an entry translates nothing while hiding a gap in the platform data or in
-  the engine itself: the half-translated languages of a project stayed invisible behind
-  exactly such a pair. The pass is the judge: an entry is listed only when every place it
-  answered would have come out the same without it. A live dictionary of 31 989 entries holds
-  22 of them, and removing all twenty-two left the English tree of 1 261 files byte for byte
-  as before. The plain report says the number, `--redundant` and `translate_redundant` list
-  them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
-
-### Changed
-- **A translation collision names the PLACE of both names.** The report said which namespace
-  two names met in - a method, a structure, a collection of a yaml element - and stopped
-  there, while the method in question declared a dozen and a half names and the two are
-  rarely neighbours: finding them was done by eye. Every colliding name now carries the file,
-  the line and the column of its own declaration, so the line of the report is a place to
-  jump to. The same for all four namespaces the pass watches: the locals of a method, the
-  methods of a module, the fields of a structure and the names of a yaml collection. ([#7](https://github.com/keyfire/xbsl/pull/7))
-- **`docs_symbol` finds the MEMBERS of a type, and takes either spelling.** A member has no
-  page of its own - it is a heading inside the type that declares it - so asking for one by
-  name answered with an empty object, and the semantics of an argument (the second one being
-  the END position, not a length) cost a round of deploying to learn. A member now answers
-  with the record of that type's page plus the block of that member alone, every overload of
-  it joined; a name several types declare answers with their list and how to ask again
-  (`Type.Member`, or type_members), and a qualified name whose type only INHERITS the member
-  is followed to the ancestor that declares it. English spellings work throughout - `Array`
-  used to find nothing either, the pages being written in Russian. The index is built over
-  the reference pages once and rebuilt when the database is. ([#6](https://github.com/keyfire/xbsl/pull/6))
-- **`translate --out` writes a repository, not a loose pile of files.** A build takes a
-  project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
-  while the command laid the descriptor straight into the directory it was given - so the
-  translated tree of a live project could not be deployed until someone moved it by hand.
-  The two names come from the TRANSLATED descriptor, so a project whose own name is a
-  Russian word lands under the English one; an `--out` that already ends in those two names
-  is taken as the project directory itself and is not nested twice, and the log line says
-  where the files went. ([#5](https://github.com/keyfire/xbsl/pull/5))
 
 ## 2026-09-10 – 0.100.0, 0.101.0
 
