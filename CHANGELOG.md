@@ -58,6 +58,20 @@ entry either - say what the behaviour was, not which class name was compared.
   while the baseline is still resolved against the ROOT file: the job runs in its checkout.
   ([#19](https://github.com/keyfire/xbsl/pull/19))
 
+### Changed
+- **The conventions guard reads the sources through the shared `docsguard` package, installed
+  by tag.** The check of the process-start convention was written here whole, while its
+  mechanics are everybody's: the engine, the bridge and the console read their sources the same
+  way and have the same silent failure waiting. What stays here is what is about THIS
+  repository - the list of folders, the `utf-8-sig` read (`xbsl/__init__.py` carries a BOM and
+  `ast.parse` refuses the mark, so the shared `process_encoding_problems`, which opens the
+  files itself as plain `utf-8`, cannot be used) and the half the package has no word for: a
+  PYTHON child needs `PYTHONIOENCODING=utf-8`, which `git` and `taskkill` have no use for. CI
+  installs the guard from a TAG rather than from a branch - from a branch it changes under the
+  repository without a commit in it, and a verdict moves with nothing here to explain why. The
+  findings over the same sources are identical before and after the move.
+  ([#23](https://github.com/keyfire/xbsl/pull/23))
+
 ### Fixed
 - **A directory named after `--as-ci` is refused with the form that works.** The flag takes an
   OPTIONAL file name, so `xbsl --as-ci e1c` hands it the tree that was meant to be checked: no
