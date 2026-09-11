@@ -15,8 +15,8 @@ English spelling, and a project written in those spellings compiles exactly like
 xbsl translate e1c/app                          # report only: coverage and what is missing
 xbsl translate e1c/app --coverage               # plus the breakdown per metadata object
 xbsl translate e1c/app --missing gaps.yaml      # the untranslated remainder as a dictionary stub
-xbsl translate e1c/app --out build/app-en       # write the translated tree
-xbsl translate e1c/app --out build/app-en --strict   # non-zero exit unless it is complete
+xbsl translate e1c/app --out build            # write the translated tree (into build/e1c/app)
+xbsl translate e1c/app --out build --strict   # non-zero exit unless it is complete
 ```
 
 ## What answers what
@@ -154,6 +154,19 @@ files and directories, and a path has to follow them or the platform stops findi
 Only a literal SHAPED like a path qualifies: it ends with a known resource suffix and every
 segment reads as a file name. A regular expression, with its slashes and named groups, does not
 qualify and stays data.
+
+## The written tree is a repository
+
+`--out DIR` makes DIR a repository ROOT: the project lands in `DIR/{Vendor}/{Name}`, the two
+names its translated descriptor carries. That is the only layout a build accepts - it packs the
+files under `{vendor}/{name}` and refuses a directory named otherwise - so the tree that comes
+out deploys as it is, with nothing moved by hand. The names are the TRANSLATED ones: a project
+whose own name is a Russian word changes it in the pass, and the directory follows.
+
+An `out` that already ends in those two names (`--out build/acme/tasks`) is taken as the project
+directory itself and is not nested a second time, so the path people wrote by hand before this
+existed keeps working. A tree with no descriptor - a fragment translated on its own - is written
+where it was asked for. The log line names the directory the files actually went to.
 
 ## Localized strings turn around
 

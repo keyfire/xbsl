@@ -38,6 +38,16 @@ entry either - say what the behaviour was, not which class name was compared.
   as before. The plain report says the number, `--redundant` and `translate_redundant` list
   them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
+### Changed
+- **`translate --out` writes a repository, not a loose pile of files.** A build takes a
+  project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
+  while the command laid the descriptor straight into the directory it was given - so the
+  translated tree of a live project could not be deployed until someone moved it by hand.
+  The two names come from the TRANSLATED descriptor, so a project whose own name is a
+  Russian word lands under the English one; an `--out` that already ends in those two names
+  is taken as the project directory itself and is not nested twice, and the log line says
+  where the files went. ([#5](https://github.com/keyfire/xbsl/pull/5))
+
 ## 2026-09-10 – 0.100.0, 0.101.0
 
 ### Added

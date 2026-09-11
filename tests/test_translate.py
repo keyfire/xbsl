@@ -397,6 +397,89 @@ def test_translate_project_renames_swaps_and_flips(tmp_path: Path):
     assert "Id: ffeacdec-02d6-4f08-bcfa-be89e9a1861a" in project_yaml
 
 
+def _mini_project(root: Path) -> None:
+    """The smallest tree that has a descriptor: the two names the layout is built from."""
+    _write(root / "Проект.yaml", (
+        "Ид: ffeacdec-02d6-4f08-bcfa-be89e9a1861a\n"
+        "Поставщик: Acme\n"
+        "Имя: Задачник\n"
+        "Версия: 1.0.0\n"
+        "Представление: \"Задачник\"\n"
+    ))
+    _write(root / "Основное" / "Подсистема.yaml", "Интерфейс: ВключатьВАвтоИнтерфейс\n")
+
+
+def _layout_dictionary():
+    return _dictionary({"Задачник": "TaskBook", "Основное": "Main"})
+
+
+def test_the_repository_layout_puts_the_project_under_vendor_and_name(tmp_path: Path):
+    """`layout="repository"`: the tree lands in {Vendor}/{Name} of the TRANSLATED descriptor.
+
+    A build takes a project only at `{repository}/{vendor}/{name}` - written flat, the tree
+    could not be deployed without being moved by hand. The names come from the translated
+    descriptor rather than from the source directories: the project's own name is a word of
+    the dictionary like any other, and the directory has to follow it.
+    """
+    root = tmp_path / "src" / "Acme" / "Задачник"
+    _mini_project(root)
+    out = tmp_path / "out"
+
+    report = translate_project(root, _layout_dictionary(), out, layout="repository")
+
+    assert report.out_dir == out / "Acme" / "TaskBook"
+    assert (out / "Acme" / "TaskBook" / "Project.yaml").is_file()
+    assert (out / "Acme" / "TaskBook" / "Main" / "Subsystem.yaml").is_file()
+    assert not (out / "Project.yaml").exists()
+
+
+def test_an_out_that_already_names_the_project_directory_is_not_nested_again(tmp_path: Path):
+    """Naming `.../Acme/TaskBook` yourself - the way the layout was reached by hand - still works."""
+    root = tmp_path / "src" / "Acme" / "Задачник"
+    _mini_project(root)
+    out = tmp_path / "out" / "Acme" / "TaskBook"
+
+    report = translate_project(root, _layout_dictionary(), out, layout="repository")
+
+    assert report.out_dir == out
+    assert (out / "Project.yaml").is_file()
+    assert not (out / "Acme").exists()
+
+
+def test_a_tree_without_a_descriptor_is_written_where_it_was_asked_for(tmp_path: Path):
+    """No descriptor - no vendor and no name, and inventing directories would lose the files."""
+    root = tmp_path / "src"
+    _write(root / "Задачи.yaml", "ВидЭлемента: Справочник\nИмя: Задачи\n")
+    out = tmp_path / "out"
+
+    report = translate_project(root, _dictionary({"Задачи": "Tasks"}), out, layout="repository")
+
+    assert report.out_dir == out
+    assert (out / "Tasks.yaml").is_file()
+
+
+def test_the_cli_writes_a_repository_and_says_where(tmp_path: Path, capsys):
+    """`--out` through the command: the log names the project directory, not the root asked for."""
+    from xbsl.translation import cli as translate_cli
+
+    root = tmp_path / "src" / "Acme" / "Задачник"
+    _mini_project(root)
+    dictionary = tmp_path / "dictionary.yaml"
+    dictionary.write_text(
+        "version: 1\nlanguage: en\ntokens:\n    Задачник: TaskBook\n    Основное: Main\n",
+        encoding="utf-8")
+    out = tmp_path / "out"
+
+    code = translate_cli.cli_main([
+        str(root), "--dictionary", str(dictionary), "--out", str(out), "--lang", "ru",
+    ])
+
+    assert code == 0
+    assert (out / "Acme" / "TaskBook" / "Project.yaml").is_file()
+    written = [line for line in capsys.readouterr().out.splitlines()
+               if line.startswith("записано файлов: ")]
+    assert written and str(out / "Acme" / "TaskBook") in written[0], written
+
 # --- the linter rule -----------------------------------------------------------------------------
 
 

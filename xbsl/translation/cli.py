@@ -5,7 +5,8 @@ Modes compose from flags around one pass over the project:
 - no flags: the coverage summary alone - the cheap health check;
 - `--coverage`: plus the per-object breakdown;
 - `--missing FILE`: write the untranslated remainder as a dictionary stub to fill;
-- `--out DIR`: write the translated tree;
+- `--out DIR`: write the translated tree - DIR is the repository ROOT, and the project
+  lands in the `{Vendor}/{Name}` its descriptor names, which is what deploys as it is;
 - `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
   name the sources use, and no problems were found - what a CI gate wants ("publish only a
   fully translated, lint-clean configuration").
@@ -31,8 +32,10 @@ MESSAGES = {
         "en": "the project directory (with its project descriptor)",
     },
     "translate.help.out": {
-        "ru": "куда записать переведённое дерево (без флага – только отчёт)",
-        "en": "where to write the translated tree (without it - report only)",
+        "ru": "корень репозитория, куда записать переведённое дерево: проект ляжет в"
+              " {{Поставщик}}/{{Имя}} (без флага – только отчёт)",
+        "en": "the repository root to write the translated tree to: the project lands in"
+              " {{Vendor}}/{{Name}} (without it - report only)",
     },
     "translate.help.dictionary": {
         "ru": "словарь проекта: файл или каталог (по умолчанию ищется xbsl-translation рядом и выше)",
@@ -431,6 +434,7 @@ def cli_main(argv: list[str] | None = None) -> int:
         root, loaded,
         Path(args.out) if args.out else None,
         swap_localization=not args.no_localization_swap,
+        layout="repository",
     )
 
     missing_tokens = report.merged_missing_tokens()
@@ -533,6 +537,7 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
         "platform_gaps": report.merged_platform_gaps(),
         "redundant_entries": report.echoed,
         "renames": report.renames,
+        "out_dir": str(report.out_dir) if report.out_dir else None,
         "warnings": {
             rel: [list(w) for w in fr.warnings]
             for rel, fr in report.files.items() if fr.warnings
@@ -651,7 +656,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
             literals=len(missing_literals),
         ))
     if args.out:
-        print(i18n.t("translate.written", count=report.written, out=args.out))
+        print(i18n.t("translate.written", count=report.written,
+                     out=report.out_dir if report.out_dir else args.out))
     # Last on purpose - whatever else the report prints, the tail of the log is the verdict.
     print(_verdict(report))
 
