@@ -38,6 +38,37 @@ export interface LinterConfig {
   enable?: string; // rules off by default that the settings table switched on
   ignore?: string;
   baseline?: string; // an EXISTING baseline file: excluded findings are suppressed
+  // Judge by the rule set the project's CI job runs (`--as-ci`): the engine reads it from the
+  // pipeline file itself, so the panel and the merge request cannot disagree about the set.
+  asCi?: boolean;
+  asCiJob?: string; // WHICH job of that file - a pipeline checking a second tree runs two
+}
+
+// Just enough of vscode.WorkspaceConfiguration to read two keys - this file stays free of
+// the vscode import so the tests can run under plain Node.
+export interface ConfigReader {
+  get<T>(key: string): T | undefined;
+}
+
+// The two settings that ask for the CI job's rule set. A named job implies the flag: nobody
+// fills in a job name meaning "and do not use it".
+export function ciSettings(c: ConfigReader): { asCi: boolean; asCiJob?: string } {
+  const job = (c.get<string>("linter.asCiJob") || "").trim();
+  return { asCi: (c.get<boolean>("linter.asCi") ?? false) || job.length > 0, asCiJob: job || undefined };
+}
+
+// The `--as-ci` half of a command line. A bare `--as-ci` takes an OPTIONAL file name, so it
+// must never stand right before a positional path: the engine would read the path as the name
+// of the pipeline file and lint nothing. The caller that appends a path passes `beforePath`,
+// which closes the option list with `--`.
+export function ciJobArgs(cfg: LinterConfig, beforePath = false): string[] {
+  if (!cfg.asCi && !cfg.asCiJob) {
+    return [];
+  }
+  if (cfg.asCiJob) {
+    return ["--as-ci-job", cfg.asCiJob]; // takes a value of its own, and implies --as-ci
+  }
+  return beforePath ? ["--as-ci", "--"] : ["--as-ci"];
 }
 
 // Whether the diagnostic is ours: the new engine signs them with source "xbsl", the engine
@@ -90,6 +121,7 @@ export function buildArgs(filename: string, cfg: LinterConfig): string[] {
   if (cfg.baseline) {
     args.push("--baseline", cfg.baseline);
   }
+  args.push(...ciJobArgs(cfg));
   return args;
 }
 
@@ -115,6 +147,7 @@ export function buildPathArgs(target: string, cfg: LinterConfig): string[] {
   if (cfg.baseline) {
     args.push("--baseline", cfg.baseline);
   }
+  args.push(...ciJobArgs(cfg, true));
   args.push(target);
   return args;
 }

@@ -210,6 +210,15 @@ answers with the names it does.
 The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and `as_ci_job`,
 and puts `as_ci` (file, job, flags, the other jobs) into the summary.
 
+**And in the editor.** `xbsl.linter.asCi` (with `xbsl.linter.asCiJob` for the job) makes the
+Problems panel judge by the same set: the extension passes the flag, and the LSP server reads
+the same pipeline file - nothing of the rule set is copied into the settings, because a copy
+is the second list this whole feature exists to avoid. The editor's own `xbsl.rules` stay ON
+TOP of the job's set, so a rule being tried out is not lost. One difference from the terminal:
+with no pipeline file the server does not refuse - a refusal costs a run in the terminal and
+the whole session in an editor - it writes the reason to the XBSL output channel and keeps the
+settings' set.
+
 ### GitHub Actions
 
 ```yaml

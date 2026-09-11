@@ -81,8 +81,8 @@ LSP-сервер xbsl (stdio)
 
 ```bash
 usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore IGNORE]
-                [--enable ENABLE] [--baseline BASELINE] [--templates TEMPLATES]
-                [--data-dir DATA_DIR] [--lang {ru,en}]
+                [--enable ENABLE] [--as-ci [AS_CI]] [--as-ci-job AS_CI_JOB] [--baseline BASELINE]
+                [--templates TEMPLATES] [--data-dir DATA_DIR] [--lang {ru,en}]
 ```
 
 **Параметры**
@@ -94,6 +94,8 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 | `--select SELECT` | только эти правила (через запятую) |
 | `--ignore IGNORE` | исключить правила (через запятую) |
 | `--enable ENABLE` | включить правила поверх набора по умолчанию |
+| `--as-ci [AS_CI]` | судить тем же набором правил, что джоба CI проекта: ключи `--select`/`--ignore`/`--enable` и базлайн берутся из команды xbsl в файле пайплайна (можно назвать файл явно); пайплайна нет – набор настроек остаётся, причина пишется в stderr |
+| `--as-ci-job AS_CI_JOB` | какую джобу файла CI брать (включает `--as-ci`); имя можно назвать частью |
 | `--baseline BASELINE` | файл базлайна (абсолютный или относительно папки воркспейса) – исключённые находки гасятся; отсутствующий файл не ошибка, он появится с первым исключением |
 | `--templates TEMPLATES` | файл шаблонов кода (абсолютный или относительно папки воркспейса) – дополняет встроенный набор, одноимённые шаблоны замещает |
 | `--data-dir DATA_DIR` | корень данных Элемента (папка с index.json) |

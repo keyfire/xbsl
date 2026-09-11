@@ -25,6 +25,7 @@ import argparse
 import base64
 import os
 import re
+import sys
 import threading
 from functools import lru_cache
 from pathlib import Path
@@ -38,9 +39,9 @@ except ImportError:  # pragma: no cover - the extra is not installed
     LanguageServer = None
 
 from xbsl import (
-    __version__, baseline, bindingcomplete, dataset, docs, engine, environment, formedits,
-    formhandlers, formmodel, formsearch, i18n, indexer, metamodel, scaffold, templates,
-    terms, uischema,
+    __version__, baseline, bindingcomplete, cijob, dataset, docs, engine, environment,
+    formedits, formhandlers, formmodel, formsearch, i18n, indexer, metamodel, scaffold,
+    templates, terms, uischema,
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
@@ -1854,6 +1855,40 @@ def _make_server() -> "LanguageServer":
     return server
 
 
+def _adopt_ci(args: argparse.Namespace) -> None:
+    """Judge by the rule set of the project's CI job - the editor's half of `--as-ci`.
+
+    The panel used to judge by the defaults while the CLI and the MCP server could already
+    take the job's set, so the same tree got two verdicts and only one of them was the one
+    that gates the merge. The set is read from the SAME place they read it - the `xbsl`
+    command of the pipeline file - rather than from a copy of it in the settings: a copy is
+    a second list to keep in step, which is the failure this whole feature exists to end.
+
+    Unlike the CLI this does NOT refuse when there is no pipeline file. A refusal costs the
+    CLI one run and the server the whole editing session, so the reason is written to stderr
+    (the client shows the server's stderr in its output channel) and the settings' own rule
+    set stands.
+    """
+    where = [args.project_root] if args.project_root else ["."]
+    try:
+        job = cijob.find(where, args.as_ci or None, args.as_ci_job)
+    except cijob.CiLintError as exc:
+        print(str(exc), file=sys.stderr)
+        return
+    # Merged, not replaced, exactly as in the CLI: the settings' own rules stay on top of
+    # the job's set, so a rule being tried out in the editor is not lost to the pipeline.
+    STATE.select = (STATE.select or set()) | set(job.select) or None
+    STATE.ignore = (STATE.ignore or set()) | set(job.ignore) or None
+    STATE.enable = (STATE.enable or set()) | set(job.enable) or None
+    if not args.baseline:
+        # `--no-baseline` in the job means the job trusts nothing frozen - the editor must
+        # not mute findings the pipeline will report.
+        STATE.baseline_arg = None if job.no_baseline else job.baseline_file()
+    print(job.describe(), file=sys.stderr)
+    if not args.as_ci_job and job.hint():
+        print(job.hint(), file=sys.stderr)
+
+
 def main() -> None:
     if LanguageServer is None:
         raise SystemExit(
@@ -1864,6 +1899,8 @@ def main() -> None:
     parser.add_argument("--select", help=i18n.t("cli.help.lsp.select"))
     parser.add_argument("--ignore", help=i18n.t("cli.help.lsp.ignore"))
     parser.add_argument("--enable", help=i18n.t("cli.help.lsp.enable"))
+    parser.add_argument("--as-ci", nargs="?", const="", help=i18n.t("cli.help.lsp.as-ci"))
+    parser.add_argument("--as-ci-job", help=i18n.t("cli.help.lsp.as-ci-job"))
     parser.add_argument("--baseline", help=i18n.t("cli.help.lsp.baseline"))
     parser.add_argument("--templates", help=i18n.t("cli.help.lsp.templates"))
     parser.add_argument("--data-dir", help=i18n.t("cli.help.lsp.data-dir"))
@@ -1878,6 +1915,8 @@ def main() -> None:
     STATE.select = _rule_set(args.select)
     STATE.ignore = _rule_set(args.ignore)
     STATE.enable = _rule_set(args.enable)
+    if args.as_ci is not None or args.as_ci_job:
+        _adopt_ci(args)
     _make_server().start_io()
 
 
