@@ -596,17 +596,22 @@ def _make_server() -> "LanguageServer":
     # --- navigation --------------------------------------------------------------------
 
     def nav_query(uri: str, position: lsp.Position) -> Optional[dict]:
+        return nav_query_at(uri, position.line, position.character)
+
+    def nav_query_at(uri: str, line: int, character: int) -> Optional[dict]:
+        """The navigation core's question, from plain coordinates: the custom requests of the
+        documentation carry the line and the character as numbers, not as an lsp.Position."""
         path = uri_to_path(uri)
         if path is None:
             return None
         doc = server.workspace.get_text_document(uri)
         lines = doc.source.split("\n")
-        if position.line >= len(lines):
+        if line >= len(lines):
             return None
         return {
             "language_id": language_of(path),
-            "line_text": lines[position.line].rstrip("\r"),
-            "character": position.character,
+            "line_text": lines[line].rstrip("\r"),
+            "character": character,
             "file_stem": path.stem,
             "file_path": rel_posix(path),
         }
@@ -1120,6 +1125,14 @@ def _make_server() -> "LanguageServer":
                 query = f"{receiver} {word}"
             else:
                 receiver = ""
+        if _project_declares(uri, line, character):
+            # A name the PROJECT declares is not described by a platform member of the same
+            # spelling. The main hover already answers such a position with the project's own
+            # card - a method, an object, a component - and the documentation block was then
+            # put UNDER it, so a module's own `Write` came with the platform's `Write`
+            # explained beneath. Candidates by the query are still offered: the word may
+            # genuinely have a page, it is simply not the answer to "what is this name here".
+            return None, "", query
         offset = sum(len(lines[k]) + 1 for k in range(line)) + character
         try:
             src = engine.load_text(path.name, doc.source)
@@ -1151,6 +1164,23 @@ def _make_server() -> "LanguageServer":
         # A word with a known type documents that type; a bare word may still be a member of
         # one (a method name written without a receiver, a name inside a comment).
         return (var_type or word), ("" if var_type else word), query
+
+    def _project_declares(uri: str, line: int, character: int) -> bool:
+        """Whether the project's own index answers for this position.
+
+        The gate is the navigation core itself rather than a second list of what counts as a
+        project name: whatever the main hover answers with - an object, a method of the module,
+        a component of the form, a tabular section, a value of an enumeration - is by
+        definition the project's answer, and the two cannot drift apart.
+        """
+        question = nav_query_at(uri, line, character)
+        lookup = ensure_lookup()
+        if question is None or lookup is None:
+            return False
+        try:
+            return bool(resolve_hover(lookup, **question))
+        except Exception:  # noqa: BLE001 - the documentation request must never fail
+            return False
 
     @server.feature("xbsl/templatesReload")
     def _templates_reload(_params: object = None) -> dict:
@@ -1213,7 +1243,13 @@ def _make_server() -> "LanguageServer":
             uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0)
         )
         if not name and not member:
-            return {}
+            # A name of the project's own, or a local variable: no page documents IT, but the
+            # word may still have one, and answering with nothing made the panel say "no
+            # symbol under the cursor" over a method the reader is looking straight at.
+            if not query:
+                return {}
+            return {"name": query, "page": None, "member": "", "anchor": "",
+                    "candidates": docs.search(query, limit=8)}
         # A MEMBER first: it is documented inside the page of the type that declares it, and
         # that block is the answer to the question asked - the type's page alone was the
         # nearest thing the panel could show, and a bare member fell through to full-text
