@@ -8,9 +8,21 @@ sits on the child's side: a Python process writes its stdout in the code page to
 PYTHONIOENCODING says otherwise, so a parent that decodes perfectly still gets mojibake.
 This repository generates a whole Russian documentation page out of `--help` that way.
 
-Read with `ast` rather than with a regular expression: a call is written `subprocess.run(...)`
-here and `(run or subprocess.run)(...)` where the tests need a seam, and a check that looked
-at the text before the parenthesis would pass over exactly the ones that matter.
+The MECHANICS are not this repository's business: the engine, the bridge and the console all
+start processes the same way and have the same silent failure waiting, so reading the sources
+with `ast` and judging a call lives in the shared `docsguard` package (`conventions.py`). What
+stays here is the list of FOLDERS - which of them hold code that starts a process is a fact
+about this repository - and the half of the convention the shared package has no word for: a
+PYTHON child needs `PYTHONIOENCODING=utf-8` in its environment, which is meaningless for `git`
+or `taskkill`.
+
+Two details of the reading are ours as well. The files are read with `utf-8-sig`, because
+`xbsl/__init__.py` carries a BOM and `ast.parse` refuses the mark as a non-printable
+character - the shared `process_encoding_problems`, which opens the files itself as plain
+`utf-8`, would die on the first one instead of judging the repository. And `ast` rather than a
+regular expression is the whole point of the shared reader: a process start is written
+`(run or subprocess.run)(...)` wherever the tests need a seam, and a check reading the text
+before the parenthesis would pass over exactly those.
 """
 
 from __future__ import annotations
@@ -18,19 +30,15 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+from docsguard import Layout, asks_for_text, encoding_problems, process_starts, python_sources
+
 ROOT = Path(__file__).resolve().parents[1]
+LAYOUT = Layout(root=ROOT)
 
 #: Everything written in Python here: the engine, the generators of the pages, the guards and
 #: the tests themselves - a convention that stops at the test folder is half a convention.
 FOLDERS = ("xbsl", "scripts", "tests", "tools")
-#: Data and build products under those folders are not sources of ours.
-SKIP_PARTS = frozenset({"data", "__pycache__", "node_modules"})
 
-#: The functions of `subprocess` that start a process.
-STARTERS = frozenset({"run", "Popen", "call", "check_call", "check_output"})
-#: The keywords that turn the streams into text. Any of them, and the bytes have to be decoded
-#: by somebody - so the encoding has to be said out loud.
-TEXT_FLAGS = ("text", "universal_newlines")
 #: How a command line names a Python interpreter when it is not `sys.executable`.
 PYTHON_NAMES = frozenset({"python", "python3", "py", "python.exe", "pythonw.exe"})
 #: What the child's own streams are set by.
@@ -48,47 +56,7 @@ def read(path: Path) -> str:
 
 def sources() -> list[Path]:
     """Every Python file of the repository, in a stable order."""
-    found: list[Path] = []
-    for folder in FOLDERS:
-        found.extend(
-            path for path in sorted((ROOT / folder).rglob("*.py"))
-            if not SKIP_PARTS & set(path.relative_to(ROOT).parts)
-        )
-    return found
-
-
-def process_starts(tree: ast.AST) -> list[ast.Call]:
-    """The calls that start a process, however the callable is spelled at the call site.
-
-    The whole callable expression is searched, not just its head: `(run or subprocess.run)(...)`
-    is a process start, and that shape is what a runner seam for the tests looks like.
-    """
-    calls: list[ast.Call] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Call):
-            continue
-        for inner in ast.walk(node.func):
-            if (
-                isinstance(inner, ast.Attribute)
-                and inner.attr in STARTERS
-                and isinstance(inner.value, ast.Name)
-                and inner.value.id == "subprocess"
-            ):
-                calls.append(node)
-                break
-    return calls
-
-
-def asks_for_text(call: ast.Call) -> bool:
-    """Does the call want str back - by `text=`, by `universal_newlines=` or by `encoding=`."""
-    for keyword in call.keywords:
-        if keyword.arg in TEXT_FLAGS and not (
-            isinstance(keyword.value, ast.Constant) and keyword.value.value is False
-        ):
-            return True
-        if keyword.arg == "encoding":
-            return True
-    return False
+    return python_sources(LAYOUT, FOLDERS)
 
 
 def starts_python(call: ast.Call) -> bool:
@@ -128,20 +96,22 @@ def names_child_encoding(tree: ast.AST) -> bool:
 
 
 def problems_in(source: str, where: str) -> list[str]:
-    """The process starts of one file that decode without saying how."""
+    """The process starts of one file that decode without saying how.
+
+    The first half is the shared one - a process read as text without an encoding. The second
+    is this repository's own: a Python child started from here writes in the console code page
+    unless its environment says otherwise, and the parent's own `encoding="utf-8"` does not
+    reach it.
+    """
+    problems = list(encoding_problems(source, where))
     tree = ast.parse(source)
-    child_encoding_named = names_child_encoding(tree)
-    problems = []
+    if names_child_encoding(tree):
+        return problems
     for call in process_starts(tree):
-        if not asks_for_text(call):
-            continue  # bytes in, bytes out - nothing is being decoded
-        if not any(keyword.arg == "encoding" for keyword in call.keywords):
-            problems.append(f"{where}:{call.lineno}: a process is read as text without "
-                            'encoding="utf-8"')
-        if starts_python(call) and not child_encoding_named:
+        if asks_for_text(call) and starts_python(call):
             problems.append(f"{where}:{call.lineno}: a Python child is read as text without "
                             f'{CHILD_ENCODING}="utf-8" in its environment')
-    return problems
+    return sorted(problems)
 
 
 def test_every_process_read_as_text_names_its_encoding():
@@ -209,3 +179,16 @@ def test_a_child_that_is_not_python_is_not_asked_for_a_python_variable():
            ' text=True, encoding="utf-8")\n')
 
     assert problems_in(git, "git.py") == []
+
+
+def test_the_source_with_a_bom_is_read_rather_than_refused():
+    """`xbsl/__init__.py` carries one, and `ast.parse` refuses the mark outright.
+
+    The shared `process_encoding_problems` opens the files itself as plain `utf-8`, so this
+    repository reads them with `utf-8-sig` and hands the text over - otherwise the guard dies
+    on the first file instead of judging the repository.
+    """
+    marked = ROOT / "xbsl" / "__init__.py"
+
+    assert marked.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert problems_in(read(marked), "init.py") == []

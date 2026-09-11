@@ -50,7 +50,9 @@ reader thread of `subprocess` dies inside - `stdout` comes back `None`, and the 
 goes on saying that the run went well. Nothing in the output says the text was lost. That is
 what the Russian half of a documentation page, a help text, or a traceback carrying a Cyrillic
 path is worth without those two. `tests/test_conventions.py` holds the repository to it,
-reading the sources with `ast`.
+reading the sources with `ast`. The reading itself lives in the shared `docsguard`
+package - three repositories have the same failure waiting - and CI installs that guard
+from a TAG, so it cannot change a verdict here without a commit here.
 
 ## How to add a rule
 
