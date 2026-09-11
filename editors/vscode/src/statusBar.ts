@@ -8,10 +8,12 @@ import { spawn } from "child_process";
 import { createHash } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
+import { CiStatus, ciIndicator, shortJob } from "./ciStatusCore";
 import { LinterConfig } from "./report";
 import { compareVersions } from "./updateCheckCore";
 
 const SHOW_INFO = "xbsl.showVersionInfo";
+const SHOW_CI = "xbsl.showCiRuleSet";
 const AGE_REFRESH_MS = 60_000;
 
 // A build is identified by a short hash of the installed bundle: all dev builds share one
@@ -81,12 +83,22 @@ function elemctlVersion(): Promise<string | undefined> {
 export function registerStatusBar(
   context: vscode.ExtensionContext,
   getLinter: (resource?: vscode.Uri) => LinterConfig
-): { setLspMode: (on: boolean) => void; setLatestVersion: (latest?: string) => void } {
+): {
+  setLspMode: (on: boolean) => void;
+  setLatestVersion: (latest?: string) => void;
+  setCiStatus: (status?: CiStatus) => void;
+} {
   const extVersion = String(context.extension.packageJSON.version ?? "?");
   const build = buildId(context);
   const hash = build ? build.hash : "?";
   const item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   item.command = SHOW_INFO;
+  // A second item, to the left of the versions one and shown only when the parity was asked
+  // for: WHICH rule set the panel judges by is a property of the workspace, not of the build,
+  // and a finding is looked at far more often than a version.
+  const ciItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+  ciItem.command = SHOW_CI;
+  let ci: CiStatus | undefined;
   let linter = "…";
   // undefined - not asked yet; "" - asked and not found (deploy and debugging will not work).
   let elemctl: string | undefined;
@@ -133,6 +145,39 @@ export function registerStatusBar(
     item.show();
   };
 
+  // The sentence about the parity: the server's own lines, plus the one thing the server has
+  // no word for - what the editor does INSTEAD when the job's set was not taken.
+  const ciLines = (): string[] => {
+    const view = ciIndicator(ci);
+    if (view.state === "refused") {
+      return [
+        vscode.l10n.t(
+          "The rule set of the CI job was NOT taken - the Problems panel judges by the rules of the settings."
+        ),
+        ...view.details,
+      ];
+    }
+    return view.details;
+  };
+
+  const renderCi = (): void => {
+    const view = ciIndicator(ci);
+    if (view.state === "off") {
+      ciItem.hide();
+      return;
+    }
+    const taken = view.state === "adopted";
+    ciItem.text = taken
+      ? `$(checklist) CI: ${shortJob(view.job)}`
+      : `$(warning) ${vscode.l10n.t("CI: not taken")}`;
+    ciItem.tooltip = ciLines().join("\n");
+    // The warning colour is for the state that used to be silent: asked for and not taken.
+    ciItem.backgroundColor = taken
+      ? undefined
+      : new vscode.ThemeColor("statusBarItem.warningBackground");
+    ciItem.show();
+  };
+
   const refresh = async (): Promise<void> => {
     render();
     linter = (await linterVersion(getLinter())) ?? "?";
@@ -146,8 +191,21 @@ export function registerStatusBar(
 
   context.subscriptions.push(
     item,
+    ciItem,
     { dispose: () => clearInterval(ageTimer) },
     vscode.commands.registerCommand(SHOW_INFO, () => void vscode.window.showInformationMessage(line())),
+    // A click goes where the answer is: the pipeline file that names the job (the include it
+    // actually stands in, when one brought it). With nothing taken there is no file to open,
+    // and the message carries the reason instead.
+    vscode.commands.registerCommand(SHOW_CI, () => {
+      const view = ciIndicator(ci);
+      const text = ciLines().join("\n");
+      if (!view.open) {
+        void vscode.window.showInformationMessage(text || vscode.l10n.t("CI: not taken"));
+        return;
+      }
+      void vscode.window.showTextDocument(vscode.Uri.file(view.open));
+    }),
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration("xbsl.linter") || e.affectsConfiguration("xbsl.lsp")
           || e.affectsConfiguration("xbsl.deploy.elemctlPath")) {
@@ -164,6 +222,12 @@ export function registerStatusBar(
     setLatestVersion: (latest?: string): void => {
       update = latest && compareVersions(latest, extVersion) > 0 ? latest : undefined;
       render();
+    },
+    // Set from the answer of the server (xbsl/ciStatus) - after the start and after every
+    // restart, because a restart is exactly what a changed parity setting causes.
+    setCiStatus: (status?: CiStatus): void => {
+      ci = status;
+      renderCi();
     },
   };
 }

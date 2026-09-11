@@ -570,5 +570,7 @@
   "Which key to set?": "Какой ключ задать?",
   "Stored in SecretStorage; never written to a setting or a command line.": "Хранится в SecretStorage; никогда не попадает в настройку или командную строку.",
   "XBSL: the key is cleared.": "XBSL: ключ очищен.",
-  "XBSL: the key is saved.": "XBSL: ключ сохранён."
+  "XBSL: the key is saved.": "XBSL: ключ сохранён.",
+  "CI: not taken": "CI: набор не взят",
+  "The rule set of the CI job was NOT taken - the Problems panel judges by the rules of the settings.": "Набор правил джобы CI НЕ взят – панель \"Проблемы\" судит правилами из настроек."
 }

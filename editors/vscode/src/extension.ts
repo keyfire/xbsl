@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
 import * as path from "path";
+import { CiStatus } from "./ciStatusCore";
 import { ciSettings, LinterConfig, RawDiag, RawReport } from "./report";
 import { registerDeploy } from "./deploy";
 import { registerDebug } from "./debug";
@@ -10,7 +11,13 @@ import { DesignerAccess, registerFormDesigner } from "./formDesigner";
 import { createFormStructureModel, registerFormStructureCommands } from "./formStructure";
 import { baselineForLint, registerExcludeAction } from "./excludeAction";
 import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
-import { activateLsp, lspActive, lspBaselinePassed, lspRequest } from "./lspClient";
+import {
+  activateLsp,
+  lspActive,
+  lspBaselinePassed,
+  lspRequest,
+  setAfterServerStart,
+} from "./lspClient";
 import { registerMetadataTree } from "./metadataTree";
 import { registerProjectWizard } from "./projectWizard";
 import { metaKeyAliases } from "./uiSchemaClient";
@@ -517,6 +524,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (lspChosen ?? lspSetting?.defaultValue ?? true) {
     if (await activateLsp(context, output, lspChosen !== undefined)) {
       statusBar.setLspMode(true);
+      // WHICH rule set the panel judges by - asked of the server, not read off the settings:
+      // the settings say what was requested, and only the server knows what came of it. With
+      // no pipeline file it goes on judging by the settings' own rules and says so in the
+      // output channel alone, which is not where anyone looks while reading a finding.
+      // Re-asked after every restart: a changed parity setting is what causes one.
+      setAfterServerStart(() => {
+        void lspRequest<CiStatus>("xbsl/ciStatus", {}).then((status) =>
+          statusBar.setCiStatus(status)
+        );
+      });
       // The server picks up template edits on request - no restart, no index loss.
       setTemplatesReload(async () => {
         await lspRequest("xbsl/templatesReload", {});

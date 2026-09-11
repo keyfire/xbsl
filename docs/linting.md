@@ -240,7 +240,15 @@ answers with the names it does.
 The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and `as_ci_job`,
 and puts `as_ci` (file, job, flags, the other jobs) into the summary.
 
-**And in the editor.** `xbsl.linter.asCi` (with `xbsl.linter.asCiJob` for the job) makes the
+**And in the editor.** The status bar says which set the panel judges by: `CI: <job>` while the
+job's set is in force, and a warning when it was asked for and NOT taken - the server does not
+refuse over a missing pipeline file (that would cost the whole editing session), so it goes on
+judging by the settings, and until now the only trace of it was one line in the output channel.
+The answer comes from the server itself (the `xbsl/ciStatus` request), not from the settings:
+the settings say what was requested, and only the server knows what came of it. A click opens
+the pipeline file the job stands in.
+
+`xbsl.linter.asCi` (with `xbsl.linter.asCiJob` for the job) makes the
 Problems panel judge by the same set: the extension passes the flag, and the LSP server reads
 the same pipeline file - nothing of the rule set is copied into the settings, because a copy
 is the second list this whole feature exists to avoid. The editor's own `xbsl.rules` stay ON
