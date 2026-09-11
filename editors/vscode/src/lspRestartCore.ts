@@ -23,6 +23,10 @@ export const SERVER_ARG_SETTINGS = [
   "xbsl.linter.select",
   "xbsl.linter.ignore",
   "xbsl.linter.enable",
+  // The rule set of the CI job: the server is told to read the pipeline file by a flag, so
+  // turning the setting on after the server is up re-arguments it like any of the above.
+  "xbsl.linter.asCi",
+  "xbsl.linter.asCiJob",
 ] as const;
 
 // `affects` is vscode's own event.affectsConfiguration, passed in so this stays vscode-free.

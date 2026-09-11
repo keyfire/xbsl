@@ -117,6 +117,14 @@ test("a setting that does not reach the command line leaves the server alone", (
   }
 });
 
+test("asking for the CI job's rule set asks for a server restart", () => {
+  // the flag reaches the server as an ARGUMENT, so a setting switched on in a live window
+  // would otherwise do nothing at all until the next reload - which is the failure this
+  // whole module exists to prevent
+  assert.ok(needsServerRestart((s) => s === "xbsl.linter.asCi"));
+  assert.ok(needsServerRestart((s) => s === "xbsl.linter.asCiJob"));
+});
+
 test("an unrelated extension's settings are ignored", () => {
   assert.ok(!needsServerRestart((s) => s.startsWith("editor.")));
 });
