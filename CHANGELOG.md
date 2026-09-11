@@ -21,6 +21,18 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **Parity with CI in the editor: the Problems panel can judge by the job's rule set.** The
+  terminal and an agent could already take it, the panel could not - so one tree got two
+  verdicts, and the one that gates the merge request was the other one. `xbsl.linter.asCi`
+  turns it on, `xbsl.linter.asCiJob` names the job. Nothing of the rule set is copied into the
+  settings: the LSP server grew `--as-ci`/`--as-ci-job` of its own and reads the same pipeline
+  file the CLI does, so the editor, the terminal and the pipeline judge by ONE list rather
+  than by three copies of it. The settings' own rules stay on top of the job's set, an
+  explicit baseline outranks the job's, and a job that trusts nothing frozen
+  (`--no-baseline`) leaves the editor showing what the pipeline will report. One difference
+  from the terminal, on purpose: with no pipeline file the server does not refuse - that
+  costs a run in a terminal and a whole session in an editor - it writes the reason to the
+  output channel and keeps the settings' set. ([#14](https://github.com/keyfire/xbsl/pull/14))
 - **`--as-ci-job`: which job to take, when the pipeline runs the linter twice.** A project
   that builds a second tree checks it in a second job - the sources in one, what `translate`
   wrote in another - and the two judge different sets: the translated tree has no baseline of
