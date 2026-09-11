@@ -27,7 +27,7 @@ xbsl-lint:
       --enable code/unused-method
       --enable conventions/missing-translation
       --enable yaml/duplicate-subtree
-    - python tools/check-agent-docs.py
+    - python tools/check-docs.py
 
 build:
   stage: build
