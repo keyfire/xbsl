@@ -205,6 +205,18 @@ def test_a_pipeline_that_runs_no_linter_says_so(tmp_path: Path):
     assert str(path) in str(exc.value)
 
 
+def test_a_directory_named_as_the_pipeline_file_is_told_what_the_flag_takes(tmp_path: Path):
+    """`--as-ci` takes an OPTIONAL file name, so the tree meant for checking lands in it."""
+    (tmp_path / "e1c").mkdir()
+
+    with pytest.raises(cijob.CiLintError) as exc:
+        cijob.read(tmp_path / "e1c")
+
+    said = str(exc.value)
+    assert "--as-ci" in said and str(tmp_path / "e1c") in said
+    assert "Is a directory" not in said and "каталог" in said  # not the file system's word
+
+
 # --- include: the pipeline is rarely one file ----------------------------------------------------
 
 
@@ -438,6 +450,17 @@ def test_a_run_takes_the_set_of_a_job_that_lives_in_an_included_file(tmp_path: P
     assert "yaml/duplicate-subtree" in out.out
     assert "ci" in out.err and "lint.yml" in out.err  # the file the job actually stands in
     assert "Jobs/SAST.gitlab-ci.yml" in out.err  # ...and the blind spot of the reader
+
+
+@pytest.mark.needs_data
+def test_the_flag_that_ate_the_path_answers_with_the_form_that_works(tmp_path: Path, capsys):
+    """`xbsl --as-ci e1c` - the shape the flag invites, and the message it used to give."""
+    root = _project_with_a_copied_subtree(tmp_path)
+
+    assert cli.main(["--as-ci", str(root)]) == 2
+
+    said = capsys.readouterr().err
+    assert f"xbsl {root} --as-ci" in said  # the command to run instead, spelled out
 
 
 @pytest.mark.needs_data
