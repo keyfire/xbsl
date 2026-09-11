@@ -505,7 +505,10 @@ def verify_install(site: Path, expected: str) -> str:
     memory and would report success no matter what happened on disk.
     """
     code = "import xbsl, sys; sys.stdout.write(xbsl.__version__)"
-    env = {**os.environ, "PYTHONPATH": str(site)}
+    # PYTHONIOENCODING because the answer is READ as text: without it the child writes in the
+    # console code page, and a decoding that says utf-8 gets replacement characters back
+    # while the exit code goes on saying that all is well.
+    env = {**os.environ, "PYTHONPATH": str(site), "PYTHONIOENCODING": "utf-8"}
     try:
         result = subprocess.run(
             [sys.executable, "-c", code], capture_output=True, text=True, timeout=120,

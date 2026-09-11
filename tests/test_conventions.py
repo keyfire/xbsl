@@ -1,0 +1,211 @@
+"""Conventions of the sources that no single test of a feature would ever notice.
+
+A convention nobody wrote down is a convention every new file gets to rediscover, and this
+one hides its failures: a process read as text without a named encoding is decoded with the
+console code page, so the Russian half of the output turns into replacement characters - and
+the exit code goes on saying that everything went well. The other half of the same failure
+sits on the child's side: a Python process writes its stdout in the code page too unless
+PYTHONIOENCODING says otherwise, so a parent that decodes perfectly still gets mojibake.
+This repository generates a whole Russian documentation page out of `--help` that way.
+
+Read with `ast` rather than with a regular expression: a call is written `subprocess.run(...)`
+here and `(run or subprocess.run)(...)` where the tests need a seam, and a check that looked
+at the text before the parenthesis would pass over exactly the ones that matter.
+"""
+
+from __future__ import annotations
+
+import ast
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+#: Everything written in Python here: the engine, the generators of the pages, the guards and
+#: the tests themselves - a convention that stops at the test folder is half a convention.
+FOLDERS = ("xbsl", "scripts", "tests", "tools")
+#: Data and build products under those folders are not sources of ours.
+SKIP_PARTS = frozenset({"data", "__pycache__", "node_modules"})
+
+#: The functions of `subprocess` that start a process.
+STARTERS = frozenset({"run", "Popen", "call", "check_call", "check_output"})
+#: The keywords that turn the streams into text. Any of them, and the bytes have to be decoded
+#: by somebody - so the encoding has to be said out loud.
+TEXT_FLAGS = ("text", "universal_newlines")
+#: How a command line names a Python interpreter when it is not `sys.executable`.
+PYTHON_NAMES = frozenset({"python", "python3", "py", "python.exe", "pythonw.exe"})
+#: What the child's own streams are set by.
+CHILD_ENCODING = "PYTHONIOENCODING"
+
+
+def read(path: Path) -> str:
+    """The text of a source file - with the BOM taken off, which some of them carry.
+
+    `utf-8` would leave the mark in the string and `ast.parse` refuses it as a non-printable
+    character: the guard would then die on the first file instead of judging the repository.
+    """
+    return path.read_text(encoding="utf-8-sig")
+
+
+def sources() -> list[Path]:
+    """Every Python file of the repository, in a stable order."""
+    found: list[Path] = []
+    for folder in FOLDERS:
+        found.extend(
+            path for path in sorted((ROOT / folder).rglob("*.py"))
+            if not SKIP_PARTS & set(path.relative_to(ROOT).parts)
+        )
+    return found
+
+
+def process_starts(tree: ast.AST) -> list[ast.Call]:
+    """The calls that start a process, however the callable is spelled at the call site.
+
+    The whole callable expression is searched, not just its head: `(run or subprocess.run)(...)`
+    is a process start, and that shape is what a runner seam for the tests looks like.
+    """
+    calls: list[ast.Call] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for inner in ast.walk(node.func):
+            if (
+                isinstance(inner, ast.Attribute)
+                and inner.attr in STARTERS
+                and isinstance(inner.value, ast.Name)
+                and inner.value.id == "subprocess"
+            ):
+                calls.append(node)
+                break
+    return calls
+
+
+def asks_for_text(call: ast.Call) -> bool:
+    """Does the call want str back - by `text=`, by `universal_newlines=` or by `encoding=`."""
+    for keyword in call.keywords:
+        if keyword.arg in TEXT_FLAGS and not (
+            isinstance(keyword.value, ast.Constant) and keyword.value.value is False
+        ):
+            return True
+        if keyword.arg == "encoding":
+            return True
+    return False
+
+
+def starts_python(call: ast.Call) -> bool:
+    """Whether the command line is a PYTHON interpreter - `sys.executable`, or named outright.
+
+    Only a literal list is judged: a command built elsewhere says nothing here, and guessing
+    would make the check fire on lines nobody can fix.
+    """
+    if not call.args or not isinstance(call.args[0], (ast.List, ast.Tuple)):
+        return False
+    elements = call.args[0].elts
+    if not elements:
+        return False
+    head = elements[0]
+    if isinstance(head, ast.Attribute) and head.attr == "executable":
+        return isinstance(head.value, ast.Name) and head.value.id == "sys"
+    return isinstance(head, ast.Constant) and str(head.value).lower() in PYTHON_NAMES
+
+
+def names_child_encoding(tree: ast.AST) -> bool:
+    """Whether the file hands its Python children an environment that sets PYTHONIOENCODING.
+
+    The environment reaches a call in three shapes - `dict(os.environ, ...)`, `{**os.environ,
+    ...}` and a name built a few lines above - so what is looked for is the NAME anywhere in
+    the file, not a keyword of the call. In `dict(...)` it is an argument name and in a dict
+    literal a string, hence the two halves. A file that names the variable has thought about
+    the child's encoding; a file that never mentions it has not, and that is the distinction
+    worth guarding.
+    """
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            if CHILD_ENCODING in node.value:
+                return True
+        elif isinstance(node, ast.keyword) and node.arg == CHILD_ENCODING:
+            return True
+    return False
+
+
+def problems_in(source: str, where: str) -> list[str]:
+    """The process starts of one file that decode without saying how."""
+    tree = ast.parse(source)
+    child_encoding_named = names_child_encoding(tree)
+    problems = []
+    for call in process_starts(tree):
+        if not asks_for_text(call):
+            continue  # bytes in, bytes out - nothing is being decoded
+        if not any(keyword.arg == "encoding" for keyword in call.keywords):
+            problems.append(f"{where}:{call.lineno}: a process is read as text without "
+                            'encoding="utf-8"')
+        if starts_python(call) and not child_encoding_named:
+            problems.append(f"{where}:{call.lineno}: a Python child is read as text without "
+                            f'{CHILD_ENCODING}="utf-8" in its environment')
+    return problems
+
+
+def test_every_process_read_as_text_names_its_encoding():
+    """The convention: nothing decodes with whatever code page the machine happens to have."""
+    problems = []
+    for path in sources():
+        problems += problems_in(read(path), path.relative_to(ROOT).as_posix())
+
+    assert problems == []
+
+
+def test_the_reader_finds_the_calls_it_is_meant_to_judge():
+    """A detector that finds nothing passes every repository, this one included."""
+    found = [
+        path.relative_to(ROOT).as_posix()
+        for path in sources()
+        if process_starts(ast.parse(read(path)))
+    ]
+
+    assert len(found) > 4
+    assert "scripts/gen-cli-docs.py" in found  # the page generator, the costliest of them
+
+
+def test_a_call_that_asks_for_text_without_an_encoding_is_caught():
+    """The provocation, in both shapes a process start is written in."""
+    plain = "import subprocess\nsubprocess.run(command, capture_output=True, text=True)\n"
+    seam = "import subprocess\n(run or subprocess.run)(command, text=True)\n"
+
+    assert len(problems_in(plain, "plain.py")) == 1
+    # the shape the failure comes in: the callable is chosen at the call site, and a check
+    # reading the head of the call would look straight past it
+    assert len(problems_in(seam, "seam.py")) == 1
+
+
+def test_a_call_that_decodes_nothing_is_left_alone():
+    """Bytes in, bytes out: there is no encoding to name, and demanding one would be noise."""
+    bytes_only = "import subprocess\nsubprocess.run(command, capture_output=True, check=True)\n"
+    spelled = ('import subprocess\nsubprocess.run(command, capture_output=True, text=True, '
+               'encoding="utf-8")\n')
+
+    assert problems_in(bytes_only, "bytes.py") == []
+    assert problems_in(spelled, "spelled.py") == []
+
+
+def test_a_python_child_without_an_encoding_of_its_own_is_caught():
+    """The other half: the parent decodes utf-8 while the child writes the console code page."""
+    silent = ('import subprocess, sys\n'
+              'subprocess.run([sys.executable, "-m", "xbsl", "--help"],'
+              ' capture_output=True, text=True, encoding="utf-8")\n')
+    named = ('import subprocess, sys, os\n'
+             'env = dict(os.environ, PYTHONIOENCODING="utf-8")\n'
+             'subprocess.run([sys.executable, "-c", code], env=env,'
+             ' capture_output=True, text=True, encoding="utf-8")\n')
+    by_name = ('import subprocess\nsubprocess.run(["python3", "-c", code],'
+               ' capture_output=True, text=True, encoding="utf-8")\n')
+
+    assert len(problems_in(silent, "silent.py")) == 1
+    assert problems_in(named, "named.py") == []
+    assert len(problems_in(by_name, "byname.py")) == 1
+
+
+def test_a_child_that_is_not_python_is_not_asked_for_a_python_variable():
+    """`git` and `taskkill` have no PYTHONIOENCODING - demanding it would be cargo cult."""
+    git = ('import subprocess\nsubprocess.run(["git", "log"], capture_output=True,'
+           ' text=True, encoding="utf-8")\n')
+
+    assert problems_in(git, "git.py") == []

@@ -209,6 +209,7 @@ def test_importing_a_single_rule_module_does_not_break_overrides():
     первого active_rules(); раньше это падало с PluginError у любого, кто
     импортировал отдельное правило (тесты, скрипты, редакторские интеграции).
     """
+    import os
     import subprocess
     import sys
 
@@ -219,7 +220,10 @@ def test_importing_a_single_rule_module_does_not_break_overrides():
         "print(len(engine.active_rules()) > 0)\n"
     )
     result = subprocess.run(
-        [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8"
+        [sys.executable, "-c", code], capture_output=True, text=True, encoding="utf-8",
+        # the child writes in the console code page unless told otherwise, and the failure
+        # this test reports would come back unreadable on exactly the machine that has it
+        env=dict(os.environ, PYTHONIOENCODING="utf-8"),
     )
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip().endswith("True")

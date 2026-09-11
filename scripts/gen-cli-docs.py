@@ -94,7 +94,11 @@ def run(args: list[str], lang: str) -> str:
     # Both variable names: XBSL_LANG wins over the legacy XBSLLINT_LANG, so setting only
     # the legacy one loses to a caller's environment (a global XBSL_LANG=ru would quietly
     # make both language versions Russian).
-    env = dict(os.environ, XBSL_LANG=lang, XBSLLINT_LANG=lang, COLUMNS="100")
+    # PYTHONIOENCODING because the help this reads is RUSSIAN: a child writing in the console
+    # code page would come back as replacement characters, and the generated page - the one
+    # committed to the repository - would carry them without a single command failing.
+    env = dict(os.environ, XBSL_LANG=lang, XBSLLINT_LANG=lang, COLUMNS="100",
+               PYTHONIOENCODING="utf-8")
     # The timeout is mandatory: a command that does not parse --help starts the server
     # instead of printing help and waits on stdin - without a limit the generation hangs.
     try:

@@ -41,6 +41,17 @@ assuming it:
 python -c "import xbsl.lexer as L; print(L.__file__)"
 ```
 
+### Starting a process
+
+Every call that reads a process AS TEXT names `encoding="utf-8"`, and a PYTHON child started
+here gets `PYTHONIOENCODING=utf-8` in its environment. Neither is a preference: on Windows the
+child writes in the console code page (cp1251 here) while the parent decodes utf-8, and the
+reader thread of `subprocess` dies inside - `stdout` comes back `None`, and the return code
+goes on saying that the run went well. Nothing in the output says the text was lost. That is
+what the Russian half of a documentation page, a help text, or a traceback carrying a Cyrillic
+path is worth without those two. `tests/test_conventions.py` holds the repository to it,
+reading the sources with `ast`.
+
 ## How to add a rule
 
 1. Create a module under `xbsl/rules/` (or extend an existing one).
