@@ -9,6 +9,21 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+- **The status bar says which rule set the Problems panel judges by.** `xbsl.linter.asCi` said
+  what was REQUESTED; what came of it was known to the engine alone, and its only trace was one
+  line in the XBSL output channel, printed once at startup - not where anyone looks while
+  reading a finding. With no pipeline file the server does not refuse (a refusal would cost the
+  whole editing session): it goes on judging by the rules of the settings, silently. The bar now
+  carries `CI: <job>` while the job's set is in force and a highlighted warning when it was
+  asked for and not taken, with the reason in the tooltip in the engine's own words; a click
+  opens the pipeline file the job stands in (the include it came from, when one brought it). The
+  answer is asked of the server (`xbsl/ciStatus`) after the start and after every restart - a
+  changed parity setting is exactly what causes one. An older engine that does not know the
+  request shows no indicator at all.
+
 ## 0.68.0
 
 ### Added

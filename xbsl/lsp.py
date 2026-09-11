@@ -256,6 +256,11 @@ class _State:
         # The index has a lock of its own: a navigation request builds it right away when
         # the background pass has not got there yet, and must not wait for the project lint.
         self.index_lock = threading.Lock()
+        # What `--as-ci` came to: the answer of the xbsl/ciStatus request. None when the
+        # server was not asked for the parity at all. The editor has no other way to learn
+        # it - the adoption happens once, at startup, and a line in the output channel is
+        # not something anyone reads while judging a finding.
+        self.ci: Optional[dict] = None
 
 
 STATE = _State()
@@ -1189,6 +1194,17 @@ def _make_server() -> "LanguageServer":
         load_templates()
         return {"ok": True, "count": len(STATE.templates)}
 
+    @server.feature("xbsl/ciStatus")
+    def _ci_status(_params: object = None) -> dict:
+        """Which rule set this server judges by - the job's, or the settings' own.
+
+        Asked by the editor for its status bar. The settings say what was REQUESTED; only
+        the server knows what came of it, because a pipeline file that is not there leaves
+        it judging by the settings while the reader goes on believing the panel and the
+        merge request agree.
+        """
+        return STATE.ci or {"enabled": False, "adopted": False}
+
     @server.feature("xbsl/docsAvailable")
     def _docs_available(_params: object = None) -> dict:
         return {"available": docs.available()}
@@ -1904,12 +1920,20 @@ def _adopt_ci(args: argparse.Namespace) -> None:
     CLI one run and the server the whole editing session, so the reason is written to stderr
     (the client shows the server's stderr in its output channel) and the settings' own rule
     set stands.
+
+    That fallback is exactly why the outcome is also STORED: a line in the output channel is
+    not something anyone reads while judging a finding, so the editor that asked for the
+    job's set had no way of knowing it was judging by the settings instead. What is kept here
+    is what `xbsl/ciStatus` answers - and the sentences are the engine's own, so the status
+    bar says word for word what the channel does.
     """
     where = [args.project_root] if args.project_root else ["."]
+    STATE.ci = {"enabled": True, "adopted": False}
     try:
         job = cijob.find(where, args.as_ci or None, args.as_ci_job)
     except cijob.CiLintError as exc:
         print(str(exc), file=sys.stderr)
+        STATE.ci["error"] = str(exc)
         return
     # Merged, not replaced, exactly as in the CLI: the settings' own rules stay on top of
     # the job's set, so a rule being tried out in the editor is not lost to the pipeline.
@@ -1925,6 +1949,23 @@ def _adopt_ci(args: argparse.Namespace) -> None:
         print(job.hint(), file=sys.stderr)
     if job.note():
         print(job.note(), file=sys.stderr)
+    STATE.ci = {
+        "enabled": True,
+        "adopted": True,
+        "file": str(job.path),
+        # The include the command actually stands in, when one brought it - what to open.
+        "source": str(job.source) if job.source else None,
+        "job": job.job,
+        "baseline": job.baseline_file(),
+        "no_baseline": job.no_baseline,
+        "jobs": list(job.alternatives),
+        "unread_includes": list(job.unread),
+        # The ready-made lines, in the server's own language: the client shows them as they
+        # are instead of assembling a second wording of the same facts.
+        "line": job.describe(),
+        "hint": "" if args.as_ci_job else job.hint(),
+        "note": job.note(),
+    }
 
 
 def main() -> None:

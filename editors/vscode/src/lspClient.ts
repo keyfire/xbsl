@@ -20,6 +20,11 @@ import { resolveMessageLanguage } from "./workspaceCore";
 
 let client: LanguageClient | undefined;
 let baselineArg: string | undefined;
+// What to run once the server is up - after the first start AND after every restart. The
+// restart is not a detail here: a changed parity setting is what causes one (the flag is an
+// argument of the server), so anything read from the server at startup goes stale exactly
+// when it matters most.
+let afterStart: (() => void) | undefined;
 // The shared "XBSL" output channel (created in extension.ts, handed over on LSP start):
 // failed custom requests are logged there instead of vanishing without a trace.
 let outputChannel: vscode.OutputChannel | undefined;
@@ -34,6 +39,16 @@ export function lspActive(): boolean {
 // an xbsl/relint.
 export function lspBaselinePassed(): boolean {
   return baselineArg !== undefined;
+}
+
+// What to re-read from the server whenever it comes up. Called right after a successful
+// start and after a successful restart; a failed start leaves the last answer alone, because
+// the editor is then not judging by anything new either.
+export function setAfterServerStart(fn: () => void): void {
+  afterStart = fn;
+  if (client) {
+    fn();
+  }
 }
 
 // Custom request to the server (xbsl/docs*, xbsl/form* and friends). Returns undefined when
@@ -209,6 +224,7 @@ export async function activateLsp(
       try {
         await fresh.client.start();
         client = fresh.client;
+        afterStart?.();
         void vscode.window.setStatusBarMessage(vscode.l10n.t("XBSL LSP: server restarted"), 3000);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
