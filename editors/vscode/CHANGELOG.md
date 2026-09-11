@@ -12,6 +12,11 @@
 ## 0.67.7
 
 ### Added
+- **The hover and the documentation panel show a type member's block.** Over
+  `Text.Substring` the hover said what the type String is and a right click opened its
+  whole page; a bare member name fell through to full-text search. The hover now shows
+  the member's signature and what the call does, the **Documentation** link opens the
+  page at its heading, and a name several types declare is offered as those types.
 - **The `code/dead-interpolation` badge links to the documentation.** The rule code in the
   "Problems" panel is now a link to the string-interpolation page - the same page that
   describes the escaping the finding is fixed with.

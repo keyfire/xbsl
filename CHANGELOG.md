@@ -29,6 +29,18 @@ entry either - say what the behaviour was, not which class name was compared.
   per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
   top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
 
+### Changed
+- **The hover and the documentation panel answer with a MEMBER's block, not with its type's
+  page.** The engine could find a member by name; the editor did not use it: over
+  `Text.Substring` the hover said what the type String is ("A sequence of characters"), and a
+  bare member name fell through to full-text search, where the top candidate for "Substring"
+  was a topic about multiline literals. The member is now taken from where it is DECLARED: the
+  hover shows the signature and what the call does, the link opens the page at the member's
+  heading, and `Array.Size` leads to the ancestor that declares the method. A name several
+  types declare is not guessed - the panel offers those types with the member's block under
+  each, and the hover stays silent. The resolution is shared with the MCP `docs_symbol` tool
+  (`docs.member_doc`), so the editor and an agent answer alike.
+
 ## 2026-09-11 – 0.102.0
 
 ### Added

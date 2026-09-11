@@ -30,13 +30,17 @@ The panel is the single "what is this thing" answer for the whole extension:
 
 | From | What happens |
 | --- | --- |
-| Hovering a name in `.xbsl` | the hover shows the type description and a **Documentation** link - a click opens the page |
-| Editor context menu, *XBSL: documentation for symbol* | the page of the type under the cursor; for a method or an ambiguous name - a list of candidates |
+| Hovering a name in `.xbsl` | the hover shows the description and a **Documentation** link - a click opens the page; over a MEMBER of a type it is that member's own block (its signature and what the call does), and the link opens the page at it |
+| Editor context menu, *XBSL: documentation for symbol* | the page of the type under the cursor, a member's page scrolled to the member; for a name several types declare - those types to choose from |
 | The designer **Palette**, *Open documentation* | the page of the component you are about to insert (a short description also rides in the palette item's tooltip) |
 | The "Contents" tree and search | plain navigation through the reference |
 
-For an ambiguous name the candidates are **ranked by the receiver before the dot**:
-`ScheduledJob.Configure` prefers the scheduled job pages over a guide topic of the same name.
+A member is documented where it is DECLARED: `Array.Size` opens the page of the ancestor that
+declares it, not the page of the heir that says nothing about it. When several unrelated types
+declare the same name, the choice is offered as those types, each with that member's block as
+the line under it; for everything else with no page of its own the candidates are **ranked by
+the receiver before the dot**: `ScheduledJob.Configure` prefers the scheduled job pages over a
+guide topic of the same name.
 
 ## What you need
 
@@ -58,8 +62,10 @@ The same reference is available outside the editor:
   summary and the section names) or with one section (`section`) when the whole article is more
   than the question needs. This is how an AI agent verifies the platform API without going
   online.
-- **LSP** - the `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree` and
-  `xbsl/hoverDoc` requests: any LSP-capable editor can build its own panel on top of them.
+- **LSP** - the `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`,
+  `xbsl/docsForSymbol` and `xbsl/hoverDoc` requests: any LSP-capable editor can build its own
+  panel on top of them. The last two answer a member the way `docs_symbol` does - the page of
+  the declaring type plus the member's name and the id of its heading.
 
 ## Related
 

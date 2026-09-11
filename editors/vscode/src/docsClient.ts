@@ -63,10 +63,14 @@ export async function docsTree(): Promise<DocNode[]> {
 }
 
 // Result of "documentation for a symbol": a confident page (page) or candidates to choose from.
+// A MEMBER of a type has no page of its own - it is a block inside the page of the type that
+// declares it, so the answer also carries the member's name and the anchor of its heading.
 export interface DocForSymbol {
   name: string;
   page: DocPage | null;
   candidates: DocHit[];
+  member?: string;
+  anchor?: string;
 }
 
 export async function docsForSymbol(

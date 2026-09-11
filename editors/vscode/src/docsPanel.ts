@@ -222,10 +222,11 @@ export async function openForSymbol(context: vscode.ExtensionContext): Promise<v
     return;
   }
   if (res.page) {
-    await render(context, res.page);
+    // A member lands on its own block rather than at the top of a page thousands of words long.
+    await render(context, res.page, res.anchor || undefined);
     return;
   }
-  // No confident page (a section method, an unknown type) - offer candidates to choose from.
+  // No confident page (an unknown type, a member several types declare) - offer candidates.
   const candidates = res.candidates ?? [];
   if (candidates.length === 0) {
     void vscode.window.showInformationMessage(vscode.l10n.t('XBSL: no documentation for "{0}".', res.name));

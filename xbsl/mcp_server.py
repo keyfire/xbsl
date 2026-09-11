@@ -26,7 +26,7 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    formmodel, i18n, metamodel, report, scaffold, terms, uischema,
+    formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
@@ -420,49 +420,22 @@ def _member_as_text(name: str) -> dict:
     how to ask again. `Type.Member` narrows, and a type that only INHERITS the member narrows
     to the ancestor that declares it - that is where the documentation is.
     """
-    hint, dot, tail = name.strip().rpartition(".")
-    member, owners = docs.member_places(tail if dot else name.strip())
-    if not owners:
+    found = docs.member_doc(name)
+    if not found:
         return {}
-    if dot and hint:
-        owners = _declaring_for(owners, hint) or owners
-    if len(owners) > 1:
+    owners = found.get("owners")
+    if owners:
         return {
-            "member": member,
-            "owners": [title for title, _ in owners],
-            "note": i18n.t("docs.member-of-many", member=member, count=len(owners),
-                           owner=min(owners, key=lambda place: len(place[0]))[0]),
+            "member": found["member"],
+            "owners": owners,
+            "note": i18n.t("docs.member-of-many", member=found["member"], count=len(owners),
+                           owner=min(owners, key=len)),
         }
-    page = docs.page(owners[0][1])
-    found = docs.member_block((page or {}).get("html") or "", member)
-    if page is None or found is None:  # pragma: no cover - the index is built from that page
-        return {}
-    page = dict(page)
+    page = dict(found["page"])
     page.pop("html", None)
-    page["member"], body = found
-    page["text"] = docs.plain_text(body)
+    page["member"] = found["member"]
+    page["text"] = docs.plain_text(found["block"])
     return page
-
-
-def _declaring_for(owners: list[tuple[str, str]], hint: str) -> list[tuple[str, str]]:
-    """The places of the type `hint` names, or of the ancestor that declares the member for it.
-
-    `Array.Size` names a type that only inherits the member: the page that documents it is the
-    ancestor's, and answering with the whole list of unrelated owners instead would bury it.
-    """
-    spellings = {form.lower() for form in (hint, terms.russian(hint, "types"),
-                                           terms.common_russian(hint)) if form}
-    direct = [place for place in owners if place[0].lower() in spellings]
-    if direct:
-        return direct
-    try:
-        bases = dataset.load_json("stdlib.json").get("bases") or {}
-    except dataset.DatasetError:  # pragma: no cover - no data, no inheritance to read
-        return []
-    ancestors = {name.lower() for spelling in (hint, terms.russian(hint, "types"),
-                                               terms.common_russian(hint)) if spelling
-                 for name in bases.get(spelling) or ()}
-    return [place for place in owners if place[0].lower() in ancestors]
 
 
 @mcp.tool()

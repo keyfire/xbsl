@@ -1022,20 +1022,28 @@ def _make_server() -> "LanguageServer":
         # read about it. {"pageId": null} when no page exists. The client turns pageId into a
         # trusted command link (a server MarkupContent link is untrusted and would not be
         # clickable).
-        def answer(pid: str, name: str) -> dict:
+        def answer(pid: str, name: str, anchor: str = "") -> dict:
             try:
                 text = docs.summary(pid)
             except Exception:  # noqa: BLE001 - a missing summary must not lose the link
                 text = ""
-            return {"pageId": pid, "symbol": name, "summary": text}
+            return {"pageId": pid, "symbol": name, "summary": text, "anchor": anchor}
 
         try:
             uri = _param(params, "uri")
             pos = _param(params, "position")
             if uri and pos is not None:
-                name, _query = docs_symbol_at(
+                name, member, _query = docs_symbol_at(
                     uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0)
                 )
+                # The member's own block before the page of its type: `Response.StatusCode`
+                # used to be described by the opening sentence of HttpResponse, which says
+                # what the TYPE is - the member's signature and meaning were a page away.
+                found = docs.member_doc(member) if member else {}
+                if found and not found.get("owners"):
+                    return {"pageId": found["page"]["id"], "symbol": found["member"],
+                            "summary": docs.summarize(found["block"], 300),
+                            "anchor": found["anchor"]}
                 if name:
                     pid = docs.for_symbol(name)
                     if pid:
@@ -1078,25 +1086,27 @@ def _make_server() -> "LanguageServer":
 
     # --- documentation (the extension's help panel is a thin client of these methods) -----
 
-    def docs_symbol_at(uri: str, line: int, character: int) -> tuple[Optional[str], str]:
-        """(name for exact resolution, query for candidates) at the cursor position.
+    def docs_symbol_at(uri: str, line: int, character: int) -> tuple[Optional[str], str, str]:
+        """(name for exact resolution, MEMBER name, query for candidates) at the cursor position.
 
-        The name is the local variable's type or the word under the cursor. The query is
+        The name is the local variable's type or the word under the cursor. The member is the
+        word as a member of a type - qualified with the receiver's type when there is one
+        (`Ответ.КодСтатуса` -> "ОтветHttp.КодСтатуса"), bare otherwise - and it is what
+        `docs.member_doc` resolves to the block of documentation the member owns. The query is
         extended with the receiver before the dot (`Задание.Настроить` -> "Задание Настроить")
-        so that method-section candidates are ranked by the right type rather than by a
-        random guide topic.
+        so that candidates are ranked by the right type rather than by a random guide topic.
         """
         path = uri_to_path(uri)
         if path is None:
-            return None, ""
+            return None, "", ""
         doc = server.workspace.get_text_document(uri)
         lines = doc.source.split("\n")
         if line >= len(lines):
-            return None, ""
+            return None, "", ""
         line_text = lines[line].rstrip("\r")
         word = _word_at(line_text, character)
         if not word:
-            return None, ""
+            return None, "", ""
         n = len(line_text)
         start = max(0, min(character, n))
         while start > 0 and (line_text[start - 1].isalnum() or line_text[start - 1] == "_"):
@@ -1122,21 +1132,24 @@ def _make_server() -> "LanguageServer":
             ):
                 # A declared variable with an uninferred type, or a name of the paired yaml
                 # (a form data attribute, a component): the word must not be documented as
-                # a same-named stdlib type - candidates by the query are still offered.
-                return None, query
+                # a same-named stdlib type or member - candidates by the query are still offered.
+                return None, "", query
             if var_type is None and receiver:
-                # A MEMBER after a dot has no page of its own - a method is a section of its
-                # type's page. So the page is resolved through the receiver (a variable's type
-                # or a type used statically); documenting the bare member name would land on
-                # whatever page happens to carry that qualifier (`Add` -> a topic about
-                # breakpoints), which is worse than no page at all.
+                # A MEMBER after a dot: the block that documents it lives on the page of the
+                # type that DECLARES it, and the receiver (a variable's type or a type used
+                # statically) says which type to start from. Without the qualifier a member
+                # several types declare could not be told apart, and the bare page would land
+                # on whatever carries that qualifier (`Add` -> a topic about breakpoints).
                 recv_type = local_vars.get(receiver) or (
                     receiver if receiver in static_roots else None
                 )
-                return (recv_type, query) if recv_type else (None, query)
+                member = f"{recv_type}.{word}" if recv_type else word
+                return recv_type, member, query
         except Exception:  # noqa: BLE001 - parsing must not break the request
             var_type = None
-        return (var_type or word), query
+        # A word with a known type documents that type; a bare word may still be a member of
+        # one (a method name written without a receiver, a name inside a comment).
+        return (var_type or word), ("" if var_type else word), query
 
     @server.feature("xbsl/templatesReload")
     def _templates_reload(_params: object = None) -> dict:
@@ -1170,22 +1183,57 @@ def _make_server() -> "LanguageServer":
             return {}
         return {"id": a["id"], "mime": a["mime"], "base64": base64.b64encode(a["bytes"]).decode("ascii")}
 
+    def _owner_hits(member: str) -> list[dict]:
+        """The types that declare the member, as docs hits - what the panel offers to choose between.
+
+        The snippet is the member's own block on that page, so the choice is made by what the
+        member DOES there rather than by what the type's opening sentence says.
+        """
+        hits = []
+        for _title, pid in docs.member_places(member)[1]:
+            rec = docs.page(pid)
+            if not rec:  # pragma: no cover - the place came from a page of its own
+                continue
+            block = docs.member_block(rec.get("html") or "", member)
+            hits.append({
+                "id": rec["id"], "title": rec["title"], "qualified": rec["qualified"],
+                "kind": rec["kind"], "availability": rec["availability"], "url": rec["url"],
+                "snippet": docs.plain_text(block[1])[:200] if block else "",
+            })
+        return hits
+
     @server.feature("xbsl/docsForSymbol")
     def _docs_for_symbol(params: object) -> dict:
         uri = _param(params, "uri")
         pos = _param(params, "position")
         if not uri or pos is None:
             return {}
-        name, query = docs_symbol_at(
+        name, member, query = docs_symbol_at(
             uri, int(_param(pos, "line", 0) or 0), int(_param(pos, "character", 0) or 0)
         )
-        if not name:
+        if not name and not member:
             return {}
-        pid = docs.for_symbol(name)
-        if pid:
-            return {"name": name, "page": docs.page(pid), "candidates": []}
-        # No confident page (a method section, an unknown type) - return candidates to choose from.
-        return {"name": name, "page": None, "candidates": docs.search(query, limit=8)}
+        # A MEMBER first: it is documented inside the page of the type that declares it, and
+        # that block is the answer to the question asked - the type's page alone was the
+        # nearest thing the panel could show, and a bare member fell through to full-text
+        # candidates, where the word ranks by accident.
+        found = docs.member_doc(member) if member else {}
+        if found and not found.get("owners"):
+            return {"name": found["member"], "page": found["page"], "candidates": [],
+                    "member": found["member"], "anchor": found["anchor"]}
+        if name:
+            pid = docs.for_symbol(name)
+            if pid:
+                return {"name": name, "page": docs.page(pid), "candidates": [],
+                        "member": "", "anchor": ""}
+        if found:
+            # Several types declare it: the pages of those types are the candidates, and a
+            # full-text search over the same word would have buried them among mentions.
+            return {"name": found["member"], "page": None, "member": found["member"],
+                    "anchor": "", "candidates": _owner_hits(found["member"])}
+        # No confident page (an unknown type, a project name) - candidates to choose from.
+        return {"name": name or member, "page": None, "member": "", "anchor": "",
+                "candidates": docs.search(query, limit=8)}
 
     @server.feature("xbsl/docsByName")
     def _docs_by_name(params: object) -> dict:
