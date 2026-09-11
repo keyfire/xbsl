@@ -55,6 +55,18 @@ entry either - say what the behaviour was, not which class name was compared.
   (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
 
 ### Fixed
+- **`translate --out`: a refused write says so, instead of an empty log and exit code 1.** The
+  writing step handled no errors and stood BEFORE the report was printed, so any trouble from
+  the file system took the whole report with it: the command answered with code 1 and no output
+  at all, which reads as a broken dictionary. On a live corpus of 1261 files that reproduces two
+  ways - an output path that is a file, and a leftover of an earlier run (a directory standing
+  where a file goes); both gave 0 bytes of output and a traceback on stderr. Every write error is
+  now named with its file and its reason ("a directory where a file goes, a read-only file, a
+  file held by another program"), the pass reaches its end and prints the report whole, the first
+  five files by name and the rest counted; the refusal of an occupied directory became a sentence
+  in the report's language and says what to do. A run that failed to write the tree exits non-zero
+  even without `--strict` - the tree is its job. A repeat into the same directory still simply
+  rewrites the tree. ([#11](https://github.com/keyfire/xbsl/pull/11))
 - **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
   the translation tests - the second silently replaced the first, and the first had been dead
   since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources

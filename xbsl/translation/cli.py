@@ -452,6 +452,12 @@ def cli_main(argv: list[str] | None = None) -> int:
     else:
         _print_text(report, args, missing_tokens, missing_phrases, missing_literals, lag)
 
+    if report.write_failed:
+        # The tree is the job of a run with --out; a run that could not write it must not
+        # answer like one that did, `--strict` or no `--strict`. The report above says which
+        # file and why - before this, the exception that stopped the writing took the whole
+        # report with it and the command answered with an exit code and an empty log.
+        return 1
     if args.strict and not _ready(report):
         return 1
     return 0
@@ -538,6 +544,8 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> 
         "redundant_entries": report.echoed,
         "renames": report.renames,
         "out_dir": str(report.out_dir) if report.out_dir else None,
+        "written": report.written,
+        "write_failed": report.write_failed,
         "warnings": {
             rel: [list(w) for w in fr.warnings]
             for rel, fr in report.files.items() if fr.warnings
