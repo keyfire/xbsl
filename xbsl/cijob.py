@@ -62,8 +62,8 @@ MESSAGES = {
         "en": "Cannot read {path}: {error}",
     },
     "ci.named-directory": {
-        "ru": "--as-ci берёт ФАЙЛ пайплайна, а {path} – каталог. Проверить его набором из CI:"
-              " xbsl {path} --as-ci (ключ пишется ПОСЛЕ путей); файл пайплайна внутри каталога"
+        "ru": "--as-ci берёт файл конвейера, а {path} – каталог. Проверить его набором из CI:"
+              " xbsl {path} --as-ci (ключ пишется после путей); файл конвейера внутри каталога"
               " называют полным именем",
         "en": "--as-ci takes the pipeline FILE, and {path} is a directory. To check it with"
               " the CI rule set: xbsl {path} --as-ci (the flag goes AFTER the paths); a"
@@ -82,23 +82,23 @@ MESSAGES = {
         "en": "{path} (include {source})",
     },
     "ci.adopted": {
-        "ru": "Набор правил как в CI: {path}, джоба {job} – {flags}",
+        "ru": "Набор правил как в CI: {path}, задача {job} – {flags}",
         "en": "Rule set as in CI: {path}, job {job} - {flags}",
     },
     "ci.adopted-nothing": {
-        "ru": "Набор правил как в CI: {path}, джоба {job} – своих ключей у команды нет",
+        "ru": "Набор правил как в CI: {path}, задача {job} – своих ключей у команды нет",
         "en": "Rule set as in CI: {path}, job {job} - the command carries no flags of its own",
     },
     "ci.other-jobs": {
-        "ru": "Линтер в этом файле гоняет ещё: {jobs} – выбрать: --as-ci-job <имя>",
+        "ru": "Линтер в этом файле запускают ещё задачи: {jobs} – выбрать: --as-ci-job <имя>",
         "en": "The linter also runs in: {jobs} - choose one with --as-ci-job <name>",
     },
     "ci.no-job": {
-        "ru": "В {path} нет джобы {job} с командой xbsl; есть: {jobs}",
+        "ru": "В {path} нет задачи {job} с командой xbsl; есть: {jobs}",
         "en": "{path} has no job {job} running xbsl; it has: {jobs}",
     },
     "ci.ambiguous-job": {
-        "ru": "В {path} под '{job}' подходит несколько джоб: {jobs} – назовите одну целиком",
+        "ru": "В {path} под '{job}' подходит несколько задач: {jobs} – назовите одну целиком",
         "en": "In {path} '{job}' fits several jobs: {jobs} - name one in full",
     },
 }

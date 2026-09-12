@@ -67,7 +67,7 @@ MESSAGES = {
     },
     "translate.problem.write-failed": {
         "ru": "{path}: файл не записан – {error}. Чаще всего на этом месте лежит остаток"
-              " прошлого прогона (каталог вместо файла, файл только для чтения) или файл"
+              " прошлого запуска (каталог вместо файла, файл только для чтения) или файл"
               " занят другой программой",
         "en": "{path}: the file was not written - {error}. Usually what stands there is a"
               " leftover of an earlier run (a directory where a file goes, a read-only file)"
@@ -78,7 +78,7 @@ MESSAGES = {
         "en": "files not written for the same reason: {count} more",
     },
     "translate.problem.clean-failed": {
-        "ru": "{path}: остаток прошлого прогона не удалён – {error}",
+        "ru": "{path}: остаток прошлого запуска не удалён – {error}",
         "en": "{path}: a leftover of an earlier run was not removed - {error}",
     },
     "translate.problem.shadow": {

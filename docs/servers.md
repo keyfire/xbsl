@@ -6,21 +6,21 @@ sidebar:
   order: 10
 ---
 
-One engine, several ways to reach it: a long-living server for an editor, a tool surface for an agent, a page in a browser – and a way to extend all of them at once.
+One engine, several ways to reach it: a long-living server for an editor, a tool surface for an agent, a page in a browser. There is also a way to extend all of them at once.
 
 ## LSP server
 
-`xbsl-lsp` (the `[lsp]` extra: `pip install "xbsl[lsp]"`) runs the linter as a
-long-living Language Server over stdio: live per-file diagnostics as you type, project-wide
-diagnostics on save, go to definition, completion and hover over a resident project index,
-and quick-fix code actions – without paying the interpreter start-up cost per call. Flags:
+`xbsl-lsp` from the `[lsp]` extra (`pip install "xbsl[lsp]"`) runs the linter as a long-living
+Language Server over stdio. Per-file diagnostics arrive as you type, project-wide ones on save.
+Go to definition, completion and hover all come off a resident project index, and quick fixes
+arrive as code actions. None of it pays the interpreter start-up cost per call. Flags:
 `--project-root` (the sources root relative to the workspace folder), `--select`/`--ignore`/
-`--enable`, `--data-dir`, `--baseline`, `--templates`. Any LSP-capable editor (VS Code, Neovim,
-JetBrains) can spawn it.
+`--enable`, `--data-dir`, `--baseline`, `--templates`. Any LSP-capable editor can spawn it:
+VS Code, Neovim, JetBrains.
 
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
-wiring. On top of that the server answers private `xbsl/*` requests – this is what the VS Code
-panels are built on, and what another editor would use to reproduce them:
+wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
+on them, and another editor would use the same requests to reproduce those panels:
 
 | Group | Requests |
 |---|---|
@@ -31,16 +31,16 @@ panels are built on, and what another editor would use to reproduce them:
 | Forms | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
 | Event handlers | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
 
-A scaffolding request returns a plan – the full text of every file it would write – and the
-editor applies it as one undoable edit; the server writes nothing itself (the CLI and the MCP
-server, on the same code, do write). `xbsl/metaCapabilities` answers with the server version and
-the kinds it can create – of objects, of section items, of forms – so a client can build its
+A scaffolding request returns a plan: the full text of every file it would write. The editor
+applies that plan as one undoable edit, and the server writes nothing itself. The CLI and the MCP
+server, running the same code, do write. `xbsl/metaCapabilities` answers with the server version
+and the kinds it can create - of objects, of section items, of forms - so a client can build its
 menus from the running engine instead of hardcoding them.
 
 ## MCP server
 
-A thin adapter over the same core: an agent (e.g. Claude Code) can call the checks as tools and
-receive structured diagnostics.
+A thin adapter over the same core. An agent such as Claude Code calls the checks as tools and
+receives structured diagnostics.
 
 ```sh
 pip install -e ".[mcp]"
@@ -48,25 +48,26 @@ claude mcp add xbsl -- xbsl-mcp
 ```
 
 Every writing `meta_*` tool applies the changes and returns the lint of the written files in the
-same response – creation and validation in one round trip. The core and the CLI do not require
-`mcp` – it lives only in the `[mcp]` extra.
+same response: creation and validation in one round trip. The core and the CLI do not need `mcp`
+at all; it lives only in the `[mcp]` extra.
 
-Every `meta_*` tool and `lint_paths` take `root` – the caller's project root (an agent working
-in a git worktree does not share the server's working directory): relative `directory`,
-`yaml_path`, `module_path`, `paths` and `baseline` resolve against it, and the answer carries
-absolute paths (of the written files, of the diagnostics) plus the `root` they were resolved
-from. Without it the server's own working directory is used, as before – and a relative path
-from a worktree then names the other checkout, whose clean answer looks like yours.
+Every `meta_*` tool and `lint_paths` take `root`, the caller's project root. An agent working in
+a git worktree does not share the server's working directory, which is why the parameter exists.
+Relative `directory`, `yaml_path`, `module_path`, `paths` and `baseline` resolve against it, and
+the answer carries absolute paths for the written files and the diagnostics plus the `root` they
+were resolved from. Without it the server's own working directory is used, as before. A relative
+path from a worktree then names the other checkout, and that checkout's clean answer looks like
+yours.
 
 **Checking and the environment**
 
 | Tool | What it does |
 |---|---|
-| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job)` | check files and directories on disk (relative paths – against `root`, the summary names it); the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too; the stale entries are named in `summary.baseline_stale_entries`, not merely counted); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps; `as_ci` takes the rule set and the baseline from the project's CI job (`.gitlab-ci.yml` or a GitHub workflow next to the project), so a preflight judges what the job judges and the summary carries `as_ci` (file, job, flags, the other jobs that run the linter); `as_ci_job` names WHICH of them to take - a pipeline that checks a second tree (a translation) runs the linter twice, by two different sets |
+| `lint_paths(paths, select, ignore, enable, baseline, no_baseline, root, as_ci, as_ci_job)` | check files and directories on disk (relative paths – against `root`, the summary names it); the project's `.xbsllint-baseline` applies on its own, exactly as in the CLI (`summary.baselined` counts what it suppressed, `no_baseline` reports the frozen findings too; the stale entries are named in `summary.baseline_stale_entries`, not merely counted); `enable` adds a rule that is off by default on top of the defaults, the way a project asks for its translation gaps; `as_ci` takes the rule set and the baseline from the project's CI job (`.gitlab-ci.yml` or a GitHub workflow next to the project), so a preflight judges what the job judges and the summary carries `as_ci` (file, job, flags, the other jobs that run the linter); `as_ci_job` names which of them to take - a pipeline that checks a second tree (a translation) runs the linter twice, by two different sets |
 | `lint_source(filename, content, select, ignore)` | check in-memory content, before the file is written |
 | `baseline_prune(paths, select, ignore, enable, baseline, dry_run, root)` | remove the baseline entries this run no longer needs (the CLI `--prune-baseline`): the answer names every one of them – path, rule, message, count and the `reason` a human wrote – and the file keeps its order and format; entries of rules this server does not carry, and of files outside `paths`, are left alone; `dry_run` shows what would go |
 | `list_rules(select, ignore)` | the rules available here: id, title, tier, scope, severity – and `params` for a rule that judges by a number (the value in force, the default, the overriding environment variable); `select` answers about one rule instead of the whole registry |
-| `version_info()` | the environment answering: engine, interpreter, data version, plugins – tells apart two environments that answer differently on the same file |
+| `version_info()` | what the environment is made of: engine, interpreter, data version, plugins. It tells apart two environments that answer differently on the same file |
 
 **Platform reference and schemas**
 
@@ -74,25 +75,25 @@ from a worktree then names the other checkout, whose clean answer looks like you
 |---|---|
 | `docs_search(query, limit)` | full-text search over the 1C:Element documentation |
 | `docs_page(id, brief, section)` | a documentation page by the id returned by the two other tools; `brief` – the head alone: a summary and the section names instead of the text, `section` – the head plus one section of the article (Properties, Methods, Constructors, ...; an unknown name answers with the names to choose from) |
-| `docs_symbol(name, brief, section)` | the documentation of a symbol by name, in either spelling: a TYPE answers with its page and the same `brief` and `section` modes, a MEMBER (`Подстрока`, `Строка.Найти`) with the block of that member alone, every overload joined - a member has no page of its own. A member several types declare answers with their names and how to ask again |
+| `docs_symbol(name, brief, section)` | the documentation of a symbol by name, in either spelling: a type answers with its page and the same `brief` and `section` modes, a member (`Подстрока`, `Строка.Найти`) with the block of that member alone, every overload joined - a member has no page of its own. A member several types declare answers with their names and how to ask again |
 | `type_members(name)` | the members of a stdlib type in one compact answer – what can follow the dot; cheaper than a page when only the member list matters |
 | `ui_schema(component, brief, property)` | the ui schema of an interface component: the designer's palette and its typed properties |
 | `metadata_schema(kind, sections, names)` | the properties an element of a given `ElementKind` may declare |
 
-The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](/platform-data#documentation-search)); the two schema tools read the generated language data. A type page runs to thousands of characters – the constructors, every property, the inherited lists – so the whole article is for reading it: `brief` answers "which page is it and what is it about", `section` answers one question about it.
+The three `docs_*` tools need the `docs.sqlite` database (see [Documentation search](/platform-data#documentation-search)), and the two schema tools read the generated language data. A type page runs to thousands of characters: the constructors, every property, the inherited lists. You want the whole article when you mean to read it. `brief` answers "which page is it and what is it about", and `section` answers one question about it.
 
 **Translating the sources** (see [Translating a project](/translation))
 
 | Tool | What it does |
 |---|---|
-| `translate_status(root)` | the coverage and what is left - the cheap check before deciding anything; a root without a dictionary is refused, the answer naming where one is looked for |
+| `translate_status(root)` | the coverage and what is left, the cheap check before deciding anything. A root without a dictionary is refused, and the answer names where a dictionary was looked for |
 | `translate_gaps(root, kind, filter, limit, offset, compact)` | what the dictionary does not cover yet, by page: the count, the first places, the platform's own spelling as a hint; `compact` keeps only the key, the kind and the count per row; the answer names the `dictionary` it read |
 | `translate_entries(root, kind, filter, limit, offset)` | what the dictionary already says, with the file and line of each entry |
-| `translate_unused(root, kind, filter, since, limit, offset, prune, compact)` | the opposite question: what the DICTIONARY still says and the project no longer has. Deleting a component leaves its names and comment lines behind for good, and nothing else reports them; `since` narrows the answer to the orphans of ONE change - the keys that occurred nowhere but in the lines git diff shows it removed (a branch or a commit reads from the fork point to the working tree, a range `A..B` as written); `prune` removes exactly the page it answers with, and is off by default; `compact` keeps only the key, the kind, the file and the line of each row, and every answer counts the orphans by kind in `counts` |
+| `translate_unused(root, kind, filter, since, limit, offset, prune, compact)` | the opposite question: what the dictionary still says and the project no longer has. Deleting a component leaves its names and comment lines behind for good, and nothing else reports them; `since` narrows the answer to the orphans of ONE change - the keys that occurred nowhere but in the lines git diff shows it removed (a branch or a commit reads from the fork point to the working tree, a range `A..B` as written); `prune` removes exactly the page it answers with, and is off by default; `compact` keeps only the key, the kind, the file and the line of each row, and every answer counts the orphans by kind in `counts` |
 | `translate_set(root, edits, edits_file, target, comment)` | write entries back: add, correct in place, or remove by emptying a value; `edits_file` is a batch file (the dictionary's own yaml format or the JSON list), `comment` is the head line a newly created file gets |
 
-The four answer in PAGES over one engine core, so filling a dictionary of thousands of
-entries never means reading the files.
+All four answer in pages over one engine core, so filling a dictionary of thousands of entries
+never means reading the files.
 
 **The project and its objects**
 
@@ -140,20 +141,20 @@ the `xbsl/meta*` LSP requests.
 
 ## Web interface
 
-A local page: point it at a project folder and see the diagnostics. Standard library only (no
-external dependencies), binds to `127.0.0.1` only.
+A local page: point it at a project folder and see the diagnostics. It is written on the
+standard library alone, with no external dependencies, and it binds to `127.0.0.1` only.
 
 ```sh
 xbsl-web            # then open http://127.0.0.1:8771/
 ```
 
-Per-tier rule toggles, a data-version selector, severity/text filters, dark/light theme; clicking
-a diagnostic opens the file in VS Code (`vscode://`).
+The page has per-tier rule toggles, a data-version selector, severity and text filters, and a
+dark and a light theme. Clicking a diagnostic opens the file in VS Code (`vscode://`).
 
 ## Extending: your own rules, data and severities
 
-Three entry point groups let a separate package extend the linter without forking it. This exists
-for teams whose rules or language data cannot be published: keep those in a private package that
+Three entry point groups let a separate package extend the linter without forking it. This is for
+teams whose rules or language data cannot be published: keep those in a private package that
 depends on `xbsl`.
 
 ```toml
@@ -171,15 +172,16 @@ myproject = "myproject:severity_overrides"   # {rule id: "error"|"warning"|"info
 ```
 
 Packages that declared the groups under the pre-rename name (`xbsllint.rules`/`xbsllint.data`/
-`xbsllint.severity`) keep working: the legacy groups are scanned after the new ones.
+`xbsllint.severity`) keep working: the old groups are scanned after the new ones.
 
-The severity dict (or a zero-argument callable returning one) raises or lowers the default level
-of any rule – built-in or plugin – for every run in this installation: a project may treat, say,
+The severity dict, or a zero-argument callable returning one, raises and lowers the default level
+of any rule, built-in or plugin, for every run in this installation. A project may treat, say,
 `style/abbreviation-case` as a warning while the published default stays info. `"off"` removes a
-rule from the default set (an explicit `--select`/`--enable` still turns it on, at its base level).
+rule from the default set; an explicit `--select` or `--enable` still turns it on, at its base
+level.
 
-Install the package and the CLI, the MCP server and the web UI all pick everything up – no flags,
-no config file. A failing entry point raises instead of warning: a linter that silently drops a
-rule stays green in CI and guarantees nothing; an override naming an unknown rule id or level
-raises for the same reason. `XBSL_NO_PLUGINS=1` ignores every external package (built-in
-rules, bundled data and default severities only).
+Install the package and the CLI, the MCP server and the web UI all pick everything up. No flags,
+no config file. A failing entry point raises rather than printing a warning, because a linter that
+silently drops a rule stays green in CI and guarantees nothing. An override naming an unknown rule
+id or level raises for the same reason. `XBSL_NO_PLUGINS=1` ignores every external package, so
+only built-in rules, bundled data and default severities remain.

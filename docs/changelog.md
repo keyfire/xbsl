@@ -56,6 +56,10 @@ entry either - say what the behaviour was, not which class name was compared.
   wording read like a transliteration and the sentences ran long, so the owner could not read
   them. The Russian metavar of `--as-ci-job` changed with them.
   ([#28](https://github.com/keyfire/xbsl/pull/28))
+- **The Russian messages of the engine are written in plain words.** The report, the
+  refusals and the LSP log read like a transliteration. The English strings were already
+  plain and did not change.
+  ([#33](https://github.com/keyfire/xbsl/pull/33))
 
 ### Fixed
 - **A directory named after `--as-ci` is refused with the form that works.** The flag expects a
