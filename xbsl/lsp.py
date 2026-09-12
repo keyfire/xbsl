@@ -423,7 +423,7 @@ def _make_server() -> "LanguageServer":
                                    enable=STATE.enable, scopes=("file",))
         diags, problem = apply_baseline_file(diags, STATE.baseline)
         if problem:
-            server.show_message_log(f"xbsl-lsp: базлайн не применён: {problem}")
+            server.show_message_log(f"xbsl-lsp: список принятых не применён: {problem}")
         # The project findings of this file survive the per-file pass: they come from the
         # last whole-project run (already baselined there) and are refreshed on save.
         # Their positions may lag behind an edited buffer - that beats losing them.
@@ -478,7 +478,7 @@ def _make_server() -> "LanguageServer":
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
             diags, problem = apply_baseline_file(diags, STATE.baseline)
             if problem:
-                server.show_message_log(f"xbsl-lsp: базлайн не применён: {problem}")
+                server.show_message_log(f"xbsl-lsp: список принятых не применён: {problem}")
             # Everything is collected by the canonical key; the uri is carried alongside,
             # because publishing needs a uri and the key is not one.
             by_key: dict[str, list] = {}

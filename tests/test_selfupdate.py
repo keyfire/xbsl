@@ -250,10 +250,10 @@ def test_native_install_is_recognized_by_compiled_modules(tmp_path):
 
 
 def test_holders_are_our_own_processes_only(monkeypatch):
-    """Ошибиться здесь – значит предложить снять ЧУЖОЙ процесс.
+    """Getting this wrong means offering to kill somebody else's process.
 
-    Поймано живым прогоном: клиент агента упоминает xbsl в аргументах (путь к проекту,
-    файл базлайна) и попадал в список держателей.
+    Caught on a live run: the agent client mentions xbsl in its arguments (the project
+    path, the baseline file) and used to land in the list of holders.
     """
     monkeypatch.setattr(
         selfupdate, "_process_listing",
@@ -372,10 +372,10 @@ def test_busy_root_native_module_rolls_back_whole(fake_site, monkeypatch):
 
 
 def test_stale_file_backup_is_swept_by_the_next_run(fake_site, monkeypatch):
-    """Бэкап-ФАЙЛ, который держал сам обновлявший процесс, не удаляется сразу.
+    """A backup file held by the updating process itself is not removed right away.
 
-    Загруженный модуль нельзя удалить, только переименовать - поэтому _drop_backups
-    оставляет его, а подметает следующий прогон.
+    A loaded module cannot be deleted, only renamed - so _drop_backups leaves it behind
+    and the next run sweeps it up.
     """
     stale = fake_site / (_MYPYC + selfupdate._BACKUP_SUFFIX)
     stale.write_bytes(b"held by the previous run")

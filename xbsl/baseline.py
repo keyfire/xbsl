@@ -55,11 +55,11 @@ _FORMAT = 1
 
 _MESSAGES = {
     "baseline.missing": {
-        "ru": "Файл базлайна не найден: {path}. Создайте его: xbsl ... --write-baseline {path}",
+        "ru": "Файл списка принятых замечаний не найден: {path}. Создайте его: xbsl ... --write-baseline {path}",
         "en": "Baseline file not found: {path}. Create it: xbsl ... --write-baseline {path}",
     },
     "baseline.invalid": {
-        "ru": "Файл базлайна повреждён или неизвестного формата: {path}",
+        "ru": "Файл списка принятых замечаний повреждён или неизвестного формата: {path}",
         "en": "The baseline file is corrupt or of an unknown format: {path}",
     },
 }
@@ -231,8 +231,8 @@ def load(path: Path) -> dict:
     if not path.is_file():
         raise BaselineError(i18n.t("baseline.missing", path=path))
     try:
-        # utf-8-sig: базлайн, переписанный чужим редактором или PowerShell, несёт BOM -
-        # это не повод объявлять файл негодным.
+        # utf-8-sig: a baseline rewritten by another editor or by PowerShell carries a
+        # BOM - that is no reason to call the file unusable.
         data = json.loads(path.read_text(encoding="utf-8-sig"))
     except (OSError, ValueError) as exc:
         raise BaselineError(i18n.t("baseline.invalid", path=path)) from exc
