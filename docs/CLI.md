@@ -37,7 +37,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--select ID/GROUP/TIER` | check only these rules (comma-separated or by repeating the flag: id, group – the part of the id before '/' (e.g. style) – or a tier letter A/B/C/D) |
 | `--ignore ID/GROUP/TIER` | exclude these rules (comma-separated or by repeating the flag: id, group or tier letter) |
 | `--enable ID/GROUP/TIER` | add rules disabled by default ON TOP of the standard set (`--select` replaces the set); the value forms are the same |
-| `--as-ci [FILE]` | run the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) next to the project; the file can be named explicitly |
+| `--as-ci [FILE]` | check by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline come from .gitlab-ci.yml (or a GitHub workflow) next to the project; the file can be named explicitly |
 | `--as-ci-job JOB` | which job of the CI file to take: a pipeline runs the linter more than once when the project checks a second tree (a translation) by a set of its own; a part of the name is enough (`--as-ci-job` english), implies `--as-ci` |
 | `--baseline FILE` | suppress findings frozen in a baseline file (created by `--write-baseline`); new findings are reported as usual |
 | `--write-baseline FILE` | instead of a report, write all current findings to a baseline file (freeze the debt; paths in the file are relative to its directory) |
@@ -45,8 +45,8 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--stale-baseline` | list the baseline entries that no longer suppress anything, with their reasons (together with `--baseline`) |
 | `--prune-baseline` | list the stale baseline entries with their reasons and remove them from the file (together with `--baseline`; the file's order and the counts of live entries are left alone) |
 | `--fix` | fix mechanical findings in place (trailing spaces, typographic characters, line endings) and report the rest; only unambiguous fixes |
-| `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
-| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are answered as data |
+| `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
+| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are printed as data |
 | `--where` | show the Element data root (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
@@ -67,7 +67,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `mcp` | MCP server for the agent |
 | `web` | web panel |
 | `templates` | code templates: list, export, import, save |
-| `baseline` | the baseline of frozen findings: add - append one rule's findings with a reason |
+| `baseline` | the baseline of accepted findings: add - append one rule's findings with a reason |
 | `extract` | generate the language data from an Element distribution (`--dist`) |
 | `data-diff` | compare two data versions: what changed in the platform |
 | `translate` | translate the project sources into English spellings |
@@ -94,9 +94,9 @@ usage: xbsl-lsp [-h] [--project-root PROJECT_ROOT] [--select SELECT] [--ignore I
 | `--select SELECT` | these rules only (comma-separated) |
 | `--ignore IGNORE` | exclude these rules (comma-separated) |
 | `--enable ENABLE` | enable rules on top of the default set |
-| `--as-ci [AS_CI]` | judge by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from the xbsl command of the pipeline file (the file can be named); with no pipeline the settings' set stands and the reason goes to stderr |
+| `--as-ci [AS_CI]` | judge by the rule set the project's CI job runs: the `--select`/`--ignore`/`--enable` flags and the baseline come from the xbsl command of the pipeline file (the file can be named); with no pipeline file the settings' set stands and the reason goes to stderr |
 | `--as-ci-job AS_CI_JOB` | which job of the CI file to take (implies `--as-ci`); a part of the name is enough |
-| `--baseline BASELINE` | the baseline file (absolute or relative to the workspace folder) – the findings frozen there are suppressed; a missing file is not an error, it appears with the first exclusion |
+| `--baseline BASELINE` | the baseline file (absolute or relative to the workspace folder) – the findings listed there are suppressed; a missing file is not an error, it appears with the first exclusion |
 | `--templates TEMPLATES` | the code templates file (absolute or relative to the workspace folder) – it extends the builtin set and replaces templates of the same name |
 | `--data-dir DATA_DIR` | the Element data root (the folder with index.json) |
 | `--lang {ru,en}` | the language of the diagnostics text |
@@ -219,7 +219,7 @@ usage: xbsl templates save [-h] [--file FILE]
 
 ## `xbsl baseline`
 
-Baseline: targeted edits of the frozen findings file.
+Baseline: targeted edits of the accepted findings file.
 
 ```bash
 usage: xbsl baseline [-h] {add} ...
@@ -261,7 +261,7 @@ usage: xbsl baseline add [-h] --rule ID/GROUP/TIER [--reason REASON] [--baseline
 | `--reason REASON` | the reason for the exclusion: written on new entries and on entries without one, recorded reasons are never replaced |
 | `--baseline FILE` | the baseline file; without the flag .xbsllint-baseline is looked up above the checked paths |
 | `--format {text,json}` | output format: text - the list of what was added, json - {baseline, added, findings, written} |
-| `--jobs N` | processes for file-scope rules: 0 – auto (kicks in on large runs), 1 – sequential, N – an explicit worker count |
+| `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
 | `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
