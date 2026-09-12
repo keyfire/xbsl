@@ -24,9 +24,10 @@ can write. So the pages stay hand-written and this guard holds them to the code:
   * every headline of "What is in the box" is named in the short annotations - the site
     description, the README lede, the PyPI summary - or is recorded here as one deliberately
     left out of them;
-  * no Russian page writes a transliterated word that has a Russian one. The dictionary lives
-    in `docsguard` and is the same for every repository of the family; what belongs here is the
-    list of Russian documents OUTSIDE `docs/`, which the guard cannot guess.
+  * no Russian page writes a transliterated word that has a Russian one, and neither does a
+    Russian message the toolkit prints. The dictionary lives in `docsguard` and is the same for
+    every repository of the family; what belongs here is what the guard cannot guess - the
+    Russian documents OUTSIDE `docs/`, and the sources whose Russian reaches a terminal.
 
 Run:
 
@@ -58,6 +59,7 @@ from docsguard import (
     pyproject_description,
     run,
     site_description,
+    source_jargon_problems,
 )
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -328,16 +330,51 @@ RUSSIAN_DOCUMENTS = (
     "editors/vscode/CHANGELOG.ru.md",
 )
 
+#: The sources whose Russian a reader meets in a terminal. There is no single catalog to name:
+#: a message is kept beside the code that prints it, so `i18n.py` holds the shared text and the
+#: translated `--help` while the rest carry their own, and `cli.py` prints a few summary lines
+#: through no catalog at all.
+#:
+#: The rule modules are out of the list, though their wording is the most-read Russian the
+#: toolkit produces. The check reads EVERY Cyrillic literal of a file it is given, and a rule
+#: module mixes wording with names: `rules/naming.py` keeps the table of English terms written in
+#: Cyrillic (`Хмл` -> Xml, `Апи` -> Api), which is the very subject of the dictionary, and
+#: `scaffold.py` holds metadata templates made of Cyrillic identifiers. A lookup key there would
+#: be read as prose and reported. The rule wording stays with review and with the RULES pages,
+#: which the page half of this check reads already.
+RUSSIAN_SOURCES = (
+    "xbsl/i18n.py",                    # the shared catalog and the translated --help
+    "xbsl/cli.py",                     # the summary lines the command prints itself
+    "xbsl/baseline.py",                # accepted findings, and the note written into the file
+    "xbsl/cijob.py",                   # reading the rule set out of a CI file
+    "xbsl/datadiff.py",                # comparing two versions of the language data
+    "xbsl/dataset.py",                 # choosing a version of the language data
+    "xbsl/docs.py",                    # the documentation search
+    "xbsl/parser.py",                  # the syntax errors
+    "xbsl/templates.py",               # the code templates
+    "xbsl/web.py",                     # the local page of the findings
+    "xbsl/translation/cli.py",         # `xbsl translate` and its report
+    "xbsl/translation/dictionary.py",  # reading and judging the dictionary
+    "xbsl/translation/entries.py",     # the entries of the dictionary
+    "xbsl/translation/project.py",     # writing the translated project
+)
+
 
 def check_jargon() -> list[str]:
     """Transliterated English where Russian has a word, plus the proof that the reader works.
+
+    Two texts are read: the Russian pages and documents, and the Russian a command prints. Its
+    help and its refusals go to a person exactly as a page goes to a reader, and they live in the
+    sources, so the names of those sources are the second thing this repository has to say.
 
     The dictionary is shared, so a repository that pinned a version of it could sit on one that
     had quietly stopped judging and look from here exactly like a repository in order. That is
     what `jargon_self_check` answers: it runs the dictionary over sentences that have to be found
     and sentences that have to stay quiet, and reports the difference as findings of its own.
     """
-    return jargon_self_check() + jargon_problems(LAYOUT, documents=RUSSIAN_DOCUMENTS)
+    return (jargon_self_check()
+            + jargon_problems(LAYOUT, documents=RUSSIAN_DOCUMENTS)
+            + source_jargon_problems(LAYOUT, RUSSIAN_SOURCES))
 
 
 def _collect(check):

@@ -431,7 +431,7 @@ def test_lint_paths_checks_with_the_rule_set_of_the_ci_job(tmp_path, monkeypatch
 
     off_by_default = "typography/yo-in-text"
     if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
-        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+        pytest.skip("правило включено установленным плагином – не видно, что по умолчанию оно выключено")
     m = _with_stub(monkeypatch)
     try:
         project = tmp_path / "project"
@@ -460,7 +460,7 @@ def test_lint_paths_can_be_told_which_ci_job_to_judge_by(tmp_path, monkeypatch):
 
     off_by_default = "typography/yo-in-text"
     if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
-        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+        pytest.skip("правило включено установленным плагином – не видно, что по умолчанию оно выключено")
     m = _with_stub(monkeypatch)
     try:
         project = tmp_path / "project"
@@ -502,7 +502,7 @@ def test_lint_paths_can_add_a_rule_that_is_off_by_default(tmp_path, monkeypatch)
 
     off_by_default = "typography/yo-in-text"
     if off_by_default in SEVERITY_OVERRIDES:  # pragma: no cover - an installed plugin decides
-        pytest.skip("правило включено установленным плагином – публичный дефолт не виден")
+        pytest.skip("правило включено установленным плагином – не видно, что по умолчанию оно выключено")
     m = _with_stub(monkeypatch)
     try:
         f = tmp_path / "Форма.yaml"

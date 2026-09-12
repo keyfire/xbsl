@@ -25,7 +25,7 @@ def test_em_dash_off_by_default_then_selectable():
     from xbsl.engine import SEVERITY_OVERRIDES
 
     if "typography/em-dash" in SEVERITY_OVERRIDES:
-        pytest.skip("уровень переопределён установленным плагином – публичный дефолт не виден")
+        pytest.skip("уровень переопределён установленным плагином – не видно, какой он по умолчанию")
     content = "// длинное тире — здесь\n"
     assert _lint("М.xbsl", content) == []  # off by default
     d = _lint("М.xbsl", content, select={"typography/em-dash"})
