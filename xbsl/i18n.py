@@ -291,48 +291,48 @@ _CORE_MESSAGES = {
               "(--select replaces the set); the value forms are the same",
     },
     "cli.help.as-ci": {
-        "ru": "гонять тот же набор правил, что джоба CI проекта: ключи --select/--ignore/"
-              "--enable и базлайн берутся из .gitlab-ci.yml (или воркфлоу GitHub) рядом с "
-              "проектом; можно назвать файл явно",
-        "en": "run the rule set the project's CI job runs: the --select/--ignore/--enable "
-              "flags and the baseline are taken from .gitlab-ci.yml (or a GitHub workflow) "
+        "ru": "проверять тем же набором правил, что и задача CI проекта: ключи --select/"
+              "--ignore/--enable и список принятых замечаний берутся из .gitlab-ci.yml (или "
+              "рабочего процесса GitHub) рядом с проектом; файл можно назвать явно",
+        "en": "check by the rule set the project's CI job runs: the --select/--ignore/--enable "
+              "flags and the baseline come from .gitlab-ci.yml (or a GitHub workflow) "
               "next to the project; the file can be named explicitly",
     },
     "cli.help.as-ci-job": {
-        "ru": "какую джобу файла CI брать: пайплайн гоняет линтер не один раз, когда проект "
-              "проверяет второе дерево (перевод) своим набором; имя можно назвать частью "
-              "(--as-ci-job english), включает --as-ci",
+        "ru": "какую задачу файла CI брать: конвейер запускает линтер не один раз, когда "
+              "проект проверяет второе дерево (перевод) своим набором; имя можно назвать "
+              "частью (--as-ci-job english), включает --as-ci",
         "en": "which job of the CI file to take: a pipeline runs the linter more than once "
               "when the project checks a second tree (a translation) by a set of its own; a "
               "part of the name is enough (--as-ci-job english), implies --as-ci",
     },
     "cli.help.baseline": {
-        "ru": "гасить находки, замороженные в файле базлайна (создаётся --write-baseline); "
-              "новые находки выводятся как обычно",
+        "ru": "гасить находки, записанные в файл принятых замечаний (его создаёт "
+              "--write-baseline); новые находки выводятся как обычно",
         "en": "suppress findings frozen in a baseline file (created by --write-baseline); "
               "new findings are reported as usual",
     },
     "cli.help.no-baseline": {
-        "ru": "не искать файл базлайна рядом с исходниками (по умолчанию найденный "
+        "ru": "не искать файл принятых замечаний рядом с исходниками (по умолчанию найденный "
               ".xbsllint-baseline применяется сам)",
         "en": "do not look for a baseline file next to the sources (by default a discovered "
               ".xbsllint-baseline is applied on its own)",
     },
     "cli.help.stale-baseline": {
-        "ru": "перечислить записи базлайна, которые больше ничего не гасят, с их причинами "
-              "(вместе с --baseline)",
+        "ru": "перечислить записи файла принятых, которые больше ничего не гасят, с их "
+              "причинами (вместе с --baseline)",
         "en": "list the baseline entries that no longer suppress anything, with their "
               "reasons (together with --baseline)",
     },
     "cli.help.prune-baseline": {
-        "ru": "перечислить устаревшие записи базлайна с их причинами и удалить их из файла "
-              "(вместе с --baseline; порядок файла и счётчики живых записей не трогаются)",
+        "ru": "перечислить устаревшие записи файла принятых с их причинами и удалить их из "
+              "файла (вместе с --baseline; порядок файла и счётчики живых записей не трогаются)",
         "en": "list the stale baseline entries with their reasons and remove them from the "
               "file (together with --baseline; the file's order and the counts of live "
               "entries are left alone)",
     },
     "cli.help.write-baseline": {
-        "ru": "вместо отчёта записать все текущие находки в файл базлайна "
+        "ru": "вместо отчёта записать все текущие находки в файл принятых замечаний "
               "(заморозить долг; пути в файле – относительно его каталога)",
         "en": "instead of a report, write all current findings to a baseline file "
               "(freeze the debt; paths in the file are relative to its directory)",
@@ -344,18 +344,18 @@ _CORE_MESSAGES = {
               "characters, line endings) and report the rest; only unambiguous fixes",
     },
     "cli.help.jobs": {
-        "ru": "процессов для файловых правил: 0 – авто (включается на больших прогонах), "
-              "1 – последовательно, N – явное число воркеров",
-        "en": "processes for file-scope rules: 0 – auto (kicks in on large runs), "
-              "1 – sequential, N – an explicit worker count",
+        "ru": "процессов для файловых правил: 0 – авто (включается на больших проверках), "
+              "1 – последовательно, N – явное число процессов",
+        "en": "processes for file-scope rules: 0 – auto (turns on for large runs), "
+              "1 – sequential, N – an explicit number of worker processes",
     },
     "cli.help.list-rules": {
         "ru": "вывести список правил (с их параметрами и величинами) и выйти; вместе с "
-              "--select/--ignore список сужается так же, как набор прогона; с --format json "
-              "те же записи отдаются машине",
+              "--select/--ignore список сужается так же, как набор проверки; с --format json "
+              "те же записи выводятся для машинной обработки",
         "en": "print the list of rules (with their parameters and values) and exit; together "
               "with --select/--ignore the list narrows the way a run's rule set does; with "
-              "--format json the same records are answered as data",
+              "--format json the same records are printed as data",
     },
     "cli.help.where": {
         "ru": "показать корень данных Элемента (путь, источник, версии) и выйти",
@@ -412,7 +412,7 @@ _CORE_MESSAGES = {
         "en": "FILE",
     },
     "cli.help.meta.job": {
-        "ru": "ДЖОБА",
+        "ru": "ЗАДАЧА",
         "en": "JOB",
     },
     "cli.help.meta.version": {
@@ -477,20 +477,20 @@ _CORE_MESSAGES = {
         "en": "code templates: list, export, import, save",
     },
     "cli.help.commands.baseline": {
-        "ru": "базлайн замороженных находок: add – дописать находки одного правила с причиной",
-        "en": "the baseline of frozen findings: add - append one rule's findings with a reason",
+        "ru": "список принятых замечаний: add – дописать находки одного правила с причиной",
+        "en": "the baseline of accepted findings: add - append one rule's findings with a reason",
     },
     "cli.help.bl.description": {
-        "ru": "Базлайн: точечные правки файла замороженных находок.\n\n"
-              "Полный снимок пишет режим проверки (xbsl <пути> --write-baseline ФАЙЛ); здесь – "
-              "дописывание отдельных находок без перезаписи остального.",
-        "en": "Baseline: targeted edits of the frozen findings file.\n\n"
-              "A full snapshot is written by the check mode (xbsl <paths> --write-baseline FILE); "
-              "here single findings are appended without rewriting the rest.",
+        "ru": "Список принятых замечаний: точечные правки файла.\n\n"
+              "Полный снимок пишет режим проверки (xbsl <пути> --write-baseline ФАЙЛ). Здесь "
+              "отдельные находки дописываются, а остальное не перезаписывается.",
+        "en": "Baseline: targeted edits of the accepted findings file.\n\n"
+              "A full snapshot is written by the check mode (xbsl <paths> --write-baseline FILE). "
+              "Here single findings are appended without rewriting the rest.",
     },
     "cli.help.bl.add": {
-        "ru": "дописать в базлайн новые находки одного правила по указанным путям: порядок и "
-              "чужие причины не трогаются, повторный вызов ничего не меняет",
+        "ru": "дописать в список принятых новые находки одного правила по указанным путям: "
+              "порядок и чужие причины не трогаются, повторный вызов ничего не меняет",
         "en": "append the new findings of one rule under the given paths to the baseline: "
               "order and other reasons stay untouched, a repeated call changes nothing",
     },
@@ -511,7 +511,8 @@ _CORE_MESSAGES = {
               "one, recorded reasons are never replaced",
     },
     "cli.help.bl.baseline": {
-        "ru": "файл базлайна; без флага ищется .xbsllint-baseline над проверяемыми путями",
+        "ru": "файл принятых замечаний; без флага ищется .xbsllint-baseline над проверяемыми "
+              "путями",
         "en": "the baseline file; without the flag .xbsllint-baseline is looked up above "
               "the checked paths",
     },
@@ -567,27 +568,29 @@ _CORE_MESSAGES = {
         "en": "enable rules on top of the default set",
     },
     "cli.help.lsp.as-ci": {
-        "ru": "судить тем же набором правил, что джоба CI проекта: ключи --select/--ignore/"
-              "--enable и базлайн берутся из команды xbsl в файле пайплайна (можно назвать "
-              "файл явно); пайплайна нет – набор настроек остаётся, причина пишется в stderr",
+        "ru": "судить тем же набором правил, что и задача CI проекта: ключи --select/--ignore/"
+              "--enable и список принятых замечаний берутся из команды xbsl в файле конвейера "
+              "(файл можно назвать явно); файла конвейера нет – остаётся набор настроек, "
+              "причина пишется в stderr",
         "en": "judge by the rule set the project's CI job runs: the --select/--ignore/--enable "
-              "flags and the baseline are taken from the xbsl command of the pipeline file "
-              "(the file can be named); with no pipeline the settings' set stands and the "
+              "flags and the baseline come from the xbsl command of the pipeline file "
+              "(the file can be named); with no pipeline file the settings' set stands and the "
               "reason goes to stderr",
     },
     "cli.help.lsp.as-ci-job": {
-        "ru": "какую джобу файла CI брать (включает --as-ci); имя можно назвать частью",
+        "ru": "какую задачу файла CI брать (включает --as-ci); имя можно назвать частью",
         "en": "which job of the CI file to take (implies --as-ci); a part of the name is enough",
     },
     "cli.help.lsp.baseline": {
-        "ru": "файл базлайна (абсолютный или относительно папки воркспейса) – исключённые "
-              "находки гасятся; отсутствующий файл не ошибка, он появится с первым исключением",
+        "ru": "файл принятых замечаний (абсолютный или относительно рабочей папки) – "
+              "перечисленные там находки гасятся; отсутствующий файл не ошибка, он появится с "
+              "первым исключением",
         "en": "the baseline file (absolute or relative to the workspace folder) – the findings "
-              "frozen there are suppressed; a missing file is not an error, it appears with the "
+              "listed there are suppressed; a missing file is not an error, it appears with the "
               "first exclusion",
     },
     "cli.help.lsp.templates": {
-        "ru": "файл шаблонов кода (абсолютный или относительно папки воркспейса) – "
+        "ru": "файл шаблонов кода (абсолютный или относительно рабочей папки) – "
               "дополняет встроенный набор, одноимённые шаблоны замещает",
         "en": "the code templates file (absolute or relative to the workspace folder) – it "
               "extends the builtin set and replaces templates of the same name",
