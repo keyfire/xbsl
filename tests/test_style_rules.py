@@ -46,9 +46,9 @@ def test_line_length_string_literal_ok():
 def test_line_length_is_on_by_default_and_warns():
     """A documented platform convention is on by default and reported as a warning.
 
-    It used to be off and `info`: the group was treated as accumulated debt. The owner's
-    call is the opposite - what the platform documents as a code-writing convention is a
-    standard, and a standard is enforced, not offered.
+    It used to be off and `info`: the group was treated as accumulated debt. The call went
+    the other way - what the platform documents as a code-writing convention is a standard,
+    and a standard is enforced, not offered.
     """
     long_call = "    Вызвать(" + ", ".join(f"Параметр{i}" for i in range(15)) + ")\n"
     diags = engine.run_sources([engine.load_text("М.xbsl", "метод Ф()\n" + long_call + ";\n")])

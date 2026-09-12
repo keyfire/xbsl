@@ -476,7 +476,7 @@ def _day_sections(name: str) -> list[tuple[str, list[str]]]:
 def test_a_day_carries_each_section_once(name: str):
     """One day, one section of each kind. Several releases of a day share the day's sections,
     so a second `### Added` under the same heading is an append that lost its way - it splits
-    what a reader expects to see in one place (the owner caught exactly that)."""
+    what a reader expects to see in one place - and that is how one was caught."""
     problems = [
         f"{day}: {kind} встречается {kinds.count(kind)} раза"
         for day, kinds in _day_sections(name)
