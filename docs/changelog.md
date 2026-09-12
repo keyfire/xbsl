@@ -81,7 +81,8 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`translate --redundant` finds the dictionary entries the platform answers itself.** Such an
   entry translates nothing and hides a gap in the data behind it: half-translated project
   languages stayed invisible because of one. A live dictionary of 31 989 entries held 22, and
-  `--prune` took all of them out with the English tree of 1 261 files unchanged to the byte. ([#3](https://github.com/keyfire/xbsl/pull/3))
+  `--prune` took all of them out with the English tree of 1 261 files unchanged to the byte.
+  ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ### Changed
 - **A name the project declares is no longer explained by a platform member spelled the same.**
