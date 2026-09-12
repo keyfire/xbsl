@@ -27,7 +27,11 @@ can write. So the pages stay hand-written and this guard holds them to the code:
   * no Russian page writes a transliterated word that has a Russian one, and neither does a
     Russian message the toolkit prints. The dictionary lives in `docsguard` and is the same for
     every repository of the family; what belongs here is what the guard cannot guess - the
-    Russian documents OUTSIDE `docs/`, and the sources whose Russian reaches a terminal.
+    Russian documents OUTSIDE `docs/`, and the sources whose Russian reaches a terminal;
+  * no page and no comment explains a change by naming who asked for it. The repository has one
+    author, so that sentence tells a reader nothing and suggests the code was written for
+    somebody else. Both editions are read, and so are the comments and docstrings of the
+    sources - which is where all three of the sentences found by hand were written.
 
 Run:
 
@@ -50,6 +54,8 @@ from pathlib import Path
 from docsguard import (
     Layout,
     PitchItem,
+    attribution_problems,
+    attribution_self_check,
     box_headlines,
     front_description,
     jargon_problems,
@@ -59,6 +65,7 @@ from docsguard import (
     pyproject_description,
     run,
     site_description,
+    source_attribution_problems,
     source_jargon_problems,
 )
 
@@ -377,6 +384,57 @@ def check_jargon() -> list[str]:
             + source_jargon_problems(LAYOUT, RUSSIAN_SOURCES))
 
 
+# --- who asked for the change -----------------------------------------------------------------
+
+#: The documents a reader meets outside `docs/`, in both editions. The pages of `docs/` the
+#: guard collects by itself, and the mirrors of the two changelogs live there, so what is left
+#: for this list is the documents at the root and the extension's own history, which the site
+#: does not mirror at all.
+ATTRIBUTION_DOCUMENTS = (
+    "README.md",
+    "README.ru.md",
+    "CHANGELOG.md",
+    "CHANGELOG.ru.md",
+    "CONTRIBUTING.md",
+    "CONTRIBUTING.ru.md",
+    "editors/vscode/README.md",
+    "editors/vscode/README.ru.md",
+    "editors/vscode/CHANGELOG.md",
+    "editors/vscode/CHANGELOG.ru.md",
+)
+
+#: The folders whose comments and docstrings are read. All of them, and that is the difference
+#: from the jargon list above: there the Russian a person reads is kept in fourteen named
+#: modules, and naming the rest would judge identifiers by a dictionary written about prose.
+#: A sentence explaining a decision needs no catalog - it can be written in any file there is,
+#: and the three that were found by hand were written in the docstrings of tests.
+ATTRIBUTION_SOURCES = ("xbsl", "xbsllint", "tests", "tools", "scripts")
+
+#: The extension is TypeScript and its comments are prose the same way. One folder, because the
+#: rest of `editors/vscode` is generated output and packaging.
+ATTRIBUTION_TYPESCRIPT = ("editors/vscode/src",)
+
+
+def check_attribution() -> list[str]:
+    """No page and no comment explains a change by naming the person who asked for it.
+
+    The repository has one author, so a sentence about who asked tells the reader nothing they
+    can act on and suggests the code was written for somebody else. What to write instead is
+    what was wrong with the previous behaviour or text.
+
+    Three such sentences were found here by hand on one day, in the docstrings of tests, and the
+    oldest had been there since July. The table lives in `docsguard`, and what belongs here is
+    the scope: both editions of the documents outside `docs/`, and the folders whose comments
+    are read. The table catches a turn of phrase rather than a word, because an owner in this
+    toolkit is a metadata object - `owner table`, `the owner's kind`, "there the owner decides"
+    are the subject and stay quiet.
+    """
+    return (attribution_self_check()
+            + attribution_problems(LAYOUT, documents=ATTRIBUTION_DOCUMENTS)
+            + source_attribution_problems(LAYOUT, ATTRIBUTION_SOURCES)
+            + source_attribution_problems(LAYOUT, ATTRIBUTION_TYPESCRIPT, patterns=("*.ts",)))
+
+
 def _collect(check):
     """A check written as `check(problems)` seen as one that returns its findings.
 
@@ -394,7 +452,7 @@ def _collect(check):
 
 CHECKS = (*(_collect(check) for check in (
     check_rules, check_mcp, check_extension, check_cli, check_environment, check_pitches,
-)), check_jargon)
+)), check_jargon, check_attribution)
 
 
 def problems() -> list[str]:

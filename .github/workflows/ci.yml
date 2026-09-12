@@ -23,7 +23,7 @@ jobs:
           # Pinned by TAG, not by a branch: a guard installed from `main` changes under the
           # repository without a commit in it - a green pipeline turns red (or, worse,
           # a red one turns green) with nothing here to explain why.
-          pip install "git+https://github.com/keyfire/docsguard@v0.9.0"
+          pip install "git+https://github.com/keyfire/docsguard@v0.10.0"
       # Данные о языке в репозиторий не входят (генерируются из дистрибутива), поэтому
       # зависящие от данных тесты пропускаются; проверяются установка, импорт и смоук на
       # матрице версий Python.
@@ -79,7 +79,7 @@ jobs:
           # Pinned by TAG, not by a branch: a guard installed from `main` changes under the
           # repository without a commit in it - a green pipeline turns red (or, worse,
           # a red one turns green) with nothing here to explain why.
-          pip install "git+https://github.com/keyfire/docsguard@v0.9.0"
+          pip install "git+https://github.com/keyfire/docsguard@v0.10.0"
       - name: Docs guard (every surface is described)
         run: python tools/check_docs.py
       # The generated pages are committed, so a stale one means the generator was not run.
