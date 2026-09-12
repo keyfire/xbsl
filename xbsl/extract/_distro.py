@@ -137,7 +137,9 @@ def _read_index(idx: Path) -> dict:
 
 
 def _write_index(idx: Path, data: dict) -> None:
-    idx.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    idx.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
 
 
 def update_index(version: str, make_default: bool = True) -> None:

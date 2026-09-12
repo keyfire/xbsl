@@ -546,9 +546,11 @@ def main(argv=None) -> None:
     version_dir = _distro.version_dir(version)
     version_dir.mkdir(parents=True, exist_ok=True)
     out = version_dir / "terms.json"
-    out.write_text(json.dumps(small, ensure_ascii=False, indent=1), encoding="utf-8")
+    out.write_text(json.dumps(small, ensure_ascii=False, indent=1), encoding="utf-8",
+                   newline="\n")
     out_full = version_dir / "terms_full.json"
-    out_full.write_text(json.dumps(full, ensure_ascii=False, indent=1), encoding="utf-8")
+    out_full.write_text(json.dumps(full, ensure_ascii=False, indent=1), encoding="utf-8",
+                        newline="\n")
     _distro.update_index(version)
 
     print(f"Записано: {out} (версия {version})")

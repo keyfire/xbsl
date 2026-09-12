@@ -20,7 +20,7 @@ jobs:
       - run: python -m pip install -e ".[dev]"
       # Pinned by TAG: a guard that changes under the repository moves the verdict of a
       # publish with nothing in this repository to explain it.
-      - run: python -m pip install "git+https://github.com/keyfire/docsguard@v0.4.0"
+      - run: python -m pip install "git+https://github.com/keyfire/docsguard@v0.7.1"
       - run: python -m pytest -q
 
   build:

@@ -23,7 +23,10 @@ can write. So the pages stay hand-written and this guard holds them to the code:
   * every XBSL_* environment variable is mentioned somewhere;
   * every headline of "What is in the box" is named in the short annotations - the site
     description, the README lede, the PyPI summary - or is recorded here as one deliberately
-    left out of them.
+    left out of them;
+  * no Russian page writes a transliterated word that has a Russian one. The dictionary lives
+    in `docsguard` and is the same for every repository of the family; what belongs here is the
+    list of Russian documents OUTSIDE `docs/`, which the guard cannot guess.
 
 Run:
 
@@ -48,6 +51,8 @@ from docsguard import (
     PitchItem,
     box_headlines,
     front_description,
+    jargon_problems,
+    jargon_self_check,
     lede,
     pitch_problems,
     pyproject_description,
@@ -309,6 +314,32 @@ def check_pitches(problems: list[str]) -> None:
     ))
 
 
+# --- the words of the Russian pages ---------------------------------------------------------
+
+#: The Russian documents that are NOT pages of `docs/`. The guard reads `docs/*.ru.md` by itself,
+#: and these four sit outside it: the two that a reader of GitHub and of PyPI meets first, the
+#: notes for a contributor, and the history of the extension, which the site does not mirror at
+#: all. The toolkit's own history needs no row - `docs/changelog.ru.md` is its mirror and is read
+#: as a page.
+RUSSIAN_DOCUMENTS = (
+    "README.ru.md",
+    "CHANGELOG.ru.md",
+    "CONTRIBUTING.ru.md",
+    "editors/vscode/CHANGELOG.ru.md",
+)
+
+
+def check_jargon() -> list[str]:
+    """Transliterated English where Russian has a word, plus the proof that the reader works.
+
+    The dictionary is shared, so a repository that pinned a version of it could sit on one that
+    had quietly stopped judging and look from here exactly like a repository in order. That is
+    what `jargon_self_check` answers: it runs the dictionary over sentences that have to be found
+    and sentences that have to stay quiet, and reports the difference as findings of its own.
+    """
+    return jargon_self_check() + jargon_problems(LAYOUT, documents=RUSSIAN_DOCUMENTS)
+
+
 def _collect(check):
     """A check written as `check(problems)` seen as one that returns its findings.
 
@@ -324,9 +355,9 @@ def _collect(check):
     return wrapped
 
 
-CHECKS = tuple(_collect(check) for check in (
+CHECKS = (*(_collect(check) for check in (
     check_rules, check_mcp, check_extension, check_cli, check_environment, check_pitches,
-))
+)), check_jargon)
 
 
 def problems() -> list[str]:
