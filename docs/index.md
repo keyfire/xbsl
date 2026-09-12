@@ -1,15 +1,15 @@
 ---
 title: "XBSL (1C:Element)"
-description: "A toolkit for 1C:Element: a linter with autofixes, an LSP server, documentation search, metadata scaffolding and translation into English spellings – plus an MCP server and a VS Code extension on the same engine."
+description: "A toolkit for 1C:Element: a linter with autofixes, an LSP server, documentation search, metadata scaffolding and translation into English spellings. Plus an MCP server and a VS Code extension on the same engine."
 sidebar:
   label: Home
   order: 1
 ---
 
-XBSL is a toolkit for **1C:Element** projects written as `Name.yaml` (element description) and
-`Name.xbsl` (code module) pairs. It gives fast local feedback ahead of the slow server-side
-compilation that runs on deploy – the only check the platform itself provides. The project
-ships as a Python engine and a VS Code extension built on top of it.
+XBSL is a toolkit for **1C:Element** projects. Such a project is written in pairs of files:
+`Name.yaml` describes an element, `Name.xbsl` holds its code. The platform checks the code once,
+when a deploy compiles it on the server, and that takes a while. XBSL answers on your own machine
+long before then. It ships as a Python engine plus a VS Code extension built on that engine.
 
 ## What is in the box
 
@@ -19,8 +19,8 @@ ships as a Python engine and a VS Code extension built on top of it.
 - **LSP server** – live diagnostics, go-to-definition and completion for any LSP-capable editor.
 - **Metadata scaffolding** – creating objects, attributes, routes and forms without hand-writing
   yaml.
-- **Translation into English spellings** – the project dictionary, coverage and a CI gate, with
-  an external translator (Yandex or Google) filling the remainder as suggestions.
+- **Translation into English spellings** – the project dictionary, the coverage and a CI check.
+  What is left over comes back as suggestions from Yandex or Google.
 - **Documentation search** – a local full-text index built from your own 1C:Element
   distribution.
 - **MCP server** – linting, documentation search and every scaffolding operation exposed as
@@ -37,12 +37,12 @@ ships as a Python engine and a VS Code extension built on top of it.
 - **[Quick start](/start)** – install the package, generate the language data from your
   distribution, run the first check.
 - **[Checking sources](/linting)** – the flags of a run, what the deeper rules rely on, the
-  baseline for a legacy codebase, CI.
+  baseline for an old codebase, CI.
 - **[Rules](/RULES)** – the full list of linter checks, with severities and scope.
 - **[Metadata scaffolding](/scaffolding)** – objects, attributes, routes and forms through the
   engine instead of hand-written yaml; the code templates.
-- **[Translating a project](/translation)** – the dictionary, coverage, machine translation of
-  what is missing, the CI gate.
+- **[Translating a project](/translation)** – the dictionary, the coverage, machine translation of
+  what is missing, the CI check.
 - **[Servers and plugins](/servers)** – the LSP server, the MCP server, the web panel, and
   rules, data and severities of your own.
 - **[Platform data](/platform-data)** – the generated datasets, the documentation index, the
@@ -60,15 +60,15 @@ ships as a Python engine and a VS Code extension built on top of it.
 
 ## Nearby
 
-The 1C:Element toolkit is two halves of one loop, and a third tool does the same job on the
-neighbouring platform.
+The 1C:Element toolkit comes in two halves: one checks, the other delivers. A third tool does
+the same job on the neighbouring platform.
 
-- **[Elemctl](https://docs.keyfire.ru/elemctl/)** – delivery of what the linter has checked: build from
-  sources, upload, apply, and an honest verification that the stand actually came up on the
-  new build. The *XBSL: deploy* command of the VS Code extension calls exactly this.
+- **[Elemctl](https://docs.keyfire.ru/elemctl/)** – it delivers what the linter has checked: build from
+  sources, upload, apply. It also verifies that the stand really came up on the new build. The
+  *XBSL: deploy* command of the VS Code extension calls exactly this.
 - **[EDT-Bridge](https://docs.keyfire.ru/edt-bridge/)** – the same idea on the 1C:Enterprise platform: an MCP
-  bridge into 1C:EDT through which an agent reads the configuration, edits modules and forms,
-  builds extensions and debugs.
+  bridge into 1C:EDT. An agent uses it to read the configuration, edit modules and forms, build
+  extensions and debug.
 
 Language data (keywords, the stdlib type catalog, the configuration metamodel) is generated
 from your own 1C:Element distribution and is not bundled with the project – see
