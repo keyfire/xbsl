@@ -374,6 +374,9 @@ range `A..B` is handed to git as written, which is how a change already merged i
 Measured on a live project: 3297 orphans without a filter, 18 of them the change's own, nine names
 and nine comment lines. One call instead of nineteen calls with `--filter` a name at a time.
 
+The removed lines come from `git diff`. A git that has not answered within a minute is refused,
+and the refusal names the other way round: the same list without git is narrowed by `--filter`.
+
 The narrowing is an intersection rather than a shortcut: a name the project still spells does not
 become an orphan however generously the diff reads. So an answer with neither a filter nor
 `--since` carries a caveat. The reading is textual, and the list describes the whole accumulated

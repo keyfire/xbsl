@@ -21,6 +21,11 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
+- **The conventions guard requires a process started from the engine to name its stdin.**
+  Otherwise the child gets the stdin an MCP or LSP server speaks over, and on Windows it cannot
+  finish. The check covers the `xbsl` folder alone: generators and tests run from a console,
+  where stdin is a console.
+  ([#42](https://github.com/keyfire/xbsl/pull/42))
 - **The machine report of the CLI names the CI rule set it judged by.** `--format json` now
   carries `summary.as_ci`: the job and the file it came from, the set as data and as the
   sentence a terminal prints, the jobs not taken and the includes left unread. That answer was
@@ -77,6 +82,12 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
+- **`translate --unused --since` no longer goes quiet inside the MCP server.** The child `git`
+  got the server's stdin and could not reach its own exit: the work took four milliseconds, the
+  read waited five minutes. The child now gets an empty stdin, and a git that has not answered
+  within a minute is refused with a hint at another way to ask. On the site project it was 302
+  seconds and an error; it is 3-7 seconds now.
+  ([#42](https://github.com/keyfire/xbsl/pull/42))
 - **A pipeline reads its includes from the top of the repository.** The folder of the named
   file stood for that top, which is right for a `.gitlab-ci.yml` lying at the root and wrong
   for every other place. A pipeline kept in a subfolder looked for `include: /ci/base.yml`
