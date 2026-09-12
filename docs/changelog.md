@@ -28,230 +28,101 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
-- **The LSP server answers which rule set it judges by (`xbsl/ciStatus`).** `--as-ci` is taken
-  once, at startup, and said out loud in one line on stderr - the output channel of the editor,
-  which is not where anyone looks while reading a finding. The silent half is worse: with no
-  pipeline file the server does NOT refuse (that would cost the whole editing session) and goes
-  on judging by the rules it was given, while the reader believes the panel and the merge
-  request agree. The request answers what came of it - taken or not, which job, out of which
-  file (and which `include:` brought it), the baseline, the other jobs, the includes left
-  unread - and the ready-made lines in the server's own language, the same ones the channel
-  carries. The extension shows it in the status bar.
-  ([#22](https://github.com/keyfire/xbsl/pull/22))
-- **`translate --dry-run`: see what the pass would write and clean, before it does.** The
-  first `--clean` of a translated tree was a blind step - there was nothing to show what would
-  be taken out, and the only account of it was a count printed after the removal, which
-  answers nothing about what a build just lost. The flag takes the pass up to the writing and
-  stops there: the tree is built, the destination is judged (an occupied directory is refused
-  exactly as it would be for real), the leftovers are listed - and nothing is written,
-  nothing removed. The leftovers are now named in an ordinary `--clean` run as well: the first
-  twenty by name under the count, the rest counted, and the json payload carries `dry_run`,
-  `planned` (the size of the tree that would be written) and `removals` in full. Without
-  `--out` the flag is refused rather than ignored - the pass writes nothing anyway.
+- **The LSP server says which rule set it judges by (`xbsl/ciStatus`).** That used to be one
+  line on stderr, in an output channel nobody reads. The request now answers whether the job's
+  set was taken, which job it was and which file it came from, and the extension shows that in
+  the status bar. ([#22](https://github.com/keyfire/xbsl/pull/22))
+- **`translate --dry-run` shows what the pass would write and what it would delete.** Cleaning
+  used to be a blind step: the count of removed files was printed after the removal. The pass
+  now stops just short of writing, and the leftovers are named up front.
   ([#21](https://github.com/keyfire/xbsl/pull/21))
-- **Parity with CI reads the `include:` of GitLab.** A pipeline is rarely one file: the
-  includes bring the jobs in from elsewhere, and a project on a shared template keeps the lint
-  job exactly there - so a reader of the root file alone answered "runs no xbsl command" about
-  a pipeline that runs one, and the local pass went on judging by a set of its own. The local
-  files of the repository are now followed in every shape GitLab writes them (a string,
-  `local:`, lists of either, the `ci/*.yml` patterns); a nested include is resolved against the
-  root of the checkout, as GitLab resolves it, and a job declared both in the root file and in
-  an include is the root file's. What lies OUTSIDE the checkout - a remote URL, a template,
-  another project, a component - is not fetched: that needs the network and usually a token,
-  and a linter downloading a URL out of a config file behind the caller's back is a surprise.
-  Those are named instead - in the line about the adopted set, in the summary of the MCP tool
-  and in the "runs no xbsl command" refusal - so a job that stays invisible has its reason
-  printed next to it. The adopted line now names the file the command actually stands in,
-  while the baseline is still resolved against the ROOT file: the job runs in its checkout.
-  ([#19](https://github.com/keyfire/xbsl/pull/19))
+- **CI parity follows the `include:` files of GitLab.** The lint job often lives outside the
+  root file, so the run answered "runs no xbsl command" about a pipeline that runs one. Local
+  includes are read now; remote ones are still not fetched, but they are named, so a job that
+  stays invisible comes with its reason. ([#19](https://github.com/keyfire/xbsl/pull/19))
 
 ### Changed
-- **The conventions guard reads the sources through the shared `docsguard` package, installed
-  by tag.** The check of the process-start convention was written here whole, while its
-  mechanics are everybody's: the engine, the bridge and the console read their sources the same
-  way and have the same silent failure waiting. What stays here is what is about THIS
-  repository - the list of folders, the `utf-8-sig` read (`xbsl/__init__.py` carries a BOM and
-  `ast.parse` refuses the mark, so the shared `process_encoding_problems`, which opens the
-  files itself as plain `utf-8`, cannot be used) and the half the package has no word for: a
-  PYTHON child needs `PYTHONIOENCODING=utf-8`, which `git` and `taskkill` have no use for. CI
-  installs the guard from a TAG rather than from a branch - from a branch it changes under the
-  repository without a commit in it, and a verdict moves with nothing here to explain why. The
-  findings over the same sources are identical before and after the move.
+- **The conventions guard reads the sources through the shared `docsguard` package.** The
+  bridge and the console read theirs the same way, and what stays here is what is about this
+  repository. CI installs the package by tag, so a verdict cannot move without a commit.
   ([#23](https://github.com/keyfire/xbsl/pull/23))
 
 ### Fixed
-- **A directory named after `--as-ci` is refused with the form that works.** The flag takes an
-  OPTIONAL file name, so `xbsl --as-ci e1c` hands it the tree that was meant to be checked: no
-  positional path is left, the run lints the current directory, and the reader gets the file
-  system's "cannot read e1c" - which says nothing about the mistake. The refusal now names the
-  flag's subject (the pipeline FILE), the command that works (`xbsl e1c --as-ci`, the flag
-  after the paths) and the fact that a pipeline file inside a directory is named in full. It
-  lives in the reader, so the CLI, the LSP server and the MCP tool all answer the same way.
+- **A directory named after `--as-ci` is refused with the form that works.** The flag expects a
+  pipeline file, so `xbsl --as-ci e1c` swallowed the path and the run linted the current
+  directory instead. The refusal now names the working form, `xbsl e1c --as-ci`.
   ([#20](https://github.com/keyfire/xbsl/pull/20))
 
 ## 2026-09-11 – 0.102.0, 0.103.0
 
 ### Added
-- **A setting of the CI parity now asks the LSP server for a restart.** The flag reaches the
-  server as an ARGUMENT, and the list of settings that re-argument it did not know the new
-  keys: switched on in a live window, `xbsl.linter.asCi` did nothing at all until the next
-  reload - the very failure that list exists to prevent.
+- **Changing the CI parity setting restarts the LSP server.** The flag reaches the server as an
+  argument, and the list of settings that call for a restart did not know about it. Switched on
+  in a live window, `xbsl.linter.asCi` did nothing until the next reload.
   ([#18](https://github.com/keyfire/xbsl/pull/18))
-- **Parity with CI in the editor: the Problems panel can judge by the job's rule set.** The
-  terminal and an agent could already take it, the panel could not - so one tree got two
-  verdicts, and the one that gates the merge request was the other one. `xbsl.linter.asCi`
-  turns it on, `xbsl.linter.asCiJob` names the job. Nothing of the rule set is copied into the
-  settings: the LSP server grew `--as-ci`/`--as-ci-job` of its own and reads the same pipeline
-  file the CLI does, so the editor, the terminal and the pipeline judge by ONE list rather
-  than by three copies of it. The settings' own rules stay on top of the job's set, an
-  explicit baseline outranks the job's, and a job that trusts nothing frozen
-  (`--no-baseline`) leaves the editor showing what the pipeline will report. One difference
-  from the terminal, on purpose: with no pipeline file the server does not refuse - that
-  costs a run in a terminal and a whole session in an editor - it writes the reason to the
-  output channel and keeps the settings' set. ([#14](https://github.com/keyfire/xbsl/pull/14))
-- **`--as-ci-job`: which job to take, when the pipeline runs the linter twice.** A project
-  that builds a second tree checks it in a second job - the sources in one, what `translate`
-  wrote in another - and the two judge different sets: the translated tree has no baseline of
-  its own and switches a rule off. `--as-ci` took the FIRST `xbsl` command of the file, and
-  there was nothing to pick the other with, so a preflight for the second tree compared its
-  verdict with the wrong job. The job can now be named (`--as-ci-job english` implies
-  `--as-ci`, so it is enough on its own): the name is matched as written, then case-blind,
-  then as a part of one - a name with spaces is tedious to quote. A part that fits two jobs is
-  refused with both names rather than guessed, and a name the file does not have answers with
-  the names it does. A run that was NOT told which job to take prints a second line about the
-  ones it passed over, so the difference between the sets stops being silent. The same for an
-  agent: `lint_paths(as_ci_job=...)`, and the `as_ci` summary carries the other jobs in
-  `jobs`. ([#13](https://github.com/keyfire/xbsl/pull/13))
-- **`--as-ci`: a local run with the rule set the project's job runs.** A project turns its own
-  rules on with `--enable` right in the pipeline, a local run knew nothing about them, and the
-  difference was learned from a red job - a round trip one push long. The flag reads the set
-  from the very `xbsl` command that CI runs (`.gitlab-ci.yml` or a GitHub workflow next to the
-  project; the file is looked up above the checked paths, or named outright): `--select`,
-  `--ignore`, `--enable` and the baseline - everything that changes the verdict - while
-  `--jobs`, `--format` and the paths stay the run's own. No second list of rules is kept in
-  step, so the agreement holds by construction. On a live project a plain run judged by 194
-  rules and found 2 findings, `--as-ci` by 200 and found 11 - what the job reports, word for
-  word. Flags add up (`--as-ci --enable X` is the job's set plus that rule), the baseline is
-  resolved against the pipeline file, and with no pipeline or no `xbsl` command in it the run
-  refuses with a line instead of quietly checking a narrower set. The same for an agent:
-  `lint_paths(as_ci=true)` and an `as_ci` field in the summary. ([#10](https://github.com/keyfire/xbsl/pull/10))
-- **The metadata tools point at each other.** A caller reads the description of ONE tool:
-  `meta_add_field` adds the key of a localized string with the default-language text, while
-  the text of every translation is written by `meta_set_localization` - and not learning that
-  cost a whole task, written out by hand. Neighbouring tools now carry a "see also" line, in
-  the MCP descriptions and in the CLI help alike, where a command's text became its
-  description as well: `xbsl add-field --help` printed the arguments and nothing about the
-  command itself. ([#4](https://github.com/keyfire/xbsl/pull/4))
-- **`translate --redundant`: the dictionary entries the platform answers itself.** An entry
-  that CONTRADICTS the platform has long been judged; one that REPEATS it was judged by
-  nobody - and such an entry translates nothing while hiding a gap in the platform data or in
-  the engine itself: the half-translated languages of a project stayed invisible behind
-  exactly such a pair. The pass is the judge: an entry is listed only when every place it
-  answered would have come out the same without it. A live dictionary of 31 989 entries holds
-  22 of them, and removing all twenty-two left the English tree of 1 261 files byte for byte
-  as before. The plain report says the number, `--redundant` and `translate_redundant` list
-  them with the file and line, `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
+- **The Problems panel can judge by the job's rule set.** The terminal could already do it, the
+  panel could not, and one tree got two verdicts. `xbsl.linter.asCi` turns it on and
+  `xbsl.linter.asCiJob` names the job; the server reads the same pipeline file the CLI does.
+  ([#14](https://github.com/keyfire/xbsl/pull/14))
+- **`--as-ci-job` picks the job when the pipeline runs the linter twice.** `--as-ci` took the
+  first `xbsl` command in the file, and there was no way to reach the second job. The job can
+  now be named, and a run that was given no name prints which jobs it passed over.
+  ([#13](https://github.com/keyfire/xbsl/pull/13))
+- **`--as-ci` runs the linter with the rule set of the project's job.** The flag reads
+  `--select`, `--ignore`, `--enable` and the baseline from the very `xbsl` command CI runs. The
+  difference used to surface as a red job: on a live project a plain run found 2 findings where
+  the job found 11. ([#10](https://github.com/keyfire/xbsl/pull/10))
+- **The metadata tools point at each other.** `meta_add_field` adds the key of a localized
+  string, the translations are written by `meta_set_localization`, and there was nowhere to
+  learn that. Neighbouring tools now carry a "see also" line in the MCP descriptions and in the
+  CLI help. ([#4](https://github.com/keyfire/xbsl/pull/4))
+- **`translate --redundant` finds the dictionary entries the platform answers itself.** Such an
+  entry translates nothing and hides a gap in the data behind it: half-translated project
+  languages stayed invisible because of one. A live dictionary of 31 989 entries held 22 of
+  them, and `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ### Changed
-- **A name the PROJECT declares is not explained by a platform member of the same spelling.**
-  The project and the platform share a lot of words - a module of one's own has a `Write` as
-  readily as the platform does - and the main hover already answered such a name with the
-  project's own card: the method, its signature, the file it lives in. The documentation block
-  was then added UNDER that card, so the reader got a platform member that has nothing to do
-  with the method in front of him. The gate is the project index itself rather than a second
-  list of what counts as a project name: whatever the hover answers with - an object, a method
-  of the module, a component of the form, a tabular section, a value of an enumeration - is the
-  project's answer, and the two cannot drift apart. The panel no longer says "no symbol under
-  the cursor" where there plainly is one either: over a name of the project (and over a local
-  variable, whose gate is older) it now offers the search over that word - the word may
-  genuinely have a page, it is simply not the answer to "what is this name here".
-  ([#16](https://github.com/keyfire/xbsl/pull/16))
-- **The hover and the documentation panel answer with a MEMBER's block, not with its type's
-  page.** The engine could find a member by name; the editor did not use it: over
-  `Text.Substring` the hover said what the type String is ("A sequence of characters"), and a
-  bare member name fell through to full-text search, where the top candidate for "Substring"
-  was a topic about multiline literals. The member is now taken from where it is DECLARED: the
-  hover shows the signature and what the call does, the link opens the page at the member's
-  heading, and `Array.Size` leads to the ancestor that declares the method. A name several
-  types declare is not guessed - the panel offers those types with the member's block under
-  each, and the hover stays silent. The resolution is shared with the MCP `docs_symbol` tool
-  (`docs.member_doc`), so the editor and an agent answer alike. ([#9](https://github.com/keyfire/xbsl/pull/9))
-- **A translation collision names the PLACE of both names.** The report said which namespace
-  two names met in - a method, a structure, a collection of a yaml element - and stopped
-  there, while the method in question declared a dozen and a half names and the two are
-  rarely neighbours: finding them was done by eye. Every colliding name now carries the file,
-  the line and the column of its own declaration, so the line of the report is a place to
-  jump to. The same for all four namespaces the pass watches: the locals of a method, the
-  methods of a module, the fields of a structure and the names of a yaml collection. ([#7](https://github.com/keyfire/xbsl/pull/7))
-- **`docs_symbol` finds the MEMBERS of a type, and takes either spelling.** A member has no
-  page of its own - it is a heading inside the type that declares it - so asking for one by
-  name answered with an empty object, and the semantics of an argument (the second one being
-  the END position, not a length) cost a round of deploying to learn. A member now answers
-  with the record of that type's page plus the block of that member alone, every overload of
-  it joined; a name several types declare answers with their list and how to ask again
-  (`Type.Member`, or type_members), and a qualified name whose type only INHERITS the member
-  is followed to the ancestor that declares it. English spellings work throughout - `Array`
-  used to find nothing either, the pages being written in Russian. The index is built over
-  the reference pages once and rebuilt when the database is. ([#6](https://github.com/keyfire/xbsl/pull/6))
-- **`translate --out` writes a repository, not a loose pile of files.** A build takes a
-  project only at `{repository}/{Vendor}/{Name}` and refuses a directory named otherwise,
-  while the command laid the descriptor straight into the directory it was given - so the
-  translated tree of a live project could not be deployed until someone moved it by hand.
-  The two names come from the TRANSLATED descriptor, so a project whose own name is a
-  Russian word lands under the English one; an `--out` that already ends in those two names
-  is taken as the project directory itself and is not nested twice, and the log line says
-  where the files went. ([#5](https://github.com/keyfire/xbsl/pull/5))
+- **A name the project declares is no longer explained by a platform member spelled the same.**
+  Over a module's own `Write` the hover showed the project's card and then added a platform
+  member that had nothing to do with it. The project's answer now settles the question, and the
+  panel offers a search over the word. ([#16](https://github.com/keyfire/xbsl/pull/16))
+- **The hover and the documentation panel answer with the member's block, not with its type's
+  page.** Over `Text.Substring` the hover explained what the type String is. It now shows the
+  signature and what the call does, and the link opens the page at the member's heading.
+  ([#9](https://github.com/keyfire/xbsl/pull/9))
+- **A translation collision names where both names are declared.** The report said only which
+  method or structure the two words met in, and finding them was then done by eye. Each name
+  now carries the file, the line and the column of its own declaration.
+  ([#7](https://github.com/keyfire/xbsl/pull/7))
+- **`docs_symbol` finds the members of a type and takes either spelling.** A member has no page
+  of its own, so asking by name answered with an empty object, and English `Array` found
+  nothing at all, the pages being written in Russian. A member now answers with its type's page
+  and the block of that one member. ([#6](https://github.com/keyfire/xbsl/pull/6))
+- **`translate --out` writes a repository rather than a loose pile of files.** A build takes a
+  project only at `{repository}/{Vendor}/{Name}`, while the command laid the descriptor straight
+  into the directory it was given, so a translated tree could not be deployed until someone
+  moved it by hand. Both names now come from the translated descriptor.
+  ([#5](https://github.com/keyfire/xbsl/pull/5))
 
 ### Fixed
-- **A Python process started from here is told what to encode its output in.** The convention
-  had one half kept and the other half nowhere: every call that reads a process as text names
-  `encoding="utf-8"`, but a Python child was started without `PYTHONIOENCODING`, and on Windows
-  such a child writes in the console code page while the parent decodes utf-8. The reader
-  thread of `subprocess` then dies INSIDE, `stdout` comes back as None, and the return code
-  goes on saying the run went well - nothing in the output says the text was lost. Four calls
-  were like that: the verification of a self-update, the generator of the Russian command
-  reference, the check of its help texts and a plugin probe. Two of them are saved today by the
-  callee - the CLI reconfigures its own streams to utf-8 - but a `-c` child has no such cover,
-  and a traceback carrying a Cyrillic path would have come back from the update check as an
-  empty string, which reads as "the package does not import". `tests/test_conventions.py` now
-  holds every process start of the repository to both halves, reading the sources with `ast`
-  rather than with a regular expression: a call is written `(run or subprocess.run)(...)`
-  wherever the tests need a seam. ([#17](https://github.com/keyfire/xbsl/pull/17))
-- **`translate --out --clean`: the orphans of an earlier pass leave the output tree.** The
-  rewrite covers the files the pass produces and touches nothing else, so a source file that
-  was RENAMED or removed left its old translation standing there - a build takes the directory
-  whole, and the orphan shipped with everything else. The same leftover can stand exactly
-  where a file now goes, and then it breaks the write itself. `--clean` takes out, before
-  writing, everything the pass is not about to write. Opt-in rather than a write into a
-  temporary directory with a swap: the swap would have to delete the old tree anyway, it costs
-  a second full copy of the project, and it breaks on the very conditions the write errors come
-  from - another volume, a directory held open by a build. The refusal of a directory holding
-  someone else's files stays the safety net above it, so the cleaning happens only inside a
-  directory that already IS a translated project. On a live corpus of 1261 files a rename left
-  1262 files with both names standing; the same directory with `--clean` came back to 1261 and
-  matched a fresh write byte for byte, and the leftover directory that had failed one write of
-  the 1261 was gone with it. Files and directories are kept by different sets on purpose - a
-  leftover directory in the place of a file would otherwise look like something to keep.
-  ([#15](https://github.com/keyfire/xbsl/pull/15))
+- **A Python process started from here is told what to encode its output in.** Without
+  `PYTHONIOENCODING` a child on Windows writes in the console code page while the parent
+  decodes utf-8: the text is lost and the return code still says the run went well. Four calls
+  were like that, and `tests/test_conventions.py` now watches every process start in the
+  repository. ([#17](https://github.com/keyfire/xbsl/pull/17))
+- **`translate --out --clean` takes the orphans of an earlier pass out of the output tree.** A
+  file renamed in the source left its old translation standing, and the build shipped it with
+  the rest of the tree. On a live corpus of 1261 files a rename left 1262, and with `--clean`
+  the tree came back to 1261. ([#15](https://github.com/keyfire/xbsl/pull/15))
 - **`translate --out`: a refused write says so, instead of an empty log and exit code 1.** The
-  writing step handled no errors and stood BEFORE the report was printed, so any trouble from
-  the file system took the whole report with it: the command answered with code 1 and no output
-  at all, which reads as a broken dictionary. On a live corpus of 1261 files that reproduces two
-  ways - an output path that is a file, and a leftover of an earlier run (a directory standing
-  where a file goes); both gave 0 bytes of output and a traceback on stderr. Every write error is
-  now named with its file and its reason ("a directory where a file goes, a read-only file, a
-  file held by another program"), the pass reaches its end and prints the report whole, the first
-  five files by name and the rest counted; the refusal of an occupied directory became a sentence
-  in the report's language and says what to do. A run that failed to write the tree exits non-zero
-  even without `--strict` - the tree is its job. A repeat into the same directory still simply
-  rewrites the tree. ([#11](https://github.com/keyfire/xbsl/pull/11))
+  writing step stood before the report was printed, so any trouble from the file system took
+  the whole report with it. Every write error is now named with its file and its reason, and
+  the pass reaches its end and prints the report.
+  ([#11](https://github.com/keyfire/xbsl/pull/11))
 - **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
-  the translation tests - the second silently replaced the first, and the first had been dead
-  since the day it was written. Nothing could see it: the unused-method rule reads XBSL sources
-  rather than the Python of the engine, and a helper nobody calls fails no assertion. The
-  duplicate is gone, and a walk of the whole checkout now holds every module to one definition
-  per name (`@overload` is the deliberate exception; a fallback nested in `if`/`try` is not a
-  top-level statement and is not compared). ([#8](https://github.com/keyfire/xbsl/pull/8))
+  the translation tests: the second silently replaced the first, which had been dead since the
+  day it was written. The duplicate is gone, and a walk of the whole checkout now watches for
+  repeats. ([#8](https://github.com/keyfire/xbsl/pull/8))
 
 ## 2026-09-10 – 0.100.0, 0.101.0
 
