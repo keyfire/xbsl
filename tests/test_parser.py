@@ -176,7 +176,7 @@ def test_use_declaration_and_statement():
     # until the end of the enclosing block (production code writes: исп КонтекстДоступа...()).
     m = ok(
         "метод А()\n"
-        "    исп Скоуп = Открыть()\n"
+        "    исп Соединение = Открыть()\n"
         "    исп КонтекстДоступа.Привилегированный()\n"
         "    Ф()\n"
         ";\n"

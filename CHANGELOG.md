@@ -46,6 +46,12 @@ entry either - say what the behaviour was, not which class name was compared.
   stays invisible comes with its reason. ([#19](https://github.com/keyfire/xbsl/pull/19))
 
 ### Changed
+- **The conventions guard reads the Russian strings of the sources.** It read the documentation
+  pages only, though a person reads the help of a command and the text of a refusal the same way
+  as a page. The check names fourteen modules that hold messages. The rule modules stay out:
+  their wording sits next to a table of English terms written in Cyrillic, and the guard would
+  read a key of that table as prose.
+  ([#39](https://github.com/keyfire/xbsl/pull/39))
 - **The conventions guard reads the sources through the shared `docsguard` package.** The
   bridge and the console read theirs the same way, and what stays here is what is about this
   repository. The findings came out identical before and after the move. CI installs the
