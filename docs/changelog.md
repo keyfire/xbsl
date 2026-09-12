@@ -25,6 +25,19 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+- **The documentation guard catches a sentence that explains a change by naming who asked for
+  it.** The repository has one author, so that sentence gives the reader nothing to act on and
+  suggests the code was written for somebody else. Three of them were found by hand on one day,
+  in the docstrings of tests, and the oldest had been there since July. Both editions of the
+  pages and documents are read now, and with them the comments and docstrings of the engine, the
+  tests, the tools and the extension. The table comes from `docsguard@v0.10.0` and catches a
+  turn of phrase rather than a word: an owner in this toolkit is a metadata object, so
+  `owner table` and `the owner's kind` stay quiet.
+  ([#46](https://github.com/keyfire/xbsl/pull/46))
+
 ## 2026-09-12 – 0.104.0, 0.105.0
 
 ### Added
