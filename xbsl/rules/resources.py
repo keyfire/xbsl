@@ -67,7 +67,7 @@ from pathlib import Path
 
 from xbsl import docs, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import RESOURCE_DIRS, SourceFile, rule
 from xbsl.lexer import Token
 from xbsl.rules._syntax import code_tokens
 
@@ -104,7 +104,8 @@ i18n.register(MESSAGES)
 #: with the file missing fails with "Неизвестный ресурс", and the same file moved into a
 #: folder of any other name fails the same way. So the name matters and English is legal;
 #: knowing only the Russian one made an English project look as if it had no resources.
-_RESOURCE_DIRS = ("Ресурсы", "Resources")
+#: The pair lives in the engine, which collects the same folders for the typography rules.
+_RESOURCE_DIRS = RESOURCE_DIRS
 
 #: The prefix of a resource uploaded into the application base (see the module docstring).
 _UPLOADED_PREFIX = "inbase/"

@@ -18,23 +18,30 @@ from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
 
 def discover(paths: list[str]) -> list[Path]:
-    """Collect source files (.xbsl, .yaml and .xbql) under the given paths.
+    """Collect source files (.xbsl, .yaml, .xbql and the resources) under the given paths.
 
     The query file of a virtual table is collected too: it is the only place where the
     query language lives outside a `Запрос{ ... }` block, and until it was collected the
     query rules had nothing to look at there - an unknown table in such a file was found by
     nobody but the server compiler.
+
+    The `.css`, `.js`, `.svg` and `.html` files of a `Resources` folder are collected as well:
+    a project ships them to the browser as they are, so the prose in them is read by the
+    same people and holds to the same typography. Only the typography rules look at such a
+    file; the rest of the checks are about a module and an element description.
     """
     out: list[Path] = []
     for raw in paths:
         p = Path(raw)
         if p.is_file():
-            if p.suffix in (".xbsl", ".yaml") or engine.is_query_file(p):
+            if (p.suffix in (".xbsl", ".yaml") or engine.is_query_file(p)
+                    or engine.is_resource_file(p)):
                 out.append(p)
         elif p.is_dir():
             out.extend(engine.find_sources(p, "*.xbsl"))
             out.extend(engine.find_sources(p, "*.yaml"))
             out.extend(engine.find_sources(p, f"*{engine.QUERY_SUFFIX}"))
+            out.extend(engine.find_resources(p))
     # Uniquify, preserving order
     seen: set[Path] = set()
     uniq: list[Path] = []
