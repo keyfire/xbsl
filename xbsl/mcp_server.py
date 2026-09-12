@@ -230,9 +230,12 @@ def lint_paths(
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
                   asks for. This is what a preflight needs - a project turns rules on in its
                   pipeline, and a run without them calls clean what the job fails on. The
-                  summary then carries `as_ci` {file, job, flags, jobs}; when there is no
-                  such file, or no xbsl command in it, the answer is {"error"} rather than a
-                  quieter verdict;
+                  summary then carries `as_ci`: the file and the job, the include the command
+                  stands in, the root of the checkout, the set as data (select/ignore/enable/
+                  baseline) and as one sentence (flags), the other jobs and the includes left
+                  unread. The CLI `--format json` answers with the same record. When there is
+                  no such file, or no xbsl command in it, the answer is {"error"} rather than
+                  a quieter verdict;
     as_ci_job   – WHICH job of that file to take (implies `as_ci`). A pipeline runs the
                   linter twice as soon as the project checks a second tree - the sources in
                   one job, what `translate` wrote in another - and those judge different
@@ -284,16 +287,11 @@ def lint_paths(
     payload["summary"].update(extra)
     payload["summary"]["root"] = str(base)
     if job is not None:
-        payload["summary"]["as_ci"] = {
-            "file": str(job.path), "job": job.job, "flags": job.describe(),
-            # The jobs NOT taken: an agent comparing its verdict with a red pipeline has to
-            # know which of them it just reproduced.
-            "jobs": list(job.alternatives),
-            # Where the command actually stands, when an `include:` brought it in - and the
-            # includes nobody fetched, so a job that is missing from `jobs` has a reason.
-            "source": str(job.source) if job.source else None,
-            "unread_includes": list(job.unread),
-        }
+        # The shared record: the file and the job, the rule set as data and as the sentence a
+        # terminal prints, the jobs NOT taken (an agent comparing its verdict with a red
+        # pipeline has to know which of them it reproduced), where the command actually
+        # stands when an `include:` brought it, and the includes nobody fetched.
+        payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
     return payload
 
 

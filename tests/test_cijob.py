@@ -6,6 +6,7 @@ knows nothing about them, and the difference shows up as a red job one push late
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -561,3 +562,96 @@ def test_the_named_file_wins_over_discovery(tmp_path: Path, capsys):
     out = capsys.readouterr()
     assert "yaml/duplicate-subtree" not in out.out  # that job enables nothing
     assert "другая" in out.err
+
+
+# --- the machine report: which set the verdict came from -----------------------------------------
+
+
+@pytest.mark.needs_data
+def test_the_json_report_names_the_job_the_verdict_came_from(tmp_path: Path, capsys):
+    """The adopted line goes to stderr in text mode, so a json reader learned nothing of it."""
+    root = _project_with_a_copied_subtree(tmp_path)
+
+    assert cli.main([str(root), "--no-baseline", "--format", "json"]) == 0
+    assert "as_ci" not in json.loads(capsys.readouterr().out)["summary"]
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci", "--format", "json"]) == 0
+
+    taken = json.loads(capsys.readouterr().out)["summary"]["as_ci"]
+    assert taken["adopted"] is True and taken["job"] == "xbsl-lint"
+    assert taken["file"] == str(tmp_path / ".gitlab-ci.yml")
+    assert Path(taken["root"]) == tmp_path.resolve()
+    # The set as data, so a reader compares sets instead of parsing a sentence...
+    assert taken["enable"] == ["yaml/duplicate-subtree"]
+    assert taken["select"] == [] and taken["ignore"] == []
+    # ...and the sentence as well, because the same report is read by people.
+    assert "xbsl-lint" in taken["flags"]
+
+
+@pytest.mark.needs_data
+def test_the_json_report_says_why_the_job_set_was_not_taken(tmp_path: Path, capsys):
+    """The refusal used to reach stderr alone: on stdout a machine reader found nothing."""
+    root = tmp_path / "project"
+    _write(root / "ФормаОдин.yaml", _FORM.format(n=0, name="ФормаОдин", rows=_rows(3)))
+
+    assert cli.main([str(root), "--as-ci", "--format", "json"]) == 2
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["summary"]["as_ci"]["enabled"] is True
+    assert payload["summary"]["as_ci"]["adopted"] is False
+    assert ".gitlab-ci.yml" in payload["summary"]["as_ci"]["error"]
+    assert ".gitlab-ci.yml" in payload["error"]
+    # No findings and no counters: the run never happened, and an empty list of diagnostics
+    # would read as a clean tree.
+    assert "diagnostics" not in payload
+
+
+@pytest.mark.needs_data
+def test_the_refusal_reaches_the_file_the_report_was_asked_for(tmp_path: Path, capsys):
+    """`--out` is the whole answer for a caller who redirects nothing."""
+    root = tmp_path / "project"
+    _write(root / "ФормаОдин.yaml", _FORM.format(n=0, name="ФормаОдин", rows=_rows(3)))
+    target = tmp_path / "report.json"
+
+    assert cli.main([str(root), "--as-ci", "--format", "json", "--out", str(target)]) == 2
+    capsys.readouterr()
+
+    assert not json.loads(target.read_text(encoding="utf-8"))["summary"]["as_ci"]["adopted"]
+
+
+@pytest.mark.needs_data
+def test_the_json_report_names_the_jobs_the_run_did_not_take(tmp_path: Path, capsys):
+    """A second job judges a second tree, and a verdict compared with the wrong one is noise."""
+    root = _project_with_a_copied_subtree(tmp_path)
+    _write(tmp_path / ".gitlab-ci.yml",
+           "xbsl-lint:\n  script:\n    - xbsl project\n"
+           "English to S3:\n  script:\n    - xbsl project --enable yaml/duplicate-subtree\n")
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci", "--format", "json"]) == 0
+    first = json.loads(capsys.readouterr().out)["summary"]["as_ci"]
+
+    assert first["jobs"] == ["English to S3"] and "--as-ci-job" in first["hint"]
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci-job", "english",
+                     "--format", "json"]) == 0
+    named = json.loads(capsys.readouterr().out)["summary"]["as_ci"]
+
+    assert named["job"] == "English to S3" and named["jobs"] == ["xbsl-lint"]
+    assert named["hint"] == ""  # the job was named: there is nothing left to choose
+
+
+@pytest.mark.needs_data
+def test_the_json_report_carries_the_include_and_what_stayed_unread(tmp_path: Path, capsys):
+    """Where to open the command, and which templates nobody fetched - the same as in prose."""
+    root = _project_with_a_copied_subtree(tmp_path)
+    _write(tmp_path / ".gitlab-ci.yml",
+           "include:\n  - local: /ci/lint.yml\n  - template: Jobs/SAST.gitlab-ci.yml\n")
+    _write(tmp_path / "ci" / "lint.yml",
+           "xbsl-lint:\n  script:\n    - xbsl project --baseline .xbsllint-baseline\n")
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci", "--format", "json"]) == 0
+
+    taken = json.loads(capsys.readouterr().out)["summary"]["as_ci"]
+    assert taken["source"] == str(tmp_path / "ci" / "lint.yml")
+    assert taken["unread_includes"] == ["template: Jobs/SAST.gitlab-ci.yml"]
+    assert taken["baseline"] == str(tmp_path / ".xbsllint-baseline")

@@ -1934,7 +1934,7 @@ def _adopt_ci(args: argparse.Namespace) -> None:
         job = cijob.find(where, args.as_ci or None, args.as_ci_job)
     except cijob.CiLintError as exc:
         print(str(exc), file=sys.stderr)
-        STATE.ci["error"] = str(exc)
+        STATE.ci = cijob.refused(str(exc))
         return
     # Merged, not replaced, exactly as in the CLI: the settings' own rules stay on top of
     # the job's set, so a rule being tried out in the editor is not lost to the pipeline.
@@ -1950,23 +1950,13 @@ def _adopt_ci(args: argparse.Namespace) -> None:
         print(job.hint(), file=sys.stderr)
     if job.note():
         print(job.note(), file=sys.stderr)
-    STATE.ci = {
-        "enabled": True,
-        "adopted": True,
-        "file": str(job.path),
-        # The include the command actually stands in, when one brought it - what to open.
-        "source": str(job.source) if job.source else None,
-        "job": job.job,
-        "baseline": job.baseline_file(),
-        "no_baseline": job.no_baseline,
-        "jobs": list(job.alternatives),
-        "unread_includes": list(job.unread),
-        # The ready-made lines, in the server's own language: the client shows them as they
-        # are instead of assembling a second wording of the same facts.
-        "line": job.describe(),
-        "hint": "" if args.as_ci_job else job.hint(),
-        "note": job.note(),
-    }
+    # The same record the CLI report and the MCP answer carry, so one adoption is described
+    # in one wording everywhere. The sentences come ready-made, in the language the server
+    # was started with, and the client shows them instead of assembling its own.
+    STATE.ci = job.as_dict(hint=not args.as_ci_job)
+    # `line` is what `flags` is called here. An extension already published reads that name,
+    # and losing the tooltip over a rename is a poor trade for one key.
+    STATE.ci["line"] = STATE.ci["flags"]
 
 
 def main() -> None:

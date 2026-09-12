@@ -202,6 +202,43 @@ class CiLint:
             return ""
         return i18n.t("ci.unread-includes", items=_listed(self.unread))
 
+    def as_dict(self, hint: bool = True) -> dict:
+        """The adoption as one record: what was taken, from where, and by which rules.
+
+        Every surface answers with THIS, so a report, an agent and a status bar cannot start
+        describing one adoption differently. The rule set travels as data (`select`, `ignore`,
+        `enable`) and as the sentence a terminal prints (`flags`), because a report is read by
+        both. `hint` is False once the caller named the job: there is nothing left to choose.
+        """
+        return {
+            "enabled": True,
+            "adopted": True,
+            "file": str(self.path),
+            "source": str(self.source) if self.source else None,
+            "root": str(self.root),
+            "job": self.job,
+            "select": list(self.select),
+            "ignore": list(self.ignore),
+            "enable": list(self.enable),
+            "baseline": self.baseline_file(),
+            "no_baseline": self.no_baseline,
+            "flags": self.describe(),
+            "jobs": list(self.alternatives),
+            "hint": self.hint() if hint else "",
+            "note": self.note(),
+            "unread_includes": list(self.unread),
+        }
+
+
+def refused(error: str) -> dict:
+    """The same record when the job's set could NOT be taken, with the reason in it.
+
+    A reader of a machine report has to tell "judged as the job does" from "judged by the
+    defaults", and the second one is the dangerous half: the verdict looks like an answer
+    about the pipeline while it is an answer about something else.
+    """
+    return {"enabled": True, "adopted": False, "error": error}
+
 
 def discover(start: Path | str) -> Path | None:
     """The pipeline file at `start` or above it - the way the baseline file is found."""
