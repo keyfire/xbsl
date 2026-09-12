@@ -89,11 +89,17 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
+- **The table modes of the translation command refuse the flags of the writing pass.**
+  `--gaps`, `--entries`, `--table`, `--unused`, `--redundant` and `--suggest` write no tree, yet
+  they took `--out`, `--clean`, `--dry-run` and `--missing` without a word: a request to show
+  what a run would do came back as a table. Such a run now names the flags it cannot read and
+  exits with 2.
+  ([#43](https://github.com/keyfire/xbsl/pull/43))
 - **`translate --unused --since` no longer goes quiet inside the MCP server.** The child `git`
   got the server's stdin and could not reach its own exit: the work took four milliseconds, the
   read waited five minutes. The child now gets an empty stdin, and a git that has not answered
-  within a minute is refused with a hint at another way to ask. On the site project it was 302
-  seconds and an error; it is 3-7 seconds now.
+  within a minute is refused with a hint at another way to ask. On a live project it was 302 seconds
+  and an error; it is 3-7 seconds now.
   ([#42](https://github.com/keyfire/xbsl/pull/42))
 - **A pipeline reads its includes from the top of the repository.** The folder of the named
   file stood for that top, which is right for a `.gitlab-ci.yml` lying at the root and wrong
