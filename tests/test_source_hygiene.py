@@ -11,6 +11,10 @@ holds every module to one definition per name. `@overload` declarations are the 
 exception - there the repeated name is the typing protocol itself; definitions nested in an
 `if` or a `try` are not top-level statements and are never compared, so a platform-conditional
 fallback stays legal.
+
+It compares the top level of a module, and that is where `tests/test_conventions.py` takes over
+for `tests/`: the shared check there reads the inside of a class as well, where pytest collects
+a `test_` method just the same.
 """
 
 from __future__ import annotations

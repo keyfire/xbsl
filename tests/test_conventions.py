@@ -1,6 +1,6 @@
 """Conventions of the sources that no single test of a feature would ever notice.
 
-A convention nobody wrote down is a convention every new file gets to rediscover, and both
+A convention nobody wrote down is a convention every new file gets to rediscover, and all four
 conventions here hide their failures.
 
 The first is the encoding of a started PROCESS: read as text without a named encoding, it is
@@ -27,27 +27,35 @@ whole timeout with nothing printed, and the orphans-of-one-change mode read as a
 had stopped answering. Nothing here ever writes to a child, so `stdin=subprocess.DEVNULL`
 costs nothing and closes the class.
 
+The fourth is the NAME of a test. A test that arrives under the name of an existing one takes
+its place: Python keeps the last definition, pytest collects what the module ended up with, and
+the count goes UP, because the newcomer was added. Nothing in the run says the older test has
+stopped. `tests/test_source_hygiene.py` has been holding the repository to one definition per
+name since July, and the check here is the narrower half of that rule brought in from the shared
+package: it reads the inside of a class as well, where a `test_` method is collected too and the
+older rule stops at the top level of the module.
+
 The MECHANICS are not this repository's business: the engine, the bridge and the console all
 start processes and write their files the same way and have the same silent failures waiting,
 so reading the sources with `ast` and judging a call lives in the shared `docsguard` package
 (`conventions.py`). What stays here is the list of FOLDERS - which of them hold code that starts
-a process, and which of them write files that outlive the run, are facts about this repository -
-and the half of the first convention the shared package has no word for: a PYTHON child needs
-`PYTHONIOENCODING=utf-8` in its environment, which is meaningless for `git` or `taskkill`.
+a process, which of them write files that outlive the run, and which of them pytest collects
+from are facts about this repository - and the half of the first convention the shared package
+has no word for: a PYTHON child needs `PYTHONIOENCODING=utf-8` in its environment, which is
+meaningless for `git` or `taskkill`.
 
-Two details of the reading are ours as well. The files are read with `utf-8-sig`, because
-`xbsl/__init__.py` carries a BOM and `ast.parse` refuses the mark as a non-printable
-character - the folder-wide `process_encoding_problems` and `text_write_newline_problems`,
-which open the files themselves as plain `utf-8`, would die on the first one instead of judging
-the repository, so both conventions are read here file by file. And `ast` rather than a regular
-expression is the whole point of the shared readers: a process start is written
-`(run or subprocess.run)(...)` wherever the tests need a seam, and a check reading the text
-before the parenthesis would pass over exactly those.
+`ast` rather than a regular expression is the whole point of the shared readers: a process start
+is written `(run or subprocess.run)(...)` wherever the tests need a seam, and a check reading the
+text before the parenthesis would pass over exactly those. The mark at the head of a file is the
+package's business too, since v0.9.0: `xbsl/__init__.py` carries one, `ast.parse` refuses it as
+a non-printable character, and a folder-wide check used to die on that file instead of judging
+the repository. `read_text` takes the mark off, so the folders are handed over whole.
 """
 
 from __future__ import annotations
 
 import ast
+import codecs
 from pathlib import Path
 
 from docsguard import (
@@ -57,6 +65,9 @@ from docsguard import (
     newline_problems,
     process_starts,
     python_sources,
+    read_text,
+    shadowed_problems,
+    shadowed_test_problems,
     text_write_newline_problems,
     text_writes,
 )
@@ -79,19 +90,13 @@ SERVER_FOLDERS = ("xbsl",)
 #: test in its own right. What belongs here is the code whose writes OUTLIVE the run.
 WRITING_FOLDERS = ("xbsl", "scripts", "tools")
 
+#: The folders of the test-name convention: the one pytest collects tests from.
+TEST_FOLDERS = ("tests",)
+
 #: How a command line names a Python interpreter when it is not `sys.executable`.
 PYTHON_NAMES = frozenset({"python", "python3", "py", "python.exe", "pythonw.exe"})
 #: What the child's own streams are set by.
 CHILD_ENCODING = "PYTHONIOENCODING"
-
-
-def read(path: Path) -> str:
-    """The text of a source file - with the BOM taken off, which some of them carry.
-
-    `utf-8` would leave the mark in the string and `ast.parse` refuses it as a non-printable
-    character: the guard would then die on the first file instead of judging the repository.
-    """
-    return path.read_text(encoding="utf-8-sig")
 
 
 def sources() -> list[Path]:
@@ -158,7 +163,7 @@ def test_every_process_read_as_text_names_its_encoding():
     """The convention: nothing decodes with whatever code page the machine happens to have."""
     problems = []
     for path in sources():
-        problems += problems_in(read(path), path.relative_to(ROOT).as_posix())
+        problems += problems_in(read_text(path), path.relative_to(ROOT).as_posix())
 
     assert problems == []
 
@@ -168,7 +173,7 @@ def test_the_reader_finds_the_calls_it_is_meant_to_judge():
     found = [
         path.relative_to(ROOT).as_posix()
         for path in sources()
-        if process_starts(ast.parse(read(path)))
+        if process_starts(ast.parse(read_text(path)))
     ]
 
     assert len(found) > 4
@@ -221,17 +226,22 @@ def test_a_child_that_is_not_python_is_not_asked_for_a_python_variable():
     assert problems_in(git, "git.py") == []
 
 
-def test_the_source_with_a_bom_is_read_rather_than_refused():
-    """`xbsl/__init__.py` carries one, and `ast.parse` refuses the mark outright.
+def test_a_source_with_a_byte_order_mark_is_judged_rather_than_crashed_on(tmp_path):
+    """The readers parse what they are given, and a mark at the head of a file used to raise.
 
-    The shared `process_encoding_problems` opens the files itself as plain `utf-8`, so this
-    repository reads them with `utf-8-sig` and hands the text over - otherwise the guard dies
-    on the first file instead of judging the repository.
+    Editors on Windows write the mark without being asked and no diff shows it. Left in the
+    text, it is a character `ast.parse` refuses, so one such file used to take the findings of
+    every other file down with it. `xbsl/__init__.py` is that file here, which is why the
+    provocation is worth making against the installed package rather than trusted.
     """
-    marked = ROOT / "xbsl" / "__init__.py"
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "marked.py").write_bytes(
+        codecs.BOM_UTF8 + b'from pathlib import Path\nPath("a").write_text(t, encoding="utf-8")\n')
 
-    assert marked.read_bytes().startswith(b"\xef\xbb\xbf")
-    assert problems_in(read(marked), "init.py") == []
+    problems = text_write_newline_problems(Layout(root=tmp_path), ("scripts",))
+
+    assert len(problems) == 1
+    assert "scripts/marked.py:2" in problems[0]
 
 
 def stdin_problems_in(source: str, where: str) -> list[str]:
@@ -253,7 +263,7 @@ def test_no_process_of_the_engine_inherits_the_stdin_of_its_parent():
     """The convention itself: a child of the MCP or LSP server can always reach its own exit."""
     problems = []
     for path in python_sources(LAYOUT, SERVER_FOLDERS):
-        problems += stdin_problems_in(read(path), path.relative_to(ROOT).as_posix())
+        problems += stdin_problems_in(read_text(path), path.relative_to(ROOT).as_posix())
 
     assert problems == []
 
@@ -277,11 +287,7 @@ def writing_sources() -> list[Path]:
 
 def test_every_text_file_written_here_names_its_newline():
     """The convention itself: no generator hands back a file with every line changed."""
-    problems: list[str] = []
-    for path in writing_sources():
-        problems += newline_problems(read(path), path.relative_to(ROOT).as_posix())
-
-    assert problems == []
+    assert text_write_newline_problems(LAYOUT, WRITING_FOLDERS) == []
 
 
 def test_the_writes_reader_finds_the_calls_it_is_meant_to_judge():
@@ -289,7 +295,7 @@ def test_the_writes_reader_finds_the_calls_it_is_meant_to_judge():
     found = [
         path.relative_to(ROOT).as_posix()
         for path in writing_sources()
-        if text_writes(ast.parse(read(path)))
+        if text_writes(ast.parse(read_text(path)))
     ]
 
     assert len(found) > 3
@@ -299,12 +305,11 @@ def test_the_writes_reader_finds_the_calls_it_is_meant_to_judge():
 
 
 def test_the_shared_newline_check_still_bites(tmp_path):
-    """The guard comes from a pinned package, and a pin is raised by hand.
+    """The guard comes from a pinned package, and the version is raised by hand.
 
     A version that had stopped judging would look from here exactly like a repository in order,
     which is the whole failure this file exists to prevent - so the provocation is made against
-    the installed package, on sources of its own. No BOM in a temporary file, so the folder-wide
-    reader can do the reading here.
+    the installed package, on sources of its own.
     """
     (tmp_path / "scripts").mkdir()
     (tmp_path / "scripts" / "offender.py").write_text(
@@ -326,3 +331,34 @@ def test_a_write_that_names_its_newline_is_left_alone():
     assert newline_problems(empty, "empty.py") == []
     assert newline_problems(feed, "feed.py") == []
     assert newline_problems(read_only, "read.py") == []
+
+
+def test_no_test_here_is_shadowed_by_a_namesake():
+    """The convention itself: every test this repository names is a test that still runs."""
+    assert shadowed_test_problems(LAYOUT, TEST_FOLDERS) == []
+
+
+def test_the_shared_test_name_check_still_bites(tmp_path):
+    """A version that had stopped judging looks from here like a repository in order."""
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "test_twice.py").write_text(
+        "def test_one():\n    pass\n\n\ndef test_one():\n    pass\n",
+        encoding="utf-8", newline="")
+
+    problems = shadowed_test_problems(Layout(root=tmp_path), TEST_FOLDERS)
+
+    assert len(problems) == 1
+    assert "tests/test_twice.py:5" in problems[0]
+
+
+def test_a_test_method_inside_a_class_is_judged_too():
+    """Where the older hygiene guard stops: it compares the top level of a module only.
+
+    pytest collects a `test_` method of a class as well, so a namesake there loses a test just
+    as quietly.
+    """
+    source = ("class TestThing:\n"
+              "    def test_one(self):\n        pass\n\n"
+              "    def test_one(self):\n        pass\n")
+
+    assert len(shadowed_problems(source, "tests/test_thing.py")) == 1
