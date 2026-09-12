@@ -92,8 +92,8 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`translate --unused --since` no longer goes quiet inside the MCP server.** The child `git`
   got the server's stdin and could not reach its own exit: the work took four milliseconds, the
   read waited five minutes. The child now gets an empty stdin, and a git that has not answered
-  within a minute is refused with a hint at another way to ask. On the site project it was 302
-  seconds and an error; it is 3-7 seconds now.
+  within a minute is refused with a hint at another way to ask. On a live project it was 302 seconds
+  and an error; it is 3-7 seconds now.
   ([#42](https://github.com/keyfire/xbsl/pull/42))
 - **A pipeline reads its includes from the top of the repository.** The folder of the named
   file stood for that top, which is right for a `.gitlab-ci.yml` lying at the root and wrong

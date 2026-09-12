@@ -764,6 +764,46 @@ def test_a_dry_run_without_out_is_refused(tmp_path: Path, capsys):
     assert code == 2 and "--dry-run" in capsys.readouterr().err
 
 
+def test_a_table_mode_refuses_the_flags_of_the_writing_pass(tmp_path: Path, capsys):
+    """Asked to show what a run would do, the table modes used to answer with a table.
+
+    `--gaps` and its neighbours never reach the writing pass, so `--out`, `--clean`,
+    `--dry-run` and `--missing` had nothing to act on - and were taken without a word. The
+    refusal names the mode, the flags it cannot read, and the run that does write the tree.
+    """
+    root, dictionary = _project_and_dictionary(tmp_path)
+    argv = [str(root), "--dictionary", str(dictionary), "--lang", "en"]
+
+    code = _cli([*argv, "--gaps", "--out", str(tmp_path / "out"), "--dry-run"])
+
+    said = capsys.readouterr().out
+    assert code == 2
+    assert "--gaps" in said and "--out" in said and "--dry-run" in said
+    assert not (tmp_path / "out").exists()
+
+
+def test_every_table_mode_answers_for_the_flags_it_cannot_honor(tmp_path: Path, capsys):
+    """One mode fixed and the rest left silent is how this came about in the first place."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    argv = [str(root), "--dictionary", str(dictionary), "--lang", "en"]
+
+    for mode in ("--gaps", "--entries", "--table", "--unused", "--redundant", "--suggest"):
+        assert _cli([*argv, mode, "--missing", str(tmp_path / "stub.yaml")]) == 2
+        assert mode in capsys.readouterr().out
+    assert not (tmp_path / "stub.yaml").exists()
+
+
+def test_the_writing_pass_still_takes_those_flags(tmp_path: Path, capsys):
+    """The refusal is about the table modes alone - the run that writes the tree is untouched."""
+    root, dictionary = _project_and_dictionary(tmp_path)
+    out = tmp_path / "out"
+
+    code = _cli([str(root), "--dictionary", str(dictionary), "--lang", "en",
+                 "--out", str(out), "--clean", "--dry-run"])
+
+    assert code == 0 and "dry run" in capsys.readouterr().out.casefold()
+
+
 # --- the linter rule -----------------------------------------------------------------------------
 
 

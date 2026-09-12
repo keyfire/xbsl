@@ -250,6 +250,10 @@ The text report names the first twenty and counts the rest. The json payload car
 `planned` (the size of the tree the pass would write) and `removals`, all of them. Without `--out`
 there is no tree to describe, and the flag is refused rather than ignored.
 
+The table modes - `--gaps`, `--entries`, `--table`, `--unused`, `--redundant`, `--suggest` - write
+no tree at all. So they refuse `--out`, `--clean`, `--dry-run` and `--missing` as well, and name
+the run that does write the tree.
+
 ## Localized strings turn around
 
 A project that already carries the target language in its localization sections gets those values
