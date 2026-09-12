@@ -1081,29 +1081,38 @@ _BLOCK_FIRST_RE = re.compile(r"^(/\*+\s*)(.*?)(\s*(?:\*+/)?\s*)$")
 _BLOCK_LINE_RE = re.compile(r"^(\s*\*?\s*)(.*?)(\s*(?:\*+/)?\s*)$")
 
 
-def comment_payloads(tok) -> list[tuple[int, int, str]]:
-    """(offset inside the token, the line index, the payload) for one comment token.
+def comment_lines(text: str, first: re.Pattern, rest: re.Pattern
+                  ) -> list[tuple[int, int, str]]:
+    """(offset inside `text`, the line index, the payload) for the text of ONE comment.
 
     The payload is the text a `phrases` entry is keyed by - the marker and the decoration
-    around it taken off. Shared rather than private, because a SECOND reading of the same
-    thing is what the orphan pass needs, and two readings drift: an imitation that took one
-    space off a `//` line answered a doc comment (`///`) with a slash glued to the text, and
-    every pair written from such a comment would then have read as an orphan.
+    around it taken off. The two patterns say how the lines of this comment are written: the
+    opening one carries the marker, the ones after it carry whatever decoration the shape
+    uses. A comment of a resource file is read by the same function with its own pair, so
+    one phrase key means the same thing in a module and in a stylesheet.
     """
     out: list[tuple[int, int, str]] = []
     offset = 0
-    for index, line in enumerate(tok.value.splitlines(keepends=True)):
+    for index, line in enumerate(text.splitlines(keepends=True)):
         body = line.rstrip("\r\n")
-        if tok.subkind == "line":
-            match = _LINE_COMMENT_RE.match(body)
-        elif index == 0:
-            match = _BLOCK_FIRST_RE.match(body)
-        else:
-            match = _BLOCK_LINE_RE.match(body)
+        match = (first if index == 0 else rest).match(body)
         if match:
             out.append((offset + match.start(2), index, match.group(2)))
         offset += len(line)
     return out
+
+
+def comment_payloads(tok) -> list[tuple[int, int, str]]:
+    """The payloads of one comment TOKEN, read by the shape the lexer gave it.
+
+    Shared rather than private, because a SECOND reading of the same thing is what the
+    orphan pass needs, and two readings drift: an imitation that took one space off a `//`
+    line answered a doc comment (`///`) with a slash glued to the text, and every pair
+    written from such a comment would then have read as an orphan.
+    """
+    if tok.subkind == "line":
+        return comment_lines(tok.value, _LINE_COMMENT_RE, _LINE_COMMENT_RE)
+    return comment_lines(tok.value, _BLOCK_FIRST_RE, _BLOCK_LINE_RE)
 
 
 def _comment_edits(tok, base, resolver, report, edits) -> None:

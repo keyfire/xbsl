@@ -38,7 +38,8 @@ stays as written and is reported as a data gap - the translator never guesses.
 **The project half comes from the dictionary.** Everything the project itself named - objects,
 methods, attributes, form components, dictionary keys, resource files, an enumeration default
 bare or qualified by its enumeration (`States.Open`) - and every Cyrillic
-comment line is translated by people. Three planes:
+comment line is translated by people. A comment in a resource file goes through the phrases plane
+just as a module comment does. Three planes:
 
 ```yaml
 version: 1
@@ -154,6 +155,36 @@ files and directories, and a path has to follow them or the platform stops findi
 Only a literal SHAPED like a path qualifies: it ends with a known resource suffix and every
 segment reads as a file name. A regular expression, with its slashes and named groups, does not
 qualify and stays data.
+
+## Prose inside a resource file
+
+A comment in a `.css`, `.js`, `.html` or `.svg` is a phrase like a comment in a module. Such files
+used to be copied byte for byte: Russian prose reached the English build untouched, and `--strict`
+called the file covered, because there was nothing in it to count.
+
+What the pass reads in them:
+
+- `/* */` and `//` comments in `.css` and `.js`;
+- `<!-- -->` comments in `.html` and `.svg`;
+- the text of `<title>` and `<desc>` in an `.svg`: a screen reader speaks those words and a
+  browser shows them in a tooltip;
+- the comments of an embedded `<style>` or `<script>`.
+
+A phrase is keyed the way a module comment is keyed: the marker and the decoration come off, and a
+block is read line by line. One sentence written both in a module and in a stylesheet takes one
+entry. The gap shows up under `--gaps`, counts towards the coverage, and fails `--strict`.
+
+Selectors, property names and their values, attributes, identifiers and the text of the page stay
+as written. The file is scanned character by character, so a marker inside data opens no comment:
+`content: "/*"`, an unquoted address in `url(...)`, a template literal, a regular expression such
+as `/[/*]/`. Markup goes through the standard library's html parser, which knows
+that `<!--` inside an attribute value opens nothing.
+
+Two borders are drawn on purpose. A comment that carries a licence is left alone: its wording is a
+legal text, and a translation of it says something the original does not. A minified `.css` or
+`.js` is skipped whole: it is build output, a banner is all that is left of its comments, and
+nobody edits a file like that. A file counts as minified when its longest line runs past five
+hundred characters.
 
 ## The written tree is a repository
 
