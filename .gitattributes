@@ -1,3 +1,17 @@
+# Every text file is stored and checked out with line feeds.
+#
+# `core.autocrlf=input` reaches the same result, and it is a setting of the machine rather than
+# of the repository: it holds until the first checkout made without it. A file saved with
+# carriage returns then reaches a generator that copies bytes. `scripts/sync-docs.mjs` mirrors
+# `CHANGELOG.md` and the extension README onto site pages and puts its own frontmatter, written
+# with line feeds, at the head of each. The page then goes to a public repository with both
+# endings in it. `newline=""` in the Python generators does not reach that far. It says how a
+# file is written and says nothing about what was inside the file that was read.
+#
+# `text=auto` leaves it to git to tell text from binary, and `eol=lf` says how the text ones
+# are checked out.
+* text=auto eol=lf
+
 # Sources are text, whatever byte ends up inside a string literal.
 #
 # git decides "text or binary" by looking for a NUL in the first kilobytes of the file. A control
@@ -6,8 +20,7 @@
 # review, the language checks and the release notes unseen. The `diff` attribute states the type
 # outright and brings the line diff back.
 #
-# Only `diff` is set here: line endings stay as they are committed, so nothing gets renormalized
-# behind the back of a working copy.
+# `diff` is all these lines set. The line ending of the same files comes from the rule above.
 *.py    diff
 *.ts    diff
 *.js    diff
@@ -25,7 +38,14 @@
 *.svg   diff
 *.cmd   diff
 
-# Binaries stay binary: git must not try to read them as lines, nor touch their bytes.
+# Binaries stay binary: git must not try to read them as lines, nor touch their bytes. They are
+# named here even though `text=auto` guesses them right today, because a guess is a fine default
+# and a poor promise. Pictures and fonts are in the repository now; the other three types are
+# named before the first such file arrives.
 *.png   binary
+*.jpg   binary
+*.ico   binary
 *.ttf   binary
 *.woff2 binary
+*.vsix  binary
+*.zip   binary
