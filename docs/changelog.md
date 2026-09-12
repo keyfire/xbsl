@@ -72,6 +72,13 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
+- **A file the toolkit writes no longer comes back from Windows with every line changed.** A
+  write in text mode turned `\n` into the platform's line ending, so the template export, the
+  `datadiff --out` report, the language data of an extraction and the translation dictionary
+  all came out CRLF there. In a checkout without `core.autocrlf=input` such a file went into
+  the repository as one line-ending change nobody asked for. Twenty-two writes name `newline`
+  now, and the convention is guarded the way the encoding of a started process already was.
+  ([#37](https://github.com/keyfire/xbsl/pull/37))
 - **A directory named after `--as-ci` is refused with the form that works.** The flag expects a
   pipeline file, so `xbsl --as-ci e1c` swallowed the path and the run linted the current
   directory instead. The refusal now names the working form, `xbsl e1c --as-ci`.
