@@ -1,4 +1,12 @@
-"""Tier B: whitespace, newlines, encoding (over the raw text, without parsing code)."""
+"""Tier B: whitespace, newlines, encoding (over the raw text, without parsing code).
+
+The three rules read a module and an element description. A resource file - the `.css`,
+`.js`, `.svg` and `.html` a subsystem ships - is collected for the typography rules alone,
+and these say nothing about it on purpose: the layout of a stylesheet is its author's
+business, half the resources of a real project come from a vendor as one minified line, and
+`--fix` rewriting a megabyte of somebody else's bundle over a trailing space is not a repair
+anyone asked for.
+"""
 
 from __future__ import annotations
 
@@ -47,9 +55,14 @@ i18n.register(MESSAGES)
 
 _TRAILING_RE = re.compile(r"[ \t]+(?=\r|\n|$)")
 
+#: The kinds these rules read: the module (a query file included) and the element description.
+_SOURCE_KINDS = ("xbsl", "yaml")
+
 
 @rule("whitespace/trailing", "whitespace/trailing.title", "B", severity=Severity.WARNING)
 def trailing_whitespace(source: SourceFile) -> Iterable[Diagnostic]:
+    if source.kind not in _SOURCE_KINDS:
+        return
     lm = linemap(source)
     for m in _TRAILING_RE.finditer(source.text):
         line, col = lm.linecol(m.start())
@@ -69,7 +82,7 @@ def trailing_whitespace(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("whitespace/mixed-newline", "whitespace/mixed-newline.title", "B", severity=Severity.WARNING)
 def mixed_newline(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.newline == "mixed":
+    if source.kind in _SOURCE_KINDS and source.newline == "mixed":
         # A whole-file fix (normalize every newline to the dominant style), not a span edit –
         # the fixer applies it by rule id, so no TextEdit is attached here.
         yield Diagnostic(
@@ -80,7 +93,7 @@ def mixed_newline(source: SourceFile) -> Iterable[Diagnostic]:
 
 @rule("encoding/utf8", "encoding/utf8.title", "B", severity=Severity.ERROR)
 def encoding_utf8(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.decode_error:
+    if source.kind in _SOURCE_KINDS and source.decode_error:
         yield Diagnostic(
             source.rel, 1, 1, "encoding/utf8", Severity.ERROR,
             i18n.t("encoding/utf8.msg", error=source.decode_error),

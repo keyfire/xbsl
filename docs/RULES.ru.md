@@ -99,14 +99,22 @@ sidebar:
 Кодировка, переводы строк, пробелы, типографика (тире, кавычки, многоточие), длина строки,
 секреты в исходниках.
 
+Типографика читает и файлы ресурсов проекта – `.css`, `.js`, `.svg` и `.html` из каталога
+`Ресурсы`. Подсистема отдаёт их браузеру как есть, поэтому проза оттуда доходит до читателя
+так же, как проза модуля. Судятся комментарии всех четырёх форматов и текст, который
+пользователь видит на экране: `<title>`, `<desc>` и `<text>` в SVG, текстовые узлы
+HTML-страницы. Код не трогаем – селекторы, идентификаторы, имена тегов и атрибутов, значения
+атрибутов, строковые литералы скрипта и стилей. Остальные правила тира по-прежнему смотрят
+только модуль и описание элемента.
+
 | Правило | | | Область | Что проверяет |
 |---|---|---|---|---|
 | `security/hardcoded-secret` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ или пароль литералом в коде |
-| `typography/em-dash` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Длинное тире в комментарии |
-| `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Символ многоточия в комментарии |
-| `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Кудрявые кавычки |
-| `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ёлочки в комментарии |
-| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Буква "ё" в тексте интерфейса |
+| `typography/em-dash` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Длинное тире в комментарии – модуля или файла ресурсов – и в тексте страницы; пишется среднее тире |
+| `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Символ многоточия там, где нужны три точки: комментарий, текст SVG или HTML-страницы |
+| `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Кудрявые кавычки везде, где попадутся: комментарий, строковый литерал модуля, текст страницы |
+| `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Ёлочки в комментарии, в файле ресурсов тоже; в тексте на экране они уместны и не судятся |
+| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Буква "ё" в тексте, который читает пользователь: подпись, запись словаря локализованных строк, текст SVG или HTML-страницы |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Хвостовые пробелы |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Смешанные переводы строк |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Файл не в UTF-8 |
@@ -408,7 +416,7 @@ xbsl путь/к/исходникам --ignore style     # без них
 
 - `typography/` – типографские символы в прозе и комментариях: длинное тире, символ многоточия,
   кудрявые кавычки, ёлочки в комментариях, а также буква "ё" в тексте, который читает
-  пользователь;
+  пользователь. Группа читает и файлы ресурсов проекта (`.css`, `.js`, `.svg`, `.html`);
 - `whitespace/` – хвостовые пробелы и смешанные переводы строк;
 - `encoding/` – файл не в UTF-8;
 - `structure/` – парность `Имя.yaml` и `Имя.xbsl`;

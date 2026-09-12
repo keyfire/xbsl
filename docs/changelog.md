@@ -28,6 +28,12 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
+- **Typography now reaches the resource files of a project.** The em dash, the ellipsis
+  character, curly quotes, guillemets and the letter "ё" are caught in the `.css`, `.js`,
+  `.svg` and `.html` under the resources folder as well. Nobody looked there before, though
+  the browser gets those files exactly as they are. The check reads comments and the text on
+  the screen; code, selectors and attribute values stay out of it.
+  ([#36](https://github.com/keyfire/xbsl/pull/36))
 - **The translator reads the comments of a resource file.** A `.css`, `.js`, `.html` or `.svg`
   used to be copied byte for byte, so a Russian comment reached the English build and
   `--strict` called the file covered. Their text is now an ordinary dictionary phrase: the

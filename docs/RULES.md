@@ -101,14 +101,22 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 Encoding, newlines, whitespace, typography (dashes, quotes, ellipsis), line length, secrets
 in the sources.
 
+Typography reads the resource files of the project as well - the `.css`, `.js`, `.svg` and
+`.html` that lie under `Resources`. A subsystem ships them to the browser as they are, so the
+prose in them reaches the reader the same way the prose of a module does. Judged there are
+the comments of all four formats and the text a user reads on the screen: `<title>`, `<desc>`
+and `<text>` of an SVG, the text nodes of an HTML page. Code is left alone - selectors,
+identifiers, tag and attribute names, attribute values, the string literals of a script or a
+stylesheet. The other rules of the tier keep to the module and the element description.
+
 | Rule | | | Scope | What it checks |
 |---|---|---|---|---|
 | `security/hardcoded-secret` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key or a password as a literal |
-| `typography/em-dash` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Em dash in a comment |
-| `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Ellipsis character in a comment |
-| `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Curly quotes |
-| `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Guillemets in a comment |
-| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Letter "ё" in interface text |
+| `typography/em-dash` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Em dash in a comment - of a module or of a resource file - and in the text of a page; the en dash is the one to write |
+| `typography/ellipsis` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | The ellipsis character where three dots belong: a comment, and the text of an SVG or of an HTML page |
+| `typography/curly-quotes` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Curly quotes wherever they turn up: a comment, a string literal of a module, the text of a page |
+| `typography/guillemets-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | Guillemets in a comment, in a resource file too; in the text on the screen they are the right quotes and are left alone |
+| `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The letter "ё" in the text a user reads: a label, an entry of the dictionary of localized strings, the text of an SVG or of an HTML page |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Trailing whitespace |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Mixed newlines |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | File is not UTF-8 |
@@ -422,7 +430,8 @@ decides their severity and defaults for that project; see
 ### The small groups
 
 - `typography/` - typographic characters in prose and comments: em dash, the ellipsis character,
-  curly quotes, guillemets in comments, plus the letter "ё" in the text a user reads;
+  curly quotes, guillemets in comments, plus the letter "ё" in the text a user reads. The group
+  reads the resource files of the project too (`.css`, `.js`, `.svg`, `.html`);
 - `whitespace/` - trailing spaces and mixed newlines;
 - `encoding/` - a file that is not UTF-8;
 - `structure/` - the pairing of `Name.yaml` and `Name.xbsl`;

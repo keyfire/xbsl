@@ -1,4 +1,4 @@
-"""Tier B: typography in XBSL comments and string literals.
+"""Tier B: typography in comments, in string literals and in the resource files.
 
 The typography rules:
 - dash: en dash – (U+2013), NOT em dash — (U+2014);  scope: prose/comments;
@@ -14,6 +14,20 @@ Hence:
 One more rule of the group reads yaml rather than code - typography/yo-in-text, the letter
 "ё" in the text a user reads (labels and the dictionary of localized strings). Its own
 section comment stands next to it, at the end of this module.
+
+THE RESOURCE FILES ARE JUDGED THE SAME WAY. A subsystem ships its `.css`, `.js`, `.svg` and
+`.html` to the browser untouched, so the prose there reaches the reader as surely as the
+prose of a module, and until now nobody looked at it (the owner's decision of 12.09.2026:
+the typography of a project covers every file of it). `xbsl/restext.py` says which parts of
+such a file are prose, and the mapping follows the three rules above with nothing invented:
+
+    a comment of any of the four formats      = a comment of a module: all four rules;
+    the text the user reads on the screen     = a UI string: the dash, the ellipsis, the
+    (SVG <title>/<desc>/<text>, HTML text)      curly quotes and the letter "ё" - but NOT
+                                                the guillemets, which belong there.
+
+Code is left alone: selectors, property and tag names, identifiers, attribute names and
+their values, and the string literals of a script or a stylesheet.
 """
 
 from __future__ import annotations
@@ -21,7 +35,7 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 
-from xbsl import i18n, uischema
+from xbsl import i18n, restext, uischema
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap, tokens
@@ -33,20 +47,30 @@ if _HAVE_YAML:
 
 MESSAGES = {
     "typography/em-dash.title": {
-        "ru": "Длинное тире в комментарии",
-        "en": "Em dash in a comment",
+        "ru": "Длинное тире в комментарии или тексте",
+        "en": "Em dash in a comment or in text",
     },
     "typography/em-dash.found": {
         "ru": "Длинное тире U+2014 в комментарии – использовать среднее тире – (U+2013).",
         "en": "Em dash U+2014 in a comment – use an en dash – (U+2013).",
     },
+    "typography/em-dash.found-text": {
+        "ru": "Длинное тире U+2014 в тексте, который читает пользователь – использовать "
+              "среднее тире – (U+2013).",
+        "en": "Em dash U+2014 in text the user reads – use an en dash – (U+2013).",
+    },
     "typography/ellipsis.title": {
-        "ru": "Символ многоточия в комментарии",
-        "en": "Ellipsis character in a comment",
+        "ru": "Символ многоточия в комментарии или тексте",
+        "en": "Ellipsis character in a comment or in text",
     },
     "typography/ellipsis.found": {
         "ru": "Символ многоточия U+2026 в комментарии – использовать три точки '...'.",
         "en": "Ellipsis character U+2026 in a comment – use three dots '...'.",
+    },
+    "typography/ellipsis.found-text": {
+        "ru": "Символ многоточия U+2026 в тексте, который читает пользователь – использовать "
+              "три точки '...'.",
+        "en": "Ellipsis character U+2026 in text the user reads – use three dots '...'.",
     },
     "typography/curly-quotes.title": {
         "ru": "Кудрявые кавычки",
@@ -105,11 +129,55 @@ def _hits(source: SourceFile, kinds: tuple[str, ...], chars: str):
     for tok in tokens(source):
         if tok.kind not in kinds:
             continue
+        where = restext.COMMENT if tok.kind == "COMMENT" else restext.TEXT
         for idx, ch in enumerate(tok.value):
             if ch in chars:
                 offset = tok.start + idx
                 line, col = lm.linecol(offset)
-                yield ch, line, col, offset
+                yield ch, line, col, offset, where
+
+
+def _resource_hits(source: SourceFile, kinds: tuple[str, ...], chars: str):
+    """The same walk over a resource file: the prose segments instead of the tokens."""
+    text = source.text
+    if not any(ch in text for ch in chars):
+        return
+    lm = linemap(source)
+    for segment in restext.segments(source):
+        if segment.kind not in kinds:
+            continue
+        for offset in range(segment.start, segment.end):
+            ch = text[offset]
+            if ch in chars:
+                line, col = lm.linecol(offset)
+                yield ch, line, col, offset, segment.kind
+
+
+def _found(source: SourceFile, chars: str, *, token_kinds: tuple[str, ...],
+           segment_kinds: tuple[str, ...]):
+    """Occurrences of `chars` in the parts of THIS file the rule judges.
+
+    A module is read by tokens, a resource file by the prose segments of `restext`; an empty
+    tuple means the rule has nothing to say about that half of the project. Every occurrence
+    says where it sits - in a comment or in the text a user reads - so a rule that judges
+    both can word its message for the place.
+    """
+    if source.kind == "xbsl":
+        return _hits(source, token_kinds, chars) if token_kinds else ()
+    if source.kind in restext.KINDS:
+        return _resource_hits(source, segment_kinds, chars) if segment_kinds else ()
+    return ()
+
+
+def _message(key: str, where: str) -> str:
+    """The wording for the place the character was found in."""
+    return i18n.t(key if where == restext.COMMENT else f"{key}-text")
+
+
+#: A comment of a module and a comment of a resource file: the same prose, the same rules.
+_COMMENTS = (restext.COMMENT,)
+#: A comment plus the text the user reads on the screen.
+_COMMENTS_AND_TEXT = (restext.COMMENT, restext.TEXT)
 
 
 # The em dash and guillemets are all over existing comments, so these two rules are off by
@@ -119,33 +187,33 @@ def _hits(source: SourceFile, kinds: tuple[str, ...], chars: str):
     severity=Severity.INFO, enabled_by_default=False, off_reason="typography/em-dash.off",
 )
 def em_dash(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "xbsl":
-        return
-    for _ch, line, col, offset in _hits(source, ("COMMENT",), _EM_DASH):
+    for _ch, line, col, offset, where in _found(
+        source, _EM_DASH, token_kinds=("COMMENT",), segment_kinds=_COMMENTS_AND_TEXT,
+    ):
         yield Diagnostic(
             source.rel, line, col, "typography/em-dash", Severity.INFO,
-            i18n.t("typography/em-dash.found"),
+            _message("typography/em-dash.found", where),
             fix=TextEdit(offset, offset + 1, "–"),  # em dash → en dash
         )
 
 
 @rule("typography/ellipsis", "typography/ellipsis.title", "B", severity=Severity.WARNING)
 def ellipsis_char(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "xbsl":
-        return
-    for _ch, line, col, offset in _hits(source, ("COMMENT",), _ELLIPSIS):
+    for _ch, line, col, offset, where in _found(
+        source, _ELLIPSIS, token_kinds=("COMMENT",), segment_kinds=_COMMENTS_AND_TEXT,
+    ):
         yield Diagnostic(
             source.rel, line, col, "typography/ellipsis", Severity.WARNING,
-            i18n.t("typography/ellipsis.found"),
+            _message("typography/ellipsis.found", where),
             fix=TextEdit(offset, offset + 1, "..."),  # … → three dots
         )
 
 
 @rule("typography/curly-quotes", "typography/curly-quotes.title", "B", severity=Severity.WARNING)
 def curly_quotes(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "xbsl":
-        return
-    for ch, line, col, offset in _hits(source, ("COMMENT", "STRING"), _CURLY):
+    for ch, line, col, offset, _where in _found(
+        source, _CURLY, token_kinds=("COMMENT", "STRING"), segment_kinds=_COMMENTS_AND_TEXT,
+    ):
         yield Diagnostic(
             source.rel, line, col, "typography/curly-quotes", Severity.WARNING,
             i18n.t("typography/curly-quotes.found", code=f"{ord(ch):04X}"),
@@ -158,9 +226,11 @@ def curly_quotes(source: SourceFile) -> Iterable[Diagnostic]:
     severity=Severity.INFO, enabled_by_default=False, off_reason="typography/guillemets-comment.off",
 )
 def guillemets_in_comment(source: SourceFile) -> Iterable[Diagnostic]:
-    if source.kind != "xbsl":
-        return
-    for ch, line, col, offset in _hits(source, ("COMMENT",), _GUILLEMETS):
+    # Comments alone, in a resource file too: on the screen the guillemets are the right
+    # quotes, and a page of the site is full of them by design.
+    for ch, line, col, offset, _where in _found(
+        source, _GUILLEMETS, token_kinds=("COMMENT",), segment_kinds=_COMMENTS,
+    ):
         yield Diagnostic(
             source.rel, line, col, "typography/guillemets-comment", Severity.INFO,
             i18n.t("typography/guillemets-comment.found", code=f"{ord(ch):04X}"),
@@ -242,21 +312,46 @@ def _yo_findings(source: SourceFile, node, judged: set[int]) -> Iterable[Diagnos
             index - prefix.rfind("\n") if "\n" in prefix
             else node.start_mark.column + 1 + index
         )
-        word = _word_at(raw, index)
-        if word.lower() in _MEANING_BEARING:
-            yield Diagnostic(
-                source.rel, line, column, "typography/yo-in-text", Severity.INFO,
-                i18n.t("typography/yo-in-text.meaning", word=word),
-            )
-            continue
-        yield Diagnostic(
+        yield _yo_diagnostic(source, raw, index, start + index, line, column)
+
+
+def _yo_diagnostic(source: SourceFile, raw: str, index: int, offset: int,
+                   line: int, column: int) -> Diagnostic:
+    """One finding: the word it sits in, and the fix unless the letter carries the meaning."""
+    word = _word_at(raw, index)
+    if word.lower() in _MEANING_BEARING:
+        return Diagnostic(
             source.rel, line, column, "typography/yo-in-text", Severity.INFO,
-            i18n.t(
-                "typography/yo-in-text.found",
-                word=word, suggestion=word.replace("ё", "е").replace("Ё", "Е"),
-            ),
-            fix=TextEdit(start + index, start + index + 1, "е" if ch == "ё" else "Е"),
+            i18n.t("typography/yo-in-text.meaning", word=word),
         )
+    return Diagnostic(
+        source.rel, line, column, "typography/yo-in-text", Severity.INFO,
+        i18n.t(
+            "typography/yo-in-text.found",
+            word=word, suggestion=word.replace("ё", "е").replace("Ё", "Е"),
+        ),
+        fix=TextEdit(offset, offset + 1, "е" if raw[index] == "ё" else "Е"),
+    )
+
+
+def _yo_in_resource(source: SourceFile) -> Iterable[Diagnostic]:
+    """The same letter in a resource file: the text of an SVG or of an HTML page.
+
+    A comment of such a file is left alone - it is prose for the next developer, and there
+    the letter is nobody's business; the rule is about what the user reads on the screen.
+    """
+    text = source.text
+    lm = linemap(source)
+    for segment in restext.segments(source):
+        if segment.kind != restext.TEXT:
+            continue
+        raw = text[segment.start:segment.end]
+        for index, ch in enumerate(raw):
+            if ch not in "ёЁ":
+                continue
+            offset = segment.start + index
+            line, column = lm.linecol(offset)
+            yield _yo_diagnostic(source, raw, index, offset, line, column)
 
 
 @rule(
@@ -264,11 +359,14 @@ def _yo_findings(source: SourceFile, node, judged: set[int]) -> Iterable[Diagnos
     severity=Severity.INFO, enabled_by_default=False, off_reason="typography/yo-in-text.off",
 )
 def yo_in_text(source: SourceFile) -> Iterable[Diagnostic]:
-    """The letter in the text a user reads - the labels and the dictionary of localized strings."""
-    if source.kind != "yaml" or not _HAVE_YAML:
-        return
+    """The letter in the text a user reads - the labels, the dictionary, the resource files."""
     text = source.text
     if "ё" not in text and "Ё" not in text:
+        return
+    if source.kind in restext.KINDS:
+        yield from _yo_in_resource(source)
+        return
+    if source.kind != "yaml" or not _HAVE_YAML:
         return
     root = _composed(source)
     if root is None:

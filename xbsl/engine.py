@@ -17,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TypeVar
 
-from xbsl import i18n
+from xbsl import i18n, restext
 from xbsl.diagnostics import Diagnostic, Severity
 
 UTF8_BOM = b"\xef\xbb\xbf"
@@ -26,7 +26,7 @@ UTF8_BOM = b"\xef\xbb\xbf"
 @dataclass
 class SourceFile:
     path: Path
-    kind: str  # 'xbsl' | 'yaml'
+    kind: str  # 'xbsl' | 'yaml' | a resource kind of restext.KINDS
     data: bytes
     text: str
     had_bom: bool
@@ -84,9 +84,23 @@ def is_query_file(path: Path) -> bool:
     return path.suffix.lower() == QUERY_SUFFIX
 
 
+#: The folder a subsystem keeps its resource files in - BOTH spellings, because the platform
+#: accepts either (probed on the local server; see xbsl/rules/resources.py, which reads the
+#: same pair). A project ships what lies there to the browser as it is.
+RESOURCE_DIRS = ("Ресурсы", "Resources")
+
+
+def is_resource_file(path: Path) -> bool:
+    """Whether the file is a resource the typography rules read (.css, .js, .svg, .html)."""
+    return path.suffix.lower() in restext.SUFFIX_KINDS
+
+
 def make_source(path: Path, data: bytes) -> SourceFile:
     """Build a SourceFile from a path and bytes (shared by the disk and memory paths)."""
-    kind = "xbsl" if path.suffix == ".xbsl" or is_query_file(path) else "yaml"
+    if path.suffix == ".xbsl" or is_query_file(path):
+        kind = "xbsl"
+    else:
+        kind = restext.SUFFIX_KINDS.get(path.suffix.lower(), "yaml")
     had_bom = data.startswith(UTF8_BOM)
     decode_error: str | None = None
     try:
@@ -129,6 +143,25 @@ def find_sources(root: Path, pattern: str) -> list[Path]:
             continue
         result.append(f)
     return sorted(result)
+
+
+def find_resources(root: Path) -> list[Path]:
+    """Resource files of the subsystems under the root - the files typography also judges.
+
+    Only what lies inside a `Resources` folder. A project is rarely alone in its checkout:
+    next to it sit a build folder, the scripts of a site, someone's `node_modules`, and a
+    walk over every `.js` of the tree would judge the typography of code nobody here wrote.
+    The platform ships the resource folder and nothing else, so that is the boundary.
+    """
+    result: list[Path] = []
+    for name in RESOURCE_DIRS:
+        for folder in find_sources(root, name):
+            if not folder.is_dir():
+                continue
+            result.extend(
+                f for f in find_sources(folder, "*") if f.is_file() and is_resource_file(f)
+            )
+    return sorted(set(result))
 
 
 # --- Rule registry -------------------------------------------------------------------

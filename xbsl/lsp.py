@@ -364,7 +364,7 @@ def _resolve_templates_path(arg: Optional[str], folder: Optional[Path]) -> Optio
 
 
 def project_sources(root: Path) -> list[Path]:
-    """The files of a whole-project pass: modules, element descriptions and query files.
+    """The files of a whole-project pass: modules, element descriptions, queries, resources.
 
     The same set the CLI collects (`discover` in cli.py). A set of its own would make one and
     the same finding visible or not depending on who asks - the CLI has been reading the query
@@ -372,7 +372,8 @@ def project_sources(root: Path) -> list[Path]:
     """
     return (engine.find_sources(root, "*.xbsl")
             + engine.find_sources(root, "*.yaml")
-            + engine.find_sources(root, f"*{engine.QUERY_SUFFIX}"))
+            + engine.find_sources(root, f"*{engine.QUERY_SUFFIX}")
+            + engine.find_resources(root))
 
 
 def _make_server() -> "LanguageServer":
