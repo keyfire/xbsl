@@ -37,7 +37,8 @@ entry either - say what the behaviour was, not which class name was compared.
 ### Changed
 - **The conventions guard reads the sources through the shared `docsguard` package.** The
   bridge and the console read theirs the same way, and what stays here is what is about this
-  repository. CI installs the package by tag, so a verdict cannot move without a commit.
+  repository. The findings came out identical before and after the move. CI installs the
+  package by tag, so a verdict cannot move without a commit.
   ([#23](https://github.com/keyfire/xbsl/pull/23))
 
 ### Fixed
@@ -59,7 +60,8 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#14](https://github.com/keyfire/xbsl/pull/14))
 - **`--as-ci-job` picks the job when the pipeline runs the linter twice.** `--as-ci` took the
   first `xbsl` command in the file, and there was no way to reach the second job. The job can
-  now be named, and a run that was given no name prints which jobs it passed over.
+  now be named, `--as-ci` alongside it is not needed, and a run that was given no name prints
+  which jobs it passed over.
   ([#13](https://github.com/keyfire/xbsl/pull/13))
 - **`--as-ci` runs the linter with the rule set of the project's job.** The flag reads
   `--select`, `--ignore`, `--enable` and the baseline from the very `xbsl` command CI runs. The
@@ -71,8 +73,8 @@ entry either - say what the behaviour was, not which class name was compared.
   CLI help. ([#4](https://github.com/keyfire/xbsl/pull/4))
 - **`translate --redundant` finds the dictionary entries the platform answers itself.** Such an
   entry translates nothing and hides a gap in the data behind it: half-translated project
-  languages stayed invisible because of one. A live dictionary of 31 989 entries held 22 of
-  them, and `--prune` removes them. ([#3](https://github.com/keyfire/xbsl/pull/3))
+  languages stayed invisible because of one. A live dictionary of 31 989 entries held 22, and
+  `--prune` took all of them out with the English tree of 1 261 files unchanged to the byte. ([#3](https://github.com/keyfire/xbsl/pull/3))
 
 ### Changed
 - **A name the project declares is no longer explained by a platform member spelled the same.**
@@ -85,7 +87,8 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#9](https://github.com/keyfire/xbsl/pull/9))
 - **A translation collision names where both names are declared.** The report said only which
   method or structure the two words met in, and finding them was then done by eye. Each name
-  now carries the file, the line and the column of its own declaration.
+  now carries the file, the line and the column of its own declaration, in all four namespaces
+  the pass watches.
   ([#7](https://github.com/keyfire/xbsl/pull/7))
 - **`docs_symbol` finds the members of a type and takes either spelling.** A member has no page
   of its own, so asking by name answered with an empty object, and English `Array` found
@@ -108,9 +111,9 @@ entry either - say what the behaviour was, not which class name was compared.
   the rest of the tree. On a live corpus of 1261 files a rename left 1262, and with `--clean`
   the tree came back to 1261. ([#15](https://github.com/keyfire/xbsl/pull/15))
 - **`translate --out`: a refused write says so, instead of an empty log and exit code 1.** The
-  writing step stood before the report was printed, so any trouble from the file system took
-  the whole report with it. Every write error is now named with its file and its reason, and
-  the pass reaches its end and prints the report.
+  writing step stood before the report, so any trouble from the file system took the whole
+  report with it. Every write error is now named with its file and reason, the report is
+  printed whole, and a failed write exits non-zero even without `--strict`.
   ([#11](https://github.com/keyfire/xbsl/pull/11))
 - **A test helper declared twice.** `_rule_findings` stood as two identical copies in a row in
   the translation tests: the second silently replaced the first, which had been dead since the
