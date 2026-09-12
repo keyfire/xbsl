@@ -9,7 +9,18 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## 0.69.1
+
+### Changed
+- **The Russian texts of the extension are written in plain words.** The Quick Fix action
+  and the descriptions of the settings changed with them.
+  ([#33](https://github.com/keyfire/xbsl/pull/33))
+- **The "Read more" link of `xbsl.baseline` opens its section again.** The heading it pointed
+  at was renamed and the link went nowhere.
+  ([#35](https://github.com/keyfire/xbsl/pull/35))
+
 ## 0.69.0
+
 
 ### Added
 - **The status bar says which rule set the Problems panel judges by.** `xbsl.linter.asCi` said
@@ -23,14 +34,6 @@
   answer is asked of the server (`xbsl/ciStatus`) after the start and after every restart - a
   changed parity setting is exactly what causes one. An older engine that does not know the
   request shows no indicator at all.
-
-### Changed
-- **The Russian texts of the extension are written in plain words.** The Quick Fix action
-  and the descriptions of the settings changed with them.
-  ([#33](https://github.com/keyfire/xbsl/pull/33))
-- **The "Read more" link of `xbsl.baseline` opens its section again.** The heading it pointed
-  at was renamed and the link went nowhere.
-  ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ## 0.68.0
 
