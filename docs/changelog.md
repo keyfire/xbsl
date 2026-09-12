@@ -28,6 +28,12 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
+- **Typography now reaches the resource files of a project.** The em dash, the ellipsis
+  character, curly quotes, guillemets and the letter "ё" are caught in the `.css`, `.js`,
+  `.svg` and `.html` under the resources folder as well. Nobody looked there before, though
+  the browser gets those files exactly as they are. The check reads comments and the text on
+  the screen; code, selectors and attribute values stay out of it.
+  ([#36](https://github.com/keyfire/xbsl/pull/36))
 - **The LSP server says which rule set it judges by (`xbsl/ciStatus`).** That used to be one
   line on stderr, in an output channel nobody reads. The request now answers whether the job's
   set was taken, which job it was and which file it came from, and the extension shows that in
