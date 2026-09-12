@@ -71,6 +71,12 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
+- **A pipeline reads its includes from the top of the repository.** The folder of the named
+  file stood for that top, which is right for a `.gitlab-ci.yml` lying at the root and wrong
+  for every other place. A pipeline kept in a subfolder looked for `include: /ci/base.yml`
+  next to itself and answered that it runs no xbsl command. The root is now found by the
+  `.git` above the file, a linked worktree included, where `.git` is a file. The baseline path
+  starts at the same root. ([#40](https://github.com/keyfire/xbsl/pull/40))
 - **A file the toolkit writes no longer comes back from Windows with every line changed.** A
   write in text mode turned `\n` into the platform's line ending, so the template export, the
   `datadiff --out` report, the language data of an extraction and the translation dictionary

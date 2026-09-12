@@ -351,6 +351,72 @@ def test_a_file_without_includes_carries_nothing_new(tmp_path: Path):
     assert ci.source is None and ci.unread == () and ci.note() == ""
 
 
+# --- the root of the checkout: where an include path starts --------------------------------------
+
+
+def test_a_pipeline_kept_in_a_subfolder_reads_the_includes_of_the_repository(tmp_path: Path):
+    """`include: /ci/base.yml` is a path from the top of the repository, wherever the file lies.
+
+    The folder of the named file used to stand for that top, so this pipeline went looking in
+    `ci/sub/ci/` and answered that it runs no xbsl command.
+    """
+    (tmp_path / ".git").mkdir()
+    _write(tmp_path / "ci" / "sub" / "lint.yml", "include:\n  - local: /ci/base.yml\n")
+    _write(tmp_path / "ci" / "base.yml",
+           "xbsl-lint:\n  script:\n    - xbsl e1c --enable code/unused-method\n")
+
+    ci = cijob.read(tmp_path / "ci" / "sub" / "lint.yml")
+
+    assert ci.job == "xbsl-lint" and ci.enable == ("code/unused-method",)
+    assert ci.root == tmp_path and ci.source == tmp_path / "ci" / "base.yml"
+
+
+def test_a_linked_worktree_is_a_checkout_like_any_other(tmp_path: Path):
+    """`git worktree add` leaves a FILE named .git, and a check run there is an ordinary one."""
+    (tmp_path / ".git").write_text("gitdir: D:/repo/.git/worktrees/task\n", encoding="utf-8")
+    _write(tmp_path / "ci" / "lint.yml", "include: /ci/base.yml\n")
+    _write(tmp_path / "ci" / "base.yml", "lint:\n  script:\n    - xbsl e1c --select code\n")
+
+    ci = cijob.read(tmp_path / "ci" / "lint.yml")
+
+    assert ci.select == ("code",) and ci.root == tmp_path
+
+
+def test_the_baseline_of_a_pipeline_in_a_subfolder_lies_at_the_top(tmp_path: Path):
+    """The job runs from the top of the repository - its baseline is there, not next to it."""
+    (tmp_path / ".git").mkdir()
+    _write(tmp_path / "ci" / "lint.yml",
+           "lint:\n  script:\n    - xbsl e1c --baseline .xbsllint-baseline\n")
+
+    assert cijob.read(tmp_path / "ci" / "lint.yml").baseline_file() == \
+        str(tmp_path / ".xbsllint-baseline")
+
+
+def test_without_a_checkout_around_it_the_folder_of_the_file_stands(tmp_path: Path):
+    """A pipeline copied into a folder of its own still reads its neighbours."""
+    _write(tmp_path / "pipelines" / "lint.yml", "include: ci/base.yml\n")
+    _write(tmp_path / "pipelines" / "ci" / "base.yml", "lint:\n  script:\n    - xbsl e1c\n")
+
+    ci = cijob.read(tmp_path / "pipelines" / "lint.yml")
+
+    assert ci.job == "lint" and ci.root == tmp_path / "pipelines"
+
+
+def test_a_repository_inside_a_repository_takes_the_nearest_top(tmp_path: Path):
+    """A submodule has a checkout of its own, and its pipeline includes from that one."""
+    (tmp_path / ".git").mkdir()
+    _write(tmp_path / "ci" / "base.yml", "outer:\n  script:\n    - xbsl e1c --select outer\n")
+    inner = tmp_path / "vendor" / "tool"
+    (inner / ".git").parent.mkdir(parents=True, exist_ok=True)
+    (inner / ".git").write_text("gitdir: ../../.git/modules/tool\n", encoding="utf-8")
+    _write(inner / ".gitlab-ci.yml", "include: /ci/base.yml\n")
+    _write(inner / "ci" / "base.yml", "inner:\n  script:\n    - xbsl e1c --select inner\n")
+
+    ci = cijob.read(inner / ".gitlab-ci.yml")
+
+    assert ci.job == "inner" and ci.select == ("inner",) and ci.root == inner
+
+
 # --- the run itself: what the project checks and what a local pass used to miss ------------------
 
 _FORM = """\
@@ -468,6 +534,22 @@ def test_a_job_that_is_not_in_the_file_refuses_by_name(tmp_path: Path, capsys):
     root = _project_with_a_copied_subtree(tmp_path)
     assert cli.main([str(root), "--as-ci-job", "no-such-job"]) == 2
     assert "no-such-job" in capsys.readouterr().err
+
+
+@pytest.mark.needs_data
+def test_a_run_takes_a_pipeline_kept_in_a_subfolder_of_the_repository(tmp_path: Path, capsys):
+    """The whole road: the file is named, its include comes from the top, the rule fires."""
+    root = _project_with_a_copied_subtree(tmp_path)
+    (tmp_path / ".git").mkdir()
+    named = _write(tmp_path / "ci" / "sub" / "lint.yml", "include:\n  - local: /ci/base.yml\n")
+    _write(tmp_path / "ci" / "base.yml",
+           "xbsl-lint:\n  script:\n    - xbsl project --enable yaml/duplicate-subtree\n")
+
+    assert cli.main([str(root), "--no-baseline", "--as-ci", str(named)]) == 0
+
+    out = capsys.readouterr()
+    assert "yaml/duplicate-subtree" in out.out
+    assert "base.yml" in out.err  # the file the command stands in
 
 
 @pytest.mark.needs_data

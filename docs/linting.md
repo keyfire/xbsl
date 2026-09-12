@@ -181,8 +181,8 @@ Rule set as in CI: /repo/.gitlab-ci.yml, job xbsl-lint - --enable code/unused-me
 ```
 
 Flags add up: `--as-ci --enable style/line-length` is the job's set plus the rule being tried
-before it goes into the pipeline. The baseline path is resolved against the pipeline file, so a
-run started in a subdirectory opens the same file the job does. How the run is carried out -
+before it goes into the pipeline. The baseline path is resolved against the root of the checkout,
+so a run started in a subdirectory opens the same file the job does. How the run is carried out -
 `--jobs`, `--format`, the paths - stays its own business, because one folder is checked far more
 often than the whole tree.
 
@@ -199,8 +199,13 @@ directory".
 project on a shared template keeps the lint job exactly there. Reading the root file alone once
 answered "runs no xbsl command" about a pipeline that runs one. Now the local files of the
 repository are followed: `include: ci/lint.yml`, `include: {local: /ci/lint.yml}`, lists of
-either, and the patterns GitLab expands there (`ci/*.yml`). A nested include resolves against the
-root of the checkout, the way GitLab resolves it. A job defined both in the root file and in an
+either, and the patterns GitLab expands there (`ci/*.yml`). Include paths start at the root of the
+checkout, the way GitLab starts them, and a nested include repeats that. The root is the folder
+above the pipeline file that carries `.git`, so a pipeline kept in `ci/sub/lint.yml` finds
+`include: /ci/base.yml` at the top of the repository. A linked worktree counts as a checkout like
+any other - `git worktree add` writes `.git` as a file, and the kind is not checked. With no `.git`
+above the file, say a pipeline copied into a folder of its own, that folder stands for the root.
+A job defined both in the root file and in an
 include is taken from the root file, the same precedence the pipeline itself has. The adopted line
 then names the file the command actually stands in:
 
