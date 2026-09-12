@@ -3673,7 +3673,7 @@ SEEDS: list[Seed] = [
               "alone (pairable), while the naming words the verdict rests on are Russian "
               "GRAMMAR, not platform names - the negation particles and the assertion prefixes "
               "have no English spelling in any dictionary of the distribution, and the noun "
-              "test is Russian morphology. Stating the English words is the owner's decision "
+              "test is Russian morphology. Stating the English words is a decision "
               "about the standard, not a lookup, so the gap is planted rather than guessed.",
     ),
     Seed(

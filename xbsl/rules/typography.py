@@ -17,7 +17,7 @@ section comment stands next to it, at the end of this module.
 
 THE RESOURCE FILES ARE JUDGED THE SAME WAY. A subsystem ships its `.css`, `.js`, `.svg` and
 `.html` to the browser untouched, so the prose there reaches the reader as surely as the
-prose of a module, and until now nobody looked at it (the owner's decision of 12.09.2026:
+prose of a module, and until now nobody looked at it (decided on 12.09.2026:
 the typography of a project covers every file of it). `xbsl/restext.py` says which parts of
 such a file are prose, and the mapping follows the three rules above with nothing invented:
 

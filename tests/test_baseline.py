@@ -311,11 +311,11 @@ def test_stale_listing_reads_out_the_reason(tmp_path, capsys):
     bl = tmp_path / "baseline.json"
     cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     capsys.readouterr()
-    _seed_stale_with_reason(bl, "решение владельца: выравнивание таблицы делаем пробелами")
+    _seed_stale_with_reason(bl, "так и задумано: выравнивание таблицы делаем пробелами")
 
     cli.main(["--baseline", str(bl), "--stale-baseline", *_NO_PAIR, str(tmp_path)])
     err = capsys.readouterr().err
-    assert "причина записи: решение владельца: выравнивание таблицы делаем пробелами" in err
+    assert "причина записи: так и задумано: выравнивание таблицы делаем пробелами" in err
 
 
 def test_prune_says_how_many_reasons_it_takes_with_it(tmp_path, capsys):
