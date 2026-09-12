@@ -25,6 +25,33 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+- **`tests/test_conventions.py` catches a test shadowed by a namesake.** A test that arrives
+  under the name of an existing one takes its place, and the count of tests goes up because the
+  newcomer was added. Nothing in the run says the older one has stopped. The check reads
+  `tests/` and names the line to rename. `tests/test_source_hygiene.py` has held every module to
+  one definition per name since July; this one comes from the shared `docsguard` package and
+  reads the inside of a class as well, where pytest collects a `test_` method just the same.
+  ([#44](https://github.com/keyfire/xbsl/pull/44))
+
+### Changed
+- **The shared guard is pinned to `docsguard@v0.9.0`.** In that release the source checks read a
+  file as `utf-8-sig`. `xbsl/__init__.py` begins with a byte-order mark, `ast.parse` answered it
+  with a `SyntaxError`, and one such file left the whole check with no findings from any file at
+  all. The newline check reads whole folders again, and the workaround that opened them one by
+  one is gone. ([#44](https://github.com/keyfire/xbsl/pull/44))
+
+### Fixed
+- **`.gitattributes` holds the line ending for the whole repository.** The line
+  `* text=auto eol=lf` stores and checks out every text file with line feeds, whatever the
+  machine is set to. The file named only `diff` per extension before, so a clone made with
+  `core.autocrlf=true` came out with 546 text files carrying carriage returns. `newline=""` in
+  the Python generators does not reach that far: it says how a file is written, and
+  `scripts/sync-docs.mjs` copies bytes when it mirrors `CHANGELOG.md` and the extension README
+  onto site pages. ([#44](https://github.com/keyfire/xbsl/pull/44))
+
 ## 2026-09-12 – 0.104.0
 
 ### Added
