@@ -65,7 +65,7 @@
   <rect x="30" y="76" width="3" height="60" rx="1.5" fill="var(--accent-blue)"/>
   <text x="44" y="90" class="box-title">Диагностика</text>
   <text x="44" y="110" class="box-body">по мере набора; проект</text>
-  <text x="44" y="128" class="box-body">целиком по сохранению + фиксы</text>
+  <text x="44" y="128" class="box-body">целиком по сохранению + исправления</text>
 
   <rect x="30" y="158" width="216" height="76" rx="8" class="box"/>
   <rect x="30" y="166" width="3" height="60" rx="1.5" fill="var(--accent-pink)"/>
@@ -136,10 +136,10 @@
 
   <rect x="596" y="240" width="254" height="112" rx="8" class="box"/>
   <rect x="596" y="248" width="3" height="96" rx="1.5" fill="var(--muted)"/>
-  <text x="610" y="264" class="box-title">Базлайн</text>
+  <text x="610" y="264" class="box-title">Список принятых</text>
   <text x="610" y="288" class="mono code">.xbsllint-baseline</text>
   <text x="610" y="310" class="box-body">исключённые находки,</text>
-  <text x="610" y="328" class="box-body">учитываются каждым прогоном</text>
+  <text x="610" y="328" class="box-body">учитываются каждой проверкой</text>
 
   <!-- elemctl -->
   <rect x="294" y="490" width="254" height="176" rx="8" class="box"/>

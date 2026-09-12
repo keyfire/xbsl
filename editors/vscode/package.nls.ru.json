@@ -95,7 +95,7 @@
   "config.linter.lang.enum.1": "Русский",
   "config.linter.lang.enum.2": "Английский",
   "config.projectRoot": "Папка с исходниками, если проект - не вся рабочая папка. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode#настройки)",
-  "config.baseline": "Файл с находками, исключёнными из отчёта. [Подробнее](https://docs.keyfire.ru/xbsl/ru/linting#базлайн-легаси-долг-и-исключения-с-причиной)",
+  "config.baseline": "Файл с находками, исключёнными из отчёта. [Подробнее](https://docs.keyfire.ru/xbsl/ru/linting#список-принятых-замечаний-старый-долг-и-исключения-с-причиной)",
   "config.templates.file": "Файл с вашими шаблонами кода. [Подробнее](https://docs.keyfire.ru/xbsl/ru/scaffolding#шаблоны-кода)",
   "cmd.checkForUpdate": "Проверить, вышло ли новое расширение",
   "config.checkForUpdates": "Раз в сутки проверять на Open VSX, нет ли расширения свежее, и отмечать это в статус-баре. [Подробнее](https://docs.keyfire.ru/xbsl/ru/vscode)",
