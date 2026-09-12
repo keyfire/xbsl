@@ -82,6 +82,15 @@ MESSAGES = {
         "en": "git does not know the revision \"{rev}\": a branch, a commit or a range A..B"
               " is expected",
     },
+    "translate.since.timeout": {
+        "ru": "git {command} не ответил за {seconds} с, поэтому снятые строки взять неоткуда."
+              " Сироты одной правки читаются по git diff; тот же список без git отбирают"
+              " по --filter, подстроке ключа или перевода.",
+        "en": "git {command} did not answer within {seconds} s, so there is nowhere to read"
+              " the removed lines from. The orphans of one change come from git diff; the"
+              " same list without git is narrowed by --filter, a substring of the key or of"
+              " the translation.",
+    },
     "translate.since.diff-failed": {
         "ru": "git diff по \"{rev}\" не выполнен: {error}",
         "en": "git diff over \"{rev}\" failed: {error}",
@@ -488,6 +497,12 @@ def removed_surfaces(root: Path, since: str) -> Removal:
     return _removal_of_diff(toplevel, spec, diff)
 
 
+#: How long one git call may take before the mode gives up on it and says so. Generous for
+#: the work - the diff of a live project takes under a second - and short enough that a
+#: repository which somehow stops answering is reported rather than waited out.
+GIT_TIMEOUT = 60
+
+
 def _git(root: Path, *args: str) -> tuple[int, str, str]:
     """One git call under `root`: (exit code, stdout, stderr), both decoded as UTF-8.
 
@@ -495,16 +510,27 @@ def _git(root: Path, *args: str) -> tuple[int, str, str]:
     are UTF-8 whatever the console codepage is, and a Windows shell would hand back mojibake
     for every Cyrillic name in the diff. `core.quotepath=false` is the same point for the
     PATHS: without it git escapes every non-Latin file name into octal.
+
+    The child gets an EMPTY stdin instead of the one this process has, and that is what makes
+    the call answer at all inside a server. An MCP or LSP server speaks over stdin, and a
+    child that inherits that handle never reaches its own exit: on Windows git finished the
+    work in four milliseconds and then sat holding the pipe, so the read waited out the whole
+    timeout - per call, with nothing printed. Nothing here ever writes to a child, so there
+    is nothing to inherit the handle for.
     """
     import subprocess
 
     try:
         done = subprocess.run(
             ["git", "-c", "core.quotepath=false", *args],
-            cwd=str(root), capture_output=True, timeout=300,
+            cwd=str(root), capture_output=True,
+            stdin=subprocess.DEVNULL, timeout=GIT_TIMEOUT,
         )
     except FileNotFoundError:
         raise ValueError(i18n.t("translate.since.no-git")) from None
+    except subprocess.TimeoutExpired:
+        raise ValueError(i18n.t("translate.since.timeout",
+                                command=" ".join(args), seconds=GIT_TIMEOUT)) from None
     return (done.returncode,
             done.stdout.decode("utf-8", "replace"),
             done.stderr.decode("utf-8", "replace"))

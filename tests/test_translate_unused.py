@@ -447,6 +447,43 @@ def test_an_unknown_revision_is_refused_by_name(committed):
     assert "нет-такой-ветки" in str(refusal.value)
 
 
+def test_the_child_git_never_gets_the_stdin_of_this_process(committed, monkeypatch):
+    """The whole mode ran inside a server and answered nothing for as long as it was let to.
+
+    An MCP or LSP server speaks over stdin, and a child that says nothing about stdin gets
+    that handle. On Windows git then never reaches its own exit - the work took four
+    milliseconds and the read waited out the timeout - so `--since` looked like a mode that
+    hangs while the same question with `--filter` answered at once.
+    """
+    root, _dictionary, base = committed
+    seen = {}
+    real = subprocess.run
+
+    def spy(command, **options):
+        seen.update(options)
+        return real(command, **options)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    entries.removed_surfaces(root, base)
+
+    assert seen.get("stdin") == subprocess.DEVNULL
+
+
+def test_a_git_call_that_stops_answering_is_refused_with_a_way_round(committed, monkeypatch):
+    """A bound on the silence: what cannot be read is said, and there is another way to ask."""
+    root, _dictionary, base = committed
+
+    def stalls(command, **options):
+        raise subprocess.TimeoutExpired(command, options.get("timeout") or 0)
+
+    monkeypatch.setattr(subprocess, "run", stalls)
+    with pytest.raises(ValueError) as refusal:
+        entries.removed_surfaces(root, base)
+
+    assert str(entries.GIT_TIMEOUT) in str(refusal.value)
+    assert "--filter" in str(refusal.value)
+
+
 def test_the_command_narrows_and_prunes_exactly_the_change(committed, capsys):
     """`--prune --since` is the pass a task makes at its end: its own leavings, nothing else."""
     root, dictionary, base = committed

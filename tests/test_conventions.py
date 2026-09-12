@@ -19,6 +19,14 @@ passing `newline=""` and so was the baseline writer, which is the only reason th
 recognizable as one; twenty-two other writes were not, from the template export of the CLI to
 the language data of an extraction.
 
+The third is the stdin of a started process, and it is the quietest of the three. The engine
+ships two servers that speak over stdin - MCP and LSP - and a child started without a word
+about stdin inherits that handle. On Windows the child then cannot finish: git did the work
+of `rev-parse` in four milliseconds and sat holding the pipe, so the parent waited out the
+whole timeout with nothing printed, and the orphans-of-one-change mode read as a tool that
+had stopped answering. Nothing here ever writes to a child, so `stdin=subprocess.DEVNULL`
+costs nothing and closes the class.
+
 The MECHANICS are not this repository's business: the engine, the bridge and the console all
 start processes and write their files the same way and have the same silent failures waiting,
 so reading the sources with `ast` and judging a call lives in the shared `docsguard` package
@@ -59,6 +67,11 @@ LAYOUT = Layout(root=ROOT)
 #: Everything written in Python here: the engine, the generators of the pages, the guards and
 #: the tests themselves - a convention that stops at the test folder is half a convention.
 FOLDERS = ("xbsl", "scripts", "tests", "tools")
+
+#: The folders of the stdin convention: the SHIPPED package alone. A server speaking over
+#: stdin is what makes an inherited handle fatal, and that is the engine - a generator or a
+#: test runs from a console, where stdin is a console and a child may have it.
+SERVER_FOLDERS = ("xbsl",)
 
 #: The folders of the newline convention, and deliberately a shorter list: a test writes into a
 #: temporary directory that is gone when the run ends - nothing it writes is committed, shipped
@@ -219,6 +232,42 @@ def test_the_source_with_a_bom_is_read_rather_than_refused():
 
     assert marked.read_bytes().startswith(b"\xef\xbb\xbf")
     assert problems_in(read(marked), "init.py") == []
+
+
+def stdin_problems_in(source: str, where: str) -> list[str]:
+    """The process starts of one file that let the child inherit this process's stdin.
+
+    A call that hands the child something to read - `input=` or an `stdin=` of its own - has
+    answered the question and is left alone; what is caught is the call that never asks.
+    """
+    problems = []
+    for call in process_starts(ast.parse(source)):
+        if any(keyword.arg in ("stdin", "input") for keyword in call.keywords):
+            continue
+        problems.append(f"{where}:{call.lineno}: a process is started without saying what its "
+                        "stdin is, so it inherits the one the server speaks over")
+    return problems
+
+
+def test_no_process_of_the_engine_inherits_the_stdin_of_its_parent():
+    """The convention itself: a child of the MCP or LSP server can always reach its own exit."""
+    problems = []
+    for path in python_sources(LAYOUT, SERVER_FOLDERS):
+        problems += stdin_problems_in(read(path), path.relative_to(ROOT).as_posix())
+
+    assert problems == []
+
+
+def test_a_process_started_without_a_word_about_stdin_is_caught():
+    """The provocation - and the two shapes that have thought about it."""
+    silent = 'import subprocess\nsubprocess.run(["git", "log"], capture_output=True)\n'
+    closed = ('import subprocess\nsubprocess.run(["git", "log"], capture_output=True,'
+              ' stdin=subprocess.DEVNULL)\n')
+    fed = ('import subprocess\nsubprocess.run(["git", "hash-object", "--stdin"], input=blob)\n')
+
+    assert len(stdin_problems_in(silent, "silent.py")) == 1
+    assert stdin_problems_in(closed, "closed.py") == []
+    assert stdin_problems_in(fed, "fed.py") == []
 
 
 def writing_sources() -> list[Path]:
