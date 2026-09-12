@@ -21,6 +21,11 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
+- **The translator reads the comments of a resource file.** A `.css`, `.js`, `.html` or `.svg`
+  used to be copied byte for byte, so a Russian comment reached the English build and
+  `--strict` called the file covered. Their text is now an ordinary dictionary phrase: the
+  comments, plus `<title>` and `<desc>` in an `.svg`. A licence comment and a minified file
+  are skipped. ([#34](https://github.com/keyfire/xbsl/pull/34))
 - **The LSP server says which rule set it judges by (`xbsl/ciStatus`).** That used to be one
   line on stderr, in an output channel nobody reads. The request now answers whether the job's
   set was taken, which job it was and which file it came from, and the extension shows that in
