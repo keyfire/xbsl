@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from xbsl.translation import dictionary as dict_module
 from xbsl.translation import entries as entries_module
 from xbsl.translation.project import translate_project
@@ -28,6 +30,11 @@ def _run(text: str, suffix: str, phrases: dict | None = None) -> tuple[str, File
 
 def _payloads(suffix: str, text: str) -> list[str]:
     return [payload for _start, _end, payload in resource_payloads(suffix, text)]
+
+
+#: A whole-pass check reads the platform data (term pairs, the metamodel, the ui schema),
+#: and a public checkout has none - those tests are skipped there rather than failed.
+_needs_data = pytest.mark.needs_data
 
 
 # --- css ------------------------------------------------------------------------------------
@@ -208,6 +215,7 @@ def test_a_minified_stylesheet_is_left_alone_whole():
     assert _payloads(".css", text) == []
 
 
+@_needs_data
 def test_a_binary_resource_is_copied_as_it_was(tmp_path: Path):
     root = tmp_path / "Acme" / "Задачник"
     _mini_project(root)
@@ -321,6 +329,7 @@ def _tokens() -> dict:
     return {"Задачник": "TaskBook", "Основное": "Main", "Ресурсы": "Resources", "Стиль": "Style"}
 
 
+@_needs_data
 def test_the_pass_writes_the_translated_stylesheet_and_counts_it(tmp_path: Path):
     root = _project_with_a_stylesheet(tmp_path)
     out = tmp_path / "out"
@@ -332,6 +341,7 @@ def test_the_pass_writes_the_translated_stylesheet_and_counts_it(tmp_path: Path)
     assert report.totals()["missing"] == 0
 
 
+@_needs_data
 def test_a_stylesheet_comment_without_an_entry_makes_the_pass_not_ready(tmp_path: Path):
     """`--strict` reads this verdict: an untranslated comment in a resource now fails it."""
     from xbsl.translation import cli as translate_cli
@@ -345,6 +355,7 @@ def test_a_stylesheet_comment_without_an_entry_makes_the_pass_not_ready(tmp_path
     assert translate_cli._ready(ready)
 
 
+@_needs_data
 def test_the_gap_of_a_stylesheet_comment_names_its_file_and_line(tmp_path: Path):
     root = _project_with_a_stylesheet(tmp_path)
     gaps = entries_module.gaps_of_project(root, _dictionary({}, _tokens()))
