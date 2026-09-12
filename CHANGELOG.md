@@ -40,6 +40,10 @@ entry either - say what the behaviour was, not which class name was compared.
   repository. The findings came out identical before and after the move. CI installs the
   package by tag, so a verdict cannot move without a commit.
   ([#23](https://github.com/keyfire/xbsl/pull/23))
+- **The `xbsl --help` texts and the VS Code extension pages are written in plain words.** The
+  wording read like a transliteration and the sentences ran long, so the owner could not read
+  them. The Russian metavar of `--as-ci-job` changed with them.
+  ([#28](https://github.com/keyfire/xbsl/pull/28))
 
 ### Fixed
 - **A directory named after `--as-ci` is refused with the form that works.** The flag expects a
