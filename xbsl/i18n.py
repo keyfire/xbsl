@@ -552,7 +552,7 @@ _CORE_MESSAGES = {
         "en": "The xbsl LSP server (stdio)",
     },
     "cli.help.lsp.project-root": {
-        "ru": "корень исходников (абсолютный или относительно папки воркспейса)",
+        "ru": "корень исходников (абсолютный или относительно рабочей папки)",
         "en": "the source root (absolute or relative to the workspace folder)",
     },
     "cli.help.lsp.select": {
