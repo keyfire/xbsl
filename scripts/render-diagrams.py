@@ -30,7 +30,10 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-IMAGES = ROOT / "editors" / "vscode" / "images"
+#: Both folders with diagrams. The root one feeds the README that GitHub and PyPI show, the
+#: extension one feeds the Marketplace page. Only the second was rendered here until
+#: 12.09.2026, and the README kept a PNG whose box carried a word the SVG no longer had.
+IMAGE_DIRS = (ROOT / "images", ROOT / "editors" / "vscode" / "images")
 
 CHROME_CANDIDATES = [
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
@@ -98,20 +101,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--theme", choices=("dark", "light"), default="dark",
                         help="палитра рендера (по умолчанию dark)")
-    parser.add_argument("--only", help="имя одного файла .svg в images/")
+    parser.add_argument("--only", help="имя одного файла .svg в любом из каталогов схем")
     parser.add_argument("--chrome", help="путь к Chrome/Chromium")
     args = parser.parse_args()
 
     chrome = find_chrome(args.chrome)
-    sources = [IMAGES / args.only] if args.only else sorted(
-        p for p in IMAGES.glob("*.svg") if _DARK_BLOCK.search(p.read_text(encoding="utf-8"))
-    )
+    if args.only:
+        sources = [folder / args.only for folder in IMAGE_DIRS
+                   if (folder / args.only).is_file()]
+    else:
+        sources = sorted(
+            (found for folder in IMAGE_DIRS for found in folder.glob("*.svg")
+             if _DARK_BLOCK.search(found.read_text(encoding="utf-8"))),
+            key=lambda found: (found.parent.name, found.name),
+        )
     if not sources:
-        print("нечего рендерить: в images/ нет схем с палитрой в переменных")
+        print("нечего рендерить: схем с палитрой в переменных не нашлось")
         return 0
     for source in sources:
         out = render(chrome, source, args.theme)
-        print(f"{source.name} -> {out.name} ({out.stat().st_size // 1024} КБ, {args.theme})")
+        print(f"{source.relative_to(ROOT).as_posix()} -> {out.name} "
+              f"({out.stat().st_size // 1024} КБ, {args.theme})")
     return 0
 
 

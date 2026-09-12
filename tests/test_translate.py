@@ -700,7 +700,7 @@ def test_a_dry_run_names_the_leftovers_and_takes_nothing_out(tmp_path: Path, cap
     assert _cli([*argv, "--clean", "--dry-run"]) == 0
 
     said = capsys.readouterr().out
-    assert "СУХОЙ ПРОГОН" in said and "Забытый.yaml" in said
+    assert "Пробный запуск" in said and "Забытый.yaml" in said
     assert "будет убрано остатков прошлого запуска: 1" in said
     assert orphan.is_file()  # named, not taken
 

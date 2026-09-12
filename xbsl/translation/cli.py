@@ -266,7 +266,7 @@ MESSAGES = {
               " to show",
     },
     "translate.dry-run": {
-        "ru": "СУХОЙ ПРОГОН: ничего не записано и не убрано",
+        "ru": "Пробный запуск: ничего не записано и не убрано",
         "en": "DRY RUN: nothing written and nothing removed",
     },
     "translate.would-write": {

@@ -77,7 +77,7 @@
   <rect x="268" y="30" width="264" height="416" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
   <rect x="548" y="30" width="258" height="416" rx="10" fill="var(--zone)" stroke="var(--zone-edge)" stroke-dasharray="5 4"/>
   <text x="30" y="54" class="zone-label">ПОТРЕБИТЕЛИ</text>
-  <text x="284" y="54" class="zone-label">ЯДРО СКАФФОЛДИНГА</text>
+  <text x="284" y="54" class="zone-label">СОЗДАНИЕ МЕТАДАННЫХ</text>
   <text x="564" y="54" class="zone-label">РЕЗУЛЬТАТ</text>
 
   <!-- edges: consumers / core -->
