@@ -3,94 +3,96 @@
 **English** · [Русский](https://github.com/keyfire/xbsl/blob/main/editors/vscode/README.ru.md)
 
 Syntax highlighting and on-the-fly linting for **1C:Element** sources (`.xbsl`), powered by the
-[xbsl](https://github.com/keyfire/xbsl) engine – plus the form designer, a metadata tree, the
-platform docs panel, metadata scaffolding, debugging and a deploy button.
+[xbsl](https://github.com/keyfire/xbsl) engine. It also brings the form designer, a metadata
+tree, the platform docs panel, metadata scaffolding, debugging and a deploy button.
 
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
-> folder of the repository – a tiny 1C:Element app with a form and a handful of deliberate findings.
+> folder of the repository. It is a tiny 1C:Element app with a form and a handful of deliberate findings.
 
 ## How it works
 
-The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine: in the
-default [LSP mode](#lsp-mode-default) every feature – diagnostics, navigation, the docs panel
-and the metadata scaffolding – talks to one long-living `xbsl-lsp` server; without the server
-the same checks and scaffolding run through the CLI:
+The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine. In the
+default [LSP mode](#lsp-mode-default) one long-living `xbsl-lsp` server answers everything:
+diagnostics, navigation, the docs panel and the metadata scaffolding. Without the server the same
+checks and scaffolding run through the CLI:
 
-![The extension features (diagnostics, metadata tree, form preview, docs panel) talk to the long-living xbsl-lsp server or, as a fallback, to the CLI; the engine reads the project sources and honors the baseline; scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.png)
+![The extension features - diagnostics, metadata tree, form preview, docs panel - talk to the long-living xbsl-lsp server, and to the CLI when there is no server. The engine reads the project sources and honors the baseline. Scaffolding edits come back as full texts and are applied as one undoable WorkspaceEdit](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/how-it-works.png)
 
-In the CLI mode two producers feed one diagnostic collection, and the split is by buffer state:
+In CLI mode two producers feed one diagnostic collection. The buffer state decides which one runs.
 
-- **While you type** (dirty buffer) the extension runs
-  `xbsl --stdin --filename <name> --format json` on the live text – per-file rules only,
-  fast, debounced. Its result replaces the diagnostics of *that buffer only*.
-- **When you save** any `.xbsl`/`.yaml` file, the extension runs
-  `xbsl <workspace folder> --format json` in the background (debounced, at most one run
-  at a time; a save during a run cancels the now-stale run and starts over). The result covers
-  per-file *and* project-scope rules, so it replaces the diagnostics of *every* file in the
-  folder – except buffers that are dirty again by then: those stay with their live `--stdin`
-  diagnostics until the next save.
+- **While you type.** On a dirty buffer the extension runs
+  `xbsl --stdin --filename <name> --format json` over the live text. Only per-file rules take
+  part, so the answer comes back fast; the run itself is debounced. Its result replaces the
+  diagnostics of *that buffer only*.
+- **When you save.** Saving any `.xbsl` or `.yaml` file runs `xbsl <workspace folder> --format json`
+  in the background. That run is debounced too, and at most one runs at a time: a save in the
+  middle of a run cancels the stale one and starts over. The result covers per-file and
+  project-scope rules, so it replaces the diagnostics of *every* file in the folder. Buffers that
+  are dirty again by then are the exception: they keep their live `--stdin` diagnostics until the
+  next save.
 
-This way there are no duplicates and no rule is lost: a clean file always shows the full
-workspace-run picture, a file being edited shows the instant per-file picture, and each save
-reconciles the two. Both runs speak the same `{diagnostics, summary}` JSON contract that the
-linter's MCP server exposes.
+That leaves no duplicates and loses no rule. A clean file shows the full picture of the workspace
+run, a file being edited shows the instant per-file picture, and each save reconciles the two.
+Both runs speak the same `{diagnostics, summary}` JSON contract that the linter's MCP server
+answers with.
 
-A workspace run that fails or exceeds `xbsl.workspaceLintTimeout` is reported to the *XBSL*
-output channel only – no popups on every save.
+A workspace run that fails or exceeds `xbsl.workspaceLintTimeout` goes to the *XBSL* output
+channel and nowhere else. There are no popups on every save.
 
 ## Features
 
 - **Syntax highlighting** for `.xbsl`: keywords (both Russian and English forms), declarations,
   operators, `@`-decorators, numbers, comments, and strings with `%name` / `${...}` interpolation.
-- **Live diagnostics** as you type (debounced) and on save – brackets/blocks balance, unused
-  locals, typography, code-style conventions, and everything else the linter reports. Squiggles
-  carry the rule id (e.g. `code/brackets`) and severity.
-- **Workspace diagnostics** – saving any `.xbsl`/`.yaml` file runs the linter over the whole
+- **Live diagnostics** as you type (debounced) and on save. Everything the linter reports shows
+  up: brackets and block balance, unused locals, typography, code-style conventions. A squiggle
+  carries the rule id (for example `code/brackets`) and the severity.
+- **Workspace diagnostics.** Saving any `.xbsl`/`.yaml` file runs the linter over the whole
   workspace folder in the background, so project-scope rules (`code/unknown-type`,
-  `yaml/unknown-type`, `Id` uniqueness) show up right in the editor, across all files.
-  Controlled by `xbsl.workspaceLint` (on by default).
+  `yaml/unknown-type`, `Id` uniqueness) show up right in the editor, across all files. Controlled
+  by `xbsl.workspaceLint` (on by default).
 - **Whole-project check** – the command *XBSL: check the whole project* runs the same
   workspace-wide check on demand.
-- **Go to definition, find all references and completion across the project** – answered by the
+- **Go to definition, find all references and completion across the project**, answered by the
   language server over its project index. See [Navigation and completion](#navigation-and-completion).
-- **Quick Fix for mechanical findings** – a lightbulb on a fixable diagnostic (trailing
-  whitespace, typography characters) applies the exact edit the linter reports; a *fix all*
+- **Quick Fix for mechanical findings.** A lightbulb on a fixable diagnostic (trailing
+  whitespace, typography characters) applies the exact edit the linter reports. The *fix all*
   source action (`source.fixAll.xbsl`) fixes the whole file and can run on save via
-  `editor.codeActionsOnSave`. Needs `xbsl` ≥ 0.7.1. See [Quick Fix](#quick-fix).
-- **Deploy to the stand** – the *XBSL: deploy the project (elemctl)* command (and a cloud
-  button in the title bar of the metadata tree) runs `elemctl deploy` in a terminal task:
-  build from sources → upload → apply → restart → verification that the apply actually took
-  effect. See [Deploy](#deploy).
+  `editor.codeActionsOnSave`. Needs `xbsl` >= 0.7.1. See [Quick Fix](#quick-fix).
+- **Deploy to the stand.** The *XBSL: deploy the project (elemctl)* command, and the cloud
+  button in the title bar of the metadata tree, run `elemctl deploy` in a terminal task: build
+  from sources → upload → apply → restart → a check that the apply actually took effect.
+  See [Deploy](#deploy).
 - **Form designer** – a panel of three areas: the structure tree on the left, the form's data on
-  the right, the form frame under them. It follows the active editor and updates as you type; the
-  selection is linked across the areas, the yaml cursor and the **properties panel**. The component
-  palette sits next to the metadata tree while the panel is open. See
-  [Form designer](#form-designer).
+  the right, the form frame under them. It follows the active editor and updates as you type. The
+  selection is linked across the areas, the yaml cursor and the **properties panel**. The
+  component palette sits next to the metadata tree while the panel is open.
+  See [Form designer](#form-designer).
 - **Metadata explorer** – a tree of the project objects in the primary side bar, grouped by
-  `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum `Values` ...), an editable
-  properties panel, creation of objects/fields/subsystems and filtering by subsystem. See
-  [Metadata explorer](#metadata-explorer).
-- **Documentation** – a view in the secondary side bar: the 1C:Element reference the way the docs site
-  shows it – a "Contents" tree (the developer and administrator guides, the type and query-language
-  references), full-text search, and a page view with images and a link to the primary source.
-  Right-click a type or variable to open its documentation. See [Documentation](#documentation).
+  `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum `Values` ...). It has an
+  editable properties panel, creation of objects, fields and subsystems, and filtering by
+  subsystem. See [Metadata explorer](#metadata-explorer).
+- **Documentation** – a view in the secondary side bar that shows the 1C:Element reference the
+  way the docs site does: a "Contents" tree (the developer and administrator guides, the type and
+  query-language references), full-text search, and a page view with images and a link to the
+  primary source. Right-click a type or variable to open its documentation.
+  See [Documentation](#documentation).
 
 **Panel layout.** The extension declares two view containers, and the layout of the screenshot
-above comes out of the box: **1C:Element • Project** (the metadata tree and the palette) sits in the
-primary side bar on the left, **1C:Element • Inspector** (properties and documentation) in the
-secondary side bar on the right, next to Chat. Nothing is nailed down: drag a container icon between the bars to rearrange, and
-**View: Reset View Locations** restores the default. The secondary side bar toggles with
-`Ctrl+Alt+B` (**View > Appearance > Secondary Side Bar**).
+above comes out of the box. **1C:Element • Project** (the metadata tree and the palette) sits in
+the primary side bar on the left, **1C:Element • Inspector** (properties and documentation) in the
+secondary side bar on the right, next to Chat. Nothing is fixed in place: drag a container icon
+between the bars to rearrange, and **View: Reset View Locations** restores the default. The
+secondary side bar toggles with `Ctrl+Alt+B` (**View > Appearance > Secondary Side Bar**).
 
 `.yaml` element descriptions keep their built-in YAML highlighting.
 
 ## Requirements
 
-The extension is a thin client over the `xbsl` CLI – it does not bundle a checker. You need:
+The extension is a thin client over the `xbsl` CLI and bundles no checker of its own. You need:
 
-1. **Python 3.10+** and the linter: `pip install xbsl`. If the linter is missing,
-   the extension offers to install it right from the error message.
-2. **Element language data** – generated once from your 1C:Element distribution, see
+1. **Python 3.10+** and the linter: `pip install xbsl`. If the linter is missing, the extension
+   offers to install it right from the error message.
+2. **Element language data**, generated once from your 1C:Element distribution. See
    [step 1 of the linter README](https://github.com/keyfire/xbsl#step-1-generate-the-language-data).
    Without it most rules cannot run; the extension surfaces the linter's error once.
 
@@ -99,43 +101,43 @@ By default the extension calls `xbsl` from `PATH`. Point it elsewhere with
 then invoked as `<python> -m xbsl`).
 
 The two are installed apart, so the engine can lag behind the extension. Most of the extension
-works with any of them; the [translation dictionary](#translation-dictionary) needs **xbsl 0.72.0
-or newer** – `--suggest`, the machine-translation run behind its suggestions button, only arrived
-there. With an older engine the panel does not open and says which version is installed
+works with any version. The [translation dictionary](#translation-dictionary) needs **xbsl 0.72.0
+or newer**, because `--suggest`, the machine-translation run behind its suggestions button, only
+arrived there. With an older engine the panel does not open and says which version is installed
 (`pip install -U xbsl`).
 
 ## New project
 
 The **XBSL: new 1C:Element project** command (`xbsl.project.new`) creates a project from
-scratch. The wizard asks four things – the project name, the vendor, the project kind
-(application or library) and the folder – then scaffolds it through the same engine that
-serves the other metadata operations and opens the generated `Проект.yaml`.
+scratch. The wizard asks four things: the project name, the vendor, the project kind
+(application or library) and the folder. It then scaffolds the project through the same engine
+that serves the other metadata operations and opens the generated `Проект.yaml`.
 
-The vendor is remembered between runs: for one developer it is usually the same. If the
-project lands outside the open folder, the extension offers to open it – a fresh project is
-rarely part of the current window.
+The vendor is remembered between runs: for one developer it is usually the same. If the project
+lands outside the open folder, the extension offers to open it – a fresh project is rarely part
+of the current window.
 
 ## Structural search across forms
 
-The **XBSL: structural form search** command (`xbsl.forms.search`) searches by structure, not
-by text: you give a component type and, optionally, `key=value` predicates on its properties.
-The extension collects the project's forms (unsaved buffers included), sends them to the
-engine and lists the matches – picking one moves the cursor to the component's line in its
+The **XBSL: structural form search** command (`xbsl.forms.search`) searches by structure rather
+than by text. You give a component type and, optionally, `key=value` predicates on its
+properties. The extension collects the project's forms, unsaved buffers included, sends them to
+the engine and lists the matches. Picking one moves the cursor to the component's line in its
 yaml.
 
-This is what you want when the question sounds like "where do we have input fields with such
-a property": plain text search does not find that, because in yaml the property and the
-component type sit on different lines.
+This is what you want when the question sounds like "where do we have input fields with such a
+property". Plain text search does not find that, because in yaml the property and the component
+type sit on different lines.
 
 > Needs the LSP mode: the matching is done by the engine, which is not running in CLI mode.
 
 ## Navigation and completion
 
-Navigation comes from the engine: the language server keeps the project index and answers
-definition, references, completion and hover. The extension adds no second implementation of its
-own – whatever the engine knows (the return types of project methods, the members of platform
-types) navigation knows with it. Without the LSP mode there is no navigation: the CLI has no
-process to ask.
+Navigation comes from the engine. The language server keeps the project index and answers
+definition, references, completion and hover. The extension adds no second implementation, so
+navigation knows exactly what the engine knows: the return types of project methods, the members
+of platform types. Without the LSP mode there is no navigation, because the CLI has no process to
+ask.
 
 **Go to definition** (F12 / Ctrl+Click), in `.xbsl` and `.yaml`:
 
@@ -156,13 +158,13 @@ for methods, objects and interface components – every usage, from the same ind
 - an object → every place it is the root of a dotted chain;
 - a component → its `Components.<Name>` uses in the form's module.
 
-Deeper chains that would need type inference are out of scope, as they are for go-to-definition.
+Deeper chains would need type inference and are out of scope, as they are for go-to-definition.
 
-> **A note on names.** 1C:Element is bilingual all the way down: keywords, literals, stdlib types and
-> the metadata vocabulary each carry a Russian and an English spelling, and this README uses the
-> English one (`var`, `new`, `Query{}`, `Array<String>`, `True`). Sources may be written either way,
-> and the extension reads both - the English key of a metadata property is what the platform's own
-> metamodel declares for it. The metadata names used below:
+> **A note on names.** 1C:Element is bilingual all the way down. Keywords, literals, stdlib types
+> and the metadata vocabulary each carry a Russian and an English spelling, and this README uses
+> the English one (`var`, `new`, `Query{}`, `Array<String>`, `True`). Sources may be written
+> either way, and the extension reads both. The English key of a metadata property is what the
+> platform's own metamodel declares for it. The metadata names used below:
 >
 > | Name | What it is |
 > | --- | --- |
@@ -180,8 +182,9 @@ Deeper chains that would need type inference are out of scope, as they are for g
   of that module;
 - in yaml, after `Type:` – project object names (the object kind is shown as the detail).
 
-**Type-aware completion** – in [LSP mode](#lsp-mode-default) only. The parsing runs over tokens, so
-keywords are understood in both of the spellings the language has, the English one and the Russian:
+**Type-aware completion** works in [LSP mode](#lsp-mode-default) only. The parsing runs over
+tokens, so keywords are understood in both spellings the language has, the English one and the
+Russian:
 
 - inside `Query{ ... }`, after a table – its fields: the standard fields of the kind, its
   `Attributes` and `TabularParts`. Aliases resolve too: `FROM Product AS P` → `P.` gives the
@@ -190,52 +193,53 @@ keywords are understood in both of the spellings the language has, the English o
   selection (the `SELECT ... AS` aliases; a plain field is named by its last segment);
 - after a variable of a known type (`var List = new Array<String>()` → `List.`) – the members of
   that type. The type comes from the annotation, from `new`, from a literal (`val Key = ""` is a
-  `String`) or from a call - both through a module (`Module.Method()`) and with no qualifier at
-  all, which is a call of a method of THIS module. Method parameters count as well;
-- after a value of a project type - its fields and methods: a structure declared in a module, a
+  `String`) or from a call. A call counts both through a module (`Module.Method()`) and with no
+  qualifier at all, which is a call of a method of the same module. Method parameters count as
+  well;
+- after a value of a project type – its fields and methods: a structure declared in a module, a
   type described in metadata, an interface component (for a form: its `Properties`, the methods
   of its module and the members of the platform type in `Inherits`);
-- inside `new Type(` - the names of what the type carries: the completion writes the `Name = `
+- inside `new Type(` – the names of what the type carries: the completion writes the `Name = `
   for you;
 - after an stdlib type or global (`AccessContext.`) – its members. Properties and methods are
   listed apart: a method carries its own icon and is inserted with parentheses.
 
 A chain is walked to its end rather than one level deep: `Parsed.File!.Read().` answers with the
-members of the result - a non-null operator does not break the chain. A loop variable takes its
-element out of the written type of the collection (`Array<Catalog.Card>` → `Catalog.Card`),
-including when the collection came from a call.
+members of the result, because a non-null operator does not break the chain. A loop variable
+takes its element out of the written type of the collection (`Array<Catalog.Card>` →
+`Catalog.Card`), including when the collection came from a call.
 
 The members of stdlib types come from the Element data (the `--data-dir` root), everything else
-from the project index. A name in scope beats a type of the same name: once a variable `List` is
-declared, `List.` is about its type, not about the `List` component. Requires `xbsl` >= 0.10.0.
+from the project index. A name in scope wins over a type of the same name: once a variable `List`
+is declared, `List.` is about its type, not about the `List` component. Requires `xbsl` >= 0.10.0.
 
-Known limits: outside LSP mode the index knows declarations, not types (no completion after
-variables). A type is not inferred where there is nothing to infer it from: a generic platform
-method whose result is set by a type argument; an expression built of operations (`"a" + X` is an
-operation, not a literal); a name the platform catalogue does not carry. The members of platform
-types are offered in their Russian spelling even in an English project - the catalogue has no
-English pair for them. There is no rename. When the context is ambiguous the providers return
-nothing rather than guessing.
+Known limits. Outside LSP mode the index knows declarations, not types, so there is no completion
+after variables. A type is not inferred where there is nothing to infer it from: a generic
+platform method whose result is set by a type argument; an expression built of operations
+(`"a" + X` is an operation, not a literal); a name the platform catalogue does not carry. The
+members of platform types are offered in their Russian spelling even in an English project,
+because the catalogue has no English pair for them. There is no rename. In an ambiguous context
+the providers return nothing at all.
 
 ## Quick Fix
 
-Findings the linter can repair mechanically carry a fix; the extension turns it into a Quick Fix:
+Findings the linter can repair mechanically carry a fix, and the extension turns it into a Quick Fix:
 
 - A **lightbulb on the diagnostic** (`Ctrl+.`) – *Fix: `<rule>`* – applies the exact edit:
   trailing whitespace removed, em dash → en dash, `…` → `...`, curly quotes → straight.
-- A **fix-all source action** – *Fix all (xbsl)* – repairs every fixable finding in the
-  file in one edit. Run it on save by adding to your settings:
+- A **fix-all source action** – *Fix all (xbsl)* – repairs every fixable finding in the file in
+  one edit. To run it on save, add this to your settings:
 
   ```json
   "editor.codeActionsOnSave": { "source.fixAll.xbsl": "explicit" }
   ```
 
-Fixes need a linter that emits them in its JSON (`xbsl` ≥ 0.7.1). Only unambiguous edits are
-offered, and only against the exact text they were computed on – a version-stamped snapshot guards
+Fixes need a linter that emits them in its JSON (`xbsl` >= 0.7.1). Only unambiguous edits are
+offered, and only against the exact text they were computed on: a version-stamped snapshot guards
 against applying an offset to text that changed since the last lint. Whole-file fixes (mixed
 newlines) are left to `xbsl --fix` on the command line.
 
-A finding whose repair belongs in another file gets a lightbulb of its own:
+A finding whose repair belongs in another file gets a lightbulb of its own.
 `conventions/missing-translation` offers to write the word into the project's dictionary – see
 [Translation dictionary](#translation-dictionary).
 
@@ -248,61 +252,60 @@ A finding whose repair belongs in another file gets a lightbulb of its own:
 | `xbsl.linter.pythonPath` | – | Python interpreter; when set, runs `<python> -m xbsl`. |
 | `xbsl.linter.dataDir` | – | Element data root (folder with `index.json`); empty = auto-resolved. |
 | `xbsl.linter.lang` | auto | Diagnostic language: ` ` (auto) / `ru` / `en`. |
-| `xbsl.linter.asCi` | `false` | Judge by the rule set the project's CI **job** runs: the `--select`/`--ignore`/`--enable` flags and the baseline are taken from the `xbsl` command of the pipeline file (`.gitlab-ci.yml` or a GitHub workflow next to the project). Without it the Problems panel judges by the defaults while the merge request is gated by another set. With no pipeline file the settings' own set stands and the reason goes to the XBSL output channel - and the status bar says which of the two happened: `CI: <job>` while the job's set is in force, a warning when it is not (a click opens the pipeline file the job stands in). |
-| `xbsl.linter.asCiJob` | – | Which job of that file to take: a pipeline runs the linter twice as soon as the project checks a second tree (a translation), and those jobs judge different sets. A part of the name is enough while only one job fits; a filled value turns `xbsl.linter.asCi` on. |
-| `xbsl.rules` | `{}` | **The one rules table.** The key is a rule (`code/brackets`), a group (`style`), a tier letter (`A`) or `*`; the value is `off` or a level. Priority: rule → group → tier → `*`. A level on a rule key turns on a rule that is off by default, on a group or a tier it only recolours; `{"*": "off"}` means "only the ones listed here". See [Rules](#rules-levels-and-disabling). |
+| `xbsl.linter.asCi` | `false` | Judge by the rule set the project's CI job runs. The `--select`/`--ignore`/`--enable` flags and the baseline are taken from the `xbsl` command of the pipeline file: `.gitlab-ci.yml` or a GitHub workflow next to the project. Without it the Problems panel judges by the defaults while the merge request is gated by another set. With no pipeline file the settings' own set stands and the reason goes to the XBSL output channel. The status bar says which of the two happened: `CI: <job>` while the job's set is in force, a warning when it is not. A click opens the pipeline file the job stands in. |
+| `xbsl.linter.asCiJob` | – | Which job of that file to take. A pipeline runs the linter twice as soon as the project checks a second tree (a translation), and those jobs judge by different sets. A part of the name is enough while only one job fits; a filled value turns `xbsl.linter.asCi` on. |
+| `xbsl.rules` | `{}` | **The one rules table.** The key is a rule (`code/brackets`), a group (`style`), a tier letter (`A`) or `*`; the value is `off` or a level. Priority: rule → group → tier → `*`. A level set on a rule turns on a rule that is off by default; on a group or a tier it only recolours. `{"*": "off"}` means "only the ones listed here". See [Rules](#rules-levels-and-disabling). |
 | `xbsl.linter.debounce` | `300` | Delay (ms) before linting while typing. |
-| `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (`Id` uniqueness etc.) cross-fire between directories. |
-| `xbsl.baseline` | – | Baseline file with the excluded findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
+| `xbsl.projectRoot` | – | Sources root for project-wide runs and the navigation index, relative to the workspace folder (or absolute). Empty – the whole folder. Set it when the repository holds examples or copies next to the project: otherwise project-scope rules (`Id` uniqueness and others) cross-fire between directories. |
+| `xbsl.baseline` | – | Baseline file with the accepted findings, relative to the workspace folder (or absolute). Empty – `.xbsllint-baseline` in the workspace folder when it exists. See [Excluding a finding](#excluding-a-finding-the-baseline). |
 | `xbsl.workspaceLint` | `true` | Full workspace run on every save of a `.xbsl`/`.yaml` file. |
 | `xbsl.workspaceLintTimeout` | `60000` | Kill a workspace run after this many ms (`0` – no limit). |
-| `xbsl.checkForUpdates` | `true` | Ask Open VSX once a day whether a newer extension is published: the extension is installed from a vsix while the editor asks the Marketplace, so nothing else notices a version left behind. The check only lights up the status bar; the **Check for a newer extension** command works regardless of it. |
-| `xbsl.deploy.*` | – | The deploy settings – the elemctl binary, the `.env`, the target application. See [Deploy](#deploy); the elemctl path and the application id are shared with debugging. |
+| `xbsl.checkForUpdates` | `true` | Ask Open VSX once a day whether a newer extension is published. The extension is installed from a vsix while the editor asks the Marketplace, so nothing else notices a version left behind. The check only lights up the status bar; the **Check for a newer extension** command works regardless of it. |
+| `xbsl.deploy.*` | – | The deploy settings: the elemctl binary, the `.env`, the target application. See [Deploy](#deploy); the elemctl path and the application id are shared with debugging. |
 | `xbsl.debug.*` | – | Debugging: the platform adapter directory, the Java launcher, opening the debuggee on start. See [Debugging](#debugging). |
 
 ## Rules: levels and disabling
 
 The old settings (`xbsl.groups.*`, `linter.select` / `.enable` / `.ignore`) are still read by the
-code but no longer shown in the forms; the **XBSL: move the rule settings into one table** command
+code but no longer shown in the forms. The **XBSL: move the rule settings into one table** command
 moves them into the table in one go.
 
-The table does not have to be edited by hand: the **XBSL: rules** command opens a panel - every
+The table does not have to be edited by hand. The **XBSL: rules** command opens a panel: every
 rule of the engine listed by group, each with its own level or "by default", a search by name, a
-"changed only" filter and a reset button. The scope is chosen explicitly (the user or the
-workspace settings), and the panel writes into `xbsl.rules` and nowhere else.
+"changed only" filter and a reset button. The scope is chosen explicitly, either the user or the
+workspace settings, and the panel writes into `xbsl.rules` and nowhere else.
 
-**By group – in the Settings UI.** The **Rule groups** section (search for `xbsl.groups` in
-the Settings editor, or browse Extensions → XBSL) has a dropdown per finding type – code,
-yaml descriptions, style, typography, whitespace, encoding, structure, forms, queries,
-naming, project, security: keep the
-group's own rule levels, report all its findings at one level (error / warning / info /
-hint), or turn the group off entirely – `off` does not just hide the findings, it excludes
-the rules from the run.
+**By group – in the Settings UI.** The **Rule groups** section (search for `xbsl.groups` in the
+Settings editor, or browse Extensions → XBSL) has a dropdown per finding type: code, yaml
+descriptions, style, typography, whitespace, encoding, structure, forms, queries, naming,
+project, security. The dropdown offers three choices: keep the group's own rule levels, report
+all its findings at one level (error / warning / info / hint), or turn the group off entirely.
+Turning it off does more than hide the findings – it excludes the rules from the run.
 
-**Per rule – from the finding.** Every finding carries a **"Configure rule..."** action in
-its lightbulb (`Ctrl+.`): disable the rule or override its level without leaving the line;
-the check reruns right away. The choices land in the `xbsl.rules` setting – a map from a
-rule id (`whitespace/trailing`) or a whole group (`style`) to a level or `off`. An exact id
-beats its group, and any `xbsl.rules` key beats the group dropdowns. Works in both the CLI
-and the LSP mode.
+**Per rule – from the finding.** Every finding carries a **"Configure rule..."** action in its
+lightbulb (`Ctrl+.`): disable the rule or override its level without leaving the line. The check
+reruns right away. The choices land in the `xbsl.rules` setting, a map from a rule id
+(`whitespace/trailing`) or a whole group (`style`) to a level or `off`. An exact id wins over its
+group, and any `xbsl.rules` key wins over the group dropdowns. Works in both the CLI and the LSP
+mode.
 
-A rule group added by an engine plugin has no dropdown of its own – the dropdowns list the
+A rule group added by an engine plugin has no dropdown of its own, because the dropdowns list the
 engine's built-in groups. Configure such a group through `xbsl.rules` by its name
-(`{"conventions": "off"}`), or through the "Configure rule..." action on any of its
-findings – both treat a plugin group exactly like a built-in one.
+(`{"conventions": "off"}`), or through the "Configure rule..." action on any of its findings.
+Both treat a plugin group exactly like a built-in one.
 
 ## Excluding a finding (the baseline)
 
-Disabling a rule silences it everywhere; sometimes a single finding must stay unfixed – the
-code is right on purpose. For that, every finding carries an **"Exclude this finding (to the
-baseline): `<rule>`"** action in its lightbulb (`Ctrl+.`): type the reason, and the finding's
-identity (file + rule + message) is recorded in the baseline file together with it. Only that
-one finding is excluded – the rule keeps checking every other file and name (to silence a
-whole rule, use "Configure rule..." instead). The finding disappears from the editor, and a
-CI gate over the same file (`xbsl ... --baseline`) stops reporting it too.
+Disabling a rule silences it everywhere. Sometimes only one finding has to stay unfixed, because
+the code is right on purpose. For that, every finding carries an **"Exclude this finding (to the
+baseline): `<rule>`"** action in its lightbulb (`Ctrl+.`). Type the reason, and the finding goes
+into the baseline file together with it, recorded by its identity: file, rule and message. Only
+that one finding is excluded, and the rule keeps checking every other file and name. To silence a
+whole rule, use "Configure rule..." instead. The finding disappears from the editor, and a CI
+gate over the same file (`xbsl ... --baseline`) stops reporting it too.
 
-The file is `.xbsllint-baseline` in the workspace folder (created on the first exclusion),
-or wherever `xbsl.baseline` points. The reason stays next to the frozen finding, and
+The file is `.xbsllint-baseline` in the workspace folder, created on the first exclusion, or
+wherever `xbsl.baseline` points. The reason stays next to the frozen finding, and
 `xbsl --write-baseline` keeps it on a rewrite:
 
 ```json
@@ -313,41 +316,37 @@ or wherever `xbsl.baseline` points. The reason stays next to the frozen finding,
 }
 ```
 
-In the LSP mode the suppression runs on the server and needs the engine 0.15.0 or newer;
-the CLI mode works with any engine that has `--baseline`. The identity includes the message
-text, so the baseline is bound to the output language – write and check it under the same
-`xbsl.linter.lang`.
+In LSP mode the suppression runs on the server and needs the engine 0.15.0 or newer; CLI mode
+works with any engine that has `--baseline`. The identity includes the message text, so the
+baseline is bound to the output language. Write and check it under the same `xbsl.linter.lang`.
 
 ## LSP mode (default)
 
-The extension runs everything through a long-living `xbsl-lsp` server instead of spawning
-the CLI per event: the Element language data and the project index stay resident, so
-as-you-type diagnostics respond in milliseconds, **hover** appears (a card for a project
-object, method or form component), and so does
-[type-aware completion](#navigation-and-completion). Definition, project-wide diagnostics on
-save and quick fixes work as before, just faster. Requires the linter installed with the
-`[lsp]` extra (`pip install "xbsl[lsp]"`); the server is found as `xbsl-lsp` on
-`PATH`, via `xbsl.linter.pythonPath` (run as a module), or by the explicit
-`xbsl.lsp.command`.
+The extension runs everything through a long-living `xbsl-lsp` server instead of spawning the CLI
+per event. The Element language data and the project index stay resident, so as-you-type
+diagnostics respond in milliseconds. **Hover** appears – a card for a project object, method or
+form component – and so does [type-aware completion](#navigation-and-completion). Definition,
+project-wide diagnostics on save and quick fixes work as before, just faster. Requires the linter
+installed with the `[lsp]` extra (`pip install "xbsl[lsp]"`). The server is found as `xbsl-lsp` on
+`PATH`, via `xbsl.linter.pythonPath` (run as a module), or by the explicit `xbsl.lsp.command`.
 
-Without the server the extension quietly keeps working in the former CLI mode (details go to
-the *XBSL* output channel, and the status bar shows the mode actually in use). To switch the
-server off entirely, set `"xbsl.lsp.enabled": false`; changing the setting needs a window
-reload.
+Without the server the extension quietly keeps working in the former CLI mode. Details go to the
+*XBSL* output channel, and the status bar shows the mode actually in use. To switch the server
+off entirely, set `"xbsl.lsp.enabled": false`; changing the setting needs a window reload.
 
 ## Code templates
 
-The **XBSL: code templates** command (`xbsl.templates.manage`) opens the management panel –
-an analog of the *Options – Templates* dialog in 1C:EDT: the list on the left, the editor on
-the right, buttons to add, edit, delete, import and export.
+The **XBSL: code templates** command (`xbsl.templates.manage`) opens the management panel, an
+analog of the *Options – Templates* dialog in 1C:EDT: the list on the left, the editor on the
+right, buttons to add, edit, delete, import and export.
 
 A set has two parts. Built-in templates ship with the tool; your own live in
-`.xbsl-templates.json` at the workspace root – the `xbsl.templates.file` setting moves that
-file elsewhere. Your set extends the built-in one, and a template with the same name replaces
-the built-in one: that is how you adjust the default behaviour without breaking anything.
+`.xbsl-templates.json` at the workspace root, and the `xbsl.templates.file` setting moves that
+file elsewhere. Your set extends the built-in one, and a template with the same name replaces the
+built-in one. That is how you adjust the default behaviour without breaking anything.
 
-The file format is the one 1C:EDT exports, so a set travels between the IDE and the editor
-both ways:
+The file format is the one 1C:EDT exports, so a set travels between the IDE and the editor both
+ways:
 
 - **XBSL: import code templates** (`xbsl.templates.import`) – merge an EDT export into your file;
 - **XBSL: export code templates** (`xbsl.templates.export`) – write the set out in that same
@@ -363,39 +362,39 @@ from a shell you can work with it by the same means (`xbsl templates list / expo
 ## Translation dictionary
 
 A project that translates its sources into English spellings (`xbsl translate`) keeps its own
-names, comment lines and string literals in a dictionary – the `xbsl-translation` directory next to
-the project or above it: several yaml files, thousands of records. The **XBSL: translation
-dictionary** command (`xbsl.translate.dictionary`) opens it as a table of five columns – **Kind**,
-**Key** / **Translation**, **Occurrences**, **Where it occurs**, **Dictionary file** – with every
-record over two lines: the key and the rest of the row on top, the translation field itself
-stretched underneath across the full width of the row, for the room a real name or a whole comment
-line needs. The column headers double as sort handles (Kind excluded – it is a plain label, though
-still a column you can resize); a border between columns drags with the mouse, the widths are
-remembered between openings of the panel, and a double click on a border resets that one column
-back to its default.
+names, comment lines and string literals in a dictionary. That dictionary is the
+`xbsl-translation` directory next to the project or above it: several yaml files, thousands of
+records. The **XBSL: translation dictionary** command (`xbsl.translate.dictionary`) opens it as a
+table of five columns: **Kind**, **Key** / **Translation**, **Occurrences**, **Where it occurs**,
+**Dictionary file**. Every record takes two lines: the key and the rest of the row on top, the
+translation field itself stretched underneath across the full width of the row. It needs the
+room, because a real name or a whole comment line goes there. The column headers double as sort
+handles, Kind excluded – that one is a plain label, though still a column you can resize. A
+border between columns drags with the mouse, the widths are remembered between openings of the
+panel, and a double click on a border resets that one column back to its default.
 
 - **The translation field is editable.** What you type is written by the engine
-  (`xbsl translate --set`) – into the right file, with the right scope; an emptied field removes
+  (`xbsl translate --set`) into the right file, with the right scope; an emptied field removes
   the record. A failed write shows the engine's message and leaves the table as it was.
-- **A literal is written the way the source writes it** – the text between the quotes, an inner
+- **A literal is written the way the source writes it**: the text between the quotes, an inner
   quote as `\"` and a backslash as `\\`. The value goes back between two quotes of a module, so
   the engine checks that it could stand there and refuses anything that would end the literal
-  early; the refusal, with its reason, is shown and the field keeps its old value.
+  early. The refusal is shown with its reason, and the field keeps its old value.
 - **Two filters**: a search over keys and translations, and *only untranslated* – what the
   dictionary does not cover yet. The selector next to them narrows the table to names, to comment
   lines or to literals.
-- **A suggestion stands grey inside the empty field itself**, as its native placeholder – the
-  platform's own spelling when the engine offers one, the machine-translation service's guess
-  otherwise (see below). A checkmark on the right accepts it, by a click or by `Enter` while the
-  field is still empty; typing anything makes the placeholder vanish on its own. A literal gets
-  one only when its text is filled locally from an already accepted name (see below) – the
-  platform tables spell names, not the whole message that stands between two quotes.
-- **The occurrence is a link** – it opens the source file at that line. The dictionary file next
+- **A suggestion stands grey inside the empty field itself**, as its native placeholder. It is
+  the platform's own spelling when the engine offers one, and the machine-translation service's
+  guess otherwise (see below). A checkmark on the right accepts it, by a click or by `Enter`
+  while the field is still empty; typing anything makes the placeholder vanish. A literal gets a
+  suggestion only when its text is filled locally from an already accepted name (see below),
+  because the platform tables spell names, not the whole message that stands between two quotes.
+- **The occurrence is a link** that opens the source file at that line. The dictionary file next
   to it is not: a short name with the full path as its tooltip, nothing to click.
 - The line above the table counts the rows, the untranslated among them and the project's
-  coverage – the very number `xbsl translate` reports and CI gates on. The literals are counted
-  beside it, the way the engine counts them: they are not part of the coverage, so a project could
-  otherwise read 100% with its messages still in Cyrillic.
+  coverage. That is the very number `xbsl translate` reports and CI gates on. The literals are
+  counted beside it, the way the engine counts them: they are not part of the coverage, so a
+  project could otherwise read 100% with its messages still in Cyrillic.
 - **A long literal keeps its row small.** In a real project a literal runs to hundreds of
   characters; the key cell is clamped to four lines and the whole text is the cell's tooltip.
 
@@ -406,139 +405,138 @@ disagree.
 
 ### Translating from the finding
 
-The `conventions/missing-translation` rule (off by default – switch it on in the rules table)
+The `conventions/missing-translation` rule (off by default, switch it on in the rules table)
 shows every uncovered name, comment line and string literal where it stands. Its lightbulb
 (`Ctrl+.`) offers:
 
-- **Translate as "\<spelling\>"** – the platform's own guess, written in one click (only when
-  there is one, so never on a literal);
+- **Translate as "\<spelling\>"** – the platform's own guess, written in one click. It appears
+  only when there is a guess, so never on a literal;
 - **Translate "\<key\>"...** – asks for the word, prefilled with that guess; on a literal the
   prompt says how the text is written between the quotes;
 - **Open the translation dictionary** – the panel above, filtered by this very key.
 
 The finding carries the exact dictionary key and its kind in its data, so the repair never guesses
-either out of the message – neither for a name, nor for a comment line elided in the text, nor for
-a literal. After a write the project is checked again (the server re-reads the dictionary by
-itself, no restart), and the finding goes away.
+either one out of the message – neither for a name, nor for a comment line elided in the text, nor
+for a literal. After a write the project is checked again: the server re-reads the dictionary by
+itself, no restart, and the finding goes away.
 
 ### Machine-translation suggestions
 
 Next to a name or a comment line the dictionary does not cover, the **Suggest via translation
 service** button asks an external service (Yandex Translate or Google Translate) to fill in what
-it can. The guess appears the same way the platform's own spelling always has – grey inside the
-empty translation field – and a click on the checkmark or `Enter` writes it, exactly the write a
+it can. The guess appears the same way the platform's own spelling always has, grey inside the
+empty translation field. A click on the checkmark or `Enter` writes it, exactly the write a
 hand-typed field sends; nothing changes until then. A literal never reaches the service: it is
 filled locally, and only when its text matches an already accepted name in full. One press walks
-the whole project: nothing caps the run and nothing stops it midway, and every batch it sends is a
-paid call to the service.
+the whole project. Nothing caps the run and nothing stops it midway, and every batch it sends is
+a paid call to the service.
 
 **The run's own report stays on screen.** How many answers came from the cache, how many were
 asked for, how many the service refused – the same three numbers the status-bar message gives for
-five seconds – sit in the panel's summary line too, and stay there until the next run rather than
-just until the message closes itself; a hover on that line names the reason behind each refusal.
-When there was nothing left to ask, the line says so in words instead of showing three zeroes; when
-every offer came from a local literal match and never touched the service, it says that too.
+five seconds – sit in the panel's summary line too. They stay there until the next run, not only
+until the message closes itself, and a hover on that line names the reason behind each refusal.
+When there was nothing left to ask, the line says so in words instead of showing three zeroes.
+When every offer came from a local literal match and never touched the service, it says that too.
 
 Set a credential with the **XBSL: Set a machine-translation key** command
-(`xbsl.translate.setKey`) – it asks which of the three to store (the Yandex API key, the Yandex
-folder id, or the Google API key) and keeps it in SecretStorage, never in a setting and never on
+(`xbsl.translate.setKey`). It asks which of the three to store – the Yandex API key, the Yandex
+folder id, or the Google API key – and keeps it in SecretStorage, never in a setting and never on
 the engine's command line. With more than one service configured, the `xbsl.translation.provider`
 setting picks which one `--suggest` uses.
 
 ## Code palette
 
-The command **XBSL: code palette** (`xbsl.choosePalette`) recolors XBSL syntax with one of
-the popular palettes: the 1C:Element web IDE style (red keywords, blue strings), One Dark,
-Monokai, Dracula, GitHub Dark – or resets back to the active editor theme. The choice is
-applied via `editor.tokenColorCustomizations` rules addressing only `*.xbsl` scopes, so the
-global theme and other languages stay untouched; the extension manages only its own rules
-(prefixed `xbsl-palette`) and preserves any customizations of yours.
+The command **XBSL: code palette** (`xbsl.choosePalette`) recolors XBSL syntax with one of the
+popular palettes: the 1C:Element web IDE style (red keywords, blue strings), One Dark, Monokai,
+Dracula, GitHub Dark. It also resets back to the active editor theme. The choice is applied via
+`editor.tokenColorCustomizations` rules addressing only `*.xbsl` scopes, so the global theme and
+other languages stay untouched. The extension manages only its own rules (prefixed
+`xbsl-palette`) and preserves any customizations of yours.
 
 ## Form designer
 
 The command **XBSL: form designer** (`xbsl.previewForm`, also a button in the editor title of form
 yamls – files whose `ElementKind` is `InterfaceComponent`) opens the form panel. A form depends on
-its own properties, so its structure and its data are edited where the form is shown: the structure
-tree on the left, the data on the right, the form frame under them, with draggable splitters
-between (their position is remembered).
+its own properties, so its structure and its data are edited where the form is shown: the
+structure tree on the left, the data on the right, the form frame under them, with draggable
+splitters between them whose position is remembered.
 
 **A panel per form.** A second form opens its own tab next to the first; each panel keeps its own
-tree, selection and expansion memory. A panel and its yaml travel as a pair: picking a tab on one
-side brings the other forward, and closing the panel closes the form's yaml (an unsaved one is
-left alone). The keyboard works inside the panel: the arrows walk the tree, plus `Alt+Up`/
-`Alt+Down`, `F2`, `Delete`, `Ctrl+C`/`Ctrl+V` and `Ctrl+Z`/`Ctrl+Y`.
+tree, selection and expansion memory. A panel and its yaml are linked: picking a tab on one side
+brings the other forward, and closing the panel closes the form's yaml (an unsaved one is left
+alone). The keyboard works inside the panel: the arrows walk the tree, plus `Alt+Up`/`Alt+Down`,
+`F2`, `Delete`, `Ctrl+C`/`Ctrl+V` and `Ctrl+Z`/`Ctrl+Y`.
 
 **Structure** – the tree of slots and components with an icon per kind and linter badges. The
 context menu and the keys: `Alt+Up`/`Alt+Down` move a component, `F2` renames, `Delete` removes,
-`Ctrl+C`/`Ctrl+V` carry a yaml fragment, plus wrapping into a container, duplicating, focusing on a
-subtree and the named-only filter. A node drags onto another node: a container takes it inside, a
-leaf places it after itself.
+`Ctrl+C`/`Ctrl+V` carry a yaml fragment. There is also wrapping into a container, duplicating,
+focusing on a subtree and the named-only filter. A node drags onto another node: a container
+takes it inside, a leaf places it after itself.
 
 **Data** – the component's own `Properties:` and the attributes of the owner object. A double click
 or a drag of a record onto a structure node creates an input component with its binding already in
 place (`Boolean` -> a checkbox, otherwise an input with `Value: =...`).
 
-**The form frame** renders from the yaml: nested vertical/horizontal groups, labels, input fields
-with captions and `=bindings`, buttons (the primary one filled), checkboxes, tables with their real
-columns, switchable tabs (`Pages`), cards, image and HTML-container placeholders, and the form's
-command bar. Unknown and custom component types render as labeled boxes with their content inside,
-so nothing disappears. The area header has a zoom (−/+, the wheel over the control and
-`Ctrl+wheel` over the frame) and a theme picker: light (the platform web client look, the
-default), dark, or the editor theme – the choice is remembered.
+**The form frame** renders from the yaml: nested vertical and horizontal groups, labels, input
+fields with captions and `=bindings`, buttons (the primary one filled), checkboxes, tables with
+their real columns, switchable tabs (`Pages`), cards, image and HTML-container placeholders, and
+the form's command bar. Unknown and custom component types render as labeled boxes with their
+content inside, so nothing disappears. The area header has a zoom (−/+, the wheel over the
+control and `Ctrl+wheel` over the frame) and a theme picker: light (the platform web client look,
+the default), dark, or the editor theme. The choice is remembered.
 
 **The selection is shared by the three areas.** A click on a frame block and a cursor move in the
 yaml expand whatever collapsed groups stand in the way, land on the node in the structure and fill
-the "Properties" panel; the selected node keeps the full selection color wherever the focus is.
-The way back only follows a yaml that is already open somewhere – it never opens a closed one on
+the "Properties" panel. The selected node keeps the full selection color wherever the focus is.
+The way back only follows a yaml that is already open somewhere and never opens a closed one on
 its own: a click on a structure node or a frame block moves the cursor there without taking focus.
-Opening a closed yaml takes an explicit ask instead – a double click on a structure node or
-`Ctrl+click` on a frame block – and it then opens beside the panel, never in the panel's own
-column, so it cannot end up hidden behind the very form it belongs to.
+Opening a closed yaml takes an explicit ask – a double click on a structure node or `Ctrl+click`
+on a frame block. It then opens beside the panel, never in the panel's own column, so it cannot
+end up hidden behind the very form it belongs to.
 
 **The component palette** sits next to the metadata tree and appears while the form panel is open.
-A double click on a palette component inserts it into the selected structure node. Dragging from
-the palette into the panel is impossible - the platform does not carry a drag from its own tree
-into a webview, which is why insertion is click-driven.
+A double click on a palette component inserts it into the selected structure node. You cannot drag
+from the palette into the panel, because the platform does not carry a drag from its own tree into
+a webview. That is why insertion is click-driven.
 
-**Properties panel.** A click on an element selects it and opens a separate **Properties**
-panel (its own tab – drag it below or aside, wherever suits), like the platform web editor:
-enums as dropdowns (`Layout`, alignments, spacings, widths, button kinds), `HorizontalStretch` and
-`VerticalStretch` as Auto / `True` / `False` toggles, everything else as text – the component's
-standard set plus
-every property present in the yaml (object values are shown read-only). Edits land in the
-yaml document as precise text edits, so the regular undo works; an empty value / *(auto)*
-removes the property. Selecting an element and every edit also position the yaml editor on
-the affected line (without stealing focus); Ctrl+click or the *Show in yaml* button jumps
-into the editor – handy for navigating large forms.
+**Properties panel.** A click on an element selects it and opens a separate **Properties** panel,
+a tab of its own you can drag below or aside. It works like the platform web editor: enums as
+dropdowns (`Layout`, alignments, spacings, widths, button kinds), `HorizontalStretch` and
+`VerticalStretch` as Auto / `True` / `False` toggles, everything else as text. You get the
+component's standard set plus every property present in the yaml, with object values shown
+read-only. Edits land in the yaml document as precise text edits, so the regular undo works; an
+empty value or *(auto)* removes the property. Selecting an element and every edit also position
+the yaml editor on the affected line, without stealing focus. Ctrl+click or the *Show in yaml*
+button jumps into the editor, which is handy for navigating large forms.
 
-**Typed value editors.** A color property opens a native color picker plus swatches of the
-colors already used in the form and your recent picks – one click reuses a shade. Any
-single-line value carries a literal/binding toggle: press `=` to bind the property to data,
-and in binding mode an autocomplete offers the bindings already used in the form and the
-attributes of the form's owner object (`=Object.Name`); the `abc` button switches
-back to a literal.
+**Typed value editors.** A color property opens a native color picker plus swatches of the colors
+already used in the form and your recent picks; one click reuses a shade. Any single-line value
+carries a literal/binding toggle: press `=` to bind the property to data. In binding mode an
+autocomplete offers the bindings already used in the form and the attributes of the form's owner
+object (`=Object.Name`); the `abc` button switches back to a literal.
 
-It is a layout skeleton, not the platform's rendering: composition, nesting and captions are
-faithful, exact sizes and styles are not (explicit label colors and font sizes are applied).
+It is a layout skeleton, not the platform's rendering. Composition, nesting and captions are
+faithful; exact sizes and styles are not, though explicit label colors and font sizes are applied.
 
-**Block presets.** In the structure area, *Save as block preset* on a component stores its
-whole subtree under a name (kept across forms and sessions); *Insert block preset* (in the palette
-title bar or a node's menu) drops a saved preset into the current selection – a named, persistent version of copy/paste
-for the layouts you rebuild often. *Manage block presets* prunes the list.
+**Block presets.** In the structure area, *Save as block preset* on a component stores its whole
+subtree under a name and keeps it across forms and sessions. *Insert block preset* (in the palette
+title bar or a node's menu) drops a saved preset into the current selection. It is a named,
+persistent version of copy and paste for the layouts you rebuild often. *Manage block presets*
+prunes the list.
 
-**Mass edit.** Select several components in the structure area and *Edit selected together* sets (or
-clears) one property on all of them at once – pick a key from the ones they already use or type a new
-one, then a value; empty clears it. Handy for aligning widths, toggling visibility, or rebinding a
-group of fields in one step.
+**Mass edit.** Select several components in the structure area and use *Edit selected together*.
+One property is set or cleared on all of them at once: pick a key from the ones they already use
+or type a new one, then a value; empty clears it. This is how you align widths, toggle visibility
+or rebind a group of fields in one step.
 
 ## Metadata explorer
 
 The collapse button in the tree title (**Collapse to the metadata kinds**) stops at the first
-level: the list of kinds stays visible while the expanded categories fold. The rest - new project,
-grouping, refresh, hiding empty categories - lives in the `...` menu of the same title bar.
+level: the list of kinds stays visible while the expanded categories fold. The rest – new project,
+grouping, refresh, hiding empty categories – lives in the `...` menu of the same title bar.
 
-A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata – like the
-platform designer, but inside VS Code.
+A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata, built
+like the platform designer but inside VS Code.
 
 > **Experimental.** The metadata explorer is an experimental feature – expect bugs and rough edges.
 
@@ -549,23 +547,24 @@ Structures, Client events and so on – each with its own icon. The `.yaml` + `.
 is one row; an object/list form is nested under its owner, forms with no owner go to a **Common
 forms** section.
 
-**Object subtrees.** A catalog/document expands into **Attributes**, **Tabular sections**, **Forms**;
-a register into **Dimensions**, **Resources**, **Attributes**; an enumeration into **Values**; a
-structure into **Fields**; client-work parameters into **Parameters**; an HTTP service into **URL
-templates** with their methods; localized strings into **Localization** - a node per language of
-the section (`Localization/<language>/<Name>.yaml`), a click opens the translated text.
+**Object subtrees.** A catalog or document expands into **Attributes**, **Tabular sections**,
+**Forms**; a register into **Dimensions**, **Resources**, **Attributes**; an enumeration into
+**Values**; a structure into **Fields**; client-work parameters into **Parameters**; an HTTP
+service into **URL templates** with their methods; localized strings into **Localization**, a node
+per language of the section (`Localization/<language>/<Name>.yaml`), where a click opens the
+translated text.
 
-**Clicks.** An object or a field opens the **properties panel** on the right (a field's `Type` is a
-combo of primitives, reference types (`<Object>.Reference?`) and the project enumerations, and still
-accepts a typed-in value); a common module opens its `.xbsl`; a form opens the preview. The context
-menu adds *Properties*, open description / module.
+**Clicks.** An object or a field opens the **properties panel** on the right. A field's `Type`
+there is a combo of primitives, reference types (`<Object>.Reference?`) and the project
+enumerations, and it still accepts a typed-in value. A common module opens its `.xbsl`, a form
+opens the preview. The context menu adds *Properties*, open description / module.
 
-**Properties panel** (the same one the form designer uses). Scalar properties are edited in place:
+**Properties panel** – the same one the form designer uses. Scalar properties are edited in place:
 dropdowns for `VisibilityScope` and `Environment`, a `True` / `False` toggle, text for the rest.
 `Id` and `ElementKind` are read-only; collections (`Attributes` and the like) are edited in the tree.
-Edits are surgical (undo works); save the file (Ctrl+S) to refresh the tree.
+Edits are surgical and undo works; save the file (Ctrl+S) to refresh the tree.
 
-The **All properties** section shows what the file does not set yet - not only for the object
+The **All properties** section shows what the file does not set yet, not only for the object
 itself but for an item of any of its collections: an attribute, a dimension, a resource, a
 structure field, an attribute of a tabular part, a value of an enumeration, a parameter. The
 metamodel names the item class itself, and where a collection holds items of different classes it
@@ -588,14 +587,14 @@ can scaffold is there:
 | **Rights and settings** | access key, privilege on an action, privilege on an element, settings storage, self-registration parameter, localized strings |
 
 In the subtree groups a **"+"** adds an attribute / dimension / resource / value / parameter /
-field / tabular section (and an attribute of a tabular section); a catalog/document has **Add object
-form**: the engine generates a form populated from the object's `Attributes` (optionally a list form
-with columns too) and registers it in the owner's `Interface`.
+field / tabular section (and an attribute of a tabular section). A catalog or document also has
+**Add object form**: the engine generates a form populated from the object's `Attributes`,
+optionally a list form with columns too, and registers it in the owner's `Interface`.
 
-The templates and yaml edits are computed by the engine (`xbsl` 0.16+): the same operations are
+The templates and yaml edits are computed by the engine (`xbsl` 0.16+). The same operations are
 available to agents through its `meta_*` MCP tools and to any editor through the `xbsl/meta*` LSP
-requests or the CLI subcommands – the tree only gathers parameters and applies the returned
-changes (regular undo works).
+requests or the CLI subcommands. The tree only gathers parameters and applies the returned
+changes, and regular undo works.
 
 **Subsystems.** A **Subsystems** branch lists the subsystem folders (a click opens the subsystem
 file); **Add subsystem** creates a folder with a subsystem file. The project root has **Filter by
@@ -607,8 +606,8 @@ badge) like the Explorer, while keeping their kind icon.
 **Deletion.** Right-click an object – **Delete object** (with confirmation; removes the object files,
 undoable; references are left as is – the linter flags dangling ones).
 
-A created object is a scaffold in files – it does not deploy on its own; a broken one only surfaces
-on the next deploy (elemctl catches the rollback) and never corrupts your working files.
+A created object is a scaffold in files and does not deploy on its own. A broken one surfaces on
+the next deploy, where elemctl catches the rollback, and your working files are never corrupted.
 
 ### Example: a demo app from the tree, deployed to 1cmycloud.com
 
@@ -623,7 +622,7 @@ uses):
 6. Deploy: `elemctl deploy --app-id <app> --project-dir <project folder> --output <tmp>`
    (create the app first: `elemctl apps ensure <app> --latest-build --wait`).
 
-The deploy report on 1cmycloud.com (`ok: true` only on an actual apply):
+The deploy report on 1cmycloud.com, where `ok: true` appears only when the build really took effect:
 
 ```
 built archive <project> 1.0-N.xasm (version 1.0-N)
@@ -641,15 +640,15 @@ verification passed: the build is applied
 }
 ```
 
-`applied: true` and `ok: true` mean the build actually took effect – the `Products` / `Categories`
-catalogs and the `ProductStatus` enumeration built by the tree are then available in the standard UI
-(the demo needs no OIDC/login).
+`applied: true` and `ok: true` mean the build actually took effect. The `Products` and
+`Categories` catalogs and the `ProductStatus` enumeration built by the tree are then available in
+the standard UI; the demo needs no OIDC or login.
 
 ## Documentation
 
 A container of its own – **Documentation (1C:Element)** in the Activity Bar – shows the platform
-reference the way the docs site does, but built from your own distribution: it matches the platform
-version you use and works offline.
+reference the way the docs site does, but built from your own distribution. It matches the
+platform version you use and works offline.
 
 > The reference shipped with the platform distribution exists in Russian only, so the pages and the contents tree stay Russian whatever the editor language is.
 
@@ -666,71 +665,71 @@ source** link to the same page on the docs site. A page's sections are nested un
 internal links navigate within the same tab, and opening a page reveals it in the Contents tree.
 
 **Documentation for the symbol.** Right-click a type or variable in an `.xbsl` file – *XBSL:
-documentation for the symbol* – to open its page. For a type its reference page opens directly; a
-MEMBER of a type has no page of its own, so the page of the type that DECLARES it opens, scrolled
-to the member's block (`Array.Size` leads to the ancestor that declares the method). When several
+documentation for the symbol* – to open its page. For a type its reference page opens directly. A
+member of a type has no page of its own, so the page of the type that declares it opens, scrolled
+to the member's block: `Array.Size` leads to the ancestor that declares the method. When several
 unrelated types declare the same name, they are offered to choose from, each with that member's
-block as the line under it; for other names with no page of their own the pick-list is ranked by
-the receiver before the dot (so `Job.Setup` prefers the scheduled-job pages, not a guide topic).
+block as the line under it. For other names with no page of their own the pick-list is ranked by
+the receiver before the dot, so `Job.Setup` prefers the scheduled-job pages over a guide topic.
 
 **Where the other entry points lead.** Hovering a name in an `.xbsl` shows the description and a
-**Documentation** link: over a member of a type that is the call's signature and what it does, and
-the link opens the page right at it. In the form designer the *Open documentation* action sits on a
-palette item (a short description also rides in its tooltip). Both open the page in this same panel
-– reading up on an unfamiliar component costs no trip out of the editor.
+**Documentation** link. Over a member of a type that is the call's signature and what it does, and
+the link opens the page right at it. In the form designer the *Open documentation* action sits on
+a palette item, and a short description also rides in its tooltip. Both open the page in this same
+panel, so reading up on an unfamiliar component costs no trip out of the editor.
 
 **F12 falls back to the page.** Go to Definition is answered from the project index, so a member of
-the platform has no source to jump to – there the key opens the documentation page instead of
+the platform has no source to jump to. There the key opens the documentation page instead of
 reporting a miss. A real definition always wins, and when there is neither, VS Code reports it as
 usual.
 
 The data comes from the linter's LSP server, so it needs [LSP mode](#lsp-mode-default) and the
-documentation database built from your distribution (`xbsl` ≥ 0.12.0, see
+documentation database built from your distribution (`xbsl` >= 0.12.0, see
 [the linter README](https://github.com/keyfire/xbsl#documentation-searching-the-element-reference)).
 In the regular (CLI) mode the view reports that the documentation is available in LSP mode.
 
 ## Deploy
 
 The command **XBSL: deploy the project (elemctl)** (`xbsl.deploy`, also a cloud button in the
-title bar of the metadata tree – a deploy takes the whole project, not the open file) runs
-`elemctl deploy` – build, upload, apply and verification
-that the apply actually took effect – as a terminal task, after a confirmation dialog with
-the exact command line. On a failed apply the platform silently rolls the application back
-while still reporting `Running`; elemctl does not trust that status and exits non-zero.
+title bar of the metadata tree) runs `elemctl deploy` as a terminal task, after a confirmation
+dialog with the exact command line. A deploy takes the whole project, not the open file, and the
+steps are the usual ones: build, upload, apply, and a check that the apply took effect. On a
+failed apply the platform silently rolls the application back while still reporting `Running`;
+elemctl does not trust that status and exits non-zero.
 
-The working directory is the workspace folder: elemctl reads the connection and the target
-from its `.env` (`ELEMENT_BASE_URL`, `ELEMENT_CLIENT_ID`/`SECRET`, `ELEMENT_APP_ID`,
-`ELEMENT_PROJECT_ID`). A set `xbsl.projectRoot` is passed as `--project-dir`; a missing
-elemctl is offered for installation right from the error message.
+The working directory is the workspace folder. elemctl reads the connection and the target from
+its `.env` (`ELEMENT_BASE_URL`, `ELEMENT_CLIENT_ID`/`SECRET`, `ELEMENT_APP_ID`,
+`ELEMENT_PROJECT_ID`). A set `xbsl.projectRoot` is passed as `--project-dir`; a missing elemctl is
+offered for installation right from the error message.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
 | `xbsl.deploy.elemctlPath` | `elemctl` | The elemctl executable – used by the deploy command **and by debugging**. |
-| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute); handy in a git worktree whose `.env` lives in the main checkout. Used **by debugging too** - it takes the stand from here unless the launch configuration sets `envFile`. |
-| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment / `.env`. When it is not set anywhere, the deploy offers the applications `elemctl apps list` can see – pick one by name, the id is what gets saved. |
+| `xbsl.deploy.envFile` | – | A `.env` with the connection and the target, passed as `--env-file` (relative to the workspace folder or absolute). Handy in a git worktree whose `.env` lives in the main working copy. Used **by debugging too**: it takes the stand from here unless the launch configuration sets `envFile`. |
+| `xbsl.deploy.appId` | – | Target application (`--app-id`); empty – `ELEMENT_APP_ID` from the environment or `.env`. When it is not set anywhere, the deploy offers the applications `elemctl apps list` can see: pick one by name, the id is what gets saved. |
 | `xbsl.deploy.extraArgs` | – | Extra `elemctl deploy` arguments, space-separated. |
 
 ## Debugging
 
-Debug **1C:Element** applications in regular VS Code: breakpoints, a call stack that chains
-client and server frames, variable values, stepping – without the Theia-based web IDE. The
-extension is thin here too: it starts the **platform's own debug adapter** (Java, the DAP
-protocol) and gets the session coordinates through `elemctl` (Console API `/actions/debug`).
-A session id generated on the client ties the adapter and the debuggee together through the
+Debug **1C:Element** applications in regular VS Code, without the Theia-based web IDE:
+breakpoints, a call stack that chains client and server frames, variable values, stepping. The
+extension is thin here too. It starts the **platform's own debug adapter** (Java, the DAP
+protocol) and gets the session coordinates through `elemctl` (Console API `/actions/debug`). A
+session id generated on the client ties the adapter and the debuggee together through the
 platform's debug server.
 
-> Until version 0.57 this was a separate extension, *XBSL Debug* (`keyfire.xbsl-debug`). It
-> is now part of this one: deploy and debugging address the same application with the same
-> elemctl, and asking for those twice was the only thing the split achieved. Settings made
-> for the old extension (`xbslDebug.*`) are still read, so an existing setup keeps working.
+> Until version 0.57 this was a separate extension, *XBSL Debug* (`keyfire.xbsl-debug`). It is
+> now part of this one. Deploy and debugging address the same application with the same elemctl,
+> and the split achieved only one thing: the credentials were asked for twice. Settings made for
+> the old extension (`xbslDebug.*`) are still read, so an existing setup keeps working.
 
 ![VS Code with the extension, the Java debug adapter and elemctl on the developer machine; the platform debug server and the Console API in the 1C:Element cloud; the browser with the debugged application joins the debug server by the same sessionId](https://raw.githubusercontent.com/keyfire/xbsl/main/editors/vscode/images/debug-how-it-works.png)
 
 **Getting started.** Run **XBSL: Set up 1C:Element debugging** (`xbsl.debug.setup`) from the
-Command Palette – the wizard checks Java, the adapter directory and elemctl, fixes what it
-can on the spot and offers to create `launch.json`. Then open the folder with the sources,
-put a breakpoint in an `.xbsl` file and press **F5**: the application opens in the browser
-with the debug parameters and execution stops on your breakpoint.
+Command Palette. The wizard checks Java, the adapter directory and elemctl, fixes what it can on
+the spot and offers to create `launch.json`. Then open the folder with the sources, put a
+breakpoint in an `.xbsl` file and press **F5**: the application opens in the browser with the
+debug parameters and execution stops on your breakpoint.
 
 **What is needed:**
 
@@ -752,18 +751,18 @@ with the debug parameters and execution stops on your breakpoint.
 | `xbsl.debug.applicationUrl` | – | Where to open the debuggee. Empty – the `uri` of the application card, which is its address **inside the platform**; set this when the application answers on a domain of its own. The `applicationUrl` attribute of `launch.json` overrides it. |
 
 The elemctl binary and the application id are **shared with deploy** (`xbsl.deploy.elemctlPath`,
-`xbsl.deploy.appId`), and the Console API credentials live in the `.env` of the sources root,
-not in a setting – elemctl reads them itself. `launch.json` is optional; its attributes are
-`appId`, `envFile`, `authMode` and `workspace`.
+`xbsl.deploy.appId`). The Console API credentials live in the `.env` of the sources root, not in a
+setting, because elemctl reads them itself. `launch.json` is optional; its attributes are `appId`,
+`envFile`, `authMode` and `workspace`.
 
 **How breakpoints bind.** The debug server identifies a module by its path **relative to the
 sources root**, shaped `<Vendor>/<Name>/<path inside the project>.xbsl` with forward slashes.
 The sources must therefore lie in a `<Vendor>/<Name>/` directory matching `Проект.yaml`, and
-the workspace must point at the directory containing it – the extension detects that root
-from the open folder itself, so opening the repository root or a subfolder both work.
+the workspace must point at the directory containing it. The extension detects that root from the
+open folder itself, so opening the repository root or a subfolder both work.
 
 **A platform bug worked around here.** Expanding a structure in the Variables tree on a client
-frame used to hang the debuggee and drop the session: a DAP `variables` request WITHOUT the
+frame used to hang the debuggee and drop the session. A DAP `variables` request without the
 `filter` field – exactly what the VS Code Variables view sends for small values – crashes the
 application's JS runtime, while a filtered request works fine. The extension rewrites every
 filterless request into filtered ones (`named` + `indexed`, counts taken from the parent's
@@ -943,10 +942,10 @@ Every command of the extension. Generated from `package.json` – do not edit by
 
 ## Feedback and bugs
 
-The extension is under active development, and bugs and rough edges are expected – the metadata
-explorer and the form designer especially. Please report anything that looks wrong, ideally with
-the steps to reproduce and the extension/engine versions from the status bar, in the project's
-GitHub issues:
+The extension is under active development, so bugs and rough edges are expected, the metadata
+explorer and the form designer especially. Please report anything that looks wrong in the
+project's GitHub issues. Steps to reproduce and the extension and engine versions from the status
+bar help a lot.
 
 **https://github.com/keyfire/xbsl/issues**
 
@@ -958,7 +957,7 @@ VS Code also offers *Report Issue* on the extension's page (from the manifest's 
 npm install
 npm run compile          # esbuild bundle -> dist/extension.js
 npm run check            # tsc type-check
-npm test                 # unit tests of the pure cores (plain Node, no runner)
+npm test                 # unit tests of the pure cores (plain Node, no test runner)
 npm run package          # build the .vsix (via @vscode/vsce)
 ```
 

@@ -10,31 +10,31 @@ The extension includes a visual designer for 1C:Element interface components
 (`ElementKind: InterfaceComponent` - forms and custom components). The main workplace is the
 **form panel**: the structure tree on the left, the form's data on the right, the form frame
 under them. Next to it live the component palette in the sidebar and the typed properties panel.
-The text editor stays the primary surface; the designer is a contextual lens over it.
+The text editor stays the primary surface, and the designer is a contextual lens over it.
 
 Two things to keep in mind:
 
-- **Every action is a minimal text edit.** The designer never rewrites or reformats the
-  whole file; comments, key order and formatting survive, and each operation is a single
-  undo step. Opening a form in the designer changes nothing until you act.
-- **The preview is a wireframe, not a render.** Rendering is server-side in the platform;
-  the local preview shows structure and layout, not pixels.
+- **Every action is a minimal text edit.** The designer never rewrites or reformats the whole
+  file. Comments, key order and formatting survive, and each operation is a single undo step.
+  Opening a form in the designer changes nothing until you act.
+- **The preview is a wireframe, not a render.** Rendering is server-side in the platform, so the
+  local preview shows structure and layout but not pixels.
 
 ## What you need
 
 - The **panels and text edits work anywhere.** Selecting nodes, moving and wrapping
-  components, copy/paste and the wireframe all rely only on the yaml.
+  components, copy and paste, and the wireframe all rely only on the yaml.
 - The **palette and the typed property editors need the language dataset** (the ui schema,
   generated from your own 1C:Element distribution – see [Language data](/start#language-data))
   and the **LSP server** (`pip install "xbsl[lsp]"`). Without them the structure tree and edits
-  still work; the palette and typed editors degrade to a hint instead of failing.
+  still work, and the palette and typed editors show a hint instead of failing.
 
 ## Opening the designer
 
 Open a `.yaml` of an interface component (a form or a custom `InterfaceComponent`) and press the
-**form designer** button in the editor title bar (shown when a form yaml is active), or **Open in
-the form designer** from the metadata tree's context menu. The form panel opens; while it is
-open, the **Palette** shows up next to the metadata tree.
+**form designer** button in the editor title bar, shown when a form yaml is active. The other way
+in is **Open in the form designer** from the metadata tree's context menu. The form panel opens;
+while it is open, the **Palette** shows up next to the metadata tree.
 
 The remaining panels live in side-bar containers and follow the active editor:
 
@@ -45,21 +45,25 @@ The remaining panels live in side-bar containers and follow the active editor:
 
 ## The form panel
 
-**Every form gets a panel of its own**, living as a normal editor tab: a second form opens next to
-the first, each panel keeps its own tree, selection and expansion memory, and opening the same form
-again brings its panel forward. A panel and its open `.yaml` travel as a pair - picking a tab on
-one side brings the other forward, as long as the two sit in different groups: sharing one (a tab
-dragged over, `Ctrl+P`), the pairing steps aside and the picked tab stays in front - otherwise the
-panel would cover the source just brought forward, and there would be no way to reach it at all.
-Closing the panel closes the form's yaml and its module (unless they have unsaved changes). The pairing never adds tabs on its own: while a source sits
-closed, clicking a field in the frame, a row in the structure tree, a row in the data area, or the
-selection change after an edit in either of the last two leaves it closed - only the selection
-moves. Opening it takes an explicit ask - *Show in yaml*, `Ctrl+click`, a double click in the tree,
-the metadata tree's context menu, or the **Module** tab below - and it then opens beside the panel,
-never in the panel's own column, so it can never end up hidden behind the very form it belongs to;
-the **Module** tab is the one deliberate exception, taking the panel's own place on purpose.
+**Every form gets a panel of its own**, living as a normal editor tab. A second form opens next
+to the first, each panel keeps its own tree, selection and expansion memory, and opening the same
+form again brings its panel forward.
 
-The panel is three areas with draggable splitters (their position is remembered):
+A panel and its open `.yaml` are linked: picking a tab on one side brings the other forward, as
+long as the two sit in different groups. Once they share one group – a tab dragged over, or
+`Ctrl+P` – the link releases and the picked tab stays in front. Otherwise the panel would cover
+the source just brought forward, and there would be no way to reach it at all. Closing the panel
+closes the form's yaml and its module, unless they have unsaved changes.
+
+The link itself never adds tabs. While a source sits closed, it stays closed: clicking a field in
+the frame, a row in the structure tree, a row in the data area, or the selection change after an
+edit in either of the last two moves only the selection. Opening it takes an explicit ask: *Show
+in yaml*, `Ctrl+click`, a double click in the tree, the metadata tree's context menu, or the
+**Module** tab below. It then opens beside the panel, never in the panel's own column, so it can
+never end up hidden behind the very form it belongs to. The **Module** tab is the one deliberate
+exception, taking the panel's own place on purpose.
+
+The panel is three areas with draggable splitters, and their position is remembered:
 
 | Left | Right |
 | --- | --- |
@@ -67,15 +71,14 @@ The panel is three areas with draggable splitters (their position is remembered)
 | **The form frame** – a full-width wireframe under both ||
 
 A form depends on its own properties, so its structure and its data are edited where the form is
-shown; the Properties panel stays separate and follows the selection.
+shown. The Properties panel stays separate and follows the selection.
 
 ### The module tab
 
 The strip at the bottom of the panel mirrors the platform IDE's bottom tabs. **Form** is the
-panel itself; **Module** opens the form's `.xbsl` (the file next to the yaml) as a regular
-editor tab of the same group - the area switches to the code with the whole editor behind it:
-completion, hovers, diagnostics, go to definition. The tab dims while the form has no module
-file.
+panel itself. **Module** opens the form's `.xbsl` (the file next to the yaml) as a regular editor
+tab of the same group: the area switches to the code with the whole editor behind it – completion,
+hovers, diagnostics, go to definition. The tab dims while the form has no module file.
 
 The way back lives on the module's side: the **Open the form** button in the editor title (the
 same spot where a form yaml carries its designer button), the panel's tab itself, or `Ctrl+Tab`.
@@ -97,12 +100,12 @@ icon per kind and linter badges on nodes.
   clipboard** (`Ctrl+V`) move subtrees – across forms and across projects.
 - **Multi-select** (`Ctrl`/`Shift` click): use **Edit selected together...** to set or clear one
   property on all of them at once.
-- **Focus and filter.** **Focus on this subtree** narrows the tree to one branch (the button in
-  the area header restores the whole form); the filter button toggles showing only named
+- **Focus and filter.** **Focus on this subtree** narrows the tree to one branch, and the button
+  in the area header restores the whole form. The filter button toggles showing only named
   components.
-- **Drag-and-drop** inside the area: dropping on a container inserts as its last child, dropping
-  on a leaf inserts after it (invalid targets are rejected before the drop). For exact ordering
-  use `Alt+Up` / `Alt+Down`.
+- **Drag-and-drop** inside the area: a node dropped on a container is inserted as its last child,
+  and a node dropped on a leaf is inserted after it. Invalid targets are rejected before the drop.
+  For exact ordering use `Alt+Up` / `Alt+Down`.
 
 ### Data
 
@@ -112,21 +115,21 @@ The **Data** area binds input components to data. It has two sections: the compo
 - **Component properties**: **Add property** (the button in the area header), **Rename property**
   (`F2`), **Change property type**, **Remove property** (`Delete`).
 - **Bind an input component**: drag an attribute (or a property) onto a node in the Structure
-  area, or double click it – the designer creates the right input component with the binding
+  area, or double click it. The designer creates the right input component with the binding
   already in place (`Boolean` -> a checkbox, otherwise an input with `Value: =...`).
 
 ### The form frame
 
-The frame is an honest wireframe of the form structure, not a render. It highlights the selected
-component and follows both the structure selection and the yaml cursor; a click on a block selects
-the component, `Ctrl+click` jumps to its yaml. An `Image` component with `Image: file.svg` shows
-the picture itself (resource images are resolved under `**/Resources/`). The area header carries
-the frame theme (light, dark, editor) and the zoom - the buttons, the wheel over the control, or
-`Ctrl+wheel` over the frame.
+The frame shows the structure of the form, not the platform's rendering. It highlights the
+selected component and follows both the structure selection and the yaml cursor; a
+click on a block selects the component, `Ctrl+click` jumps to its yaml. An `Image` component with
+`Image: file.svg` shows the picture itself, and resource images are resolved under
+`**/Resources/`. The area header carries the frame theme (light, dark, editor) and the zoom: the
+buttons, the wheel over the control, or `Ctrl+wheel` over the frame.
 
 ## Following the cursor
 
-The text and the panels show ONE place of the form. The yaml cursor, the structure node, the
+The text and the panels show the same place of the form. The yaml cursor, the structure node, the
 frame block and the contents of the properties panel are tied together both ways, so you can
 switch between "type it" and "click it" at every step without hunting for the node again.
 
@@ -135,8 +138,8 @@ the arrow keys):
 
 - the **frame** highlights that component's block;
 - the **structure** selects the node's row, expanding the collapsed groups on the way from the
-  root – nothing to hunt for;
-- the **properties panel** fills with the node under the cursor (while it is open);
+  root, so there is nothing to hunt for;
+- the **properties panel** fills with the node under the cursor, while it is open;
 - the focus stays in the editor: the follow is visual and never interrupts typing.
 
 **From the panels to the yaml.**
@@ -150,7 +153,7 @@ the arrow keys):
 | *Show in yaml* in the properties panel | opens the yaml if needed (beside the panel) and jumps to the property's line |
 
 The selected node is shared by the three areas and keeps its **full color wherever the focus
-is** – losing focus (going to the palette, say) still leaves you looking at what you work on.
+is**. Losing focus, by going to the palette say, still leaves you looking at what you work on.
 
 The same following covers metadata: the properties panel follows the cursor in an object's yaml
 (`Catalog`, `Document`, ...), and the metadata tree reveals the element of the active editor.
@@ -164,8 +167,8 @@ ui schema.
 
 - **Insert** by double-clicking (or pressing `Enter` twice) a palette entry while a container is
   selected in the Structure area; or **Insert into the form** from the context menu.
-- **A palette entry cannot be dragged into the form panel** – the platform does not carry a drag
-  from its own tree into a webview. That is why insertion is click-driven; dragging works inside
+- **A palette entry cannot be dragged into the form panel.** The platform does not carry a drag
+  from its own tree into a webview, which is why insertion is click-driven. Dragging works inside
   the panel itself.
 - **Add to favorites** / **Remove from favorites** (the star) pins the components you use most.
 - **Open documentation** opens the component's page in the Documentation panel; the tooltip
@@ -173,8 +176,8 @@ ui schema.
 
 ## Properties panel
 
-The **Properties** panel edits the selected component (and, from the metadata tree's
-**Properties**, metadata objects too – it is one shared panel).
+The **Properties** panel edits the selected component. From the metadata tree's **Properties** it
+edits metadata objects too, because it is one shared panel.
 
 - **Set on top, all below.** The **Set** section lists the keys present in the yaml; below it,
   collapsible groups hold every applicable property. Search filters by property name *and* by
@@ -188,25 +191,25 @@ The **Properties** panel edits the selected component (and, from the metadata tr
   Binding completion offers enumeration values (`=Enum.Value`), owner-object attributes
   (`=Object.Attribute`), components and their members (`=Components.Button.Value`)
   and bindings already used in the form.
-- **Events.** An event property offers a dropdown of the module's compatible handlers;
-  "create handler" writes a stub with the right signature into the `.xbsl` and jumps to it, beside
-  the panel - unlike a node click, this one asked for new code and has no other way to show where
-  it landed, so it opens even from a closed module.
-  Resetting an event asks what to do with the method - unbind only, or delete the handler from the
-  module; the deletion takes the method with its annotations, and the yaml and the module change
-  in one undo step.
+- **Events.** An event property offers a dropdown of the module's compatible handlers. The
+  "create handler" entry writes a stub with the right signature into the `.xbsl` and jumps to it,
+  beside the panel. Unlike a node click, this one asks for new code, and there is no other way to
+  show where that code landed, so the module opens even from a closed state. Resetting an event
+  asks what to do with the method: unbind only, or delete the handler from the module. The
+  deletion takes the method with its annotations, and the yaml and the module change in one
+  undo step.
 - **Metadata objects, the same way.** For a selected object (`Catalog`, `Document`, `HttpService`,
   ...) the applicable properties come from the platform metamodel, so the **All properties**
   section also shows what the file does not set yet: `Presentation`, `Hierarchical`,
-  `InputByString`, `AccessControl`. The editors are typed - a tri-state for a flag, a value list
-  for an enumeration, a combobox for a data type; collections and nested blocks (`Attributes`,
+  `InputByString`, `AccessControl`. The editors are typed: a tri-state for a flag, a value list
+  for an enumeration, a combobox for a data type. Collections and nested blocks (`Attributes`,
   `TabularParts`) are listed for reference and edited in the metadata tree.
 - **Collection items too.** An attribute, a dimension, a resource, a structure field, an attribute
   of a tabular part, a value of an enumeration, a parameter - each gets its own **All properties**
-  section: the metamodel names the item class itself, and where a collection holds items of
-  different classes it picks one by the name (the built-in `Code`, `Name` and `Owner` of a catalog
-  are classes of their own with their own properties - `Code` has `Length`, `Uniqueness`,
-  `AutoNumbering`). Without generated data, and for a nested block that is not a collection item,
+  section. The metamodel names the item class itself, and where a collection holds items of
+  different classes it picks one by the name: the built-in `Code`, `Name` and `Owner` of a catalog
+  are classes of their own with their own properties, and `Code` has `Length`, `Uniqueness`,
+  `AutoNumbering`. Without generated data, and for a nested block that is not a collection item,
   the panel stays the flat list of set properties it has always been.
 - **Slot indicator.** A property that is a child slot is marked with a bar and a badge.
 - **Serial editing.** The selected property row survives switching to another component of the
@@ -237,7 +240,7 @@ drops it into any form (from the Palette title bar or a structure node's context
 
 For a read-only source – a library form from an `.xlib`, a git/diff view, or a file flagged
 read-only – the panels show a banner and disable the editors, and structure edits are refused
-with a message, so browsing such a form never risks a stray write.
+with a message. Browsing such a form never risks a stray write.
 
 ## Examples: what it looks like in practice
 
@@ -267,7 +270,7 @@ LSP requests (`xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`). See the
 
 ## Provenance
 
-The platform ships its own web-based visual editor; this designer is an independent
+The platform ships its own web-based visual editor. This designer is an independent
 reimplementation written from the public platform documentation, the toolkit's own extracted
 datasets and black-box observation of designers in general-purpose IDEs. UI texts, icons and
 layouts are our own. See [NOTICE](https://github.com/keyfire/xbsl/blob/main/NOTICE).
