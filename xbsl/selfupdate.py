@@ -590,7 +590,7 @@ def _update_pipx_metadata(site: Path, version: str, log) -> None:
         main = data.get("main_package") or {}
         if main.get("package") == "xbsl":
             main["package_version"] = version
-            meta.write_text(json.dumps(data, indent=4), encoding="utf-8")
+            meta.write_text(json.dumps(data, indent=4), encoding="utf-8", newline="")
             log(i18n.t("selfupdate.pipx-updated"))
     except (OSError, ValueError):
         pass

@@ -82,7 +82,7 @@ def render(chrome: str, svg_path: Path, theme: str) -> Path:
     out = svg_path.with_suffix(".png")
     with tempfile.TemporaryDirectory() as tmp:
         staged = Path(tmp) / svg_path.name
-        staged.write_text(force_theme(svg, theme), encoding="utf-8")
+        staged.write_text(force_theme(svg, theme), encoding="utf-8", newline="")
         subprocess.run(
             [
                 chrome, "--headless=new", "--disable-gpu",

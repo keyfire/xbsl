@@ -1196,7 +1196,9 @@ def main(argv=None) -> int:
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     if not args.out:
         _distro.update_index(version, make_default=not args.no_default)
     print(f"Записано: {out} (версия {version})")

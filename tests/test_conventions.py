@@ -1,26 +1,38 @@
 """Conventions of the sources that no single test of a feature would ever notice.
 
-A convention nobody wrote down is a convention every new file gets to rediscover, and this
-one hides its failures: a process read as text without a named encoding is decoded with the
-console code page, so the Russian half of the output turns into replacement characters - and
-the exit code goes on saying that everything went well. The other half of the same failure
-sits on the child's side: a Python process writes its stdout in the code page too unless
-PYTHONIOENCODING says otherwise, so a parent that decodes perfectly still gets mojibake.
+A convention nobody wrote down is a convention every new file gets to rediscover, and both
+conventions here hide their failures.
+
+The first is the encoding of a started PROCESS: read as text without a named encoding, it is
+decoded with the console code page, so the Russian half of the output turns into replacement
+characters - and the exit code goes on saying that everything went well. The other half of the
+same failure sits on the child's side: a Python process writes its stdout in the code page too
+unless PYTHONIOENCODING says otherwise, so a parent that decodes perfectly still gets mojibake.
 This repository generates a whole Russian documentation page out of `--help` that way.
 
+The second is the line ending of a file this repository WRITES. `write_text` and `open` in text
+mode turn a line feed into whatever the platform uses, so a generator run on Windows hands back
+a file with every line changed. `core.autocrlf=input` hides that in a checkout that has it, and
+that is the whole trouble: on a machine without the setting, a page nobody edited goes to a
+public repository as one line-ending change. The generators of the documentation were already
+passing `newline=""` and so was the baseline writer, which is the only reason the convention was
+recognizable as one; twenty-two other writes were not, from the template export of the CLI to
+the language data of an extraction.
+
 The MECHANICS are not this repository's business: the engine, the bridge and the console all
-start processes the same way and have the same silent failure waiting, so reading the sources
-with `ast` and judging a call lives in the shared `docsguard` package (`conventions.py`). What
-stays here is the list of FOLDERS - which of them hold code that starts a process is a fact
-about this repository - and the half of the convention the shared package has no word for: a
-PYTHON child needs `PYTHONIOENCODING=utf-8` in its environment, which is meaningless for `git`
-or `taskkill`.
+start processes and write their files the same way and have the same silent failures waiting,
+so reading the sources with `ast` and judging a call lives in the shared `docsguard` package
+(`conventions.py`). What stays here is the list of FOLDERS - which of them hold code that starts
+a process, and which of them write files that outlive the run, are facts about this repository -
+and the half of the first convention the shared package has no word for: a PYTHON child needs
+`PYTHONIOENCODING=utf-8` in its environment, which is meaningless for `git` or `taskkill`.
 
 Two details of the reading are ours as well. The files are read with `utf-8-sig`, because
 `xbsl/__init__.py` carries a BOM and `ast.parse` refuses the mark as a non-printable
-character - the shared `process_encoding_problems`, which opens the files itself as plain
-`utf-8`, would die on the first one instead of judging the repository. And `ast` rather than a
-regular expression is the whole point of the shared reader: a process start is written
+character - the folder-wide `process_encoding_problems` and `text_write_newline_problems`,
+which open the files themselves as plain `utf-8`, would die on the first one instead of judging
+the repository, so both conventions are read here file by file. And `ast` rather than a regular
+expression is the whole point of the shared readers: a process start is written
 `(run or subprocess.run)(...)` wherever the tests need a seam, and a check reading the text
 before the parenthesis would pass over exactly those.
 """
@@ -30,7 +42,16 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from docsguard import Layout, asks_for_text, encoding_problems, process_starts, python_sources
+from docsguard import (
+    Layout,
+    asks_for_text,
+    encoding_problems,
+    newline_problems,
+    process_starts,
+    python_sources,
+    text_write_newline_problems,
+    text_writes,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 LAYOUT = Layout(root=ROOT)
@@ -38,6 +59,12 @@ LAYOUT = Layout(root=ROOT)
 #: Everything written in Python here: the engine, the generators of the pages, the guards and
 #: the tests themselves - a convention that stops at the test folder is half a convention.
 FOLDERS = ("xbsl", "scripts", "tests", "tools")
+
+#: The folders of the newline convention, and deliberately a shorter list: a test writes into a
+#: temporary directory that is gone when the run ends - nothing it writes is committed, shipped
+#: or compared between machines, and a fixture carrying the other line ending on purpose is a
+#: test in its own right. What belongs here is the code whose writes OUTLIVE the run.
+WRITING_FOLDERS = ("xbsl", "scripts", "tools")
 
 #: How a command line names a Python interpreter when it is not `sys.executable`.
 PYTHON_NAMES = frozenset({"python", "python3", "py", "python.exe", "pythonw.exe"})
@@ -192,3 +219,61 @@ def test_the_source_with_a_bom_is_read_rather_than_refused():
 
     assert marked.read_bytes().startswith(b"\xef\xbb\xbf")
     assert problems_in(read(marked), "init.py") == []
+
+
+def writing_sources() -> list[Path]:
+    """Every Python file whose writes outlive the run, in a stable order."""
+    return python_sources(LAYOUT, WRITING_FOLDERS)
+
+
+def test_every_text_file_written_here_names_its_newline():
+    """The convention itself: no generator hands back a file with every line changed."""
+    problems: list[str] = []
+    for path in writing_sources():
+        problems += newline_problems(read(path), path.relative_to(ROOT).as_posix())
+
+    assert problems == []
+
+
+def test_the_writes_reader_finds_the_calls_it_is_meant_to_judge():
+    """A detector that finds nothing passes every repository, this one included."""
+    found = [
+        path.relative_to(ROOT).as_posix()
+        for path in writing_sources()
+        if text_writes(ast.parse(read(path)))
+    ]
+
+    assert len(found) > 3
+    # The writer the convention was found broken in: `xbsl templates` rewrites the file of
+    # custom templates on every import and export.
+    assert "xbsl/cli.py" in found
+
+
+def test_the_shared_newline_check_still_bites(tmp_path):
+    """The guard comes from a pinned package, and a pin is raised by hand.
+
+    A version that had stopped judging would look from here exactly like a repository in order,
+    which is the whole failure this file exists to prevent - so the provocation is made against
+    the installed package, on sources of its own. No BOM in a temporary file, so the folder-wide
+    reader can do the reading here.
+    """
+    (tmp_path / "scripts").mkdir()
+    (tmp_path / "scripts" / "offender.py").write_text(
+        'from pathlib import Path\nPath("page.md").write_text(text, encoding="utf-8")\n',
+        encoding="utf-8", newline="")
+
+    problems = text_write_newline_problems(Layout(root=tmp_path), ("scripts",))
+
+    assert len(problems) == 1
+    assert "scripts/offender.py:2" in problems[0]
+
+
+def test_a_write_that_names_its_newline_is_left_alone():
+    """Either spelling passes - `""` and `"\\n"` both write the text through untouched."""
+    empty = 'from pathlib import Path\nPath("a").write_text(t, encoding="utf-8", newline="")\n'
+    feed = 'from pathlib import Path\nPath("a").write_text(t, encoding="utf-8", newline="\\n")\n'
+    read_only = 'from pathlib import Path\ntext = open("a", encoding="utf-8").read()\n'
+
+    assert newline_problems(empty, "empty.py") == []
+    assert newline_problems(feed, "feed.py") == []
+    assert newline_problems(read_only, "read.py") == []

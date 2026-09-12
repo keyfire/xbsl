@@ -745,7 +745,7 @@ def cli_main(argv: list[str] | None = None) -> int:
     else:
         text = render_text(diff, limit=(args.limit if args.limit > 0 else None))
     if args.out:
-        Path(args.out).write_text(text, encoding="utf-8")
+        Path(args.out).write_text(text, encoding="utf-8", newline="")
         print(i18n.t("datadiff.written", path=args.out))
     else:
         print(text, end="")

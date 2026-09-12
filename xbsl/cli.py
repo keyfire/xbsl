@@ -543,7 +543,7 @@ def _templates_main(argv: list[str]) -> int:
 
         if args.action == "export":
             chosen = custom if args.custom_only else merged
-            Path(args.output).write_text(tpl.dumps(chosen), encoding="utf-8")
+            Path(args.output).write_text(tpl.dumps(chosen), encoding="utf-8", newline="")
             print(json.dumps({"exported": len(chosen), "output": args.output}, ensure_ascii=False))
             return 0
 
@@ -555,7 +555,7 @@ def _templates_main(argv: list[str]) -> int:
             builtin_by_name = {t.name: t for t in builtin}
             fresh = [t for t in incoming if builtin_by_name.get(t.name) != t]
             saved = tpl.merge(custom, fresh)
-            path.write_text(tpl.dumps(saved), encoding="utf-8")
+            path.write_text(tpl.dumps(saved), encoding="utf-8", newline="")
             print(json.dumps(
                 {"imported": len(fresh), "skipped": len(incoming) - len(fresh),
                  "total": len(saved), "file": str(path)},
@@ -568,7 +568,7 @@ def _templates_main(argv: list[str]) -> int:
         builtin_by_name = {t.name: t for t in builtin}
         fresh = [t for t in incoming if builtin_by_name.get(t.name) != t]
         if fresh:
-            path.write_text(tpl.dumps(fresh), encoding="utf-8")
+            path.write_text(tpl.dumps(fresh), encoding="utf-8", newline="")
         elif path.exists():
             path.unlink()  # nothing but the builtin set left - the file has no reason to exist
         print(json.dumps({"saved": len(fresh), "file": str(path)}, ensure_ascii=False))

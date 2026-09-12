@@ -264,19 +264,24 @@ def build(root: Path) -> dict[str, Module]:
     """Write the probe project; return its modules with the "line -> claim" map."""
     out = project_dir(root)
     out.mkdir(parents=True, exist_ok=True)
-    (out / "Проект.yaml").write_text(PROJECT.format(uid=_uid(1)), encoding="utf-8")
+    (out / "Проект.yaml").write_text(PROJECT.format(uid=_uid(1)), encoding="utf-8",
+                                 newline="")
     main = out / "Основное"
     main.mkdir(exist_ok=True)
-    (main / "Подсистема.yaml").write_text(SUBSYSTEM, encoding="utf-8")
+    (main / "Подсистема.yaml").write_text(SUBSYSTEM, encoding="utf-8", newline="")
     (main / "Задачи.yaml").write_text(
-        CATALOG.format(uid=_uid(2), attr=_uid(9)), encoding="utf-8"
+        CATALOG.format(uid=_uid(2), attr=_uid(9)), encoding="utf-8", newline=""
     )
-    (main / "Отгрузка.yaml").write_text(DOCUMENT.format(uid=_uid(3)), encoding="utf-8")
+    (main / "Отгрузка.yaml").write_text(DOCUMENT.format(uid=_uid(3)), encoding="utf-8",
+                                    newline="")
     (main / "Показатели.yaml").write_text(
-        REGISTER.format(uid=_uid(4), dim=_uid(5), res=_uid(6)), encoding="utf-8"
+        REGISTER.format(uid=_uid(4), dim=_uid(5), res=_uid(6)), encoding="utf-8",
+        newline=""
     )
-    (main / "Карточка.yaml").write_text(FORM.format(uid=_uid(7)), encoding="utf-8")
-    (main / "Проба.yaml").write_text(COMMON.format(uid=_uid(8)), encoding="utf-8")
+    (main / "Карточка.yaml").write_text(FORM.format(uid=_uid(7)), encoding="utf-8",
+                                    newline="")
+    (main / "Проба.yaml").write_text(COMMON.format(uid=_uid(8)), encoding="utf-8",
+                                 newline="")
 
     modules = {
         kind: Module(kind=kind, path=path, header=HEADERS[kind])
@@ -295,7 +300,7 @@ def build(root: Path) -> dict[str, Module]:
         if module.kind == "rights":
             lines.append("    возврат []")  # the handler has to return something
         lines.append(";")
-        (out / module.path).write_text("\n".join(lines) + "\n", encoding="utf-8")
+        (out / module.path).write_text("\n".join(lines) + "\n", encoding="utf-8", newline="")
     return modules
 
 
