@@ -126,7 +126,7 @@
   <!-- Metadata scaffolding -->
   <rect x="252" y="318" width="268" height="96" rx="8" class="box"/>
   <rect x="252" y="326" width="3" height="80" rx="1.5" fill="var(--accent-pink)"/>
-  <text x="266" y="342" class="box-title">Скаффолдинг метаданных</text>
+  <text x="266" y="342" class="box-title">Создание метаданных</text>
   <text x="266" y="362" class="box-body">объекты, реквизиты,</text>
   <text x="266" y="380" class="box-body">маршруты, формы</text>
   <text x="266" y="402" class="mono code">uuid + точечные правки yaml</text>

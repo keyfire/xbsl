@@ -124,8 +124,8 @@ _CORE_MESSAGES = {
         "en": "parameter {name} = {value} (default {default}, env {env}) - {doc}",
     },
     "cli.run-params": {
-        "ru": "Параметры правил изменены переменными среды: {params} – замечания этого "
-              "прогона отличаются от прогона с умолчаниями",
+        "ru": "Параметры правил изменены переменными среды: {params} – замечания этой "
+              "проверки отличаются от замечаний с умолчаниями",
         "en": "Rule parameters changed by environment variables: {params} - the findings of "
               "this run differ from a run on the defaults",
     },
@@ -156,11 +156,11 @@ _CORE_MESSAGES = {
               "a project directory, an .xbsl/.yaml/.xbql file.",
     },
     "cli.baseline-found": {
-        "ru": "Найден базлайн проекта: {path} (отключить – ключом --no-baseline)",
+        "ru": "Найден список принятых замечаний проекта: {path} (отключить – ключом --no-baseline)",
         "en": "Project baseline found: {path} (disable it with --no-baseline)",
     },
     "cli.baseline-stale-entry": {
-        "ru": "устаревшая запись базлайна: {path} [{rule}] x{count} – {message}",
+        "ru": "устаревшая запись списка принятых: {path} [{rule}] x{count} – {message}",
         "en": "stale baseline entry: {path} [{rule}] x{count} - {message}",
     },
     "cli.baseline-stale-reason": {
@@ -168,7 +168,7 @@ _CORE_MESSAGES = {
         "en": "    the entry's reason: {reason}",
     },
     "cli.baseline-pruned": {
-        "ru": "Базлайн очищен: {path} (удалено записей: {removed})",
+        "ru": "Список принятых очищен: {path} (удалено записей: {removed})",
         "en": "Baseline pruned: {path} ({removed} entries removed)",
     },
     "cli.baseline-pruned-reasons": {
@@ -178,7 +178,7 @@ _CORE_MESSAGES = {
               "lives on only in the git history",
     },
     "cli.baseline-summary": {
-        "ru": "Погашено базлайном: {suppressed}; устаревших записей базлайна: {unused}",
+        "ru": "Погашено списком принятых: {suppressed}; устаревших записей: {unused}",
         "en": "Suppressed by the baseline: {suppressed}; stale baseline entries: {unused}",
     },
     "cli.baseline-stale-hint": {
@@ -188,15 +188,15 @@ _CORE_MESSAGES = {
               "--prune-baseline",
     },
     "cli.baseline-not-checked": {
-        "ru": "Записей базлайна не проверено: {count} – их правил не было в наборе этого "
-              "прогона ({rules}) либо их файлы лежат вне проверенных путей ({paths}); "
+        "ru": "Записей списка принятых не проверено: {count} – их правил не было в наборе этой "
+              "проверки ({rules}) либо их файлы лежат вне проверенных путей ({paths}); "
               "устаревшими они не считаются и при чистке не снимаются",
         "en": "Baseline entries not checked: {count} - their rules were not in this run's "
               "set ({rules}) or their files lie outside the checked paths ({paths}); "
               "they do not count as stale and pruning leaves them alone",
     },
     "cli.run-set": {
-        "ru": "Набор прогона: xbsl {engine}; надстройки: {plugins}; правил активно: "
+        "ru": "Набор проверки: xbsl {engine}; надстройки: {plugins}; правил активно: "
               "{active} из {total} (из надстроек: {plugin})",
         "en": "Run set: xbsl {engine}; plugins: {plugins}; rules active: "
               "{active} of {total} (from plugins: {plugin})",
@@ -206,15 +206,15 @@ _CORE_MESSAGES = {
         "en": "none",
     },
     "cli.baseline-added-entry": {
-        "ru": "добавлено в базлайн: {path} [{rule}] +{count} – {message}",
+        "ru": "добавлено в список принятых: {path} [{rule}] +{count} – {message}",
         "en": "added to the baseline: {path} [{rule}] +{count} - {message}",
     },
     "cli.baseline-added": {
-        "ru": "Базлайн дополнен: {path} (находок: {count}, записей: {entries})",
+        "ru": "Список принятых дополнен: {path} (находок: {count}, записей: {entries})",
         "en": "Baseline extended: {path} ({count} findings in {entries} entries)",
     },
     "cli.baseline-nothing-to-add": {
-        "ru": "Новых находок нет – базлайн не изменён: {path}",
+        "ru": "Новых находок нет – список принятых не изменён: {path}",
         "en": "No new findings - the baseline is unchanged: {path}",
     },
     "cli.baseline-unknown-rule": {
@@ -222,13 +222,13 @@ _CORE_MESSAGES = {
         "en": "Unknown rule: {rule} (the list: xbsl --list-rules)",
     },
     "cli.baseline-none-to-extend": {
-        "ru": "Базлайн не найден выше проверяемых путей – укажите --baseline либо создайте "
+        "ru": "Список принятых не найден выше проверяемых путей – укажите --baseline либо создайте "
               "файл: xbsl <пути> --write-baseline .xbsllint-baseline",
         "en": "No baseline above the checked paths - pass --baseline or create the file: "
               "xbsl <paths> --write-baseline .xbsllint-baseline",
     },
     "cli.baseline-written": {
-        "ru": "Базлайн записан: {path} ({diags} замечаний в {files} файлах)",
+        "ru": "Список принятых записан: {path} ({diags} замечаний в {files} файлах)",
         "en": "Baseline written: {path} ({diags} findings in {files} files)",
     },
     "cli.fix-summary": {

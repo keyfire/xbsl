@@ -47,8 +47,8 @@ def test_index_with_a_bom_is_read(tmp_path):
 
 
 def test_a_broken_json_names_the_file(tmp_path):
-    """Голый JSONDecodeError валил все шаги одинаково и не называл файл - диагноз стоил
-    отдельного прогона."""
+    """A bare JSONDecodeError failed every step the same way and never named the file -
+    the diagnosis cost a run of its own."""
     (tmp_path / "index.json").write_text("{оборванный", encoding="utf-8")
     dataset.set_data_root(tmp_path)
     try:

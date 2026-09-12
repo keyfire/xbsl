@@ -31,7 +31,7 @@ const folder = path.resolve("ws");
 
 // --- groupReportByFile --------------------------------------------------------------------
 
-test("groupReportByFile: раскладка по файлам, относительные пути – от папки воркспейса", () => {
+test("groupReportByFile: раскладка по файлам, относительные пути – от рабочей папки", () => {
   const absolute = path.join(folder, "Модуль.xbsl");
   const grouped = groupReportByFile(
     [diag("Форма.yaml", 1, 2, "a"), diag(absolute, 3, 4, "b"), diag("Форма.yaml", 5, 6, "c")],
@@ -62,7 +62,7 @@ test("groupReportByFile: выключенные правила выпадают,
 // snapshot must be restored from the saved raw report. The fix must be found by the anchor
 // of the displayed diagnostic.
 
-test("регрессия: сохранённый raw воркспейс-прогона даёт правку по якорю диагностики закрытого файла", () => {
+test("регрессия: сохранённый raw проверки всего проекта даёт правку по якорю диагностики закрытого файла", () => {
   const fix: FixEdit = { start: 20, end: 23, newText: "" };
   const d = diag("Модуль.xbsl", 2, 14, "whitespace/trailing", fix);
   const grouped = groupReportByFile([d, diag("Модуль.xbsl", 5, 1, "code/unused-loop-var")], folder, () => false);

@@ -253,7 +253,7 @@ MESSAGES = {
         "en": "files written: {count} -> {out}",
     },
     "translate.cleaned": {
-        "ru": "убрано остатков прошлого прогона: {count}",
+        "ru": "убрано остатков прошлого запуска: {count}",
         "en": "leftovers of earlier passes removed: {count}",
     },
     "translate.clean-without-out": {
@@ -261,7 +261,7 @@ MESSAGES = {
         "en": "--clean without --out: there is nothing to clean, no tree is being written",
     },
     "translate.dry-run-without-out": {
-        "ru": "--dry-run без --out: прогон и так ничего не пишет – показывать нечего",
+        "ru": "--dry-run без --out: команда и так ничего не пишет – показывать нечего",
         "en": "--dry-run without --out: the pass writes nothing anyway - there is nothing"
               " to show",
     },
@@ -274,7 +274,7 @@ MESSAGES = {
         "en": "files to be written: {count} -> {out}",
     },
     "translate.would-clean": {
-        "ru": "будет убрано остатков прошлого прогона: {count}",
+        "ru": "будет убрано остатков прошлого запуска: {count}",
         "en": "leftovers of earlier passes to be removed: {count}",
     },
     "translate.cleaned-more": {
@@ -322,9 +322,9 @@ MESSAGES = {
         "en": "fill the untranslated remainder with an external translator: suggestions, not writes",
     },
     "translate.help.clean": {
-        "ru": "перед записью убрать из каталога --out всё, чего этот прогон не пишет:"
+        "ru": "перед записью убрать из каталога --out всё, чего этот запуск не пишет:"
               " переименованный или снятый в исходнике файл иначе доживает в дереве от"
-              " прошлого прогона и уезжает в сборку, а остаток на месте нужного файла ломает"
+              " прошлого запуска и уезжает в сборку, а остаток на месте нужного файла ломает"
               " саму запись",
         "en": "before writing, take out of the --out directory everything this pass does not"
               " write: a file renamed or dropped in the sources otherwise survives there from"
@@ -332,7 +332,7 @@ MESSAGES = {
               " goes breaks the write itself",
     },
     "translate.help.dry-run": {
-        "ru": "показать, что прогон сделает с каталогом --out, и не делать: перечень того,"
+        "ru": "показать, что команда сделает с каталогом --out, и не делать: перечень того,"
               " что уберёт --clean, и число файлов, которые будут записаны. Первая чистка"
               " дерева в тысячу файлов иначе делается вслепую – счётчик печатается уже после",
         "en": "say what the pass would do to the --out directory and do none of it: the list"
@@ -370,7 +370,7 @@ MESSAGES = {
         "en": "unknown --plans value: {names} (available: {valid})",
     },
     "translate.suggest-unread-flags": {
-        "ru": "режим предложений не читает эти флаги: {names}. Прогон идёт по всему проекту"
+        "ru": "режим предложений не читает эти флаги: {names}. Разбор идёт по всему проекту"
               " целиком; чтобы посмотреть срез, воспользуйтесь --gaps или --entries",
         "en": "the suggest mode does not read these flags: {names}. The run always covers the"
               " whole project; to look at a slice use --gaps or --entries",
