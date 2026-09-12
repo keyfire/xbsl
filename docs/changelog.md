@@ -25,7 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-12 – 0.104.0, 0.105.0
 
 ### Added
 - **`tests/test_conventions.py` catches a test shadowed by a namesake.** A test that arrives
@@ -35,26 +35,6 @@ entry either - say what the behaviour was, not which class name was compared.
   one definition per name since July; this one comes from the shared `docsguard` package and
   reads the inside of a class as well, where pytest collects a `test_` method just the same.
   ([#44](https://github.com/keyfire/xbsl/pull/44))
-
-### Changed
-- **The shared guard is pinned to `docsguard@v0.9.0`.** In that release the source checks read a
-  file as `utf-8-sig`. `xbsl/__init__.py` begins with a byte-order mark, `ast.parse` answered it
-  with a `SyntaxError`, and one such file left the whole check with no findings from any file at
-  all. The newline check reads whole folders again, and the workaround that opened them one by
-  one is gone. ([#44](https://github.com/keyfire/xbsl/pull/44))
-
-### Fixed
-- **`.gitattributes` holds the line ending for the whole repository.** The line
-  `* text=auto eol=lf` stores and checks out every text file with line feeds, whatever the
-  machine is set to. The file named only `diff` per extension before, so a clone made with
-  `core.autocrlf=true` came out with 546 text files carrying carriage returns. `newline=""` in
-  the Python generators does not reach that far: it says how a file is written, and
-  `scripts/sync-docs.mjs` copies bytes when it mirrors `CHANGELOG.md` and the extension README
-  onto site pages. ([#44](https://github.com/keyfire/xbsl/pull/44))
-
-## 2026-09-12 – 0.104.0
-
-### Added
 - **The conventions guard requires a process started from the engine to name its stdin.**
   Otherwise the child gets the stdin an MCP or LSP server speaks over, and on Windows it cannot
   finish. The check covers the `xbsl` folder alone: generators and tests run from a console,
@@ -91,6 +71,11 @@ entry either - say what the behaviour was, not which class name was compared.
   stays invisible comes with its reason. ([#19](https://github.com/keyfire/xbsl/pull/19))
 
 ### Changed
+- **The shared guard is pinned to `docsguard@v0.9.0`.** In that release the source checks read a
+  file as `utf-8-sig`. `xbsl/__init__.py` begins with a byte-order mark, `ast.parse` answered it
+  with a `SyntaxError`, and one such file left the whole check with no findings from any file at
+  all. The newline check reads whole folders again, and the workaround that opened them one by
+  one is gone. ([#44](https://github.com/keyfire/xbsl/pull/44))
 - **The conventions guard reads the Russian strings of the sources.** It read the documentation
   pages only, though a person reads the help of a command and the text of a refusal the same way
   as a page. The check names fourteen modules that hold messages. The rule modules stay out:
@@ -116,6 +101,13 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
+- **`.gitattributes` holds the line ending for the whole repository.** The line
+  `* text=auto eol=lf` stores and checks out every text file with line feeds, whatever the
+  machine is set to. The file named only `diff` per extension before, so a clone made with
+  `core.autocrlf=true` came out with 546 text files carrying carriage returns. `newline=""` in
+  the Python generators does not reach that far: it says how a file is written, and
+  `scripts/sync-docs.mjs` copies bytes when it mirrors `CHANGELOG.md` and the extension README
+  onto site pages. ([#44](https://github.com/keyfire/xbsl/pull/44))
 - **The table modes of the translation command refuse the flags of the writing pass.**
   `--gaps`, `--entries`, `--table`, `--unused`, `--redundant` and `--suggest` write no tree, yet
   they took `--out`, `--clean`, `--dry-run` and `--missing` without a word: a request to show
