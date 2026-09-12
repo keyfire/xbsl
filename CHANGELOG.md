@@ -48,6 +48,10 @@ entry either - say what the behaviour was, not which class name was compared.
   refusals and the LSP log read like a transliteration. The English strings were already
   plain and did not change.
   ([#33](https://github.com/keyfire/xbsl/pull/33))
+- **The Russian dry-run line of `translate` no longer shouts in capitals.** The English
+  string is unchanged. The Russian pages caught up with the messages rewritten in #33: their
+  examples quoted output the tool no longer prints.
+  ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
 - **A directory named after `--as-ci` is refused with the form that works.** The flag expects a
