@@ -59,8 +59,8 @@ entry either - say what the behaviour was, not which class name was compared.
   package by tag, so a verdict cannot move without a commit.
   ([#23](https://github.com/keyfire/xbsl/pull/23))
 - **The `xbsl --help` texts and the VS Code extension pages are written in plain words.** The
-  wording read like a transliteration and the sentences ran long, so the owner could not read
-  them. The Russian metavar of `--as-ci-job` changed with them.
+  wording read like a transliteration and the sentences ran long, so half of the text had to be
+  translated back before it said anything. The Russian metavar of `--as-ci-job` changed with them.
   ([#28](https://github.com/keyfire/xbsl/pull/28))
 - **The Russian messages of the engine are written in plain words.** The report, the
   refusals and the LSP log read like a transliteration. The English strings were already

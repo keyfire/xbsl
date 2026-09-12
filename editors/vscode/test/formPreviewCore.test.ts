@@ -582,7 +582,7 @@ check(
 // --- an English form is drawn like the Russian one --------------------------------------
 // The platform reads a project written with the English spellings the same way, and the
 // designer parses the yaml itself: without the key pairs from the engine the frame came up
-// empty on a legal form (found by the owner on demo-en).
+// empty on a legal form (found on demo-en).
 const EN_FORM = `
 ElementKind: InterfaceComponent
 Id: 00000000-0000-4000-8000-000000000009

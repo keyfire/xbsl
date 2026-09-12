@@ -657,8 +657,8 @@ def test_chain_type_at_dot_after_call():
 def test_chain_type_at_dot_after_property():
     # a dot after a PROPERTY link: `Список.НастройкиСервисовУчетныхЗаписей.` - the chain
     # walks property types the same way it walks returns, and the completion trigger
-    # (CHAIN_TAIL_RE) must fire without a bracket before the dot. This is the owner's
-    # reported dead completion: the first links worked, the property link answered nothing.
+    # (CHAIN_TAIL_RE) must fire without a bracket before the dot. This is the dead
+    # completion seen on a real project: the first links worked, the property link did not.
     code = (
         "метод А()\n"
         "    знч Список = СпискиПользователей.ПолучитьСписокПоУмолчанию()\n"

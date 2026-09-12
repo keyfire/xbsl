@@ -326,9 +326,8 @@
 ## 0.61.5
 
 ### Removed
-- **The screenshots are gone from the pages** (the owner's decision): three animations and
-  eleven frames showed the previous panel titles and versions, and keeping them current
-  costs more than they give. The diagrams of how the extension works stay - those do not
+- **The screenshots are gone from the pages.** Three animations and eleven frames showed the
+  previous panel titles and versions, and keeping them current costs more than they give. The diagrams of how the extension works stay - those do not
   go stale.
 
 ### Changed

@@ -155,7 +155,7 @@ function engineFailed(res: RunResult): string {
     : String(res.error ?? "");
 }
 
-// The machine-translation keys the owner put into SecretStorage, shaped as the environment the
+// The machine-translation keys the user put into SecretStorage, shaped as the environment the
 // engine's `--suggest` run reads them from. An empty value is dropped rather than passed as an
 // empty string: to the engine the two look identical (its own env lookup only asks "is it set"),
 // so there is nothing to gain by passing one and a reader of the spawned process's environment
@@ -1631,7 +1631,7 @@ interface KeyChoice extends vscode.QuickPickItem {
 }
 
 // What the command offers to set: the two keys and the one id Yandex Translate needs besides its
-// key. No default and no example value is offered anywhere here - the owner types the real one.
+// key. No default and no example value is offered anywhere here - the user types the real one.
 function keyChoices(): KeyChoice[] {
   return [
     { label: vscode.l10n.t("Yandex Translate: API key"), secret: SECRET_YANDEX_KEY },
@@ -1641,7 +1641,7 @@ function keyChoices(): KeyChoice[] {
 }
 
 // Puts one machine-translation credential into SecretStorage - never into a setting, never onto
-// the engine's command line. The owner types it here, with the input hidden; the code that spawns
+// the engine's command line. The user types it here, with the input hidden; the code that spawns
 // the engine only ever reads it back (`secretsEnv`). An empty answer clears the credential rather
 // than storing an empty string, so "forgot the key" and "cleared the key" read the same way.
 async function setMachineKey(context: vscode.ExtensionContext): Promise<void> {
