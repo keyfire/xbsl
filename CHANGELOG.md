@@ -27,6 +27,11 @@ entry either - say what the behaviour was, not which class name was compared.
   the browser gets those files exactly as they are. The check reads comments and the text on
   the screen; code, selectors and attribute values stay out of it.
   ([#36](https://github.com/keyfire/xbsl/pull/36))
+- **The translator reads the comments of a resource file.** A `.css`, `.js`, `.html` or `.svg`
+  used to be copied byte for byte, so a Russian comment reached the English build and
+  `--strict` called the file covered. Their text is now an ordinary dictionary phrase: the
+  comments, plus `<title>` and `<desc>` in an `.svg`. A licence comment and a minified file
+  are skipped. ([#34](https://github.com/keyfire/xbsl/pull/34))
 - **The LSP server says which rule set it judges by (`xbsl/ciStatus`).** That used to be one
   line on stderr, in an output channel nobody reads. The request now answers whether the job's
   set was taken, which job it was and which file it came from, and the extension shows that in
@@ -50,6 +55,14 @@ entry either - say what the behaviour was, not which class name was compared.
   wording read like a transliteration and the sentences ran long, so the owner could not read
   them. The Russian metavar of `--as-ci-job` changed with them.
   ([#28](https://github.com/keyfire/xbsl/pull/28))
+- **The Russian messages of the engine are written in plain words.** The report, the
+  refusals and the LSP log read like a transliteration. The English strings were already
+  plain and did not change.
+  ([#33](https://github.com/keyfire/xbsl/pull/33))
+- **The Russian dry-run line of `translate` no longer shouts in capitals.** The English
+  string is unchanged. The Russian pages caught up with the messages rewritten in #33: their
+  examples quoted output the tool no longer prints.
+  ([#35](https://github.com/keyfire/xbsl/pull/35))
 
 ### Fixed
 - **A directory named after `--as-ci` is refused with the form that works.** The flag expects a

@@ -27,7 +27,7 @@ def test_write_then_check_suppresses_all(tmp_path, capsys):
     code = cli.main(["--write-baseline", str(bl), *_NO_PAIR, str(f)])
     err = capsys.readouterr().err
     assert code == 0 and bl.is_file()
-    assert "Базлайн записан" in err
+    assert "Список принятых записан" in err
 
     code, payload = _run_json(["--baseline", str(bl), str(f)], capsys)
     assert code == 0
@@ -96,7 +96,7 @@ def test_baselined_error_does_not_fail_the_run(tmp_path, capsys):
 
 
 def test_baseline_with_a_bom_is_read(tmp_path):
-    """Базлайн, переписанный PowerShell (Out-File -Encoding utf8 ставит BOM), годен."""
+    """A baseline rewritten by PowerShell (Out-File -Encoding utf8 adds a BOM) is read."""
     from xbsl import baseline
 
     bl = tmp_path / "baseline.json"
@@ -121,7 +121,7 @@ def test_text_summary_reports_baseline(tmp_path, capsys):
 
     cli.main(["--baseline", str(bl), *_NO_PAIR, str(f)])
     err = capsys.readouterr().err
-    assert "Погашено базлайном: 1" in err
+    assert "Погашено списком принятых: 1" in err
 
 
 def test_enable_adds_rule_on_top_of_defaults(tmp_path, capsys):
@@ -263,7 +263,7 @@ def test_summary_points_at_the_key_that_lists_the_stale_entries(tmp_path, capsys
 
     cli.main(["--baseline", str(bl), *_NO_PAIR, str(tmp_path)])
     err = capsys.readouterr().err
-    assert "устаревших записей базлайна: 1" in err
+    assert "устаревших записей: 1" in err
     assert "--stale-baseline" in err and "--prune-baseline" in err
 
 
@@ -291,7 +291,7 @@ def test_a_baseline_without_stale_entries_gets_no_hint(tmp_path, capsys):
 
     cli.main(["--baseline", str(bl), *_NO_PAIR, str(tmp_path)])
     err = capsys.readouterr().err
-    assert "устаревших записей базлайна: 0" in err
+    assert "устаревших записей: 0" in err
     assert "--stale-baseline" not in err
 
 
@@ -412,8 +412,8 @@ def test_project_baseline_is_found_without_the_flag(tmp_path, capsys):
 
     code = cli.main([*_NO_PAIR, str(f)])
     err = capsys.readouterr().err
-    assert code == 0 and "Найден базлайн проекта" in err
-    assert "Погашено базлайном: 1" in err
+    assert code == 0 and "Найден список принятых замечаний проекта" in err
+    assert "Погашено списком принятых: 1" in err
 
 
 def test_discovery_is_switched_off_by_the_flag(tmp_path, capsys):
@@ -427,7 +427,7 @@ def test_discovery_is_switched_off_by_the_flag(tmp_path, capsys):
 
     cli.main(["--no-baseline", *_NO_PAIR, str(f)])
     out, err = capsys.readouterr()
-    assert "Найден базлайн" not in err and "Погашено базлайном" not in err
+    assert "Найден список принятых" not in err and "Погашено списком принятых" not in err
     assert "whitespace/trailing" in out
 
 
@@ -445,7 +445,7 @@ def test_explicit_baseline_wins_over_discovery(tmp_path, capsys):
     cli.main(["--baseline", str(named), *_NO_PAIR, str(f)])
     out, err = capsys.readouterr()
     # the named (empty) baseline suppresses nothing, and the discovery message never appears
-    assert "Найден базлайн" not in err and "whitespace/trailing" in out
+    assert "Найден список принятых" not in err and "whitespace/trailing" in out
 
 
 def _seed_other_rule(bl):

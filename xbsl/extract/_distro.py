@@ -198,7 +198,7 @@ def keep_previous(version: str, build: str) -> str:
     previous = str((data.get("builds") or {}).get(version, ""))
     if not previous:
         return ("прежний каталог не несёт номера сборки - снимок не назван и не сделан; "
-                "номер записывается начиная с этого прогона")
+                "номер записывается начиная с этого запуска")
     if build and previous == build:
         return f"в каталоге уже сборка +{previous} - снимок не нужен"
     snapshot = f"{version}+{previous}"

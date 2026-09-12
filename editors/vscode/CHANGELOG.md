@@ -24,6 +24,14 @@
   changed parity setting is exactly what causes one. An older engine that does not know the
   request shows no indicator at all.
 
+### Changed
+- **The Russian texts of the extension are written in plain words.** The Quick Fix action
+  and the descriptions of the settings changed with them.
+  ([#33](https://github.com/keyfire/xbsl/pull/33))
+- **The "Read more" link of `xbsl.baseline` opens its section again.** The heading it pointed
+  at was renamed and the link went nowhere.
+  ([#35](https://github.com/keyfire/xbsl/pull/35))
+
 ## 0.68.0
 
 ### Added

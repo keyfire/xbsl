@@ -106,10 +106,10 @@
   <!-- Baseline -->
   <rect x="30" y="360" width="174" height="112" rx="8" class="box"/>
   <rect x="30" y="368" width="3" height="96" rx="1.5" fill="var(--muted)"/>
-  <text x="44" y="384" class="box-title">Базлайн</text>
+  <text x="44" y="384" class="box-title">Список принятых</text>
   <text x="44" y="408" class="mono code">.xbsllint-baseline</text>
-  <text x="44" y="430" class="box-body">замороженный легаси-долг,</text>
-  <text x="44" y="448" class="box-body">гасится в каждом прогоне</text>
+  <text x="44" y="430" class="box-body">замороженный старый долг,</text>
+  <text x="44" y="448" class="box-body">гасится при каждой проверке</text>
 
   <!-- Engine core -->
   <rect x="252" y="68" width="268" height="230" rx="8" class="box"/>
@@ -117,7 +117,7 @@
   <text x="266" y="92" class="box-title">Ядро движка</text>
   <text x="266" y="118" class="box-body">линтер: тиры A–D, правила style,</text>
   <text x="266" y="136" class="box-body">типографика, неизвестные типы</text>
-  <text x="266" y="154" class="box-body">автофиксы (--fix)</text>
+  <text x="266" y="154" class="box-body">автоисправления (--fix)</text>
   <text x="266" y="172" class="box-body">индекс проекта: определения,</text>
   <text x="266" y="190" class="box-body">использования, дополнение</text>
   <text x="266" y="208" class="box-body">поиск по документации</text>
@@ -126,7 +126,7 @@
   <!-- Metadata scaffolding -->
   <rect x="252" y="318" width="268" height="96" rx="8" class="box"/>
   <rect x="252" y="326" width="3" height="80" rx="1.5" fill="var(--accent-pink)"/>
-  <text x="266" y="342" class="box-title">Скаффолдинг метаданных</text>
+  <text x="266" y="342" class="box-title">Создание метаданных</text>
   <text x="266" y="362" class="box-body">объекты, реквизиты,</text>
   <text x="266" y="380" class="box-body">маршруты, формы</text>
   <text x="266" y="402" class="mono code">uuid + точечные правки yaml</text>

@@ -1,7 +1,8 @@
 """Translate a whole project tree: files, names of files, localization, coverage.
 
-`translate_project` walks the project, translates every `.yaml`/`.xbsl`/`.xbql`, copies the
-resources, renames every path component through the same token map the contents use (a
+`translate_project` walks the project, translates every `.yaml`/`.xbsl`/`.xbql`, takes the
+prose out of the resources it can read (the comments of a `.css`/`.js`/`.html`/`.svg` and the
+`<title>`/`<desc>` of a drawing - `resourcefile`), copies the rest, renames every path component through the same token map the contents use (a
 reference and the file it points to cannot drift apart when both go through one map), and
 turns the localized-strings layout around: the project's dictionaries already carry the
 target language, so the translated project gets those values as its BASE (with the keys
@@ -31,6 +32,8 @@ from xbsl.translation.dictionary import (
 )
 from xbsl.translation.jsonfile import translate_json
 from xbsl.translation.reporting import FileReport
+from xbsl.translation.resourcefile import SUFFIXES as RESOURCE_SUFFIXES
+from xbsl.translation.resourcefile import translate_resource
 from xbsl.translation.yamlfile import translate_yaml
 
 try:
@@ -64,7 +67,7 @@ MESSAGES = {
     },
     "translate.problem.write-failed": {
         "ru": "{path}: файл не записан – {error}. Чаще всего на этом месте лежит остаток"
-              " прошлого прогона (каталог вместо файла, файл только для чтения) или файл"
+              " прошлого запуска (каталог вместо файла, файл только для чтения) или файл"
               " занят другой программой",
         "en": "{path}: the file was not written - {error}. Usually what stands there is a"
               " leftover of an earlier run (a directory where a file goes, a read-only file)"
@@ -75,7 +78,7 @@ MESSAGES = {
         "en": "files not written for the same reason: {count} more",
     },
     "translate.problem.clean-failed": {
-        "ru": "{path}: остаток прошлого прогона не удалён – {error}",
+        "ru": "{path}: остаток прошлого запуска не удалён – {error}",
         "en": "{path}: a leftover of an earlier run was not removed - {error}",
     },
     "translate.problem.shadow": {
@@ -403,6 +406,9 @@ def translate_project(
                 translated = translate_code(source, resolver, file_report)
         elif path.suffix == ".json":
             translated = _translate_json_bytes(path.read_bytes(), dictionary, fields, file_report)
+        elif path.suffix.lower() in RESOURCE_SUFFIXES:
+            translated = _translate_resource_bytes(
+                path.read_bytes(), path.suffix, dictionary, file_report)
         else:
             translated = path.read_bytes()
         new_rel_parts = [_translate_component(part, resolver, file_report) for part in rel.parts]
@@ -485,6 +491,27 @@ def _translate_json_bytes(
         # Not a text resource this pass understands - copied as it is, like any binary.
         return raw
     translated = translate_json(text, dictionary, fields, report)
+    if translated == text:
+        return raw
+    return (b"\xef\xbb\xbf" if bom else b"") + translated.encode("utf-8")
+
+
+def _translate_resource_bytes(
+    raw: bytes, suffix: str, dictionary: Dictionary, report: FileReport
+) -> bytes:
+    """Translate the prose of a `.css`/`.js`/`.html`/`.svg`, keeping its encoding and mark.
+
+    A resource used to be copied whole, comments and all, so Russian prose reached the
+    English tree and the coverage said the file was complete. What the reading finds and
+    where it stops is `resourcefile`; here is only the decoding around it.
+    """
+    bom = raw.startswith(b"\xef\xbb\xbf")
+    try:
+        text = raw.decode("utf-8-sig" if bom else "utf-8")
+    except UnicodeDecodeError:
+        # Not a text resource this pass understands - copied as it is, like any binary.
+        return raw
+    translated = translate_resource(text, suffix, dictionary, report)
     if translated == text:
         return raw
     return (b"\xef\xbb\xbf" if bom else b"") + translated.encode("utf-8")

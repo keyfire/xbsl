@@ -601,7 +601,7 @@ def test_a_renamed_source_leaves_an_orphan_that_clean_takes_out(tmp_path: Path, 
     assert len(written("percent.svg")) == 1 and len(written("percent-sign.svg")) == 1
 
     assert _cli([*argv, "--clean"]) == 0
-    assert "убрано остатков прошлого прогона: 1" in capsys.readouterr().out
+    assert "убрано остатков прошлого запуска: 1" in capsys.readouterr().out
     assert written("percent.svg") == []
     assert len(written("percent-sign.svg")) == 1
 
@@ -680,7 +680,7 @@ def test_a_clean_says_which_leftovers_it_took_out(tmp_path: Path, capsys):
     assert _cli([*argv, "--clean"]) == 0
 
     said = capsys.readouterr().out
-    assert "убрано остатков прошлого прогона: 1" in said and "Забытый.yaml" in said
+    assert "убрано остатков прошлого запуска: 1" in said and "Забытый.yaml" in said
 
 
 def test_a_dry_run_names_the_leftovers_and_takes_nothing_out(tmp_path: Path, capsys):
@@ -700,8 +700,8 @@ def test_a_dry_run_names_the_leftovers_and_takes_nothing_out(tmp_path: Path, cap
     assert _cli([*argv, "--clean", "--dry-run"]) == 0
 
     said = capsys.readouterr().out
-    assert "СУХОЙ ПРОГОН" in said and "Забытый.yaml" in said
-    assert "будет убрано остатков прошлого прогона: 1" in said
+    assert "Пробный запуск" in said and "Забытый.yaml" in said
+    assert "будет убрано остатков прошлого запуска: 1" in said
     assert orphan.is_file()  # named, not taken
 
     assert _cli([*argv, "--clean"]) == 0
