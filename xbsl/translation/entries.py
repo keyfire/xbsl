@@ -331,6 +331,9 @@ def _comment_bodies(path: Path, text: str) -> set[str]:
     private regex of this module did neither, and answered a doc comment with a slash glued
     to the text.
 
+    A resource - a stylesheet, a script, a page, a drawing - is read by `resourcefile`, the
+    module the translating pass itself reads it with, for the same reason.
+
     A yaml file is read by its own pattern from EVERY `#` on the line, without the "inside a
     scalar" test the translator makes: the extra bodies that yields cost nothing (an entry
     stays in place), while a missed one costs a translation. The same reading serves a module
@@ -356,10 +359,14 @@ def _comment_bodies_of(suffix: str, text: str) -> set[str]:
     INTERSECTS this set with the orphans of the whole project.
     """
     from xbsl.translation import code as code_module
+    from xbsl.translation import resourcefile as resource_module
     from xbsl.translation import yamlfile as yaml_module
 
     if suffix == ".yaml":
         return _marked_bodies(text, "#", yaml_module._COMMENT_TEXT_RE)
+    if suffix.lower() in resource_module.SUFFIXES:
+        return {payload for _start, _end, payload in
+                resource_module.resource_payloads(suffix, text)}
     if suffix not in (".xbsl", ".xbql"):
         return set()  # json carries keys and data, never a comment
     from xbsl import lexer
@@ -401,6 +408,7 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
     delete a translation the project still needs.
     """
     from xbsl.translation import project as project_module
+    from xbsl.translation import resourcefile as resource_module
 
     names: set[str] = set()
     lines: set[str] = set()
@@ -411,14 +419,18 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
         # its file name alone (an icon next to the yaml that names it) is exactly that case.
         for part in path.relative_to(root).parts:
             names.update(_WORD_RE.findall(part))
-        if path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
+        resource = path.suffix.lower() in resource_module.SUFFIXES
+        if not resource and path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
             continue
         try:
             text = path.read_text(encoding="utf-8-sig")
         except (OSError, UnicodeDecodeError):
             continue
-        names.update(_WORD_RE.findall(text))
-        literals.update(_LITERAL_RE.findall(text))
+        if not resource:
+            # A stylesheet or a script is read for its PROSE alone. Its words are English
+            # code, and feeding them in would answer for a name no source declares any more.
+            names.update(_WORD_RE.findall(text))
+            literals.update(_LITERAL_RE.findall(text))
         lines.update(_comment_bodies(path, text))
     return names, lines, literals
 
@@ -521,14 +533,18 @@ def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
                 seen.add(path)
         elif in_hunk and path and raw.startswith("-"):
             removed.setdefault(path, []).append(raw[1:])
+    from xbsl.translation import resourcefile as resource_module
+
     out = Removal(base=base, files=len(seen))
     for rel, body in removed.items():
         suffix = Path(rel).suffix
-        if suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
+        resource = suffix.lower() in resource_module.SUFFIXES
+        if not resource and suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
             continue
         text = "\n".join(body)
-        out.names.update(_WORD_RE.findall(text))
-        out.literals.update(_LITERAL_RE.findall(text))
+        if not resource:
+            out.names.update(_WORD_RE.findall(text))
+            out.literals.update(_LITERAL_RE.findall(text))
         out.lines.update(_comment_bodies_of(suffix, text))
     for rel in seen:
         # A file that is gone took its PATH with it, and a path is a place a name may live -
