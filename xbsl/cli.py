@@ -1124,6 +1124,7 @@ def _check_main(argv: list[str]) -> int:
 
     from xbsl.engine import RULES, active_rules, load, make_source, run_sources
 
+    adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
         # "As in CI" is read from the pipeline file itself, never from a second list of rules
         # kept in step by hand: the job's --enable flags are what a local pass was missing,
@@ -1132,7 +1133,16 @@ def _check_main(argv: list[str]) -> int:
             job = cijob.find(args.paths, args.as_ci or None, args.as_ci_job)
         except cijob.CiLintError as exc:
             print(str(exc), file=sys.stderr)
+            if args.format == "json":
+                # A refusal is where a machine reader needs the reason most, and stderr is
+                # not where it looks. The payload carries no `diagnostics` on purpose: the
+                # run never happened, and an empty list of findings reads like a clean tree.
+                _emit_report(json.dumps(
+                    {"error": str(exc), "summary": {"as_ci": cijob.refused(str(exc))}},
+                    ensure_ascii=False,
+                ), args.out)
             return 2
+        adopted = job
         # Merged, not replaced: `--as-ci --enable style/line-length` is "the job's set plus
         # this one", which is how a rule is tried out before it goes into the pipeline.
         args.select = (args.select or []) + list(job.select)
@@ -1320,6 +1330,12 @@ def _check_main(argv: list[str]) -> int:
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
         payload["summary"].update(environment.provenance(active))
+        if adopted is not None:
+            # The record the MCP server already answered with, now in the terminal's report
+            # too: which job of which file this verdict was judged by. Without it a reader
+            # comparing a local run with a red pipeline had nothing to compare THE SETS by,
+            # and the flag's whole promise is that the two agree.
+            payload["summary"]["as_ci"] = adopted.as_dict(hint=not args.as_ci_job)
         if suppressed is not None:
             payload["summary"]["baselined"] = suppressed
             # Two different units, both useful: `unused` counts the suppressions nobody

@@ -243,8 +243,15 @@ xbsl build/en --as-ci-job english      # the set of the "English to S3" job
 A half that fits two jobs is refused rather than guessed, and a name the file does not have is
 answered with the names it does.
 
-The same is available to an agent: the MCP `lint_paths` tool takes `as_ci` and `as_ci_job`,
-and puts `as_ci` (file, job, flags, the other jobs) into the summary.
+**In a machine report.** With `--format json` the same answer stands in `summary.as_ci`: whether
+the job's set was taken (`adopted`), which job of which file (`job`, `file`, plus `source` when an
+`include:` brought the command in), the root of the checkout, the set as data (`select`, `ignore`,
+`enable`, `baseline`, `no_baseline`) and as the sentence printed above it (`flags`), the jobs not
+taken (`jobs`) and the includes left unread. A refusal still returns 2, and the payload carries the
+reason under the same key. Such a payload has no `diagnostics` in it, because the run never
+happened and an empty list of findings reads as a clean tree. The MCP `lint_paths` tool takes
+`as_ci` and `as_ci_job` and answers with the same record. The editor asks for it with
+`xbsl/ciStatus`.
 
 **And in the editor.** The status bar says which set the panel judges by. While the job's set is
 in force it reads `CI: <job>`; when the set was asked for and could not be taken, it shows a

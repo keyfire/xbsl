@@ -21,6 +21,12 @@ entry either - say what the behaviour was, not which class name was compared.
 ## 2026-09-12 – 0.104.0
 
 ### Added
+- **The machine report of the CLI names the CI rule set it judged by.** `--format json` now
+  carries `summary.as_ci`: the job and the file it came from, the set as data and as the
+  sentence a terminal prints, the jobs not taken and the includes left unread. That answer was
+  a line on stderr in text mode only, so a reader of the report had nowhere to take it from,
+  and only the agent tool could see it. A refusal reaches the report too, under the same key
+  and with no findings in it. ([#41](https://github.com/keyfire/xbsl/pull/41))
 - **Typography now reaches the resource files of a project.** The em dash, the ellipsis
   character, curly quotes, guillemets and the letter "ё" are caught in the `.css`, `.js`,
   `.svg` and `.html` under the resources folder as well. Nobody looked there before, though
