@@ -800,6 +800,9 @@ STANDARD_FIELDS: dict[str, dict[str, str]] = {
     "КонтрактСущности": {"Ссылка": "{}.Ссылка"},
 }
 
+#: The key of a dynamic list row as the catalog spells it: by the row type parameter.
+_ROW_KEY_RE = re.compile(r"([\wЁё]+)\.RowDataKeyType(\?)?")
+
 #: The standard attributes of a tabular section row, `{}` standing for the owner element.
 TABULAR_STANDARD_FIELDS: dict[str, str] = {"Владелец": "{}.Ссылка", "НомерСтроки": "Число"}
 
@@ -825,6 +828,12 @@ class ProjectCatalog:
         self.elements: dict[str, dict] = dict(elements or {})
         self.modules: dict[str, dict] = dict(modules or {})
         self.rows: dict[str, dict[str, TypeSet | None]] = {}
+        # {row data type of a dynamic list (`Форма.ДанныеСтроки`): the list's main table}
+        self.row_keys: dict[str, str] = {
+            row: table
+            for element in self.elements.values()
+            for row, table in (element.get("row_keys") or {}).items()
+        }
         self._written: dict[tuple[str, str | None], TypeSet | None] = {}
 
     # -- names -----------------------------------------------------------------------------
@@ -930,7 +939,25 @@ class ProjectCatalog:
         bindings = _type_param_bindings(head, args, resolve)
         if bindings is None:
             return None
+        key = _ROW_KEY_RE.fullmatch(written or "")
+        if key is not None:
+            return self._row_key(bindings.get(key.group(1)), bool(key.group(2)))
         return parse_type_with(written, resolve, bindings)
+
+    def _row_key(self, row: TypeSet | None, nullable: bool) -> TypeSet | None:
+        """The key of a dynamic list row: a reference of the list's main table.
+
+        The catalog spells it by the row type (`ТипДанныхСтроки.RowDataKeyType`), and only the
+        form that declares the row type says which table stands behind it. Answered for a
+        catalog and a document - the tables whose key the compiler was shown to call a reference.
+        """
+        if row is None or row.size != 1 or not row.names:
+            return None
+        table = self.row_keys.get(next(iter(row.names)))
+        element = self.elements.get(table or "")
+        if element is None or element.get("kind") not in ("Справочник", "Документ"):
+            return None
+        return TypeSet(frozenset({f"{table}.Ссылка"}), nullable)
 
     def _facet_member(self, element_name: str, facet: str, name: str,
                       called: bool) -> TypeSet | None:

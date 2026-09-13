@@ -288,6 +288,40 @@ def test_projects_linted_together_keep_their_names_apart():
     assert ("Б/Основное/Остатки.xbsl", line) not in by_file
 
 
+LIST_FORM_YAML = """ВидЭлемента: КомпонентИнтерфейса
+Имя: СкладыФормаСписка
+Наследует:
+    Тип: ФормаСписка
+Свойства:
+    -
+        Имя: Список
+        Тип: ДинамическийСписок<СкладыФормаСписка.ДанныеСтрокиСписка>
+        ЗначениеПоУмолчанию:
+            ИмяТипаДанныхСтроки: ДанныеСтрокиСписка
+            ОсновнаяТаблица:
+                Таблица: Склады
+"""
+
+LIST_FORM_XBSL = """метод Открыть(Параметр: СтрокаДинамическогоСписка<СкладыФормаСписка.ДанныеСтрокиСписка>)
+    знч Склад = Параметр.Ключ как Склады.Ссылка
+    знч Партия = Параметр.Ключ как Партии.Ссылка
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_the_key_of_a_dynamic_list_row_is_a_reference_of_its_main_table():
+    files = _project(ROWS, **{
+        "Основное/СкладыФормаСписка.yaml": LIST_FORM_YAML,
+        "Основное/СкладыФормаСписка.xbsl": LIST_FORM_XBSL,
+    })
+    _sources, diags = _lint(files)
+    where = sorted((d.rule_id, d.line) for d in diags
+                   if d.path.replace("\\", "/") == "Основное/СкладыФормаСписка.xbsl")
+    # the control on line 3: the key is no reference of another catalog
+    assert where == [(REDUNDANT, 2)]
+
+
 # --- the fixes ------------------------------------------------------------------------------------
 
 FIXES = """метод Исправления(Место: Склады.Ссылка|Площадки.Ссылка, Склад: Склады.Ссылка, П: Строка?)

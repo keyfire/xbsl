@@ -41,7 +41,7 @@ import hashlib
 from collections.abc import Iterable
 from pathlib import PurePosixPath
 
-from xbsl import i18n, lexer
+from xbsl import i18n, lexer, terms
 from xbsl import parser as P
 from xbsl import typeinfer
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
@@ -99,10 +99,10 @@ def _typed_members(data: dict, key: str, kind: str | None) -> dict[str, str | No
     for item in items:
         if not isinstance(item, dict):
             continue
-        name = item.get("Имя") or item.get("Name")
+        name = _first_of(item, "Имя")
         if not isinstance(name, str) or not name:
             continue
-        written = item.get("Тип") if "Тип" in item else item.get("Type")
+        written = _first_of(item, "Тип")
         out[name] = written.strip() if isinstance(written, str) and written.strip() else None
     return out
 
@@ -116,15 +116,49 @@ def _contracts(data: dict, kind: str | None) -> list[str]:
     for facet in settings.values():
         if not isinstance(facet, dict):
             continue
-        listed = facet.get("Контракты") if "Контракты" in facet else facet.get("Contracts")
+        listed = _first_of(facet, "Контракты")
         if isinstance(listed, list):
             out.extend(item.strip() for item in listed if isinstance(item, str) and item.strip())
     return out
 
 
+def _first_of(node: dict, *names: str):
+    for name in terms.key_forms(*names):
+        if name in node:
+            return node[name]
+    return None
+
+
+def _row_keys(data: dict, element: str) -> dict[str, str]:
+    """{row data type of a dynamic list: its main table} declared anywhere in the element.
+
+    A form names the row type of its list (`RowDataTypeName`) next to the table the list
+    reads (`MainTable.Table`), and the key of such a row is a reference of that table:
+    `Параметр.Ключ как Задачи.Ссылка` in a row command is a redundant cast the compiler reports.
+    """
+    out: dict[str, str] = {}
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            row = _first_of(node, "ИмяТипаДанныхСтроки")
+            main = _first_of(node, "ОсновнаяТаблица")
+            if isinstance(row, str) and row.strip() and isinstance(main, dict):
+                table = _first_of(main, "Таблица")
+                if isinstance(table, str) and table.strip():
+                    out[f"{element}.{row.strip()}"] = table.strip()
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(data)
+    return out
+
+
 def _yaml_names(node, out: set[str]) -> None:
     if isinstance(node, dict):
-        for key in ("Имя", "Name"):
+        for key in terms.key_forms("Имя"):
             value = node.get(key)
             if isinstance(value, str) and value:
                 out.add(value)
@@ -149,7 +183,7 @@ def _element_fact(source: SourceFile) -> dict | None:
         for part in parts:
             if not isinstance(part, dict):
                 continue
-            part_name = part.get("Имя") or part.get("Name")
+            part_name = _first_of(part, "Имя")
             if isinstance(part_name, str) and part_name:
                 tabular[part_name] = _typed_members(part, "Реквизиты", kind)
     values = _typed_members(data, "Элементы", kind) if kind == "Перечисление" else {}
@@ -166,6 +200,7 @@ def _element_fact(source: SourceFile) -> dict | None:
         "tabular": tabular,
         "values": sorted(values),
         "contracts": _contracts(data, kind),
+        "row_keys": _row_keys(data, name),
         "names": sorted(names),
     }
 
