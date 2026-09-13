@@ -104,27 +104,38 @@ and code samples stay as they were, and so do lines that were long in the source
 
 The dictionary is a directory of yaml files, or one file, named `xbsl-translation` and discovered
 next to the project or above it. To fill it, drop a completed stub next to the ones already there.
-Two files disagreeing about one key are refused at load time.
+Two files disagreeing about one key are refused at load time, and so is one file that declares a key
+twice with two translations.
 
 The refusal names every such key at once - the section, the key and the translation in each file -
 rather than the first one it meets. Two branches once closed the same gaps in files of their own;
 each pipeline was green, and the merged dictionary failed to load with ten keys translated twice,
 four of them differently. Taken one at a time, that was four loads.
 
+A place is a file and a line, which makes a key repeated inside one file a collision of the same
+kind. The yaml parser keeps only the last value of a repeated key and says nothing about the first,
+so the dictionary files are read with the line of every key. A repeat with two values is refused
+along with the other conflicts, and a repeat of the same value is a redundant copy. The same key in
+two sections is not a repeat, and a section head written twice in one file reads as one section, the
+way the entries table reads it. Measured on a live dictionary of 167 files: no key repeats inside a
+file, and the load takes no longer than before.
+
 `--check-duplicates` asks the same question of the dictionary files without loading them, and before
 the merge. It lists the keys translated differently (a conflict, exit code 1) and the keys
-translated the same way in several files (a redundant copy, exit code 0 - listed because the second
+translated the same way in several places (a redundant copy, exit code 0 - listed because the second
 copy is what a person takes out). `--against REF` adds the dictionary files as a git ref has them,
 `origin/master` say, so a branch sees the collision it would bring to its target while it is still a
 branch. The same file at the ref and in the working tree counts as one file: a key the working tree
 spells differently is that file's own edit, while a key living only at the ref - in a file the
-working tree removed too - counts. `--format json` carries `conflicts` and `duplicates` as
-`{section, key, places: [{file, value}]}` and `against` with the ref, its file count and how many of
-its entries the working tree does not carry. `--strict` has no flag for this: a dictionary with a
-conflict does not load, so the strict pass fails on its own and names every conflict at once. The
-plain report counts the redundant copies in its summary. Measured on a live dictionary of 167 files:
-no conflicts, six keys translated the same way twice, two seconds alone and under three against the
-target branch - the copies whose text the working tree carries unchanged are not parsed again.
+working tree removed too - counts. Such a key comes in with every place the ref declares it at, so a
+repeat inside a file at the ref counts too. `--format json` carries `conflicts` and `duplicates` as
+`{section, key, places: [{file, line, value}]}` (the text report prints a place as `file:line`) and
+`against` with the ref, its file count and how many of its entries the working tree does not carry.
+`--strict` has no flag for this: a dictionary with a conflict does not load, so the strict pass
+fails on its own and names every conflict at once. The plain report counts the redundant copies in
+its summary. Measured on a live dictionary of 167 files: no conflicts, six keys translated the same
+way twice, two seconds alone and under three against the target branch - the copies whose text the
+working tree carries unchanged are not parsed again.
 
 **A qualified entry** (`Dictionary.Key: SignIn`) applies inside one namespace only. A key of a
 localized-strings dictionary may need a spelling the same word cannot have in code.
@@ -344,6 +355,10 @@ knows which word was meant. Only the files of the discovered dictionary are judg
 without one hears nothing, and a lint run over the directory that holds both the project and its
 `xbsl-translation` checks the sources and the dictionary together.
 
+In VS Code the findings appear even when `xbsl.projectRoot` narrows the checks to the project
+folder. The extension sends the dictionary files to the language server as you type, and the server
+adds the dictionary to the project-wide check.
+
 ## In the editor
 
 The rule `conventions/missing-translation` - info, off by default, project scope - shows the same
@@ -510,9 +525,9 @@ naming the next `offset`. `limit=0` returns the whole list, and for the gaps the
 `--missing`, which writes the entire remainder to a file as a dictionary stub.
 
 A new entry lands in `090-manual.yaml`, or in the file named by `target`, while an entry that
-already exists is corrected where it lives. The writer never duplicates a key. A key two files
-translate differently is refused when the dictionary loads, and `--check-duplicates` lists every
-such key without loading it.
+already exists is corrected where it lives. The writer never duplicates a key. A key translated
+differently in two places, two files or twice in one, is refused when the dictionary loads, and
+`--check-duplicates` lists every such key without loading it.
 
 ## Machine translation
 

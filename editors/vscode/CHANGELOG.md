@@ -9,6 +9,26 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Added
+- **The metadata tree can be filtered by subsystems and packages.** The filter button in the tree
+  title opens a form with checkboxes and object counts, so a subsystem can be narrowed to some of
+  its packages. The filter now also survives a window reload.
+  ([#61](https://github.com/keyfire/xbsl/pull/61))
+- **A subsystem in the Subsystems branch expands into its packages.** Packages used to show only in
+  the "By subsystems" grouping. A package node is the same in both places, with its object count,
+  "Create package" and "Rename package". ([#60](https://github.com/keyfire/xbsl/pull/60))
+- **The WSDL of a SOAP service client opens from the tree.** The client gets a "WSDL" node and an
+  "Open WSDL" command, with a node per file when there are several. Nothing in the tree led to these
+  files before. ([#60](https://github.com/keyfire/xbsl/pull/60))
+
+### Fixed
+- **The Problems panel shows the findings of the translation dictionary.** With `xbsl.projectRoot`
+  set, the dictionary files never reached the server, so `translation/english-shape` was seen only
+  in the CLI and CI. The findings stay after a save with an xbsl engine that has the matching fix.
+  ([#59](https://github.com/keyfire/xbsl/pull/59))
+
 ## 0.70.0
 
 ### Added

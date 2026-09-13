@@ -18,6 +18,9 @@ arrive as code actions. None of it pays the interpreter start-up cost per call. 
 `--enable`, `--data-dir`, `--baseline`, `--templates`. Any LSP-capable editor can spawn it:
 VS Code, Neovim, JetBrains.
 
+With `--project-root` the server also checks the project's translation dictionary. Other yaml files
+outside the root are not checked.
+
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:

@@ -76,8 +76,8 @@ channel and nowhere else. There are no popups on every save.
   See [Form designer](#form-designer).
 - **Metadata explorer** – a tree of the project objects in the primary side bar, grouped by
   `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum `Values` ...). It has an
-  editable properties panel, creation of objects, fields and subsystems, and filtering by
-  subsystem. See [Metadata explorer](#metadata-explorer).
+  editable properties panel, creation of objects, fields and subsystems, and filtering by subsystems
+  and packages. See [Metadata explorer](#metadata-explorer).
 - **Documentation** – a view in the secondary side bar that shows the 1C:Element reference the
   way the docs site does: a "Contents" tree (the developer and administrator guides, the type and
   query-language references), full-text search, and a page view with images and a link to the
@@ -540,7 +540,7 @@ or rebind a group of fields in one step.
 
 The collapse button in the tree title (**Collapse to the metadata kinds**) stops at the first
 level: the list of kinds stays visible while the expanded categories fold. The rest – new project,
-grouping, refresh, hiding empty categories – lives in the `...` menu of the same title bar.
+grouping, filter, refresh, hiding empty categories – lives in the `...` menu of the same title bar.
 
 A dedicated **1C:Element** icon in the Activity Bar opens a tree of the project metadata, built
 like the platform designer but inside VS Code.
@@ -559,7 +559,10 @@ forms** section.
 **Values**; a structure into **Fields**; client-work parameters into **Parameters**; an HTTP
 service into **URL templates** with their methods; localized strings into **Localization**, a node
 per language of the section (`Localization/<language>/<Name>.yaml`), where a click opens the
-translated text.
+translated text. A SOAP service client gets a **WSDL** node for the description its type is
+generated from (`<Name>.Wsdl.1.wsdl` beside the element): a click opens it as XML, several
+descriptions get a node each, and **Open WSDL** in the client's context menu does the same. A SOAP
+service has no such node - the platform builds its WSDL from the element.
 
 **Clicks.** An object or a field opens the **properties panel** on the right. A field's `Type`
 there is a combo of primitives, reference types (`<Object>.Reference?`) and the project
@@ -605,18 +608,31 @@ requests or the CLI subcommands. The tree only gathers parameters and applies th
 changes, and regular undo works.
 
 **Subsystems and packages.** A **Subsystems** branch lists the subsystems of the project - a
-first-level folder, with or without a subsystem file (a click opens the file when there is one);
-**Add subsystem** on the branch or on the project root creates a folder with a subsystem file at the
-project root. In the **By subsystems** grouping a subsystem holds its packages - folders below it,
-nested ones under their parent, the number of objects in grey and the full namespace in the
-tooltip - and the objects of its root by class. The placement comes from the engine
+first-level folder, with or without a subsystem file (a click opens the file when there is one) -
+and a subsystem with packages expands into them, nested ones under their parent. **Add subsystem**
+on the branch or on the project root creates a folder with a subsystem file at the project root. In
+the **By subsystems** grouping a subsystem holds its packages and the objects of its root by class.
+A package node is the same in both places: a folder below the subsystem, the number of objects in
+grey, the full namespace in the tooltip. The placement comes from the engine
 (`xbsl/metaProjectInfo`): the tree is drawn at once and completed when the answer arrives. **Create
 package** on a subsystem or a package asks the name and the first object of the package - a folder
 without objects is not a package. **Move to package...** on an object, or dragging the object onto a
 subsystem or a package, moves it with the engine's `move-object`: the imports and full names the
 move needs are updated across the project. **Rename package** renames the folder and every name that
-spells it. The project root has **Filter by subsystem** (multi-select) and **Clear filter**; the
-active filter is shown in grey.
+spells it.
+
+**Filter by subsystems and packages.** The filter button in the tree title - also in the `...` menu,
+on the project root and on the **Subsystems** branch - opens a form with a tree of checkboxes: the
+subsystems, their packages with the nesting, and the number of objects at every node. Ticking a
+subsystem ticks all of its packages. A subsystem with only some packages ticked shows a partial
+mark, and the tree keeps just those packages; the **Subsystems** branch is narrowed the same way,
+its numbers counting the objects that pass. Where a subsystem or a package has objects of its own as
+well as packages, an **Objects outside packages** item stands for those objects. Nothing ticked
+means no filter. While a filter is on, the title button is filled, the project label lists the
+filter in grey, and **Clear the subsystem and package filter** sits next to the project name. The
+filter is kept per project across window reloads, and a package that was renamed or deleted drops
+out of it; a subsystem added while a filter is on stays hidden until it is ticked. The packages come
+from the engine (`xbsl/metaProjectInfo`); until it answers, the form lists subsystems only.
 
 **Git status.** Object, form, subsystem and project rows carry the file's SCM decoration (color and
 badge) like the Explorer, while keeping their kind icon.
@@ -799,8 +815,8 @@ session.
 - **XBSL: code templates** (`xbsl.templates.manage`), **import** (`xbsl.templates.import`) and
   **export** (`xbsl.templates.export`) – the template set and exchange with an EDT export (see above).
 - **Metadata explorer** commands (`xbsl.metadata.*`) are invoked from the tree and its context
-  menus: properties, add object / field / subsystem, add object form, filter by subsystem, delete
-  object, refresh. See [Metadata explorer](#metadata-explorer).
+  menus: properties, add object / field / subsystem, add object form, filter by subsystems and
+  packages, delete object, refresh. See [Metadata explorer](#metadata-explorer).
 - **XBSL: deploy the project (elemctl)** (`xbsl.deploy`) – deploy to the stand (see above).
 - **XBSL: form designer** (`xbsl.previewForm`) – the panel of the active form yaml (see above).
 - **XBSL: search the documentation** (`xbsl.docs.search`) and **documentation for the symbol**

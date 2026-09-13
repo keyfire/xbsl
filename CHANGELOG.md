@@ -18,6 +18,34 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+- **With `--project-root`, the LSP server skips yaml outside the root, except the dictionary.** Such
+  a file got findings when opened and lost them at the next save. Modules are still checked wherever
+  they are opened. ([#59](https://github.com/keyfire/xbsl/pull/59))
+
+### Fixed
+- **`yaml/missing-import` reads the tables of a dynamic list.** A list whose main or joined table
+  lay in a package of another subsystem passed the linter, and the server build refused it. Such a
+  table now asks for the import like any other reference.
+  ([#58](https://github.com/keyfire/xbsl/pull/58))
+- **`yaml/wrong-namespace` and `code/wrong-namespace` check the partial name too.**
+  `Subsystem::Name` goes stale after a move into a package just like the full name, and the build
+  refuses it. The fix writes the package segment when the element lies in one place.
+  ([#58](https://github.com/keyfire/xbsl/pull/58))
+- **`code/package-resources-missing` checks the root of a subsystem as well.** A run on a server
+  showed that without its own `Resources` folder `ResourcesPackage.Current()` finds nothing there,
+  not even the files of the packages. ([#58](https://github.com/keyfire/xbsl/pull/58))
+- **The dictionary load and `--check-duplicates` see a key repeated in one file.** The yaml parser
+  keeps only the last value, so such a pair loaded with its second translation unnoticed. The repeat
+  now counts as a conflict or a duplicate, named by file and line.
+  ([#57](https://github.com/keyfire/xbsl/pull/57))
+- **The LSP server keeps the dictionary findings next to a narrowed project root.** The project-wide
+  check read only the files under `--project-root` and cleared the findings of other open files, so
+  a dictionary file lost them at the first save. The check now covers the dictionary.
+  ([#59](https://github.com/keyfire/xbsl/pull/59))
+
 ## 2026-09-13 – 0.106.0, 0.106.1
 
 ### Added
