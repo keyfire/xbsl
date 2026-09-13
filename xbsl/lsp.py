@@ -1583,6 +1583,58 @@ def _make_server() -> "LanguageServer":
             uses=[str(u) for u in uses] if uses else None,
         )
 
+    # The operations below walk every source under the root - the placement of every object,
+    # the references across the project - so they run on a worker thread: a move judged over a
+    # large project must not hold the diagnostics of an open buffer back.
+
+    def _sources_reader(path: Path) -> str:
+        try:
+            return _buffer_reader(path)
+        except RuntimeError:
+            # No workspace yet (a request racing the handshake, a handler driven in tests).
+            return engine.load(path).text
+
+    @server.feature("xbsl/metaProjectInfo")
+    @server.thread()
+    def _meta_project_info(params: object) -> dict:
+        """The scaffold.project_info answer - the placement of every object (subsystem, package,
+        namespace) and the list of packages. Read only: the metadata tree of the editor draws
+        its package nodes from it instead of guessing the placement from the folders."""
+        try:
+            return scaffold.project_info(
+                _meta_root(params),
+                kind=_opt_str(params, "kind"),
+                subsystem=_opt_str(params, "subsystem"),
+                brief=bool(_param(params, "brief", False)),
+                package=_opt_str(params, "package"),
+                project=_opt_str(params, "project"),
+                reference=bool(_param(params, "reference", False)),
+            )
+        except (scaffold.ScaffoldError, OSError) as exc:
+            return {"error": str(exc)}
+
+    @server.feature("xbsl/metaMoveObject")
+    @server.thread()
+    def _meta_move_object(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_move_object,
+            _meta_root(params),
+            Path(str(_param(params, "path"))),
+            Path(str(_param(params, "targetDir"))),
+            reader=_sources_reader,
+        )
+
+    @server.feature("xbsl/metaRenamePackage")
+    @server.thread()
+    def _meta_rename_package(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_rename_package,
+            _meta_root(params),
+            Path(str(_param(params, "packageDir"))),
+            str(_param(params, "newName")),
+            reader=_sources_reader,
+        )
+
     # --- form designer (the structure view is a thin client of these methods) ------------
     #
     # Like the meta* family, the server only computes; the editor applies the edits via

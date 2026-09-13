@@ -885,6 +885,9 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Add object... | `xbsl.metadata.addObjectPick` | Command Palette |
 | Add localization (translation) | `xbsl.metadata.addLocalization` | Command Palette |
 | Add subsystem | `xbsl.metadata.addSubsystem` | Command Palette |
+| Create package | `xbsl.metadata.addPackage` | Command Palette |
+| Rename package | `xbsl.metadata.renamePackage` | Command Palette |
+| Move to package... | `xbsl.metadata.moveToPackage` | Command Palette |
 | Filter by subsystem | `xbsl.metadata.filterBySubsystem` | Command Palette |
 | Clear subsystem filter | `xbsl.metadata.clearFilter` | Command Palette |
 | Tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |

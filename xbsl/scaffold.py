@@ -23,7 +23,9 @@ document; a parser does not provide insertion positions.
 
 from __future__ import annotations
 
+import dataclasses
 import json
+import os
 import re
 import uuid as _uuid
 from collections.abc import Mapping
@@ -33,6 +35,7 @@ from pathlib import Path
 
 from xbsl import dataset, engine, fixer, metamodel, terms, uischema
 from xbsl.layout import Layout, Place, service_dirs
+from xbsl.lexer import _skip_interpolation
 
 #: The platform accepts BOTH spellings of the service file names - its converter checks the
 #: pairs itself (`Проект`/`Project`, `Подсистема`/`Subsystem`). The Russian name stays
@@ -1904,6 +1907,23 @@ class ScaffoldResult:
         }
 
 
+def vacated_dirs(renames: list[FileRename]) -> list[Path]:
+    """The folders renamed files left, deepest first, that may now be empty.
+
+    The parents of every old path up to the nearest folder that still receives a renamed file
+    (a rename inside one folder vacates nothing). Whether a folder IS empty is the caller's
+    check at the moment of removal - a file nobody renamed keeps it.
+    """
+    kept = {parent for r in renames for parent in (r.new_path.parent, *r.new_path.parents)}
+    out: set[Path] = set()
+    for rename in renames:
+        for parent in (rename.old_path.parent, *rename.old_path.parents):
+            if parent in kept or parent == parent.parent:
+                break
+            out.add(parent)
+    return sorted(out, key=lambda p: len(p.parts), reverse=True)
+
+
 def apply_result(result: ScaffoldResult) -> list[str]:
     """Write the changes to disk; returns the paths of the written files.
 
@@ -1911,12 +1931,19 @@ def apply_result(result: ScaffoldResult) -> list[str]:
     paths. Editing an existing file preserves its BOM (the encoding is detected by
     engine.load); newlines are chosen by the operation itself when generating the text.
     A rename that only changes letter case is applied in two steps (see _rename_file).
+    A folder the renames leave empty is removed: a package renamed or emptied by a move
+    would otherwise stay behind as a bare folder (see vacated_dirs).
     """
     for rename in result.renames:
         if _rename_clashes(rename):
             raise ScaffoldError(f"Файл уже существует: {rename.new_path}")
         rename.new_path.parent.mkdir(parents=True, exist_ok=True)
         _rename_file(rename)
+    for directory in vacated_dirs(result.renames):
+        try:
+            directory.rmdir()  # only an empty folder goes; a folder with anything left stays
+        except OSError:
+            pass
     written = []
     for change in result.changes:
         change.path.parent.mkdir(parents=True, exist_ok=True)
@@ -2062,6 +2089,12 @@ def op_new_object(
     the service's routes ("GET /, POST /, GET /{id}"); report - the report source and layout;
     presentation - Presentation, the element's caption where the kind means a caption by
     it, and the NAME of a string attribute where it means one (see _check_presentation).
+
+    A folder that does not exist yet is created with the object, and inside a subsystem that
+    is how a package is born - a package has no descriptor, and a folder without objects is
+    not one. Its new folder names must then be identifiers (a package name is a segment of the
+    namespace), and a project with a translation dictionary is reminded of the pair the new
+    name needs (see _package_birth).
     """
     kind = resolve_kind(kind)
     spec = KIND_SPECS.get(kind)
@@ -2074,6 +2107,7 @@ def op_new_object(
     yaml_path = directory / f"{name}.yaml"
     if yaml_path.exists():
         raise ScaffoldError(f"Файл уже существует: {yaml_path}")
+    born = _package_birth(directory)
 
     if access and kind not in ACCESS_KIND_RIGHTS:
         raise ScaffoldError(
@@ -2100,18 +2134,18 @@ def op_new_object(
     # The kinds with a generator of their own build the yaml themselves - the caption is
     # written into the finished text, so all kinds get it in one place.
     if kind == "HttpСервис":
-        return _presented(
+        return _noted(_presented(
             _new_http_service(yaml_path, name, access, routes or "GET /", result, scope),
             yaml_path, presentation,
-        )
+        ), born)
     if kind == "SoapСервис":
-        return _presented(
+        return _noted(_presented(
             _new_soap_service(yaml_path, name, access, result, scope), yaml_path, presentation
-        )
+        ), born)
     if kind == "Отчет":
-        return _presented(
+        return _noted(_presented(
             _new_report(yaml_path, name, report or {}, result, scope), yaml_path, presentation
-        )
+        ), born)
 
     lang = project_language(directory)
     extra = _expand_extra(spec.extra, name)
@@ -2147,6 +2181,12 @@ def op_new_object(
         ))
     if spec.note:
         result.notes.append(spec.note)
+    return _noted(result, born)
+
+
+def _noted(result: ScaffoldResult, notes: list[str]) -> ScaffoldResult:
+    """The result with the notes appended - an operation's closing remarks."""
+    result.notes.extend(notes)
     return result
 
 
@@ -3071,6 +3111,11 @@ def op_add_subsystem(
     The file name follows the spelling of the enclosing project's descriptor: next to a
     `Project.yaml` the subsystem is created as `Subsystem.yaml` - a project keeps one
     spelling throughout.
+
+    A subsystem is a first-level folder of its project (xbsl.layout, the documentation page
+    "Иерархическая структура проекта"): the finer division of a subsystem is its packages.
+    A parent folder below the project root is refused - a descriptor written there would
+    sit in a package, and the placement of every element around it would not change.
     """
     name = _check_identifier(name, "подсистемы")
     parent_dir = Path(parent_dir)
@@ -3078,6 +3123,13 @@ def op_add_subsystem(
     for candidate in (parent_dir, *parent_dir.parents):
         descriptor = project_file_in(candidate)
         if descriptor is not None:
+            if candidate != parent_dir:
+                raise ScaffoldError(
+                    f"Подсистема – каталог первого уровня проекта ({candidate}), а {parent_dir} "
+                    "лежит внутри подсистемы: вложенный каталог подсистемы – это пакет. Пакет "
+                    "описания не имеет и появляется вместе с первым объектом: new-object "
+                    f"{parent_dir / name} <вид> <имя>"
+                )
             if descriptor.name == PROJECT_FILE_EN:
                 file_name = SUBSYSTEM_FILE_EN
             break
@@ -6033,6 +6085,43 @@ def op_rename_object(
 # --- operation: object deletion ------------------------------------------------------------
 
 
+def _family_pattern(name: str) -> re.Pattern:
+    """The file owners (the part of a file name before the first dot) of one object's family.
+
+    The object itself, its forms (`<Имя>Форма*`, `<Name>ObjectForm` and the other English
+    kinds, whose word stands before `Form`), the card-list row component
+    (`СтрокаСписка<Имя>` / `ListRow<Name>`) and the virtual table of its list
+    (`<Имя>СписокТаблица` / `<Name>ListTable`). A lowercase letter after the form word means an
+    unrelated name (`<Имя>Форматирование`), which is why the word must end the owner or be
+    followed by a capital.
+    """
+    escaped = re.escape(name)
+    return re.compile(
+        rf"^(?:{escaped}"
+        rf"|{escaped}Форма(?:[А-ЯЁA-Z][{_WORD}]*)?"
+        rf"|{escaped}(?:[A-Z][A-Za-z]*)?Form"
+        rf"|(?:СтрокаСписка|ListRow){escaped}"
+        rf"|{escaped}{_LIST_TABLE})$"
+    )
+
+
+def object_family(yaml_path: Path, name: str) -> list[Path]:
+    """The files of one object in its folder, the ones deleting or moving it takes along.
+
+    Its yaml, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the `.xbql` query of a virtual
+    table, the forms, the row component and the virtual table of its list - every one with
+    its own pair (see _family_pattern). op_delete_object removes this set, op_move_object
+    carries it into another folder; op_rename_object renames the same set by the same naming
+    rules of _Renamer.
+    """
+    family = _family_pattern(name)
+    return [
+        path for path in sorted(Path(yaml_path).parent.iterdir())
+        if path.is_file() and path.suffix in (".yaml", ".xbsl", ".xbql")
+        and family.match(path.name.split(".", 1)[0])
+    ]
+
+
 def op_delete_object(
     root: Path,
     name: str | None = None,
@@ -6080,18 +6169,8 @@ def op_delete_object(
         hit = find_object(root, _check_identifier(name, "объекта"))
 
     escaped = re.escape(hit.name)
-    family = re.compile(
-        rf"^(?:{escaped}"
-        rf"|{escaped}Форма(?:[А-ЯЁA-Z][{_WORD}]*)?"
-        rf"|СтрокаСписка{escaped}"
-        rf"|{escaped}{_LIST_TABLE})$"
-    )
     result = ScaffoldResult()
-    for path in sorted(hit.path.parent.iterdir()):
-        if not path.is_file() or path.suffix not in (".yaml", ".xbsl", ".xbql"):
-            continue
-        if family.match(path.name.split(".", 1)[0]):
-            result.deletes.append(path)
+    result.deletes.extend(object_family(hit.path, hit.name))
 
     deleted = {p.resolve() for p in result.deletes}
     ident = re.compile(rf"(?<![{_WORD}.@]){escaped}(?![{_WORD}])")
@@ -6133,4 +6212,975 @@ def op_delete_object(
             result.notes.append(f"... и ещё {len(references) - len(shown)}")
     else:
         result.notes.append(f"Упоминаний '{hit.name}' вне удаляемых файлов не осталось")
+    return result
+
+
+# --- packages: a new folder, imports and qualified names -------------------------------------
+#
+# A package has no descriptor of its own: it is a folder of a subsystem, and it exists while an
+# object lies in it (xbsl.layout). Three operations change what lies where - an object created
+# in a new folder (the birth of a package, op_new_object), an object moved into another folder
+# (op_move_object) and a package folder renamed (op_rename_package) - and they share the
+# helpers below.
+
+
+def _folder_place(directory: Path) -> tuple[Layout, Place | None]:
+    """The placement model around a folder and the place a file put into it would take.
+
+    The folder need not exist yet: the model reads the descriptors up the path, and the
+    package of a file is the folders under its subsystem whatever the disk holds so far.
+    """
+    probe = Path(directory) / "_.yaml"
+    layout = _path_placement(probe, Path(probe.anchor))
+    return layout, layout.place(probe)
+
+
+def _package_chain(place: Place, directory: Path) -> tuple[str, ...]:
+    """The folders of `directory` below its subsystem folder, outermost first."""
+    try:
+        return Path(directory).relative_to(place.subsystem_dir).parts
+    except ValueError:
+        return ()
+
+
+def _fresh_package_names(place: Place, directory: Path) -> list[str]:
+    """The package folders of `directory` that do not exist yet, each checked as a name.
+
+    A package name becomes a segment of the namespace (`Подсистема::Пакет`), so a folder to be
+    created must be an identifier. A service folder (resources, localization) ends the package
+    chain: what lies under it is not a package.
+    """
+    fresh: list[str] = []
+    base = place.subsystem_dir
+    for part in _package_chain(place, directory):
+        if part in service_dirs():
+            break
+        base = base / part
+        if not base.exists():
+            fresh.append(_check_identifier(part, "пакета"))
+    return fresh
+
+
+def _dictionary_notes(names: list[str], start: Path) -> list[str]:
+    """The reminder of the dictionary pairs new package names need - or nothing.
+
+    The translator renames the folders of a project as it renames its names (a path component
+    is translated like an identifier), so a Cyrillic package name without a token pair stays
+    Russian in the English edition. Only a project that has a dictionary is reminded, and only
+    of the names that dictionary lacks.
+    """
+    cyrillic = [name for name in dict.fromkeys(names) if _CYRILLIC_RE.search(name)]
+    if not cyrillic:
+        return []
+    from xbsl.translation import dictionary as dictionary_module
+
+    found = dictionary_module.discover(Path(start))
+    if found is None:
+        return []
+    missing = [name for name in cyrillic if not _dictionary_has_token(found, name)]
+    if not missing:
+        return []
+    return [
+        f"Имени пакета {', '.join(missing)} нужна пара в словаре перевода проекта ({found}): "
+        "переводчик переводит и имена каталогов. Добавьте её (translate_set или "
+        "xbsl translate --set) и сверьте translate_gaps"
+    ]
+
+
+def _dictionary_has_token(dictionary: Path, name: str) -> bool:
+    """Whether a dictionary file (or a folder of them) carries an entry keyed by the name.
+
+    Read as text, not loaded: a project dictionary runs to megabytes, loading it took seconds
+    of every move into a new package, and the question is only whether the key is written. A
+    key in the phrases section answers yes as well - the reminder errs towards silence.
+    """
+    pattern = re.compile(rf"""^[ \t]+["']?{re.escape(name)}["']?[ \t]*:""", re.M)
+    files = sorted(dictionary.rglob("*.yaml")) if dictionary.is_dir() else [dictionary]
+    for file in files:
+        try:
+            if pattern.search(file.read_text(encoding="utf-8-sig", errors="replace")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _package_birth(directory: Path) -> list[str]:
+    """Check the package a folder that does not exist yet would start; the notes it needs.
+
+    Nothing to say about a folder that exists or one outside every subsystem. See
+    _fresh_package_names for the names and _dictionary_notes for the reminder.
+    """
+    directory = Path(directory)
+    if directory.exists():
+        return []
+    _layout, place = _folder_place(directory)
+    if place is None:
+        return []
+    return _dictionary_notes(_fresh_package_names(place, directory), directory)
+
+
+def _root_layout(root: Path) -> Layout:
+    """The placement model of every project under the root: descriptors only, no object walk."""
+    projects: dict[Path, tuple[str, str]] = {}
+    for project_yaml in _rglob_names(root, PROJECT_FILES):
+        if _hidden_under(project_yaml, root):
+            continue
+        text = _read(project_yaml)
+        directory = project_yaml.parent
+        projects[directory] = (
+            _vendor_of(text, directory.parent.name), element_name(text, directory.name),
+        )
+    names = {
+        descriptor.parent: _subsystem_name(descriptor.parent)
+        for descriptor in _rglob_names(root, SUBSYSTEM_FILES)
+        if not _hidden_under(descriptor, root)
+    }
+    return Layout(projects, names)
+
+
+def _under_root(path: Path | None, root: Path) -> bool:
+    """Whether the path is the root or lies below it (None - a placement without a project)."""
+    if path is None:
+        return True
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def _relative(path: Path | str, root: Path) -> str:
+    """A path for a note: relative to the root with forward slashes, as it is when outside."""
+    try:
+        return Path(path).resolve().relative_to(root.resolve()).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _full_namespace(prefix: str | None, key: str | None) -> str:
+    """`Поставщик::Проект::Подсистема[::Пакет]`, the parts that are known."""
+    return "::".join(part for part in (prefix, key) if part)
+
+
+def _qualified_re(old_key: str, prefix: str | None, *, names=None,
+                  prefix_required: bool = False) -> re.Pattern:
+    """A qualified reference to a place: `[Поставщик::Проект::]Подсистема[::Пакет]` and a tail.
+
+    With `names` the tail is `::<one of the names>` - an element of the place, the case of a
+    move. Without, the place itself: followed by `::<identifier>` or by the end of the chain -
+    an import line, a qualifier - the case of a package rename. The chain must START the
+    qualified name: `Другой::Проект::Подсистема::Пакет` of another project, or a longer chain
+    inside one, names nothing here. The groups are `head` (the prefix as written) and `key`.
+    """
+    key = "::".join(re.escape(part) for part in old_key.split("::"))
+    head = ""
+    if prefix:
+        head = rf"(?:{re.escape(prefix)}::)" + ("" if prefix_required else "?")
+    if names:
+        alternatives = "|".join(re.escape(n) for n in sorted(names, key=len, reverse=True))
+        tail = rf"(?=::(?:{alternatives})(?![{_WORD}]))"
+    else:
+        tail = rf"(?=::[{_WORD}]|(?![{_WORD}:]))"
+    return re.compile(rf"(?<![{_WORD}.:])(?P<head>{head})(?P<key>{key}){tail}")
+
+
+def _code_spans(text: str) -> list[tuple[int, int, bool]]:
+    """(start, end, is_code) spans of a module or a query text.
+
+    Code is everything but the literals - the comments included, the way the renames treat
+    them: a comment naming a place documents the reference. A string literal is not code, but
+    the expression of its interpolation (`%{...}`, `${...}`) is; a pattern literal ('...') is
+    not. The literal rules are the lexer's (xbsl.lexer.tokenize), followed without the language
+    data - a rewrite of names must work in a checkout that has none.
+    """
+    spans: list[tuple[int, int, bool]] = []
+    n = len(text)
+    start = 0
+    i = 0
+
+    def cut(end: int, code: bool) -> None:
+        nonlocal start
+        if end > start:
+            spans.append((start, end, code))
+        start = end
+
+    while i < n:
+        c = text[i]
+        if text.startswith("/*", i):
+            close = text.find("*/", i + 2)
+            i = n if close == -1 else close + 2
+            continue
+        if text.startswith("//", i):
+            while i < n and text[i] not in "\r\n":
+                i += 1
+            continue
+        if c == "'":
+            cut(i, True)
+            j = i + 1
+            while j < n and text[j] not in "'\r\n":
+                j += 2 if text[j] == "\\" else 1
+            i = min(n, j + 1 if j < n and text[j] == "'" else j)
+            cut(i, False)
+            continue
+        if c == '"':
+            cut(i, True)
+            j = i + 1
+            while j < n:
+                cj = text[j]
+                if cj == "\\":
+                    j += 2
+                    continue
+                if cj == '"':
+                    j += 1
+                    break
+                if cj in "%$" and j + 1 < n and text[j + 1] == "{":
+                    cut(j + 2, False)
+                    end = _skip_interpolation(text, j + 2)
+                    cut(max(j + 2, end - 1), True)
+                    j = end
+                    continue
+                j += 1
+            i = min(j, n)
+            cut(i, False)
+            continue
+        i += 1
+    cut(n, True)
+    return spans
+
+
+_MODULE_IMPORT_LINE = re.compile(
+    rf"^[ \t]*(импорт|import)[ \t]+([{_WORD}]+(?:::[{_WORD}]+)*)[ \t]*(?://.*)?\r?$"
+)
+
+
+def _requalified_code(text: str, pattern: re.Pattern, new_key: str, *,
+                      skip_imports: bool) -> tuple[str, int]:
+    """The code spans of a module or a query with the place of `pattern` spelled as `new_key`."""
+    count = 0
+    pieces: list[str] = []
+
+    def replace(match: re.Match) -> str:
+        return match.group("head") + new_key
+
+    for start, end, code in _code_spans(text):
+        chunk = text[start:end]
+        if not code or "::" not in chunk:
+            pieces.append(chunk)
+            continue
+        lines = chunk.split("\n")
+        for index, line in enumerate(lines):
+            if skip_imports and _MODULE_IMPORT_LINE.match(line):
+                continue  # an import names a namespace, never an element
+            lines[index], replaced = pattern.subn(replace, line)
+            count += replaced
+        pieces.append("\n".join(lines))
+    return "".join(pieces), count
+
+
+def _requalified_yaml(text: str, pattern: re.Pattern, new_key: str, *,
+                      skip_imports: bool) -> tuple[str, int]:
+    """A yaml with the place of `pattern` spelled as `new_key`, its `Import` section aside when
+    asked (an import names a namespace, the move rewrites elements)."""
+    import_keys = set(key_forms("Импорт"))
+    count = 0
+    in_imports = False
+    lines = text.split("\n")
+    for index, line in enumerate(lines):
+        key = _YAML_KEY_LINE.match(line)
+        if key is not None and key.group(1) == "":
+            in_imports = key.group(2) in import_keys
+        elif line.strip() and not line[:1].isspace() and not line.startswith(("-", "#")):
+            in_imports = False
+        if (skip_imports and in_imports) or "::" not in line:
+            continue
+        lines[index], replaced = pattern.subn(lambda m: m.group("head") + new_key, line)
+        count += replaced
+    return "\n".join(lines), count
+
+
+def _requalified(path: Path, text: str, pattern: re.Pattern, new_key: str, *,
+                 skip_imports: bool) -> tuple[str, int]:
+    """The qualified names of one source rewritten to the new place (yaml, module or query)."""
+    if path.suffix == ".yaml":
+        return _requalified_yaml(text, pattern, new_key, skip_imports=skip_imports)
+    return _requalified_code(text, pattern, new_key, skip_imports=skip_imports)
+
+
+def _local_namespace(written: str, prefix: str | None) -> str:
+    """A namespace as written in an import, this project's own prefix taken off."""
+    if prefix and written.startswith(prefix + "::"):
+        return written[len(prefix) + 2:]
+    return written
+
+
+def _with_module_imports(text: str, namespaces: list[str], lang: str,
+                         prefix: str | None = None) -> str:
+    """The module text with an import line for every namespace it does not import yet.
+
+    The lines join the import block at the head of the module, spelled with the keyword the
+    module already uses; a module without imports gets them as its first lines, followed by an
+    empty one. An import written in the full form (`Поставщик::Проект::Б::П`) counts as the
+    short one.
+    """
+    nl = _dominant_nl(text)
+    cr = "\r" if nl == "\r\n" else ""
+    lines = text.split("\n")
+    last = -1
+    keyword = None
+    written: set[str] = set()
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("//"):
+            continue
+        match = _MODULE_IMPORT_LINE.match(line)
+        if match is None:
+            break
+        last = index
+        keyword = keyword or match.group(1)
+        written.add(_local_namespace(match.group(2), prefix))
+    add = [ns for ns in dict.fromkeys(namespaces) if _local_namespace(ns, prefix) not in written]
+    if not add:
+        return text
+    keyword = keyword or ("import" if lang == "en" else "импорт")
+    new_lines = [f"{keyword} {ns}{cr}" for ns in add]
+    if last >= 0:
+        return "\n".join(lines[:last + 1] + new_lines + lines[last + 1:])
+    head = new_lines + ([cr] if text.strip() else [])
+    return "\n".join(head + lines)
+
+
+def _with_list_items(text: str, keys: tuple[str, ...], create_key: str, items: list[str],
+                     anchor: int | None, prefix: str | None = None) -> str:
+    """A top-level yaml list (`Import`, `Using`) with the items it lacks appended.
+
+    Both shapes of the list are kept as they are written - a block list gets the items at its
+    end with its own indentation, a flow list `[А, Б]` inside the brackets. A yaml without the
+    list gets one at `anchor` (the end of a line), or at the head of the file.
+    """
+    nl = _dominant_nl(text)
+    wanted = list(dict.fromkeys(items))
+    for spelling in keys:
+        flow = re.search(
+            rf"^{re.escape(spelling)}:[ \t]*\[([^\]\r\n]*)\][ \t]*\r?$", text, re.M,
+        )
+        if flow is not None:
+            present = [item.strip() for item in flow.group(1).split(",") if item.strip()]
+            known = {_local_namespace(item, prefix) for item in present}
+            add = [item for item in wanted if _local_namespace(item, prefix) not in known]
+            if not add:
+                return text
+            return text[:flow.start(1)] + ", ".join(present + add) + text[flow.end(1):]
+    for spelling in keys:
+        if re.search(rf"^{re.escape(spelling)}:[ \t]*\r?$", text, re.M) is None:
+            continue
+        bounds = _section_bounds(text, spelling, top_level=True)
+        if bounds is None:
+            continue
+        _indent, header_end, body_end = bounds
+        body = text[header_end:body_end]
+        present = [m.group(1) for m in re.finditer(r"^[ \t]*-[ \t]*(\S+?)[ \t]*\r?$", body, re.M)]
+        known = {_local_namespace(item, prefix) for item in present}
+        add = [item for item in wanted if _local_namespace(item, prefix) not in known]
+        if not add:
+            return text
+        item_indent = re.search(r"^([ \t]*)-", body, re.M)
+        indent = item_indent.group(1) if item_indent else "    "
+        return text[:body_end] + "".join(f"{nl}{indent}- {item}" for item in add) + text[body_end:]
+    section = f"{create_key}:" + "".join(f"{nl}    - {item}" for item in wanted)
+    if anchor is None:
+        return section + nl + text
+    return text[:anchor] + nl + section + text[anchor:]
+
+
+def _header_end(text: str) -> int | None:
+    """The end of the last header line (kind, id, name, visibility) at the top of a yaml."""
+    header = {form for key in _HEADER_KEYS for form in key_forms(key)}
+    end = None
+    position = 0
+    for line in text.split("\n"):
+        line_end = position + len(line)
+        key = _YAML_KEY_LINE.match(line)
+        stripped = line.strip()
+        if key is not None and key.group(1) == "" and key.group(2) in header:
+            end = line_end - (1 if line.endswith("\r") else 0)
+        elif stripped and not stripped.startswith("#"):
+            break
+        position = line_end + 1
+    return end
+
+
+def _with_yaml_imports(text: str, namespaces: list[str], prefix: str | None = None) -> str:
+    """The yaml text with the namespaces in its top-level `Import` section.
+
+    A yaml without the section gets it right after its header keys, where the serializer of
+    the platform writes it, spelled in the language of the file.
+    """
+    return _with_list_items(
+        text, key_forms("Импорт"), spelled_key("Импорт", yaml_language(text)), namespaces,
+        _header_end(text), prefix,
+    )
+
+
+#: The permission list of a subsystem descriptor - the platform's spellings, the way the
+#: yaml/missing-subsystem-usage rule reads them (`Using` is what the serializer writes).
+_USAGE_KEYS = ("Использование", "Using")
+
+
+def _with_usage(text: str, subsystems: list[str], lang: str) -> str:
+    """The subsystem descriptor with the subsystems added to its `Using` list."""
+    create = _USAGE_KEYS[1] if lang == "en" else _USAGE_KEYS[0]
+    return _with_list_items(text, _USAGE_KEYS, create, subsystems, None)
+
+
+def _mentioned_in_code(text: str, names) -> bool:
+    """Whether a module or a query names one of the elements as an identifier in its code."""
+    pattern = re.compile(
+        rf"(?<![{_WORD}.@])(?:{'|'.join(re.escape(n) for n in names)})(?![{_WORD}])"
+    )
+    for start, end, code in _code_spans(text):
+        if not code:
+            continue
+        for line in text[start:end].split("\n"):
+            if not _MODULE_IMPORT_LINE.match(line) and pattern.search(line):
+                return True
+    return False
+
+
+# --- operation: moving an object -------------------------------------------------------------
+#
+# What a move breaks is decided by the linter's own rules, run over the sources before and after
+# the move (engine.run_sources with the placement model of xbsl.layout): a finding the move
+# brought is a reference to repair or a refusal, a finding that was there before is not the
+# move's business. The rules report their namespaces in `Diagnostic.data`
+# (xbsl.rules.yaml_imports), which is what the repair reads.
+
+_IMPORT_RULES = ("code/missing-import", "yaml/missing-import", "yaml/localization-missing-import")
+_VISIBILITY_RULES = ("code/foreign-not-public", "yaml/foreign-not-public")
+_UNUSED_IMPORT_RULE = "code/unused-import"
+_USAGE_RULE = "yaml/missing-subsystem-usage"
+
+
+def _judged(sources: list, rule_ids: tuple[str, ...]) -> list:
+    """The findings of the named project rules over the sources that carry their data.
+
+    The map-reduce of engine.run_sources, with the facts of a source kept in its cache: a move
+    judges the same sources three times (before, after, with the repairs), and only the files
+    it moved or edited have new facts - the mappers of the code rules parse every module, which
+    is the dearest part of the whole operation. A fact is keyed by the mapper and the path (a
+    fact carries the path, and a moved source shares its text caches with the original). A
+    mapper that fails on one file skips that file, as in the engine; missing language data
+    stops the run - the caller judges the yaml alone then.
+    """
+    import xbsl.rules  # noqa: F401 - registers the rules a move is judged by
+
+    found = []
+    for info in engine.active_rules(set(rule_ids)):
+        if info.scope != "project" or info.mapper is None:
+            continue
+        facts = {}
+        for src in sources:
+            key = ("scaffold-fact", info.mapper, str(src.path))
+            if key not in src.cache:
+                try:
+                    src.cache[key] = info.mapper(src)
+                except dataset.DatasetError:
+                    raise
+                except Exception:  # noqa: BLE001 - a rule bug skips the file, as in the engine
+                    src.cache[key] = None
+            if src.cache[key] is not None:
+                facts[src.rel] = src.cache[key]
+        found.extend(d for d in info.func(facts) if isinstance(d.data, dict))
+    return found
+
+
+def _finding_identity(diag, origin: str) -> tuple:
+    """What makes two findings of the rules the same, whichever side of the move they are on.
+
+    The path is the file's path BEFORE the move. An import finding is one per file per set of
+    candidate namespaces; a visibility finding is keyed by the element, not by its namespace -
+    the namespace is exactly what a move changes.
+    """
+    data = diag.data or {}
+    if diag.rule_id in _IMPORT_RULES:
+        return diag.rule_id, origin, tuple(data.get("namespaces", ()))
+    if diag.rule_id in _VISIBILITY_RULES:
+        return diag.rule_id, origin, data.get("name")
+    if diag.rule_id == _UNUSED_IMPORT_RULE:
+        return diag.rule_id, origin, data.get("namespace")
+    return diag.rule_id, origin, data.get("subsystem"), data.get("uses")
+
+
+def _sources_language(texts: Mapping[str, str]) -> str:
+    """The language the sources write their metadata in - by majority, like project_language."""
+    russian = sum(1 for text in texts.values() if _KIND_RE.search(text[:4096]))
+    english = sum(1 for text in texts.values() if _KIND_EN_RE.search(text[:4096]))
+    return "en" if english > russian else "ru"
+
+
+def op_move_object(root: Path, yaml_path: Path, target_dir: Path, *,
+                   reader=None) -> ScaffoldResult:
+    """Move a configuration object into another folder of its project, references kept working.
+
+    The folder is a package of the subsystem (a folder that does not exist yet becomes a new
+    package), another package, the subsystem root, or a folder of another subsystem. Moved
+    together (renames): the object's family of files (object_family - its yaml and modules,
+    the query of a virtual table, forms, row component, list table) and the translations of a
+    localized-strings element.
+
+    Edited, by the linter's rules run over the sources before and after the move - one
+    placement model, not a copy of it:
+
+    - an element of a package is imported by the package's own namespace, so a module or a
+      yaml that reached a moved element and now misses the import of its new place gets the
+      line (`импорт Склад::Партии`, an item of `Import`): in another subsystem, and in the
+      moved files themselves when the move crosses a subsystem boundary. Within one subsystem
+      the root and the packages see each other, and nothing is written;
+    - a module outside the subsystems (the project module) that names a moved element gets the
+      import of the package it moved into, and so does the yaml of a virtual table whose query
+      names one - both are compiler facts the import rules do not model yet, found here by
+      the name in the code, and the place to fold into the rules once they do;
+    - a qualified name that spells the old place (`Склад::Задачи`, the full
+      `Поставщик::Проект::Склад::ЗадачиФормаСписка.ДанныеСтрокиСписка` of a generated form)
+      is rewritten to the new one in every file of the project, the moved ones included, and
+      the full form in the files of other projects under the root;
+    - a subsystem that starts importing another one gets it in its `Using` list.
+
+    Refused: a target outside the object's project, outside its subsystems (the project root, a
+    service folder) or in a subsystem that does not exist, a new folder whose name is not an
+    identifier, a file or an element of the same name already in the target namespace, and a
+    move that leaves a non-public element reached from another subsystem - no import repairs
+    that, the visibility is the author's decision.
+
+    Not removed: an import line the move made unnecessary. The notes name each one, and
+    code/unused-import reports it. `reader` supplies the texts of open editor buffers.
+    """
+    root = Path(os.path.abspath(root))
+    if not root.is_dir():
+        raise ScaffoldError(f"Корень проекта не найден: {root}")
+    yaml_path = Path(os.path.abspath(yaml_path))
+    if not yaml_path.is_file():
+        raise ScaffoldError(f"Файл не найден: {yaml_path}")
+    _refuse_a_translation_file(yaml_path)
+    read = reader or _read
+    text = read(yaml_path)
+    kind = element_kind(text)
+    if kind is None:
+        raise ScaffoldError(f"В {yaml_path} нет ВидЭлемента – это не объект конфигурации")
+    name = element_name(text, yaml_path.stem)
+    source_dir = yaml_path.parent
+    target_dir = Path(os.path.abspath(target_dir))
+    if target_dir.exists() and not target_dir.is_dir():
+        raise ScaffoldError(f"{target_dir} – не каталог")
+    if _path_key(source_dir) == _path_key(target_dir):
+        raise ScaffoldError(f"Объект '{name}' уже лежит в {target_dir}")
+
+    source_layout = _path_placement(yaml_path, Path(yaml_path.anchor))
+    source_place = source_layout.place(yaml_path)
+    source_project = (
+        source_place.project_dir if source_place else source_layout.project_dir_of(yaml_path)
+    )
+    if not _under_root(source_project, root):
+        raise ScaffoldError(
+            f"Проект объекта ({source_project}) лежит вне корня {root}: ссылки на объект ищутся "
+            "под корнем, передайте корень проекта или репозитория"
+        )
+    _target_layout, target_place = _folder_place(target_dir)
+    if target_place is None:
+        raise ScaffoldError(
+            f"{target_dir} – не каталог подсистемы и не пакет: объект переносят в каталог "
+            "подсистемы или её пакета, а корень проекта и служебные каталоги для этого не годятся"
+        )
+    if target_place.project_dir != source_project:
+        raise ScaffoldError(
+            f"{target_dir} лежит вне проекта объекта ({source_project or source_dir}): между "
+            "проектами объект не переносят"
+        )
+    if not target_place.subsystem_dir.is_dir():
+        raise ScaffoldError(
+            f"Подсистемы '{target_place.subsystem}' нет ({target_place.subsystem_dir}): "
+            "создайте её (add-subsystem), затем переносите"
+        )
+    for part in _package_chain(target_place, target_dir):
+        if part in service_dirs() or part.startswith("."):
+            raise ScaffoldError(
+                f"{target_dir} лежит в служебном каталоге '{part}': объект в нём не пакет"
+            )
+    fresh = _fresh_package_names(target_place, target_dir)
+
+    family = object_family(yaml_path, name)
+    moves = [FileRename(path, target_dir / path.name) for path in family]
+    if kind == _LOCALIZED_STRINGS_KIND:
+        for translation in _translation_files(yaml_path, name).values():
+            moves.append(FileRename(translation, target_dir / translation.relative_to(source_dir)))
+    for move in moves:
+        if _rename_clashes(move):
+            raise ScaffoldError(f"Файл уже существует: {move.new_path}")
+    names: set[str] = set()
+    for path in family:
+        if path.suffix != ".yaml":
+            continue
+        member_text = text if path == yaml_path else read(path)
+        if element_kind(member_text) is not None:
+            names.add(element_name(member_text, path.stem))
+
+    identity = source_layout.identity(source_project)
+    prefix = f"{identity[0]}::{identity[1]}" if identity else None
+    old_key = source_place.key if source_place else None
+    new_key = target_place.key
+    # Every map below is keyed by the normalized path (_path_key): the caller's spelling of a
+    # path and the one a walk of the root yields may differ in case or in being relative.
+    moved_to = {_path_key(move.old_path): move.new_path for move in moves}
+    origin = {_path_key(move.new_path): _path_key(move.old_path) for move in moves}
+
+    spelled: dict[str, Path] = {}
+    for path in (engine.find_sources(root, "*.yaml") + engine.find_sources(root, "*.xbsl")
+                 + engine.find_sources(root, "*.xbql")):
+        spelled[_path_key(path)] = path
+    texts = {
+        key: (text if key == _path_key(yaml_path) else read(path))
+        for key, path in spelled.items()
+    }
+    root_layout = _root_layout(root)
+
+    def mentions(body: str) -> bool:
+        return any(n in body for n in names)
+
+    # A namesake in the target: in the same namespace the name is taken, elsewhere in the
+    # subsystem a short name becomes ambiguous (the documentation, "Пространство имен").
+    ambiguous: list[str] = []
+    for key, body in texts.items():
+        if key in moved_to or not key.endswith(".yaml") or not mentions(body):
+            continue
+        other = element_name(body, "")
+        if other not in names or element_kind(body) is None:
+            continue
+        place = root_layout.place(spelled[key])
+        if place is None or place.subsystem != target_place.subsystem:
+            continue
+        if place.key == new_key:
+            raise ScaffoldError(
+                f"Имя '{other}' в {_full_namespace(prefix, new_key)} уже занято: {spelled[key]}"
+            )
+        ambiguous.append(
+            f"В подсистеме {target_place.subsystem} уже есть элемент '{other}' "
+            f"({_relative(spelled[key], root)}): обращение к нему по краткому имени станет "
+            "неоднозначным"
+        )
+
+    rewritten: dict[str, str] = {}
+    requalified: dict[str, int] = {}
+    if old_key is not None:
+        short = _qualified_re(old_key, prefix, names=names)
+        full = _qualified_re(old_key, prefix, names=names, prefix_required=True) if prefix else None
+        for key, body in texts.items():
+            if "::" not in body or not mentions(body):
+                continue
+            same_project = root_layout.project_dir_of(spelled[key]) == source_project
+            pattern = short if same_project else full
+            if pattern is None:
+                continue
+            new_body, count = _requalified(spelled[key], body, pattern, new_key, skip_imports=True)
+            if count:
+                rewritten[key] = new_body
+                requalified[key] = count
+
+    # The rules need every descriptor and element yaml - the placement of every name - and the
+    # files that could reach a moved element. A module that never spells a moved name keeps its
+    # findings on both sides of the move, so it stays out of the run: parsing every module of a
+    # project is the dearest part of it.
+    focused = {_stem_of(key) for key, body in texts.items() if key in moved_to or mentions(body)}
+    before = [
+        engine.make_source(spelled[key], texts[key].encode("utf-8"))
+        for key in texts if key.endswith(".yaml") or _stem_of(key) in focused
+    ]
+
+    def moved(src):
+        key = _path_key(src.path)
+        at = moved_to.get(key, src.path)
+        if key in rewritten:
+            return engine.make_source(at, rewritten[key].encode("utf-8"))
+        # The caches of a source (tokens, tree, yaml) depend on its text alone.
+        return dataclasses.replace(src, path=at) if key in moved_to else src
+
+    after = [moved(src) for src in before]
+    rule_sets = (_IMPORT_RULES, _VISIBILITY_RULES, (_UNUSED_IMPORT_RULE, _USAGE_RULE))
+    notes_tail: list[str] = []
+    try:
+        found_before = _judged(before, sum(rule_sets, ()))
+        found_after = _judged(after, rule_sets[0] + rule_sets[1])
+    except dataset.DatasetError:
+        # Without the language data no module can be read: the yaml side is judged alone.
+        rule_sets = tuple(tuple(r for r in rules if r.startswith("yaml/")) for rules in rule_sets)
+        before = [src for src in before if src.path.suffix == ".yaml"]
+        after = [src for src in after if src.path.suffix == ".yaml"]
+        found_before = _judged(before, sum(rule_sets, ()))
+        found_after = _judged(after, rule_sets[0] + rule_sets[1])
+        notes_tail.append(
+            "Модули и запросы не проверены: без данных языка движок не читает код. После "
+            "переноса проверьте их линтером (code/missing-import)"
+        )
+
+    def origin_of(diag) -> str:
+        key = _path_key(diag.path)
+        return origin.get(key, key)
+
+    def spelled_origin(diag) -> str:
+        return _relative(spelled.get(origin_of(diag), Path(diag.path)), root)
+
+    seen = {_finding_identity(d, origin_of(d)) for d in found_before}
+    hidden = [
+        d for d in found_after
+        if d.rule_id in rule_sets[1] and _finding_identity(d, origin_of(d)) not in seen
+    ]
+    if hidden:
+        listed = "; ".join(f"{spelled_origin(d)}:{d.line}: {d.message}" for d in hidden[:5])
+        more = f" (и ещё {len(hidden) - 5})" if len(hidden) > 5 else ""
+        raise ScaffoldError(
+            f"Перенос сделает обращения недоступными, и импорт тут не поможет: {listed}{more}. "
+            "Задайте переносимым элементам ОбластьВидимости: ВПроекте либо переносите внутри "
+            "подсистемы"
+        )
+
+    old_subsystem = source_place.subsystem if source_place else None
+    imports: dict[str, list[str]] = {}
+    for diag in found_after:
+        if diag.rule_id not in rule_sets[0] or _finding_identity(diag, origin_of(diag)) in seen:
+            continue
+        namespaces = list(diag.data.get("namespaces", ()))
+        chosen = namespaces[0] if len(namespaces) == 1 else None
+        if chosen is None and new_key in namespaces:
+            chosen = new_key
+        if chosen is None and _path_key(diag.path) in origin:
+            # A moved file that now looks back at its old subsystem: of several public
+            # namesakes the one there is what the reference resolved to before the move.
+            own = [ns for ns in namespaces if ns.split("::", 1)[0] == old_subsystem]
+            chosen = own[0] if len(own) == 1 else None
+        if chosen is None:
+            continue  # the final pass reports it as not repaired
+        key = origin_of(diag)
+        if key.endswith(".xbql"):
+            key = key[: -len(".xbql")] + ".yaml"
+        imports.setdefault(key, []).append(chosen)
+
+    # Two compiler facts the import rules do not model yet, found by the name in the code: a
+    # module outside the subsystems (the project module) that names an element of a package
+    # imports the package, and so does the yaml of a virtual table whose query names one. The
+    # place to fold into the rules - and out of here - once they learn both.
+    if target_place.package is not None:
+        for key, body in texts.items():
+            path = spelled[key]
+            if path.suffix not in (".xbsl", ".xbql") or not mentions(body):
+                continue
+            if root_layout.project_dir_of(path) != source_project:
+                continue
+            place = root_layout.place(moved_to.get(key, path))
+            if path.suffix == ".xbsl" and place is None and _mentioned_in_code(body, names):
+                imports.setdefault(key, []).append(new_key)
+            elif (path.suffix == ".xbql" and place is not None and place.key != new_key
+                  and _mentioned_in_code(body, names)):
+                imports.setdefault(key[: -len(".xbql")] + ".yaml", []).append(new_key)
+
+    lang = _sources_language(texts)
+    current = dict(rewritten)
+    added: dict[str, list[str]] = {}
+    for key, namespaces in imports.items():
+        if key not in texts:
+            notes_tail.append(
+                f"Импорт {', '.join(dict.fromkeys(namespaces))} некуда дописать: нет файла {key}"
+            )
+            continue
+        body = current.get(key, texts[key])
+        if key.endswith(".yaml"):
+            new_body = _with_yaml_imports(body, namespaces, prefix)
+        else:
+            new_body = _with_module_imports(body, namespaces, lang, prefix)
+        if new_body != body:
+            current[key] = new_body
+            added[key] = list(dict.fromkeys(namespaces))
+
+    def edited(src):
+        key = origin.get(_path_key(src.path), _path_key(src.path))
+        if key in added:
+            return engine.make_source(src.path, current[key].encode("utf-8"))
+        return src
+
+    final = [edited(src) for src in after]
+    found_final = _judged(final, rule_sets[0] + rule_sets[2])
+    fresh_findings = [d for d in found_final if _finding_identity(d, origin_of(d)) not in seen]
+
+    uses: dict[str, list[str]] = {}
+    for diag in fresh_findings:
+        key = _path_key(diag.path)
+        if diag.rule_id == _USAGE_RULE and key in texts:
+            uses.setdefault(key, []).append(diag.data["uses"])
+    for key, subsystems in uses.items():
+        body = current.get(key, texts[key])
+        new_body = _with_usage(body, subsystems, lang)
+        if new_body != body:
+            current[key] = new_body
+
+    result = ScaffoldResult(renames=moves)
+    for key in sorted(current, key=lambda k: str(spelled[k])):
+        if current[key] != texts[key]:
+            result.changes.append(
+                FileChange(moved_to.get(key, spelled[key]), current[key], created=False)
+            )
+
+    result.notes.append(
+        f"Перенесено файлов: {len(moves)} – '{name}' из "
+        f"{_full_namespace(prefix, old_key) or _relative(source_dir, root)} в "
+        f"{_full_namespace(prefix, new_key)} ({_relative(target_dir, root)})"
+    )
+    by_namespace: dict[str, list[str]] = {}
+    for key, namespaces in added.items():
+        for namespace in namespaces:
+            by_namespace.setdefault(namespace, []).append(_relative(spelled[key], root))
+    for namespace, files in sorted(by_namespace.items()):
+        result.notes.append(f"Дописан импорт {namespace}: {', '.join(sorted(files))}")
+    if requalified:
+        listed = ", ".join(
+            f"{_relative(spelled[k], root)} ({n})" for k, n in sorted(requalified.items())
+        )
+        result.notes.append(
+            f"Полные имена переписаны на {_full_namespace(prefix, new_key)}: {listed}"
+        )
+    for key, subsystems in sorted(uses.items()):
+        result.notes.append(
+            f"В Использование ({_relative(spelled[key], root)}) добавлено: {', '.join(subsystems)}"
+        )
+    if not added and not requalified and not uses:
+        result.notes.append("Ссылок, которым перенос меняет импорт или полное имя, нет")
+    unused = [d for d in fresh_findings if d.rule_id == _UNUSED_IMPORT_RULE]
+    if unused:
+        listed = "; ".join(
+            f"{spelled_origin(d)}:{d.line} {d.data.get('namespace')}" for d in unused
+        )
+        result.notes.append(
+            f"Импорты, ставшие лишними (не сняты – их покажет code/unused-import): {listed}"
+        )
+    for diag in fresh_findings:
+        if diag.rule_id in rule_sets[0]:
+            result.notes.append(
+                f"Импорт не дописан, разберите вручную: {spelled_origin(diag)}:{diag.line}: "
+                f"{diag.message}"
+            )
+    result.notes.extend(ambiguous)
+    result.notes.extend(notes_tail)
+    result.notes.extend(_dictionary_notes(fresh, target_dir))
+    return result
+
+
+def _path_key(path) -> str:
+    """A path as a map key: absolute, and in the case the filesystem compares by."""
+    return os.path.normcase(os.path.abspath(path))
+
+
+
+def _stem_of(key: str) -> str:
+    """The pairing key of a source path: X.yaml and X.xbsl share it (xbsl.rules.environment)."""
+    slash = key.replace("\\", "/")
+    return slash[: slash.rfind(".")] if "." in slash.rsplit("/", 1)[-1] else slash
+
+
+# --- operation: renaming a package -----------------------------------------------------------
+
+
+def op_rename_package(root: Path, package_dir: Path, new_name: str, *,
+                      reader=None) -> ScaffoldResult:
+    """Rename a package of a subsystem: its folder and every name that spells it.
+
+    Renamed: every file under the package folder - nested packages, resources and translations
+    included; a result carries file renames, and the folder they empty goes away when the
+    result is applied (apply_result). Edited across the sources under the root: the import
+    lines `импорт Подсистема::Старое[::Вложенный]`, the items of `Import`, and the qualified
+    names `Подсистема::Старое::Элемент` of code, bindings and types - with the project's own
+    `Поставщик::Проект::` prefix or without it, the full type names of generated forms among
+    them. A file of another project under the root is edited only where it spells the name in
+    full with this project's prefix: its short `Подсистема::Старое` is a package of its own
+    project.
+
+    Short names need nothing: within the subsystem the root and the packages see each other,
+    and from elsewhere the element comes through the import that is edited. Refused: a folder
+    that is not a package (a subsystem, a service folder), a name that is not an identifier or
+    differs only by letter case, and a target folder that exists.
+    """
+    root = Path(os.path.abspath(root))
+    if not root.is_dir():
+        raise ScaffoldError(f"Корень проекта не найден: {root}")
+    package_dir = Path(os.path.abspath(package_dir))
+    if not package_dir.is_dir():
+        raise ScaffoldError(f"Каталог пакета не найден: {package_dir}")
+    new_name = _check_identifier(new_name, "пакета")
+    layout, place = _folder_place(package_dir)
+    chain = _package_chain(place, package_dir) if place is not None else ()
+    if place is None or not chain:
+        raise ScaffoldError(
+            f"{package_dir} – не пакет: пакет – каталог внутри каталога подсистемы, а "
+            "подсистема – каталог первого уровня проекта"
+        )
+    for part in chain:
+        if part in service_dirs() or part.startswith("."):
+            raise ScaffoldError(f"{package_dir} – служебный каталог '{part}', а не пакет")
+    if not _under_root(place.project_dir, root):
+        raise ScaffoldError(
+            f"Проект пакета ({place.project_dir}) лежит вне корня {root}: ссылки на пакет ищутся "
+            "под корнем, передайте корень проекта или репозитория"
+        )
+    old_name = package_dir.name
+    if old_name == new_name:
+        raise ScaffoldError("Старое и новое имена совпадают")
+    target = package_dir.with_name(new_name)
+    if old_name.casefold() == new_name.casefold():
+        raise ScaffoldError(
+            "Имена отличаются только регистром: на регистронезависимой файловой системе "
+            "каталог так не переименовать – сделайте это в два шага через временное имя "
+            "(git mv), затем поправьте имена"
+        )
+    if target.exists():
+        raise ScaffoldError(f"Каталог уже существует: {target}")
+
+    identity = layout.identity(place.project_dir)
+    prefix = f"{identity[0]}::{identity[1]}" if identity else None
+    old_key = place.key
+    new_key = old_key[: len(old_key) - len(old_name)] + new_name
+    files = sorted(path for path in package_dir.rglob("*") if path.is_file())
+    result = ScaffoldResult(
+        renames=[FileRename(path, target / path.relative_to(package_dir)) for path in files]
+    )
+    moved_to = {_path_key(r.old_path): r.new_path for r in result.renames}
+
+    short = _qualified_re(old_key, prefix)
+    full = _qualified_re(old_key, prefix, prefix_required=True) if prefix else None
+    root_layout = _root_layout(root)
+    read = reader or _read
+    edits: list[tuple[str, int]] = []
+    for path in (engine.find_sources(root, "*.yaml") + engine.find_sources(root, "*.xbsl")
+                 + engine.find_sources(root, "*.xbql")):
+        body = read(path)
+        if "::" not in body or old_name not in body:
+            continue
+        pattern = short if root_layout.project_dir_of(path) == place.project_dir else full
+        if pattern is None:
+            continue
+        new_body, count = _requalified(path, body, pattern, new_key, skip_imports=False)
+        if count:
+            result.changes.append(
+                FileChange(moved_to.get(_path_key(path), path), new_body, created=False)
+            )
+            edits.append((_relative(path, root), count))
+
+    result.notes.append(
+        f"Пакет {_full_namespace(prefix, old_key)} переименован в {new_name}: файлов "
+        f"перенесено {len(files)} ({_relative(package_dir, root)} -> {_relative(target, root)})"
+    )
+    if edits:
+        listed = ", ".join(f"{path} ({count})" for path, count in edits)
+        result.notes.append(
+            f"Имена {old_key} заменены на {new_key}: {len(edits)} файлов, "
+            f"{sum(count for _path, count in edits)} замен – {listed}"
+        )
+    else:
+        result.notes.append(f"Импортов и полных имён {old_key} в проекте нет")
+    result.notes.extend(_dictionary_notes([new_name], target))
     return result

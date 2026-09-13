@@ -1213,7 +1213,8 @@ def meta_rename_object(
     objects share old_name. dry_run=true returns the plan (renames, files, notes) without
     writing anything.
 
-    See also: meta_delete_object removes the same set of files instead of renaming it.
+    See also: meta_delete_object removes the same set of files instead of renaming it;
+    meta_move_object carries it into another folder under the same name.
     """
     base = _base(root)
     try:
@@ -1267,6 +1268,82 @@ def meta_delete_object(
 
 
 @mcp.tool()
+def meta_move_object(
+    root: str,
+    yaml_path: str,
+    target_dir: str,
+    dry_run: bool = False,
+) -> dict:
+    """Move a configuration object into another folder of its project and keep it reachable.
+
+    target_dir – a package of the object's subsystem (a folder that does not exist yet becomes a
+    new package), another package, the subsystem root or a folder of another subsystem. The
+    object moves with its forms `<Имя>Форма*`, modules, list row and list table (and the
+    translations of a localized-strings element).
+    An element of a package lives in the package's own namespace: another subsystem reaches it
+    only through `импорт Subsystem::Package`, while the root and the packages of one subsystem
+    see each other. So the move adds that import where a reference now needs it - modules and
+    yaml `Import` sections of other subsystems, the moved files themselves when the move
+    crosses a subsystem boundary, the project module, the yaml of a virtual table whose query
+    names a moved table - rewrites qualified names that spell the old place (the full
+    `Vendor::Project::Subsystem::Form.ListRowData` type of a generated form included) and adds
+    the subsystem to `Using` where a new cross-subsystem import needs it. The decision
+    is made by the linter's own import rules run before and after the move. Refused: a target
+    outside the project's subsystems, a taken name, and a non-public element left reachable
+    from another subsystem. An import the move made unnecessary is named in notes, not removed.
+    root – the caller's project or repository root (absolute): references are looked for under
+    it, relative paths resolve against it, and the answer names it as `root`. dry_run=true
+    returns the plan (renames, files, notes) without writing.
+
+    See also: meta_rename_package renames a package folder, meta_rename_object renames the
+    object itself, meta_project_info lists the packages.
+    """
+    base = _base(root)
+    try:
+        result = scaffold.op_move_object(
+            base, _under(base, yaml_path), _under(base, target_dir),
+        )
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    if dry_run:
+        return _absolute(result.as_dict(content=False), base)
+    return _apply_and_lint(result, base)
+
+
+@mcp.tool()
+def meta_rename_package(
+    root: str,
+    package_dir: str,
+    new_name: str,
+    dry_run: bool = False,
+) -> dict:
+    """Rename a package of a subsystem: its folder and every name that spells it.
+
+    package_dir – the package folder inside a subsystem folder (a nested package works too);
+    new_name – an identifier. Every file under the folder moves (nested packages, resources,
+    translations), and the sources under root get `импорт Subsystem::Old[::Nested]`, the
+    `Import` items and the qualified names `Subsystem::Old::Element` (with the project's
+    `Vendor::Project::` prefix or without) rewritten to the new name. A file of another project
+    under root is edited only where it spells the full name with this project's prefix. Short
+    names need nothing. Notes remind of the translation dictionary pair a new Cyrillic name
+    needs when the project has a dictionary.
+    root – the caller's project or repository root (absolute); relative paths resolve against
+    it, and the answer names it as `root`. dry_run=true returns the plan without writing.
+
+    See also: meta_move_object moves an object into a package, meta_project_info lists the
+    packages.
+    """
+    base = _base(root)
+    try:
+        result = scaffold.op_rename_package(base, _under(base, package_dir), new_name)
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    if dry_run:
+        return _absolute(result.as_dict(content=False), base)
+    return _apply_and_lint(result, base)
+
+
+@mcp.tool()
 @_documents_root
 def meta_add_subsystem(
     parent_dir: str,
@@ -1280,7 +1357,9 @@ def meta_add_subsystem(
     for the Использование block; representation – the navigation caption.
 
     See also: meta_new_object creates an object INSIDE such a folder - the folder is what
-    its `directory` names; meta_project_info lists the subsystems already there.
+    its `directory` names; meta_project_info lists the subsystems already there. A subsystem
+    is a first-level folder of the project: the finer division is a package, a folder
+    created with its first object (meta_new_object) or by meta_move_object.
     """
     base = _base(root)
     return _meta(

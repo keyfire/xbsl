@@ -12,8 +12,25 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as vscode from "vscode";
-import { applyScaffold, callMeta, ensureSavedForCli, ScaffoldResult } from "./engineMeta";
+import {
+  applyScaffold,
+  callMeta,
+  engineProjectInfo,
+  ensureSavedForCli,
+  ensureSourcesSavedForCli,
+  ScaffoldResult,
+} from "./engineMeta";
 import { lspActive, lspRequest } from "./lspClient";
+import {
+  allPackages,
+  bucketItems,
+  EnginePlacement,
+  EngineProjectInfo,
+  PackageGroup,
+  pathKey,
+  projectPlacementOf,
+  readPlacement,
+} from "./packagesCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
   groupResources,
@@ -368,11 +385,15 @@ interface Project {
   appModulePath?: string; // Проект.xbsl / Project.xbsl, spelled like the descriptor
 }
 
-// Subsystem = a folder with Подсистема.yaml (name = the folder name; element membership is by folder).
+// A subsystem folder as the tree found it: a folder with Подсистема.yaml (name = the folder
+// name). With the engine's placement (EnginePlacement) the subsystems come from the engine
+// instead - a first-level folder of the project, the descriptor optional - and the descriptor
+// found here only lends its file to the node.
 interface Subsystem {
   name: string;
   dir: string;
-  yamlPath: string; // Подсистема.yaml or Subsystem.yaml - captured at discovery
+  yamlPath?: string; // Подсистема.yaml or Subsystem.yaml; none - a subsystem without a descriptor
+  namespace?: string; // Vendor::Project::Subsystem, when the engine told
 }
 
 // --- source parsing ---------------------------------------------------------------------
@@ -562,6 +583,10 @@ class XbslNode extends vscode.TreeItem {
   stdKind?: string; // standard attribute: the object kind (Справочник/Документ)
   stdName?: string; // standard attribute: the name (Наименование/Код/Номер/Дата)
   docsKind?: string; // category: the platform type whose docs page describes it (tooltip)
+  folderDir?: string; // subsystem or package: the folder a new package and a dropped object go into
+  projectDir?: string; // project root: the folder a new subsystem goes into
+  packageKey?: string; // package: its path under the subsystem (`Партии::Архив`)
+  movable?: boolean; // an object "move to a package" and drag and drop can carry
 }
 
 // Set parent links across the whole built tree (for reveal), and give every node a STABLE, unique
@@ -608,9 +633,14 @@ function subsystemNode(sub: Subsystem): XbslNode {
   const node = new XbslNode(sub.name, vscode.TreeItemCollapsibleState.None);
   node.iconPath = new vscode.ThemeIcon("symbol-namespace");
   node.yamlPath = sub.yamlPath;
-  node.resourceUri = vscode.Uri.file(node.yamlPath); // for git statuses (color/badge), keeping our own icon
-  node.contextValue = "subsystem yaml";
-  node.command = { command: "xbsl.metadata.openYaml", title: "", arguments: [node] };
+  node.folderDir = sub.dir;
+  // git statuses (color/badge), keeping our own icon: the descriptor, or the folder without one
+  node.resourceUri = vscode.Uri.file(sub.yamlPath ?? sub.dir);
+  node.contextValue = ["subsystem", sub.yamlPath ? "yaml" : "", "addpkg"].filter(Boolean).join(" ");
+  if (sub.yamlPath) {
+    node.command = { command: "xbsl.metadata.openYaml", title: "", arguments: [node] };
+  }
+  node.tooltip = sub.namespace;
   return node;
 }
 
@@ -626,8 +656,11 @@ function subsystemsBranchNode(subsystems: Subsystem[]): XbslNode {
   return node;
 }
 
-// Subsystem node in the "By subsystems" mode: collapsible, carries nested subsystems and its own
-// objects (by classes). Подсистема.yaml is opened via the context menu (a click expands the node).
+// Subsystem node in the "By subsystems" mode: collapsible, carries its packages and its own
+// objects (by classes). The descriptor is opened via the context menu (a click expands the
+// node); a subsystem without one - the descriptor is optional - offers no such item.
+// A subsystem does not nest: its finer division is a package, so the node offers "Create
+// package" where it used to offer a nested subsystem.
 function subsystemGroupNode(sub: Subsystem, children: XbslNode[]): XbslNode {
   const node = new XbslNode(
     sub.name,
@@ -635,18 +668,63 @@ function subsystemGroupNode(sub: Subsystem, children: XbslNode[]): XbslNode {
   );
   node.iconPath = new vscode.ThemeIcon("symbol-namespace");
   node.yamlPath = sub.yamlPath;
-  node.resourceUri = vscode.Uri.file(node.yamlPath); // git statuses
-  node.contextValue = "subsystem yaml addsub";
+  node.folderDir = sub.dir;
+  node.resourceUri = vscode.Uri.file(sub.yamlPath ?? sub.dir); // git statuses
+  node.contextValue = ["subsystem", sub.yamlPath ? "yaml" : "", "addpkg"].filter(Boolean).join(" ");
+  node.tooltip = sub.namespace;
   node.children = children;
   return node;
 }
 
-// Project children in the "By subsystems" mode: the subsystem tree (by folder nesting), under each -
-// its objects by classes; objects outside subsystems - as categories at the project root. Membership
-// is by folder: an object belongs to the DEEPEST subsystem whose folder is a prefix of its path.
+// A package of a subsystem: a folder without a descriptor, labeled by its last segment (the
+// nesting shows the rest), the full namespace in the tooltip, the number of its objects -
+// nested packages included - in the description.
+function packageNode(group: PackageGroup, children: XbslNode[], objects: number): XbslNode {
+  const node = new XbslNode(
+    group.name,
+    children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+  );
+  node.iconPath = neutralIcon("package");
+  node.folderDir = group.dir;
+  node.packageKey = group.key;
+  node.resourceUri = vscode.Uri.file(group.dir); // git statuses of the folder
+  node.description = String(objects);
+  node.contextValue = "package addpkg renamepkg";
+  node.tooltip = group.namespace;
+  node.children = children;
+  return node;
+}
+
+// The objects a category shows at its top level - what its description counts.
+function countedObjects(categories: XbslNode[]): number {
+  return categories
+    .filter((c) => !/\bxbslResources\b/.test(c.contextValue ?? ""))
+    .reduce((sum, c) => sum + (c.children?.length ?? 0), 0);
+}
+
+// Project children in the "By subsystems" mode.
+//
+// With the engine's placement: the subsystems of the project (a descriptor is optional), under
+// each - its packages with their nesting and the objects of its root by classes; under a package
+// - its nested packages and its objects. Which subsystem and package an object belongs to is the
+// engine's answer, never guessed here (packagesCore.bucketItems).
+//
+// Without it (an engine that cannot answer): the old picture - the subsystem tree by folder
+// nesting, an object belongs to the DEEPEST subsystem folder that is a prefix of its path, and
+// packages are not shown.
 function subsystemModeChildren(
-  subsystems: Subsystem[], elements: Element[], resources: string[] = []
+  subsystems: Subsystem[],
+  elements: Element[],
+  resources: string[] = [],
+  placement?: EnginePlacement,
+  projectDir?: string
 ): XbslNode[] {
+  // The engine's view of exactly this project: an answer that does not know it yet (a project
+  // created after it was given) draws it the old way until the next one.
+  const project = placement?.projects.find((p) => pathKey(p.dir) === pathKey(projectDir ?? ""));
+  if (placement && project) {
+    return packagedChildren(subsystems, elements, resources, placement, project.dir);
+  }
   const under = (child: string, dir: string): boolean => child.toLowerCase().startsWith(dir.toLowerCase() + path.sep);
   const deepest = (p: string, among: Subsystem[]): Subsystem | undefined => {
     let best: Subsystem | undefined;
@@ -719,6 +797,64 @@ function subsystemModeChildren(
   ];
 }
 
+// The engine-backed half of subsystemModeChildren (see there).
+function packagedChildren(
+  descriptors: Subsystem[],
+  elements: Element[],
+  resources: string[],
+  placement: EnginePlacement,
+  projectDir: string
+): XbslNode[] {
+  const project = placement.projects.find((p) => p.dir === projectDir);
+  if (!project) {
+    return categoriesOf(elements, false, false, resources);
+  }
+  const namespaceOf = (el: Element): string | undefined => placement.objects.get(pathKey(el.yamlPath))?.namespace;
+  const byElement = bucketItems(elements, (el) => el.yamlPath, project, placement);
+  const byResource = bucketItems(resources, (p) => p, project, placement);
+  const nodes: XbslNode[] = [];
+  for (const group of project.subsystems) {
+    const elementSlot = byElement.subsystems.get(group);
+    const resourceSlot = byResource.subsystems.get(group);
+    const buildPackage = (pkg: PackageGroup): { node: XbslNode; objects: number } => {
+      const nested = [...pkg.children].sort(byName).map(buildPackage);
+      const categories = categoriesOf(
+        elementSlot?.packages.get(pkg.key) ?? [], false, false,
+        resourceSlot?.packages.get(pkg.key) ?? [], namespaceOf
+      );
+      const objects = countedObjects(categories) + nested.reduce((sum, n) => sum + n.objects, 0);
+      return { node: packageNode(pkg, [...nested.map((n) => n.node), ...categories], objects), objects };
+    };
+    const descriptor = descriptors.find((d) => pathKey(d.dir) === pathKey(group.dir));
+    const view: Subsystem = { name: group.name, dir: group.dir, yamlPath: descriptor?.yamlPath, namespace: group.namespace };
+    nodes.push(
+      subsystemGroupNode(view, [
+        ...[...group.packages].sort(byName).map((pkg) => buildPackage(pkg).node),
+        ...categoriesOf(elementSlot?.root ?? [], false, false, resourceSlot?.root ?? [], namespaceOf),
+      ])
+    );
+  }
+  nodes.sort((a, b) => String(a.label).localeCompare(String(b.label), "ru"));
+  return [...nodes, ...categoriesOf(byElement.outside, false, false, byResource.outside, namespaceOf)];
+}
+
+// The subsystems to list: the engine's, when it answered for this project (a subsystem without a
+// descriptor included, a nested descriptor - a package - left out), else the descriptors found.
+function subsystemViews(descriptors: Subsystem[], placement: EnginePlacement | undefined, projectDir: string | undefined): Subsystem[] {
+  const project = placement && projectDir !== undefined
+    ? placement.projects.find((p) => pathKey(p.dir) === pathKey(projectDir))
+    : undefined;
+  if (!project) {
+    return descriptors;
+  }
+  return project.subsystems.map((group) => ({
+    name: group.name,
+    dir: group.dir,
+    yamlPath: descriptors.find((d) => pathKey(d.dir) === pathKey(group.dir))?.yamlPath,
+    namespace: group.namespace,
+  }));
+}
+
 function projectNode(project: Project, children: XbslNode[], filterNames: string[]): XbslNode {
   const node = new XbslNode(project.name, vscode.TreeItemCollapsibleState.Expanded);
   node.iconPath = new vscode.ThemeIcon("project");
@@ -732,6 +868,7 @@ function projectNode(project: Project, children: XbslNode[], filterNames: string
     .filter(Boolean)
     .join(" ");
   node.appModulePath = project.appModulePath;
+  node.projectDir = project.dir;
   node.children = children;
   node.tooltip = vscode.l10n.t("Project");
   return node;
@@ -970,7 +1107,7 @@ function formsGroupNode(forms: Element[], owner?: { name: string; yamlPath: stri
   return node;
 }
 
-function elementNode(el: Element, boundForms: Element[]): XbslNode {
+function elementNode(el: Element, boundForms: Element[], namespace?: string): XbslNode {
   const groups: XbslNode[] = [];
   const internals = parseInternals(el.text);
   const stdNames = new Set(standardAttrNames(el.kind));
@@ -1028,13 +1165,17 @@ function elementNode(el: Element, boundForms: Element[]): XbslNode {
     el.queryPath ? "xbql" : "",
     // Localized strings get translations right on the element - the "+" mirrors the cloud IDE.
     el.kind === LOCALIZED_STRINGS_KIND ? "addloc" : "",
+    "movable",
   ]
     .filter(Boolean)
     .join(" ");
+  node.movable = true;
   node.codeKind = CODE_KINDS.has(el.kind);
   // Click: the source on the left (module for code kinds, or the description), properties - right.
   node.command = { command: "xbsl.metadata.openWithProps", title: "", arguments: [node] };
-  node.tooltip = el.kind;
+  // The namespace the object lives in, as the engine placed it (Vendor::Project::Subsystem
+  // [::Package]) - what a full type name of it spells; the kind below it.
+  node.tooltip = namespace ? `${namespace}\n${el.kind}` : el.kind;
   return node;
 }
 
@@ -1094,7 +1235,8 @@ function formOwnerResolver(objects: Element[]): (form: Element) => string | unde
 // Categories (by kind) for a set of elements, including the "Common forms" section. Empty creatable
 // categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
 function categoriesOf(
-  elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean, resources: string[] = []
+  elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean, resources: string[] = [],
+  namespaceOf?: (el: Element) => string | undefined
 ): XbslNode[] {
   const forms = elements.filter((e) => e.kind === FORM_KIND);
   const objects = elements.filter((e) => e.kind !== FORM_KIND);
@@ -1123,7 +1265,7 @@ function categoriesOf(
   const cats = new Map<string, Cat>();
   for (const obj of [...objects].sort(byName)) {
     const meta = metaFor(obj.kind);
-    const node = elementNode(obj, formsByOwner.get(obj.name) ?? []);
+    const node = elementNode(obj, formsByOwner.get(obj.name) ?? [], namespaceOf?.(obj));
     const cat = cats.get(meta.group) ?? { icon: meta.icon, order: meta.order, elements: [] };
     cat.elements.push(node);
     cats.set(meta.group, cat);
@@ -1192,7 +1334,9 @@ function categoriesOf(
 
 type GroupMode = "kind" | "subsystem";
 
-function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hideEmpty: boolean): XbslNode[] {
+function buildRoots(
+  model: Model, filterDirs: Set<string>, mode: GroupMode, hideEmpty: boolean, placement?: EnginePlacement
+): XbslNode[] {
   const filterActive = filterDirs.size > 0;
   const underFilter = (p: string): boolean =>
     [...filterDirs].some((d) => p.toLowerCase().startsWith(d.toLowerCase() + path.sep));
@@ -1200,18 +1344,26 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
   const resources = filterActive ? model.resources.filter(underFilter) : model.resources;
   const showEmpty = !filterActive;
 
+  // The namespace of an object, when the engine placed it - the tooltip of its node.
+  const namespaceOf = placement
+    ? (el: Element): string | undefined => placement.objects.get(pathKey(el.yamlPath))?.namespace
+    : undefined;
+
   // Project children: "By object classes" - the Subsystems branch + categories by kind;
-  // "By subsystems" - the subsystem tree with the objects under it.
-  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[]): XbslNode[] =>
+  // "By subsystems" - the subsystem tree with the packages and the objects under it.
+  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[], projectDir?: string): XbslNode[] =>
     mode === "subsystem"
-      ? subsystemModeChildren(subs, elems, res)
-      : [subsystemsBranchNode(subs), ...categoriesOf(elems, showEmpty, hideEmpty, res)];
+      ? subsystemModeChildren(subs, elems, res, placement, projectDir)
+      : [
+          subsystemsBranchNode(subsystemViews(subs, placement, projectDir)),
+          ...categoriesOf(elems, showEmpty, hideEmpty, res, namespaceOf),
+        ];
 
   if (model.projects.length === 0) {
     // No Проект.yaml found - go without a project root.
     return mode === "subsystem"
-      ? subsystemModeChildren(model.subsystems, elements, resources)
-      : categoriesOf(elements, showEmpty, hideEmpty, resources);
+      ? subsystemModeChildren(model.subsystems, elements, resources, placement, "")
+      : categoriesOf(elements, showEmpty, hideEmpty, resources, namespaceOf);
   }
   const projects = [...model.projects].sort(byName);
   const projectOf = (targetPath: string): Project => {
@@ -1256,7 +1408,8 @@ function buildRoots(model: Model, filterDirs: Set<string>, mode: GroupMode, hide
       childrenOf(
         elementsByProject.get(p) ?? [],
         subsystemsByProject.get(p) ?? [],
-        resourcesByProject.get(p) ?? []
+        resourcesByProject.get(p) ?? [],
+        p.dir
       ),
       filterNamesOf(p)
     )
@@ -1296,8 +1449,27 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   private hideEmpty = false; // hide empty class categories (the toolbar toggle)
   private treeView?: vscode.TreeView<XbslNode>; // for reveal (getParent is mandatory)
   private pendingReveal?: (n: XbslNode) => boolean; // reveal this node after a rebuild
+  private modelStale = false; // files changed since the model was parsed
+
+  // The engine's placement of the objects - subsystem, package, namespace (xbsl/metaProjectInfo).
+  // Asked once per change of the file SET and never waited for: the tree is drawn at once with
+  // what is known - the last answer, or none (then without packages) - and drawn again when the
+  // answer arrives. A change of a file's content keeps the answer: no folder moved.
+  private placement?: EnginePlacement;
+  private generation = 0; // bumped when files appear, disappear or move
+  private placementGeneration = -1; // the generation the placement was last asked for
+  private placementRequest?: Promise<void>;
+  // The engine answered, and its answer had no placement (an engine older than packages): it is
+  // not asked again this session - an answer that cannot change is not worth a process per save.
+  private placementUnsupported = false;
 
   constructor(private readonly projectRootFor: (folder: vscode.WorkspaceFolder) => string) {}
+
+  // The root the engine walks for an operation on this path - the project root the lint uses.
+  rootFor(fsPath: string): string | undefined {
+    const folder = vscode.workspace.getWorkspaceFolder(vscode.Uri.file(fsPath));
+    return folder ? this.projectRootFor(folder) : undefined;
+  }
 
   // The tree view is created separately (access to reveal is needed); attached after creation.
   attachView(view: vscode.TreeView<XbslNode>): void {
@@ -1321,9 +1493,72 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     return this.writesEnglishNames();
   }
 
-  refresh(): void {
+  // The files changed: the model is parsed anew on the next draw. `structural` - files appeared,
+  // disappeared or moved, so the placement is asked for again too; a content change keeps it.
+  refresh(structural = true): void {
+    if (structural) {
+      this.generation++;
+    }
+    this.modelStale = true;
+    this.redraw();
+  }
+
+  // Another picture of the same files: a filter, the grouping, a toggle, the placement arriving.
+  private redraw(): void {
     this.roots = undefined;
     this.emitter.fire(undefined);
+  }
+
+  // Ask the engine for the placement unless the current file set was asked for already. The
+  // answer triggers a redraw; failing to answer keeps the last placement (a restarting server is
+  // no reason to fold the packages away) or, never having had one, the tree without packages.
+  private askPlacement(): Promise<void> {
+    if (this.placementRequest) {
+      return this.placementRequest;
+    }
+    if (this.placementGeneration === this.generation || this.placementUnsupported) {
+      return Promise.resolve();
+    }
+    const generation = this.generation;
+    this.placementGeneration = generation;
+    this.placementRequest = this.fetchPlacement()
+      .then((placement) => {
+        if (placement) {
+          this.placement = placement;
+        }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        this.placementRequest = undefined;
+        this.redraw(); // a newer file set asks again from the draw
+      });
+    return this.placementRequest;
+  }
+
+  private async fetchPlacement(): Promise<EnginePlacement | undefined> {
+    const merged: Required<Omit<EngineProjectInfo, "error">> = { projects: [], packages: [], objects: [] };
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      const info = await engineProjectInfo(this.projectRootFor(folder));
+      if (!info) {
+        return undefined;
+      }
+      merged.projects.push(...(info.projects ?? []));
+      merged.packages.push(...(info.packages ?? []));
+      merged.objects.push(...(info.objects ?? []));
+    }
+    const placement = readPlacement(merged, (this.model?.subsystems ?? []).map((s) => s.dir));
+    this.placementUnsupported = placement === undefined && merged.objects.length > 0;
+    return placement;
+  }
+
+  // The placement for a command that needs it now (the move targets): the current answer, asked
+  // for and awaited when the file set changed since.
+  async currentPlacement(): Promise<EnginePlacement | undefined> {
+    if (!this.model) {
+      this.model = await parseModel(this.projectRootFor);
+    }
+    await this.askPlacement();
+    return this.placement;
   }
 
   get filterDirs(): Set<string> {
@@ -1332,7 +1567,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
 
   setFilter(dirs: string[]): void {
     this.filter = new Set(dirs);
-    this.refresh();
+    this.redraw();
   }
 
   get mode(): GroupMode {
@@ -1344,7 +1579,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       return;
     }
     this.groupMode = mode;
-    this.refresh();
+    this.redraw();
   }
 
   get emptyHidden(): boolean {
@@ -1356,7 +1591,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       return;
     }
     this.hideEmpty = hide;
-    this.refresh();
+    this.redraw();
   }
 
   getTreeItem(node: XbslNode): vscode.TreeItem {
@@ -1414,8 +1649,12 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
 
   private async buildRootsIfNeeded(): Promise<XbslNode[]> {
     if (!this.roots) {
-      this.model = await parseModel(this.projectRootFor);
-      this.roots = buildRoots(this.model, this.filter, this.groupMode, this.hideEmpty);
+      if (!this.model || this.modelStale) {
+        this.modelStale = false;
+        this.model = await parseModel(this.projectRootFor);
+      }
+      void this.askPlacement();
+      this.roots = buildRoots(this.model, this.filter, this.groupMode, this.hideEmpty, this.placement);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -1445,11 +1684,41 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   }
 
   // Where to put a new object: subsystems (folders) and the project root.
-  async placements(): Promise<{ subsystems: Subsystem[]; projectDir?: string }> {
+  async placements(): Promise<{
+    subsystems: Subsystem[];
+    packages: Array<{ label: string; description: string; dir: string }>;
+    projectDir?: string;
+    projectDirs: string[];
+  }> {
     if (!this.model) {
       this.model = await parseModel(this.projectRootFor);
     }
-    return { subsystems: this.model.subsystems, projectDir: this.model.projects[0]?.dir };
+    // The packages the engine told of last: a new object may go into one of them.
+    const packages = (this.placement?.projects ?? []).flatMap((project) =>
+      project.subsystems.flatMap((s) =>
+        allPackages(s.packages).map((g) => ({ label: `${s.name}::${g.key}`, description: g.namespace, dir: g.dir }))
+      )
+    );
+    return {
+      subsystems: this.model.subsystems,
+      packages,
+      projectDir: this.model.projects[0]?.dir,
+      projectDirs: this.model.projects.map((p) => p.dir),
+    };
+  }
+
+  // Where an object may move within its project: the root of every subsystem and every package,
+  // as the engine placed them. undefined - the engine has not told (an older one, none at all).
+  async moveTargets(fsPath: string): Promise<Array<vscode.QuickPickItem & { dir: string }> | undefined> {
+    const placement = await this.currentPlacement();
+    const project = placement ? projectPlacementOf(placement, fsPath) : undefined;
+    if (!project) {
+      return undefined;
+    }
+    return project.subsystems.flatMap((s) => [
+      { label: s.name, description: vscode.l10n.t("subsystem root"), dir: s.dir },
+      ...allPackages(s.packages).map((g) => ({ label: `${s.name}::${g.key}`, description: g.namespace, dir: g.dir })),
+    ]);
   }
 
   // Interface components (forms) of the workspace - the "Project" section of the component
@@ -1736,7 +2005,8 @@ const IDENTIFIER = /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/;
 async function applyAndReveal(
   provider: XbslMetadataProvider,
   result: ScaffoldResult,
-  revealPred?: (n: XbslNode) => boolean
+  revealPred?: (n: XbslNode) => boolean,
+  openEdited = true
 ): Promise<void> {
   const paths = await applyScaffold(result);
   if (!paths.length) {
@@ -1744,6 +2014,11 @@ async function applyAndReveal(
   }
   if (revealPred) {
     provider.requestReveal(revealPred);
+  }
+  // A move or a package rename edits files all over the project: none of them is the point of
+  // interest, the node in the tree is.
+  if (!openEdited) {
+    return;
   }
   const edited = (result.files ?? []).find((f) => !f.created && f.cursor);
   const target = edited ?? (result.files ?? [])[0];
@@ -1927,7 +2202,20 @@ interface Placement extends vscode.QuickPickItem {
   dir: string;
 }
 
-async function addObject(provider: XbslMetadataProvider, kind?: string): Promise<void> {
+// The nearest node - the node itself included - that stands for a folder of a subsystem or of a
+// package: where a new package, a new object of its category and a dropped object go.
+function folderNodeOf(node?: XbslNode): XbslNode | undefined {
+  for (let n = node; n; n = n.parent) {
+    if (n.folderDir) {
+      return n;
+    }
+  }
+  return undefined;
+}
+
+// `targetDir` - the folder is already known (a category under a subsystem or a package node, a
+// new package): the new object goes there without asking.
+async function addObject(provider: XbslMetadataProvider, kind?: string, targetDir?: string): Promise<void> {
   if (!kind) {
     return;
   }
@@ -1940,14 +2228,17 @@ async function addObject(provider: XbslMetadataProvider, kind?: string): Promise
     return;
   }
 
-  // Where to put it: a subsystem (folder) or the project root.
-  const { subsystems, projectDir } = await provider.placements();
+  // Where to put it: a subsystem (folder), a package of one or the project root.
+  const { subsystems, packages, projectDir } = await provider.placements();
   const items: Placement[] = [
     ...subsystems.map((s) => ({ label: s.name, dir: s.dir })),
+    ...packages,
     ...(projectDir ? [{ label: vscode.l10n.t("(project root)"), description: projectDir, dir: projectDir }] : []),
   ];
-  let dir: string | undefined;
-  if (items.length <= 1) {
+  let dir: string | undefined = targetDir;
+  if (dir) {
+    // the folder came with the command
+  } else if (items.length <= 1) {
     dir = items[0]?.dir ?? projectDir;
   } else {
     const pick = await vscode.window.showQuickPick(items, {
@@ -2057,8 +2348,9 @@ async function addLocalization(provider: XbslMetadataProvider, node?: XbslNode):
 // writes its names in, like the "Name of the new object" prompt does.
 async function addObjectPick(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
   const kinds = node?.newObjectKinds ?? [];
+  const targetDir = folderNodeOf(node)?.folderDir;
   if (kinds.length < 2) {
-    return addObject(provider, kinds[0]);
+    return addObject(provider, kinds[0], targetDir);
   }
   const english = provider.writesEnglishNames();
   const pick = await vscode.window.showQuickPick(
@@ -2066,7 +2358,206 @@ async function addObjectPick(provider: XbslMetadataProvider, node?: XbslNode): P
     { placeHolder: vscode.l10n.t("Kind of the new object") }
   );
   if (pick) {
-    await addObject(provider, pick.objectKind);
+    await addObject(provider, pick.objectKind, targetDir);
+  }
+}
+
+// "Create package" on a subsystem or a package. A package has no descriptor and a folder without
+// objects is not a package, so the command asks the name and goes straight on to the first object
+// of the package - the engine's own "new object" with the new folder as its directory; the engine
+// checks the name as a namespace segment and reminds of the dictionary pair it needs.
+async function addPackage(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const parent = folderNodeOf(node);
+  if (!parent?.folderDir) {
+    return;
+  }
+  const english = provider.writesEnglishNames();
+  const name = await askIdentifier(vscode.l10n.t("Name of the new package"), english ? "NewPackage" : "НовыйПакет");
+  if (!name) {
+    return;
+  }
+  const dir = path.join(parent.folderDir, name);
+  if (fs.existsSync(dir)) {
+    void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: the folder {0} already exists.", dir));
+    return;
+  }
+  const kinds = NEW_OBJECT_KINDS.map((k) => ({ label: (english && englishKindName(k)) || k, objectKind: k }));
+  const pick = await vscode.window.showQuickPick(kinds, {
+    placeHolder: vscode.l10n.t("Kind of the first object of the package {0}", name),
+  });
+  if (pick) {
+    await addObject(provider, pick.objectKind, dir);
+  }
+}
+
+// One object moved by the engine (xbsl/metaMoveObject): the files, the imports a reference needs
+// at the new place, the full names spelling the old one. The engine reads every source of the
+// project, which takes a while on a large one - hence the progress.
+async function runMove(provider: XbslMetadataProvider, nodes: XbslNode[], targetDir: string): Promise<void> {
+  if (!(await ensureSourcesSavedForCli())) {
+    return;
+  }
+  for (const node of nodes) {
+    const yamlPath = node.yamlPath;
+    const root = yamlPath ? provider.rootFor(yamlPath) : undefined;
+    if (!yamlPath || !root) {
+      continue;
+    }
+    const result = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t("XBSL: moving {0}...", String(node.label)) },
+      () => callMeta("xbsl/metaMoveObject", { root, path: yamlPath, targetDir }, "move-object", [root, yamlPath, targetDir])
+    );
+    if (!result) {
+      return;
+    }
+    const moved = pathKey(path.join(targetDir, path.basename(yamlPath)));
+    await applyAndReveal(
+      provider,
+      result,
+      (n) => !!n.yamlPath && pathKey(n.yamlPath) === moved && /\belement\b/.test(n.contextValue ?? ""),
+      false
+    );
+    if (result.error) {
+      return;
+    }
+  }
+}
+
+interface MoveTarget extends vscode.QuickPickItem {
+  dir?: string;
+  newPackage?: boolean;
+}
+
+// "Move to package" on an object: the targets are the roots and packages of its subsystems as
+// the engine placed them, plus a new package under any of them.
+async function moveToPackage(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  if (!node?.yamlPath) {
+    return;
+  }
+  const targets = await provider.moveTargets(node.yamlPath);
+  if (!targets) {
+    void vscode.window.showWarningMessage(
+      vscode.l10n.t("XBSL: the engine did not tell where the packages are - moving needs the xbsl engine with packages support.")
+    );
+    return;
+  }
+  const current = pathKey(path.dirname(node.yamlPath));
+  const items: MoveTarget[] = [
+    ...targets.filter((t) => pathKey(t.dir) !== current),
+    { label: `$(add) ${vscode.l10n.t("New package...")}`, newPackage: true },
+  ];
+  const pick = await vscode.window.showQuickPick(items, {
+    placeHolder: vscode.l10n.t("Where to move {0}", String(node.label)),
+  });
+  if (!pick) {
+    return;
+  }
+  let dir = pick.dir;
+  if (pick.newPackage) {
+    const parent = await vscode.window.showQuickPick(targets, {
+      placeHolder: vscode.l10n.t("Where the new package goes"),
+    });
+    if (!parent) {
+      return;
+    }
+    const name = await askIdentifier(
+      vscode.l10n.t("Name of the new package"),
+      provider.writesEnglishNames() ? "NewPackage" : "НовыйПакет"
+    );
+    if (!name) {
+      return;
+    }
+    dir = path.join(parent.dir, name);
+  }
+  if (dir) {
+    await runMove(provider, [node], dir);
+  }
+}
+
+// "Rename package": the folder and every import and full name that spells the package - the
+// engine's operation (xbsl/metaRenamePackage), the tree applies what it computed.
+async function renamePackage(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const packageDir = node?.folderDir;
+  if (!packageDir || !node?.packageKey) {
+    return;
+  }
+  const current = path.basename(packageDir);
+  const name = await askIdentifier(vscode.l10n.t("New name of the package {0}", node.packageKey), current);
+  if (!name || name === current) {
+    return;
+  }
+  const root = provider.rootFor(packageDir);
+  if (!root || !(await ensureSourcesSavedForCli())) {
+    return;
+  }
+  const packageKey = node.packageKey;
+  const result = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t("XBSL: renaming the package {0}...", packageKey) },
+    () => callMeta(
+      "xbsl/metaRenamePackage", { root, packageDir, newName: name }, "rename-package", [root, packageDir, name]
+    )
+  );
+  if (!result) {
+    return;
+  }
+  const renamed = pathKey(path.join(path.dirname(packageDir), name));
+  await applyAndReveal(
+    provider,
+    result,
+    (n) => !!n.folderDir && pathKey(n.folderDir) === renamed && /\bpackage\b/.test(n.contextValue ?? ""),
+    false
+  );
+}
+
+const TREE_MIME = "application/vnd.code.tree.xbslmetadata";
+
+// Drag an object onto a subsystem or a package (or anything under one) - the same move as the
+// "Move to package" command, confirmed first: a drop is easy to make by accident, and a move
+// edits files across the project.
+class MetadataDragAndDrop implements vscode.TreeDragAndDropController<XbslNode> {
+  readonly dragMimeTypes = [TREE_MIME];
+  readonly dropMimeTypes = [TREE_MIME];
+
+  constructor(private readonly provider: XbslMetadataProvider) {}
+
+  handleDrag(source: readonly XbslNode[], data: vscode.DataTransfer): void {
+    const movable = source.filter((n) => n.movable && n.yamlPath);
+    if (movable.length) {
+      data.set(TREE_MIME, new vscode.DataTransferItem(movable));
+    }
+  }
+
+  async handleDrop(target: XbslNode | undefined, data: vscode.DataTransfer): Promise<void> {
+    const destination = folderNodeOf(target);
+    const nodes = data.get(TREE_MIME)?.value as XbslNode[] | undefined;
+    const dir = destination?.folderDir;
+    if (!destination || !dir || !nodes?.length) {
+      return;
+    }
+    // The editor puts every dragged node under the tree's own type as well: a field or a form
+    // carries the yaml of its object, and only an object itself moves.
+    const moving = nodes.filter(
+      (n) => n.movable && n.yamlPath && pathKey(path.dirname(n.yamlPath)) !== pathKey(dir)
+    );
+    if (!moving.length) {
+      return;
+    }
+    const where = typeof destination.tooltip === "string" && destination.tooltip
+      ? destination.tooltip
+      : String(destination.label);
+    const move = vscode.l10n.t("Move");
+    const pick = await vscode.window.showWarningMessage(
+      vscode.l10n.t(
+        "XBSL: move {0} to {1}? The imports and full names that need it are updated across the project.",
+        moving.map((n) => String(n.label)).join(", "),
+        where
+      ),
+      { modal: true },
+      move
+    );
+    if (pick === move) {
+      await runMove(this.provider, moving, dir);
+    }
   }
 }
 
@@ -2157,14 +2648,18 @@ async function deleteObject(provider: XbslMetadataProvider, node?: XbslNode): Pr
   provider.refresh();
 }
 
-async function addSubsystem(provider: XbslMetadataProvider): Promise<void> {
-  const { subsystems, projectDir } = await provider.placements();
-  const parents: Placement[] = [
-    ...(projectDir ? [{ label: vscode.l10n.t("(project root)"), description: projectDir, dir: projectDir }] : []),
-    ...subsystems.map((s) => ({ label: s.name, dir: s.dir })),
-  ];
-  let parent: string | undefined;
-  if (parents.length <= 1) {
+// A subsystem is a first-level folder of its project (a folder inside a subsystem is a package),
+// so the only parent to choose is the project: the one the command was called on, the only one,
+// or one of several.
+async function addSubsystem(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
+  const { projectDir, projectDirs } = await provider.placements();
+  const parents: Placement[] = projectDirs.map((dir) => ({
+    label: vscode.l10n.t("(project root)"), description: dir, dir,
+  }));
+  let parent: string | undefined = node?.projectDir;
+  if (parent) {
+    // called on a project node
+  } else if (parents.length <= 1) {
     parent = parents[0]?.dir ?? projectDir;
   } else {
     const pick = await vscode.window.showQuickPick(parents, {
@@ -2268,6 +2763,8 @@ export function registerMetadataTree(
     // A button of our own instead of the built-in one: that collapses the project root too,
     // leaving a single line in the tree and two clicks back to the metadata kinds.
     showCollapseAll: false,
+    // An object dragged onto a subsystem or a package moves there (the engine's move).
+    dragAndDropController: new MetadataDragAndDrop(provider),
   });
   provider.attachView(view); // reveal requires access to the tree view
   // Collapse everything but keep the root open: the list of metadata kinds is what the tree is
@@ -2290,21 +2787,29 @@ export function registerMetadataTree(
   // Resource files carry arbitrary extensions - watched by their folder, not by type.
   const resourceWatcher = vscode.workspace.createFileSystemWatcher("**/{Ресурсы,Resources}/**");
   let timer: NodeJS.Timeout | undefined;
-  const bump = () => {
+  let structural = false;
+  // `reshapes` - files appeared or disappeared (or a descriptor changed, which renames a
+  // subsystem or a project): the engine is asked for the placement again. A change of content
+  // re-reads the model but keeps the placement - no folder moved.
+  const bump = (reshapes: boolean) => {
+    structural = structural || reshapes;
     if (timer) {
       clearTimeout(timer);
     }
     timer = setTimeout(() => {
       timer = undefined;
-      provider.refresh();
+      const changedSet = structural;
+      structural = false;
+      provider.refresh(changedSet);
     }, 300);
   };
-  watcher.onDidCreate(bump);
-  watcher.onDidDelete(bump);
-  watcher.onDidChange(bump);
+  const DESCRIPTORS = new Set(["Проект.yaml", "Project.yaml", "Подсистема.yaml", "Subsystem.yaml"]);
+  watcher.onDidCreate(() => bump(true));
+  watcher.onDidDelete(() => bump(true));
+  watcher.onDidChange((uri) => bump(DESCRIPTORS.has(path.basename(uri.fsPath))));
   // A changed file keeps its node; only appearing and disappearing files reshape the tree.
-  resourceWatcher.onDidCreate(bump);
-  resourceWatcher.onDidDelete(bump);
+  resourceWatcher.onDidCreate(() => bump(true));
+  resourceWatcher.onDidDelete(() => bump(true));
 
   context.subscriptions.push(
     view,
@@ -2344,7 +2849,10 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.addRouteMethod", (n?: XbslNode) => addRouteMethod(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.addObjectForm", (n?: XbslNode) => addObjectForm(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.deleteObject", (n?: XbslNode) => deleteObject(provider, n)),
-    vscode.commands.registerCommand("xbsl.metadata.addSubsystem", () => addSubsystem(provider)),
+    vscode.commands.registerCommand("xbsl.metadata.addSubsystem", (n?: XbslNode) => addSubsystem(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.addPackage", (n?: XbslNode) => addPackage(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.renamePackage", (n?: XbslNode) => renamePackage(provider, n)),
+    vscode.commands.registerCommand("xbsl.metadata.moveToPackage", (n?: XbslNode) => moveToPackage(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.filterBySubsystem", () => filterBySubsystem(provider)),
     vscode.commands.registerCommand("xbsl.metadata.clearFilter", () => provider.setFilter([])),
     vscode.commands.registerCommand("xbsl.metadata.groupMode", () => pickGroupMode(provider, context)),
@@ -2357,8 +2865,9 @@ export function registerMetadataTree(
   // not via CREATABLE_KINDS). The pick command serves the inline "+" of multi-kind categories.
   for (const kind of NEW_OBJECT_KINDS) {
     context.subscriptions.push(
-      vscode.commands.registerCommand(`xbsl.metadata.addObject.${CREATABLE_SLUG[kind]}`, () =>
-        addObject(provider, kind)
+      // Called on a category under a subsystem or a package, the object goes into that folder.
+      vscode.commands.registerCommand(`xbsl.metadata.addObject.${CREATABLE_SLUG[kind]}`, (n?: XbslNode) =>
+        addObject(provider, kind, folderNodeOf(n)?.folderDir)
       )
     );
   }

@@ -861,6 +861,9 @@ VS Code, как обычно.
 | Добавить объект... | `xbsl.metadata.addObjectPick` | палитра команд |
 | Добавить локализацию (перевод) | `xbsl.metadata.addLocalization` | палитра команд |
 | Добавить подсистему | `xbsl.metadata.addSubsystem` | палитра команд |
+| Создать пакет | `xbsl.metadata.addPackage` | палитра команд |
+| Переименовать пакет | `xbsl.metadata.renamePackage` | палитра команд |
+| Перенести в пакет... | `xbsl.metadata.moveToPackage` | палитра команд |
 | Отбор по подсистеме | `xbsl.metadata.filterBySubsystem` | палитра команд |
 | Снять отбор по подсистеме | `xbsl.metadata.clearFilter` | палитра команд |
 | Группировка дерева (по классам / по подсистемам) | `xbsl.metadata.groupMode` | палитра команд |
