@@ -686,6 +686,12 @@ function findNode(nodes: XbslNode[], pred: (n: XbslNode) => boolean): XbslNode |
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "ru");
 
+// A subsystem draws the icon of its kind, the one the Subsystems branch carries, the way an object
+// draws the icon of its category. Both groupings take it from here.
+function subsystemIcon(): vscode.ThemeIcon {
+  return neutralIcon(metaFor("Подсистема").icon);
+}
+
 // A subsystem of the Subsystems branch. Its packages, when the engine told of them, hang under it
 // with their nesting; the objects stay in their classes below the branch.
 function subsystemNode(sub: Subsystem, packages: PackageTotal[] = []): XbslNode {
@@ -694,7 +700,7 @@ function subsystemNode(sub: Subsystem, packages: PackageTotal[] = []): XbslNode 
     packages.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
   node.children = packages.map(packageTotalNode);
-  node.iconPath = new vscode.ThemeIcon("symbol-namespace");
+  node.iconPath = subsystemIcon();
   node.yamlPath = sub.yamlPath;
   node.folderDir = sub.dir;
   // git statuses (color/badge), keeping our own icon: the descriptor, or the folder without one
@@ -714,7 +720,7 @@ function subsystemsBranchNode(
     vscode.l10n.t("Subsystems"),
     subsystems.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
-  node.iconPath = new vscode.ThemeIcon("folder-library");
+  node.iconPath = subsystemIcon();
   node.description = String(subsystems.length);
   node.contextValue = "subsystems";
   node.children = [...subsystems].sort(byName).map((sub) => subsystemNode(sub, packagesOf(sub)));
@@ -747,7 +753,7 @@ function subsystemGroupNode(sub: Subsystem, children: XbslNode[]): XbslNode {
     sub.name,
     children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
-  node.iconPath = new vscode.ThemeIcon("symbol-namespace");
+  node.iconPath = subsystemIcon();
   node.yamlPath = sub.yamlPath;
   node.folderDir = sub.dir;
   node.resourceUri = vscode.Uri.file(sub.yamlPath ?? sub.dir); // git statuses
@@ -1361,10 +1367,17 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   if (el.wsdlPaths?.length) {
     groups.push(wsdlNode(el.wsdlPaths));
   }
+  // An element whose only section is one list of items - the parameters of client-work parameters,
+  // the values of an enumeration, the fields of a structure - shows the items right under it. The
+  // platform gives such an element nothing else to show, and a lone group node only adds a level.
+  // The element takes over the "+" of the group.
+  const addKeys = KIND_ADD_GROUPS[el.kind] ?? [];
+  const lone = groups.length === 1 && addKeys.length === 1 && groups[0].addKind === addKeys[0] ? groups[0] : undefined;
+  const children = lone ? lone.children ?? [] : groups;
 
   const node = new XbslNode(
     el.name,
-    groups.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+    children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
   node.iconPath = neutralIcon(metaFor(el.kind).icon);
   node.yamlPath = el.yamlPath;
@@ -1374,9 +1387,11 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   node.queryPath = el.queryPath;
   node.wsdlPaths = el.wsdlPaths;
   node.offset = internals?.rootOffset; // the object root - for the properties panel
-  node.children = groups;
+  node.children = children;
+  node.addKind = lone?.addKind;
   node.contextValue = [
     "element", "yaml", "props", "deletable",
+    lone?.addKind ? ADD_SPECS[lone.addKind].token : "",
     el.modulePath ? "xbsl" : "",
     el.objectModulePath ? "objmod" : "",
     el.queryPath ? "xbql" : "",
