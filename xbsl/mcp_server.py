@@ -1722,13 +1722,15 @@ def translate_status(root: str, against: str = "") -> dict:
     above which - the xbsl-translation dictionary sits; a root without one is refused with
     the places looked at, and the answer names the absolute `dictionary` read.
     against – a git ref (say `origin/master`): the answer then carries `collisions`, the keys
-    the working tree's dictionary files and the ref's translate differently (`conflicts` -
-    what the load of the merged dictionary would refuse) or the same way (`duplicates`), so
-    a branch sees a collision with the target branch before the merge. The same report as
-    `xbsl translate --check-duplicates --against REF`, with `against` naming the ref, its file
-    count and how many of its entries the working tree does not carry. A dictionary that does
-    not load - a conflict already in the working tree - answers with the `error` naming every
-    conflict and, when a ref was given, the `collisions` report next to it.
+    the working tree's dictionary files and the ref's translate in more than one place -
+    differently (`conflicts`, what the load of the merged dictionary would refuse) or the same
+    way (`duplicates`) - so a branch sees a collision with the target branch before the merge.
+    A place is a file and a line (`places: [{file, line, value}]`), so a key one file declares
+    twice is reported too. The same report as `xbsl translate --check-duplicates --against
+    REF`, with `against` naming the ref, its file count and how many of its entries the
+    working tree does not carry. A dictionary that does not load - a conflict already in the
+    working tree - answers with the `error` naming every conflict and, when a ref was given,
+    the `collisions` report next to it.
     Returns the totals only - a cheap health check before deciding what to fill.
     Two units live here, so read the names: `missing_tokens`, `missing_phrases`,
     `literals_translated` and `missing_literals` count DISTINCT entries - what a dictionary line
@@ -1736,9 +1738,9 @@ def translate_status(root: str, against: str = "") -> dict:
     pass touched. `literals_translated` and `missing_literals` are the two halves of one number:
     how many different literal texts the plane names and how many it does not.
     `literal_occurrences` is the odd one out and says so: it counts rewritten SPANS, the size
-    of the change rather than the size of the dictionary. `duplicates` counts the keys two
-    dictionary files translate the same way - harmless to the lookups, listed by the CLI's
-    `--check-duplicates` for the copy to take out.
+    of the change rather than the size of the dictionary. `duplicates` counts the keys
+    translated the same way in two places, two files or twice in one - harmless to the
+    lookups, listed by the CLI's `--check-duplicates` for the copy to take out.
     """
     from xbsl.translation import cli as translate_cli
 
