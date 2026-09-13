@@ -1530,6 +1530,25 @@ def _package_files(**extra: str) -> dict[str, str]:
             "Склад/Партии/ПартииТоваров.yaml": _BATCHES_RU, **extra}
 
 
+_BATCH_PICKER_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f67
+Имя: ПодборПартий
+Импорт:
+    - Склад
+Наследует:
+    Тип: Таблица<ДинамическийСписок>
+    Источник:
+        ОсновнаяТаблица:
+            Таблица: {table}
+        Поля:
+            -
+                Тип: ПолеДинамическогоСписка
+                Выражение: Ссылка
+"""
+_PARTIAL_TOKENS = {**_PACKAGE_TOKENS, "ПодборПартий": "BatchPicker"}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="structure/xbsl-pair",
@@ -4734,6 +4753,91 @@ SEEDS: list[Seed] = [
             "Склад/Партии/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
         }),
         tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=FINDING,
+        note="a dynamic list reads a table of a package its yaml does not import",
+        files=_package_files(**{
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ПодборПартий.yaml": _BATCH_PICKER_RU.format(table="ПартииТоваров"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=CLEAN,
+        note="a dynamic list reading a table at the root of the subsystem it imports",
+        files=_package_files(**{
+            "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ПодборПартий.yaml": _BATCH_PICKER_RU.format(table="Товары"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=FINDING,
+        note="a list form moved into a package spells its row type by a partial name without the package",
+        files=_package_files(**{
+            "Склад/Партии/ПартииТоваровФормаСписка.yaml": _BATCH_LIST_RU.replace(
+                "acme::Проба::", "").format(namespace="Склад"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=CLEAN,
+        note="the same partial row type with the package segment",
+        files=_package_files(**{
+            "Склад/Партии/ПартииТоваровФормаСписка.yaml": _BATCH_LIST_RU.replace(
+                "acme::Проба::", "").format(namespace="Склад::Партии"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="code/wrong-namespace",
+        expect=FINDING,
+        note="a query names a table of a package by a partial name without the segment of the package",
+        files=_package_files(**{
+            "Склад/ОтчетыПартий.yaml": _BATCH_REPORTS_YAML_RU,
+            "Склад/ОтчетыПартий.xbsl": _BATCH_REPORTS_XBSL_RU.replace(
+                "acme::Проба::", "").format(namespace="Склад"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="code/wrong-namespace",
+        expect=CLEAN,
+        note="the same partial name with the segment of the package",
+        files=_package_files(**{
+            "Склад/ОтчетыПартий.yaml": _BATCH_REPORTS_YAML_RU,
+            "Склад/ОтчетыПартий.xbsl": _BATCH_REPORTS_XBSL_RU.replace(
+                "acme::Проба::", "").format(namespace="Склад::Партии"),
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="code/package-resources-missing",
+        expect=FINDING,
+        note="the current resources package read at the root of a subsystem with no resources folder",
+        files=_package_files(**{
+            "Склад/Партии/Ресурсы/Партия.svg": "<svg/>",
+            "Склад/ЗначкиПартий.yaml": _BATCH_ICONS_YAML_RU,
+            "Склад/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
+        }),
+        tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="code/package-resources-missing",
+        expect=CLEAN,
+        note="the same module once the subsystem keeps a resources folder of its own",
+        files=_package_files(**{
+            "Склад/Ресурсы/Партия.svg": "<svg/>",
+            "Склад/ЗначкиПартий.yaml": _BATCH_ICONS_YAML_RU,
+            "Склад/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
+        }),
+        tokens=_PARTIAL_TOKENS,
     ),
 ]
 
