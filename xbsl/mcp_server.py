@@ -1705,18 +1705,26 @@ def translate_entries(
     root: str,
     filter: str = "",
     kind: str = "any",
-    limit: int = 50,
+    limit: int = 10,
     offset: int = 0,
+    compact: bool = False,
 ) -> dict:
     """What the dictionary already says - the way to keep a new entry consistent with it.
 
     root   – the project directory (a root without a dictionary next to or above it is
              refused with the places looked at);
     filter – a substring of the key OR of the value (look up a root before inventing a word);
-    kind   – 'token', 'phrase', 'literal' or 'any'.
-    Every row names the file and line it lives on, so an entry can be corrected in place.
-    A page that does not carry everything says so: `truncated`, `remaining` and a `hint`
-    naming the next `offset`.
+    kind   – 'token', 'phrase', 'literal' or 'any';
+    limit/offset – the page (limit 0 means all). Ten rows by default: the question this
+             answers is how a word is translated already, and ten rows settle it, while
+             fifty full rows on a common stem came to ten kilobytes per call;
+    compact – each row is only {key, kind, value}: the shape of an answer to "how is this
+             term translated". The file, the line and the scope are the bulk of a full
+             row, and they matter only when an entry is to be corrected in place - ask for
+             full rows then.
+    Every full row names the file and line it lives on, so an entry can be corrected in
+    place. A page that does not carry everything says so: `truncated`, `remaining` and a
+    `hint` naming the next `offset`.
     """
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
@@ -1735,20 +1743,25 @@ def translate_entries(
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
     page, paging = entries_module.page_of(rows, limit, offset)
-    return {**paging, "dictionary": str(path),
-            "entries": [entry.as_dict() for entry in page]}
+    out = {**paging, "dictionary": str(path)}
+    if compact:
+        out["entries"] = [{"key": e.key, "kind": e.kind, "value": e.value} for e in page]
+    else:
+        out["entries"] = [entry.as_dict() for entry in page]
+    return out
 
 
 @mcp.tool()
 def translate_unused(
     root: str,
     kind: str = "any",
-    filter: str = "",
+    filter: str | list[str] = "",
     since: str = "",
     limit: int = 50,
     offset: int = 0,
     prune: bool = False,
     compact: bool = False,
+    budget_seconds: float = 300,
 ) -> dict:
     """The opposite of translate_gaps: what the DICTIONARY still says and the project has not.
 
@@ -1762,15 +1775,23 @@ def translate_unused(
     root   – the project directory (a root without a dictionary next to or above it is
              refused with the places looked at);
     kind   – 'token' (names), 'phrase' (comment lines), 'literal' or 'any';
-    filter – a substring of the key OR of the value: the way to ask about the names of one
-             component that has just been deleted rather than about the whole history;
+    filter – a substring of the key OR of the value, or a LIST of them (a row matches any):
+             the way to ask about the names of one component that has just been deleted, or
+             about the ten lines a comment sweep took out, in one call rather than ten. The
+             answer then carries `unmatched` - the substrings no orphan fell under, which
+             for a sweep means the dictionary keeps nothing of those lines;
     since  – the orphans of ONE change, which is what a task cleaning up after itself asks:
-             only the keys that occurred nowhere but in the lines the change REMOVED. A
-             branch or a commit is read from the fork point with HEAD to the WORKING TREE, so
-             work not committed yet counts; a range `A..B` is handed to git as written, which
-             is how a change already merged is examined. Without it the answer covers the
-             whole accumulated dictionary - a live project answers with thousands of rows,
-             every one of them somebody's old deletion - and says so in `note`;
+             the keys that occurred nowhere but in the lines the change REMOVED, and the
+             entries the change itself ADDED to the dictionary - a comment line written and
+             reworded inside one branch shows neither wording in the diff against the base,
+             and its first pair would otherwise stay for good. A branch or a commit is read
+             from the fork point with HEAD to the WORKING TREE, so work not committed yet
+             counts; a range `A..B` is handed to git as written, which is how a change
+             already merged is examined. The `since` block of the answer sizes both sides:
+             `files` of the change and `dictionary_files` / `dictionary_added` of the
+             dictionary diff. Without it the answer covers the whole accumulated dictionary
+             - a live project answers with thousands of rows, every one of them somebody's
+             old deletion - and says so in `note`;
     limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
     prune  – REMOVE the listed entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
@@ -1778,7 +1799,14 @@ def translate_unused(
              answers with, so `kind`, `filter` and the page apply to the removal too;
     compact – each row is only {key, kind, file, line}: the values are the bulk of a
              page, and a cleaning pass needs the keys and their places, not the
-             translations.
+             translations;
+    budget_seconds – how long the walk over the sources may take (300 by default). Past it
+             the tool answers with what it has read: `partial` is true, `sources` counts the
+             files read of the total, and `note` says how to go on (a larger budget, or a
+             narrower `filter` / `kind`). A partial list holds candidates, not a verdict -
+             an entry used only in a file not read is in it too - so `prune` does nothing
+             on such an answer. Before the budget a call over a large project stayed silent
+             until the client gave up on it, half an hour later.
     Every answer carries `counts` - the orphans by kind over the WHOLE filtered set, not
     the page - so the size of a cleaning is known before any page is read.
 
@@ -1788,9 +1816,14 @@ def translate_unused(
     payload reading, so the two sides spell a phrase alike; a qualified key (`<Owner>.<Name>`)
     is judged by both halves, since the sources spell them apart.
     """
+    import time
+
     from xbsl.translation import cli as translate_cli
     from xbsl.translation import entries as entries_module
 
+    # The clock starts before git is asked: the budget bounds the whole call, and the git
+    # calls have a bound of their own (entries.GIT_TIMEOUT).
+    deadline = time.monotonic() + max(float(budget_seconds), 0.0)
     refusal = entries_module.kind_refusal(kind)
     if refusal:
         return {"error": refusal}
@@ -1801,23 +1834,40 @@ def translate_unused(
     removed = None
     if since:
         try:
-            removed = entries_module.removed_surfaces(project, since)
+            removed = entries_module.removed_surfaces(project, since, path)
         except ValueError as exc:
             return {"error": str(exc)}
-    needle = (filter or "").casefold()
-    rows = [
-        entry for entry in entries_module.unused_entries(project, path, dictionary, removed)
-        if (kind in ("any", entry.kind))
-        and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
-    ]
+    wanted = [filter] if isinstance(filter, str) else list(filter or [])
+    needles = {text: text.casefold() for text in wanted if text}
+    hit: set[str] = set()
+    found = entries_module.orphans_of(project, path, dictionary, removed, deadline=deadline)
+    rows = []
+    for entry in found.entries:
+        if kind not in ("any", entry.kind):
+            continue
+        if needles:
+            key, value = entry.key.casefold(), entry.value.casefold()
+            matched = [text for text, needle in needles.items()
+                       if needle in key or needle in value]
+            if not matched:
+                continue
+            hit.update(matched)
+        rows.append(entry)
     page, paging = entries_module.page_of(rows, limit, offset)
     counts: dict[str, int] = {}
     for entry in rows:
         counts[entry.kind] = counts.get(entry.kind, 0) + 1
-    out = {**paging, "dictionary": str(path), "counts": counts}
+    out = {**paging, "dictionary": str(path), "counts": counts,
+           "sources": {"read": found.read, "total": found.total}}
+    if needles:
+        out["unmatched"] = [text for text in needles if text not in hit]
     if removed is not None:
-        out["since"] = {"base": removed.base, "files": removed.files}
-    elif not needle:
+        out["since"] = removed.as_dict()
+    if found.partial:
+        out["partial"] = True
+        out["note"] = i18n.t("translate.unused.partial", seconds=f"{float(budget_seconds):g}",
+                             read=found.read, total=found.total)
+    elif removed is None and not needles:
         out["note"] = i18n.t("translate.unused.textual", option="since")
     if compact:
         out["unused"] = [
@@ -1825,7 +1875,7 @@ def translate_unused(
         ]
     else:
         out["unused"] = [entry.as_dict() for entry in page]
-    if prune and page:
+    if prune and page and not found.partial:
         removed = entries_module.write_entries(
             path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
         )
