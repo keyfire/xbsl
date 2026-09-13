@@ -1622,6 +1622,21 @@ SEEDS: list[Seed] = [
         tokens={"Модуль": "Module", "Авторизация": "Authentication"},
     ),
     Seed(
+        rule="style/constructor-literal",
+        expect=FINDING,
+        note="a constructor of a type with a literal called with a constant string - the "
+             "keyword and the type name are read in both spellings",
+        files={"Модуль.xbsl": "метод Проба(): Дата\n    возврат новый Дата(\"2026-01-31\")\n;\n"},
+        tokens={"Модуль": "Module", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="style/constructor-literal",
+        expect=CLEAN,
+        note="the literal the fix writes passes in both spellings",
+        files={"Модуль.xbsl": "метод Проба(): Дата\n    возврат Дата{2026-01-31}\n;\n"},
+        tokens={"Модуль": "Module", "Проба": "Probe"},
+    ),
+    Seed(
         rule="query/unknown-table",
         expect=FINDING,
         note="a query over a table of neither the platform nor the project",

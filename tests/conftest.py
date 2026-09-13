@@ -96,6 +96,7 @@ _DATA_DEPENDENT = {
     "test_rule_translation_gaps",  # the translator reads the term pairs and the metamodel
     "test_rule_property_shadows_module",  # the rule reads the yaml keys and kinds from the metamodel
     "test_rule_unused_locals",  # the rules walk the parser's tree, the lexer reads language.json
+    "test_rule_constructor_literal",  # the rule parses the module and reads the term pairs
 }
 
 
