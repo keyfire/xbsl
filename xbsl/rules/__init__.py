@@ -84,6 +84,7 @@ from . import (  # noqa: F401
     ns_objects,
     popup_markup,
     queries,
+    redundant_checks,
     reserved_names,
     row_fields,
     semantics,
