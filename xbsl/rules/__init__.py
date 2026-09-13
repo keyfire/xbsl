@@ -48,6 +48,7 @@ from . import (  # noqa: F401
 from . import (  # noqa: F401
     style_conditions,
     style_layout,
+    style_literals,
     style_naming,
     style_strings,
     style_types,
