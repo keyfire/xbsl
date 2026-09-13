@@ -60,7 +60,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 202 rules of the base set** - severity, default state, scope, links to
+**The full list of all 205 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -104,16 +104,19 @@ before libraries were understood at all.
 The cross-file rules of tier D catch what the compiler reports late or not at all. A `Handler:`
 in yaml with no method in the paired module. A foreign-subsystem type used without an import of its
 namespace - of the subsystem for an element at its root, of `Subsystem::Package` for an element of a
-package, since importing a subsystem does not bring its packages. A `DynamicList` typed by the
-automatic list form that misses an attribute of its object. A
-cross-component call `Components.X.Method()` that carries no visibility annotation. Environment
-mismatches: `@OnServer` called from a client handler without `@AvailableFromClient`, a client
-module used from an `HttpService`. Reserved names: a field or parameter named `Type` in either
-language spelling, a component property named like a built-in one. Methods that nothing
-references. And top-level yaml properties measured against the configuration metamodel. The
-`query/` group parses `Query{ ... }` blocks and verifies the `FROM` and `JOIN` tables against the
-project objects and their `TabularParts`. A block with constructs outside the supported subset -
-temporary tables, unions, subqueries - is skipped whole rather than guessed.
+package, since importing a subsystem does not bring its packages. The project module is judged for
+the elements of packages, and the tables of a query count as references too - of a `Query{...}`
+block against the imports of the module, of the `.xbql` of a virtual table against the `Import`
+section of its yaml. A full name of the project that leads to a namespace where its element does not
+lie is reported with a fix. A `DynamicList` typed by the automatic list form that misses an
+attribute of its object. A cross-component call `Components.X.Method()` that carries no visibility
+annotation. Environment mismatches: `@OnServer` called from a client handler without
+`@AvailableFromClient`, a client module used from an `HttpService`. Reserved names: a field or
+parameter named `Type` in either language spelling, a component property named like a built-in one.
+Methods that nothing references. And top-level yaml properties measured against the configuration
+metamodel. The `query/` group parses `Query{ ... }` blocks and verifies the `FROM` and `JOIN` tables
+against the project objects and their `TabularParts`. A block with constructs outside the supported
+subset - temporary tables, unions, subqueries - is skipped whole rather than guessed.
 
 The comments are read too. The `comment/` group judges their wording, and one of its rules looks
 across files: `comment/unknown-name` collects the identifiers of every module, the names of every

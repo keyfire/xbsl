@@ -76,6 +76,21 @@ entry either - say what the behaviour was, not which class name was compared.
   of the three shapes its own message. There is no autofix, because only the author knows which word
   was meant. The rule opens the new `translation/` group.
   ([#52](https://github.com/keyfire/xbsl/pull/52))
+- **`yaml/wrong-namespace` and `code/wrong-namespace`: a full name that outlived a move of its
+  element.** `Vendor::Project::Subsystem[::Package]::Name` spells the placement of the element, so
+  moving the element into a package leaves every such name leading where the element is no more, and
+  the build answers "Unknown type". A generated list form keeps exactly such a row type, and the
+  linter had no reading of a qualified name in yaml at all. The rules judge a full name of the
+  file's own project against where the element lies - in every yaml value, in a module and in the
+  tables of a query - and the finding replaces the namespace when the element lies in one place. On
+  a project split into packages, 86 names stripped of the package segment gave 86 findings, and
+  `--fix` restored the tree byte for byte. ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **`code/package-resources-missing`: the current resources package of a package without
+  resources.** `ResourcesPackage.Current()` returns the resources of the current namespace, and in a
+  module of a package that is the package, not its subsystem. A module that read icons by a computed
+  name was moved into a package without a resources folder, and the files of the subsystem were no
+  longer found - with no error at compile time or at run time. The rule reports the call when the
+  package keeps no resources folder of its own. ([#56](https://github.com/keyfire/xbsl/pull/56))
 - **An object moves into a package without breaking its references.** An element of a package lives
   in the package's own namespace, so moving a file into a package folder is only half of the move:
   every module and yaml of another subsystem that reached the element needs
@@ -88,11 +103,13 @@ entry either - say what the behaviour was, not which class name was compared.
   `Vendor::Project::Subsystem::FormName.ListRowData` of a generated form included, and adds the
   subsystem to `Using` where a new import needs it. The decision is made by the import and
   visibility rules themselves, run before and after the move, so the move and the linter never
-  disagree. It refuses a taken name and a non-public element that another subsystem would reach
-  after the move, and names the imports it made unnecessary instead of removing them. On a copy of a
-  real project two moves into new packages left no missing import behind, while the same files moved
-  by hand gave exactly the findings the command repaired.
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
+  disagree. The project module and the yaml of a virtual table in another subsystem get the import
+  of the new package through the import rules themselves; a virtual table of the same subsystem
+  needs none and is left as it is. It refuses a taken name and a non-public element that another
+  subsystem would reach after the move, and names the imports it made unnecessary instead of
+  removing them. On a copy of a real project two moves into new packages left no missing import
+  behind, while the same files moved by hand gave exactly the findings the command repaired.
+  ([#54](https://github.com/keyfire/xbsl/pull/54), [#56](https://github.com/keyfire/xbsl/pull/56))
 - **`rename-package` renames a package with every name that spells it.** The folder with all its
   files, `import Subsystem::Old`, the `Import` items and the qualified names across the project
   (`meta_rename_package`, `xbsl/metaRenamePackage`). A file of another project under the root is
@@ -195,12 +212,25 @@ entry either - say what the behaviour was, not which class name was compared.
   reference inside one subsystem - between its root and its packages - still needs no import. On a
   vendor library with about twenty packages nine false `yaml/missing-import` reports went away.
   ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The import rules read the project module and the queries.** `code/missing-import` left the
+  module outside the subsystems alone, and neither import rule read a table after `FROM`/`JOIN`,
+  while the compiler resolves both against the imports: a server build refused a project module
+  calling a module of a package, and a virtual table whose query read a table of a package another
+  subsystem owns. Now the project module asks for the import of a package, `yaml/missing-import`
+  reads the paired `.xbql` of a virtual table and reports on its `Import` section, and
+  `code/missing-import` reads the tables of the `Query{...}` blocks, temporary and qualified tables
+  aside. The rule also reads a `Type<...>` literal, which the parsed tree keeps without its name.
+  ([#56](https://github.com/keyfire/xbsl/pull/56))
 - **The import rules read the names inside a string interpolation.** A name written in `%{...}` is
   resolved against the imports of the module like any other, but `code/unused-import` did not count
   it as a use and `code/missing-import` did not see it at all. A server build over a project with
   packages showed both sides: an import serving nothing but such a name was reported unused, and the
   build without it failed at the line of the string.
   ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **`code/unused-import` sees an import of a subsystem whose root keeps nothing.** Once every
+  element of a subsystem has moved into packages, the subsystem looked like an unknown namespace and
+  an import of it went unreported. A module naming a resource by a bare key keeps such an import.
+  ([#56](https://github.com/keyfire/xbsl/pull/56))
 - **The scaffolding places an object of a package.** A subsystem was looked for only in the folder
   right above an object, so an object of a package came back with no subsystem and a namespace
   without it - and a generated list form wrote its row type with that namespace. `object-info` and

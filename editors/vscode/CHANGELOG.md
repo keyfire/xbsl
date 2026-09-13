@@ -28,6 +28,10 @@
   move needs are updated across the project. **Rename package** renames the folder and every name
   that spells it. The engine xbsl with the new commands is required.
   ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **Documentation links for the three new package rules.** The code of `yaml/wrong-namespace` and
+  `code/wrong-namespace` in the "Problems" panel opens the section on the qualified name of an
+  element, and the code of `code/package-resources-missing` the section on resources in code.
+  ([#56](https://github.com/keyfire/xbsl/pull/56))
 
 ### Changed
 - **A subsystem node offers "Create package" instead of a nested subsystem.** A subsystem is a

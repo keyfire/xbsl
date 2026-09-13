@@ -239,6 +239,16 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: MODULAR,
     anchor: "использование-подсистем",
   },
+  {
+    match: (r) => r === "yaml/wrong-namespace" || r === "code/wrong-namespace",
+    page: MODULAR,
+    anchor: "квалифицированное-имя-элемента",
+  },
+  {
+    match: (r) => r === "code/package-resources-missing",
+    page: "topics/resource-in-project",
+    anchor: "использование-в-коде",
+  },
   { match: (r) => r === "yaml/dynlist-missing-field", page: "topics/dynamic-list" },
   { match: (r) => r === "yaml/dynlist-column-sort-lost", page: "topics/dynamic-list" },
   {
