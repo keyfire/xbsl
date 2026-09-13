@@ -617,8 +617,7 @@ class _TypeTextParser:
 def cast_verdict(source: TypeSet, target: TypeSet, assignable) -> str | None:
     """What the compiler says about `<операнд> как <тип>`: "redundant", "insistent" or None.
 
-    The logic of the compiler read literally (`BslBinder.BindingVisitor.endVisit(CastExpression)`
-    and `IG5Type.canHoldValueWithUndef` of the platform compiler):
+    The behaviour of the compiler, each branch shown on the probe project of the cast rules:
 
     - the cast is worth a word only when the target can hold every value of the operand. Each
       type of the operand must be assignable to some type of the target; the empty value of an
@@ -796,13 +795,20 @@ _DATA_FACETS = frozenset({"Объект", "Данные", "Запись"})
 #: Element kinds whose own name is a type carrying its fields (the structure itself).
 _STRUCTURE_KINDS = frozenset({"Структура", "ХранимаяСтруктура"})
 
-#: The standard attributes an element carries without a declared type, by kind; `{}` stands for
-#: the name of the element. Filled only with what the compiler was shown to answer (see the
-#: probe project of the cast rules); an attribute missing here stays unknown.
+#: The fields an element carries WITHOUT declaring them, by kind; `{}` stands for the name of
+#: the element. Filled only with what the compiler was shown to answer (see the probe project of
+#: the cast rules); a field missing here stays unknown.
 STANDARD_FIELDS: dict[str, dict[str, str]] = {
-    "Справочник": {"Ссылка": "{}.Ссылка", "Наименование": "Строка", "ПометкаУдаления": "Булево"},
+    "Справочник": {"Ссылка": "{}.Ссылка", "ПометкаУдаления": "Булево"},
     "Документ": {"Ссылка": "{}.Ссылка", "ПометкаУдаления": "Булево"},
     "КонтрактСущности": {"Ссылка": "{}.Ссылка"},
+}
+
+#: The type of a standard attribute DECLARED without one (`- Имя: Наименование` with a length
+#: only). Undeclared, such an attribute does not exist at all - the compiler answers
+#: `Реквизит ... не найден` for the code of an element that never declared it.
+DECLARED_STANDARD_TYPES: dict[str, dict[str, str]] = {
+    "Справочник": {"Наименование": "Строка"},
 }
 
 #: The key of a dynamic list row as the catalog spells it: by the row type parameter.
@@ -833,6 +839,7 @@ class ProjectCatalog:
         self.elements: dict[str, dict] = dict(elements or {})
         self.modules: dict[str, dict] = dict(modules or {})
         self.rows: dict[str, dict[str, TypeSet | None]] = {}
+        self._members: dict[tuple[str, str, bool], TypeSet | None] = {}
         # {row data type of a dynamic list (`Форма.ДанныеСтроки`): the list's main table}
         self.row_keys: dict[str, str] = {
             row: table
@@ -908,6 +915,12 @@ class ProjectCatalog:
 
     def member(self, owner: str, name: str, called: bool) -> TypeSet | None:
         """The type of `<value of owner>.name` (a call of it when `called`)."""
+        key = (owner, name, called)
+        if key not in self._members:
+            self._members[key] = self._member(owner, name, called)
+        return self._members[key]
+
+    def _member(self, owner: str, name: str, called: bool) -> TypeSet | None:
         head, args = split_nominal(owner)
         if head in self.rows:
             return None if called else self.rows[head].get(name)
@@ -986,7 +999,9 @@ class ProjectCatalog:
             if name in fields:
                 written = fields[name]
                 if written is None:
-                    standard = STANDARD_FIELDS.get(element.get("kind") or "", {}).get(name)
+                    kind = element.get("kind") or ""
+                    standard = (DECLARED_STANDARD_TYPES.get(kind, {}).get(name)
+                                or STANDARD_FIELDS.get(kind, {}).get(name))
                     return standard.replace("{}", element_name) if standard else None
                 return written
         standard = STANDARD_FIELDS.get(element.get("kind") or "", {}).get(name)
@@ -1000,6 +1015,11 @@ class ProjectCatalog:
         own = self.modules.get(module or "") or {}
         if member in (own.get("enums") or {}).get(name, ()):
             return TypeSet.of(f"{module}.{name}")
+        # an enumeration of a module, named with its module (`Модуль.Цвет.Красный`, and the bare
+        # `Цвет` inside that module resolves to the same qualified name)
+        owner, dot, enum = name.partition(".")
+        if dot and not called and member in ((self.modules.get(owner) or {}).get("enums") or {}).get(enum, ()):
+            return TypeSet.of(name)
         element = self.elements.get(name)
         if element is not None and element.get("kind") == "Перечисление" and not called:
             if member in (element.get("values") or ()):
@@ -1034,6 +1054,18 @@ class ProjectCatalog:
             return None
         written = next(iter(distinct))
         return self.written(written, module) if written else None
+
+    def indexed(self, collection: TypeSet) -> TypeSet | None:
+        """`Массив<Т>[i]` is a `Т`, `Соответствие<К, З>[к]` a `З` - the two indexers the compiler was
+        shown to type (not an empty value: the index of a map that has no such key throws)."""
+        if collection.size != 1 or not collection.names:
+            return None
+        head, args = split_nominal(next(iter(collection.names)))
+        if head == "Массив" and len(args) == 1:
+            return parse_type(args[0], self.resolver(None))
+        if head == "Соответствие" and len(args) == 2:
+            return parse_type(args[1], self.resolver(None))
+        return None
 
     def element_of(self, collection: TypeSet) -> TypeSet | None:
         """One element of a collection set: the rows of a query result, the items of an array."""
@@ -1085,6 +1117,19 @@ _SET_LITERALS = {
     "PATTERN": "Образец",
 }
 
+def _arithmetic(op: str, left, right) -> TypeSet | None:
+    """The result of `+ - * / %` over two known values: numbers give a number, and `+` with a string
+    on either side gives a string - the combinations the compiler was shown to answer."""
+    number, string = TypeSet.of("Число"), TypeSet.of("Строка")
+    if not (isinstance(left, TypeSet) and isinstance(right, TypeSet)):
+        return None
+    if left == number and right == number and op in ("+", "-", "*", "/", "%"):
+        return number
+    if op == "+" and string in (left, right) and {left, right} <= {string, number}:
+        return string
+    return None
+
+
 #: Operators whose result is a Boolean whatever the operands are.
 _LOGICAL_OPS = frozenset({"и", "или", "and", "or", "И", "ИЛИ", "AND", "OR"})
 
@@ -1106,6 +1151,9 @@ class ModuleScope:
     own_properties: dict[str, str] = field(default_factory=dict)
     opaque: frozenset[str] = frozenset()
     this_type: TypeSet | None = None
+    #: The lexer output of `text` when the caller has it; a query literal is read from it
+    #: instead of being tokenized again.
+    tokens: list | None = None
 
 
 class _Scopes:
@@ -1173,8 +1221,15 @@ class ModuleTyper:
         for member in members:
             if isinstance(member, P.ObjectField):
                 written = getattr(getattr(member, "type", None), "text", None)
-                self.module_fields[member.name] = (
-                    self.catalog.written(written, self.scope.module) if written else None)
+                if written:
+                    self.module_fields[member.name] = self.catalog.written(written, self.scope.module)
+                elif member.init is not None:
+                    # `конст Лимит = 10` is a number: a field written without a type is typed by
+                    # its value, the way a local is
+                    got = self.expression(member.init)
+                    self.module_fields[member.name] = got if isinstance(got, TypeSet) else None
+                else:
+                    self.module_fields[member.name] = None
         for member in members:
             if isinstance(member, P.Method):
                 self.method(member, self.scope.this_type)
@@ -1187,8 +1242,6 @@ class ModuleTyper:
                 owner = self.catalog.written(member.name, self.scope.module)
                 for inner in member.methods:
                     self.method(inner, owner)
-            elif isinstance(member, P.ObjectField) and member.init is not None:
-                self.expression(member.init)
         return self.casts
 
     def method(self, method: object, this_type: TypeSet | None) -> None:
@@ -1324,15 +1377,20 @@ class ModuleTyper:
             right = self.expression(node.right)
             if node.op in _LOGICAL_OPS:
                 return TypeSet.of("Булево")
-            return None
+            return _arithmetic(node.op, left, right)
         if isinstance(node, P.Coalesce):
-            self.expression(node.left)
-            self.expression(node.right)
+            left = self.expression(node.left)
+            right = self.expression(node.right)
+            # `А ?? Б` is А without the empty value, or Б
+            if isinstance(left, TypeSet) and isinstance(right, TypeSet) and not left.null:
+                return left.without_undefined().union(right)
             return None
         if isinstance(node, P.Ternary):
             self.expression(node.cond)
-            self.expression(node.then)
-            self.expression(node.otherwise)
+            then = self.expression(node.then)
+            otherwise = self.expression(node.otherwise)
+            if isinstance(then, TypeSet) and isinstance(otherwise, TypeSet):
+                return then.union(otherwise)
             return None
         if isinstance(node, P.New):
             for argument in node.args or ():
@@ -1354,9 +1412,9 @@ class ModuleTyper:
             self.expression(callee)
             return None
         if isinstance(node, P.Index):
-            self.expression(node.obj)
+            owner = self.expression(node.obj)
             self.expression(node.index)
-            return None
+            return self.catalog.indexed(owner) if isinstance(owner, TypeSet) else None
         if isinstance(node, P.Lambda):
             self.scopes.push()
             try:
@@ -1373,8 +1431,12 @@ class ModuleTyper:
                 self.scopes.pop()
             return None
         if isinstance(node, (P.ArrayLit,)):
-            for item in node.items:
-                self.expression(item)
+            items = [self.expression(item) for item in node.items]
+            # `[1, 2]` is an array of the one type all its items have
+            if items and not node.type_args and all(isinstance(item, TypeSet) for item in items):
+                first = items[0]
+                if all(item == first for item in items) and first.single and first.names:
+                    return TypeSet.of(f"Массив<{first.text()}>")
             return None
         if isinstance(node, P.MapLit):
             for key, value in node.entries:
@@ -1411,7 +1473,7 @@ class ModuleTyper:
         if kind == "QUERY":
             from xbsl import querytypes
 
-            key = querytypes.row_type(self.scope, node.start, node.end)
+            key = querytypes.row_type(self.scope, node.start, node.end, self.query_parameter)
             if key is None:
                 return None
             return TypeSet.of(f"ТипизированныйЗапрос<{key}>")
@@ -1432,6 +1494,13 @@ class ModuleTyper:
         if got is not None and node.safe and owner.undefined:
             got = got.with_undefined()
         return got
+
+    def query_parameter(self, name: str) -> TypeSet | None:
+        """The type of `%Имя` in a query literal: the code value of that name, when it is one type."""
+        got = self.name(name)
+        if isinstance(got, TypeSet) and got.single and got.names:
+            return got
+        return None
 
     def _platform_static(self, type_name: str, member: str, called: bool) -> TypeSet | None:
         head = platform_head(type_name)

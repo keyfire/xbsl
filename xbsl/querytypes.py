@@ -24,6 +24,7 @@ a cast over it is then never judged.
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass
 
 from xbsl import lexer
@@ -36,7 +37,7 @@ _WORD_KINDS = ("IDENT", "KEYWORD")
 #: only where `typeinfer.STANDARD_FIELDS` knows the type, but it never breaks the row - a field
 #: the project neither declares nor finds here does (see _BrokenQuery).
 _SERVICE_FIELDS = frozenset({
-    "Ссылка", "ПометкаУдаления", "Код", "Наименование", "Владелец", "Родитель", "ЭтоГруппа",
+    "Ссылка", "ПометкаУдаления", "Владелец", "Родитель", "ЭтоГруппа",
     "Предопределенный", "ИмяПредопределенных", "Дата", "Номер", "Проведен", "Период",
     "Регистратор", "НомерСтроки", "Активность", "ВидДвижения", "КлючЗаписи", "ВерсияДанных",
     "КлючСтроки", "Представление",
@@ -53,9 +54,11 @@ def _words(*english: str) -> frozenset[str]:
     return query_words(*english)
 
 
-def row_type(scope: ModuleScope, start: int, end: int) -> str | None:
+def row_type(scope: ModuleScope, start: int, end: int, parameter=None) -> str | None:
     """The canonical name of the row type of the query literal at [start, end), registered in
-    the catalog of the scope, or None when the literal is not read."""
+    the catalog of the scope, or None when the literal is not read.
+
+    `parameter(name)` types a `%Имя` of the literal by the code value of that name."""
     catalog = scope.catalog
     key = f"#Q{len(catalog.rows)}"
     cache = getattr(catalog, "_row_keys", None)
@@ -65,7 +68,16 @@ def row_type(scope: ModuleScope, start: int, end: int) -> str | None:
     marker = (scope.module, start, end, hash(scope.text[start:end]))
     if marker in cache:
         return cache[marker]
-    columns = row_columns(scope.text[start:end], scope)
+    if scope.tokens is not None:
+        starts = getattr(scope, "_token_starts", None)
+        if starts is None:
+            starts = [t.start for t in scope.tokens]
+            scope._token_starts = starts  # type: ignore[attr-defined]
+        first = bisect.bisect_left(starts, start)
+        last = bisect.bisect_left(starts, end)
+        columns = row_columns_from_tokens(scope.tokens[first:last], scope, parameter)
+    else:
+        columns = row_columns(scope.text[start:end], scope, parameter)
     got = catalog.register_row(key, columns) if columns is not None else None
     cache[marker] = got
     return got
@@ -88,12 +100,19 @@ class _Table:
     nullable: bool = False       # the joined side of an outer join
 
 
-def row_columns(text: str, scope: ModuleScope) -> dict[str, TypeSet | None] | None:
+def row_columns(text: str, scope: ModuleScope, parameter=None) -> dict[str, TypeSet | None] | None:
     """{column: its type or None} of the query literal text, or None for a block not read."""
     try:
-        tokens = [t for t in lexer.tokenize(text) if t.kind not in ("COMMENT", "BOM", "EOF")]
+        tokens = lexer.tokenize(text)
     except Exception:  # noqa: BLE001 - no data, no query reading
         return None
+    return row_columns_from_tokens(tokens, scope, parameter)
+
+
+def row_columns_from_tokens(tokens: list, scope: ModuleScope,
+                            parameter=None) -> dict[str, TypeSet | None] | None:
+    """`row_columns` over the tokens of the literal, `Запрос{` to `}`."""
+    tokens = [t for t in tokens if t.kind not in ("COMMENT", "BOM", "EOF")]
     # `Запрос { ... }`: the block without the keyword and the braces.
     open_at = next((i for i, t in enumerate(tokens) if t.kind == "OP" and t.value == "{"), None)
     if open_at is None or not tokens or not (tokens[-1].kind == "OP" and tokens[-1].value == "}"):
@@ -111,7 +130,7 @@ def row_columns(text: str, scope: ModuleScope) -> dict[str, TypeSet | None] | No
     order: list[str] = []
     for part in parts:
         try:
-            columns = _select_columns(part, scope)
+            columns = _select_columns(part, scope, parameter)
         except _BrokenQuery:
             return None
         if columns is None:
@@ -172,7 +191,8 @@ def _is_word(token, spellings: frozenset[str]) -> bool:
     return token.kind in _WORD_KINDS and token.value.upper() in spellings
 
 
-def _select_columns(part: list, scope: ModuleScope) -> dict[str, TypeSet | None] | None:
+def _select_columns(part: list, scope: ModuleScope,
+                    parameter=None) -> dict[str, TypeSet | None] | None:
     select = _words("SELECT")
     if not part or not _is_word(part[0], select):
         return None
@@ -194,6 +214,7 @@ def _select_columns(part: list, scope: ModuleScope) -> dict[str, TypeSet | None]
     tables = _from_tables(part[select_end:], scope)
     if tables is None or any(table.element is None for table in tables.values()):
         return None
+    _check_paths(part[select_end:], tables, scope)
     columns: dict[str, TypeSet | None] = {}
     commas = _top_level_indexes(select_list, lambda t: t.kind == "OP" and t.value == ",")
     bounds = [-1] + commas + [len(select_list)]
@@ -215,8 +236,58 @@ def _select_columns(part: list, scope: ModuleScope) -> dict[str, TypeSet | None]
             name = expression[-1].value
         if name in columns:
             return None
-        columns[name] = _expression_type(expression, tables, scope)
+        columns[name] = _expression_type(expression, tables, scope, parameter)
     return columns
+
+
+def _check_paths(tokens: list, tables: dict[str, "_Table"], scope: ModuleScope) -> None:
+    """Every `Алиас.Поле` of the clauses after the select list must name a field its table has.
+
+    The compiler refuses the whole literal over one unknown field in a condition as well (the
+    probe project: an unknown field in WHERE silenced the cast over a known column), so such a
+    field breaks the row here too. A dotted chain stops before a call (`Т.Поле.ЗаменитьNull(...)`),
+    a subquery in parentheses and an interpolation (`%{...}`) are not read.
+    """
+    count = len(tokens)
+    index = 0
+    depth = 0
+    while index < count:
+        token = tokens[index]
+        if token.kind == "OP" and token.value == "%" and index + 1 < count \
+                and tokens[index + 1].kind == "OP" and tokens[index + 1].value == "{":
+            close = index + 1
+            level = 0
+            while close < count:
+                if tokens[close].kind == "OP" and tokens[close].value == "{":
+                    level += 1
+                elif tokens[close].kind == "OP" and tokens[close].value == "}":
+                    level -= 1
+                    if level == 0:
+                        break
+                close += 1
+            index = close + 1
+            continue
+        if token.kind == "OP" and token.value == "(":
+            depth += 1
+        elif token.kind == "OP" and token.value == ")":
+            depth -= 1
+        elif (depth == 0 and token.kind in _WORD_KINDS and token.value in tables
+              and index + 2 < count and tokens[index + 1].kind == "OP" and tokens[index + 1].value == "."
+              and (index == 0 or not (tokens[index - 1].kind == "OP" and tokens[index - 1].value == "."))):
+            segments = [token]
+            cursor = index + 1
+            while cursor + 1 < count and tokens[cursor].kind == "OP" and tokens[cursor].value == "." \
+                    and tokens[cursor + 1].kind in _WORD_KINDS:
+                follower = tokens[cursor + 2] if cursor + 2 < count else None
+                if follower is not None and follower.kind == "OP" and follower.value == "(":
+                    break
+                segments.append(tokens[cursor + 1])
+                cursor += 2
+            if len(segments) > 1:
+                _path(segments, tables, scope)
+            index = cursor
+            continue
+        index += 1
 
 
 def _is_path(tokens: list) -> bool:
@@ -362,17 +433,28 @@ def _service_field(name: str) -> bool:
     return bool(russian) and russian in _SERVICE_FIELDS
 
 
-def _expression_type(tokens: list, tables: dict[str, _Table], scope: ModuleScope) -> TypeSet | None:
+def _expression_type(tokens: list, tables: dict[str, _Table], scope: ModuleScope,
+                     parameter=None) -> TypeSet | None:
     """The type of one select expression (see the module docstring for the shapes)."""
     if not tokens:
         return None
+    # `%Имя`: the code value of that name
+    if len(tokens) == 2 and tokens[0].kind == "OP" and tokens[0].value == "%" \
+            and tokens[1].kind in _WORD_KINDS:
+        return parameter(tokens[1].value) if parameter is not None else None
     if len(tokens) == 1:
         literal = _literal(tokens[0])
         if literal is not None or tokens[0].kind not in _WORD_KINDS:
             return literal
         return _path(tokens, tables, scope)
+    if _is_word(tokens[0], _words("CASE")) and _is_word(tokens[-1], _words("END")) \
+            and _case_end(tokens) == len(tokens) - 1:
+        return _case(tokens, tables, scope, parameter)
+    arithmetic = _arithmetic(tokens, tables, scope, parameter)
+    if arithmetic is not _NOT_ARITHMETIC:
+        return arithmetic
     if _is_word(tokens[0], _words("CASE")):
-        return _case(tokens, tables, scope)
+        return None
     # a literal of a platform type (`ДатаВремя{}`): the type is the name that opens it
     if (tokens[0].kind in _WORD_KINDS and len(tokens) >= 3 and tokens[1].kind == "OP"
             and tokens[1].value == "{" and tokens[-1].kind == "OP" and tokens[-1].value == "}"):
@@ -396,19 +478,59 @@ def _expression_type(tokens: list, tables: dict[str, _Table], scope: ModuleScope
             return None
         if not (tokens[open_at - 2].kind == "OP" and tokens[open_at - 2].value == "."):
             return None
-        inner = _expression_type(tokens[:open_at - 2], tables, scope)
+        inner = _expression_type(tokens[:open_at - 2], tables, scope, parameter)
         if inner is None:
             return None
         argument = tokens[open_at + 1:-1]
         if not argument:
             return TypeSet(inner.names, True if inner.null else inner.undefined, False)
-        replacement = _expression_type(argument, tables, scope)
+        replacement = _expression_type(argument, tables, scope, parameter)
         if replacement is None:
             return None
         return inner.without_null().union(replacement)
     if not _is_path(tokens):
         return None
     return _path(tokens[::2], tables, scope)
+
+
+_NOT_ARITHMETIC = object()
+
+
+def _case_end(tokens: list) -> int | None:
+    """The index of the `КОНЕЦ` that closes the `ВЫБОР` at index 0, counting nested ones."""
+    case, end = _words("CASE"), _words("END")
+    level = 0
+    for index, token in enumerate(tokens):
+        if _is_word(token, case):
+            level += 1
+        elif _is_word(token, end):
+            level -= 1
+            if level == 0:
+                return index
+    return None
+
+
+def _arithmetic(tokens: list, tables: dict[str, _Table], scope: ModuleScope, parameter):
+    """`А + Б`, `А * 2`: numbers give a number, `+` over two strings a string; anything else, and
+    an operand with Null or the empty value, stays unknown. _NOT_ARITHMETIC when the expression has
+    no operator at its top level."""
+    for operators in (("+", "-"), ("*", "/", "%")):
+        marks = [i for i in _top_level_indexes(tokens, lambda t: t.kind == "OP" and t.value in operators)
+                 if i > 0 and not (tokens[i - 1].kind == "OP" and tokens[i - 1].value not in (")",))]
+        if not marks:
+            continue
+        bounds = [-1] + marks + [len(tokens)]
+        parts = [tokens[a + 1:b] for a, b in zip(bounds, bounds[1:])]
+        types = [_expression_type(part, tables, scope, parameter) for part in parts]
+        if any(t is None or t.null or t.undefined or not t.single for t in types):
+            return None
+        if all(t == TypeSet.of("Число") for t in types):
+            return TypeSet.of("Число")
+        signs = {tokens[i].value for i in marks}
+        if signs == {"+"} and all(t == TypeSet.of("Строка") for t in types):
+            return TypeSet.of("Строка")
+        return None
+    return _NOT_ARITHMETIC
 
 
 def _matching_open(tokens: list) -> int | None:
@@ -467,7 +589,8 @@ def _literal(token) -> TypeSet | None:
     return None
 
 
-def _case(tokens: list, tables: dict[str, _Table], scope: ModuleScope) -> TypeSet | None:
+def _case(tokens: list, tables: dict[str, _Table], scope: ModuleScope,
+          parameter=None) -> TypeSet | None:
     """`ВЫБОР КОГДА ... ТОГДА r1 ... ИНАЧЕ r КОНЕЦ` - the union of the results."""
     if not _is_word(tokens[-1], _words("END")):
         return None
@@ -491,7 +614,7 @@ def _case(tokens: list, tables: dict[str, _Table], scope: ModuleScope) -> TypeSe
         return None
     got: TypeSet | None = None
     for result in results:
-        typed = _expression_type(result, tables, scope)
+        typed = _expression_type(result, tables, scope, parameter)
         if typed is None:
             return None
         got = typed if got is None else got.union(typed)

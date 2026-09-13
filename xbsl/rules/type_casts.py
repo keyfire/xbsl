@@ -2,11 +2,11 @@
 
 The editor of the platform warns about two kinds of `<выражение> как <Тип>`:
 
-- the expression is ALREADY of that type (or of one the type holds), the redundant type cast.
+- the expression is ALREADY of that type (or of one the type holds), and the cast is redundant.
   `Найдена!.Ссылка как Товары.Ссылка`, where the query row reads the reference of the
   very catalog, is the everyday shape;
 - the expression is that type OR the empty value, and the cast does nothing but drop the empty
-  value - "Следует использовать настойчивую операцию '!'". `Строка.Товар как Товары.Ссылка`
+  value - the editor advises the non-null operator instead. `Строка.Товар как Товары.Ссылка`
   over a field declared `Товары.Ссылка?` says the same as `Строка.Товар!`, and the operator
   says it without naming the type again.
 
@@ -36,8 +36,8 @@ What keeps both rules at zero false findings:
 
 from __future__ import annotations
 
-import dataclasses
 import hashlib
+import re
 from collections.abc import Iterable
 from pathlib import PurePosixPath
 
@@ -48,35 +48,36 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
+from xbsl.rules._syntax import code_tokens
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
     "code/redundant-cast.title": {
-        "ru": "Избыточное приведение типа",
-        "en": "Redundant type cast",
+        "ru": "Приведение к типу, который у значения уже есть",
+        "en": "A cast to the type the value already has",
     },
     "code/redundant-cast.found": {
-        "ru": "Избыточное приведение: выражение уже имеет тип '{source}', и 'как {target}' "
-              "ничего не меняет – уберите приведение.",
-        "en": "Redundant cast: the expression is already of type '{source}', and "
-              "'{n[как]} {target}' changes nothing - remove the cast.",
+        "ru": "Значение уже имеет тип '{source}': 'как {target}' ничего не проверяет, и приведение "
+              "можно убрать.",
+        "en": "The value already is of type '{source}': '{n[как]} {target}' checks nothing, and "
+              "the cast can go.",
     },
     "code/redundant-cast.wider": {
-        "ru": "Избыточное приведение: значение типа '{source}' уже относится к типу '{target}' – "
-              "приведение уберите, если этот тип не нужен объявлению или перегрузке.",
-        "en": "Redundant cast: a value of type '{source}' already is a '{target}' - remove the "
-              "cast unless a declaration or an overload needs that type.",
+        "ru": "Значение типа '{source}' и так относится к '{target}': приведение ничего не "
+              "проверяет. Убрать его можно, если этот тип не нужен объявлению или перегрузке.",
+        "en": "A value of type '{source}' already belongs to '{target}': the cast checks nothing. "
+              "It can go unless a declaration or an overload needs that type.",
     },
     "code/cast-to-non-null.title": {
-        "ru": "Приведение вместо настойчивой операции '!'",
-        "en": "A cast in place of the non-null operator '!'",
+        "ru": "Приведение, которое только отбрасывает Неопределено",
+        "en": "A cast that only drops Undefined",
     },
     "code/cast-to-non-null.found": {
-        "ru": "Выражение имеет тип '{source}', и 'как {target}' только отбрасывает "
-              "Неопределено – используйте настойчивую операцию '!'.",
-        "en": "The expression is of type '{source}', and '{n[как]} {target}' only drops "
-              "{n[Неопределено]} - use the non-null operator '!'.",
+        "ru": "Значение имеет тип '{source}', и 'как {target}' лишь отбрасывает Неопределено – "
+              "то же скажет '!', не повторяя тип.",
+        "en": "The value is of type '{source}', and '{n[как]} {target}' only drops "
+              "{n[Неопределено]} - '!' says the same without repeating the type.",
     },
 }
 i18n.register(MESSAGES)
@@ -205,14 +206,13 @@ def _element_fact(source: SourceFile) -> dict | None:
     }
 
 
-def _walk_casts(node) -> bool:
-    if isinstance(node, (list, tuple)):
-        return any(_walk_casts(item) for item in node)
-    if not isinstance(node, P.Node):
-        return False
-    if isinstance(node, P.AsType):
-        return True
-    return any(_walk_casts(getattr(node, f.name, None)) for f in dataclasses.fields(node))
+def _casts_in(source: SourceFile) -> bool:
+    """Whether the module casts at all: the keyword of the cast in code outside the queries.
+
+    Read off the code tokens the other code rules already hold, not off a walk over the AST -
+    the walk visits every node of every module to find that most modules have no cast.
+    """
+    return any(t.kind == "KEYWORD" and t.canonical == "AS" for t in code_tokens(source))
 
 
 def _written(type_ref) -> str | None:
@@ -252,7 +252,7 @@ def _module_fact(source: SourceFile) -> dict | None:
     }
     # The text travels only for a module that casts at all: the reduce types its operands, and
     # a module with no cast has nothing to judge.
-    if not errors and _walk_casts(module.members):
+    if not errors and _casts_in(source):
         fact["text"] = source.text
     return fact
 
@@ -350,15 +350,19 @@ def _judge_project(group: dict[str, dict], found: dict[str, list[Diagnostic]]) -
         _judge_module(rel, fact, pairs, catalog, found)
 
 
-def _parsed_module(fact: dict):
+def _parsed_module(fact: dict) -> tuple[object, list]:
+    """(the module, its tokens) of a fact's text, tokenized once: the parser, the query rows and
+    the fixes all read the same tokens, and a second save of an unchanged module parses nothing."""
     digest = fact["digest"]
-    module = _parsed_texts.get(digest)
-    if module is None:
-        module, _errors = P.parse_text(fact["text"])
+    parsed = _parsed_texts.get(digest)
+    if parsed is None:
+        tokens = lexer.tokenize(fact["text"])
+        module, _errors = P.parse_tokens(tokens)
         if len(_parsed_texts) > 512:
             _parsed_texts.clear()
-        _parsed_texts[digest] = module
-    return module
+        parsed = (module, tokens)
+        _parsed_texts[digest] = parsed
+    return parsed
 
 
 def _own_names(stem: str, pairs: dict[str, dict]) -> tuple[dict[str, str], frozenset[str]]:
@@ -382,21 +386,21 @@ def _own_names(stem: str, pairs: dict[str, dict]) -> tuple[dict[str, str], froze
         for name, written in (element.get("properties") or {}).items():
             if written:
                 typed[name] = written
-    opaque = frozenset(set(element.get("names") or ()) - set(typed))
+    opaque = frozenset(set(element.get("names") or ()) - set(typed) - {element.get("name")})
     return typed, opaque
 
 
 def _judge_module(rel: str, fact: dict, pairs: dict[str, dict],
                   catalog: typeinfer.ProjectCatalog, found: dict[str, list[Diagnostic]]) -> None:
     text = fact["text"]
-    module = _parsed_module(fact)
+    module, all_tokens = _parsed_module(fact)
     own, opaque = _own_names(fact["stem"], pairs)
-    scope = typeinfer.ModuleScope(fact["module"], text, catalog, own, opaque)
+    scope = typeinfer.ModuleScope(fact["module"], text, catalog, own, opaque, tokens=all_tokens)
     try:
         sites = typeinfer.ModuleTyper(scope).run(module)
     except RecursionError:
         return
-    lines = linemap(_TextSource(text))
+    lines = None
     tokens: list | None = None
     for site in sites:
         if site.source is None or site.target is None:
@@ -405,9 +409,10 @@ def _judge_module(rel: str, fact: dict, pairs: dict[str, dict],
         if verdict is None:
             continue
         if tokens is None:
-            tokens = [t for t in lexer.tokenize(text) if t.kind not in ("COMMENT", "BOM", "EOF")]
+            tokens = [t for t in all_tokens if t.kind not in ("COMMENT", "BOM", "EOF")]
+            lines = linemap(_TextSource(text))
         node = site.node
-        line, col = lines.linecol(node.start)
+        line, col = lines.linecol(_reported_start(text, node))
         operand = node.operand
         target = _target_text(text, node)
         if verdict == "redundant":
@@ -415,15 +420,33 @@ def _judge_module(rel: str, fact: dict, pairs: dict[str, dict],
             key = "code/redundant-cast.found" if exact else "code/redundant-cast.wider"
             found[_REDUNDANT].append(Diagnostic(
                 rel, line, col, _REDUNDANT, Severity.WARNING,
-                i18n.t(key, source=site.source.text(), target=target),
+                i18n.t(key, source=_shown(site.source), target=target),
                 fix=_removal(text, tokens, node, operand) if exact else None,
             ))
         else:
             found[_NON_NULL].append(Diagnostic(
                 rel, line, col, _NON_NULL, Severity.WARNING,
-                i18n.t("code/cast-to-non-null.found", source=site.source.text(), target=target),
+                i18n.t("code/cast-to-non-null.found", source=_shown(site.source), target=target),
                 fix=_non_null(text, tokens, node, operand),
             ))
+
+
+def _reported_start(text: str, node) -> int:
+    """Where the finding stands: the start of the operand with the parentheses written around it.
+
+    The compiler anchors its warning at the start of the cast expression as the source spells it,
+    so `(А + Б) как Число` is reported at `(`, while the parser keeps the node from `А`."""
+    start, end = node.operand.start, node.operand.end
+    while True:
+        left = start - 1
+        while left >= 0 and text[left] in " \t\r\n":
+            left -= 1
+        right = end
+        while right < len(text) and text[right] in " \t\r\n":
+            right += 1
+        if left < 0 or right >= len(text) or text[left] != "(" or text[right] != ")" or right >= node.end:
+            return start
+        start, end = left, right + 1
 
 
 class _TextSource:
@@ -437,6 +460,31 @@ class _TextSource:
 def _target_text(text: str, node) -> str:
     written = getattr(getattr(node, "type", None), "text", None)
     return written or text[node.operand.end:node.end].split(None, 1)[-1]
+
+
+#: One name of a canonical type text: a head or a facet (`Товары.Ссылка`).
+_SHOWN_NAME_RE = re.compile(r"[A-Za-zА-Яа-яЁё_][\wЁё]*(?:\.[A-Za-zА-Яа-яЁё_][\wЁё]*)?")
+
+
+def _shown(types: typeinfer.TypeSet) -> str:
+    """The inferred type as the message shows it: canonical names are the catalog's (Russian)
+    ones, and an English message spells the platform names the English way, a facet of a project
+    element included (`Goods.Reference`)."""
+    text = types.text()
+    if i18n.current_lang() != "en":
+        return text
+
+    def english(match: re.Match) -> str:
+        name = match.group(0)
+        head, dot, suffix = name.partition(".")
+        if not dot:
+            return terms.english(name, "types") or name
+        facet = terms.english(name, "facets")
+        if facet:
+            return facet
+        return f"{head}.{terms.facet_suffix_english(suffix) or suffix}"
+
+    return _SHOWN_NAME_RE.sub(english, text)
 
 
 #: Operands that stay one primary expression without parentheses: a name, a member chain, a

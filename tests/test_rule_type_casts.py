@@ -322,6 +322,93 @@ def test_the_key_of_a_dynamic_list_row_is_a_reference_of_its_main_table():
     assert where == [(REDUNDANT, 2)]
 
 
+OPERATORS = """перечисление Порядок
+    Первый,
+    Второй
+;
+
+конст Лимит = 10
+
+метод Операции(А: Число, Б: Число, П: Строка?, Флаг: Булево)
+    знч Сумма = (А + Б) как Число
+    знч Строка1 = (А + "шт") как Строка
+    знч Строка2 = (П ?? "") как Строка
+    знч Выбор = (Флаг ? "а" : "б") как Строка
+    знч Смесь = (Флаг ? "а" : 1) как Строка
+    знч Список = новый Массив<Строка>()
+    знч Первый = Список[0] как Строка
+    знч Карта = новый Соответствие<Строка, Число>()
+    знч Значение = Карта["к"] как Число
+    знч Числа = [1, 2] как Массив<Число>
+    знч Предел = Лимит как Число
+    знч Место = Порядок.Первый как Порядок
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_operators_literals_and_indexers_type_their_result():
+    found = _found(_project(OPERATORS))
+    expected = [(REDUNDANT, _line(OPERATORS, marker)) for marker in (
+        "(А + Б) как", '(А + "шт") как', '(П ?? "") как', '(Флаг ? "а" : "б") как',
+        "Список[0] как", 'Карта["к"] как', "[1, 2] как", "Лимит как", "Порядок.Первый как")]
+    assert found == sorted(expected)
+    # the control: a ternary of a string and a number is no string
+    assert (REDUNDANT, _line(OPERATORS, '(Флаг ? "а" : 1) как')) not in found
+
+
+@pytest.mark.needs_data
+def test_a_parenthesized_operand_is_reported_at_its_parenthesis():
+    _sources, diags = _lint(_project(OPERATORS))
+    line = _line(OPERATORS, "(А + Б) как")
+    finding = next(d for d in diags if d.line == line)
+    assert finding.col == OPERATORS.splitlines()[line - 1].index("(А + Б)") + 1
+
+
+QUERY_SHAPES = """метод Выборки(Код: Строка)
+    исп Выборка = Запрос{
+        ВЫБРАТЬ
+            С.Вместимость * 2 КАК Двойная,
+            С.Наименование + "!" КАК Имя,
+            %Код КАК Параметр,
+            С.Основной.ЗаменитьNull() КАК ОсновнойИлиПусто,
+            О.Вместимость КАК ВместимостьОсновного
+        ИЗ Склады КАК С
+            ЛЕВОЕ СОЕДИНЕНИЕ Склады КАК О ПО О.Ссылка == С.Основной
+    }.Выполнить()
+    для Запись из Выборка
+        знч Двойная = Запись.Двойная как Число
+        знч Имя = Запись.Имя как Строка
+        знч Параметр = Запись.Параметр как Строка
+        знч Основной = Запись.ОсновнойИлиПусто как Склады.Ссылка
+        знч Вместимость = Запись.ВместимостьОсновного как Число
+    ;
+    исп СОшибкой = Запрос{
+        ВЫБРАТЬ С.Вместимость КАК Вместимость ИЗ Склады КАК С ГДЕ С.НетТакогоПоля == 1
+    }.Выполнить()
+    для Запись из СОшибкой
+        знч Объем = Запись.Вместимость как Число
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_query_columns_by_operators_parameters_and_joins():
+    found = _found(_project(QUERY_SHAPES))
+    assert found == sorted([
+        (REDUNDANT, _line(QUERY_SHAPES, "Запись.Двойная как")),
+        (REDUNDANT, _line(QUERY_SHAPES, "Запись.Имя как")),
+        (REDUNDANT, _line(QUERY_SHAPES, "Запись.Параметр как")),
+        # `ЗаменитьNull()` keeps the empty value of a nullable field, so the cast only drops it
+        (NON_NULL, _line(QUERY_SHAPES, "Запись.ОсновнойИлиПусто как")),
+    ])
+    # the controls: the joined side of an outer join may be Null, and an unknown field in a
+    # condition fails the whole query - the known column included
+    assert (REDUNDANT, _line(QUERY_SHAPES, "Запись.ВместимостьОсновного как")) not in found
+    assert (REDUNDANT, _line(QUERY_SHAPES, "Запись.Вместимость как")) not in found
+
+
 # --- the fixes ------------------------------------------------------------------------------------
 
 FIXES = """метод Исправления(Место: Склады.Ссылка|Площадки.Ссылка, Склад: Склады.Ссылка, П: Строка?)
