@@ -9,7 +9,7 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.70.0
 
 ### Added
 - **The metadata tree shows the packages of a subsystem.** In the "By subsystems" grouping packages
