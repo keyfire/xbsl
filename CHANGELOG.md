@@ -108,6 +108,16 @@ entry either - say what the behaviour was, not which class name was compared.
   with four such keys used to take four rounds of "take one out, load again". One error now lists
   them all with the translation in each file. ([#48](https://github.com/keyfire/xbsl/pull/48))
 
+### Fixed
+- **The translation carries an import of another subsystem's package into the English tree.**
+  An `Import` list in yaml names such a package as `Subsystem::Package`, and the translator took
+  that value for data: the line stayed Russian, and the strict run found nothing, since a text
+  kept as is is not a gap. The translated build then knew no type of the package in that file.
+  Each segment is spelled from the dictionary now, and a segment without an entry is a gap the
+  strict run fails on. On a project laid out in packages all 125 such lines had stayed Russian,
+  while the 227 package imports in modules were translated.
+  ([#50](https://github.com/keyfire/xbsl/pull/50))
+
 ## 2026-09-12 – 0.104.0, 0.105.0
 
 ### Added

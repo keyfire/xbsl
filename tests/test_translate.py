@@ -332,6 +332,33 @@ def test_yaml_subsystem_descriptor():
     assert report.user_missing == 0
 
 
+_PACKAGE_IMPORT = (
+    "ВидЭлемента: ВиртуальнаяТаблица\n"
+    "Имя: Лента\n"
+    "Импорт:\n"
+    "    - Основное\n"
+    "    - Основное::Контент\n"
+)
+
+
+def test_yaml_import_of_a_package_translates_every_segment():
+    # A package of another subsystem is imported as `Subsystem::Package`: the translated build
+    # resolves the import by both English segments, so neither may stay Russian.
+    out, report = _yaml(_PACKAGE_IMPORT, tokens={"Основное": "Main", "Контент": "WebContent", "Лента": "Feed"},
+                        name="Лента.yaml")
+    assert "    - Main\n" in out
+    assert "    - Main::WebContent\n" in out
+    assert report.user_missing == 0
+    assert not report.texts_kept
+
+
+def test_yaml_import_of_a_package_without_an_entry_is_a_gap():
+    # An untranslated segment is a dictionary gap the strict run fails on, not data kept as is.
+    out, report = _yaml(_PACKAGE_IMPORT, tokens={"Основное": "Main", "Лента": "Feed"}, name="Лента.yaml")
+    assert report.user_missing == 1
+    assert not report.texts_kept
+
+
 # --- the project walk --------------------------------------------------------------------------
 
 
