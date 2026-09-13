@@ -143,22 +143,25 @@ computed-permission handlers stay yours to write, and the `notes` field says whi
 `object-info` reports the current permissions and the kind's rights, `project-info` the `Default`
 of every object. No section there means the platform falls back to `PermitAdmins`.
 
-`rename-object` renames the object's files, including its forms and the generated
-`ListRow<Name>` component of a card list. References it rewrites across the whole project and
-with an eye on the context: the reference-bearing yaml keys `Type`, `Table`, `DataSource`, `Form`
-and `FormType`, the `=` bindings and the .xbsl code. Attributes, components or dynamic-list
-fields that merely share the old name are left alone, and so are string literals with UI text.
-`--new-presentation` and `--old-presentation` update the `Title` and `Presentation` of the object
-and its forms. The object's `Id` is untouched, so the platform keeps the stored data.
+`rename-object` renames the object's files, including its forms, the generated `ListRow<Name>`
+component of a card list and the WSDL descriptions of a SOAP service client. A description keeps its
+number, and a reference from one description to another by file name gets the new name. The command
+rewrites references across the whole project and with an eye on the context: the reference-bearing
+yaml keys `Type`, `Table`, `DataSource`, `Form` and `FormType`, the `=` bindings and the .xbsl code.
+Attributes, components or dynamic-list fields that merely share the old name are left alone, and so
+are string literals with UI text. `--new-presentation` and `--old-presentation` update the `Title`
+and `Presentation` of the object and its forms. The object's `Id` is untouched, so the platform
+keeps the stored data.
 
 `delete-object` deletes an object whole: the yaml and module pair, its forms and the generated
-`ListRow<Name>` row component, with their pairs. A subsystem is the folder the files live in, so
-the membership goes away with them. Every remaining mention of the name across the project is
-listed by file and line, string literals and comments included. A router opening a form by a name
-in a string, or code seeding data, is exactly the leftover that otherwise surfaces as a runtime
-error. The command does not edit those mentions: which one is dead code is the author's call.
-Deletion is irreversible, so without `--apply` the command prints the plan. The MCP tool
-`meta_delete_object` answers with a plan too, since its `dry_run` defaults to true.
+`ListRow<Name>` row component with their pairs, and the WSDL descriptions of a SOAP service client.
+A subsystem is the folder the files live in, so the membership goes away with them. Every remaining
+mention of the name across the project is listed by file and line, string literals and comments
+included. A router opening a form by a name in a string, or code seeding data, is exactly the
+leftover that otherwise surfaces as a runtime error. The command does not edit those mentions: which
+one is dead code is the author's call. Deletion is irreversible, so without `--apply` the command
+prints the plan. The MCP tool `meta_delete_object` answers with a plan too, since its `dry_run`
+defaults to true.
 
 A rename that only changes letter case, `Goods` into `goods`, runs in two steps through a
 temporary name. A case-insensitive filesystem, Windows or macOS, addresses the old and the new
@@ -173,13 +176,14 @@ has to be deleted before pulling.
 
 `move-object` (MCP `meta_move_object`) moves an object into another folder of its project: a package
 of the subsystem - a folder that does not exist yet becomes one - another package, the subsystem
-root or another subsystem. The object takes its forms, modules, list row and list table along. An
-element of a package lives in the package's own namespace, so the move repairs what reached the
-object from its old place: a module or a yaml of another subsystem gets `import Subsystem::Package`
-or an `Import` item, the moved files get the imports of their old subsystem when the move crosses a
-subsystem boundary, a qualified name - the full `Vendor::Project::Subsystem::FormName.ListRowData`
-of a generated form included - is rewritten, and a subsystem that starts importing another one gets
-it in `Using`. What needs repairing is decided by the import and visibility rules of the linter, run
+root or another subsystem. The object takes its forms, modules, list row and list table along, and a
+SOAP service client its WSDL descriptions. An element of a package lives in the package's own
+namespace, so the move repairs what reached the object from its old place: a module or a yaml of
+another subsystem gets `import Subsystem::Package` or an `Import` item, the moved files get the
+imports of their old subsystem when the move crosses a subsystem boundary, a qualified name - the
+full `Vendor::Project::Subsystem::FormName.ListRowData` of a generated form included - is rewritten,
+and a subsystem that starts importing another one gets it in `Using`. What needs repairing is
+decided by the import and visibility rules of the linter, run
 before and after the move. Within one subsystem the root and the packages see each other, so the
 move adds no import there, and only the full names follow the files. The command refuses a taken
 name and a non-public element that another subsystem would reach from now on - the visibility is the

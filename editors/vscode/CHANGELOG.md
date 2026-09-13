@@ -35,6 +35,10 @@
   set, the dictionary files never reached the server, so `translation/english-shape` was seen only
   in the CLI and CI. The findings stay after a save with an xbsl engine that has the matching fix.
   ([#59](https://github.com/keyfire/xbsl/pull/59))
+- **"Delete object" in the metadata tree no longer leaves files behind.** The forms, the query of a
+  virtual table and the WSDL descriptions of a SOAP service client stayed. The engine now picks the
+  files, and the confirmation shows the mentions left in the project. WSDL descriptions need an xbsl
+  engine with the matching fix. ([#63](https://github.com/keyfire/xbsl/pull/63))
 
 ## 0.70.0
 

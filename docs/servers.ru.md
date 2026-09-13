@@ -31,7 +31,7 @@ Neovim, JetBrains.
 | Диагностики и подсказки | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
 | Документация платформы | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Схемы и словари | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
-| Создание метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
+| Создание метаданных | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaDeleteObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
 | Формы | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
 | Обработчики событий | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
 
@@ -107,7 +107,7 @@ claude mcp add xbsl -- xbsl-mcp
 | `meta_new_project(...)` | создать проект: `Проект.yaml`, `Проект.xbsl` и первую подсистему |
 | `meta_new_object(directory, kind, name, ...)` | создать объект: `<Имя>.yaml` и `<Имя>.xbsl` у видов с модулем |
 | `meta_rename_object(..., dry_run)` | переименовать объект и обновить все ссылки в исходниках |
-| `meta_delete_object(..., dry_run)` | удалить объект целиком: пару yaml/модуль и его формы |
+| `meta_delete_object(..., dry_run)` | удалить объект целиком: пару yaml/модуль, его формы и описания WSDL клиента SOAP-сервиса |
 | `meta_move_object(root, yaml_path, target_dir, dry_run)` | перенести объект с формами, модулями, строкой и таблицей списка в пакет, другой пакет, корень подсистемы или другую подсистему; импорты, нужные ссылкам на новом месте, квалифицированные имена старого места и `Использование` чинят правила импорта, прогнанные до и после переноса, а занятое имя и непубличный элемент, который станет нужен другой подсистеме, получают отказ |
 | `meta_rename_package(root, package_dir, new_name, dry_run)` | переименовать каталог пакета со всеми файлами и переписать `импорт Подсистема::Пакет`, элементы `Импорт` и квалифицированные имена по проекту |
 | `meta_move_resource(root, resource_path, target_dir, dry_run)` | перенести файл ресурса или папку в другую папку того же каталога `Ресурсы` и переписать ключи `Ресурс{...}` и значения свойств-картинок, которые на него указывают; обращения по строке – в `notes`, перенос в другой каталог `Ресурсы` запрещён |

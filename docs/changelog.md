@@ -61,6 +61,10 @@ entry either - say what the behaviour was, not which class name was compared.
   check read only the files under `--project-root` and cleared the findings of other open files, so
   a dictionary file lost them at the first save. The check now covers the dictionary.
   ([#59](https://github.com/keyfire/xbsl/pull/59))
+- **`move-object`, `rename-object` and `delete-object` no longer lose the WSDL descriptions of a
+  SOAP service client.** The `<Name>.Wsdl.1.wsdl` file stayed behind, so a moved or renamed client
+  failed to apply. A rename keeps the number of each description and updates a reference from one
+  description to another by file name. ([#63](https://github.com/keyfire/xbsl/pull/63))
 
 ## 2026-09-13 – 0.106.0, 0.106.1
 

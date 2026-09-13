@@ -30,7 +30,7 @@ on them, and another editor would use the same requests to reproduce those panel
 | Diagnostics and hints | `xbsl/relint`, `xbsl/hoverDoc`, `xbsl/templatesReload` |
 | Platform documentation | `xbsl/docsAvailable`, `xbsl/docsSearch`, `xbsl/docsPage`, `xbsl/docsTree`, `xbsl/docsAsset`, `xbsl/docsForSymbol`, `xbsl/docsByName` |
 | Schemas and vocabularies | `xbsl/uiSchema`, `xbsl/metadataSchema`, `xbsl/formKeys`, `xbsl/metaKeys`, `xbsl/metaCapabilities`, `xbsl/httpMethods` |
-| Metadata scaffolding | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
+| Metadata scaffolding | `xbsl/objectInfo`, `xbsl/metaNewObject`, `xbsl/metaAddField`, `xbsl/metaSetFieldProperty`, `xbsl/metaAddForm`, `xbsl/metaAddRoute`, `xbsl/metaAddSubsystem`, `xbsl/metaProjectInfo`, `xbsl/metaMoveObject`, `xbsl/metaDeleteObject`, `xbsl/metaRenamePackage`, `xbsl/metaMoveResource`, `xbsl/metaRenameResourceFolder`, `xbsl/metaDeleteResourceFolder`, `xbsl/metaAddLocalization`, `xbsl/localizationInfo` |
 | Forms | `xbsl/formTree`, `xbsl/formNodeAt`, `xbsl/formEdit`, `xbsl/searchForms`, `xbsl/bindingComplete` |
 | Event handlers | `xbsl/moduleHandlers`, `xbsl/addHandler`, `xbsl/addModuleMethod`, `xbsl/removeHandler` |
 
@@ -107,7 +107,7 @@ never means reading the files.
 | `meta_new_project(...)` | scaffold a project: `Проект.yaml`, `Проект.xbsl` and the first subsystem |
 | `meta_new_object(directory, kind, name, ...)` | create an object: `<Name>.yaml` plus `<Name>.xbsl` for kinds with a module |
 | `meta_rename_object(..., dry_run)` | rename an object and update every reference across the sources |
-| `meta_delete_object(..., dry_run)` | delete an object whole: the yaml/module pair and its forms |
+| `meta_delete_object(..., dry_run)` | delete an object whole: the yaml/module pair, its forms and the WSDL descriptions of a SOAP service client |
 | `meta_move_object(root, yaml_path, target_dir, dry_run)` | move an object with its forms, modules, list row and list table into a package, another package, the subsystem root or another subsystem; the imports a reference needs at the new place, the qualified names of the old place and `Using` are repaired by the import rules run before and after the move, and a taken name or a non-public element another subsystem would reach is refused |
 | `meta_rename_package(root, package_dir, new_name, dry_run)` | rename a package folder with all its files and rewrite `import Subsystem::Package`, the `Import` items and the qualified names across the project |
 | `meta_move_resource(root, resource_path, target_dir, dry_run)` | move a resource file or a folder into another folder of the same `Resources` folder and rewrite the `Resource{...}` keys and image property values that lead to it; lookups by a string are listed in `notes`, a move into another `Resources` folder is refused |
