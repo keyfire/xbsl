@@ -623,6 +623,11 @@ def parse_text(text: str) -> tuple[Module, list[ParseError]]:
     return _Parser(tokenize(text)).parse_module()
 
 
+def parse_tokens(toks: list[Token]) -> tuple[Module, list[ParseError]]:
+    """Parse tokens the caller already holds (the lexer output of a whole text)."""
+    return _Parser(toks).parse_module()
+
+
 def parse(source) -> tuple[Module, list[ParseError]]:
     """Parse a source file; the result is cached in source.cache."""
     cached = source.cache.get("ast")

@@ -92,6 +92,7 @@ from . import (  # noqa: F401
     slot_shape,
     structure_fields,
     tabular_members,
+    type_casts,
     type_defaults,
     duplicate_bodies,
     unknown_members,
