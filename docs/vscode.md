@@ -883,6 +883,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
 | Open description (yaml) | `xbsl.metadata.openYaml` | Command Palette |
 | Open query (xbql) | `xbsl.metadata.openQuery` | Command Palette |
+| Open WSDL | `xbsl.metadata.openWsdl` | Command Palette |
 | Open module (xbsl) | `xbsl.metadata.openModule` | Command Palette |
 | Open object module (.Object.xbsl) | `xbsl.metadata.openObjectModule` | Command Palette |
 | Open in the form designer | `xbsl.metadata.previewForm` | Command Palette |
