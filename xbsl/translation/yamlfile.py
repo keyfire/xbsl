@@ -96,6 +96,12 @@ _RESOURCE_VALUE_RE = re.compile(r"^([\w-]+)\.(svg|png|jpe?g|gif|webp|ico|css|js|
 #: A scalar that looks like a bare identifier or a dotted chain of identifiers.
 _IDENT_CHAIN_RE = re.compile(r"^\w+(\.\w+)*$", re.UNICODE)
 
+#: The same chain that may also cross a namespace: an import list names a package of another
+#: subsystem as `Subsystem::Package`. The build of the translated tree looks the import up by
+#: the English spelling of every segment; taken for data, the value stayed Russian, no gap was
+#: reported, and every type of the package went unknown in that file.
+_NAME_RE = re.compile(r"^\w+(?:(?:\.|::)\w+)*$", re.UNICODE)
+
 #: The kind-carrying key and the sections of a localized-strings body.
 _LOCALIZATION_SECTIONS = ("Строки", "Шаблоны", "Strings", "Templates")
 
@@ -210,7 +216,7 @@ def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
             line, col = _at(node)
             report.note_token(stem, line, col, resource=True)
         return
-    if not _IDENT_CHAIN_RE.match(value):
+    if not _NAME_RE.match(value):
         # Not a name after all (a label pasted into a name-typed slot): data, left alone.
         line, col = _at(node)
         report.note_text_kept(value, line, col)
