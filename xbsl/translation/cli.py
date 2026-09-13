@@ -10,10 +10,11 @@ Modes compose from flags around one pass over the project:
 - `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
   name the sources use, and no problems were found - what a CI gate wants ("publish only a
   fully translated, lint-clean configuration");
-- `--check-duplicates [--against REF]`: the keys more than one dictionary file translates -
-  the conflicts the load would refuse and the redundant copies - read from the dictionary
-  files alone; with a git ref, the files of that ref count too, so a branch sees the collision
-  it would bring to the target branch before the merge.
+- `--check-duplicates [--against REF]`: the keys the dictionary translates in more than one
+  place - two files, or twice in one - the conflicts the load would refuse and the redundant
+  copies, each place with its file and line, read from the dictionary files alone; with a git
+  ref, the files of that ref count too, so a branch sees the collision it would bring to the
+  target branch before the merge.
 """
 
 from __future__ import annotations
@@ -393,16 +394,18 @@ MESSAGES = {
               " whole project; to look at a slice use --gaps or --entries",
     },
     "translate.help.check-duplicates": {
-        "ru": "проверить файлы словаря на ключи, переведённые в нескольких файлах: по-разному –"
-              " конфликт, код возврата 1 (такой словарь не загружается вовсе, поэтому --strict"
-              " падает сам и называет все конфликты разом, отдельного ключа у него нет);"
-              " одинаково – лишний дубль, перечисляется при коде 0. Читает только словарь,"
-              " прохода по проекту не делает",
-        "en": "check the dictionary files for keys translated in several files: differently -"
-              " a conflict, exit code 1 (such a dictionary does not load at all, so --strict"
-              " fails on its own and names every conflict at once, it has no separate flag);"
-              " the same way - a redundant duplicate, listed with exit code 0. Reads the"
-              " dictionary alone, no pass over the project",
+        "ru": "проверить файлы словаря на ключи, переведённые больше одного раза – в нескольких"
+              " файлах или дважды в одном: по-разному – конфликт, код возврата 1 (такой словарь"
+              " не загружается вовсе, поэтому --strict падает сам и называет все конфликты"
+              " разом, отдельного ключа у него нет); одинаково – лишний дубль, перечисляется при"
+              " коде 0. Каждое место названо файлом и строкой. Читает только словарь, прохода по"
+              " проекту не делает",
+        "en": "check the dictionary files for keys translated more than once - in several files"
+              " or twice in one: differently - a conflict, exit code 1 (such a dictionary does"
+              " not load at all, so --strict fails on its own and names every conflict at once,"
+              " it has no separate flag); the same way - a redundant duplicate, listed with exit"
+              " code 0. Every place is named by its file and line. Reads the dictionary alone,"
+              " no pass over the project",
     },
     "translate.help.against": {
         "ru": "git-ссылка (например origin/master), файлы словаря на которой добавляются к"
@@ -433,16 +436,16 @@ MESSAGES = {
               " theirs the working tree does not carry",
     },
     "translate.conflicts-header": {
-        "ru": "ключей, переведённых по-разному в разных файлах: {count} – оставьте одно значение",
-        "en": "keys translated differently in different files: {count} - keep one value",
+        "ru": "ключей, переведённых по-разному в нескольких местах: {count} – оставьте одно значение",
+        "en": "keys translated differently in several places: {count} - keep one value",
     },
     "translate.conflicts-none": {
         "ru": "ключей, переведённых по-разному, нет",
-        "en": "no key is translated differently in two files",
+        "en": "no key is translated differently in two places",
     },
     "translate.duplicates-header": {
-        "ru": "ключей, переведённых одинаково в нескольких файлах: {count} – лишние копии снимают",
-        "en": "keys translated the same way in several files: {count} - the extra copies are"
+        "ru": "ключей, переведённых одинаково в нескольких местах: {count} – лишние копии снимают",
+        "en": "keys translated the same way in several places: {count} - the extra copies are"
               " taken out",
     },
     "translate.duplicates-none": {
@@ -450,9 +453,9 @@ MESSAGES = {
         "en": "no key is translated the same way twice",
     },
     "translate.summary-duplicates": {
-        "ru": "ключей, переведённых одинаково в нескольких файлах: {entries}"
+        "ru": "ключей, переведённых одинаково в нескольких местах: {entries}"
               " (список – --check-duplicates)",
-        "en": "keys translated the same way in several files: {entries}"
+        "en": "keys translated the same way in several places: {entries}"
               " (list them with --check-duplicates)",
     },
 }
@@ -698,8 +701,9 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None,
     out = {
         "dictionary": str(dictionary) if dictionary else None,
         "dictionary_behind": lag,
-        # The keys two dictionary files translate the same way - the load keeps them, the
-        # redundant copy is what a person takes out (`--check-duplicates` lists the same).
+        # The keys translated the same way in two places, two files or twice in one - the load
+        # keeps them, the redundant copy is what a person takes out (`--check-duplicates`
+        # lists the same).
         "dictionary_duplicates": duplicates or [],
         "totals": report.totals(),
         "ready": _ready(report),
@@ -1079,7 +1083,7 @@ def _render_redundant(args, page: list, total: int, payload: dict) -> None:
 
 
 def _check_duplicates(args, root: Path) -> int:
-    """The keys more than one dictionary file translates, before the load refuses them.
+    """The keys translated in more than one place, before the load refuses them.
 
     Two branches once closed the same gaps, each in a dictionary file of its own; each
     pipeline passed, and the target branch failed at the dictionary load after the merge -
@@ -1088,7 +1092,8 @@ def _check_duplicates(args, root: Path) -> int:
     with `--against` the files of the target branch are read out of git and laid over the
     working tree's, so the branch sees the collision BEFORE the merge. Two lists come back:
     the keys translated differently, which fail the exit code, and the keys translated the
-    same way twice, which do not - the second copy is what a person takes out.
+    same way twice, which do not - the second copy is what a person takes out. A place is a
+    file and a line, so a key one file declares twice is on the lists too.
     """
     ignored = [flag for flag, attribute, absent in CHECK_IGNORES
                if getattr(args, attribute) != absent]
@@ -1413,14 +1418,15 @@ def dictionary_path_for(root: Path) -> Path | None:
 
 
 def collisions_report(dictionary: Path, against: str = "") -> dict:
-    """The keys more than one dictionary file translates - the answer of `--check-duplicates`.
+    """The keys translated in more than one place - the answer of `--check-duplicates`.
 
     `{"dictionary", "against", "conflicts", "duplicates"}`, or `{"error"}` when a file does
     not load or git cannot read the ref. `against` is None without a ref; with one it names
     the ref, how many dictionary files it holds and how many of their entries the working
     tree does not carry - zero says the ref adds nothing to what the working tree already
-    shows. The rows are those of `dictionary.collisions`, the files named relative to the
-    dictionary and the ref's copies as `ref:name`.
+    shows. The rows are those of `dictionary.collisions`: every place a file and a line, the
+    files named relative to the dictionary and the ref's copies as `ref:name`, with the lines
+    that copy has.
     """
     from xbsl.translation import dictionary as dictionary_module
     from xbsl.translation import entries as entries_module

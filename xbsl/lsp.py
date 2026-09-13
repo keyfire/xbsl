@@ -6,13 +6,16 @@ every keystroke does not pay for interpreter startup and dataset loading.
 
 Features:
     - live per-file diagnostics on open and change (file-scope rules, debounced);
-    - whole-project diagnostics on save (file and project rules over the source root);
+    - whole-project diagnostics on save (file and project rules over the source root, file
+      rules over the translation dictionary that serves the project);
     - go-to-definition, completion and hover over the in-memory project index;
     - quick fix (code action) for findings that carry a mechanical fix.
 
 The source root defaults to the workspace folder; if the project lives deeper in the
 repository, pass `--project-root PATH` (absolute or relative to that folder) - the
-equivalent of the extension's `xbsl.projectRoot` setting. Other flags: `--select`,
+equivalent of the extension's `xbsl.projectRoot` setting. A root given this way also bounds
+the yaml the server judges: a yaml document outside it gets diagnostics only when it is a file
+of the project's translation dictionary (see `in_project_scope`). Other flags: `--select`,
 `--ignore`, `--enable` (comma-separated rule sets), `--data-dir` (Element data root),
 `--baseline` (baseline file - excluded findings are suppressed here too, as in the CLI).
 Flags, rather than initializationOptions, make it equally easy to launch the server from
@@ -45,6 +48,7 @@ from xbsl import (
 )
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.templates import Template, TemplateError
+from xbsl.translation import dictionary as translation_dictionary
 from xbsl.lsp_nav import (
     CHAIN_TAIL_RE,
     IndexLookup,
@@ -376,6 +380,57 @@ def project_sources(root: Path) -> list[Path]:
             + engine.find_resources(root))
 
 
+def _under(path: Path, folder: Path) -> bool:
+    """Whether `path` is `folder` itself or lies inside it, compared as resolved paths."""
+    resolved, base = path.resolve(), folder.resolve()
+    return resolved == base or base in resolved.parents
+
+
+def dictionary_sources(root: Path) -> list[Path]:
+    """The files of the translation dictionary that serves the project, if it lies outside the root.
+
+    The dictionary sits next to the project or above it - `dictionary.discover` walks up from the
+    root, the way `xbsl translate` finds it - so a root narrowed to the project leaves it out of
+    `project_sources`. A lint run over the repository reads it, and CI printed the findings of
+    `translation/english-shape` on its values while the editor never showed them. The
+    whole-project pass runs the file rules over these files: the findings are in the Problems
+    panel after the first pass, and a save refreshes them the way it refreshes the project's yaml.
+
+    The project rules do not get them. A project rule that needs the dictionary reads it from disk
+    (`conventions/missing-translation` does), and as a source the dictionary would change the
+    verdict on the project: `code/unused-method` counts every word of every source as a mention,
+    and the dictionary names every method, so the rule would fall silent the way it does in a lint
+    run over the repository.
+
+    A dictionary inside the root is already among the project sources and is not added twice;
+    there it reaches the project rules, as it does in the CLI.
+    """
+    found = translation_dictionary.discover(root)
+    if found is None or _under(found, root):
+        return []
+    if found.is_file():
+        return [found]
+    return engine.find_sources(found, "*.yaml")
+
+
+def in_project_scope(path: Path, root: Path) -> bool:
+    """Whether a file belongs to the project at `root`: under the root, or in its dictionary.
+
+    The per-file pass asks this of a yaml document when `--project-root` narrowed the root. The
+    extension hands the dictionary over by a glob, and a glob also matches the dictionary of
+    another project in the same checkout or a copy of the sources under the same relative path;
+    only the server knows which dictionary serves this root. A yaml document the project does not
+    own would get findings on open and lose them to the next whole-project pass, which publishes
+    an empty list over every document it has not read.
+    """
+    if _under(path, root):
+        return True
+    found = translation_dictionary.discover(root)
+    if found is None:
+        return False
+    return _under(path, found) if found.is_dir() else path.resolve() == found.resolve()
+
+
 def _make_server() -> "LanguageServer":
     server = LanguageServer("xbsl-lsp", f"v{__version__}")
 
@@ -420,6 +475,12 @@ def _make_server() -> "LanguageServer":
         # Full path, not just the name: findings are matched against baseline entries
         # by it, and structure/xbsl-pair sees the module's real neighbor.
         src = engine.load_text(str(path), doc.source)
+        # A narrowed root is the project's boundary for yaml: outside it only the files of the
+        # dictionary that serves the project are judged (see in_project_scope). Modules are
+        # judged wherever they are opened, as before.
+        if (src.kind == "yaml" and STATE.project_root_arg and STATE.root is not None
+                and not in_project_scope(path, STATE.root)):
+            return
         diags = engine.run_sources([src], select=STATE.select, ignore=STATE.ignore,
                                    enable=STATE.enable, scopes=("file",))
         diags, problem = apply_baseline_file(diags, STATE.baseline)
@@ -474,9 +535,12 @@ def _make_server() -> "LanguageServer":
             return
         build_project_index()  # navigation comes alive before the lint of the whole project
         try:
-            files = project_sources(root)
-            sources = [engine.load(p) for p in files]
+            sources = [engine.load(p) for p in project_sources(root)]
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
+            # The dictionary gets the file rules alone (see dictionary_sources).
+            dictionary = [engine.load(p) for p in dictionary_sources(root)]
+            diags += engine.run_sources(dictionary, select=STATE.select, ignore=STATE.ignore,
+                                        enable=STATE.enable, scopes=("file",))
             diags, problem = apply_baseline_file(diags, STATE.baseline)
             if problem:
                 server.show_message_log(f"xbsl-lsp: список принятых не применён: {problem}")

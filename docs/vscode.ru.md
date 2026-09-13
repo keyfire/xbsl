@@ -858,6 +858,7 @@ VS Code, как обычно.
 | Обновить дерево метаданных | `xbsl.metadata.refresh` | палитра команд |
 | Открыть описание (yaml) | `xbsl.metadata.openYaml` | палитра команд |
 | Открыть запрос (xbql) | `xbsl.metadata.openQuery` | палитра команд |
+| Открыть WSDL | `xbsl.metadata.openWsdl` | палитра команд |
 | Открыть модуль (xbsl) | `xbsl.metadata.openModule` | палитра команд |
 | Открыть модуль объекта (.Объект.xbsl) | `xbsl.metadata.openObjectModule` | палитра команд |
 | Открыть в конструкторе | `xbsl.metadata.previewForm` | палитра команд |
@@ -886,8 +887,9 @@ VS Code, как обычно.
 | Переместить в папку... | `xbsl.metadata.moveResource` | палитра команд |
 | Переименовать папку | `xbsl.metadata.renameResourceFolder` | палитра команд |
 | Удалить папку | `xbsl.metadata.deleteResourceFolder` | палитра команд |
-| Отбор по подсистеме | `xbsl.metadata.filterBySubsystem` | палитра команд |
-| Снять отбор по подсистеме | `xbsl.metadata.clearFilter` | палитра команд |
+| Отбор по подсистемам и пакетам... | `xbsl.metadata.filterBySubsystem` | палитра команд |
+| Отбор по подсистемам и пакетам (установлен)... | `xbsl.metadata.editFilter` | панель / контекстное меню |
+| Сбросить отбор по подсистемам и пакетам | `xbsl.metadata.clearFilter` | палитра команд |
 | Группировка дерева (по классам / по подсистемам) | `xbsl.metadata.groupMode` | палитра команд |
 | Скрыть пустые классы | `xbsl.metadata.hideEmptyCategories` | палитра команд |
 | Показать пустые классы | `xbsl.metadata.showEmptyCategories` | палитра команд |

@@ -13,6 +13,7 @@ import {
 import { baselineForLint } from "./excludeAction";
 import { ciJobArgs, ciSettings } from "./report";
 import { pipInstallCommand, runInstallTask } from "./installer";
+import { lspDocumentSelector } from "./lspDocumentsCore";
 import { needsServerRestart } from "./lspRestartCore";
 import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
@@ -141,16 +142,10 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
     args,
     options: { cwd: folder?.uri.fsPath },
   };
-  // yaml is limited to the sources root so unrelated repository yamls are not linted.
-  const yamlPattern = projectRoot ? `**/${projectRoot}/**/*.yaml` : "**/*.yaml";
   const clientOptions: LanguageClientOptions = {
-    // xbql is the standalone query of a virtual table: the server serves it for completion
-    // (the whole file is one query) and publishes no diagnostics for it.
-    documentSelector: [
-      { language: "xbsl" },
-      { language: "xbql" },
-      { language: "yaml", pattern: yamlPattern },
-    ],
+    // yaml is limited to the sources root so unrelated repository yamls are not linted - all
+    // but the translation dictionary next to the project (see lspDocumentsCore).
+    documentSelector: lspDocumentSelector(projectRoot),
     outputChannel: output,
     diagnosticCollectionName: "xbsl-lsp",
     middleware: {

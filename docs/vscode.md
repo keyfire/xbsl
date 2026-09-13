@@ -883,6 +883,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Refresh the metadata tree | `xbsl.metadata.refresh` | Command Palette |
 | Open description (yaml) | `xbsl.metadata.openYaml` | Command Palette |
 | Open query (xbql) | `xbsl.metadata.openQuery` | Command Palette |
+| Open WSDL | `xbsl.metadata.openWsdl` | Command Palette |
 | Open module (xbsl) | `xbsl.metadata.openModule` | Command Palette |
 | Open object module (.Object.xbsl) | `xbsl.metadata.openObjectModule` | Command Palette |
 | Open in the form designer | `xbsl.metadata.previewForm` | Command Palette |
@@ -911,8 +912,9 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Move to folder... | `xbsl.metadata.moveResource` | Command Palette |
 | Rename folder | `xbsl.metadata.renameResourceFolder` | Command Palette |
 | Delete folder | `xbsl.metadata.deleteResourceFolder` | Command Palette |
-| Filter by subsystem | `xbsl.metadata.filterBySubsystem` | Command Palette |
-| Clear subsystem filter | `xbsl.metadata.clearFilter` | Command Palette |
+| Filter by subsystems and packages... | `xbsl.metadata.filterBySubsystem` | Command Palette |
+| Filter by subsystems and packages (active)... | `xbsl.metadata.editFilter` | panel / context menu |
+| Clear the subsystem and package filter | `xbsl.metadata.clearFilter` | Command Palette |
 | Tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
 | Hide empty categories | `xbsl.metadata.hideEmptyCategories` | Command Palette |
 | Show empty categories | `xbsl.metadata.showEmptyCategories` | Command Palette |

@@ -226,12 +226,32 @@ export interface Buckets<T> {
   subsystems: Map<SubsystemGroup, { root: T[]; packages: Map<string, T[]> }>;
 }
 
-/** Sort the items of one project into its subsystems and packages.
+/** Where one item of a project lies: its subsystem and package, undefined outside every subsystem.
  *
  * An object the engine placed goes where the engine said. Anything else - a resource file, an
  * object the answer does not know yet - goes by its folder: into the deepest package folder of
- * the answer that holds it, else to the root of the subsystem whose folder holds it.
+ * the answer that holds it, else to the root of the subsystem whose folder holds it. The tree
+ * sorts its nodes by this and the filter judges an item by it, so the two never disagree.
  */
+export function placeOf(
+  p: string,
+  project: ProjectPlacement,
+  placement: EnginePlacement
+): { subsystem: SubsystemGroup; packageKey: string | null } | undefined {
+  const placed = placement.objects.get(pathKey(p));
+  if (placed) {
+    const group = placed.subsystem ? project.subsystems.find((s) => s.name === placed.subsystem) : undefined;
+    if (group) {
+      return { subsystem: group, packageKey: placed.package };
+    }
+    if (!placed.subsystem) {
+      return undefined;
+    }
+  }
+  return folderPlace(project, p);
+}
+
+/** Sort the items of one project into its subsystems and packages (placeOf decides each). */
 export function bucketItems<T>(
   items: T[],
   pathOf: (item: T) => string,
@@ -257,22 +277,9 @@ export function bucketItems<T>(
     target.packages.set(packageKey, [...(target.packages.get(packageKey) ?? []), item]);
   };
   for (const item of items) {
-    const p = pathOf(item);
-    const placed = placement.objects.get(pathKey(p));
-    if (placed) {
-      const group = placed.subsystem ? project.subsystems.find((s) => s.name === placed.subsystem) : undefined;
-      if (group) {
-        push(group, placed.package, item);
-        continue;
-      }
-      if (!placed.subsystem) {
-        buckets.outside.push(item);
-        continue;
-      }
-    }
-    const byFolder = folderPlace(project, p);
-    if (byFolder) {
-      push(byFolder.subsystem, byFolder.packageKey, item);
+    const where = placeOf(pathOf(item), project, placement);
+    if (where) {
+      push(where.subsystem, where.packageKey, item);
     } else {
       buckets.outside.push(item);
     }
@@ -305,6 +312,54 @@ export function folderPlace(
 // Every package group of a subsystem, outermost first.
 export function allPackages(groups: PackageGroup[]): PackageGroup[] {
   return groups.flatMap((g) => [g, ...allPackages(g.children)]);
+}
+
+// --- packages under the Subsystems branch ------------------------------------------------
+
+// A package with the number of objects in it, nested packages included - the grey number of a
+// package node.
+export interface PackageTotal {
+  group: PackageGroup;
+  objects: number;
+  children: PackageTotal[];
+}
+
+/** The packages of every subsystem of one project with their object totals, keyed by the
+ * pathKey of the subsystem folder.
+ *
+ * This is what the Subsystems branch of the grouping by classes hangs under a subsystem: the
+ * objects themselves stay in their classes below, so a package shows only its nesting and its
+ * count. The items are placed the way the grouping by subsystems places them (bucketItems), and
+ * `count` says how many objects a set of items makes there, so a package carries the same number
+ * in both groupings. Packages and nested packages are sorted by name. Without the engine's view
+ * of this project (no answer, or one given before the project appeared) the map is empty and
+ * every subsystem stays a leaf.
+ */
+export function packageTotals<T>(
+  items: T[],
+  pathOf: (item: T) => string,
+  placement: EnginePlacement | undefined,
+  projectDir: string,
+  count: (items: T[]) => number
+): Map<string, PackageTotal[]> {
+  const totals = new Map<string, PackageTotal[]>();
+  const project = placement?.projects.find((p) => pathKey(p.dir) === pathKey(projectDir));
+  if (!placement || !project) {
+    return totals;
+  }
+  const buckets = bucketItems(items, pathOf, project, placement);
+  const byName = (groups: PackageGroup[]): PackageGroup[] =>
+    [...groups].sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  for (const subsystem of project.subsystems) {
+    const slot = buckets.subsystems.get(subsystem);
+    const total = (group: PackageGroup): PackageTotal => {
+      const children = byName(group.children).map(total);
+      const nested = children.reduce((sum, child) => sum + child.objects, 0);
+      return { group, objects: count(slot?.packages.get(group.key) ?? []) + nested, children };
+    };
+    totals.set(pathKey(subsystem.dir), byName(subsystem.packages).map(total));
+  }
+  return totals;
 }
 
 // --- applying a scaffolding result with renames ------------------------------------------

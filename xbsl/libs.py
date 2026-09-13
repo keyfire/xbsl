@@ -170,6 +170,43 @@ def archive_global_types(path: Path) -> frozenset[str]:
     return _global_types_cached(str(path), stat.st_mtime, stat.st_size)
 
 
+@lru_cache(maxsize=32)
+def _subsystems_cached(path: str, mtime: float, size: int) -> frozenset[str]:
+    names: set[str] = set()
+    try:
+        with zipfile.ZipFile(path) as archive:
+            for entry in archive.namelist():
+                parts = entry.split("/")
+                if len(parts) < 4 or not parts[2]:
+                    continue  # the manifest and the project files lie above the subsystems
+                names.add(parts[2])
+                if len(parts) != 4 or parts[3] not in _NON_ELEMENT_FILES or not _HAVE_YAML:
+                    continue
+                try:
+                    values = yaml.load(archive.read(entry).decode("utf-8-sig"), Loader=_LOADER)
+                except (yaml.YAMLError, UnicodeDecodeError):
+                    continue
+                if isinstance(values, dict) and _first(values, _NAME_KEYS):
+                    names.add(_first(values, _NAME_KEYS))
+    except (zipfile.BadZipFile, OSError):
+        return frozenset()
+    return frozenset(names)
+
+
+def archive_subsystems(path: Path) -> frozenset[str]:
+    """Names of the subsystems an archive keeps, or an empty set when it cannot be read.
+
+    A subsystem is a folder under the project root of the archive; a descriptor that declares
+    another name adds that name as well - the set is used to leave names alone, so a name too
+    many costs nothing.
+    """
+    try:
+        stat = path.stat()
+    except OSError:
+        return frozenset()
+    return _subsystems_cached(str(path), stat.st_mtime, stat.st_size)
+
+
 def project_library_types(descriptor: Path, text: str) -> list[str]:
     """Global type names of every library the descriptor declares and whose archive is found.
 

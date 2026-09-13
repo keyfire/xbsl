@@ -5,7 +5,8 @@ Three rules live here:
 - code/resource-bare-name (tier C, file) – the key spells out the Ресурсы folder itself;
 - code/unknown-resource (tier D, project) – the key resolves to nothing;
 - code/package-resources-missing (tier D, project) – `ПакетРесурсов.Текущий()` in a module of
-  a package that keeps no resources of its own (see the docstring of the rule).
+  a package or at the root of a subsystem that keeps no resources of its own (see the docstring
+  of the rule).
 
 THE KEY IS A PATH RELATIVE TO A SUBSYSTEM'S `Ресурсы` FOLDER. Probed on the local server,
 every form next to the same controls (positions match the compiler's - the first character
@@ -118,6 +119,21 @@ MESSAGES = {
               "computed name belongs at the root of the subsystem. The other ways out are to put "
               "the resources into the folder of the package or to address the file with a "
               "{n[Ресурс]}{{...}} literal, which does find the files of the subsystem.",
+    },
+    "code/package-resources-missing.root": {
+        "ru": "{n[ПакетРесурсов]}.{n[Текущий]}() в модуле корня подсистемы '{package}' отдаёт "
+              "ресурсы самой подсистемы, а своего каталога {n[Ресурсы]} у неё нет: ни один файл "
+              "не найдётся ({n[ИсключениеРесурсНеНайден]}) – ни файл её пакетов, ни файл другой "
+              "подсистемы, и даже {n[ПолучитьВсе]}() бросает это исключение. Положите файлы в "
+              "каталог {n[Ресурсы]} подсистемы или держите модуль, который читает ресурсы по "
+              "вычисленному имени, в пакете с этими файлами.",
+        "en": "{n[ПакетРесурсов]}.{n[Текущий]}() in a module at the root of subsystem '{package}' "
+              "returns the resources of the subsystem itself, and the subsystem has no "
+              "{n[Ресурсы]} folder of its own: no file is found ({n[ИсключениеРесурсНеНайден]}) - "
+              "neither a file of its packages nor one of another subsystem, and even "
+              "{n[ПолучитьВсе]}() throws that exception. Put the files into the {n[Ресурсы]} "
+              "folder of the subsystem, or keep the module that reads resources by a computed "
+              "name in the package that holds them.",
     },
 }
 i18n.register(MESSAGES)
@@ -304,7 +320,8 @@ def _current_package_mapper(source: SourceFile) -> dict | None:
     scope="project", severity=Severity.WARNING, mapper=_current_package_mapper,
 )
 def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
-    """`ResourcesPackage.Current()` in a module of a package that has no resources folder.
+    """`ResourcesPackage.Current()` in a module of a package or at the root of a subsystem that
+    has no resources folder.
 
     The documentation ties the resources to the namespace: every subsystem and every package
     may keep a set of its own (the page on resources), and `Current()` returns the package
@@ -318,11 +335,20 @@ def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     run time. A package of a shipped library reads its own folder the same way: the module of
     the package and the folder of icons it reads lie in the package, not in the subsystem.
 
+    The root of a subsystem is judged the same way. The documentation leaves it open - one of
+    its examples hands `Get` a path that starts at the folder of the subsystem, as if the lookup
+    reached the whole project - so the question was put to a run: a setup handler of a probe
+    project, executed at its first apply, reported what `Current()` found. From the root of a
+    subsystem without a resources folder it found nothing, and `GetAll()` itself threw
+    `ResourceNotFoundException`: neither a file of a package of the same subsystem nor a file
+    of another subsystem, whether named relative to the folder or by the path of that example,
+    while the same reader at the root of a subsystem with the folder found its file. The path of
+    the example found nothing there either.
+
     The folder is looked up on disk, both spellings: a module that is not on disk (a buffer, a
-    fixture) is not judged. A package that has the folder is not judged either - whether the
-    file named at run time lies there is a fact of the data. A module at the root of a
-    subsystem is out of scope: its lookup reaches the folder of the subsystem, where the files
-    are normally kept.
+    fixture) is not judged. A place that has the folder is not judged either - whether the
+    file named at run time lies there is a fact of the data. The project module lies outside the
+    subsystems and is not judged.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -331,15 +357,20 @@ def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["k"] != "cur":
             continue
         place = layout.place(Path(fact["path"]))
-        if place is None or place.package is None:
+        if place is None:
             continue
-        folder = place.subsystem_dir.joinpath(*place.package.split("::"))
+        folder = place.subsystem_dir
+        if place.package is not None:
+            folder = folder.joinpath(*place.package.split("::"))
         if not folder.is_dir() or any((folder / name).is_dir() for name in _RESOURCE_DIRS):
             continue
+        if place.package is None:
+            message = i18n.t("code/package-resources-missing.root", package=place.subsystem)
+        else:
+            message = i18n.t("code/package-resources-missing.empty",
+                             package=f"{place.subsystem}::{place.package}")
         for line, col in fact["calls"]:
             yield Diagnostic(
-                rel, line, col, "code/package-resources-missing", Severity.WARNING,
-                i18n.t("code/package-resources-missing.empty",
-                       package=f"{place.subsystem}::{place.package}"),
+                rel, line, col, "code/package-resources-missing", Severity.WARNING, message,
                 data={"namespace": place.key},
             )
