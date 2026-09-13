@@ -725,6 +725,17 @@ class _Reach:
                 self.work.extend((stem, text) for text in declared)
         if owner and owner.get("base"):
             self.work.append((stem, owner["base"]))
+            # A component that inherits a component of the project reads the properties of the
+            # base by their bare names, just as its own.
+            plain, qualified = _type_chains(owner["base"])
+            bases = {chain.split(".")[0] for chain in plain}
+            bases |= {_qualified_name(chain)[1] for chain in qualified}
+            for base in bases:
+                for base_stem in project.stems_of.get(base, ()):
+                    base_members = (project.elements.get(base_stem) or {}).get("members") or {}
+                    for name, declared in base_members.items():
+                        if name in named:
+                            self.work.extend((base_stem, text) for text in declared)
         for element, member in fact["chains"]:
             declared_here = False
             for target in project.stems_of.get(element, ()):
