@@ -343,7 +343,8 @@ _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
     "add-subsystem", "add-dependency", "add-localization", "set-localization",
     "set-field-property",
-    "rename-object", "delete-object", "move-object", "rename-package", "set-access",
+    "rename-object", "delete-object", "move-object", "rename-package",
+    "move-resource", "rename-resource-folder", "delete-resource-folder", "set-access",
     "object-info", "project-info",
     "localization-info", "form-tree", "form-edit", "form-handlers",
 )
@@ -713,6 +714,21 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("package_dir", help=i18n.t("cli.help.scaf.rp-package"))
     p.add_argument("new_name", help=i18n.t("cli.help.scaf.rp-new"))
 
+    p = command("move-resource")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("resource_path", help=i18n.t("cli.help.scaf.mr-path"))
+    p.add_argument("target_dir", help=i18n.t("cli.help.scaf.mr-target"))
+
+    p = command("rename-resource-folder")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("folder_dir", help=i18n.t("cli.help.scaf.rrf-folder"))
+    p.add_argument("new_name", help=i18n.t("cli.help.scaf.rrf-new"))
+
+    p = command("delete-resource-folder")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("folder_dir", help=i18n.t("cli.help.scaf.rrf-folder"))
+    p.add_argument("--apply", action="store_true", help=i18n.t("cli.help.scaf.delete-apply"))
+
     p = command("set-access")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
@@ -939,6 +955,25 @@ def _scaffold_main(argv: list[str]) -> int:
             result = scaffold.op_rename_package(
                 Path(args.root), Path(args.package_dir), args.new_name,
             )
+        elif args.command == "move-resource":
+            result = scaffold.op_move_resource(
+                Path(args.root), Path(args.resource_path), Path(args.target_dir),
+            )
+        elif args.command == "rename-resource-folder":
+            result = scaffold.op_rename_resource_folder(
+                Path(args.root), Path(args.folder_dir), args.new_name,
+            )
+        elif args.command == "delete-resource-folder":
+            result = scaffold.op_delete_resource_folder(Path(args.root), Path(args.folder_dir))
+            # Irreversible, like delete-object: the PLAN is the default answer, --apply performs it.
+            if not args.apply or args.dry_run:
+                payload = result.as_dict(content=False)
+                payload["dry-run"] = True
+                print(json.dumps(payload, ensure_ascii=False))
+                return 0
+            scaffold.apply_result(result)
+            print(json.dumps(result.as_dict(content=False), ensure_ascii=False))
+            return 0
         elif args.command == "form-tree":
             from xbsl import formedits, formmodel
 

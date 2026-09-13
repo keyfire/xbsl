@@ -433,3 +433,20 @@ export function vacatedDirs(renames: ScaffoldRename[]): string[] {
   }
   return [...out.values()].sort((a, b) => b.split(/[\\/]/).length - a.split(/[\\/]/).length);
 }
+
+/** The folders deleted files leave, deepest first - removed afterwards when they are empty.
+ *
+ * The twin of scaffold.emptied_dirs: nothing receives a file here, so the applier removes a
+ * folder only when it IS empty and then tries its parent, stopping at the first one that still
+ * holds anything - a resources folder whose last folder went away with its files, say.
+ */
+export function emptiedDirs(deletes: string[]): string[] {
+  const out = new Map<string, string>();
+  for (const deleted of deletes) {
+    const dir = parentDir(deleted);
+    if (!out.has(pathKey(dir))) {
+      out.set(pathKey(dir), dir);
+    }
+  }
+  return [...out.values()].sort((a, b) => b.split(/[\\/]/).length - a.split(/[\\/]/).length);
+}

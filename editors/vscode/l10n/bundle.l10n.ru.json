@@ -603,5 +603,21 @@
   "nothing selected": "ничего не выбрано",
   "{0} (partially)": "{0} (частично)",
   "{0} and {1} more": "{0} и ещё {1}",
-  "Filter: {0}": "Отбор: {0}"
+  "Filter: {0}": "Отбор: {0}",
+  "A folder name is one name, without path separators.": "Имя папки – одно имя, без разделителей пути.",
+  "Name of the new resource folder": "Имя новой папки ресурсов",
+  "Move resources into it...": "Перенести в неё ресурсы...",
+  "Add files from disk...": "Добавить файлы с диска...",
+  "An empty folder is not kept: what goes into {0} first?": "Пустая папка не хранится: что положить в {0} первым?",
+  "Resources to move into {0}": "Ресурсы, которые перенести в {0}",
+  "Add to resources": "Добавить в ресурсы",
+  "XBSL: the name {0} is taken in {1} - nothing was added.": "XBSL: имя {0} в {1} уже занято – ничего не добавлено.",
+  "(the Resources folder)": "(каталог Ресурсы)",
+  "New folder...": "Новая папка...",
+  "Where the new folder goes": "Где создать новую папку",
+  "New name of the resource folder {0}": "Новое имя папки ресурсов {0}",
+  "XBSL: renaming the resource folder {0}...": "XBSL: переименование папки ресурсов {0}...",
+  "XBSL: looking for what names {0}...": "XBSL: поиск ссылок на {0}...",
+  "XBSL: delete the resource folder {0} with its files ({1})? The places that name them are listed below and are not edited.": "XBSL: удалить папку ресурсов {0} вместе с файлами ({1})? Места, которые на них ссылаются, перечислены ниже и не правятся.",
+  "XBSL: move {0} to {1}? The resource keys that name the files are updated across the project.": "XBSL: перенести {0} в {1}? Ключи ресурсов, которые указывают на эти файлы, обновятся по всему проекту."
 }

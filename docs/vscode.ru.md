@@ -900,6 +900,11 @@ VS Code, как обычно.
 | Создать пакет | `xbsl.metadata.addPackage` | палитра команд |
 | Переименовать пакет | `xbsl.metadata.renamePackage` | палитра команд |
 | Перенести в пакет... | `xbsl.metadata.moveToPackage` | палитра команд |
+| Создать папку | `xbsl.metadata.addResourceFolder` | палитра команд |
+| Добавить файлы ресурсов... | `xbsl.metadata.addResourceFiles` | палитра команд |
+| Переместить в папку... | `xbsl.metadata.moveResource` | палитра команд |
+| Переименовать папку | `xbsl.metadata.renameResourceFolder` | палитра команд |
+| Удалить папку | `xbsl.metadata.deleteResourceFolder` | палитра команд |
 | Отбор по подсистемам и пакетам... | `xbsl.metadata.filterBySubsystem` | палитра команд |
 | Отбор по подсистемам и пакетам (установлен)... | `xbsl.metadata.editFilter` | панель / контекстное меню |
 | Сбросить отбор по подсистемам и пакетам | `xbsl.metadata.clearFilter` | палитра команд |

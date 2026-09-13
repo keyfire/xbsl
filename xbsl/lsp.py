@@ -1699,6 +1699,41 @@ def _make_server() -> "LanguageServer":
             reader=_sources_reader,
         )
 
+    # The folders of resources: the metadata tree moves a file between them, renames and deletes
+    # one. Compute only, like the rest of the family - a deletion comes back as a plan the editor
+    # shows before applying it.
+    @server.feature("xbsl/metaMoveResource")
+    @server.thread()
+    def _meta_move_resource(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_move_resource,
+            _meta_root(params),
+            Path(str(_param(params, "path"))),
+            Path(str(_param(params, "targetDir"))),
+            reader=_sources_reader,
+        )
+
+    @server.feature("xbsl/metaRenameResourceFolder")
+    @server.thread()
+    def _meta_rename_resource_folder(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_rename_resource_folder,
+            _meta_root(params),
+            Path(str(_param(params, "folderDir"))),
+            str(_param(params, "newName")),
+            reader=_sources_reader,
+        )
+
+    @server.feature("xbsl/metaDeleteResourceFolder")
+    @server.thread()
+    def _meta_delete_resource_folder(params: object) -> dict:
+        return _meta_op(
+            scaffold.op_delete_resource_folder,
+            _meta_root(params),
+            Path(str(_param(params, "folderDir"))),
+            reader=_sources_reader,
+        )
+
     # --- form designer (the structure view is a thin client of these methods) ------------
     #
     # Like the meta* family, the server only computes; the editor applies the edits via

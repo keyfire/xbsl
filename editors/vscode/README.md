@@ -916,6 +916,11 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Create package | `xbsl.metadata.addPackage` | Command Palette |
 | Rename package | `xbsl.metadata.renamePackage` | Command Palette |
 | Move to package... | `xbsl.metadata.moveToPackage` | Command Palette |
+| Create folder | `xbsl.metadata.addResourceFolder` | Command Palette |
+| Add resource files... | `xbsl.metadata.addResourceFiles` | Command Palette |
+| Move to folder... | `xbsl.metadata.moveResource` | Command Palette |
+| Rename folder | `xbsl.metadata.renameResourceFolder` | Command Palette |
+| Delete folder | `xbsl.metadata.deleteResourceFolder` | Command Palette |
 | Filter by subsystems and packages... | `xbsl.metadata.filterBySubsystem` | Command Palette |
 | Filter by subsystems and packages (active)... | `xbsl.metadata.editFilter` | panel / context menu |
 | Clear the subsystem and package filter | `xbsl.metadata.clearFilter` | Command Palette |

@@ -6,6 +6,7 @@ import * as assert from "assert";
 import {
   allPackages,
   bucketItems,
+  emptiedDirs,
   EngineProjectInfo,
   folderPlace,
   readPlacement,
@@ -154,6 +155,19 @@ test("vacatedDirs: the parents no renamed file lands in, deepest first", () => {
     vacatedDirs([{ from: "D:\\p\\Склад\\А.yaml", to: "D:\\p\\Склад\\Партии\\А.yaml" }]),
     []
   );
+});
+
+test("emptiedDirs: the folders of the deleted files, once each, deepest first", () => {
+  const deletes = [
+    "D:\\p\\Склад\\Ресурсы\\Стили\\Темные\\a.css",
+    "D:\\p\\Склад\\Ресурсы\\Стили\\b.css",
+    "d:\\P\\Склад\\Ресурсы\\Стили\\Темные\\c.css",
+  ];
+  assert.deepStrictEqual(emptiedDirs(deletes), [
+    "D:\\p\\Склад\\Ресурсы\\Стили\\Темные",
+    "D:\\p\\Склад\\Ресурсы\\Стили",
+  ]);
+  assert.deepStrictEqual(emptiedDirs([]), []);
 });
 
 console.log(`\ntotal: ${passed} ok, ${failed} fail`);
