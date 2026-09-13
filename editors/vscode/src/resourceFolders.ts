@@ -26,11 +26,13 @@ import {
   ResourceRef,
   resourceFolderTree,
   resourcePathOf,
+  ResourcesDescriptorRef,
 } from "./resourceFoldersCore";
 
 // A tree node as this module sees it: what it stands for, and its label for a prompt.
 export interface ResourceNodeLike {
   resource?: ResourceRef;
+  resourcesDescriptors?: ResourcesDescriptorRef[]; // the descriptions a click on the node opens
   label?: string | vscode.TreeItemLabel;
 }
 
@@ -39,6 +41,7 @@ export interface ResourceTreeAccess {
   rootFor(fsPath: string): string | undefined; // the root the engine looks for references under
   refresh(): void;
   requestReveal(pred: (node: ResourceNodeLike) => boolean): void;
+  openSource(fsPath: string): Promise<unknown>; // a source opens where the tree opens sources
 }
 
 // The files of a resources folder as they lie on disk: the "Move resources" pick and the move
@@ -362,8 +365,33 @@ export async function dropResources(
   return true;
 }
 
+// "Open resources description" and the click on the node of a Resources folder: the description
+// of that folder opens like a subsystem's descriptor. The Resources category of several folders
+// may carry several descriptions - then the user picks one by the folder that owns it.
+async function openDescriptor(access: ResourceTreeAccess, node?: ResourceNodeLike): Promise<void> {
+  const descriptors = node?.resourcesDescriptors ?? [];
+  if (descriptors.length < 2) {
+    if (descriptors.length) {
+      await access.openSource(descriptors[0].path);
+    }
+    return;
+  }
+  const pick = await vscode.window.showQuickPick(
+    descriptors.map((descriptor) => ({
+      label: descriptor.owner,
+      description: vscode.workspace.asRelativePath(descriptor.path),
+      path: descriptor.path,
+    })),
+    { placeHolder: vscode.l10n.t("Which resources description to open") }
+  );
+  if (pick) {
+    await access.openSource(pick.path);
+  }
+}
+
 export function registerResourceFolderCommands(context: vscode.ExtensionContext, access: ResourceTreeAccess): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand("xbsl.metadata.openResourcesDescriptor", (n?: ResourceNodeLike) => openDescriptor(access, n)),
     vscode.commands.registerCommand("xbsl.metadata.addResourceFolder", (n?: ResourceNodeLike) => createFolder(access, n)),
     vscode.commands.registerCommand("xbsl.metadata.addResourceFiles", (n?: ResourceNodeLike) => addFiles(access, n)),
     vscode.commands.registerCommand("xbsl.metadata.moveResource", (n?: ResourceNodeLike) => moveToFolder(access, n)),

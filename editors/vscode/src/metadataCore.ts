@@ -574,12 +574,23 @@ export interface ResourceFile {
 export interface ResourceScope {
   scope: string; // the folder that owns the resources dir - a subsystem or the project root
   dir: string; // the resources dir itself, in the separators of the input path
-  files: ResourceFile[];
+  files: ResourceFile[]; // the resources; the description of the folder is not one of them
+  descriptor?: string; // the description of the folder (`Ресурсы/Ресурсы.yaml`), when there is one
+}
+
+// The description of a resources folder, by its key: a yaml right in the folder, named like the
+// folder in either spelling. It sets the visibility of the whole folder - an element of the
+// project rather than a resource, so the section opens it from the folder's node instead of
+// listing it among the files. A yaml of that name in a folder inside is an ordinary file.
+export function isResourcesDescriptorKey(key: string): boolean {
+  return !key.includes("/") && RESOURCE_DIR_NAMES.some((name) => key === `${name}.yaml`);
 }
 
 // Group resource files by their owning resources folder. The tree shows each file under its
 // scope by the KEY - the exact spelling a `Ресурс{...}` reference takes, which is the whole
-// point: the section teaches the correct addressing, not just lists files.
+// point: the section teaches the correct addressing, not just lists files. The description of a
+// folder is set apart: counted nowhere, opened from the node of the folder. A folder holding the
+// description alone is still a scope - with no files.
 export function groupResources(paths: string[]): ResourceScope[] {
   const byDir = new Map<string, ResourceScope>();
   for (const filePath of paths) {
@@ -590,8 +601,13 @@ export function groupResources(paths: string[]): ResourceScope[] {
     }
     const sep = filePath.includes("\\") ? "\\" : "/";
     const dir = parts.slice(0, index + 1).join(sep);
-    const entry = byDir.get(dir) ?? { scope: parts[index - 1], dir, files: [] };
-    entry.files.push({ key: parts.slice(index + 1).join("/"), filePath });
+    const entry: ResourceScope = byDir.get(dir) ?? { scope: parts[index - 1], dir, files: [] };
+    const key = parts.slice(index + 1).join("/");
+    if (isResourcesDescriptorKey(key)) {
+      entry.descriptor = filePath;
+    } else {
+      entry.files.push({ key, filePath });
+    }
     byDir.set(dir, entry);
   }
   const scopes = [...byDir.values()];

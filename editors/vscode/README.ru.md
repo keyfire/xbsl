@@ -882,6 +882,7 @@ VS Code, как обычно.
 | Открыть описание (yaml) | `xbsl.metadata.openYaml` | палитра команд |
 | Открыть запрос (xbql) | `xbsl.metadata.openQuery` | палитра команд |
 | Открыть WSDL | `xbsl.metadata.openWsdl` | палитра команд |
+| Открыть описание ресурсов | `xbsl.metadata.openResourcesDescriptor` | палитра команд |
 | Открыть модуль (xbsl) | `xbsl.metadata.openModule` | палитра команд |
 | Открыть модуль объекта (.Объект.xbsl) | `xbsl.metadata.openObjectModule` | палитра команд |
 | Открыть в конструкторе | `xbsl.metadata.previewForm` | палитра команд |

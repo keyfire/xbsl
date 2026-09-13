@@ -81,6 +81,8 @@ import {
   resourceFolderTree,
   ResourceRef,
   resourcePathOf,
+  resourcesDescriptors,
+  ResourcesDescriptorRef,
 } from "./resourceFoldersCore";
 import { updatePropsFromSelection } from "./formProps";
 import { revealContent } from "./reveal";
@@ -633,6 +635,7 @@ class XbslNode extends vscode.TreeItem {
   stdKind?: string; // standard attribute: the object kind (Справочник/Документ)
   stdName?: string; // standard attribute: the name (Наименование/Код/Номер/Дата)
   resource?: ResourceRef; // the Resources section: the folder itself, a folder in it or a file
+  resourcesDescriptors?: ResourcesDescriptorRef[]; // a Resources folder node: the descriptions a click opens
   docsKind?: string; // category: the platform type whose docs page describes it (tooltip)
   folderDir?: string; // subsystem or package: the folder a new package and a dropped object go into
   projectDir?: string; // project root: the folder a new subsystem goes into
@@ -1066,37 +1069,61 @@ function resourceChildren(folder: ResourceFolder, dir: string): XbslNode[] {
   ];
 }
 
+// The descriptions a node of a Resources folder opens on a click, the way a subsystem opens its
+// descriptor - the arrow still expands (a tree item with a command expands on the twistie only).
+// No description - no command and no menu item, the click only expands. `dir` - the node stands
+// for that one folder, and its git statuses come from the description, or from the folder itself.
+function withResourcesDescriptors(node: XbslNode, descriptors: ResourcesDescriptorRef[], dir?: string): void {
+  if (dir !== undefined) {
+    node.resourceUri = vscode.Uri.file(descriptors[0]?.path ?? dir);
+  }
+  if (!descriptors.length) {
+    return;
+  }
+  node.resourcesDescriptors = descriptors;
+  node.contextValue = `${node.contextValue ?? ""} resdescr`.trim();
+  node.command = { command: "xbsl.metadata.openResourcesDescriptor", title: "", arguments: [node] };
+}
+
 // The folder that owns a Resources dir - a subsystem or the project root.
 function resourceScopeNode(scope: ResourceScope): XbslNode {
-  const node = new XbslNode(scope.scope, vscode.TreeItemCollapsibleState.Collapsed);
+  const children = resourceChildren(resourceFolderTree(scope.files), scope.dir);
+  const node = new XbslNode(
+    scope.scope,
+    children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+  );
   node.iconPath = neutralIcon("symbol-folder"); // the Resources folder of that subsystem
   node.description = String(scope.files.length);
   node.resource = { dir: scope.dir, path: "", folder: true };
   node.contextValue = "xbslResourceScope addresfolder";
-  node.children = resourceChildren(resourceFolderTree(scope.files), scope.dir);
+  node.children = children;
+  withResourcesDescriptors(node, resourcesDescriptors([scope]), scope.dir);
   return node;
 }
 
 function resourcesCategoryNode(paths: string[]): XbslNode {
   const scopes = groupResources(paths);
   const total = scopes.reduce((sum, scope) => sum + scope.files.length, 0);
+  // A single scope loses the extra level: a small project has one Resources folder, and the
+  // scope node would repeat what the project root already says. The category then stands for
+  // that folder - a new folder and new files go into it, a click opens its description.
+  const single = scopes.length === 1;
+  const children = single
+    ? resourceChildren(resourceFolderTree(scopes[0].files), scopes[0].dir)
+    : scopes.map(resourceScopeNode);
   const node = new XbslNode(
     vscode.l10n.t(RESOURCES_GROUP),
-    total ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+    children.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
   );
   node.iconPath = neutralIcon("file-media");
   node.description = String(total);
   node.contextValue = "xbslCategory xbslResources";
-  // A single scope loses the extra level: a small project has one Resources folder, and the
-  // scope node would repeat what the project root already says. The category then stands for
-  // that folder - a new folder and new files go into it.
-  if (scopes.length === 1) {
+  if (single) {
     node.resource = { dir: scopes[0].dir, path: "", folder: true };
     node.contextValue += " addresfolder";
-    node.children = resourceChildren(resourceFolderTree(scopes[0].files), scopes[0].dir);
-  } else {
-    node.children = scopes.map(resourceScopeNode);
   }
+  node.children = children;
+  withResourcesDescriptors(node, resourcesDescriptors(scopes), single ? scopes[0].dir : undefined);
   return node;
 }
 
@@ -2858,6 +2885,7 @@ function resourceTreeAccess(provider: XbslMetadataProvider): ResourceTreeAccess 
     rootFor: (fsPath) => provider.rootFor(fsPath),
     refresh: () => provider.refresh(),
     requestReveal: (pred) => provider.requestReveal(pred),
+    openSource: (fsPath) => openFile(fsPath),
   };
 }
 
