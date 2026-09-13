@@ -202,6 +202,145 @@ def query_aliases(source: SourceFile, offset: int) -> dict[str, str]:
     return dict(query_alias_pairs(query_block_tokens(source, span)))
 
 
+@lru_cache(maxsize=1)
+def _query_vocabulary() -> frozenset[str]:
+    """Every single word of the query vocabulary, upper-cased, in both spellings.
+
+    A bare word after a table is its alias only when it is none of these: `ИЗ Заказы З, ...`
+    against `ИЗ Заказы ГДЕ ...`. One-letter entries stay out - `Т` is a word of the vocabulary
+    and the most common alias at once, and taking it for a keyword would only end the reading
+    of a comma list early.
+    """
+    words: set[str] = set()
+    for english, others in (*_query_spellings().items(), *_QUERY_FALLBACK.items()):
+        for phrase in (english, *others):
+            words.update(word for word in phrase.upper().split() if len(word) > 1)
+    return frozenset(words)
+
+
+dataset.register_reset(_query_spellings.cache_clear)
+dataset.register_reset(query_words.cache_clear)
+dataset.register_reset(_query_vocabulary.cache_clear)
+
+
+def _query_table_at(block: list[Token], j: int) -> tuple[tuple[list[Token], list[Token]] | None, int]:
+    """The table expression that starts at block[j] and the index right after it.
+
+    Returns (qualifiers, segments) - `Склад::Партии::Заказы.Товары` gives the qualifiers
+    `Склад`, `Партии` and the segments `Заказы`, `Товары` - or None when no name stands there.
+    The parameters of a virtual table (`BatchPrices.SliceLast(&Period)`) are skipped over.
+    """
+    n = len(block)
+    if j >= n or block[j].kind not in WORD_KINDS or block[j].value.upper() in _query_vocabulary():
+        return None, j
+    qualifiers: list[Token] = []
+    segments = [block[j]]
+    j += 1
+    while (j + 1 < n and block[j].kind == "OP" and block[j].value == "::"
+           and block[j + 1].kind in WORD_KINDS):
+        qualifiers.append(segments.pop())
+        segments.append(block[j + 1])
+        j += 2
+    while (j + 1 < n and block[j].kind == "OP" and block[j].value == "."
+           and block[j + 1].kind in WORD_KINDS):
+        segments.append(block[j + 1])
+        j += 2
+    if j < n and block[j].kind == "OP" and block[j].value == "(":
+        depth = 0
+        while j < n:
+            if block[j].kind == "OP" and block[j].value == "(":
+                depth += 1
+            elif block[j].kind == "OP" and block[j].value == ")":
+                depth -= 1
+                if depth == 0:
+                    j += 1
+                    break
+            j += 1
+    return (qualifiers, segments), j
+
+
+def query_tables(source: SourceFile) -> list[tuple[list[Token], list[Token]]]:
+    """Every table the queries of a file read, in order: (the `::` qualifiers, the segments).
+
+    A table is the name after FROM/JOIN, in either spelling, and every further item of a comma
+    list of FROM (`FROM Orders AS O, Batches B`). What stands in the table position without
+    being a name - a subquery, a parameter (`&Collection`, `%Source`) - is not a table and is
+    passed over; the FROM of the subquery is read in its own turn. A comma after a join
+    condition (`... ON True, Batches`) is not followed: telling where a condition ends needs
+    more than tokens, and the documentation advises a join over a comma list anyway.
+    Unlike the reading of query/unknown-table no construct silences a block: a union or a
+    temporary table does not change what the name of a project table names. A standalone query
+    file is one block (see query_ranges). Cached on the source.
+    """
+    cached = source.cache.get("query_tables")
+    if cached is not None:
+        return cached
+    intro = query_table_intro()
+    alias_intro = query_alias_intro()
+    vocabulary = _query_vocabulary()
+    out: list[tuple[list[Token], list[Token]]] = []
+    for span in query_ranges(source):
+        block = query_block_tokens(source, span)
+        n = len(block)
+        i = 0
+        while i < n:
+            if not (block[i].kind in WORD_KINDS and block[i].value.upper() in intro):
+                i += 1
+                continue
+            j = i + 1
+            while True:
+                table, j = _query_table_at(block, j)
+                if table is None:
+                    break
+                out.append(table)
+                if (j + 1 < n and block[j].kind in WORD_KINDS
+                        and block[j].value.upper() in alias_intro
+                        and block[j + 1].kind in WORD_KINDS):
+                    j += 2
+                elif (j < n and block[j].kind in WORD_KINDS
+                      and block[j].value.upper() not in vocabulary):
+                    j += 1  # an alias written without AS
+                if j < n and block[j].kind == "OP" and block[j].value == ",":
+                    j += 1
+                    continue
+                break
+            i = max(j, i + 1)
+    source.cache["query_tables"] = out
+    return out
+
+
+def query_temporary_tables(source: SourceFile) -> frozenset[str]:
+    """The names the queries of a file give to temporary tables.
+
+    The name after INTO, after CREATE TEMPORARY TABLE and after DROP, in either spelling. A
+    temporary table is read by the short name in the queries of the whole module (the
+    documentation page on the query literal), not only in the block that fills it, so the set is
+    the file's. `INSERT INTO` shares the English word INTO with the clause that fills a temporary
+    table, and the table it names lands here as well - for a caller that subtracts the set that
+    only means one name less to judge.
+    """
+    cached = source.cache.get("query_temporary_tables")
+    if cached is not None:
+        return cached
+    phrases = [tuple(spelling.split())
+               for spelling in query_words("INTO", "CREATE TEMPORARY TABLE", "DROP")]
+    names: set[str] = set()
+    for span in query_ranges(source):
+        words = [t for t in query_block_tokens(source, span)]
+        for i in range(len(words)):
+            for phrase in phrases:
+                end = i + len(phrase)
+                if end >= len(words):
+                    continue
+                if all(words[i + k].kind in WORD_KINDS and words[i + k].value.upper() == part
+                       for k, part in enumerate(phrase)):
+                    if words[end].kind in WORD_KINDS:
+                        names.add(words[end].value)
+    result = frozenset(names)
+    source.cache["query_temporary_tables"] = result
+    return result
+
+
 def _query_columns(toks: list[Token], start: int, end: int) -> list[str]:
     """Column names of the query block [start, end): the `КАК Имя` alias or the last segment
     of a plain field chain (`А.Заголовок` -> `Заголовок`). Computed columns without an alias
