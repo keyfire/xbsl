@@ -93,6 +93,7 @@ from . import (  # noqa: F401
     type_defaults,
     duplicate_bodies,
     unknown_members,
+    unused_imports,
     unused_methods,
     url_params,
     access_control,

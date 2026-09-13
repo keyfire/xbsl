@@ -6,25 +6,9 @@ the consumer's subsystem declares Б in its `Использование`. One ru
 yaml/foreign-not-public and code/foreign-not-public for the first (the markup and the module
 reach the element from two places), yaml/missing-import and code/missing-import for the
 second (the yaml and the code of one element import separately), yaml/missing-subsystem-usage
-for the third. code/unused-import is the odd one out - it looks the other way, at an import
-nothing needs.
-
-code/unused-import is the mirror of code/missing-import: a module declares
-`импорт <Подсистема>` while nothing in its CODE resolves through it. The platform's own
-editor reports such imports, the linter did not, and they accumulate - a subsystem is
-imported "just in case", the code that needed it is rewritten, the line stays.
-
-What counts as a use is deliberately narrow: a name of an element of that subsystem
-appearing as an identifier anywhere in the module - a type position, a call, a namespace
-qualifier. The rule errs towards silence by design, and both ways it can be wrong are
-harmless: a local name that happens to match an element of the imported subsystem reads as
-a use (the import is kept, no false report), and a qualified reference `Подсистема::Элемент`
-mentions the element too, though such a reference needs no import at all.
-
-The PAIRED yaml is NOT a use: its own `Импорт:` section covers its type positions, and the
-module import does not extend to it - the live case that prompted the rule is exactly this
-shape (a module importing a subsystem only its yaml refers to, with the yaml importing it
-on its own).
+for the third. The mirror of the import rules - an import nothing needs, code/unused-import -
+lives in xbsl.rules.unused_imports on the same placement model: it reads what the compiler
+resolves rather than what the module spells, and that takes a module of its own.
 
 yaml/missing-import wants a public foreign element to be imported; yaml/foreign-not-public
 wants the foreign element to be public at all (see its own docstring). Together they cover
@@ -150,7 +134,7 @@ from xbsl.rules._syntax import query_tables, query_temporary_tables
 from xbsl.rules.enum_values import _binding_values, _name_values
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.undefined_names import _IMPLICIT
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, unreadable_object, value_of
+from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_types import (
     _key_spellings,
     _parse_type_string,
@@ -159,26 +143,6 @@ from xbsl.rules.yaml_types import (
 )
 
 MESSAGES = {
-    "code/unused-import.title": {
-        "ru": "Неиспользуемый импорт подсистемы",
-        "en": "Unused subsystem import",
-    },
-    "code/unused-import.unused": {
-        "ru": "Импорт пространства имён '{sub}' не используется: ни один его элемент в коде "
-              "модуля не упомянут. Ссылки ПАРНОГО yaml импорт модуля не покрывает – у yaml "
-              "своя секция Импорт. Строку можно снять.",
-        "en": "The import of namespace '{sub}' is unused: no element of it is mentioned in "
-              "the module code. References of the PAIRED yaml are not covered by a module "
-              "import - the yaml has an {n[Импорт]} section of its own. The line can go.",
-    },
-    "code/unused-import.packages": {
-        "ru": "Импорт подсистемы '{sub}' не используется: код модуля упоминает только "
-              "элементы её пакетов ({packages}), а они через 'импорт {sub}' не приходят – "
-              "у пакета своя строка импорта. Строку можно снять.",
-        "en": "The import of subsystem '{sub}' is unused: the module code mentions only "
-              "elements of its packages ({packages}), and those do not come through "
-              "`{n[импорт]} {sub}` - a package has an import line of its own. The line can go.",
-    },
     "code/missing-import.title": {
         "ru": "Нет импорта подсистемы в модуле",
         "en": "Missing subsystem import in a module",
@@ -406,9 +370,6 @@ _INTERPOLATION_OPEN = re.compile(r"[%$]\{")
 
 #: A string nested inside an interpolation expression: its text is not names.
 _NESTED_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
-
-#: Any identifier of an interpolation expression.
-_INTERPOLATION_IDENT = re.compile(r"[^\W\d]\w*")
 
 #: The root of a dotted chain inside an interpolation expression: the shape of
 #: `_BINDING_CHAIN`, and neither a member of a longer chain nor the tail of a qualified name.
@@ -948,132 +909,6 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             )
 
 
-# --- code/unused-import -------------------------------------------------------------------
-
-
-def _unused_import_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a descriptor contributes its place in the layout, an element yaml its
-    name and path, a module its import lines (with positions) and the identifiers of its
-    code."""
-    if source.kind == "yaml":
-        if not _HAVE_YAML:
-            return None
-        if (fact := _layout_fact(source)) is not None:
-            return fact
-        data, err = _parsed(source)
-        if err is not None:
-            # The file did not parse, but the element it declares still lives in this
-            # subsystem: dropping it makes an import of the subsystem read as unused.
-            unread = unreadable_object(source)
-            return {"k": "el", "path": str(source.path), "name": unread} if unread else None
-        if not isinstance(data, dict) or not object_kind(data):
-            return None
-        name = value_of(data, "Имя")
-        return {"k": "el", "path": str(source.path),
-                "name": name if isinstance(name, str) else source.path.stem}
-    if source.kind != "xbsl":
-        return None
-    toks = tokens(source)
-    imports = _module_imports(toks)
-    if not imports:
-        return None
-    idents = {tok.value for tok in toks if tok.kind == "IDENT"}
-    # A name inside `%{...}` of a string is a use as well. Every word of the expression counts,
-    # nested strings included: here a word too many only keeps an import, never reports one.
-    for tok in toks:
-        if tok.kind == "STRING":
-            for _offset, body in _interpolation_bodies(tok.value, blank_strings=False):
-                idents.update(_INTERPOLATION_IDENT.findall(body))
-    return {"k": "mod", "path": str(source.path), "imports": imports,
-            "idents": sorted(idents), "bare_resources": _has_bare_resource(toks)}
-
-
-@lru_cache(maxsize=1)
-def _resource_words() -> frozenset[str]:
-    """Both spellings of the resource literal `Resource{...}`."""
-    return frozenset(terms.key_forms("Ресурс"))
-
-
-dataset.register_reset(_resource_words.cache_clear)
-
-
-def _has_bare_resource(toks: Sequence[Token]) -> bool:
-    """Whether a resource literal of the module names its file by a key without a namespace.
-
-    The documentation lets a module reach a resource of another subsystem through an import of
-    that subsystem, so such a key may be what an import of a subsystem serves.
-    """
-    for i, tok in enumerate(toks[:-1]):
-        if tok.kind != "IDENT" or tok.value not in _resource_words():
-            continue
-        if not (toks[i + 1].kind == "OP" and toks[i + 1].value == "{"):
-            continue
-        for inner in toks[i + 2:]:
-            if inner.kind == "OP" and inner.value == "}":
-                return True
-            if inner.kind == "OP" and inner.value == "::":
-                break
-    return False
-
-
-@rule(
-    "code/unused-import", "code/unused-import.title", "D",
-    scope="project", severity=Severity.WARNING, mapper=_unused_import_mapper,
-)
-def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
-    """A module imports a namespace whose elements its code never mentions.
-
-    The namespace is a placement key - a subsystem root (`импорт Б`) or a package
-    (`импорт Б::П`) - and each is judged by the elements it owns itself: an import of the
-    subsystem does not bring the elements of its packages, so a module that mentions only
-    those has no use for `импорт Б` and is told which package imports carry the names
-    instead. A namespace the project does not own (a library, another project, a typo) is
-    not this rule's case.
-
-    A subsystem whose root keeps no element at all is still a namespace of the project - its
-    packages or its descriptor make it known - and an import of it serves nothing, the usual
-    state once every element of a subsystem has moved into packages. The one thing such an
-    import may still bring is a resource of that subsystem named by a bare key, so a module
-    with a `Resource{...}` literal of that shape is not judged there.
-    """
-    layout = _layout_from(facts)
-    if not layout.known:
-        return  # no descriptor at all - the project layout is unknown, nothing to judge
-    owned: dict[str, set[str]] = {}  # placement key -> the names of its elements
-    for fact in facts.values():
-        if fact["k"] != "el":
-            continue
-        place = layout.place(Path(fact["path"]))
-        if place is not None:
-            owned.setdefault(place.key, set()).add(fact["name"])
-    subsystems = {subsystem_of_key(key) for key in owned} | set(layout.subsystem_names.values())
-    for rel, fact in facts.items():
-        if fact["k"] != "mod":
-            continue
-        idents = set(fact["idents"])
-        project_dir = layout.project_dir_of(Path(fact["path"]))
-        for written, line, col in fact["imports"]:
-            key = layout.local_name(written, project_dir)
-            elements = owned.get(key)
-            if elements is None:
-                if key not in subsystems or fact.get("bare_resources"):
-                    continue  # an unknown namespace (a library, a typo) - not this rule's case
-                elements = set()  # a subsystem with nothing at its root
-            if elements & idents:
-                continue
-            packages = sorted(
-                other for other, names in owned.items()
-                if other.startswith(key + "::") and names & idents
-            )
-            if packages:
-                message = i18n.t("code/unused-import.packages", sub=written,
-                                 packages=", ".join(packages))
-            else:
-                message = i18n.t("code/unused-import.unused", sub=written)
-            yield Diagnostic(rel, line, col, "code/unused-import", Severity.WARNING, message,
-                             data={"namespace": key})
-
-
 # --- code/missing-import ------------------------------------------------------------------
 
 
@@ -1219,11 +1054,11 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     """A module names a type of ANOTHER subsystem without importing its namespace - the
     compiler refuses.
 
-    The mirror of code/unused-import, and the mirror is where the care goes: there a name that
-    merely COINCIDES with an element of the imported namespace keeps the import and costs
-    nothing, here the same coincidence would be a false report. So the two rules do not read
-    the module the same way. That one takes every identifier; this one takes only the roots of
-    types WRITTEN DOWN in a type position, where a name can be nothing else.
+    The mirror of code/unused-import, and the mirror is where the care goes: there a name the
+    compiler looks up in the imported namespace keeps the import and costs nothing, here a name
+    that merely COINCIDES with an element would be a false report. So the two rules do not read
+    the module the same way. That one follows every lookup the binder makes; this one takes only
+    the roots of types WRITTEN DOWN in a type position, where a name can be nothing else.
 
     The root of a chain (`Модуль.Метод()`) is judged too, and everything that can explain such
     a bare name is subtracted first: the names the method introduces (parameters, variables,
