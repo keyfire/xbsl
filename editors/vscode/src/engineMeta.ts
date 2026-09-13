@@ -12,7 +12,7 @@ import * as fs from "fs";
 import * as vscode from "vscode";
 import { lspActive, lspRequest } from "./lspClient";
 import { pipInstallCommand, runInstallTask } from "./installer";
-import { EngineProjectInfo, ScaffoldRename, scaffoldSteps, vacatedDirs } from "./packagesCore";
+import { emptiedDirs, EngineProjectInfo, parentDir, ScaffoldRename, scaffoldSteps, vacatedDirs } from "./packagesCore";
 
 export interface ScaffoldFile {
   path: string;
@@ -170,8 +170,8 @@ export async function engineProjectInfo(root: string): Promise<EngineProjectInfo
 
 // Applying the result in ONE WorkspaceEdit (reversible via undo): the renames, then new files
 // and full replacements of edited ones, then deletions - the order of the engine's own
-// apply_result (see scaffoldSteps). A folder the renames emptied is removed afterwards. Returns
-// the affected paths.
+// apply_result (see scaffoldSteps). A folder the renames or the deletions emptied is removed
+// afterwards. Returns the affected paths.
 export async function applyScaffold(result: ScaffoldResult): Promise<string[]> {
   if (result.error) {
     void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: {0}", result.error));
@@ -211,6 +211,20 @@ export async function applyScaffold(result: ScaffoldResult): Promise<string[]> {
       }
     } catch {
       // gone already, or not empty after all - either way nothing to remove
+    }
+  }
+  // A deletion has no folder that receives a file, so the walk goes up from each emptied folder
+  // while the folder it reaches is empty (a resources folder whose last folder was deleted).
+  for (const start of emptiedDirs(result.deletes ?? [])) {
+    for (let dir = start, prev = ""; dir !== prev; prev = dir, dir = parentDir(dir)) {
+      try {
+        if ((await fs.promises.readdir(dir)).length !== 0) {
+          break;
+        }
+        await fs.promises.rmdir(dir);
+      } catch {
+        break; // gone already (a deeper start removed it), or out of reach
+      }
     }
   }
   for (const note of result.notes ?? []) {

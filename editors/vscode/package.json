@@ -518,6 +518,35 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.metadata.addResourceFolder",
+        "title": "%cmd.metadata.addResourceFolder%",
+        "category": "XBSL",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "xbsl.metadata.addResourceFiles",
+        "title": "%cmd.metadata.addResourceFiles%",
+        "category": "XBSL",
+        "icon": "$(add)"
+      },
+      {
+        "command": "xbsl.metadata.moveResource",
+        "title": "%cmd.metadata.moveResource%",
+        "category": "XBSL"
+      },
+      {
+        "command": "xbsl.metadata.renameResourceFolder",
+        "title": "%cmd.metadata.renameResourceFolder%",
+        "category": "XBSL",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "xbsl.metadata.deleteResourceFolder",
+        "title": "%cmd.metadata.deleteResourceFolder%",
+        "category": "XBSL",
+        "icon": "$(trash)"
+      },
+      {
         "command": "xbsl.metadata.filterBySubsystem",
         "title": "%cmd.metadata.filterBySubsystem%",
         "category": "XBSL",
@@ -1399,6 +1428,36 @@
           "command": "xbsl.metadata.moveToPackage",
           "when": "view == xbslMetadata && viewItem =~ /\\bmovable\\b/",
           "group": "4_edit@1"
+        },
+        {
+          "command": "xbsl.metadata.addResourceFolder",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddresfolder\\b/",
+          "group": "inline"
+        },
+        {
+          "command": "xbsl.metadata.addResourceFolder",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddresfolder\\b/",
+          "group": "1_add@1"
+        },
+        {
+          "command": "xbsl.metadata.addResourceFiles",
+          "when": "view == xbslMetadata && viewItem =~ /\\baddresfolder\\b/",
+          "group": "1_add@2"
+        },
+        {
+          "command": "xbsl.metadata.moveResource",
+          "when": "view == xbslMetadata && viewItem =~ /\\bmovableres\\b/",
+          "group": "4_edit@1"
+        },
+        {
+          "command": "xbsl.metadata.renameResourceFolder",
+          "when": "view == xbslMetadata && viewItem =~ /\\bresfolder\\b/",
+          "group": "4_edit@2"
+        },
+        {
+          "command": "xbsl.metadata.deleteResourceFolder",
+          "when": "view == xbslMetadata && viewItem =~ /\\bresfolder\\b/",
+          "group": "9_delete@1"
         },
         {
           "command": "xbsl.metadata.addSubsystem",

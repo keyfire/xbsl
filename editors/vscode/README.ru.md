@@ -874,6 +874,11 @@ VS Code, как обычно.
 | Создать пакет | `xbsl.metadata.addPackage` | палитра команд |
 | Переименовать пакет | `xbsl.metadata.renamePackage` | палитра команд |
 | Перенести в пакет... | `xbsl.metadata.moveToPackage` | палитра команд |
+| Создать папку | `xbsl.metadata.addResourceFolder` | палитра команд |
+| Добавить файлы ресурсов... | `xbsl.metadata.addResourceFiles` | палитра команд |
+| Переместить в папку... | `xbsl.metadata.moveResource` | палитра команд |
+| Переименовать папку | `xbsl.metadata.renameResourceFolder` | палитра команд |
+| Удалить папку | `xbsl.metadata.deleteResourceFolder` | палитра команд |
 | Отбор по подсистеме | `xbsl.metadata.filterBySubsystem` | палитра команд |
 | Снять отбор по подсистеме | `xbsl.metadata.clearFilter` | палитра команд |
 | Группировка дерева (по классам / по подсистемам) | `xbsl.metadata.groupMode` | палитра команд |

@@ -1355,6 +1355,112 @@ def meta_rename_package(
 
 
 @mcp.tool()
+def meta_move_resource(
+    root: str,
+    resource_path: str,
+    target_dir: str,
+    dry_run: bool = False,
+) -> dict:
+    """Move a resource file - or a folder of them - into another folder of its `Resources` folder.
+
+    resource_path – a file or a folder inside the `Resources` folder of a subsystem or a package;
+    target_dir – that `Resources` folder itself or a folder in it (a folder that does not exist
+    yet is created: the platform keeps no empty folder, so a folder starts with its first file).
+    A resource is addressed by its path under the folder, so the move rewrites the static
+    references that resolve to the moved files: `Resource{Old/file.svg}` literals of modules and
+    yaml bindings and the bare values of image properties, with a namespace
+    (`Subsystem::Old/file.svg`) or without one - a bare key from the subsystem itself or from a
+    file importing it. A key two visible folders hold is named in notes rather than rewritten.
+    String literals that spell the old path (`ResourcesPackage.Current().Get("Old/...")`) are
+    resolved at run time and are listed in notes by file and line, never edited. Refused: a
+    target in the `Resources` folder of another subsystem or package (the file would change its
+    namespace, and a lookup by a string in the old place has nothing to rewrite), a taken name,
+    the resources description `Resources.yaml`.
+    root – the caller's project or repository root (absolute): references are looked for under
+    it, relative paths resolve against it, and the answer names it as `root`. dry_run=true
+    returns the plan (renames, files, notes) without writing.
+
+    See also: meta_rename_resource_folder renames a folder, meta_delete_resource_folder removes
+    one, meta_move_object moves a configuration object.
+    """
+    base = _base(root)
+    try:
+        result = scaffold.op_move_resource(
+            base, _under(base, resource_path), _under(base, target_dir),
+        )
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    if dry_run:
+        return _absolute(result.as_dict(content=False), base)
+    return _apply_and_lint(result, base)
+
+
+@mcp.tool()
+def meta_rename_resource_folder(
+    root: str,
+    folder_dir: str,
+    new_name: str,
+    dry_run: bool = False,
+) -> dict:
+    """Rename a folder inside a `Resources` folder: every file under it and every key naming one.
+
+    folder_dir – a folder inside the `Resources` folder of a subsystem or a package (the
+    `Resources` folder itself is refused); new_name – the new folder name, a segment of the keys.
+    The files move under the new name, the static references that resolve to them are
+    rewritten (the same reading as meta_move_resource), and the string literals that spell the
+    old path are listed in notes by file and line - a lookup by a computed string is left to
+    the author. Notes remind of the translation dictionary pair a new Cyrillic name needs when
+    the project has a dictionary.
+    root – the caller's project or repository root (absolute); relative paths resolve against
+    it, and the answer names it as `root`. dry_run=true returns the plan without writing.
+
+    See also: meta_move_resource moves a resource into a folder, meta_delete_resource_folder
+    removes a folder, meta_rename_package renames a package.
+    """
+    base = _base(root)
+    try:
+        result = scaffold.op_rename_resource_folder(base, _under(base, folder_dir), new_name)
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    if dry_run:
+        return _absolute(result.as_dict(content=False), base)
+    return _apply_and_lint(result, base)
+
+
+@mcp.tool()
+def meta_delete_resource_folder(
+    root: str,
+    folder_dir: str,
+    dry_run: bool = True,
+) -> dict:
+    """Delete a folder inside a `Resources` folder with every file under it.
+
+    Nothing is rewritten: the static references that resolve to the deleted files
+    (`Resource{...}` literals, bare values of image properties) and the string literals that spell
+    the folder's path are listed in notes by file and line - which one is dead code is the
+    author's call. The folder goes away with its last file. Deletion is irreversible, so
+    dry_run defaults to TRUE - the first call returns the plan; repeat with dry_run=false to
+    perform it.
+    root – the caller's project or repository root (absolute); relative paths resolve against
+    it, and the answer names it as `root`.
+
+    See also: meta_rename_resource_folder when the folder stays under another name,
+    meta_delete_object removes a configuration object.
+    """
+    base = _base(root)
+    try:
+        result = scaffold.op_delete_resource_folder(base, _under(base, folder_dir))
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    if dry_run:
+        payload = _absolute(result.as_dict(content=False), base)
+        payload["dry-run"] = True
+        return payload
+    scaffold.apply_result(result)
+    return _absolute(result.as_dict(content=False), base)
+
+
+@mcp.tool()
 @_documents_root
 def meta_add_subsystem(
     parent_dir: str,

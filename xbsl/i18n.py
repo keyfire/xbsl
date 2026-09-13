@@ -1175,6 +1175,51 @@ _CORE_MESSAGES = {
         "ru": "новое имя пакета – идентификатор",
         "en": "the new package name - an identifier",
     },
+    "cli.help.scaf.move-resource": {
+        "ru": "перенести файл ресурса или папку в другую папку того же каталога Ресурсы "
+              "(несуществующая папка создаётся): ключи Ресурс{{...}} и значения свойств-картинок, "
+              "которые указывают на перенесённые файлы, переписываются, обращения по строке "
+              "перечисляются в заметках; см. также rename-resource-folder – переименовать папку",
+        "en": "move a resource file or a folder into another folder of the same Resources folder "
+              "(a missing folder is created): the Resource{{...}} keys and the image property "
+              "values naming the moved files are rewritten, the lookups by a string are listed "
+              "in the notes; see also rename-resource-folder, which renames a folder",
+    },
+    "cli.help.scaf.mr-path": {
+        "ru": "файл ресурса или папка внутри каталога Ресурсы подсистемы или пакета",
+        "en": "a resource file or a folder inside the Resources folder of a subsystem or a "
+              "package",
+    },
+    "cli.help.scaf.mr-target": {
+        "ru": "папка назначения в том же каталоге Ресурсы или сам этот каталог",
+        "en": "the target folder in the same Resources folder, or that folder itself",
+    },
+    "cli.help.scaf.rename-resource-folder": {
+        "ru": "переименовать папку внутри каталога Ресурсы: файлы переносятся, ключи Ресурс{{...}}, "
+              "которые на них указывают, переписываются по проекту, обращения по строке "
+              "перечисляются в заметках; см. также move-resource – перенести ресурс в папку, "
+              "delete-resource-folder – удалить папку",
+        "en": "rename a folder inside a Resources folder: the files move, the Resource{{...}} keys "
+              "naming them are rewritten across the project, the lookups by a string are listed "
+              "in the notes; see also move-resource, which moves a resource into a folder, and "
+              "delete-resource-folder",
+    },
+    "cli.help.scaf.rrf-folder": {
+        "ru": "папка внутри каталога Ресурсы подсистемы или пакета",
+        "en": "a folder inside the Resources folder of a subsystem or a package",
+    },
+    "cli.help.scaf.rrf-new": {
+        "ru": "новое имя папки – оно становится частью ключа ресурса",
+        "en": "the new folder name - it becomes a part of the resource key",
+    },
+    "cli.help.scaf.delete-resource-folder": {
+        "ru": "удалить папку внутри каталога Ресурсы со всеми файлами и перечислить ключи "
+              "Ресурс{{...}} и обращения по строке, которые на них указывают; без --apply – только "
+              "план; см. также rename-resource-folder – переименовать вместо удаления",
+        "en": "delete a folder inside a Resources folder with every file and list the "
+              "Resource{{...}} keys and the lookups by a string naming them; without --apply - the "
+              "plan only; see also rename-resource-folder, which renames instead of removing",
+    },
     "cli.help.scaf.delete-object": {
         "ru": "удалить объект целиком (пара yaml+xbsl, формы, строка списка) и перечислить "
               "оставшиеся упоминания; без --apply – только план; см. также rename-object – "

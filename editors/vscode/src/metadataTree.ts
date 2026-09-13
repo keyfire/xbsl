@@ -45,6 +45,15 @@ import {
 } from "./metadataCore";
 import { formPathOfModule } from "./formDesignerCore";
 import { resourcePreviewHtml } from "./resourcePreviewCore";
+import { dropResources, registerResourceFolderCommands, ResourceTreeAccess } from "./resourceFolders";
+import {
+  isMovableResource,
+  lastSegment,
+  ResourceFolder,
+  resourceFolderTree,
+  ResourceRef,
+  resourcePathOf,
+} from "./resourceFoldersCore";
 import { updatePropsFromSelection } from "./formProps";
 import { revealContent } from "./reveal";
 
@@ -582,6 +591,7 @@ class XbslNode extends vscode.TreeItem {
   codeKind?: boolean; // code kind (module/HTTP service): click opens the module on the left
   stdKind?: string; // standard attribute: the object kind (Справочник/Документ)
   stdName?: string; // standard attribute: the name (Наименование/Код/Номер/Дата)
+  resource?: ResourceRef; // the Resources section: the folder itself, a folder in it or a file
   docsKind?: string; // category: the platform type whose docs page describes it (tooltip)
   folderDir?: string; // subsystem or package: the folder a new package and a dropped object go into
   projectDir?: string; // project root: the folder a new subsystem goes into
@@ -899,14 +909,16 @@ function categoryNode(group: string, icon: string, children: XbslNode[], createK
   return node;
 }
 
-// A resource file is shown by its KEY - the exact spelling a `Ресурс{...}` reference takes,
-// so the section teaches the correct addressing rather than just lists files.
-function resourceFileNode(file: ResourceFile): XbslNode {
-  const node = new XbslNode(file.key, vscode.TreeItemCollapsibleState.None);
+// A resource file under its folder (resourceFoldersCore): the name is the label, and the tooltip
+// is the KEY - the exact spelling a `Resource{...}` reference takes, so the section still teaches
+// the addressing. The description of the resources stays where it is and is not movable.
+function resourceFileNode(file: ResourceFile, dir: string): XbslNode {
+  const node = new XbslNode(lastSegment(file.key), vscode.TreeItemCollapsibleState.None);
   node.iconPath = neutralIcon("file-media");
   node.resourceUri = vscode.Uri.file(file.filePath); // git statuses; the icon stays ours
   node.tooltip = `Ресурс{${file.key}}`;
-  node.contextValue = "xbslResource";
+  node.resource = { dir, path: file.key, folder: false };
+  node.contextValue = isMovableResource(node.resource) ? "xbslResource movableres" : "xbslResource";
   // An svg goes to our own preview: the project's icons are fill="currentColor", and a
   // standalone viewer paints them black - invisible on a dark canvas. Other images open
   // with the editor's own viewers.
@@ -916,13 +928,35 @@ function resourceFileNode(file: ResourceFile): XbslNode {
   return node;
 }
 
+// A folder inside a Resources folder: its folders, then its files; the number of files under it
+// in the description, the way a package counts its objects.
+function resourceFolderNode(folder: ResourceFolder, dir: string): XbslNode {
+  const node = new XbslNode(folder.name, vscode.TreeItemCollapsibleState.Collapsed);
+  node.iconPath = neutralIcon("folder");
+  node.description = String(folder.count);
+  node.resource = { dir, path: folder.path, folder: true };
+  node.resourceUri = vscode.Uri.file(resourcePathOf(node.resource)); // git statuses of the folder
+  node.tooltip = folder.path;
+  node.contextValue = "xbslResourceFolder resfolder addresfolder movableres";
+  node.children = resourceChildren(folder, dir);
+  return node;
+}
+
+function resourceChildren(folder: ResourceFolder, dir: string): XbslNode[] {
+  return [
+    ...folder.folders.map((nested) => resourceFolderNode(nested, dir)),
+    ...folder.files.map((file) => resourceFileNode(file, dir)),
+  ];
+}
+
 // The folder that owns a Resources dir - a subsystem or the project root.
 function resourceScopeNode(scope: ResourceScope): XbslNode {
   const node = new XbslNode(scope.scope, vscode.TreeItemCollapsibleState.Collapsed);
   node.iconPath = neutralIcon("symbol-namespace");
   node.description = String(scope.files.length);
-  node.contextValue = "xbslResourceScope";
-  node.children = scope.files.map(resourceFileNode);
+  node.resource = { dir: scope.dir, path: "", folder: true };
+  node.contextValue = "xbslResourceScope addresfolder";
+  node.children = resourceChildren(resourceFolderTree(scope.files), scope.dir);
   return node;
 }
 
@@ -937,9 +971,15 @@ function resourcesCategoryNode(paths: string[]): XbslNode {
   node.description = String(total);
   node.contextValue = "xbslCategory xbslResources";
   // A single scope loses the extra level: a small project has one Resources folder, and the
-  // scope node would repeat what the project root already says.
-  node.children =
-    scopes.length === 1 ? scopes[0].files.map(resourceFileNode) : scopes.map(resourceScopeNode);
+  // scope node would repeat what the project root already says. The category then stands for
+  // that folder - a new folder and new files go into it.
+  if (scopes.length === 1) {
+    node.resource = { dir: scopes[0].dir, path: "", folder: true };
+    node.contextValue += " addresfolder";
+    node.children = resourceChildren(resourceFolderTree(scopes[0].files), scopes[0].dir);
+  } else {
+    node.children = scopes.map(resourceScopeNode);
+  }
   return node;
 }
 
@@ -2511,6 +2551,15 @@ async function renamePackage(provider: XbslMetadataProvider, node?: XbslNode): P
 
 const TREE_MIME = "application/vnd.code.tree.xbslmetadata";
 
+// What the commands of the Resources section need from the tree (resourceFolders.ts).
+function resourceTreeAccess(provider: XbslMetadataProvider): ResourceTreeAccess {
+  return {
+    rootFor: (fsPath) => provider.rootFor(fsPath),
+    refresh: () => provider.refresh(),
+    requestReveal: (pred) => provider.requestReveal(pred),
+  };
+}
+
 // Drag an object onto a subsystem or a package (or anything under one) - the same move as the
 // "Move to package" command, confirmed first: a drop is easy to make by accident, and a move
 // edits files across the project.
@@ -2521,15 +2570,20 @@ class MetadataDragAndDrop implements vscode.TreeDragAndDropController<XbslNode> 
   constructor(private readonly provider: XbslMetadataProvider) {}
 
   handleDrag(source: readonly XbslNode[], data: vscode.DataTransfer): void {
-    const movable = source.filter((n) => n.movable && n.yamlPath);
+    // A resource file or folder travels too: dropped on a folder of its section, it moves there.
+    const movable = source.filter((n) => (n.movable && n.yamlPath) || isMovableResource(n.resource));
     if (movable.length) {
       data.set(TREE_MIME, new vscode.DataTransferItem(movable));
     }
   }
 
   async handleDrop(target: XbslNode | undefined, data: vscode.DataTransfer): Promise<void> {
+    const dragged = data.get(TREE_MIME)?.value as XbslNode[] | undefined;
+    if (dragged?.length && (await dropResources(resourceTreeAccess(this.provider), dragged, target))) {
+      return;
+    }
     const destination = folderNodeOf(target);
-    const nodes = data.get(TREE_MIME)?.value as XbslNode[] | undefined;
+    const nodes = dragged;
     const dir = destination?.folderDir;
     if (!destination || !dir || !nodes?.length) {
       return;
@@ -2879,6 +2933,8 @@ export function registerMetadataTree(
       addLocalization(provider, n)
     )
   );
+  // The folders of the Resources section: create, add files, move, rename, delete.
+  registerResourceFolderCommands(context, resourceTreeAccess(provider));
 
   // The properties panel takes the Тип combo box candidates from here; the component palette
   // takes the project's interface components; the form designer's data panel resolves a
