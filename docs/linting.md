@@ -27,12 +27,14 @@ the en dash of a comment into a hyphen; a project that writes the en dash there 
 The `comment/` group judges how a comment is worded rather than which characters it holds:
 `comment/subjunctive` (the particle `бы` - the finding asks for a word of condition, because
 dropping the particle alone turns a hypothesis into a statement about the code),
-`comment/first-person` ("we", "our" and first-person plural verbs) and `comment/emphasis-caps` (a
-function word such as `НЕ` or `ТОЛЬКО` in capitals for emphasis). The rules read the comments of
+`comment/first-person` ("we", "our" and first-person plural verbs), `comment/emphasis-caps` (a
+function word such as `НЕ` or `ТОЛЬКО` in capitals for emphasis) and `comment/dash-condition` (a
+condition written with a dash, as in "the store is not set - the main one is taken"; the finding
+suggests the wording with a word of condition). The rules read the comments of
 modules, element descriptions and resource files. They are off by default - on code that never
 adopted the convention they fire in bulk - and a project that did turns the group on in its CI with
 `--enable comment`. `--fix --enable comment/emphasis-caps` restores the case of a stressed word; the
-other two have no fix, the rephrase is the author's. A project that writes a hyphen in its code
+others have no fix, the rephrase is the author's. A project that writes a hyphen in its code
 comments adds `--enable typography/en-dash-comment`.
 
 For editor integration there is `--stdin --filename NAME`: it checks a single buffer read from
@@ -58,7 +60,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 200 rules of the base set** - severity, default state, scope, links to
+**The full list of all 202 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -112,6 +114,14 @@ references. And top-level yaml properties measured against the configuration met
 `query/` group parses `Query{ ... }` blocks and verifies the `FROM` and `JOIN` tables against the
 project objects and their `TabularParts`. A block with constructs outside the supported subset -
 temporary tables, unions, subqueries - is skipped whole rather than guessed.
+
+The comments are read too. The `comment/` group judges their wording, and one of its rules looks
+across files: `comment/unknown-name` collects the identifiers of every module, the names of every
+element description and the platform catalog, and reports a word of a comment that looks like an
+identifier and that none of them knows - a method that was renamed while its mention stayed. A case
+form of a known name and a line of commented-out code are not reported. The name of another product
+mentioned in prose has the same shape, which is why the rule is off by default and a project turns
+it on with `--enable comment/unknown-name`.
 
 Detailed group descriptions live in [RULES.md](/RULES): `query/` (a composite type in `IN` with
 a subquery), `project/` (project properties), `naming/` (the naming standard, the `[morph]`

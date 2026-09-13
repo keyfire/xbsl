@@ -49,6 +49,22 @@ entry either - say what the behaviour was, not which class name was compared.
   rewritten. The group and the en dash rule are off by default; a project turns them on with
   `--enable`. Element descriptions are read too: these rules judge the `#` comments of a yaml, which
   the older typography rules do not. ([#51](https://github.com/keyfire/xbsl/pull/51))
+- **Two more checks for comments: a condition written with a dash, and a name the project does not
+  have.** Both come from the same pass of one project's comments through a style edit, where each
+  was found by eye and then chased through the tree by a script. `comment/dash-condition` reports a
+  sentence like "the store is not set - the main one is taken" and suggests the wording with a word
+  of condition. It counts only a short left part that names something and ends in a state, followed
+  by a verb after the dash, so the legend of a value ("empty - the slot is free") stays quiet. On
+  the tree of that project before the edit it found 32 sentences: the edit had rewritten 22 of them
+  into conditions by hand, and the 9 it missed read the same way. `comment/unknown-name` is a
+  project rule. It collects the identifiers of the modules, the names of the element descriptions
+  and the platform catalog, and reports an identifier-like word of a comment that none of them
+  knows - a method renamed while its mention stayed. A case form of a known name, a line of
+  commented-out code and a chain that names another system are left alone. Over the same tree it
+  found all eight stale names the edit had fixed by hand, six of them in the comments of element
+  descriptions. Both rules are off by default. The dash is a convention of a project, and the name
+  of another product mentioned in prose has the shape of a renamed method: on foreign code 6 of the
+  7 findings of the name rule were real. ([#55](https://github.com/keyfire/xbsl/pull/55))
 - **`translation/english-shape` reads the English values of the translation dictionary.**
   `xbsl translate --strict` measures how much of a project the dictionary covers and never reads
   what the values say, so a mechanical edit of the English went through unnoticed. A verb ending

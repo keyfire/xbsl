@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 200 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 202 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -125,6 +125,7 @@ the translation dictionary.
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The subjunctive particle (would) in a comment; the finding asks for a word of condition, because dropping the particle turns a hypothesis into a statement. Concessive turns are left alone |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The author speaking as "we" in a comment: a pronoun or a first-person plural verb; a comment is impersonal |
 | `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A function word in capitals for emphasis in a comment (not, only, one); abbreviations and names from the code are left alone, the fix restores the case |
+| `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A condition written with a dash in a comment ("the store is not set - the main one is taken"); the finding suggests the wording with a word of condition. The legend of a value is left alone: nothing is named before the state, or no verb follows the dash |
 | `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A trace of a mechanical replacement in an English value of the translation dictionary: an ending glued onto a word that takes none (`onlies`), a passive followed straight by a noun phrase ("is shadowed the parameter"), capitals the Russian key does not have; only the `xbsl-translation` files are judged |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Trailing whitespace |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Mixed newlines |
@@ -311,6 +312,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Visible text left as a Cyrillic literal in a module - judged by the sink it reaches (an argument of the platform message call, a property of an event-log event, or either of them one step away through a method that forwards its parameter); markup, pure interpolation and single words are skipped, and the rule is silent on a project whose descriptor lists fewer than two localization languages |
 | `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A project token or a Cyrillic comment line the project's translation dictionary does not cover yet - one finding at its first occurrence in the file; silent unless an `xbsl-translation` dictionary lives next to (or above) the project (see `xbsl translate`) |
 | `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field access on a structure declared in the project is checked against its declaration: rename a field and its reader in another module turns red here rather than on the server apply. The type comes from the variable's declaration (`Module.Structure`, a bare name for the declaring module), from a `new` constructor and from the element type of a `for X in List` loop; a name declared with anything else in the method, a namesake of a stdlib type, the second hop of a chain and Latin member spellings are not judged |
+| `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A name in a comment that neither the project nor the platform has: a renamed method, a replaced object, a typo. A case form of a known name, commented-out code and a chain naming another system are left alone |
 
 ## Group details
 
@@ -443,10 +445,11 @@ decides their severity and defaults for that project; see
   comparison sign) and, for a project that writes a hyphen in its code comments, the en dash of a
   comment; plus the letter "ё" in the text a user reads. The group reads the resource files of the
   project too (`.css`, `.js`, `.svg`, `.html`);
-- `comment/` - the wording of a comment: the subjunctive particle, the first person and a function
-  word in capitals for emphasis. The group reads the comments of modules, element descriptions and
-  resource files and is off by default; a project that keeps its comments impersonal turns it on
-  with `--enable comment`;
+- `comment/` - the wording of a comment: the subjunctive particle, the first person, a function word
+  in capitals for emphasis and a condition written with a dash; `comment/unknown-name` checks the
+  names a comment mentions against the project. The group reads the comments of modules, element
+  descriptions and resource files (the name rule reads modules and element descriptions) and is off
+  by default; a project that keeps its comments impersonal turns it on with `--enable comment`;
 - `translation/` - the English of the translation dictionary: `translation/english-shape` reads the
   values of the `xbsl-translation` files, whose text `xbsl translate --strict` never judges;
 - `whitespace/` - trailing spaces and mixed newlines;
