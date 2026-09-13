@@ -43,6 +43,7 @@ export interface FilterNode {
   place: string; // the placement key: `Склад`, `Склад::Партии`; "" for a project
   count: number; // objects under the node, nested places included
   title?: string; // a tooltip: the namespace of a subsystem or a package
+  dir?: string; // a subsystem or a package: its folder - how a node of the metadata tree finds it
   packagesKnown?: boolean; // project: the engine placed it, so its packages are listed
   children: FilterNode[];
 }
@@ -254,6 +255,7 @@ function placedSubsystems<T>(
       place,
       count: own + nested.reduce((sum, n) => sum + n.count, 0),
       title: group.namespace,
+      dir: group.dir,
       children: withLoose(place, own, nested),
     };
   };
@@ -269,6 +271,7 @@ function placedSubsystems<T>(
       place: subsystem.name,
       count: own + packages.reduce((sum, n) => sum + n.count, 0),
       title: subsystem.namespace,
+      dir: subsystem.dir,
       children: withLoose(subsystem.name, own, packages),
     };
   });
@@ -284,6 +287,7 @@ function describedSubsystems<T>(project: string, items: T[], input: FilterInput<
       project,
       place: subsystem.name,
       count: input.count(items.filter((item) => isUnder(input.pathOf(item), subsystem.dir))),
+      dir: subsystem.dir,
       children: [],
     }));
 }
@@ -560,6 +564,80 @@ export function summarize(keys: ReadonlySet<string>, maxItems = 3, maxChars = 48
     length += name.length + 2;
   }
   return { items, more: names.length - items.length };
+}
+
+// --- the filter by one node of the metadata tree ------------------------------------------
+
+/** The choice of exactly one place: a subsystem whole, or a package with its nested packages.
+ * It is the choice the form writes for that one node checked, so the form opens with it. */
+export function placeSelection(project: string, place: string): Selection {
+  return new Map([[project, new Set([wholeKey(place)])]]);
+}
+
+export interface FolderPlace {
+  project: string;
+  place: string;
+  kind: "subsystem" | "package";
+}
+
+/** The places a node of the metadata tree can filter by, keyed by the pathKey of their folders.
+ *
+ * These are exactly the subsystems and packages the form offers a checkbox for, so a node gets
+ * "filter by" only where the form could have made the same choice: a descriptor inside a
+ * subsystem, which the tree without the engine's answer lists as a subsystem of its own, gets none.
+ */
+export function placesByFolder(tree: FilterTree): Map<string, FolderPlace> {
+  const out = new Map<string, FolderPlace>();
+  const visit = (node: FilterNode): void => {
+    if ((node.kind === "subsystem" || node.kind === "package") && node.dir !== undefined) {
+      out.set(pathKey(node.dir), { project: node.project, place: node.place, kind: node.kind });
+    }
+    node.children.forEach(visit);
+  };
+  tree.projects.forEach(visit);
+  return out;
+}
+
+export interface PlaceFilter {
+  project: string;
+  places: ReadonlySet<string>;
+}
+
+/** The subsystems and packages the filter is exactly - undefined when it is anything else.
+ *
+ * The choice is compared in its canonical form, the one the stored filter takes: checking every
+ * item of a package in the form is the filter by that package. Where canonical folding makes two
+ * nodes the same choice - a subsystem whose only item is one package - the filter is both of
+ * them, just as the form shows both checked.
+ */
+export function placeFilterOf(tree: FilterTree, selection: Selection): PlaceFilter | undefined {
+  const chosen = [...canonicalSelection(tree, selection)].filter(([, keys]) => keys.size > 0);
+  if (chosen.length !== 1 || chosen[0][1].size !== 1) {
+    return undefined;
+  }
+  const [project, keys] = chosen[0];
+  const projectNode = tree.projects.find((p) => p.project === project);
+  const [key] = [...keys];
+  if (!projectNode || !key.endsWith(WHOLE)) {
+    return undefined;
+  }
+  const places = new Set<string>();
+  const visit = (node: FilterNode): void => {
+    if (node.kind === "subsystem" || node.kind === "package") {
+      const own = canonicalSelection(tree, placeSelection(project, node.place)).get(project);
+      if (own?.size === 1 && own.has(key)) {
+        places.add(node.place);
+      }
+    }
+    node.children.forEach(visit);
+  };
+  projectNode.children.forEach(visit);
+  return places.size ? { project, places } : undefined;
+}
+
+/** Is the filter exactly this place? */
+export function isPlaceFilter(filter: PlaceFilter | undefined, place: FolderPlace): boolean {
+  return !!filter && filter.project === place.project && filter.places.has(place.place);
 }
 
 // --- storage ------------------------------------------------------------------------------

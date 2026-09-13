@@ -936,6 +936,10 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Filter by subsystems and packages... | `xbsl.metadata.filterBySubsystem` | Command Palette |
 | Filter by subsystems and packages (active)... | `xbsl.metadata.editFilter` | panel / context menu |
 | Clear the subsystem and package filter | `xbsl.metadata.clearFilter` | Command Palette |
+| Filter by the subsystem | `xbsl.metadata.filterBySubsystemNode` | panel / context menu |
+| Filter by the package | `xbsl.metadata.filterByPackageNode` | panel / context menu |
+| Clear the filter by the subsystem | `xbsl.metadata.clearSubsystemNodeFilter` | panel / context menu |
+| Clear the filter by the package | `xbsl.metadata.clearPackageNodeFilter` | panel / context menu |
 | Tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
 | Hide empty categories | `xbsl.metadata.hideEmptyCategories` | Command Palette |
 | Show empty categories | `xbsl.metadata.showEmptyCategories` | Command Palette |

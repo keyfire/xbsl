@@ -913,6 +913,10 @@ VS Code, как обычно.
 | Отбор по подсистемам и пакетам... | `xbsl.metadata.filterBySubsystem` | палитра команд |
 | Отбор по подсистемам и пакетам (установлен)... | `xbsl.metadata.editFilter` | панель / контекстное меню |
 | Сбросить отбор по подсистемам и пакетам | `xbsl.metadata.clearFilter` | палитра команд |
+| Отобрать по подсистеме | `xbsl.metadata.filterBySubsystemNode` | панель / контекстное меню |
+| Отобрать по пакету | `xbsl.metadata.filterByPackageNode` | панель / контекстное меню |
+| Снять отбор по подсистеме | `xbsl.metadata.clearSubsystemNodeFilter` | панель / контекстное меню |
+| Снять отбор по пакету | `xbsl.metadata.clearPackageNodeFilter` | панель / контекстное меню |
 | Группировка дерева (по классам / по подсистемам) | `xbsl.metadata.groupMode` | палитра команд |
 | Скрыть пустые классы | `xbsl.metadata.hideEmptyCategories` | палитра команд |
 | Показать пустые классы | `xbsl.metadata.showEmptyCategories` | палитра команд |

@@ -41,8 +41,14 @@ import {
   chosenSubsystems,
   FilterTree,
   filterPredicate,
+  FolderPlace,
   hasChoice,
+  isPlaceFilter,
+  PlaceFilter,
+  placeFilterOf,
   placeKey,
+  placesByFolder,
+  placeSelection,
   readSelection,
   sameSelection,
   Selection,
@@ -631,6 +637,7 @@ class XbslNode extends vscode.TreeItem {
   projectDir?: string; // project root: the folder a new subsystem goes into
   packageKey?: string; // package: its path under the subsystem (`Партии::Архив`)
   movable?: boolean; // an object "move to a package" and drag and drop can carry
+  filterPlace?: FolderPlace; // subsystem or package: the place "Filter by" narrows the tree to
   wsdlPaths?: string[]; // SOAP service client and its WSDL node: the descriptions "Open WSDL" opens
 }
 
@@ -1537,7 +1544,41 @@ function filterTreeOf(model: Model, placement: EnginePlacement | undefined): Fil
   });
 }
 
+// The subsystem and package nodes that filter the tree by their own place, in the Subsystems branch
+// and in the grouping by subsystems alike. A node the form offers a checkbox for gets "Filter by the
+// subsystem" or "Filter by the package" in its row (filterbysub / filterbypkg); the node the whole
+// filter is exactly gets the filled button that clears it instead (filteredbysub / filteredbypkg).
+// Only the branch, the subsystems and the packages are walked: the objects below cannot filter.
+function markFilterNodes(nodes: XbslNode[], places: Map<string, FolderPlace>, current: PlaceFilter | undefined): void {
+  for (const node of nodes) {
+    const place = node.folderDir !== undefined ? places.get(pathKey(node.folderDir)) : undefined;
+    if (place) {
+      const token = place.kind === "package" ? "pkg" : "sub";
+      node.filterPlace = place;
+      node.contextValue = [node.contextValue, `${isPlaceFilter(current, place) ? "filteredby" : "filterby"}${token}`]
+        .filter(Boolean)
+        .join(" ");
+    }
+    if (place || /\bsubsystems\b/.test(node.contextValue ?? "")) {
+      markFilterNodes(node.children ?? [], places, current);
+    }
+  }
+}
+
+// `filterTree` - the tree of checkboxes over the same model and placement (filterTreeOf): which
+// places can filter, and which of them the filter is exactly.
 function buildRoots(
+  model: Model, selection: Selection, mode: GroupMode, hideEmpty: boolean, placement: EnginePlacement | undefined,
+  filterTree: FilterTree
+): XbslNode[] {
+  const roots = drawRoots(model, selection, mode, hideEmpty, placement);
+  const places = placesByFolder(filterTree);
+  const current = placeFilterOf(filterTree, selection);
+  markFilterNodes(model.projects.length ? roots.flatMap((root) => root.children ?? []) : roots, places, current);
+  return roots;
+}
+
+function drawRoots(
   model: Model, selection: Selection, mode: GroupMode, hideEmpty: boolean, placement?: EnginePlacement
 ): XbslNode[] {
   const projects = [...model.projects].sort(byName);
@@ -1657,6 +1698,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   private hideEmpty = false; // hide empty class categories (the toolbar toggle)
   private treeView?: vscode.TreeView<XbslNode>; // for reveal (getParent is mandatory)
   private pendingReveal?: (n: XbslNode) => boolean; // reveal this node after a rebuild
+  private pendingExpand = false; // and expand it
   private modelStale = false; // files changed since the model was parsed
 
   // The engine's placement of the objects - subsystem, package, namespace (xbsl/metaProjectInfo).
@@ -1817,11 +1859,11 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
 
   // A package renamed or deleted, a subsystem gone: its keys leave the stored choice as soon as
   // the engine's answer shows it. Only an answer can tell - without one every key is kept.
-  private dropStaleKeys(): void {
-    if (!this.placement || !this.model || !this.selection.size) {
+  private dropStaleKeys(filterTree: FilterTree): void {
+    if (!this.placement || !this.selection.size) {
       return;
     }
-    const cleaned = canonicalSelection(filterTreeOf(this.model, this.placement), this.selection);
+    const cleaned = canonicalSelection(filterTree, this.selection);
     if (!sameSelection(cleaned, this.selection)) {
       this.selection = cleaned;
       void this.memento?.update(FILTER_STATE_KEY, writeSelection(cleaned));
@@ -1912,9 +1954,10 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
         this.model = await parseModel(this.projectRootFor);
       }
       void this.askPlacement();
-      this.dropStaleKeys();
+      const filterTree = filterTreeOf(this.model, this.placement);
+      this.dropStaleKeys(filterTree);
       this.syncFilterContext();
-      this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement);
+      this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement, filterTree);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -2056,9 +2099,12 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   }
 
   // Reveal (select) a node in the tree after a rebuild - for adding an object/field: the new node
-  // only appears in the fresh roots, so the reveal is deferred until they are built.
-  requestReveal(pred: (n: XbslNode) => boolean): void {
+  // only appears in the fresh roots, so the reveal is deferred until they are built. `refresh:
+  // false` - the caller draws the tree anew itself without a change of files (the filter), so
+  // nothing is read again; `expand` - the node is opened as well.
+  requestReveal(pred: (n: XbslNode) => boolean, options: { refresh?: boolean; expand?: boolean } = {}): void {
     this.pendingReveal = pred;
+    this.pendingExpand = options.expand ?? false;
     // Keep the reveal predicate for a short window: the reveal must survive the repeated rebuild
     // from the file watcher (file save -> refresh ~300 ms). Once the window expires, clear it.
     setTimeout(() => {
@@ -2066,7 +2112,9 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
         this.pendingReveal = undefined;
       }
     }, 1200);
-    this.refresh();
+    if (options.refresh ?? true) {
+      this.refresh();
+    }
   }
 
   private async flushReveal(): Promise<void> {
@@ -2079,7 +2127,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     }
     // pendingReveal is NOT cleared here - let the reveal survive the watcher rebuild (the timer clears it).
     try {
-      await this.treeView.reveal(node, { select: true, focus: false });
+      await this.treeView.reveal(node, { select: true, focus: false, expand: this.pendingExpand });
     } catch {
       // reveal may refuse (the tree is not ready yet) - not critical
     }
@@ -3013,6 +3061,21 @@ async function openFilter(provider: XbslMetadataProvider, host: TreeFilterHost):
   await TreeFilterPanel.show(host);
 }
 
+// "Filter by the subsystem" / "Filter by the package" on a node: the filter becomes exactly that
+// place - the subsystem whole, the package with its nested packages - and is kept like the form's.
+// The filled button of the node the filter already is clears it. Either way the tree is drawn
+// anew, and the node is revealed in it selected and expanded.
+async function filterByNode(provider: XbslMetadataProvider, node: XbslNode | undefined, clear: boolean): Promise<void> {
+  const place = node?.filterPlace;
+  const dir = node?.folderDir;
+  if (!place || dir === undefined) {
+    return;
+  }
+  const folder = pathKey(dir);
+  provider.requestReveal((n) => n.folderDir !== undefined && pathKey(n.folderDir) === folder, { refresh: false, expand: true });
+  await provider.applySelection(clear ? new Map() : placeSelection(place.project, place.place));
+}
+
 const GROUP_MODE_KEY = "xbsl.metadata.groupMode";
 // The filter by subsystems and packages, per project root (workspace state), and the context key
 // that switches the filter icon of the toolbar to the filled one.
@@ -3172,6 +3235,10 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.filterBySubsystem", () => openFilter(provider, filterHost)),
     vscode.commands.registerCommand("xbsl.metadata.editFilter", () => openFilter(provider, filterHost)),
     vscode.commands.registerCommand("xbsl.metadata.clearFilter", () => provider.applySelection(new Map())),
+    vscode.commands.registerCommand("xbsl.metadata.filterBySubsystemNode", (n?: XbslNode) => filterByNode(provider, n, false)),
+    vscode.commands.registerCommand("xbsl.metadata.filterByPackageNode", (n?: XbslNode) => filterByNode(provider, n, false)),
+    vscode.commands.registerCommand("xbsl.metadata.clearSubsystemNodeFilter", (n?: XbslNode) => filterByNode(provider, n, true)),
+    vscode.commands.registerCommand("xbsl.metadata.clearPackageNodeFilter", (n?: XbslNode) => filterByNode(provider, n, true)),
     vscode.commands.registerCommand("xbsl.metadata.groupMode", () => pickGroupMode(provider, context)),
     vscode.commands.registerCommand("xbsl.metadata.hideEmptyCategories", () => setEmptyHidden(provider, context, true)),
     vscode.commands.registerCommand("xbsl.metadata.showEmptyCategories", () => setEmptyHidden(provider, context, false))
