@@ -75,7 +75,7 @@ channel and nowhere else. There are no popups on every save.
   component palette sits next to the metadata tree while the panel is open.
   See [Form designer](#form-designer).
 - **Metadata explorer** – a tree of the project objects in the primary side bar, grouped by
-  `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum `Values` ...). It has an
+  `ElementKind`, with subtrees (`Attributes`, `Dimensions`, `Forms`, enum values ...). It has an
   editable properties panel, creation of objects, fields and subsystems, and filtering by subsystems
   and packages. See [Metadata explorer](#metadata-explorer).
 - **Documentation** – a view in the secondary side bar that shows the 1C:Element reference the
@@ -555,9 +555,10 @@ is one row; an object/list form is nested under its owner, forms with no owner g
 forms** section.
 
 **Object subtrees.** A catalog or document expands into **Attributes**, **Tabular sections**,
-**Forms**; a register into **Dimensions**, **Resources**, **Attributes**; an enumeration into
-**Values**; a structure into **Fields**; client-work parameters into **Parameters**; an HTTP
-service into **URL templates** with their methods; localized strings into **Localization**, a node
+**Forms**; a register into **Dimensions**, **Resources**, **Attributes**; an enumeration, a
+structure and client-work parameters list their values, fields and parameters right under the
+element, with **+** on its row, since they have no other section; an HTTP service into **URL
+templates** with their methods; localized strings into **Localization**, a node
 per language of the section (`Localization/<language>/<Name>.yaml`), where a click opens the
 translated text. A SOAP service client gets a **WSDL** node for the description its type is
 generated from (`<Name>.Wsdl.1.wsdl` beside the element): a click opens it as XML, several
@@ -676,7 +677,7 @@ uses):
 2. **Subsystems → "+" → Add subsystem** → `Main`.
 3. **Catalogs → "+" → Add catalog** → `Products` (subsystem `Main`); the same for `Categories`.
 4. Under `Products` → **Attributes → "+" → Add attribute** → `Price`, `SKU`.
-5. **Enumerations → Add enumeration** → `ProductStatus`; in **Values** → `InStock`, `OnOrder`.
+5. **Enumerations → Add enumeration** → `ProductStatus`; **+** on it → `InStock`, `OnOrder`.
 6. Deploy: `elemctl deploy --app-id <app> --project-dir <project folder> --output <tmp>`
    (create the app first: `elemctl apps ensure <app> --latest-build --wait`).
 

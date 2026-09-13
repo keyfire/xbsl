@@ -40,6 +40,14 @@
   ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Changed
+- **Client-work parameters, an enumeration and a structure list their items right under the
+  element.** Their one section used to add a level with nothing next to it. The parameters, values
+  or fields now hang under the element, and the "+" to add one sits on its row.
+  ([#68](https://github.com/keyfire/xbsl/pull/68))
+- **A subsystem in the metadata tree carries the icon of the Subsystems branch.** Subsystems used to
+  draw curly braces, unlike an object, which draws the icon of its category. Now both groupings show
+  the same icon on the branch and on every subsystem.
+  ([#68](https://github.com/keyfire/xbsl/pull/68))
 - **The description of a Resources folder opens from the folder's node.** `Resources.yaml` sat among
   the resource files and in their counts, though it sets the visibility of the whole folder. A click
   on the folder's node opens it now, as a subsystem opens its descriptor, and "Open resources
