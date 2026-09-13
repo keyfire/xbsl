@@ -58,6 +58,7 @@ def test_a_package_without_resources_is_reported(tmp_path):
         ("Значки.xbsl", 2, 13, "warning")
     ]
     assert "'Склад::Партии'" in diags[0].message and "Ресурс{...}" in diags[0].message
+    assert diags[0].data == {"namespace": "Склад::Партии"}
 
 
 def test_a_package_with_a_folder_of_its_own_is_silent(tmp_path):

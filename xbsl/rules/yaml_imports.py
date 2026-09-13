@@ -924,7 +924,35 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
             for _offset, body in _interpolation_bodies(tok.value, blank_strings=False):
                 idents.update(_INTERPOLATION_IDENT.findall(body))
     return {"k": "mod", "path": str(source.path), "imports": imports,
-            "idents": sorted(idents)}
+            "idents": sorted(idents), "bare_resources": _has_bare_resource(toks)}
+
+
+@lru_cache(maxsize=1)
+def _resource_words() -> frozenset[str]:
+    """Both spellings of the resource literal `Resource{...}`."""
+    return frozenset(terms.key_forms("Ресурс"))
+
+
+dataset.register_reset(_resource_words.cache_clear)
+
+
+def _has_bare_resource(toks: Sequence[Token]) -> bool:
+    """Whether a resource literal of the module names its file by a key without a namespace.
+
+    The documentation lets a module reach a resource of another subsystem through an import of
+    that subsystem, so such a key may be what an import of a subsystem serves.
+    """
+    for i, tok in enumerate(toks[:-1]):
+        if tok.kind != "IDENT" or tok.value not in _resource_words():
+            continue
+        if not (toks[i + 1].kind == "OP" and toks[i + 1].value == "{"):
+            continue
+        for inner in toks[i + 2:]:
+            if inner.kind == "OP" and inner.value == "}":
+                return True
+            if inner.kind == "OP" and inner.value == "::":
+                break
+    return False
 
 
 @rule(
@@ -940,6 +968,12 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     those has no use for `импорт Б` and is told which package imports carry the names
     instead. A namespace the project does not own (a library, another project, a typo) is
     not this rule's case.
+
+    A subsystem whose root keeps no element at all is still a namespace of the project - its
+    packages or its descriptor make it known - and an import of it serves nothing, the usual
+    state once every element of a subsystem has moved into packages. The one thing such an
+    import may still bring is a resource of that subsystem named by a bare key, so a module
+    with a `Resource{...}` literal of that shape is not judged there.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -951,6 +985,7 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         place = layout.place(Path(fact["path"]))
         if place is not None:
             owned.setdefault(place.key, set()).add(fact["name"])
+    subsystems = {subsystem_of_key(key) for key in owned} | set(layout.subsystem_names.values())
     for rel, fact in facts.items():
         if fact["k"] != "mod":
             continue
@@ -960,7 +995,9 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             key = layout.local_name(written, project_dir)
             elements = owned.get(key)
             if elements is None:
-                continue  # an unknown namespace (a library, a typo) - not this rule's case
+                if key not in subsystems or fact.get("bare_resources"):
+                    continue  # an unknown namespace (a library, a typo) - not this rule's case
+                elements = set()  # a subsystem with nothing at its root
             if elements & idents:
                 continue
             packages = sorted(

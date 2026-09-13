@@ -76,6 +76,7 @@ def test_the_project_module_needs_the_import_of_a_package():
         (MISSING_CODE, "Проект.xbsl", 4, 5)
     ]
     assert "импорт Склад::Партии" in diags[0].message and "вне подсистем" in diags[0].message
+    assert diags[0].data == {"namespaces": ["Склад::Партии"]}  # what a move repairs by
 
 
 def test_the_import_of_the_package_covers_the_project_module():
@@ -149,6 +150,7 @@ def test_a_query_table_of_a_package_needs_the_package_import_in_the_yaml():
     message = diags[0].message
     assert "ПартииТоваров" in message and "ОстаткиПартий.xbql" in message
     assert "строка 4" in message and "- Склад::Партии" in message
+    assert diags[0].data == {"namespaces": ["Склад::Партии"]}
 
 
 def test_the_package_import_in_the_yaml_covers_the_query():
@@ -256,6 +258,35 @@ def test_a_type_literal_is_a_written_type():
     assert "импорт Склад::Партии" in diags[0].message
     covered = _project({"Продажи/Заказы.xbsl": "импорт Склад::Партии\n\n" + code})
     assert _lint(MISSING_CODE, covered) == []
+
+
+# --- an import of a subsystem whose root keeps nothing ------------------------------------------
+
+
+def _root_emptied(code: str) -> dict[str, str]:
+    """The project with every element of `Склад` in its package: the root keeps none."""
+    files = _project({"Продажи/Заказы.xbsl": code})
+    del files[f"{BASE}/Склад/Номенклатура.yaml"]
+    return files
+
+
+def test_an_import_of_a_subsystem_with_nothing_at_its_root_is_unused():
+    diags = _lint(UNUSED, _root_emptied("импорт Склад\nимпорт Склад::Партии\n\n" + CALL))
+    assert [(d.line, d.data) for d in diags] == [(1, {"namespace": "Склад"})]
+    assert "Склад::Партии" in diags[0].message
+
+
+def test_a_bare_resource_key_keeps_the_import_of_such_a_subsystem():
+    """The import of a subsystem may still bring its resources to a key without a namespace."""
+    code = ("импорт Склад\nимпорт Склад::Партии\n\nметод Т()\n    РасчетПартий.Пересчитать()\n"
+            "    знч Схема = Ресурс{Схема.svg}\n;\n")
+    assert _lint(UNUSED, _root_emptied(code)) == []
+    qualified = code.replace("Ресурс{Схема.svg}", "Ресурс{Склад::Схема.svg}")
+    assert len(_lint(UNUSED, _root_emptied(qualified))) == 1
+
+
+def test_an_unknown_namespace_stays_out_of_the_judgement():
+    assert _lint(UNUSED, _root_emptied("импорт Внешний\n\n" + CALL)) == []
 
 
 # --- the reading of the tables itself ---------------------------------------------------------

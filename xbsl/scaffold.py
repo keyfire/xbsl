@@ -6633,20 +6633,6 @@ def _with_usage(text: str, subsystems: list[str], lang: str) -> str:
     return _with_list_items(text, _USAGE_KEYS, create, subsystems, None)
 
 
-def _mentioned_in_code(text: str, names) -> bool:
-    """Whether a module or a query names one of the elements as an identifier in its code."""
-    pattern = re.compile(
-        rf"(?<![{_WORD}.@])(?:{'|'.join(re.escape(n) for n in names)})(?![{_WORD}])"
-    )
-    for start, end, code in _code_spans(text):
-        if not code:
-            continue
-        for line in text[start:end].split("\n"):
-            if not _MODULE_IMPORT_LINE.match(line) and pattern.search(line):
-                return True
-    return False
-
-
 # --- operation: moving an object -------------------------------------------------------------
 #
 # What a move breaks is decided by the linter's own rules, run over the sources before and after
@@ -6736,10 +6722,10 @@ def op_move_object(root: Path, yaml_path: Path, target_dir: Path, *,
       line (`импорт Склад::Партии`, an item of `Import`): in another subsystem, and in the
       moved files themselves when the move crosses a subsystem boundary. Within one subsystem
       the root and the packages see each other, and nothing is written;
-    - a module outside the subsystems (the project module) that names a moved element gets the
-      import of the package it moved into, and so does the yaml of a virtual table whose query
-      names one - both are compiler facts the import rules do not model yet, found here by
-      the name in the code, and the place to fold into the rules once they do;
+    - the same rules read the module outside the subsystems (the project module), which gets
+      the import of the package an element it names moved into, and the query of a virtual
+      table, whose yaml gets the import when the table it reads moved into a package of
+      another subsystem;
     - a qualified name that spells the old place (`Склад::Задачи`, the full
       `Поставщик::Проект::Склад::ЗадачиФормаСписка.ДанныеСтрокиСписка` of a generated form)
       is rewritten to the new one in every file of the project, the moved ones included, and
@@ -6962,24 +6948,6 @@ def op_move_object(root: Path, yaml_path: Path, target_dir: Path, *,
         if key.endswith(".xbql"):
             key = key[: -len(".xbql")] + ".yaml"
         imports.setdefault(key, []).append(chosen)
-
-    # Two compiler facts the import rules do not model yet, found by the name in the code: a
-    # module outside the subsystems (the project module) that names an element of a package
-    # imports the package, and so does the yaml of a virtual table whose query names one. The
-    # place to fold into the rules - and out of here - once they learn both.
-    if target_place.package is not None:
-        for key, body in texts.items():
-            path = spelled[key]
-            if path.suffix not in (".xbsl", ".xbql") or not mentions(body):
-                continue
-            if root_layout.project_dir_of(path) != source_project:
-                continue
-            place = root_layout.place(moved_to.get(key, path))
-            if path.suffix == ".xbsl" and place is None and _mentioned_in_code(body, names):
-                imports.setdefault(key, []).append(new_key)
-            elif (path.suffix == ".xbql" and place is not None and place.key != new_key
-                  and _mentioned_in_code(body, names)):
-                imports.setdefault(key[: -len(".xbql")] + ".yaml", []).append(new_key)
 
     lang = _sources_language(texts)
     current = dict(rewritten)

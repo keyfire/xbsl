@@ -71,6 +71,8 @@ def test_a_row_type_without_the_package_segment_is_reported_with_the_repair():
     source = sources[diags[0].path]
     fix = diags[0].fix
     assert source.text[fix.start:fix.end] == "Склад" and fix.new == "Склад::Партии"
+    assert diags[0].data == {"name": "ПартииТоваровФормаСписка", "namespace": "Склад",
+                             "namespaces": ["Склад::Партии"]}
 
 
 def test_the_full_name_that_spells_the_package_is_silent():

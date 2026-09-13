@@ -30,7 +30,10 @@ The check is narrow on purpose:
 
 The repair is mechanical when the element lies in one place: the namespace is replaced by the
 placement of the element, and the finding carries that edit. Two elements of the name in two
-places leave the choice to the author.
+places leave the choice to the author. Like the findings of the import and visibility rules
+(xbsl.rules.yaml_imports), a finding carries its facts in `Diagnostic.data` for a repair to
+read: `{"name": <the element>, "namespace": <the written placement>, "namespaces": [<where
+the element lies>]}`, placements without the prefix of the project.
 """
 
 from __future__ import annotations
@@ -293,6 +296,8 @@ def _judge(facts: dict[str, dict], rule_id: str) -> Iterable[Diagnostic]:
                 i18n.t(f"{rule_id}.{key}", written=written, namespace="::".join(qualifiers),
                        name=name, actual="/".join(actual)),
                 fix=TextEdit(start, end, sorted(owners)[0]) if len(owners) == 1 else None,
+                data={"name": name, "namespace": "::".join(qualifiers[2:]),
+                      "namespaces": sorted(owners)},
             )
 
 

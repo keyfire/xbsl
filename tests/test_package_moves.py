@@ -155,6 +155,7 @@ def test_an_import_the_move_made_unnecessary_is_named_and_kept(tmp_path):
     assert any("code/unused-import" in n and "Заказы.xbsl:1 Склад" in n for n in result.notes)
 
 
+@pytest.mark.needs_data  # the import rule reads the project module through the parser
 def test_the_project_module_gets_the_import_of_the_package(tmp_path):
     project = _project(tmp_path, {
         "Проект.xbsl": "метод Т(): Номенклатура.Ссылка?\n    возврат Неопределено\n;\n",
@@ -165,18 +166,37 @@ def test_the_project_module_gets_the_import_of_the_package(tmp_path):
     assert module.startswith("импорт Склад::Партии\n\nметод Т()")
 
 
+_BALANCES = {
+    "ОстаткиТоваров.yaml": (
+        "ВидЭлемента: ВиртуальнаяТаблица\nИд: 6f0b6a44-0000-4000-8000-000000000109\n"
+        "Имя: ОстаткиТоваров\nОбластьВидимости: ВПроекте\n"
+    ),
+    "ОстаткиТоваров.xbql": "ВЫБРАТЬ\n    Н.Ссылка КАК Товар\nИЗ\n    Номенклатура КАК Н\n",
+}
+
+
+@pytest.mark.needs_data  # the import rule tokenizes the query
 def test_a_query_naming_a_moved_table_imports_the_package_in_its_yaml(tmp_path):
+    """The query of a virtual table resolves its tables against the imports of its yaml."""
     project = _project(tmp_path, {
-        "Склад/ОстаткиТоваров.yaml": (
-            "ВидЭлемента: ВиртуальнаяТаблица\nИд: 6f0b6a44-0000-4000-8000-000000000109\n"
-            "Имя: ОстаткиТоваров\nОбластьВидимости: ВПроекте\n"
-        ),
-        "Склад/ОстаткиТоваров.xbql": "ВЫБРАТЬ\n    Н.Ссылка КАК Товар\nИЗ\n    Номенклатура КАК Н\n",
+        "Продажи/ОстаткиТоваров.yaml": _BALANCES["ОстаткиТоваров.yaml"] + "Импорт:\n    - Склад\n",
+        "Продажи/ОстаткиТоваров.xbql": _BALANCES["ОстаткиТоваров.xbql"],
     })
     stock = project / "Склад"
     result = scaffold.op_move_object(tmp_path, stock / "Номенклатура.yaml", stock / "Партии")
-    table = _content(result, stock / "ОстаткиТоваров.yaml")
-    assert "ОбластьВидимости: ВПроекте\nИмпорт:\n    - Склад::Партии\n" in table
+    table = _content(result, project / "Продажи" / "ОстаткиТоваров.yaml")
+    assert "Импорт:\n    - Склад\n    - Склад::Партии\n" in table
+
+
+@pytest.mark.needs_data
+def test_a_query_of_the_same_subsystem_gets_no_import(tmp_path):
+    """Within one subsystem a query reads the tables of its root and its packages without an
+    import: modules of a compiled library and of a project split into packages read tables of
+    another package of their subsystem that way, and yaml/missing-import holds the same."""
+    project = _project(tmp_path, {f"Склад/{name}": text for name, text in _BALANCES.items()})
+    stock = project / "Склад"
+    result = scaffold.op_move_object(tmp_path, stock / "Номенклатура.yaml", stock / "Партии")
+    assert all(change.path != stock / "ОстаткиТоваров.yaml" for change in result.changes)
 
 
 def test_a_qualified_reference_follows_the_moved_element(tmp_path):

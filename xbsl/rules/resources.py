@@ -341,4 +341,5 @@ def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "code/package-resources-missing", Severity.WARNING,
                 i18n.t("code/package-resources-missing.empty",
                        package=f"{place.subsystem}::{place.package}"),
+                data={"namespace": place.key},
             )
