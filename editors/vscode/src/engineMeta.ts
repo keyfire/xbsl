@@ -8,9 +8,11 @@
 //     editing an existing file a dirty buffer is offered to be saved).
 
 import { spawn } from "child_process";
+import * as fs from "fs";
 import * as vscode from "vscode";
 import { lspActive, lspRequest } from "./lspClient";
 import { pipInstallCommand, runInstallTask } from "./installer";
+import { EngineProjectInfo, ScaffoldRename, scaffoldSteps, vacatedDirs } from "./packagesCore";
 
 export interface ScaffoldFile {
   path: string;
@@ -21,6 +23,10 @@ export interface ScaffoldFile {
 
 export interface ScaffoldResult {
   files?: ScaffoldFile[];
+  // Moving an object and renaming a package move files: applied before the edits, which
+  // address the new paths.
+  renames?: ScaffoldRename[];
+  deletes?: string[];
   notes?: string[];
   error?: string;
 }
@@ -30,17 +36,20 @@ interface CliPlan {
   args: string[];
 }
 
-function cliPlan(subcommand: string, args: string[]): CliPlan {
+// A writing subcommand is asked for its plan (`--dry-run`): the editor applies it. A reading one
+// (`project-info`) has no such flag and refuses an unknown one.
+function cliPlan(subcommand: string, args: string[], dryRun = true): CliPlan {
   const cfg = vscode.workspace.getConfiguration("xbsl");
+  const tail = dryRun ? ["--dry-run"] : [];
   const python = (cfg.get<string>("linter.pythonPath") || "").trim();
   if (python) {
-    return { command: python, args: ["-m", "xbsl", subcommand, ...args, "--dry-run"] };
+    return { command: python, args: ["-m", "xbsl", subcommand, ...args, ...tail] };
   }
   const command = (cfg.get<string>("linter.command") || "xbsl").trim();
-  return { command, args: [subcommand, ...args, "--dry-run"] };
+  return { command, args: [subcommand, ...args, ...tail] };
 }
 
-function runCli(plan: CliPlan, cwd: string | undefined): Promise<ScaffoldResult | undefined> {
+function runCli<T = ScaffoldResult>(plan: CliPlan, cwd: string | undefined): Promise<T | undefined> {
   return new Promise((resolve) => {
     let child;
     try {
@@ -55,7 +64,7 @@ function runCli(plan: CliPlan, cwd: string | undefined): Promise<ScaffoldResult 
     child.on("error", () => resolve(undefined));
     child.on("close", () => {
       try {
-        resolve(JSON.parse(out) as ScaffoldResult);
+        resolve(JSON.parse(out) as T);
       } catch {
         resolve(undefined); // non-JSON: an old engine without subcommands or a startup crash
       }
@@ -131,8 +140,38 @@ export async function ensureSavedForCli(paths: string[]): Promise<boolean> {
   return true;
 }
 
-// Applying the result: new files are created, edited ones are replaced entirely by a single
-// WorkspaceEdit (reversible via undo). Returns the list of affected paths.
+// An operation over the whole project - moving an object, renaming a package - reads every
+// source. In CLI mode the engine reads them from disk, so every unsaved source buffer is
+// offered to be saved first.
+export async function ensureSourcesSavedForCli(): Promise<boolean> {
+  if (lspActive()) {
+    return true;
+  }
+  const dirty = vscode.workspace.textDocuments
+    .filter((doc) => doc.isDirty && /\.(yaml|xbsl|xbql)$/i.test(doc.uri.fsPath))
+    .map((doc) => doc.uri.fsPath);
+  return dirty.length ? ensureSavedForCli(dirty) : true;
+}
+
+// The placement of every object under a root, as the engine sees it (xbsl/metaProjectInfo; the
+// CLI `project-info` when the server is not up or is older than the request). Read only, and
+// silent: without an answer the tree is drawn the way it was before packages, so a failure is
+// no reason to bother anyone with an install prompt.
+export async function engineProjectInfo(root: string): Promise<EngineProjectInfo | undefined> {
+  if (lspActive()) {
+    const viaLsp = await lspRequest<EngineProjectInfo>("xbsl/metaProjectInfo", { root });
+    if (viaLsp && !viaLsp.error) {
+      return viaLsp;
+    }
+  }
+  const viaCli = await runCli<EngineProjectInfo>(cliPlan("project-info", [root], false), root);
+  return viaCli && !viaCli.error ? viaCli : undefined;
+}
+
+// Applying the result in ONE WorkspaceEdit (reversible via undo): the renames, then new files
+// and full replacements of edited ones, then deletions - the order of the engine's own
+// apply_result (see scaffoldSteps). A folder the renames emptied is removed afterwards. Returns
+// the affected paths.
 export async function applyScaffold(result: ScaffoldResult): Promise<string[]> {
   if (result.error) {
     void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: {0}", result.error));
@@ -140,17 +179,24 @@ export async function applyScaffold(result: ScaffoldResult): Promise<string[]> {
   }
   const files = result.files ?? [];
   const we = new vscode.WorkspaceEdit();
-  for (const file of files) {
-    const uri = vscode.Uri.file(file.path);
-    if (file.created) {
-      we.createFile(uri, { contents: Buffer.from(file.content, "utf8"), ignoreIfExists: false });
-    } else {
-      const doc = await vscode.workspace.openTextDocument(uri);
+  for (const step of scaffoldSteps(result)) {
+    if (step.kind === "rename") {
+      we.renameFile(vscode.Uri.file(step.from), vscode.Uri.file(step.to), { overwrite: false });
+    } else if (step.kind === "create") {
+      we.createFile(vscode.Uri.file(step.path), { contents: Buffer.from(step.content, "utf8"), ignoreIfExists: false });
+    } else if (step.kind === "replace") {
+      // The range is measured on the text as it is now - at the old path for a renamed file.
+      const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(step.readFrom));
       const full = new vscode.Range(doc.positionAt(0), doc.positionAt(doc.getText().length));
-      we.replace(uri, full, file.content);
+      we.replace(vscode.Uri.file(step.path), full, step.content);
+    } else {
+      we.deleteFile(vscode.Uri.file(step.path), { ignoreIfNotExists: true });
     }
   }
-  await vscode.workspace.applyEdit(we);
+  if (!(await vscode.workspace.applyEdit(we))) {
+    void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: the editor did not apply the changes."));
+    return [];
+  }
   // Edits of existing files are saved (file creation via WorkspaceEdit already writes to disk).
   for (const file of files.filter((f) => !f.created)) {
     const doc = vscode.workspace.textDocuments.find((d) => d.uri.fsPath === file.path);
@@ -158,8 +204,17 @@ export async function applyScaffold(result: ScaffoldResult): Promise<string[]> {
       await doc.save();
     }
   }
+  for (const dir of vacatedDirs(result.renames ?? [])) {
+    try {
+      if ((await fs.promises.readdir(dir)).length === 0) {
+        await fs.promises.rmdir(dir);
+      }
+    } catch {
+      // gone already, or not empty after all - either way nothing to remove
+    }
+  }
   for (const note of result.notes ?? []) {
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: {0}", note));
   }
-  return files.map((f) => f.path);
+  return [...files.map((f) => f.path), ...(result.renames ?? []).map((r) => r.to)];
 }

@@ -343,7 +343,8 @@ _META_COMMANDS = (
     "new-project", "new-object", "add-field", "add-route", "add-method", "add-form",
     "add-subsystem", "add-dependency", "add-localization", "set-localization",
     "set-field-property",
-    "rename-object", "delete-object", "set-access", "object-info", "project-info",
+    "rename-object", "delete-object", "move-object", "rename-package", "set-access",
+    "object-info", "project-info",
     "localization-info", "form-tree", "form-edit", "form-handlers",
 )
 
@@ -702,6 +703,16 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
     p.add_argument("--apply", action="store_true", help=i18n.t("cli.help.scaf.delete-apply"))
 
+    p = command("move-object")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.mo-yaml"))
+    p.add_argument("target_dir", help=i18n.t("cli.help.scaf.mo-target"))
+
+    p = command("rename-package")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("package_dir", help=i18n.t("cli.help.scaf.rp-package"))
+    p.add_argument("new_name", help=i18n.t("cli.help.scaf.rp-new"))
+
     p = command("set-access")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
@@ -920,6 +931,14 @@ def _scaffold_main(argv: list[str]) -> int:
             scaffold.apply_result(result)
             print(json.dumps(result.as_dict(content=False), ensure_ascii=False))
             return 0
+        elif args.command == "move-object":
+            result = scaffold.op_move_object(
+                Path(args.root), Path(args.yaml_path), Path(args.target_dir),
+            )
+        elif args.command == "rename-package":
+            result = scaffold.op_rename_package(
+                Path(args.root), Path(args.package_dir), args.new_name,
+            )
         elif args.command == "form-tree":
             from xbsl import formedits, formmodel
 

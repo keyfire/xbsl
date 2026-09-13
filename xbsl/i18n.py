@@ -1141,6 +1141,40 @@ _CORE_MESSAGES = {
         "ru": "yaml объекта (при нескольких объектах с одним именем)",
         "en": "the object's yaml (when several objects share one name)",
     },
+    "cli.help.scaf.move-object": {
+        "ru": "перенести объект в другой каталог проекта – пакет подсистемы (новый каталог "
+              "становится пакетом), её корень или другую подсистему; дописывает импорт нового "
+              "пространства имён туда, где он теперь нужен, и переписывает полные имена; см. "
+              "также rename-package – переименовать пакет",
+        "en": "move an object into another folder of its project - a package of the subsystem (a "
+              "new folder becomes a package), its root or another subsystem; adds the import of "
+              "the new namespace where it is needed now and rewrites the full names; see also "
+              "rename-package, which renames a package",
+    },
+    "cli.help.scaf.mo-yaml": {
+        "ru": "yaml переносимого объекта; формы, модули и строка списка переносятся вместе с ним",
+        "en": "the yaml of the object to move; its forms, modules and list row move along",
+    },
+    "cli.help.scaf.mo-target": {
+        "ru": "каталог назначения – каталог подсистемы или пакета (несуществующий создаётся)",
+        "en": "the target folder - a subsystem or a package folder (a missing one is created)",
+    },
+    "cli.help.scaf.rename-package": {
+        "ru": "переименовать пакет подсистемы: каталог со всеми файлами и имена "
+              "Подсистема::Пакет в импортах и полных именах по проекту; см. также move-object – "
+              "перенести объект в пакет",
+        "en": "rename a package of a subsystem: its folder with every file and the "
+              "Subsystem::Package names in imports and full names across the project; see also "
+              "move-object, which moves an object into a package",
+    },
+    "cli.help.scaf.rp-package": {
+        "ru": "каталог пакета (внутри каталога подсистемы)",
+        "en": "the package folder (inside a subsystem folder)",
+    },
+    "cli.help.scaf.rp-new": {
+        "ru": "новое имя пакета – идентификатор",
+        "en": "the new package name - an identifier",
+    },
     "cli.help.scaf.delete-object": {
         "ru": "удалить объект целиком (пара yaml+xbsl, формы, строка списка) и перечислить "
               "оставшиеся упоминания; без --apply – только план; см. также rename-object – "

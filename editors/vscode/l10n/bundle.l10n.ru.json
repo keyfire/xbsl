@@ -572,5 +572,19 @@
   "XBSL: the key is cleared.": "XBSL: ключ очищен.",
   "XBSL: the key is saved.": "XBSL: ключ сохранён.",
   "CI: not taken": "CI: набор не взят",
-  "The rule set of the CI job was NOT taken - the Problems panel judges by the rules of the settings.": "Набор правил задачи CI не взят – панель \"Проблемы\" судит правилами из настроек."
+  "The rule set of the CI job was NOT taken - the Problems panel judges by the rules of the settings.": "Набор правил задачи CI не взят – панель \"Проблемы\" судит правилами из настроек.",
+  "subsystem root": "корень подсистемы",
+  "Name of the new package": "Имя нового пакета",
+  "XBSL: the folder {0} already exists.": "XBSL: каталог {0} уже существует.",
+  "Kind of the first object of the package {0}": "Вид первого объекта пакета {0}",
+  "XBSL: moving {0}...": "XBSL: перенос {0}...",
+  "XBSL: the engine did not tell where the packages are - moving needs the xbsl engine with packages support.": "XBSL: движок не сообщил, где лежат пакеты – для переноса нужен движок xbsl с поддержкой пакетов.",
+  "New package...": "Новый пакет...",
+  "Where to move {0}": "Куда перенести {0}",
+  "Where the new package goes": "Где создать новый пакет",
+  "New name of the package {0}": "Новое имя пакета {0}",
+  "XBSL: renaming the package {0}...": "XBSL: переименование пакета {0}...",
+  "Move": "Перенести",
+  "XBSL: move {0} to {1}? The imports and full names that need it are updated across the project.": "XBSL: перенести {0} в {1}? Импорты и полные имена, которым это нужно, обновятся по всему проекту.",
+  "XBSL: the editor did not apply the changes.": "XBSL: редактор не применил изменения."
 }

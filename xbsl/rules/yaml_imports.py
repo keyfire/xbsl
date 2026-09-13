@@ -31,6 +31,15 @@ wants the foreign element to be public at all (see its own docstring). Together 
 what the platform requires for a reference across a subsystem boundary; both are built on
 the same placement model of the project, described below.
 
+Every finding carries its namespaces in `Diagnostic.data` as well as in the message: the
+import rules `{"namespaces": [...]}` (importing any one of them resolves the name), the
+visibility rules `{"namespace": ..., "name": <the element>}`, code/unused-import
+`{"namespace": ...}`, yaml/missing-subsystem-usage
+`{"subsystem": ..., "uses": ...}`. A message is bilingual prose; the data is what a repair
+reads. The scaffolding moves an object or renames a package by running these very rules over
+the sources before and after the change (xbsl.scaffold.op_move_object), so the decision "this
+reference loses its import" has one model, not a copy per surface.
+
 
 The yaml/missing-import rule: a yaml element (a form, an object...) that references an
 element of ANOTHER subsystem must list that subsystem in its own `Импорт:` section. A
@@ -608,6 +617,7 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "yaml/missing-import", Severity.WARNING,
                 i18n.t(f"yaml/missing-import.{shape}", name=chain_name,
                        sub="/".join(candidates)),
+                data={"namespaces": list(candidates)},
             )
 
 
@@ -769,6 +779,7 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "yaml/foreign-not-public", Severity.ERROR,
                 i18n.t("yaml/foreign-not-public.found", name=chain_name, sub=owner, vis=vis),
+                data={"namespace": owner, "name": root.rpartition("::")[2]},
             )
 
 
@@ -857,7 +868,8 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                                  packages=", ".join(packages))
             else:
                 message = i18n.t("code/unused-import.unused", sub=written)
-            yield Diagnostic(rel, line, col, "code/unused-import", Severity.WARNING, message)
+            yield Diagnostic(rel, line, col, "code/unused-import", Severity.WARNING, message,
+                             data={"namespace": key})
 
 
 # --- code/missing-import ------------------------------------------------------------------
@@ -1063,6 +1075,7 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "code/missing-import", Severity.WARNING,
                 i18n.t(f"code/missing-import.{shape}", name=chain_name,
                        sub="/".join(candidates)),
+                data={"namespaces": list(candidates)},
             )
 
 
@@ -1185,6 +1198,7 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                     name=chain_name, sub=owner, mine=mine or "",
                     vis=vis or i18n.name(_DEFAULT_SCOPE),
                 ),
+                data={"namespace": owner, "name": root.rpartition("::")[2]},
             )
 
 
@@ -1320,6 +1334,7 @@ def missing_subsystem_usage(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         yield Diagnostic(
             rel, line, 1, "yaml/missing-subsystem-usage", Severity.WARNING,
             i18n.t("yaml/missing-subsystem-usage.missing", sub=name, count=count),
+            data={"subsystem": my_sub, "uses": name},
         )
 
 
@@ -1457,4 +1472,5 @@ def localization_missing_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 rel, line, col, "yaml/localization-missing-import", Severity.ERROR,
                 i18n.t("yaml/localization-missing-import.missing",
                        ref=f"{name}.{key}", sub="/".join(candidates)),
+                data={"namespaces": list(candidates)},
             )
