@@ -129,16 +129,16 @@ def test_the_packages_list_follows_the_filters_of_the_objects(tmp_path):
 def test_find_projects_lists_a_subsystem_folder_without_a_descriptor(tmp_path):
     """A shipped library keeps a subsystem with no descriptor: objects make the folder one."""
     project_dir = _project(tmp_path)
-    queue = project_dir / "Очередь" / "Сообщения"
-    queue.mkdir(parents=True)
-    apply_result(scaffold.op_new_object(queue, "Справочник", "Конверты"))
+    routes = project_dir / "Доставка" / "Маршруты"
+    routes.mkdir(parents=True)
+    apply_result(scaffold.op_new_object(routes, "Справочник", "Рейсы"))
     (project_dir / "Пустая").mkdir()
     (project_dir / "Ресурсы").mkdir()
     (project_dir / ".служебная").mkdir()
-    assert scaffold.find_projects(tmp_path)[0]["subsystems"] == ["Очередь", "Склад"]
-    hit = scaffold.find_object(tmp_path, "Конверты")
+    assert scaffold.find_projects(tmp_path)[0]["subsystems"] == ["Доставка", "Склад"]
+    hit = scaffold.find_object(tmp_path, "Рейсы")
     assert (hit.subsystem, hit.package, hit.namespace) == (
-        "Очередь", "Сообщения", "Демо::Учет::Очередь::Сообщения")
+        "Доставка", "Маршруты", "Демо::Учет::Доставка::Маршруты")
 
 
 def test_the_reference_sections_come_on_request_or_with_brief(tmp_path):

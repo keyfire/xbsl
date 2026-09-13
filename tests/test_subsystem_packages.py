@@ -112,8 +112,8 @@ def test_a_first_level_folder_is_a_subsystem_without_a_descriptor():
     """A shipped library keeps a subsystem with no descriptor at all: the folder names it."""
     root = Path(BASE)
     model = Layout({root: ("Демо", "Учет")}, {})
-    place = model.place(root / "Очередь" / "Сообщения" / "Конверт.yaml")
-    assert (place.subsystem, place.package) == ("Очередь", "Сообщения")
+    place = model.place(root / "Доставка" / "Маршруты" / "Рейс.yaml")
+    assert (place.subsystem, place.package) == ("Доставка", "Маршруты")
 
 
 def test_the_descriptor_name_wins_over_the_folder_name():
