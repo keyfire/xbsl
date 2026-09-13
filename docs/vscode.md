@@ -632,19 +632,25 @@ means no filter. While a filter is on, the title button is filled, the project l
 filter in grey, and **Clear the subsystem and package filter** sits next to the project name. The
 filter is kept per project across window reloads, and a package that was renamed or deleted drops
 out of it; a subsystem added while a filter is on stays hidden until it is ticked. The packages come
-from the engine (`xbsl/metaProjectInfo`); until it answers, the form lists subsystems only.
+from the engine (`xbsl/metaProjectInfo`); until it answers, the form lists subsystems only. A
+subsystem or a package also filters in one click. **Filter by the subsystem** or **Filter by the
+package** in its row narrows the tree to exactly that place, a package with its nested packages, and
+the filled button of that node clears the filter. The button is in the **Subsystems** branch and in
+the **By subsystems** grouping.
 
 **Resources and their folders.** The **Resources** section lists the files of a `Resources` folder
-as folders with their nesting and the number of files in grey; a file shows its name, and the
-tooltip gives its key - the spelling a `Resource{...}` reference takes. A click opens the file, an
-svg in a preview that follows the editor theme. **Create folder** on the section or on a folder asks
-the name and goes on to the first files, because an empty folder is not kept: resources of the same
-folder moved into it, or files added from disk. **Add resource files...** copies picked files into a
-folder. **Move to folder...** on a file or a folder, or dragging it onto a folder of the section,
-moves it with the engine's `move-resource`, and **Rename folder** renames a folder: the keys that
-name the files are rewritten across the project, and the lookups by a computed string are named in a
-note. **Delete folder** first shows every place that names the files, then deletes. A resource moves
-only within its own `Resources` folder.
+as folders with their nesting, a folder icon and the number of files in grey; a file shows its name
+and the icon of its type, and the tooltip gives its key - the spelling a `Resource{...}` reference
+takes. A click opens the file, an svg in a preview that follows the editor theme. The description of
+the folder, `Resources.yaml`, is not among the files: a click on the node of the folder opens it.
+**Create folder** on the section or on a folder asks the name and goes on to the first files,
+because an empty folder is not kept: resources of the same folder moved into it, or files added from
+disk. **Add resource files...** copies picked files into a folder. **Move to folder...** on a file
+or a folder, or dragging it onto a folder of the section, moves it with the engine's
+`move-resource`, and **Rename folder** renames a folder: the keys that name the files are rewritten
+across the project, and the lookups by a computed string are named in a note. **Delete folder**
+first shows every place that names the files, then deletes. A resource moves only within its own
+`Resources` folder.
 
 **Where a resource is used.** **Find All References** on a file or a folder lists the places that
 name it in the References view, the panel the editor's own search of references opens. The engine

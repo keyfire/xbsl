@@ -16,6 +16,10 @@
   it open in the References view by file, and F4 goes to the next one. Besides `Resource{...}` keys,
   the list shows strings with the path and marks a key that lies in two folders. The command needs an
   xbsl engine that has `resource-references`. ([#67](https://github.com/keyfire/xbsl/pull/67))
+- **A subsystem or a package filters the tree in one click.** The filter button in its row narrows
+  the tree to exactly that place, and the filled button clears the filter. The button is in the
+  Subsystems branch and in the "By subsystems" grouping.
+  ([#65](https://github.com/keyfire/xbsl/pull/65))
 - **The metadata tree can be filtered by subsystems and packages.** The filter button in the tree
   title opens a form with checkboxes and object counts, so a subsystem can be narrowed to some of
   its packages. The filter now also survives a window reload.
@@ -27,12 +31,19 @@
   "Open WSDL" command, with a node per file when there are several. Nothing in the tree led to these
   files before. ([#60](https://github.com/keyfire/xbsl/pull/60))
 - **The Resources section shows folders.** A folder of thirty files used to read as thirty full keys
-  in a row. Folders now nest with the number of files in grey, and a file keeps its key in the
-  tooltip. ([#62](https://github.com/keyfire/xbsl/pull/62))
+  in a row. Folders now nest with a folder icon and the number of files in grey, and a file shows
+  the icon of its type with its key in the tooltip. ([#62](https://github.com/keyfire/xbsl/pull/62),
+  [#64](https://github.com/keyfire/xbsl/pull/64))
 - **Resource folders are created, renamed and deleted from the tree.** "Move to folder..." or a drag
   moves a resource, and the engine rewrites the keys naming it; "Delete folder" lists those places
   first. The commands need an xbsl engine that has them.
   ([#62](https://github.com/keyfire/xbsl/pull/62))
+
+### Changed
+- **The description of a Resources folder opens from the folder's node.** `Resources.yaml` sat among
+  the resource files and in their counts, though it sets the visibility of the whole folder. A click
+  on the folder's node opens it now, as a subsystem opens its descriptor, and "Open resources
+  description" is in the menu. ([#66](https://github.com/keyfire/xbsl/pull/66))
 
 ### Fixed
 - **The Problems panel shows the findings of the translation dictionary.** With `xbsl.projectRoot`
