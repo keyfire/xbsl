@@ -39,15 +39,15 @@ projects (the name of each mechanism is what the tests and the notes call it):
   the package of the module nor the root of its subsystem has one: then that namespace is used. A
   qualified key (`Ресурс{Б::ключ}`) marks nothing.
 - DECLARED TYPES - the types a value brings along without being written in the module: the type
-  of a property the code names - of the paired yaml, a component under `Components.` included, or
-  of a base component of the project -, the base type of the element, the result of a method or
-  the type of a field of another element reached through a static chain (`Module.Method()`), what
-  a member the platform gives a manager returns (a derived type of the element), the fields of the
-  structures those types are, the attributes of an element whose derived type
-  (`Element.Reference`) they are, and a query column that passes a field of its table on as it is.
-  A declared type is followed only through the members the module names after a dot, and every
-  root it holds is marked. That over-reads on purpose: a declared type the code merely passes
-  along is taken as touched, which keeps an import at worst.
+  of a property the code names (a property of the paired yaml or of a base component of the
+  project, a component under `Components.` included), the base type of the element, the result
+  of a method or the type of a field of another element reached through a static chain
+  (`Module.Method()`), what a member the platform gives a manager returns (a derived type of the
+  element), the fields of the structures those types are, the attributes of an element whose
+  derived type (`Element.Reference`) they are, and a query column that passes a field of its
+  table on as it is. A declared type is followed only through the members the module names after
+  a dot, and every root it holds is marked. That over-reads on purpose: a declared type the code
+  merely passes along or compares is taken as touched, which keeps an import at worst.
 
 The paired yaml is NOT a use in itself: its `Импорт:` section covers its own type positions, and
 an import of the element does not reach its modules (docs, "Модульная разработка"). The yaml has
@@ -58,8 +58,9 @@ the marks are exact: a type of a package marks the package, not its subsystem. S
 to `импорт Б::П` is unused when the module reaches only the package, and the message names the
 packages that carry the names instead. A namespace the project does not own (a library, another
 project, a typo) is not judged. An import of the module's own namespace is judged like any other:
-the editor reports it as well, and the type of the module itself counts as a use of it whenever the
-binder has a reason to ask for that type.
+the editor reports it as well, and the type of the module itself counts as a use of it once the
+module declares a local or reads a name that is not one (`этот` included) - that is when the binder
+asks for that type; a module that does neither, a component module too, leaves it unused.
 
 What keeps the rule quiet where it cannot follow the compiler: a module that does not parse, a
 paired yaml that does not parse, an element the module reaches whose yaml or module is unreadable
@@ -140,9 +141,8 @@ _INTERPOLATION_WORD_RE = re.compile(rf"(?<![\w:$%&])(\.?)({_NAME})(?!\s*::)")
 _UPLOADED_PREFIX = "inbase/"
 
 
-#: The kinds of an enumeration and of a common module, as object_kind spells them.
+#: The kind of an enumeration, as object_kind spells it.
 _ENUM_KIND = "Перечисление"
-_COMMON_MODULE_KIND = "ОбщийМодуль"
 
 
 @lru_cache(maxsize=1)
@@ -197,6 +197,7 @@ class _Walk:
         self.module_names: set[str] = set()
         self.locals = False                   # whether a method declares a local
         self.enum_values: set[str] = set()    # the values of the enumerations the module declares
+        self.this = False                     # whether the code reads `этот`
 
     # --- types
 
@@ -276,6 +277,9 @@ class _Walk:
             return
         if isinstance(node, P.Member):
             self.member(node, scope)
+            return
+        if isinstance(node, P.This):
+            self.this = True
             return
         if isinstance(node, P.Lambda):
             for param in node.params:
@@ -522,7 +526,7 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
         "named": sorted(walk.named), "dotted": sorted(walk.dotted),
         "chains": sorted(walk.chains), "tables": sorted(tables),
         "columns": _query_columns(source) if query_ranges(source) else [],
-        "resources": sorted(resources), "locals": walk.locals,
+        "resources": sorted(resources), "locals": walk.locals, "this": walk.this,
         **declared,
     })
     return fact
@@ -833,11 +837,10 @@ def _used(fact: dict, project: _Project, resources: dict[str, set[str]],
                 used.add(key)
     place = project.layout.place(path)
     if place is not None and owner is not None and (
-            owner.get("kind") != _COMMON_MODULE_KIND or fact["locals"]
-            or any(name not in (owner.get("members") or {}) for name in fact["bare"])):
-        # The type of the module itself: the binder asks for it to look a bare name up among
-        # its properties and to check a local against them, and a module of anything but a
-        # common module binds its handlers against it outright.
+            fact["locals"] or fact["bare"] or fact["roots"] or fact["this"]):
+        # The type of the module itself: the binder asks for it to check a local against its
+        # properties and to look up a name that is not a local among them, `этот` included. A
+        # module that does neither leaves its own namespace unused, a component module as well.
         used.add(place.key)
     bare_keys = [key for key in fact["resources"]
                  if "::" not in key and not key.startswith(_UPLOADED_PREFIX)]

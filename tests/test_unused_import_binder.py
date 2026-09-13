@@ -219,13 +219,15 @@ def test_a_qualified_name_uses_the_namespace_it_names():
 
 @needs_data
 def test_an_import_of_the_own_namespace_is_judged():
-    """A common module that asks nothing of its own type has no use for importing its own
-    subsystem; any other module binds against its own type and keeps such an import."""
+    """A module that asks nothing of its own type has no use for importing its own subsystem, a
+    component module as well; a local or a name that is not one makes the binder ask for it."""
     own = "импорт Продажи\n\nметод Т(): Число\n    возврат 1\n;\n"
-    assert _lint(own) == [(1, "Продажи")]
-    assert _lint(own.replace("    возврат 1\n", "    пер Х = 1\n    возврат Х\n")) == []
+    with_local = own.replace("    возврат 1\n", "    пер Х = 1\n    возврат Х\n")
     properties = "    -\n        Имя: Число1\n        Тип: Число\n"
-    assert _lint_component(own, properties) == []
+    assert _lint(own) == [(1, "Продажи")]
+    assert _lint(with_local) == []
+    assert _lint_component(own, properties) == [(1, "Продажи")]
+    assert _lint_component(own.replace("возврат 1", "возврат Число1"), properties) == []
 
 
 @needs_data
