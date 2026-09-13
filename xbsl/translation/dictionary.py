@@ -30,16 +30,18 @@ the service's prose - never a translation record on its own, so it feeds no plan
 counted toward coverage.
 
 The dictionary is a directory of yaml files (or one file), so filling it is dropping a
-completed stub next to the existing ones; duplicate keys with different values are refused.
-Discovery walks up from the project root for a `xbsl-translation` directory or a
-`xbsl-translation.yaml` file - the dictionary lives in the repository, outside the sources
-it describes, and never ships inside an assembly.
+completed stub next to the existing ones; a key two files translate differently is refused,
+and the refusal names every such key at once (see `collisions`). Discovery walks up from the
+project root for a `xbsl-translation` directory or a `xbsl-translation.yaml` file - the
+dictionary lives in the repository, outside the sources it describes, and never ships inside
+an assembly.
 """
 
 from __future__ import annotations
 
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -92,9 +94,11 @@ MESSAGES = {
         "ru": "{path}: язык словаря '{language}' не совпадает с '{expected}' из соседнего файла",
         "en": "{path}: the dictionary language '{language}' differs from '{expected}' of a sibling file",
     },
-    "translate.dictionary.duplicate": {
-        "ru": "{path}: ключ '{key}' уже переведён иначе в {other} ('{value}' против '{known}')",
-        "en": "{path}: the key '{key}' is already translated differently in {other} ('{value}' vs '{known}')",
+    "translate.dictionary.conflicts": {
+        "ru": "ключей, переведённых по-разному в разных файлах: {count} (каждая строка ниже –"
+              " секция, ключ и перевод в каждом файле; оставьте одно значение)",
+        "en": "keys translated differently in different files: {count} (each line below is the"
+              " section, the key and the translation in every file; keep one value)",
     },
     "translate.dictionary.bad-token-value": {
         "ru": "{path}: перевод токена '{key}' не является латинским идентификатором: '{value}'",
@@ -269,8 +273,10 @@ class Dictionary:
     sources: tuple[Path, ...] = ()
     #: Non-fatal remarks gathered while loading (an empty value skipped, etc.).
     notes: list[str] = field(default_factory=list)
-    #: Where each key was first seen - for the duplicate report.
-    _origins: dict[str, str] = field(default_factory=dict)
+    #: The keys two files translate the SAME way - rows of `collisions`. Harmless to the
+    #: lookups, so the load keeps them rather than refusing; listed because the second copy
+    #: is what a person takes out (`xbsl translate --check-duplicates`).
+    duplicates: list[dict] = field(default_factory=list)
 
     def token(self, name: str, *scopes: str) -> str | None:
         """The translation of a name, the scoped entry first.
@@ -390,28 +396,33 @@ def missing_message(start: Path) -> str:
     return text
 
 
+#: The sections of a dictionary file, in the order the reports list them - the three planes
+#: and the terms. Each is an attribute of `Dictionary` under the same name.
+SECTIONS = ("tokens", "phrases", "literals", "terms")
+
+#: The validated content of one dictionary file: section -> {key: translation}. Empty values
+#: (stubs still being filled) are already dropped, so every pair here is a translation.
+Sections = dict[str, dict[str, str]]
+
+
 def load(path: Path) -> Dictionary:
-    """Load a dictionary from a file or from every yaml file of a directory."""
+    """Load a dictionary from a file or from every yaml file of a directory.
+
+    Every file is read and checked before anything is merged, and the keys that two files
+    translate differently are refused in ONE error naming all of them. Refusing at the first
+    one made the fix a loop: take a duplicate out, load again, meet the next - once per key,
+    on a merge that had brought ten of them in at a time. The other refusals (a file that
+    does not parse, a broken token value) still stop at the first, as before: they are one
+    file's fault, and the file is named.
+    """
     if not _HAVE_YAML:
         raise DictionaryError(i18n.t("translate.dictionary.no-yaml"))
-    if path.is_dir():
-        files = sorted(p for p in path.rglob("*.yaml") if p.is_file())
-    elif path.is_file():
-        files = [path]
-    else:
-        raise DictionaryError(i18n.t("translate.dictionary.not-found", path=path))
+    files = _files_of(path)
     out = Dictionary(sources=tuple(files))
     language: str | None = None
+    parsed: list[tuple[str, Sections]] = []
     for file in files:
-        try:
-            data = yaml.load(file.read_text(encoding="utf-8-sig"), Loader=_LOADER) or {}
-        except (OSError, yaml.YAMLError) as exc:
-            raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=file, error=exc)) from exc
-        if not isinstance(data, dict):
-            raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=file, error="mapping expected"))
-        version = data.get("version", 1)
-        if version != 1:
-            raise DictionaryError(i18n.t("translate.dictionary.bad-version", path=file, version=version))
+        data = _parse(file, _text_of(file))
         file_language = str(data.get("language") or "en")
         if language is None:
             language = file_language
@@ -420,47 +431,172 @@ def load(path: Path) -> Dictionary:
                 "translate.dictionary.language-mismatch",
                 path=file, language=file_language, expected=language,
             ))
-        _merge_section(out, file, data, "tokens")
-        _merge_section(out, file, data, "phrases")
-        _merge_section(out, file, data, "literals")
-        _merge_section(out, file, data, "terms")
+        parsed.append((str(file), _sections(file, data, out.notes)))
+    conflicts, out.duplicates = collisions(parsed)
+    if conflicts:
+        raise DictionaryError(conflicts_message(conflicts))
+    for _label, sections in parsed:
+        for section, pairs in sections.items():
+            getattr(out, section).update(pairs)
     out.language = language or "en"
     return out
 
 
-def _merge_section(out: Dictionary, file: Path, data: dict, section: str) -> None:
-    raw = data.get(section)
-    if raw is None:
-        return
-    if not isinstance(raw, dict):
-        raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=file, section=section))
-    target = {
-        "tokens": out.tokens, "phrases": out.phrases, "literals": out.literals, "terms": out.terms,
-    }[section]
-    for key, value in raw.items():
-        if not isinstance(key, str) or not key:
-            raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=file, section=section))
-        if value is None or value == "":
-            continue  # a stub still being filled - the key simply stays untranslated
-        if not isinstance(value, str):
-            raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=file, section=section))
-        if section == "tokens":
-            _validate_token(out, file, key, value)
-        elif section == "literals":
-            _validate_literal(file, key, value)
-        origin_key = f"{section}:{key}"
-        known = target.get(key)
-        if known is not None and known != value:
-            raise DictionaryError(i18n.t(
-                "translate.dictionary.duplicate",
-                path=file, key=key, value=value,
-                known=known, other=out._origins.get(origin_key, "?"),
-            ))
-        target[key] = value
-        out._origins.setdefault(origin_key, str(file))
+def read_sections(path: Path) -> list[tuple[str, Sections]]:
+    """(name, validated sections) of every dictionary file, in the order `load` reads them.
+
+    The reading behind `load` without the merge - what a check of the files against each
+    other starts from. The name is the file's path relative to the dictionary (POSIX slashes),
+    which is how the same file read from a git ref is matched to it (see `overlay`); the
+    single-file dictionary is named by its file name. A file that does not load stops the
+    reading with the same error `load` would raise for it.
+    """
+    if not _HAVE_YAML:
+        raise DictionaryError(i18n.t("translate.dictionary.no-yaml"))
+    base = path if path.is_dir() else path.parent
+    return [
+        (file.relative_to(base).as_posix(), sections_of(file, _text_of(file)))
+        for file in _files_of(path)
+    ]
 
 
-def _validate_literal(file: Path, key: str, value: str) -> None:
+def sections_of(label: str | Path, text: str, notes: list[str] | None = None) -> Sections:
+    """The validated sections of one dictionary file given as TEXT.
+
+    `label` names the file in the refusals - a path, or `ref:name` for a copy read out of git.
+    The keyword notes of the tokens plane land in `notes` when a list is given.
+    """
+    return _sections(label, _parse(label, text), [] if notes is None else notes)
+
+
+def collisions(files: Sequence[tuple[str, Sections]]) -> tuple[list[dict], list[dict]]:
+    """The keys more than one file translates: (conflicts, duplicates).
+
+    A conflict is a key two files translate DIFFERENTLY - what the load refuses. A duplicate
+    is a key two files translate the same way: the lookups do not care, and it is listed
+    because the second copy is what a person takes out. A key with three readings, two of them
+    alike, is a conflict. A row is `{"section", "key", "places": [{"file", "value"}, ...]}`,
+    the places in file order; the rows come in section order, then by key.
+    """
+    places: dict[tuple[str, str], list[dict]] = {}
+    for name, sections in files:
+        for section, pairs in sections.items():
+            for key, value in pairs.items():
+                places.setdefault((section, key), []).append({"file": name, "value": value})
+    conflicts: list[dict] = []
+    duplicates: list[dict] = []
+    ordered = sorted(places.items(), key=lambda kv: (SECTIONS.index(kv[0][0]), kv[0][1]))
+    for (section, key), seen in ordered:
+        if len(seen) < 2:
+            continue
+        row = {"section": section, "key": key, "places": seen}
+        (conflicts if len({place["value"] for place in seen}) > 1 else duplicates).append(row)
+    return conflicts, duplicates
+
+
+def overlay(
+    working: Sequence[tuple[str, Sections]], other: Sequence[tuple[str, Sections]], prefix: str,
+) -> list[tuple[str, Sections]]:
+    """The working tree's files plus what `other` - the same dictionary at a git ref - adds.
+
+    A file present on both sides is ONE file: a key the working tree spells differently is
+    that file's own edit, not a collision, and only the keys the working tree's copy does not
+    carry come in - under `prefix:name`, so a report says where the second reading lives. A
+    file `other` has and the working tree does not comes in whole, the same way. This is what
+    lets a branch see the collision it would bring to the target branch BEFORE the merge: the
+    keys the target added since the fork, in files of its own or in the shared ones.
+    """
+    known = dict(working)
+    out = list(working)
+    for name, sections in other:
+        mine = known.get(name) or {}
+        extra: Sections = {}
+        for section, pairs in sections.items():
+            have = mine.get(section) or {}
+            added = {key: value for key, value in pairs.items() if key not in have}
+            if added:
+                extra[section] = added
+        if extra:
+            out.append((f"{prefix}:{name}", extra))
+    return out
+
+
+def conflicts_message(conflicts: list[dict]) -> str:
+    """The text of the refusal: the count, then one line per key with every file and value."""
+    lines = [i18n.t("translate.dictionary.conflicts", count=len(conflicts))]
+    lines.extend("  " + collision_line(row) for row in conflicts)
+    return "\n".join(lines)
+
+
+def collision_line(row: dict) -> str:
+    """One conflict as a report line: the section, the key, then each file with its value."""
+    places = "; ".join(f"{place['file']} = '{place['value']}'" for place in row["places"])
+    return f"[{row['section']}] {row['key']}: {places}"
+
+
+def duplicate_line(row: dict) -> str:
+    """One duplicate as a report line: the value once, since every file agrees on it."""
+    files = ", ".join(place["file"] for place in row["places"])
+    return f"[{row['section']}] {row['key']} = '{row['places'][0]['value']}': {files}"
+
+
+def _files_of(path: Path) -> list[Path]:
+    """The files a dictionary path stands for: every yaml under a directory, or the file."""
+    if path.is_dir():
+        return sorted(p for p in path.rglob("*.yaml") if p.is_file())
+    if path.is_file():
+        return [path]
+    raise DictionaryError(i18n.t("translate.dictionary.not-found", path=path))
+
+
+def _text_of(file: Path) -> str:
+    try:
+        return file.read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=file, error=exc)) from exc
+
+
+def _parse(label: str | Path, text: str) -> dict:
+    """The mapping of one dictionary file, its version checked."""
+    try:
+        data = yaml.load(text, Loader=_LOADER) or {}
+    except yaml.YAMLError as exc:
+        raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=label, error=exc)) from exc
+    if not isinstance(data, dict):
+        raise DictionaryError(i18n.t("translate.dictionary.bad-file", path=label, error="mapping expected"))
+    version = data.get("version", 1)
+    if version != 1:
+        raise DictionaryError(i18n.t("translate.dictionary.bad-version", path=label, version=version))
+    return data
+
+
+def _sections(label: str | Path, data: dict, notes: list[str]) -> Sections:
+    """The four sections of one parsed file, validated, the empty values dropped."""
+    out: Sections = {}
+    for section in SECTIONS:
+        raw = data.get(section)
+        if raw is None:
+            continue
+        if not isinstance(raw, dict):
+            raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=label, section=section))
+        pairs: dict[str, str] = {}
+        for key, value in raw.items():
+            if not isinstance(key, str) or not key:
+                raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=label, section=section))
+            if value is None or value == "":
+                continue  # a stub still being filled - the key simply stays untranslated
+            if not isinstance(value, str):
+                raise DictionaryError(i18n.t("translate.dictionary.bad-section", path=label, section=section))
+            if section == "tokens":
+                _validate_token(notes, label, key, value)
+            elif section == "literals":
+                _validate_literal(label, key, value)
+            pairs[key] = value
+        out[section] = pairs
+    return out
+
+
+def _validate_literal(file: str | Path, key: str, value: str) -> None:
     """Refuse an entry whose key or value would not survive being pasted between quotes.
 
     Both sides are checked, because both obey one convention: the key is the text the source
@@ -479,7 +615,7 @@ def _validate_literal(file: Path, key: str, value: str) -> None:
         ))
 
 
-def _validate_token(out: Dictionary, file: Path, key: str, value: str) -> None:
+def _validate_token(notes: list[str], file: str | Path, key: str, value: str) -> None:
     if not _TOKEN_VALUE_RE.match(value):
         raise DictionaryError(i18n.t(
             "translate.dictionary.bad-token-value", path=file, key=key, value=value,
@@ -489,7 +625,7 @@ def _validate_token(out: Dictionary, file: Path, key: str, value: str) -> None:
     # is a note for the report, not a refusal.
     keyword_targets = {en.lower() for en in platform_map.keyword_english().values()}
     if value.lower() in keyword_targets:
-        out.notes.append(i18n.t(
+        notes.append(i18n.t(
             "translate.dictionary.keyword-value", path=file, key=key, value=value,
         ))
 

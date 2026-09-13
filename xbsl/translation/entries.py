@@ -112,6 +112,15 @@ MESSAGES = {
               " an answer. To go on: a larger budget_seconds, or a narrower question -"
               " filter, kind.",
     },
+    "translate.against.read-failed": {
+        "ru": "файлы словаря на \"{rev}\" не прочитаны: {error}",
+        "en": "the dictionary files at \"{rev}\" could not be read: {error}",
+    },
+    "translate.against.not-a-repo": {
+        "ru": "словарь {path} не в репозитории git: его файлы на ссылке взять неоткуда",
+        "en": "the dictionary {path} is not inside a git repository: there is nowhere to"
+              " read its files at a ref from",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -655,6 +664,93 @@ def _git(root: Path, *args: str) -> tuple[int, str, str]:
     return (done.returncode,
             done.stdout.decode("utf-8", "replace"),
             done.stderr.decode("utf-8", "replace"))
+
+
+def _git_bytes(root: Path, *args: str, feed: bytes = b"") -> tuple[int, bytes, str]:
+    """One git call fed `feed` on stdin, its stdout kept as BYTES: (exit code, stdout, stderr).
+
+    `cat-file --batch` reads the objects to print from stdin and prints file contents, which
+    the caller decodes the way it reads the files on disk. The child gets a pipe of its own,
+    written and closed before it reads - as far from a server's stdin as the DEVNULL of
+    `_git`.
+    """
+    import subprocess
+
+    try:
+        done = subprocess.run(
+            ["git", "-c", "core.quotepath=false", *args],
+            cwd=str(root), capture_output=True, input=feed, timeout=GIT_TIMEOUT,
+        )
+    except FileNotFoundError:
+        raise ValueError(i18n.t("translate.since.no-git")) from None
+    except subprocess.TimeoutExpired:
+        raise ValueError(i18n.t("translate.since.timeout",
+                                command=" ".join(args), seconds=GIT_TIMEOUT)) from None
+    return done.returncode, done.stdout, done.stderr.decode("utf-8", "replace")
+
+
+def dictionary_at(dictionary: Path, ref: str) -> list[tuple[str, str]]:
+    """(name, text) of every dictionary file as the git ref `ref` has it.
+
+    The names are relative to the dictionary - the ones `dictionary.read_sections` gives the
+    working tree's files, which is how the two readings of one file are matched. `ref` is
+    whatever git resolves to a commit (`origin/master`, a tag, a sha); it is resolved once,
+    so the listing and the contents come from one commit even if the ref moves meanwhile.
+    Raises ValueError naming what failed: no git, not a repository, an unknown ref, a read
+    git refused.
+
+    The contents come out of ONE `cat-file --batch` rather than a `git show` per file: a live
+    dictionary is a hundred and seventy files, and on Windows a process start costs more than
+    the read.
+    """
+    where = dictionary if dictionary.is_dir() else dictionary.parent
+    code, prefix, _error = _git(where, "rev-parse", "--show-prefix")
+    if code != 0:
+        raise ValueError(i18n.t("translate.against.not-a-repo", path=dictionary))
+    code, commit, _error = _git(where, "rev-parse", "--verify", "--quiet", f"{ref}^{{commit}}")
+    if code != 0:
+        raise ValueError(i18n.t("translate.since.unknown-rev", rev=ref))
+    commit, prefix = commit.strip(), prefix.strip()
+    spec = "." if dictionary.is_dir() else dictionary.name
+    # `-z`: without it git wraps a name holding a quote or a backslash in quotes of its own,
+    # and `core.quotepath=false` does not reach those - the name would match no file.
+    code, listing, error = _git(
+        where, "ls-tree", "-r", "-z", "--name-only", "--full-name", commit, "--", spec,
+    )
+    if code != 0:
+        raise ValueError(i18n.t("translate.against.read-failed", rev=ref, error=error.strip()))
+    names = [name for name in listing.split("\0") if name.endswith(".yaml")]
+    feed = "".join(f"{commit}:{name}\n" for name in names).encode("utf-8")
+    code, blob, error = _git_bytes(where, "cat-file", "--batch", feed=feed)
+    if code != 0:
+        raise ValueError(i18n.t("translate.against.read-failed", rev=ref, error=error.strip()))
+    return _batched_blobs(blob, names, prefix)
+
+
+def _batched_blobs(blob: bytes, names: list[str], prefix: str) -> list[tuple[str, str]]:
+    """Read the output of `cat-file --batch` back: `<oid> blob <size>`, the content, a newline.
+
+    A spec git could not find prints `<spec> missing` and no content; the names come from the
+    listing of the same commit, so that line is a guard rather than a case. The names lose the
+    `prefix` of the dictionary inside the repository and a byte order mark is taken off the
+    text, the way the files on disk are read.
+    """
+    out: list[tuple[str, str]] = []
+    position = 0
+    for name in names:
+        end = blob.find(b"\n", position)
+        if end < 0:
+            break
+        parts = blob[position:end].decode("utf-8", "replace").split()
+        position = end + 1
+        if len(parts) != 3 or parts[1] != "blob" or not parts[2].isdigit():
+            continue
+        size = int(parts[2])
+        text = blob[position:position + size].decode("utf-8", "replace")
+        position += size + 1
+        short = name[len(prefix):] if prefix and name.startswith(prefix) else name
+        out.append((short, text.removeprefix("\ufeff")))
+    return out
 
 
 def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:

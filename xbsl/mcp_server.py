@@ -1604,12 +1604,20 @@ def meta_add_handler(
 
 
 @mcp.tool()
-def translate_status(root: str) -> dict:
+def translate_status(root: str, against: str = "") -> dict:
     """Coverage of the project's translation dictionary: how much is done and what is left.
 
     root – the project directory (the one with the project descriptor), next to which - or
     above which - the xbsl-translation dictionary sits; a root without one is refused with
     the places looked at, and the answer names the absolute `dictionary` read.
+    against – a git ref (say `origin/master`): the answer then carries `collisions`, the keys
+    the working tree's dictionary files and the ref's translate differently (`conflicts` -
+    what the load of the merged dictionary would refuse) or the same way (`duplicates`), so
+    a branch sees a collision with the target branch before the merge. The same report as
+    `xbsl translate --check-duplicates --against REF`, with `against` naming the ref, its file
+    count and how many of its entries the working tree does not carry. A dictionary that does
+    not load - a conflict already in the working tree - answers with the `error` naming every
+    conflict and, when a ref was given, the `collisions` report next to it.
     Returns the totals only - a cheap health check before deciding what to fill.
     Two units live here, so read the names: `missing_tokens`, `missing_phrases`,
     `literals_translated` and `missing_literals` count DISTINCT entries - what a dictionary line
@@ -1617,18 +1625,25 @@ def translate_status(root: str) -> dict:
     pass touched. `literals_translated` and `missing_literals` are the two halves of one number:
     how many different literal texts the plane names and how many it does not.
     `literal_occurrences` is the odd one out and says so: it counts rewritten SPANS, the size
-    of the change rather than the size of the dictionary.
+    of the change rather than the size of the dictionary. `duplicates` counts the keys two
+    dictionary files translate the same way - harmless to the lookups, listed by the CLI's
+    `--check-duplicates` for the copy to take out.
     """
     from xbsl.translation import cli as translate_cli
 
     project, dictionary, error = translate_cli.load_for_tools(root)
+    collisions = None
+    if against and project.is_dir():
+        found = translate_cli.dictionary_path_for(project)
+        if found is not None:
+            collisions = translate_cli.collisions_report(found, against)
     if error:
-        return {"error": error}
+        return {"error": error, "collisions": collisions} if collisions else {"error": error}
     from xbsl.translation import project as project_module
 
     report_obj = project_module.translate_project(project, dictionary, None)
     totals = report_obj.totals()
-    return {
+    answer = {
         "coverage": totals["coverage"],
         "translated": totals["translated"],
         "missing": totals["missing"],
@@ -1638,9 +1653,13 @@ def translate_status(root: str) -> dict:
         "missing_literals": totals["missing_literals"],
         "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
+        "duplicates": len(dictionary.duplicates),
         "problems": report_obj.problems[:20],
         "dictionary": str(translate_cli.dictionary_path_for(project)),
     }
+    if collisions:
+        answer["collisions"] = collisions
+    return answer
 
 
 @mcp.tool()
