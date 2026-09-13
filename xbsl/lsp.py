@@ -1753,6 +1753,18 @@ def _make_server() -> "LanguageServer":
             reader=_sources_reader,
         )
 
+    @server.feature("xbsl/metaResourceReferences")
+    @server.thread()
+    def _meta_resource_references(params: object) -> dict:
+        """Every place that names a resource file or a folder (scaffold.resource_references).
+        Read only: the metadata tree shows the answer in the references view."""
+        try:
+            return scaffold.resource_references(
+                _meta_root(params), Path(str(_param(params, "path"))), reader=_sources_reader,
+            )
+        except (scaffold.ScaffoldError, OSError) as exc:
+            return {"error": str(exc)}
+
     # --- form designer (the structure view is a thin client of these methods) ------------
     #
     # Like the meta* family, the server only computes; the editor applies the edits via

@@ -86,6 +86,7 @@
   "cmd.metadata.moveResource": "Переместить в папку...",
   "cmd.metadata.renameResourceFolder": "Переименовать папку",
   "cmd.metadata.deleteResourceFolder": "Удалить папку",
+  "cmd.metadata.findResourceReferences": "Найти все ссылки",
   "cmd.metadata.filterBySubsystem": "Отбор по подсистемам и пакетам...",
   "cmd.metadata.editFilter": "Отбор по подсистемам и пакетам (установлен)...",
   "cmd.metadata.clearFilter": "Сбросить отбор по подсистемам и пакетам",

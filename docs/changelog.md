@@ -28,6 +28,10 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **`resource-references` finds the places that name a resource file or folder.** It reads the
+  sources the way `move-resource` does. Every place comes with its file, range and line, and string
+  lookups and a key that two folders hold are marked. MCP calls it `meta_resource_references`, LSP
+  `xbsl/metaResourceReferences`. ([#67](https://github.com/keyfire/xbsl/pull/67))
 - **`move-resource`, `rename-resource-folder` and `delete-resource-folder` work with resource
   folders.** A file moved by hand left its `Resource{...}` keys on the old path until a build
   failed. The commands move the files and rewrite the keys; lookups by a computed string are listed,

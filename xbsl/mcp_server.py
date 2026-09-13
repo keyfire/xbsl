@@ -1431,6 +1431,37 @@ def meta_rename_resource_folder(
 
 
 @mcp.tool()
+def meta_resource_references(root: str, resource_path: str, limit: int = 100) -> dict:
+    """Find every place in the sources that names a resource file or a folder of them.
+
+    resource_path – a file or a folder inside the `Resources` folder of a subsystem or a
+    package. The reading is the one meta_move_resource makes, so the answer lists what a move
+    would rewrite or name. Each place has `path`, a zero-based LSP `range` (characters counted
+    in UTF-16 code units), the `text` of its line and a `kind`:
+    `reference` – a `Resource{...}` literal of a module or a yaml binding, or the bare value of
+    an image property, that resolves to the file, with a namespace or without one;
+    `ambiguous` – a key that two resources folders visible from the file hold, this one among
+    them; `string` – a string literal that spells the path, read at run time by
+    `ResourcesPackage.Current().Get()` or a wrapper of the project; `computed` – a string with
+    the folder of the file and a computed name, which may name the file.
+    For a folder, every file under it counts. `total` is the number of places; `references`
+    holds the first `limit` of them, sorted by file and position.
+    root – the caller's project or repository root (absolute): references are looked for under
+    it, relative paths resolve against it, and the answer names it as `root`.
+
+    See also: meta_move_resource moves a resource and rewrites its keys,
+    meta_delete_resource_folder lists them before a folder is deleted.
+    """
+    base = _base(root)
+    try:
+        answer = scaffold.resource_references(base, _under(base, resource_path))
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    answer["references"] = answer["references"][:max(0, limit)]
+    return {"root": str(base), **answer}
+
+
+@mcp.tool()
 def meta_delete_resource_folder(
     root: str,
     folder_dir: str,

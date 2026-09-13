@@ -344,7 +344,7 @@ _META_COMMANDS = (
     "set-field-property",
     "rename-object", "delete-object", "move-object", "rename-package",
     "move-resource", "rename-resource-folder", "delete-resource-folder", "set-access",
-    "object-info", "project-info",
+    "object-info", "project-info", "resource-references",
     "localization-info", "form-tree", "form-edit", "form-handlers",
 )
 
@@ -742,6 +742,10 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", help=i18n.t("cli.help.scaf.arg.object-name"))
     p.add_argument("--path", help=i18n.t("cli.help.scaf.yaml-vs-name"))
 
+    p = command("resource-references")
+    p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
+    p.add_argument("resource_path", help=i18n.t("cli.help.scaf.mr-path"))
+
     p = command("project-info")
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--kind", help=i18n.t("cli.help.scaf.project-info-kind"))
@@ -809,7 +813,7 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--signature", help=i18n.t("cli.help.scaf.fh-signature"))
 
     for name, sp in sub.choices.items():
-        if name.endswith("-info") or name == "form-tree":
+        if name.endswith("-info") or name in ("form-tree", "resource-references"):
             continue
         sp.add_argument("--dry-run", action="store_true", help=i18n.t("cli.help.scaf.dry-run"))
     return parser
@@ -1101,6 +1105,12 @@ def _scaffold_main(argv: list[str]) -> int:
                     Path(args.root), name=args.name,
                     yaml_path=Path(args.path) if args.path else None,
                 ),
+                ensure_ascii=False,
+            ))
+            return 0
+        elif args.command == "resource-references":
+            print(json.dumps(
+                scaffold.resource_references(Path(args.root), Path(args.resource_path)),
                 ensure_ascii=False,
             ))
             return 0

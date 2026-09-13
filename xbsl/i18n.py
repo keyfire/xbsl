@@ -1261,6 +1261,15 @@ _CORE_MESSAGES = {
         "ru": "сводка объекта: реквизиты, ТЧ, формы, namespace",
         "en": "object summary: attributes, tabular sections, forms, namespace",
     },
+    "cli.help.scaf.resource-references": {
+        "ru": "найти места, которые называют файл ресурса или папку: ключи Ресурс{{...}}, значения "
+              "свойств-картинок и обращения по строке; ответ – JSON с файлом, диапазоном и текстом "
+              "строки каждого места; см. также move-resource – перенести ресурс с правкой ключей",
+        "en": "find the places that name a resource file or a folder: Resource{{...}} keys, image "
+              "property values and lookups by a string; the answer is JSON with the file, the "
+              "range and the line of each place; see also move-resource, which moves a resource "
+              "and rewrites its keys",
+    },
     "cli.help.scaf.project-info": {
         "ru": "обзор исходников: проекты, подсистемы, объекты",
         "en": "sources overview: projects, subsystems, objects",
