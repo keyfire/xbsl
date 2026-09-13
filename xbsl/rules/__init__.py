@@ -17,7 +17,7 @@ from . import (  # noqa: F401
 )
 
 # Tier B – text and conventions:
-from . import security, typography, whitespace  # noqa: F401
+from . import comment_prose, security, typography, whitespace  # noqa: F401
 
 # Tier C – code structure, basic syntax and local variables:
 from . import (  # noqa: F401
