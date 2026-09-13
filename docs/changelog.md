@@ -25,7 +25,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## 2026-09-13 – 0.106.0
+## 2026-09-13 – 0.106.0, 0.106.1
 
 ### Added
 - **The documentation guard catches a sentence naming who asked for a change.** The repository has
@@ -93,6 +93,11 @@ entry either - say what the behaviour was, not which class name was compared.
   `--unused` help points at `--format json`. ([#47](https://github.com/keyfire/xbsl/pull/47))
 
 ### Fixed
+- **Translation carries a package import of another subsystem into the English tree.** An
+  `Import` list in yaml names such a package as `Subsystem::Package`, and the translator left that
+  value in Russian. The strict run did not notice, and the translated build could not find the
+  package's types. Each segment now comes from the dictionary, and the strict run treats a segment
+  without an entry as a gap. ([#50](https://github.com/keyfire/xbsl/pull/50))
 - **The import rules know the packages of a subsystem.** They took `import Subsystem` as enough for
   its packages, while another subsystem needs `import Subsystem::Package`. `code/missing-import` and
   `yaml/missing-import` now ask for it. ([#53](https://github.com/keyfire/xbsl/pull/53))
