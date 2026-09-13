@@ -497,7 +497,7 @@ _NOT_ARITHMETIC = object()
 
 
 def _case_end(tokens: list) -> int | None:
-    """The index of the `КОНЕЦ` that closes the `ВЫБОР` at index 0, counting nested ones."""
+    """The index of the `END` that closes the `CASE` at index 0, counting nested ones."""
     case, end = _words("CASE"), _words("END")
     level = 0
     for index, token in enumerate(tokens):

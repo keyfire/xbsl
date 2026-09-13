@@ -1015,8 +1015,8 @@ class ProjectCatalog:
         own = self.modules.get(module or "") or {}
         if member in (own.get("enums") or {}).get(name, ()):
             return TypeSet.of(f"{module}.{name}")
-        # an enumeration of a module, named with its module (`Модуль.Цвет.Красный`, and the bare
-        # `Цвет` inside that module resolves to the same qualified name)
+        # an enumeration of a module, named with its module (`Module.Color.Red`, and the bare
+        # `Color` inside that module resolves to the same qualified name)
         owner, dot, enum = name.partition(".")
         if dot and not called and member in ((self.modules.get(owner) or {}).get("enums") or {}).get(enum, ()):
             return TypeSet.of(name)
