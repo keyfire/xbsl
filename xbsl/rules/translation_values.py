@@ -284,6 +284,10 @@ _FINITE_MARKERS = frozenset("""
     is are was were has have had does do did can could will would should may might must shall
 """.split())
 
+#: A relative pronoun or a conjunction ends the noun phrase: in "is shadowed the parameter that
+#: is passed" the finite verb belongs to the relative clause and says nothing about the phrase.
+_PHRASE_ENDS = frozenset("that which who whom whose where when and or but".split())
+
 
 def _passive_findings(value: str) -> Iterable[tuple[str, int]]:
     """(the passive turn as written, its offset in the value) for shape 2."""
@@ -302,6 +306,9 @@ def _passive_findings(value: str) -> Iterable[tuple[str, int]]:
         if _SUBORDINATORS.intersection(w.lower() for w in _WORD_RE.findall(clause)):
             continue
         after = [(match.group(name) or "").lower().strip("'") for name in ("w1", "w2", "w3", "w4")]
+        ends = [index for index, word in enumerate(after) if word in _PHRASE_ENDS]
+        if ends:
+            after = after[:ends[0]]
         if _ADVERBIAL.intersection(after[:2]) or _FINITE_MARKERS.intersection(after):
             continue
         end = match.end("participle")

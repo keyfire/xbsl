@@ -71,15 +71,17 @@ def test_ordinary_english_endings_stay_silent(tmp_path):
 
 
 def test_a_passive_followed_by_a_noun_phrase_is_a_trace(tmp_path):
-    """A `which` behind a comma opens a different clause and does not excuse the passive."""
+    """A `which` behind a comma opens a different clause, and a finite verb of a relative clause
+    after the phrase does not make the phrase a subject - neither excuses the passive."""
     _dictionary(tmp_path, (
         "phrases:\n"
         '    "переменная перекрывает параметр.": "a variable is shadowed the parameter."\n'
         '    "верно, а поле перекрывает имя.": "which is fine, and a field is shadowed the name."\n'
+        '    "имя перекрывает то, что передано.": "a name is shadowed the value that is passed."\n'
     ))
     diags = _lint(tmp_path)
 
-    assert _words(diags) == ["is shadowed the", "is shadowed the"], [d.message for d in diags]
+    assert _words(diags) == ["is shadowed the"] * 3, [d.message for d in diags]
     assert all("страдательный залог" in d.message for d in diags)
 
 
