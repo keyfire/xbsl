@@ -25,6 +25,7 @@
   "cmd.metadata.openYaml": "Open description (yaml)",
   "cmd.metadata.openQuery": "Open query (xbql)",
   "cmd.metadata.openWsdl": "Open WSDL",
+  "cmd.metadata.openResourcesDescriptor": "Open resources description",
   "cmd.metadata.openModule": "Open module (xbsl)",
   "cmd.metadata.openObjectModule": "Open object module (.Object.xbsl)",
   "cmd.metadata.previewForm": "Open in the form designer",

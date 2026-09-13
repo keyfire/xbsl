@@ -8,7 +8,7 @@
 // (scaffold.op_move_resource and its two neighbours): the keys naming the files are rewritten
 // there, never here. This module only decides what the tree shows and offers.
 
-import { RESOURCE_DIR_NAMES, ResourceFile } from "./metadataCore";
+import { isResourcesDescriptorKey, ResourceFile, ResourceScope } from "./metadataCore";
 import { joinDir, pathKey } from "./packagesCore";
 
 export interface ResourceFolder {
@@ -115,10 +115,21 @@ export function resourcePathOf(ref: ResourceRef): string {
 // The description of the resources (`Resources/Resources.yaml`, either spelling) sets the
 // visibility of the whole folder: it is not a resource, and it stays where it is.
 export function isResourcesDescriptor(ref: ResourceRef): boolean {
-  if (ref.folder || ref.path.includes("/") || !ref.path.toLowerCase().endsWith(".yaml")) {
-    return false;
-  }
-  return RESOURCE_DIR_NAMES.includes(ref.path.slice(0, -".yaml".length));
+  return !ref.folder && isResourcesDescriptorKey(ref.path);
+}
+
+// A description a node of the section opens, with the folder that owns it - the label a pick
+// shows when the Resources category holds several folders.
+export interface ResourcesDescriptorRef {
+  owner: string;
+  path: string;
+}
+
+// The descriptions of the given resources folders, in their order; a folder without one adds
+// nothing. One description - a click on the node opens it; several - the click asks which;
+// none - the click only expands.
+export function resourcesDescriptors(scopes: ResourceScope[]): ResourcesDescriptorRef[] {
+  return scopes.flatMap((scope) => (scope.descriptor ? [{ owner: scope.scope, path: scope.descriptor }] : []));
 }
 
 // A node that "Move to folder" and a drag may carry: a file or a folder inside the resources

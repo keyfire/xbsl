@@ -183,6 +183,11 @@
         "category": "XBSL"
       },
       {
+        "command": "xbsl.metadata.openResourcesDescriptor",
+        "title": "%cmd.metadata.openResourcesDescriptor%",
+        "category": "XBSL"
+      },
+      {
         "command": "xbsl.metadata.openModule",
         "title": "%cmd.metadata.openModule%",
         "category": "XBSL",
@@ -1023,6 +1028,11 @@
           "command": "xbsl.metadata.openWsdl",
           "when": "view == xbslMetadata && viewItem =~ /\\bwsdl\\b/",
           "group": "1_open@5"
+        },
+        {
+          "command": "xbsl.metadata.openResourcesDescriptor",
+          "when": "view == xbslMetadata && viewItem =~ /\\bresdescr\\b/",
+          "group": "1_open@6"
         },
         {
           "command": "xbsl.metadata.previewForm",

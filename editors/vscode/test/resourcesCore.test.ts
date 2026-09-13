@@ -3,7 +3,7 @@
 // the very spelling a `Ресурс{...}` reference uses, so the tree teaches the correct addressing.
 
 import * as assert from "assert";
-import { groupResources } from "../src/metadataCore";
+import { groupResources, isResourcesDescriptorKey } from "../src/metadataCore";
 import {
   canMoveInto,
   childPath,
@@ -17,6 +17,7 @@ import {
   resourceFolderTree,
   resourceCodicon,
   resourcePathOf,
+  resourcesDescriptors,
 } from "../src/resourceFoldersCore";
 
 function keysOf(scopes: ReturnType<typeof groupResources>): Record<string, string[]> {
@@ -70,6 +71,47 @@ function keysOf(scopes: ReturnType<typeof groupResources>): Record<string, strin
   ]);
   assert.strictEqual(scopes.length, 1);
   assert.strictEqual(scopes[0].files.length, 2);
+}
+
+// The description of a resources folder (`Ресурсы/Ресурсы.yaml`, either spelling) is not a
+// resource: it is set apart from the files - counted nowhere, opened from the folder's node. A
+// yaml of that name deeper is an ordinary file, and so is a copy under another name.
+{
+  const scopes = groupResources([
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Ресурсы.yaml",
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Значки\\Ресурсы.yaml",
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Значки\\Флаг.svg",
+    "D:\\repo\\app\\Задачи\\Ресурсы\\Ресурсы 1.yaml",
+    "D:\\repo\\app\\Шаги\\Ресурсы\\schema.svg",
+    "/repo/app/Main/Resources/Resources.yaml",
+  ]);
+  assert.deepStrictEqual(keysOf(scopes), {
+    "Задачи": ["Значки/Ресурсы.yaml", "Значки/Флаг.svg", "Ресурсы 1.yaml"],
+    Main: [],
+    "Шаги": ["schema.svg"],
+  });
+  assert.strictEqual(scopes.find((s) => s.scope === "Задачи")?.descriptor, "D:\\repo\\app\\Задачи\\Ресурсы\\Ресурсы.yaml");
+  // A folder holding the description alone is still a scope, with no files.
+  assert.strictEqual(scopes.find((s) => s.scope === "Main")?.descriptor, "/repo/app/Main/Resources/Resources.yaml");
+  assert.strictEqual(scopes.find((s) => s.scope === "Шаги")?.descriptor, undefined);
+  // The counts of the section come from the files, so the description is in none of them.
+  const tasks = scopes.find((s) => s.scope === "Задачи")!;
+  assert.strictEqual(resourceFolderTree(tasks.files).count, 3);
+  assert.deepStrictEqual(resourceFolderTree(tasks.files).files.map((f) => f.key), ["Ресурсы 1.yaml"]);
+
+  // What a click on a node opens: the descriptions of its folders, labeled by the owner, in the
+  // order of the scopes (the Russian collation puts Cyrillic names first).
+  assert.deepStrictEqual(resourcesDescriptors(scopes), [
+    { owner: "Задачи", path: "D:\\repo\\app\\Задачи\\Ресурсы\\Ресурсы.yaml" },
+    { owner: "Main", path: "/repo/app/Main/Resources/Resources.yaml" },
+  ]);
+  assert.deepStrictEqual(resourcesDescriptors(scopes.filter((s) => s.scope === "Шаги")), []);
+
+  assert.ok(isResourcesDescriptorKey("Ресурсы.yaml"));
+  assert.ok(isResourcesDescriptorKey("Resources.yaml"));
+  assert.ok(!isResourcesDescriptorKey("Значки/Ресурсы.yaml"));
+  assert.ok(!isResourcesDescriptorKey("Ресурсы.yml"));
+  assert.ok(!isResourcesDescriptorKey("Ресурсы 1.yaml"));
 }
 
 // --- folders (resourceFoldersCore) --------------------------------------------------------------
