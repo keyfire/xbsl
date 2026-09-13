@@ -1,8 +1,7 @@
 """Tier D: code/unused-import - an import the module never uses, judged the way the compiler does.
 
 A module declares `импорт <Пространство>`, and nothing in it resolves through that namespace. The
-platform's editor reports such a line (`UNUSED_IMPORT`, "Неиспользуемый импорт"), and it is the
-compiler that decides, not a text search. Its binder keeps a set of USED namespaces while it binds
+platform's editor warns about such a line, and it is the compiler that decides, not a text search. Its binder keeps a set of USED namespaces while it binds
 the module, and warns about every import whose namespace never made it into the set. A namespace
 enters the set whenever the binder asks for a type of that namespace - to resolve a name, to look
 a member up, to check an argument - whether the type was written or merely inferred. So what counts
