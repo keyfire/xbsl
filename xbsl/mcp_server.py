@@ -685,26 +685,45 @@ def _meta(root_dir: Path, op, *args, **kwargs) -> dict:
 
 @mcp.tool()
 def meta_project_info(root: str, kind: str | None = None, subsystem: str | None = None,
-                      brief: bool = False) -> dict:
-    """Map the 1C:Element sources under a root: projects, subsystems, objects by kind.
+                      brief: bool = False, package: str | None = None,
+                      project: str | None = None, reference: bool = False) -> dict:
+    """Map the 1C:Element sources under a root: projects, subsystems, packages, objects by kind.
 
     root – the caller's project or repository root, an absolute path (a relative one is taken
     against the server's working directory, which a session started elsewhere does not
     share); the answer repeats the absolute path read as `root`, and every path in it is
     absolute.
-    kind / subsystem – list only the objects of that kind (`Catalog`) or of that
-    subsystem; brief – leave the list out and answer with the counts alone. A real project
-    does not fit here whole (the site sources are 105 KB of listing), so ask narrowly: the
-    counts by kind (`object_counts`) come with every answer, filtered or not, and `filter`
-    states what was left out.
+    kind / subsystem / package – list only the objects of that kind (`Catalog`), of that
+    subsystem (its packages included) or of that package (`Batches`, or `Warehouse::Batches`;
+    a nested package belongs to the one it lies in); brief – leave the list out and answer
+    with the counts alone. A real project does not fit here whole (the site sources are 105 KB
+    of listing), so ask narrowly: the counts by kind (`object_counts`) come with every answer,
+    filtered or not, and `filter` states what was left out.
+    project – walk only the projects of that name (`Name` or `Vendor::Name`, as `projects`
+    lists them) or the one in that folder (absolute or under root; two checkouts of a project
+    share the name). A repository root holds more than the project: a folder of examples next
+    to it multiplied one answer sevenfold (3324 objects against 471). An unknown name is an
+    error naming the projects found.
 
-    Also reports which object kinds meta_new_object can create and which section kinds
-    meta_add_field accepts per object kind. Use before creating objects to pick the
-    directory and to check for name clashes.
+    Every object carries `subsystem`, `package` (null at the subsystem root, `P` or `P1::P2`
+    inside one) and `namespace` (`Vendor::Project::Subsystem[::Package]` - the prefix of a
+    full type name). `packages` goes with the list and follows its filters:
+    `{subsystem, package, dir, objects}` for every package a listed object lies in (enclosing
+    packages included), `objects` counting the listed objects lying directly in it; brief
+    leaves it out together with the objects.
+
+    reference – also answer which object kinds meta_new_object can create
+    (`creatable_kinds`), which section kinds meta_add_field accepts per object kind
+    (`field_kinds`) and the access methods and rights (`access_methods`,
+    `access_kind_rights`). These do not depend on the sources and cost about 4 KB - more than
+    a narrow answer itself - so they come only with reference=true or with brief (the
+    orienting call). Use before creating objects to pick the directory and to check for name
+    clashes.
     """
     base = _base(root)
     try:
-        info = scaffold.project_info(base, kind=kind, subsystem=subsystem, brief=brief)
+        info = scaffold.project_info(base, kind=kind, subsystem=subsystem, brief=brief,
+                                     package=package, project=project, reference=reference)
     except scaffold.ScaffoldError as exc:
         return _failed(exc, base)
     return {"root": str(base), **info}
@@ -716,7 +735,8 @@ def meta_object_info(root: str, name: str | None = None, yaml_path: str | None =
 
     Fields (with the standard ones the platform adds: Наименование / Номер+Дата, and for
     registers Период / Регистратор / ВидЗаписи), tabular sections with their own fields,
-    hierarchy, existing forms, suggested form layout, namespace, plus:
+    hierarchy, existing forms, suggested form layout, subsystem, package (null at the subsystem
+    root) and namespace (`Vendor::Project::Subsystem[::Package]`), plus:
 
     - access – the КонтрольДоступа summary (null means no section: РазрешеноАдминистраторам)
       and access_rights – the rights this kind has;
@@ -788,7 +808,8 @@ def meta_new_object(
 ) -> dict:
     """Create a configuration object: <Имя>.yaml (+ <Имя>.xbsl for kinds with a module).
 
-    directory – the subsystem folder; kind – one of meta_project_info().creatable_kinds
+    directory – the subsystem folder; kind – one of
+    meta_project_info(reference=True).creatable_kinds
     (Справочник, Документ, Перечисление, ОбщийМодуль, HttpСервис, Отчет, КлючДоступа,
     ПланОбмена, НаборКонстант, ВиртуальнаяТаблица, Обработка, ЗапланированноеЗадание,
     контракты, права, команды ...). Kinds whose module has a mandatory handler get it

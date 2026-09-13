@@ -1191,12 +1191,30 @@ _CORE_MESSAGES = {
         "en": "only the objects of this kind",
     },
     "cli.help.scaf.project-info-subsystem": {
-        "ru": "только объекты этой подсистемы",
-        "en": "only the objects of this subsystem",
+        "ru": "только объекты этой подсистемы (с её пакетами)",
+        "en": "only the objects of this subsystem (its packages included)",
+    },
+    "cli.help.scaf.project-info-package": {
+        "ru": "только объекты этого пакета: путь под подсистемой или Подсистема::Пакет; "
+              "вложенный пакет входит в тот, где лежит",
+        "en": "only the objects of this package: the path under the subsystem or "
+              "Subsystem::Package; a nested package belongs to the one it lies in",
+    },
+    "cli.help.scaf.project-info-project": {
+        "ru": "обходить только проекты с этим именем (Имя или Поставщик::Имя) либо проект "
+              "в этом каталоге – корень репозитория держит не один проект",
+        "en": "walk only the projects of this name (Name or Vendor::Name) or the project in "
+              "this folder – a repository root holds more than one project",
     },
     "cli.help.scaf.project-info-brief": {
-        "ru": "без перечня объектов: только счётчики по видам",
-        "en": "no list of objects: the counts by kind alone",
+        "ru": "без перечней объектов и пакетов: счётчики по видам и справочные разделы",
+        "en": "no lists of objects and packages: the counts by kind and the reference sections",
+    },
+    "cli.help.scaf.project-info-reference": {
+        "ru": "добавить справочные разделы (виды объектов, виды секций, методы доступа) – "
+              "около 4 КБ, от исходников не зависят",
+        "en": "add the reference sections (object kinds, section kinds, access methods) – "
+              "about 4 KB, independent of the sources",
     },
     "cli.help.scaf.form-tree": {
         "ru": "дерево компонента интерфейса (узлы, слоты, свойства со спанами); см. также "

@@ -44,11 +44,12 @@ from pathlib import Path
 from xbsl import dataset, i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.layout import subsystem_of_key
 from xbsl.lexer import linemap
 # The `Свойства:` block reader of the sibling property rule: one description of where an own
 # property is declared, rather than two that can drift apart.
 from xbsl.rules.reserved_names import _key_alternation, _props_block_re
-from xbsl.rules.yaml_imports import _SUBSYSTEM_FILES, _subsystem_of
+from xbsl.rules.yaml_imports import _layout_fact, _layout_from
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
@@ -103,7 +104,7 @@ def _property_positions(source: SourceFile) -> dict[str, list[tuple[int, int]]]:
 
 
 def _shadow_mapper(source: SourceFile) -> dict | None:
-    """The map phase: subsystem roots, common module names, component properties.
+    """The map phase: the descriptors of the layout, common module names, component properties.
 
     The property names come from the PARSED document (the block reader only says where they
     are written), so a name the regex cannot place still reaches the reduce - anchored at the
@@ -111,16 +112,11 @@ def _shadow_mapper(source: SourceFile) -> dict | None:
     """
     if not _HAVE_YAML or source.kind != "yaml":
         return None
+    if (fact := _layout_fact(source)) is not None:
+        return fact
     data, err = _parsed(source)
     if err is not None or not isinstance(data, dict):
         return None
-    if source.path.name in _SUBSYSTEM_FILES:
-        name = value_of(data, "Имя")
-        return {
-            "k": "sub",
-            "dir": str(source.path.parent),
-            "name": name if isinstance(name, str) else source.path.parent.name,
-        }
     kind = object_kind(data)
     if kind == _MODULE_KIND:
         name = value_of(data, "Имя", kind)
@@ -160,20 +156,30 @@ def _shadow_mapper(source: SourceFile) -> dict | None:
     scope="project", severity=Severity.ERROR, mapper=_shadow_mapper,
 )
 def property_shadows_module(facts: dict[str, dict]) -> Iterable[Diagnostic]:
-    roots = {Path(f["dir"]): f["name"] for f in facts.values() if f["k"] == "sub"}
+    layout = _layout_from(facts)
+    # placement key (None outside every subsystem) -> the names of the common modules there
     modules: dict[str | None, set[str]] = {}
     for fact in facts.values():
         if fact["k"] == "mod":
-            subsystem = _subsystem_of(Path(fact["path"]), roots)
-            modules.setdefault(subsystem, set()).add(fact["name"])
+            place = layout.place(Path(fact["path"]))
+            modules.setdefault(place.key if place else None, set()).add(fact["name"])
     if not modules:
         return
     for rel, fact in facts.items():
         if fact["k"] != "comp":
             continue
-        reachable = set(modules.get(_subsystem_of(Path(fact["path"]), roots), ()))
+        path = Path(fact["path"])
+        place = layout.place(path)
+        # The modules of the component's own subsystem - its root and its packages see each
+        # other - plus those of every namespace the component imports, package or root.
+        mine = place.subsystem if place is not None else None
+        reachable: set[str] = set()
+        for key, names in modules.items():
+            if (subsystem_of_key(key) if key is not None else None) == mine:
+                reachable |= names
+        project_dir = layout.project_dir_of(path)
         for imported in fact["imports"]:
-            reachable |= modules.get(imported, set())
+            reachable |= modules.get(layout.local_name(imported, project_dir), set())
         for name, line, col in fact["props"]:
             if name in reachable:
                 yield Diagnostic(

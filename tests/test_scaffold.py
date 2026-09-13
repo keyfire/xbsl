@@ -1438,7 +1438,7 @@ def test_project_info_access_summary(tmp_path):
     apply_result(scaffold.op_new_object(subsystem, "Справочник", "Склады"))
     apply_result(scaffold.op_new_object(subsystem, "ОбщийМодуль", "Хелпер"))
 
-    overview = scaffold.project_info(tmp_path)
+    overview = scaffold.project_info(tmp_path, reference=True)
     by_name = {o["name"]: o for o in overview["objects"]}
     assert by_name["Товары"]["access_default"] == "РазрешеноАутентифицированным"
     assert by_name["Склады"]["access_default"] is None  # no section
@@ -3175,7 +3175,9 @@ def test_project_info_answers_by_kind_and_in_brief(tmp_path):
 
     by_kind = scaffold.project_info(tmp_path, kind="Перечисление")
     assert [o["name"] for o in by_kind["objects"]] == ["Цвета"]
-    assert by_kind["filter"] == {"kind": "Перечисление", "subsystem": None}
+    assert by_kind["filter"] == {
+        "project": None, "kind": "Перечисление", "subsystem": None, "package": None,
+    }
     assert by_kind["object_counts"]["Справочник"] == 2
 
     brief = scaffold.project_info(tmp_path, brief=True)

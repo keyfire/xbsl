@@ -32,6 +32,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from xbsl import dataset, engine, fixer, metamodel, terms, uischema
+from xbsl.layout import Layout, Place, service_dirs
 
 #: The platform accepts BOTH spellings of the service file names - its converter checks the
 #: pairs itself (`Проект`/`Project`, `Подсистема`/`Subsystem`). The Russian name stays
@@ -1203,27 +1204,81 @@ class ObjectHit:
     name: str
     path: Path  # the object's yaml
     subsystem: str | None
-    namespace: str  # vendor::project::subsystem
+    namespace: str  # vendor::project::subsystem[::package]
     text: str = field(repr=False, default="")
+    # The package under the subsystem (`П`, nested `П1::П2`), None at the subsystem root.
+    package: str | None = None
+
+
+def _hidden_under(path: Path, base: Path) -> bool:
+    """Whether a part of the path below the base starts with a dot (a service copy)."""
+    return any(part.startswith(".") for part in path.relative_to(base).parts)
+
+
+def _nested_project_between(path: Path, project_dir: Path) -> bool:
+    """Whether a folder between the file and the project root holds a project of its own."""
+    for parent in path.parents:
+        if parent == project_dir:
+            return False
+        if project_file_in(parent) is not None:
+            return True
+    return False
+
+
+def _holds_objects(directory: Path, project_dir: Path) -> bool:
+    """Whether the folder holds at least one object of THIS project (stops at the first)."""
+    for yaml_path in engine.find_sources(directory, "*.yaml"):
+        if yaml_path.name in PROJECT_FILES or yaml_path.name in SUBSYSTEM_FILES:
+            continue
+        if _nested_project_between(yaml_path, project_dir):
+            continue
+        if element_kind(_read(yaml_path)) is not None:
+            return True
+    return False
+
+
+def _subsystem_name(directory: Path) -> str:
+    """The name of a subsystem folder: its descriptor's `Name` when it says, else the folder."""
+    descriptor = subsystem_file_in(directory)
+    return element_name(_read(descriptor), directory.name) if descriptor else directory.name
+
+
+def _project_subsystems(project_dir: Path) -> list[str]:
+    """The subsystems of a project: its first-level folders (xbsl.layout).
+
+    A folder is a subsystem when it carries a descriptor or holds at least one object - the
+    descriptor is optional, a shipped library keeps a subsystem with none. Hidden folders, the
+    service folders (resources, localization) and a nested project are not subsystems.
+    """
+    names = []
+    for directory in sorted(p for p in project_dir.iterdir() if p.is_dir()):
+        if directory.name.startswith(".") or directory.name in service_dirs():
+            continue
+        if project_file_in(directory) is not None:
+            continue
+        if subsystem_file_in(directory) is not None or _holds_objects(directory, project_dir):
+            names.append(_subsystem_name(directory))
+    return sorted(names)
 
 
 def find_projects(root: Path) -> list[dict]:
-    """Projects under the root: [{vendor, name, dir, subsystems: [names]}], hidden directories skipped."""
+    """Projects under the root: [{vendor, name, dir, subsystems: [names]}], hidden directories skipped.
+
+    `subsystems` names the first-level folders of the project that are subsystems - with a
+    descriptor or with objects inside (see _project_subsystems); packages are not listed here,
+    project_info answers them in `packages`.
+    """
     out = []
     for project_yaml in _rglob_names(root, PROJECT_FILES):
-        rel = project_yaml.relative_to(root)
-        if any(part.startswith(".") for part in rel.parts):
+        if _hidden_under(project_yaml, root):
             continue
         text = _read(project_yaml)
         project_dir = project_yaml.parent
         vendor = _vendor_of(text, project_dir.parent.name)
         name = element_name(text, project_dir.name)
-        subsystems = sorted(
-            p.parent.name for p in _rglob_names(project_dir, SUBSYSTEM_FILES)
-            if not any(part.startswith(".") for part in p.relative_to(project_dir).parts)
-        )
         out.append({
-            "vendor": vendor, "name": name, "dir": project_dir, "subsystems": subsystems,
+            "vendor": vendor, "name": name, "dir": project_dir,
+            "subsystems": _project_subsystems(project_dir),
             "libraries": project_libraries(text),
         })
     return out
@@ -1246,24 +1301,69 @@ def _iter_objects(root: Path):
         yield yaml_path, kind, element_name(text, yaml_path.stem), text
 
 
-def _namespace_of(yaml_path: Path, root: Path) -> tuple[str | None, str]:
-    """(subsystem name, vendor::project::subsystem) for an object file."""
-    subsystem = yaml_path.parent.name if subsystem_file_in(yaml_path.parent) else None
-    project_dir = yaml_path.parent
-    while project_dir != project_dir.parent:
-        if project_file_in(project_dir) is not None:
+def _disk_placement(root: Path, projects: list[dict]) -> Layout:
+    """The placement model of everything under the root, read off the disk once.
+
+    The same model the cross-subsystem rules build out of their facts (xbsl.layout): the
+    project roots with their vendor and name (find_projects has read them already) and the
+    subsystem folders that carry a descriptor, under the name it declares.
+    """
+    names = {
+        descriptor.parent: _subsystem_name(descriptor.parent)
+        for descriptor in _rglob_names(root, SUBSYSTEM_FILES)
+        if not _hidden_under(descriptor, root)
+    }
+    return Layout({p["dir"]: (p["vendor"], p["name"]) for p in projects}, names)
+
+
+def _path_placement(yaml_path: Path, root: Path) -> Layout:
+    """The placement model around ONE object file, without walking the whole root.
+
+    The nearest project descriptor up the path (the climb stops at the root) and the subsystem
+    descriptors met on the way are all the model needs for that file.
+    """
+    projects: dict[Path, tuple[str, str]] = {}
+    names: dict[Path, str] = {}
+    directory = yaml_path.parent
+    while True:
+        project_yaml = project_file_in(directory)
+        if project_yaml is not None:
+            text = _read(project_yaml)
+            projects[directory] = (
+                _vendor_of(text, directory.parent.name), element_name(text, directory.name),
+            )
             break
-        if project_dir == root:
+        if subsystem_file_in(directory) is not None:
+            names[directory] = _subsystem_name(directory)
+        if directory == root or directory == directory.parent:
             break
-        project_dir = project_dir.parent
-    vendor = project = ""
-    project_yaml = project_file_in(project_dir)
-    if project_yaml is not None:
-        text = _read(project_yaml)
-        vendor = _vendor_of(text, project_dir.parent.name)
-        project = element_name(text, project_dir.name)
-    parts = [p for p in (vendor, project, subsystem) if p]
-    return subsystem, "::".join(parts)
+        directory = directory.parent
+    return Layout(projects, names)
+
+
+def _namespace_of(yaml_path: Path, root: Path, placement: Layout | None = None,
+                  ) -> tuple[str | None, str | None, str]:
+    """(subsystem, package, vendor::project::subsystem[::package]) for an object file.
+
+    The package is the path of folders between the subsystem folder and the file (`П`,
+    nested `П1::П2`), None at the subsystem root - an object of a package lives in the
+    package's namespace, and a type name written in full has to spell it.
+    """
+    placement = placement or _path_placement(yaml_path, root)
+    place: Place | None = placement.place(yaml_path)
+    project_dir = place.project_dir if place else placement.project_dir_of(yaml_path)
+    vendor, project = placement.identity(project_dir) or ("", "")
+    subsystem = place.subsystem if place else None
+    package = place.package if place else None
+    parts = [p for p in (vendor, project, subsystem, package) if p]
+    return subsystem, package, "::".join(parts)
+
+
+def _object_hit(kind: str, name: str, yaml_path: Path, root: Path, text: str,
+                placement: Layout | None = None) -> ObjectHit:
+    """An ObjectHit with its placement filled in."""
+    subsystem, package, namespace = _namespace_of(yaml_path, root, placement)
+    return ObjectHit(kind, name, yaml_path, subsystem, namespace, text, package=package)
 
 
 def find_object(root: Path, name: str) -> ObjectHit:
@@ -1271,8 +1371,7 @@ def find_object(root: Path, name: str) -> ObjectHit:
     hits = []
     for yaml_path, kind, obj_name, text in _iter_objects(root):
         if obj_name == name:
-            subsystem, namespace = _namespace_of(yaml_path, root)
-            hits.append(ObjectHit(kind, obj_name, yaml_path, subsystem, namespace, text))
+            hits.append(_object_hit(kind, obj_name, yaml_path, root, text))
     if not hits:
         raise ScaffoldError(f"Объект '{name}' не найден под {root}")
     if len(hits) > 1:
@@ -1340,10 +1439,7 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         kind = element_kind(text)
         if kind is None:
             raise ScaffoldError(f"В {yaml_path} нет ВидЭлемента – это не объект конфигурации")
-        subsystem, namespace = _namespace_of(yaml_path, root)
-        hit = ObjectHit(
-            kind, element_name(text, yaml_path.stem), yaml_path, subsystem, namespace, text,
-        )
+        hit = _object_hit(kind, element_name(text, yaml_path.stem), yaml_path, root, text)
     else:
         hit = find_object(root, name or "")
         text = hit.text
@@ -1406,6 +1502,8 @@ def object_info(root: Path, name: str | None = None, yaml_path: Path | None = No
         "lang": info_lang,
         "name": hit.name,
         "subsystem": hit.subsystem,
+        # The package under the subsystem (`П`, nested `П1::П2`), None at the subsystem root.
+        "package": hit.package,
         "namespace": hit.namespace,
         # None - no КонтрольДоступа section: the platform applies РазрешеноАдминистраторам.
         "access": access_info(text),
@@ -1522,50 +1620,9 @@ def _suggest_layout(field_count: int, tc_count: int) -> str:
     return "tabs"
 
 
-def project_info(root: Path, kind: str | None = None, subsystem: str | None = None,
-                 brief: bool = False) -> dict:
-    """Overview of the sources under the root: projects, subsystems and objects by kind.
-
-    The whole tree in one answer is unusable on a real project - on the site sources it is
-    105 KB (3071 lines) and does not fit in a tool answer at all, so the caller ended up
-    saving it to a file and grepping: two extra steps for a question like "what objects of
-    kind X live here". `kind` and `subsystem` narrow the list, `brief` drops it altogether
-    and leaves the counts.
-
-    `object_counts` is in EVERY answer, filtered or not: a filter that matched nothing must
-    not read as an empty project, and the count of what is there says which it was. What the
-    answer left out is stated by `filter`, for the same reason.
-    """
-    projects = find_projects(root)
-    objects = []
-    counts: dict[str, int] = {}
-    for yaml_path, object_kind, name, text in _iter_objects(root):
-        object_subsystem, namespace = _namespace_of(yaml_path, root)
-        counts[object_kind] = counts.get(object_kind, 0) + 1
-        if kind is not None and object_kind.casefold() != kind.casefold():
-            continue
-        if subsystem is not None and (object_subsystem or "").casefold() != subsystem.casefold():
-            continue
-        if brief:
-            continue
-        entry = {
-            "kind": object_kind, "name": name, "path": str(yaml_path),
-            "subsystem": object_subsystem, "namespace": namespace,
-        }
-        if object_kind in ACCESS_KIND_RIGHTS:
-            # Project-wide rights summary: the method for ПоУмолчанию (None - no section,
-            # so РазрешеноАдминистраторам applies) and the methods of individual rights.
-            access = access_info(text)
-            entry["access_default"] = access["default"] if access else None
-            entry["access_permissions"] = access["permissions"] if access else {}
-        objects.append(entry)
-    info = {
-        "projects": [
-            {**p, "dir": str(p["dir"])} for p in projects
-        ],
-        "object_counts": {k: counts[k] for k in sorted(counts)},
-        "objects_total": sum(counts.values()),
-        "filter": {"kind": kind, "subsystem": subsystem},
+def _reference_sections() -> dict:
+    """What the tools accept, independent of any project: kinds, sections, access methods."""
+    return {
         "creatable_kinds": sorted(KIND_SPECS),
         "field_kinds": {
             section_kind: list(sections) for section_kind, sections in KIND_SECTIONS.items()
@@ -1573,7 +1630,156 @@ def project_info(root: Path, kind: str | None = None, subsystem: str | None = No
         "access_methods": list(ACCESS_METHODS),
         "access_kind_rights": {k: list(v) for k, v in ACCESS_KIND_RIGHTS.items()},
     }
+
+
+def _project_matches(project: dict, wanted: str, root: Path) -> bool:
+    """A project named by its `Name`, by `Vendor::Name` or by its folder (absolute or under the
+    root), letter case aside - two checkouts of one project under a root share the name, and
+    only the folder tells them apart."""
+    wanted = wanted.strip().replace("\\", "/").rstrip("/").casefold()
+    directory = project["dir"]
+    spellings = {project["name"], f'{project["vendor"]}::{project["name"]}', directory.as_posix()}
+    if directory.is_relative_to(root):
+        spellings.add(directory.relative_to(root).as_posix())
+    return wanted in {spelled.casefold() for spelled in spellings}
+
+
+def _package_matches(subsystem: str | None, package: str | None, wanted: str) -> bool:
+    """The package filter: the package path under its subsystem (`П`) or the placement key
+    (`Подсистема::П`); a nested package belongs to the package it lies in."""
+    if package is None:
+        return False
+    wanted = wanted.strip().casefold()
+    for spelled in (package, f"{subsystem}::{package}"):
+        spelled = spelled.casefold()
+        if spelled == wanted or spelled.startswith(wanted + "::"):
+            return True
+    return False
+
+
+def project_info(root: Path, kind: str | None = None, subsystem: str | None = None,
+                 brief: bool = False, *, package: str | None = None,
+                 project: str | None = None, reference: bool = False) -> dict:
+    """Overview of the sources under the root: projects, subsystems, packages, objects by kind.
+
+    The whole tree in one answer is unusable on a real project - on the site sources it is
+    105 KB (3071 lines) and does not fit in a tool answer at all, so the caller ended up
+    saving it to a file and grepping: two extra steps for a question like "what objects of
+    kind X live here". `kind`, `subsystem` and `package` narrow the list, `brief` drops it
+    altogether and leaves the counts.
+
+    `project` narrows the walk itself to the projects of that name (`Name` or
+    `Vendor::Name`, as find_projects lists them) or to the one in that folder (absolute or
+    under the root - two checkouts of a project share the name): a repository root holds more
+    than the project - on one checkout a root call walked a folder of vendor examples, 3324
+    objects against the project's 471 - and an unknown name is an error naming the projects
+    there.
+
+    `object_counts` is in EVERY answer, filtered or not: a filter that matched nothing must
+    not read as an empty project, and the count of what is there says which it was. It covers
+    the selected projects (everything under the root without `project`) whatever `kind`,
+    `subsystem` and `package` say. What the answer left out is stated by `filter`, for the
+    same reason.
+
+    Every object carries its `subsystem`, its `package` (None at the subsystem root, `П` or
+    nested `П1::П2` inside one) and its `namespace` - `Поставщик::Проект::Подсистема[::Пакет]`,
+    the prefix a full type name spells. `packages` goes with the list and follows its filters:
+    `{subsystem, package, dir, objects}` for every package a listed object lies in, enclosing
+    packages included (a tree needs its intermediate nodes), `objects` counting the listed
+    objects that lie directly in it; `brief` leaves it out together with the objects.
+
+    The reference sections (`creatable_kinds`, `field_kinds`, `access_methods`,
+    `access_kind_rights`) do not depend on the sources and cost about 4 KB - more than the
+    rest of a narrow answer - so they come with `reference=True` or with `brief`, the
+    orienting call where they belong.
+    """
+    root = Path(root)
+    every_project = find_projects(root)
+    placement = _disk_placement(root, every_project)
+    projects = every_project
+    walk_roots = [root]
+    if project is not None:
+        projects = [p for p in every_project if _project_matches(p, project, root)]
+        if not projects:
+            known = ", ".join(
+                sorted(f'{p["vendor"]}::{p["name"]}' for p in every_project)
+            ) or "нет ни одного"
+            raise ScaffoldError(f"Проект '{project}' под {root} не найден; проекты там: {known}")
+        walk_roots = [p["dir"] for p in projects]
+        # A selected project inside another selected one is walked once, as part of it.
+        walk_roots = [
+            d for d in walk_roots if not any(o != d and o in d.parents for o in walk_roots)
+        ]
+    selected_dirs = {p["dir"] for p in projects}
+    objects = []
+    counts: dict[str, int] = {}
+    packages: dict[tuple[str, str, Path], int] = {}
+    for walk_root in walk_roots:
+        for yaml_path, object_kind, name, text in _iter_objects(walk_root):
+            if project is not None and placement.project_dir_of(yaml_path) not in selected_dirs:
+                continue  # an object of a project nested inside the selected one
+            counts[object_kind] = counts.get(object_kind, 0) + 1
+            if kind is not None and object_kind.casefold() != kind.casefold():
+                continue
+            object_subsystem, object_package, namespace = _namespace_of(
+                yaml_path, root, placement,
+            )
+            if subsystem is not None and (
+                (object_subsystem or "").casefold() != subsystem.casefold()
+            ):
+                continue
+            if package is not None and not _package_matches(
+                object_subsystem, object_package, package,
+            ):
+                continue
+            if brief:
+                continue
+            place = placement.place(yaml_path)
+            if place is not None and place.package is not None:
+                segments = place.package.split("::")
+                # Every enclosing package is an entry of its own, so a tree has its
+                # intermediate nodes; the object counts in the package it lies in directly.
+                for depth in range(1, len(segments) + 1):
+                    spelled = "::".join(segments[:depth])
+                    if package is not None and not _package_matches(
+                        place.subsystem, spelled, package,
+                    ):
+                        continue
+                    key = (
+                        place.subsystem, spelled,
+                        place.subsystem_dir.joinpath(*segments[:depth]),
+                    )
+                    lies_here = 1 if depth == len(segments) else 0
+                    packages[key] = packages.get(key, 0) + lies_here
+            entry = {
+                "kind": object_kind, "name": name, "path": str(yaml_path),
+                "subsystem": object_subsystem, "package": object_package,
+                "namespace": namespace,
+            }
+            if object_kind in ACCESS_KIND_RIGHTS:
+                # Project-wide rights summary: the method for `Default` (None - no section,
+                # so `PermitAdmins` applies) and the methods of individual rights.
+                access = access_info(text)
+                entry["access_default"] = access["default"] if access else None
+                entry["access_permissions"] = access["permissions"] if access else {}
+            objects.append(entry)
+    info = {
+        "projects": [
+            {**p, "dir": str(p["dir"])} for p in projects
+        ],
+        "object_counts": {k: counts[k] for k in sorted(counts)},
+        "objects_total": sum(counts.values()),
+        "filter": {"project": project, "kind": kind, "subsystem": subsystem, "package": package},
+    }
+    if reference or brief:
+        info.update(_reference_sections())
     if not brief:
+        info["packages"] = [
+            {"subsystem": sub, "package": pkg, "dir": str(directory), "objects": count}
+            for (sub, pkg, directory), count in sorted(
+                packages.items(), key=lambda item: (item[0][0], item[0][1], str(item[0][2])),
+            )
+        ]
         info["objects"] = sorted(objects, key=lambda o: (o["kind"], o["name"]))
     return info
 
@@ -5718,8 +5924,7 @@ def op_rename_object(
         file_name = element_name(text, yaml_path.stem)
         if file_name != old_name:
             raise ScaffoldError(f"В {yaml_path.name} объект называется '{file_name}', а не '{old_name}'")
-        subsystem, namespace = _namespace_of(yaml_path, root)
-        hit = ObjectHit(kind, file_name, yaml_path, subsystem, namespace, text)
+        hit = _object_hit(kind, file_name, yaml_path, root, text)
     else:
         hit = find_object(root, old_name)
 
@@ -5868,8 +6073,7 @@ def op_delete_object(
         file_name = element_name(text, yaml_path.stem)
         if name and file_name != name:
             raise ScaffoldError(f"В {yaml_path.name} объект называется '{file_name}', а не '{name}'")
-        subsystem, namespace = _namespace_of(yaml_path, root)
-        hit = ObjectHit(kind, file_name, yaml_path, subsystem, namespace, text)
+        hit = _object_hit(kind, file_name, yaml_path, root, text)
     else:
         if not name:
             raise ScaffoldError("Укажите имя объекта либо путь к его yaml")

@@ -720,8 +720,12 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("root", help=i18n.t("cli.help.scaf.arg.project-root"))
     p.add_argument("--kind", help=i18n.t("cli.help.scaf.project-info-kind"))
     p.add_argument("--subsystem", help=i18n.t("cli.help.scaf.project-info-subsystem"))
+    p.add_argument("--package", help=i18n.t("cli.help.scaf.project-info-package"))
+    p.add_argument("--project", help=i18n.t("cli.help.scaf.project-info-project"))
     p.add_argument("--brief", action="store_true",
                    help=i18n.t("cli.help.scaf.project-info-brief"))
+    p.add_argument("--reference", action="store_true",
+                   help=i18n.t("cli.help.scaf.project-info-reference"))
 
     p = command("form-tree")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.arg.form-yaml"))
@@ -1050,7 +1054,9 @@ def _scaffold_main(argv: list[str]) -> int:
         else:  # project-info
             print(json.dumps(
                 scaffold.project_info(Path(args.root), kind=args.kind,
-                                      subsystem=args.subsystem, brief=args.brief),
+                                      subsystem=args.subsystem, brief=args.brief,
+                                      package=args.package, project=args.project,
+                                      reference=args.reference),
                 ensure_ascii=False,
             ))
             return 0
