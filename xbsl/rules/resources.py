@@ -1,9 +1,11 @@
 """Resources addressed by `Ресурс{...}`: the shape of the key and its existence.
 
-Two rules live here:
+Three rules live here:
 
 - code/resource-bare-name (tier C, file) – the key spells out the Ресурсы folder itself;
-- code/unknown-resource (tier D, project) – the key resolves to nothing.
+- code/unknown-resource (tier D, project) – the key resolves to nothing;
+- code/package-resources-missing (tier D, project) – `ПакетРесурсов.Текущий()` in a module of
+  a package that keeps no resources of its own (see the docstring of the rule).
 
 THE KEY IS A PATH RELATIVE TO A SUBSYSTEM'S `Ресурсы` FOLDER. Probed on the local server,
 every form next to the same controls (positions match the compiler's - the first character
@@ -65,11 +67,14 @@ from collections.abc import Iterable
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import docs, i18n, terms
+from xbsl import dataset, docs, i18n, terms
+from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import RESOURCE_DIRS, SourceFile, rule
+from xbsl.engine import RESOURCE_DIRS, SourceFile, is_query_file, rule
 from xbsl.lexer import Token
 from xbsl.rules._syntax import code_tokens
+from xbsl.rules.yaml_imports import _layout_fact, _layout_from
+from xbsl.rules.yaml_schema import _HAVE_YAML
 
 MESSAGES = {
     "code/resource-bare-name.title": {
@@ -94,6 +99,25 @@ MESSAGES = {
         "en": "A resource key is a path RELATIVE to the {n[Ресурсы]} folder: '{name}' starts with "
               "that folder itself, the platform looks the path up inside {n[Ресурсы]} and applying "
               "the build fails with 'Неизвестный ресурс'. Correct: '{n[Ресурс]}{{{base}}}'.",
+    },
+    "code/package-resources-missing.title": {
+        "ru": "Текущий пакет ресурсов в пакете без ресурсов",
+        "en": "The current resources package in a package without resources",
+    },
+    "code/package-resources-missing.empty": {
+        "ru": "{n[ПакетРесурсов]}.{n[Текущий]}() в модуле пакета '{package}' отдаёт ресурсы самого "
+              "пакета, а своего каталога {n[Ресурсы]} у пакета нет: ни один файл не найдётся "
+              "({n[ИсключениеРесурсНеНайден]}), и файлы из каталога {n[Ресурсы]} подсистемы тоже. "
+              "Модуль, который читает ресурсы по вычисленному имени, держат в корне подсистемы. "
+              "Другие выходы – положить ресурсы в каталог пакета или обратиться к файлу "
+              "литералом {n[Ресурс]}{{...}}: литерал файлы подсистемы находит.",
+        "en": "{n[ПакетРесурсов]}.{n[Текущий]}() in a module of package '{package}' returns the "
+              "resources of the package itself, and the package has no {n[Ресурсы]} folder of its "
+              "own: no file is found ({n[ИсключениеРесурсНеНайден]}), the files of the "
+              "{n[Ресурсы]} folder of the subsystem included. A module that reads resources by a "
+              "computed name belongs at the root of the subsystem. The other ways out are to put "
+              "the resources into the folder of the package or to address the file with a "
+              "{n[Ресурс]}{{...}} literal, which does find the files of the subsystem.",
     },
 }
 i18n.register(MESSAGES)
@@ -235,4 +259,87 @@ def unknown_resource(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "code/unknown-resource", Severity.ERROR,
                 i18n.t("code/unknown-resource.unknown", name=name),
+            )
+
+
+# --- code/package-resources-missing -------------------------------------------------------
+
+
+@lru_cache(maxsize=1)
+def _current_package_words() -> tuple[frozenset[str], frozenset[str]]:
+    """Both spellings of the type `ResourcesPackage` and of its static method `Current`."""
+    return (frozenset(terms.forms("ПакетРесурсов", "types")),
+            frozenset({"Текущий", terms.member_english_of("ПакетРесурсов", "Текущий")} - {None}))
+
+
+dataset.register_reset(_current_package_words.cache_clear)
+
+
+def _current_package_mapper(source: SourceFile) -> dict | None:
+    """The map phase: a descriptor contributes its place in the layout, a module the positions
+    of its `ПакетРесурсов.Текущий()` calls."""
+    if source.kind == "yaml":
+        return _layout_fact(source) if _HAVE_YAML else None
+    if source.kind != "xbsl" or is_query_file(source.path):
+        return None
+    types, members = _current_package_words()
+    if not any(word in source.text for word in types):
+        return None
+    try:
+        toks = code_tokens(source)
+    except DatasetError:
+        return None  # no language data - the module cannot be tokenized
+    calls = [
+        (tok.line, tok.col) for i, tok in enumerate(toks[:-3])
+        if tok.kind == "IDENT" and tok.value in types
+        and toks[i + 1].kind == "OP" and toks[i + 1].value == "."
+        and toks[i + 2].kind == "IDENT" and toks[i + 2].value in members
+        and toks[i + 3].kind == "OP" and toks[i + 3].value == "("
+    ]
+    return {"k": "cur", "path": str(source.path), "calls": calls} if calls else None
+
+
+@rule(
+    "code/package-resources-missing", "code/package-resources-missing.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_current_package_mapper,
+)
+def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """`ResourcesPackage.Current()` in a module of a package that has no resources folder.
+
+    The documentation ties the resources to the namespace: every subsystem and every package
+    may keep a set of its own (the page on resources), and `Current()` returns the package
+    "associated with the current namespace" (the page of `ResourcesPackage`) - for a module of a
+    package that is the package, not its subsystem. The live case showed the consequence: a
+    module that read icons by a computed name was moved from the root of a subsystem into a
+    package without a resources folder, `Get` found nothing, and a fresh seeding left seven
+    records of seven without their icons, with no error anywhere; the same module back at the
+    root found all seven. A `Resource{...}` literal in the module of a package does find a file
+    of the subsystem, and the compiler checks it - only the lookup by a computed name is left to
+    run time. A package of a shipped library reads its own folder the same way: the module of
+    the package and the folder of icons it reads lie in the package, not in the subsystem.
+
+    The folder is looked up on disk, both spellings: a module that is not on disk (a buffer, a
+    fixture) is not judged. A package that has the folder is not judged either - whether the
+    file named at run time lies there is a fact of the data. A module at the root of a
+    subsystem is out of scope: its lookup reaches the folder of the subsystem, where the files
+    are normally kept.
+    """
+    layout = _layout_from(facts)
+    if not layout.known:
+        return  # no descriptor at all - the placement of a module is unknown
+    for rel, fact in facts.items():
+        if fact["k"] != "cur":
+            continue
+        place = layout.place(Path(fact["path"]))
+        if place is None or place.package is None:
+            continue
+        folder = place.subsystem_dir.joinpath(*place.package.split("::"))
+        if not folder.is_dir() or any((folder / name).is_dir() for name in _RESOURCE_DIRS):
+            continue
+        for line, col in fact["calls"]:
+            yield Diagnostic(
+                rel, line, col, "code/package-resources-missing", Severity.WARNING,
+                i18n.t("code/package-resources-missing.empty",
+                       package=f"{place.subsystem}::{place.package}"),
+                data={"namespace": place.key},
             )

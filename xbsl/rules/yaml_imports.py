@@ -131,7 +131,7 @@ from pathlib import Path
 from xbsl import dataset, i18n, parser as P, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule
+from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.layout import (
     PROJECT_FILES,
     SUBSYSTEM_FILES,
@@ -145,11 +145,17 @@ from xbsl.layout import (
 from xbsl.lexer import Token, _skip_interpolation, linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules import semantics
+from xbsl.rules._syntax import query_tables, query_temporary_tables
 from xbsl.rules.enum_values import _binding_values, _name_values
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.undefined_names import _IMPLICIT
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, unreadable_object, value_of
-from xbsl.rules.yaml_types import _parse_type_string, _type_values, _value_positions
+from xbsl.rules.yaml_types import (
+    _key_spellings,
+    _parse_type_string,
+    _type_values,
+    _value_positions,
+)
 
 MESSAGES = {
     "code/unused-import.title": {
@@ -197,6 +203,27 @@ MESSAGES = {
               "of its packages, and the {n[Импорт]} section of the paired yaml does not cover "
               "the code.",
     },
+    "code/missing-import.table": {
+        "ru": "Таблица запроса '{name}' – из пространства имён '{sub}', а модуль его не "
+              "импортирует: компиляция упадёт на этой строке (\"Таблица ... находится в "
+              "пространстве имен ..., которое не импортировано\"). Нужна строка 'импорт {sub}' – "
+              "импорт одной подсистемы элементы её пакетов не даёт, а секция Импорт парного yaml "
+              "код не покрывает.",
+        "en": "Query table '{name}' comes from namespace '{sub}' which this module does not "
+              "import: compilation fails at this line (\"the table is in a namespace that is "
+              "not imported\"). The module needs the line `{n[импорт]} {sub}` - an import of the "
+              "subsystem alone does not bring the elements of its packages, and the "
+              "{n[Импорт]} section of the paired yaml does not cover the code.",
+    },
+    "code/missing-import.root": {
+        "ru": "Обращение '{name}' из модуля вне подсистем (модуль проекта) – к элементу пакета "
+              "'{sub}', а строки 'импорт {sub}' в модуле нет: компиляция упадёт на этой строке. "
+              "Элемент пакета приходит только через импорт самого пакета.",
+        "en": "'{name}' in a module outside any subsystem (the project module) reaches an "
+              "element of package '{sub}', and the module has no line `{n[импорт]} {sub}`: "
+              "compilation fails at this line. An element of a package comes only through an "
+              "import of the package itself.",
+    },
     "yaml/missing-subsystem-usage.title": {
         "ru": "Подсистема импортируется, но не объявлена используемой",
         "en": "A subsystem is imported but not declared as used",
@@ -237,6 +264,20 @@ MESSAGES = {
               "imported\"). The section needs the entry '- {sub}' - an import of the subsystem "
               "alone does not bring the elements of its packages, and an import in the paired "
               ".xbsl does not cover the markup bindings.",
+    },
+    "yaml/missing-import.query": {
+        "ru": "Таблица '{name}' запроса {query} (строка {query_line}) – из пространства имён "
+              "'{sub}', а в секции Импорт этого yaml его нет: деплой упадёт на серверной "
+              "компиляции (\"Таблица ... находится в пространстве имен ..., которое не "
+              "импортировано\"). Нужна строка '- {sub}' в секции Импорт – запрос виртуальной "
+              "таблицы видит импорт её yaml, а импорт одной подсистемы элементы её пакетов не "
+              "даёт.",
+        "en": "Table '{name}' of the query {query} (line {query_line}) comes from namespace "
+              "'{sub}' which the {n[Импорт]} section of this yaml does not list: the deploy "
+              "fails at server compilation (\"the table is in a namespace that is not "
+              "imported\"). The section needs the entry '- {sub}' - the query of a virtual "
+              "table sees the imports of its yaml, and an import of the subsystem alone does "
+              "not bring the elements of its packages.",
     },
 }
 i18n.register(MESSAGES)
@@ -436,6 +477,41 @@ def _binding_chain_roots(
     return roots
 
 
+def _query_table_roots(
+    source: SourceFile, stdlib: frozenset[str],
+) -> list[tuple[str, str, int, int]]:
+    """The roots of the tables the queries of a file read: (root, the table as written, line,
+    col), one entry per root, first occurrence kept.
+
+    A table after FROM/JOIN names an element the way a type position does, and the compiler
+    resolves it against the same imports: a virtual table whose `.xbql` reads a table of a
+    package another subsystem owns was refused with "the table is in a namespace that is not
+    imported" until its yaml imported the package.
+    Subtracted here, where the answer lives: a qualified table (the form needs no import), a
+    temporary table of the file (its short name may repeat a project table, and the platform
+    reads it in the queries of the whole module) and a stdlib name - an entity of the platform
+    is a table too, and without an import the name resolves to the standard namespace.
+    """
+    temporary = query_temporary_tables(source)
+    roots: dict[str, tuple[str, int, int]] = {}
+    for qualifiers, segments in query_tables(source):
+        root = segments[0].value
+        if qualifiers or root in stdlib or root in temporary or root in roots:
+            continue
+        roots[root] = (".".join(t.value for t in segments), segments[0].line, segments[0].col)
+    return [(root, written, line, col) for root, (written, line, col) in roots.items()]
+
+
+@lru_cache(maxsize=1)
+def _import_key_re() -> re.Pattern[str]:
+    """The top-level `Импорт:` key of a yaml, in either spelling."""
+    keys = "|".join(re.escape(key) for key in _key_spellings("Импорт"))
+    return re.compile(r"(?m)^(?:" + keys + r"):")
+
+
+dataset.register_reset(_import_key_re.cache_clear)
+
+
 #: A qualified reference: one or more `Имя::` qualifiers and the element name. The
 #: qualifiers are kept whole - `Б::Элемент` names a subsystem root, `Б::П::Элемент` a package,
 #: `e1c::site::Б::Элемент` a subsystem with the project prefix on; what they name inside THIS
@@ -514,9 +590,20 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
     placement slice (name, visibility, imports) with its candidate type roots and binding
     chain roots (stdlib settles here), a module its local types (the collision guard) and
     the names it declares - the paired yaml addresses those through the element name, so
-    they explain a binding root the same way a local name does."""
+    they explain a binding root the same way a local name does. A standalone query (the
+    `.xbql` of a virtual table) contributes the roots of the tables it reads: the yaml of the
+    pair imports for it."""
     if not _HAVE_YAML:
         return None
+    if source.kind == "xbsl" and is_query_file(source.path):
+        try:
+            tables = _query_table_roots(source, semantics._stdlib_names())
+        except DatasetError:
+            return None  # no language data - the query cannot be tokenized
+        if not tables:
+            return None
+        return {"k": "q", "stem": _pair_stem(source.rel), "file": source.path.name,
+                "tables": tables}
     if source.kind == "xbsl":
         try:
             local = semantics._file_local_types(source)
@@ -558,6 +645,9 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
     nm = value_of(data, "Имя", kind)
+    # Where a table of the paired query is reported: the import section that lacks the entry,
+    # or the head of the file when there is none.
+    anchor = _import_key_re().search(source.text)
     return {
         "k": "el",
         "path": str(source.path),
@@ -567,6 +657,7 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
         "imports": imports,
         "cands": cands,
         "broots": _binding_chain_roots(source, data, stdlib),
+        "anchor": linemap(source).linecol(anchor.start()) if anchor else (1, 1),
     }
 
 
@@ -580,10 +671,13 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         return
     local_types: set[str] = set()
     declared_by_stem: dict[str, set[str]] = {}
+    queries_by_stem: dict[str, dict] = {}
     for fact in facts.values():
         if fact["k"] == "x":
             local_types.update(fact["local_types"])
             declared_by_stem.setdefault(fact["stem"], set()).update(fact["declared"])
+        elif fact["k"] == "q":
+            queries_by_stem[fact["stem"]] = fact
     placement: dict[str, dict[str, object]] = {}
     elements: list[tuple[str, dict, Place]] = []
     for rel, fact in facts.items():
@@ -600,11 +694,21 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         # A binding root the PAIRED module declares (a method, a field, a structure) is
         # addressed through the element's own name - the file explains it, not an import.
         paired = declared_by_stem.get(fact["stem"], frozenset())
-        candidates_here = [(*c, "missing") for c in fact["cands"]] + [
-            (*c, "chain") for c in fact["broots"] if c[0] not in paired
-        ]
+        candidates_here: list[tuple[str, str, int, int, str, dict]] = [
+            (*c, "missing", {}) for c in fact["cands"]
+        ] + [(*c, "chain", {}) for c in fact["broots"] if c[0] not in paired]
+        # The tables of the paired query resolve against the imports of THIS yaml; the finding
+        # stands where the entry has to be added, and names the line of the query.
+        query = queries_by_stem.get(fact["stem"])
+        if query is not None:
+            anchor_line, anchor_col = fact.get("anchor") or (1, 1)
+            candidates_here += [
+                (root, written, anchor_line, anchor_col, "query",
+                 {"query": query["file"], "query_line": line})
+                for root, written, line, _col in query["tables"]
+            ]
         reported: set[tuple[str, ...]] = set()
-        for root, chain_name, line, col, shape in candidates_here:
+        for root, chain_name, line, col, shape, extra in candidates_here:
             if root in local_types:
                 continue
             candidates = _foreign_candidates(root, my_place, placement)
@@ -616,7 +720,7 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 rel, line, col, "yaml/missing-import", Severity.WARNING,
                 i18n.t(f"yaml/missing-import.{shape}", name=chain_name,
-                       sub="/".join(candidates)),
+                       sub="/".join(candidates), **extra),
                 data={"namespaces": list(candidates)},
             )
 
@@ -820,7 +924,35 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
             for _offset, body in _interpolation_bodies(tok.value, blank_strings=False):
                 idents.update(_INTERPOLATION_IDENT.findall(body))
     return {"k": "mod", "path": str(source.path), "imports": imports,
-            "idents": sorted(idents)}
+            "idents": sorted(idents), "bare_resources": _has_bare_resource(toks)}
+
+
+@lru_cache(maxsize=1)
+def _resource_words() -> frozenset[str]:
+    """Both spellings of the resource literal `Resource{...}`."""
+    return frozenset(terms.key_forms("Ресурс"))
+
+
+dataset.register_reset(_resource_words.cache_clear)
+
+
+def _has_bare_resource(toks: Sequence[Token]) -> bool:
+    """Whether a resource literal of the module names its file by a key without a namespace.
+
+    The documentation lets a module reach a resource of another subsystem through an import of
+    that subsystem, so such a key may be what an import of a subsystem serves.
+    """
+    for i, tok in enumerate(toks[:-1]):
+        if tok.kind != "IDENT" or tok.value not in _resource_words():
+            continue
+        if not (toks[i + 1].kind == "OP" and toks[i + 1].value == "{"):
+            continue
+        for inner in toks[i + 2:]:
+            if inner.kind == "OP" and inner.value == "}":
+                return True
+            if inner.kind == "OP" and inner.value == "::":
+                break
+    return False
 
 
 @rule(
@@ -836,6 +968,12 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     those has no use for `импорт Б` and is told which package imports carry the names
     instead. A namespace the project does not own (a library, another project, a typo) is
     not this rule's case.
+
+    A subsystem whose root keeps no element at all is still a namespace of the project - its
+    packages or its descriptor make it known - and an import of it serves nothing, the usual
+    state once every element of a subsystem has moved into packages. The one thing such an
+    import may still bring is a resource of that subsystem named by a bare key, so a module
+    with a `Resource{...}` literal of that shape is not judged there.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -847,6 +985,7 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         place = layout.place(Path(fact["path"]))
         if place is not None:
             owned.setdefault(place.key, set()).add(fact["name"])
+    subsystems = {subsystem_of_key(key) for key in owned} | set(layout.subsystem_names.values())
     for rel, fact in facts.items():
         if fact["k"] != "mod":
             continue
@@ -856,7 +995,9 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             key = layout.local_name(written, project_dir)
             elements = owned.get(key)
             if elements is None:
-                continue  # an unknown namespace (a library, a typo) - not this rule's case
+                if key not in subsystems or fact.get("bare_resources"):
+                    continue  # an unknown namespace (a library, a typo) - not this rule's case
+                elements = set()  # a subsystem with nothing at its root
             if elements & idents:
                 continue
             packages = sorted(
@@ -878,11 +1019,13 @@ def unused_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 def _missing_import_mapper(source: SourceFile) -> dict | None:
     """The map phase: the placement slice as above, and from a module its imports and the
     roots of the types it WRITES DOWN - a parameter, a variable, a return, `новый`, `как`,
-    `это`, generic arguments included.
+    `это`, a type literal `Тип<...>`, generic arguments included.
 
     Only written types are collected, and that narrowness is the rule (see the docstring of
     `missing_code_import`). A type position is a place where the name can be nothing but a
-    type, which is what keeps the reading of a name free of guesswork.
+    type, which is what keeps the reading of a name free of guesswork. The tables of the query
+    blocks are the same kind of place: after FROM/JOIN a name is a table.
+    A standalone query (`.xbql`) is not a module - its tables belong to the yaml of the pair.
     """
     if source.kind == "yaml":
         if not _HAVE_YAML:
@@ -904,7 +1047,7 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
             # see the chain roots below.
             "keys": sorted(k for k in data if isinstance(k, str)),
         }
-    if source.kind != "xbsl":
+    if source.kind != "xbsl" or is_query_file(source.path):
         return None
     try:
         local = sorted(semantics._file_local_types(source))
@@ -922,9 +1065,15 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
     imports = [name for name, _line, _col in _module_imports(toks)]
     cands: list[tuple[str, str, int, int]] = []
     for node in _nodes(module):
-        if not isinstance(node, P.TypeRef):
+        if isinstance(node, P.Literal) and node.kind == "TYPE":
+            # A type literal `Тип<Имя>` is a written type as well, but the tree keeps no name
+            # for it: the type is the text between the brackets.
+            raw = source.text[node.start:node.end]
+            text = raw[raw.find("<") + 1:raw.rfind(">")] if "<" in raw else ""
+        elif isinstance(node, P.TypeRef):
+            text = getattr(node, "text", "") or ""
+        else:
             continue
-        text = getattr(node, "text", "") or ""
         for chain in _parse_type_string(text) or ():
             if chain[0] in stdlib:
                 continue
@@ -971,7 +1120,8 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
             line, col = lm.linecol(node.obj.start)
             roots.append((name, f"{name}.{node.name}", line, col))
     return {"k": "mod", "path": str(source.path), "stem": _pair_stem(source.rel),
-            "imports": imports, "cands": cands, "roots": roots, "local_types": local}
+            "imports": imports, "cands": cands, "roots": roots, "local_types": local,
+            "tables": _query_table_roots(source, stdlib)}
 
 
 def _method_names(method: P.Method) -> set[str]:
@@ -1031,6 +1181,18 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     skipped (without an import the foreign namespace is not in scope and the name resolves to
     the standard one), so is a type declared inside a module of the project, and so is a
     non-public foreign element - that one is a visibility error rather than a missing import.
+
+    The tables of the query blocks are read as well: a name after FROM/JOIN resolves against
+    the imports of the module like a type does (the refusal is "the table is in a namespace
+    that is not imported"), less the temporary tables of the module and the qualified names.
+
+    A module outside every subsystem - the project module, `Проект.xbsl` - is judged for the
+    packages only. A server build refused a project module that called a common module of a
+    package while it imported the subsystem alone, so an element of a package asks for its own
+    import there as everywhere. For an element at the root of a subsystem nothing is asked, as
+    before: the root is the case such a module has always been left alone for, and a name the
+    root of any subsystem owns - or an element outside the subsystems carries - is not judged
+    against a package namesake either.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -1040,6 +1202,7 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["k"] == "mod":
             local_types.update(fact["local_types"])
     placement: dict[str, dict[str, object]] = {}
+    unplaced: set[str] = set()  # elements that sit outside every subsystem
     paired_keys: dict[str, set[str]] = {}
     for fact in facts.values():
         if fact["k"] != "el":
@@ -1048,24 +1211,35 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         place = layout.place(Path(fact["path"]))
         if place is not None:
             placement.setdefault(fact["name"], {})[place.key] = fact["vis"]
+        else:
+            unplaced.add(fact["name"])
     for rel, fact in facts.items():
         if fact["k"] != "mod":
             continue
         own_keys = paired_keys.get(fact["stem"], frozenset())
         candidates_here = [(*c, "missing") for c in fact["cands"]] + [
             (*c, "chain") for c in fact.get("roots", ()) if c[0] not in own_keys
-        ]
+        ] + [(*c, "table") for c in fact.get("tables", ())]
         if not candidates_here:
             continue
-        my_place = layout.place(Path(fact["path"]))
-        if my_place is None:
-            continue  # a module outside any subsystem needs no import
-        imports = {layout.local_name(name, my_place.project_dir) for name in fact["imports"]}
+        path = Path(fact["path"])
+        my_place = layout.place(path)
+        if my_place is not None:
+            project_dir = my_place.project_dir
+        else:
+            project_dir = layout.project_dir_of(path)
+            if project_dir is None or path.parent != project_dir:
+                continue  # not the project module: the placement of the file is unknown
+        imports = {layout.local_name(name, project_dir) for name in fact["imports"]}
         reported: set[tuple[str, ...]] = set()
         for root, chain_name, line, col, shape in candidates_here:
             if root in local_types:
                 continue
-            candidates = _foreign_candidates(root, my_place, placement)
+            if my_place is None:
+                candidates = _package_candidates(root, placement, unplaced)
+                shape = "root"
+            else:
+                candidates = _foreign_candidates(root, my_place, placement)
             if not candidates or imports.intersection(candidates):
                 continue
             if candidates in reported:
@@ -1077,6 +1251,22 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                        sub="/".join(candidates)),
                 data={"namespaces": list(candidates)},
             )
+
+
+def _package_candidates(
+    root: str, placement: dict[str, dict[str, object]], unplaced: set[str],
+) -> tuple[str, ...]:
+    """The public package keys a plain name resolves to from a module outside every subsystem.
+
+    Empty when the name is unknown, when an element outside the subsystems carries it too (the
+    namesake next to the module resolves nearer), when the root of a subsystem owns it (the
+    root is not judged for such a module, and the root namesake would stand first) or when no
+    owner is public (the visibility rule's case).
+    """
+    owners = placement.get(root)
+    if not owners or root in unplaced or any("::" not in key for key in owners):
+        return ()
+    return tuple(sorted(key for key, vis in owners.items() if vis in _public_scopes()))
 
 
 # --- code/foreign-not-public --------------------------------------------------------------
