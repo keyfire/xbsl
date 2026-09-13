@@ -875,8 +875,9 @@ VS Code, как обычно.
 | Создать пакет | `xbsl.metadata.addPackage` | палитра команд |
 | Переименовать пакет | `xbsl.metadata.renamePackage` | палитра команд |
 | Перенести в пакет... | `xbsl.metadata.moveToPackage` | палитра команд |
-| Отбор по подсистеме | `xbsl.metadata.filterBySubsystem` | палитра команд |
-| Снять отбор по подсистеме | `xbsl.metadata.clearFilter` | палитра команд |
+| Отбор по подсистемам и пакетам... | `xbsl.metadata.filterBySubsystem` | палитра команд |
+| Отбор по подсистемам и пакетам (установлен)... | `xbsl.metadata.editFilter` | панель / контекстное меню |
+| Сбросить отбор по подсистемам и пакетам | `xbsl.metadata.clearFilter` | палитра команд |
 | Группировка дерева (по классам / по подсистемам) | `xbsl.metadata.groupMode` | палитра команд |
 | Скрыть пустые классы | `xbsl.metadata.hideEmptyCategories` | палитра команд |
 | Показать пустые классы | `xbsl.metadata.showEmptyCategories` | палитра команд |

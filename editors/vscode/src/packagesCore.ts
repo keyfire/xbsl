@@ -226,12 +226,32 @@ export interface Buckets<T> {
   subsystems: Map<SubsystemGroup, { root: T[]; packages: Map<string, T[]> }>;
 }
 
-/** Sort the items of one project into its subsystems and packages.
+/** Where one item of a project lies: its subsystem and package, undefined outside every subsystem.
  *
  * An object the engine placed goes where the engine said. Anything else - a resource file, an
  * object the answer does not know yet - goes by its folder: into the deepest package folder of
- * the answer that holds it, else to the root of the subsystem whose folder holds it.
+ * the answer that holds it, else to the root of the subsystem whose folder holds it. The tree
+ * sorts its nodes by this and the filter judges an item by it, so the two never disagree.
  */
+export function placeOf(
+  p: string,
+  project: ProjectPlacement,
+  placement: EnginePlacement
+): { subsystem: SubsystemGroup; packageKey: string | null } | undefined {
+  const placed = placement.objects.get(pathKey(p));
+  if (placed) {
+    const group = placed.subsystem ? project.subsystems.find((s) => s.name === placed.subsystem) : undefined;
+    if (group) {
+      return { subsystem: group, packageKey: placed.package };
+    }
+    if (!placed.subsystem) {
+      return undefined;
+    }
+  }
+  return folderPlace(project, p);
+}
+
+/** Sort the items of one project into its subsystems and packages (placeOf decides each). */
 export function bucketItems<T>(
   items: T[],
   pathOf: (item: T) => string,
@@ -257,22 +277,9 @@ export function bucketItems<T>(
     target.packages.set(packageKey, [...(target.packages.get(packageKey) ?? []), item]);
   };
   for (const item of items) {
-    const p = pathOf(item);
-    const placed = placement.objects.get(pathKey(p));
-    if (placed) {
-      const group = placed.subsystem ? project.subsystems.find((s) => s.name === placed.subsystem) : undefined;
-      if (group) {
-        push(group, placed.package, item);
-        continue;
-      }
-      if (!placed.subsystem) {
-        buckets.outside.push(item);
-        continue;
-      }
-    }
-    const byFolder = folderPlace(project, p);
-    if (byFolder) {
-      push(byFolder.subsystem, byFolder.packageKey, item);
+    const where = placeOf(pathOf(item), project, placement);
+    if (where) {
+      push(where.subsystem, where.packageKey, item);
     } else {
       buckets.outside.push(item);
     }

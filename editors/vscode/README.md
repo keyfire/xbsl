@@ -900,8 +900,9 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Create package | `xbsl.metadata.addPackage` | Command Palette |
 | Rename package | `xbsl.metadata.renamePackage` | Command Palette |
 | Move to package... | `xbsl.metadata.moveToPackage` | Command Palette |
-| Filter by subsystem | `xbsl.metadata.filterBySubsystem` | Command Palette |
-| Clear subsystem filter | `xbsl.metadata.clearFilter` | Command Palette |
+| Filter by subsystems and packages... | `xbsl.metadata.filterBySubsystem` | Command Palette |
+| Filter by subsystems and packages (active)... | `xbsl.metadata.editFilter` | panel / context menu |
+| Clear the subsystem and package filter | `xbsl.metadata.clearFilter` | Command Palette |
 | Tree grouping (by class / by subsystem) | `xbsl.metadata.groupMode` | Command Palette |
 | Hide empty categories | `xbsl.metadata.hideEmptyCategories` | Command Palette |
 | Show empty categories | `xbsl.metadata.showEmptyCategories` | Command Palette |

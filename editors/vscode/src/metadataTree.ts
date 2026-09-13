@@ -33,6 +33,23 @@ import {
   projectPlacementOf,
   readPlacement,
 } from "./packagesCore";
+import {
+  buildFilterTree,
+  canonicalSelection,
+  chosenPackageTotals,
+  chosenSubsystems,
+  FilterTree,
+  filterPredicate,
+  hasChoice,
+  placeKey,
+  readSelection,
+  sameSelection,
+  Selection,
+  summarize,
+  touches,
+  writeSelection,
+} from "./treeFilterCore";
+import { TreeFilterHost, TreeFilterPanel } from "./treeFilterPanel";
 import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
@@ -683,11 +700,18 @@ function subsystemsBranchNode(
 
 // The packages the Subsystems branch shows under a subsystem (packagesCore.packageTotals), counted
 // the way the grouping by subsystems counts them. Without the engine's answer - none.
+//
+// `keys` - the filter of this project is on: the elements come filtered already, and a package
+// nothing of which is chosen is left out, the way the grouping by subsystems leaves it out.
 function branchPackages(
-  elements: Element[], placement: EnginePlacement | undefined, projectDir: string | undefined
+  elements: Element[], placement: EnginePlacement | undefined, projectDir: string | undefined,
+  keys?: ReadonlySet<string>
 ): (sub: Subsystem) => PackageTotal[] {
   const totals = packageTotals(elements, (el) => el.yamlPath, placement, projectDir ?? "", topLevelObjects);
-  return (sub) => totals.get(pathKey(sub.dir)) ?? [];
+  return (sub) => {
+    const packages = totals.get(pathKey(sub.dir)) ?? [];
+    return keys ? chosenPackageTotals(packages, sub.name, keys) : packages;
+  };
 }
 
 // Subsystem node in the "By subsystems" mode: collapsible, carries its packages and its own
@@ -760,18 +784,23 @@ function topLevelObjects(elements: Element[]): number {
 // Without it (an engine that cannot answer): the old picture - the subsystem tree by folder
 // nesting, an object belongs to the DEEPEST subsystem folder that is a prefix of its path, and
 // packages are not shown.
+//
+// `keys` - the filter of this project is on: the elements and resources come filtered already,
+// and a subsystem or a package nothing of which is chosen is left out with them, so an empty
+// node of an unchosen place does not stay behind.
 function subsystemModeChildren(
   subsystems: Subsystem[],
   elements: Element[],
   resources: string[] = [],
   placement?: EnginePlacement,
-  projectDir?: string
+  projectDir?: string,
+  keys?: ReadonlySet<string>
 ): XbslNode[] {
   // The engine's view of exactly this project: an answer that does not know it yet (a project
   // created after it was given) draws it the old way until the next one.
   const project = placement?.projects.find((p) => pathKey(p.dir) === pathKey(projectDir ?? ""));
   if (placement && project) {
-    return packagedChildren(subsystems, elements, resources, placement, project.dir);
+    return packagedChildren(subsystems, elements, resources, placement, project.dir, keys);
   }
   const under = (child: string, dir: string): boolean => child.toLowerCase().startsWith(dir.toLowerCase() + path.sep);
   const deepest = (p: string, among: Subsystem[]): Subsystem | undefined => {
@@ -840,7 +869,7 @@ function subsystemModeChildren(
       ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false, resBySub.get(s.dir) ?? []),
     ]);
   return [
-    ...topSubs.sort(byName).map(buildSub),
+    ...topSubs.filter((s) => !keys || touches(keys, s.name)).sort(byName).map(buildSub),
     ...categoriesOf(rootElems, false, false, rootRes),
   ];
 }
@@ -851,7 +880,8 @@ function packagedChildren(
   elements: Element[],
   resources: string[],
   placement: EnginePlacement,
-  projectDir: string
+  projectDir: string,
+  keys?: ReadonlySet<string>
 ): XbslNode[] {
   const project = placement.projects.find((p) => p.dir === projectDir);
   if (!project) {
@@ -862,10 +892,14 @@ function packagedChildren(
   const byResource = bucketItems(resources, (p) => p, project, placement);
   const nodes: XbslNode[] = [];
   for (const group of project.subsystems) {
+    if (keys && !touches(keys, group.name)) {
+      continue;
+    }
     const elementSlot = byElement.subsystems.get(group);
     const resourceSlot = byResource.subsystems.get(group);
+    const chosen = (pkg: PackageGroup): boolean => !keys || touches(keys, placeKey(group.name, pkg.key));
     const buildPackage = (pkg: PackageGroup): { node: XbslNode; objects: number } => {
-      const nested = [...pkg.children].sort(byName).map(buildPackage);
+      const nested = [...pkg.children].filter(chosen).sort(byName).map(buildPackage);
       const categories = categoriesOf(
         elementSlot?.packages.get(pkg.key) ?? [], false, false,
         resourceSlot?.packages.get(pkg.key) ?? [], namespaceOf
@@ -877,7 +911,7 @@ function packagedChildren(
     const view: Subsystem = { name: group.name, dir: group.dir, yamlPath: descriptor?.yamlPath, namespace: group.namespace };
     nodes.push(
       subsystemGroupNode(view, [
-        ...[...group.packages].sort(byName).map((pkg) => buildPackage(pkg).node),
+        ...[...group.packages].filter(chosen).sort(byName).map((pkg) => buildPackage(pkg).node),
         ...categoriesOf(elementSlot?.root ?? [], false, false, resourceSlot?.root ?? [], namespaceOf),
       ])
     );
@@ -903,22 +937,38 @@ function subsystemViews(descriptors: Subsystem[], placement: EnginePlacement | u
   }));
 }
 
-function projectNode(project: Project, children: XbslNode[], filterNames: string[]): XbslNode {
+// What the label of a project says about its filter: the subsystems chosen whole by their names,
+// the partly chosen ones marked, the rest counted after a few names.
+function filterText(keys: ReadonlySet<string>, maxItems: number, maxChars: number): string {
+  if (!keys.size) {
+    return vscode.l10n.t("nothing selected");
+  }
+  const { items, more } = summarize(keys, maxItems, maxChars);
+  const text = items.map((item) => (item.partial ? vscode.l10n.t("{0} (partially)", item.name) : item.name)).join(", ");
+  return more ? vscode.l10n.t("{0} and {1} more", text, more) : text;
+}
+
+// `filterKeys` - the filter is on (for this project, or for another one - then nothing of this
+// project is chosen).
+function projectNode(project: Project, children: XbslNode[], filterKeys?: ReadonlySet<string>): XbslNode {
   const node = new XbslNode(project.name, vscode.TreeItemCollapsibleState.Expanded);
   node.iconPath = new vscode.ThemeIcon("project");
   node.resourceUri = vscode.Uri.file(project.yamlPath); // git statuses
-  // Grayed out next to the name - Поставщик\Имя from Проект.yaml; a filter appends its list.
+  // Grayed out next to the name - `Поставщик\Имя` from the descriptor; a filter appends its
+  // summary, and the tooltip lists the whole of it.
   const base = project.vendor ? `${project.vendor}\\${project.name}` : "";
-  node.description = filterNames.length
-    ? `${base} • ${vscode.l10n.t("filter")}: ${filterNames.join(", ")}`.trim()
+  node.description = filterKeys
+    ? `${base} • ${vscode.l10n.t("filter")}: ${filterText(filterKeys, 3, 48)}`.trim()
     : base || undefined;
-  node.contextValue = ["project", project.appModulePath ? "appmod" : "", filterNames.length ? "filtered" : ""]
+  node.contextValue = ["project", project.appModulePath ? "appmod" : "", filterKeys ? "filtered" : ""]
     .filter(Boolean)
     .join(" ");
   node.appModulePath = project.appModulePath;
   node.projectDir = project.dir;
   node.children = children;
-  node.tooltip = vscode.l10n.t("Project");
+  node.tooltip = filterKeys
+    ? `${vscode.l10n.t("Project")}\n${vscode.l10n.t("Filter: {0}", filterText(filterKeys, Infinity, Infinity))}`
+    : vscode.l10n.t("Project");
   return node;
 }
 
@@ -1415,41 +1465,9 @@ function categoriesOf(
 
 type GroupMode = "kind" | "subsystem";
 
-function buildRoots(
-  model: Model, filterDirs: Set<string>, mode: GroupMode, hideEmpty: boolean, placement?: EnginePlacement
-): XbslNode[] {
-  const filterActive = filterDirs.size > 0;
-  const underFilter = (p: string): boolean =>
-    [...filterDirs].some((d) => p.toLowerCase().startsWith(d.toLowerCase() + path.sep));
-  const elements = filterActive ? model.elements.filter((el) => underFilter(el.yamlPath)) : model.elements;
-  const resources = filterActive ? model.resources.filter(underFilter) : model.resources;
-  const showEmpty = !filterActive;
-
-  // The namespace of an object, when the engine placed it - the tooltip of its node.
-  const namespaceOf = placement
-    ? (el: Element): string | undefined => placement.objects.get(pathKey(el.yamlPath))?.namespace
-    : undefined;
-
-  // Project children: "By object classes" - the Subsystems branch + categories by kind;
-  // "By subsystems" - the subsystem tree with the packages and the objects under it.
-  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[], projectDir?: string): XbslNode[] =>
-    mode === "subsystem"
-      ? subsystemModeChildren(subs, elems, res, placement, projectDir)
-      : [
-          subsystemsBranchNode(
-            subsystemViews(subs, placement, projectDir), branchPackages(elems, placement, projectDir)
-          ),
-          ...categoriesOf(elems, showEmpty, hideEmpty, res, namespaceOf),
-        ];
-
-  if (model.projects.length === 0) {
-    // No Проект.yaml found - go without a project root.
-    return mode === "subsystem"
-      ? subsystemModeChildren(model.subsystems, elements, resources, placement, "")
-      : categoriesOf(elements, showEmpty, hideEmpty, resources, namespaceOf);
-  }
-  const projects = [...model.projects].sort(byName);
-  const projectOf = (targetPath: string): Project => {
+// The project a path is drawn under: the deepest project folder holding it, else the first project.
+function projectResolver(projects: Project[]): (targetPath: string) => Project | undefined {
+  return (targetPath: string): Project | undefined => {
     let best = projects[0];
     let bestLen = -1;
     for (const p of projects) {
@@ -1461,29 +1479,89 @@ function buildRoots(
     }
     return best;
   };
-  const elementsByProject = new Map<Project, Element[]>();
-  for (const el of elements) {
-    const p = projectOf(el.yamlPath);
-    const list = elementsByProject.get(p) ?? [];
-    list.push(el);
-    elementsByProject.set(p, list);
+}
+
+// The tree of checkboxes of the filter form over the model and the engine's placement.
+function filterTreeOf(model: Model, placement: EnginePlacement | undefined): FilterTree {
+  const projects = [...model.projects].sort(byName);
+  const projectOf = projectResolver(projects);
+  return buildFilterTree({
+    projects: projects.map((p) => ({ dir: p.dir, name: p.name, title: p.vendor ? `${p.vendor}::${p.name}` : p.name })),
+    items: model.elements,
+    pathOf: (el) => el.yamlPath,
+    projectOf: (p) => projectOf(p)?.dir ?? "",
+    count: topLevelObjects,
+    placement,
+    subsystems: model.subsystems,
+  });
+}
+
+function buildRoots(
+  model: Model, selection: Selection, mode: GroupMode, hideEmpty: boolean, placement?: EnginePlacement
+): XbslNode[] {
+  const projects = [...model.projects].sort(byName);
+  const projectOf = projectResolver(projects);
+  // The filter judges an item by the project it is drawn under and by the engine's placement - the
+  // same placement the grouping by subsystems sorts it by.
+  const passes = filterPredicate({
+    selection,
+    projects: projects.map((p) => p.dir),
+    projectOf: (p) => projectOf(p)?.dir ?? "",
+    placement,
+    subsystems: model.subsystems,
+  });
+  const filterActive = passes !== undefined;
+  const elements = passes ? model.elements.filter((el) => passes(el.yamlPath)) : model.elements;
+  const resources = passes ? model.resources.filter(passes) : model.resources;
+  const showEmpty = !filterActive;
+  const keysOf = (dir: string): ReadonlySet<string> | undefined =>
+    filterActive ? selection.get(pathKey(dir)) ?? new Set<string>() : undefined;
+
+  // The namespace of an object, when the engine placed it - the tooltip of its node.
+  const namespaceOf = placement
+    ? (el: Element): string | undefined => placement.objects.get(pathKey(el.yamlPath))?.namespace
+    : undefined;
+
+  // Project children: "By object classes" - the Subsystems branch + categories by kind;
+  // "By subsystems" - the subsystem tree with the packages and the objects under it. Under a
+  // filter both hide what nothing is chosen of: the Subsystems branch keeps a chosen package
+  // under its subsystem and drops the unchosen subsystems and packages.
+  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[], projectDir: string): XbslNode[] => {
+    const keys = keysOf(projectDir);
+    if (mode === "subsystem") {
+      return subsystemModeChildren(subs, elems, res, placement, projectDir, keys);
+    }
+    const views = subsystemViews(subs, placement, projectDir);
+    return [
+      subsystemsBranchNode(
+        keys ? chosenSubsystems(views, keys) : views, branchPackages(elems, placement, projectDir, keys)
+      ),
+      ...categoriesOf(elems, showEmpty, hideEmpty, res, namespaceOf),
+    ];
+  };
+
+  if (projects.length === 0) {
+    // No Проект.yaml found - go without a project root.
+    return mode === "subsystem"
+      ? subsystemModeChildren(model.subsystems, elements, resources, placement, "", keysOf(""))
+      : categoriesOf(elements, showEmpty, hideEmpty, resources, namespaceOf);
   }
-  const subsystemsByProject = new Map<Project, Subsystem[]>();
-  for (const s of model.subsystems) {
-    const p = projectOf(s.dir);
-    const list = subsystemsByProject.get(p) ?? [];
-    list.push(s);
-    subsystemsByProject.set(p, list);
-  }
-  const resourcesByProject = new Map<Project, string[]>();
-  for (const filePath of resources) {
-    const p = projectOf(filePath);
-    const list = resourcesByProject.get(p) ?? [];
-    list.push(filePath);
-    resourcesByProject.set(p, list);
-  }
-  const filterNamesOf = (p: Project): string[] =>
-    model.subsystems.filter((s) => filterDirs.has(s.dir) && projectOf(s.dir) === p).map((s) => s.name);
+  const group = <T>(items: T[], pathOf: (item: T) => string): Map<Project | undefined, T[]> => {
+    const out = new Map<Project | undefined, T[]>();
+    for (const item of items) {
+      const p = projectOf(pathOf(item));
+      const list = out.get(p);
+      if (list) {
+        list.push(item);
+      } else {
+        out.set(p, [item]);
+      }
+    }
+    return out;
+  };
+  const elementsByProject = group(elements, (el) => el.yamlPath);
+  const subsystemsByProject = group(model.subsystems, (s) => s.dir);
+  const resourcesByProject = group(resources, (filePath) => filePath);
 
   return projects.map((p) =>
     projectNode(
@@ -1494,7 +1572,7 @@ function buildRoots(
         resourcesByProject.get(p) ?? [],
         p.dir
       ),
-      filterNamesOf(p)
+      keysOf(p.dir)
     )
   );
 }
@@ -1527,7 +1605,13 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   readonly onDidChangeTreeData = this.emitter.event;
   private roots?: XbslNode[];
   private model?: Model;
-  private filter = new Set<string>(); // subsystem directories of the active filter
+  // The filter by subsystems and packages: the chosen placement keys per project
+  // (treeFilterCore), kept in the workspace state so a reload of the window keeps it.
+  private selection: Selection;
+  private filterContext?: boolean; // the value last given to FILTER_CONTEXT
+  // The filter form reads the tree again when the files or the engine's answer change.
+  private readonly formEmitter = new vscode.EventEmitter<void>();
+  readonly onDidChangeForm = this.formEmitter.event;
   private groupMode: GroupMode = "kind"; // tree hierarchy: by classes or by subsystems
   private hideEmpty = false; // hide empty class categories (the toolbar toggle)
   private treeView?: vscode.TreeView<XbslNode>; // for reveal (getParent is mandatory)
@@ -1546,7 +1630,12 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   // not asked again this session - an answer that cannot change is not worth a process per save.
   private placementUnsupported = false;
 
-  constructor(private readonly projectRootFor: (folder: vscode.WorkspaceFolder) => string) {}
+  constructor(
+    private readonly projectRootFor: (folder: vscode.WorkspaceFolder) => string,
+    private readonly memento?: vscode.Memento
+  ) {
+    this.selection = readSelection(memento?.get(FILTER_STATE_KEY));
+  }
 
   // The root the engine walks for an operation on this path - the project root the lint uses.
   rootFor(fsPath: string): string | undefined {
@@ -1584,6 +1673,9 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     }
     this.modelStale = true;
     this.redraw();
+    if (structural) {
+      this.formEmitter.fire();
+    }
   }
 
   // Another picture of the same files: a filter, the grouping, a toggle, the placement arriving.
@@ -1614,6 +1706,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       .finally(() => {
         this.placementRequest = undefined;
         this.redraw(); // a newer file set asks again from the draw
+        this.formEmitter.fire();
       });
     return this.placementRequest;
   }
@@ -1644,13 +1737,54 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     return this.placement;
   }
 
-  get filterDirs(): Set<string> {
-    return this.filter;
+  get appliedSelection(): Selection {
+    return this.selection;
   }
 
-  setFilter(dirs: string[]): void {
-    this.filter = new Set(dirs);
+  // Filter the tree by the choice and keep it for the next window.
+  async applySelection(selection: Selection): Promise<void> {
+    this.selection = selection;
+    await this.memento?.update(FILTER_STATE_KEY, writeSelection(selection));
+    this.syncFilterContext();
     this.redraw();
+    this.formEmitter.fire();
+  }
+
+  // The tree of checkboxes for the filter form, over the model as it is now and the engine's last
+  // answer; the engine is asked again when the file set changed, and its answer reaches the form
+  // through onDidChangeForm. `pending` - that answer is still on its way.
+  async filterForm(): Promise<{ tree: FilterTree; pending: boolean }> {
+    if (!this.model || this.modelStale) {
+      this.modelStale = false;
+      this.model = await parseModel(this.projectRootFor);
+    }
+    void this.askPlacement();
+    return { tree: filterTreeOf(this.model, this.placement), pending: this.placementRequest !== undefined };
+  }
+
+  // The toolbar shows the filled filter icon while a filter is on (FILTER_CONTEXT). Before the
+  // model is read, any stored choice counts.
+  syncFilterContext(): void {
+    const active = this.model
+      ? hasChoice(this.selection, this.model.projects.map((p) => p.dir))
+      : [...this.selection.values()].some((keys) => keys.size > 0);
+    if (active !== this.filterContext) {
+      this.filterContext = active;
+      void vscode.commands.executeCommand("setContext", FILTER_CONTEXT, active);
+    }
+  }
+
+  // A package renamed or deleted, a subsystem gone: its keys leave the stored choice as soon as
+  // the engine's answer shows it. Only an answer can tell - without one every key is kept.
+  private dropStaleKeys(): void {
+    if (!this.placement || !this.model || !this.selection.size) {
+      return;
+    }
+    const cleaned = canonicalSelection(filterTreeOf(this.model, this.placement), this.selection);
+    if (!sameSelection(cleaned, this.selection)) {
+      this.selection = cleaned;
+      void this.memento?.update(FILTER_STATE_KEY, writeSelection(cleaned));
+    }
   }
 
   get mode(): GroupMode {
@@ -1737,7 +1871,9 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
         this.model = await parseModel(this.projectRootFor);
       }
       void this.askPlacement();
-      this.roots = buildRoots(this.model, this.filter, this.groupMode, this.hideEmpty, this.placement);
+      this.dropStaleKeys();
+      this.syncFilterContext();
+      this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement);
       setParents(this.roots, undefined);
     }
     return this.roots;
@@ -2798,25 +2934,23 @@ async function addSubsystem(provider: XbslMetadataProvider, node?: XbslNode): Pr
   );
 }
 
-async function filterBySubsystem(provider: XbslMetadataProvider): Promise<void> {
-  const { subsystems } = await provider.placements();
-  if (!subsystems.length) {
+// The filter form over the tree. A project without a single subsystem has nothing to choose - unless
+// a filter is on already, which the form can still reset, or the engine is still to answer.
+async function openFilter(provider: XbslMetadataProvider, host: TreeFilterHost): Promise<void> {
+  const { tree, pending } = await provider.filterForm();
+  const nothing = tree.projects.every((p) => !p.children.length);
+  if (nothing && !pending && !hasChoice(provider.appliedSelection, tree.projects.map((p) => p.project))) {
     void vscode.window.showInformationMessage(vscode.l10n.t("XBSL: the project has no subsystems."));
     return;
   }
-  const current = provider.filterDirs;
-  const items = subsystems.map((s) => ({ label: s.name, dir: s.dir, picked: current.has(s.dir) }));
-  const picks = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    placeHolder: vscode.l10n.t("Show only these subsystems (nothing selected – no filter)"),
-  });
-  if (!picks) {
-    return; // canceled - leave the filter as is
-  }
-  provider.setFilter(picks.map((p) => p.dir));
+  await TreeFilterPanel.show(host);
 }
 
 const GROUP_MODE_KEY = "xbsl.metadata.groupMode";
+// The filter by subsystems and packages, per project root (workspace state), and the context key
+// that switches the filter icon of the toolbar to the filled one.
+const FILTER_STATE_KEY = "xbsl.metadata.treeFilter";
+const FILTER_CONTEXT = "xbsl.metadata.filterActive";
 // Persisted "hide empty categories" toggle; the context key drives which title button is shown.
 const HIDE_EMPTY_KEY = "xbsl.metadata.hideEmpty";
 const HIDE_EMPTY_CONTEXT = "xbsl.metadata.emptyHidden";
@@ -2855,7 +2989,8 @@ export function registerMetadataTree(
   formOwnerByPath: (yamlPath: string) => Promise<{ name: string; kind: string; yamlPath: string } | undefined>;
   projectEnums: () => Promise<Record<string, string[]>>;
 } {
-  const provider = new XbslMetadataProvider(projectRootFor);
+  const provider = new XbslMetadataProvider(projectRootFor, context.workspaceState);
+  provider.syncFilterContext();
   sessionProvider = provider; // the panels ask the project language through it
   panelColumnFn = panelColumnFor; // where a form's own designer panel sits, when one is open
   const view = vscode.window.createTreeView("xbslMetadata", {
@@ -2867,6 +3002,12 @@ export function registerMetadataTree(
     dragAndDropController: new MetadataDragAndDrop(provider),
   });
   provider.attachView(view); // reveal requires access to the tree view
+  const filterHost: TreeFilterHost = {
+    form: () => provider.filterForm(),
+    selection: () => provider.appliedSelection,
+    apply: (selection) => provider.applySelection(selection),
+    onDidChange: provider.onDidChangeForm,
+  };
   // Collapse everything but keep the root open: the list of metadata kinds is what the tree is
   // opened for, and hiding it buys nothing.
   context.subscriptions.push(
@@ -2960,8 +3101,10 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.addPackage", (n?: XbslNode) => addPackage(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.renamePackage", (n?: XbslNode) => renamePackage(provider, n)),
     vscode.commands.registerCommand("xbsl.metadata.moveToPackage", (n?: XbslNode) => moveToPackage(provider, n)),
-    vscode.commands.registerCommand("xbsl.metadata.filterBySubsystem", () => filterBySubsystem(provider)),
-    vscode.commands.registerCommand("xbsl.metadata.clearFilter", () => provider.setFilter([])),
+    // The same form behind two buttons: the plain filter icon, and the filled one while a filter is on.
+    vscode.commands.registerCommand("xbsl.metadata.filterBySubsystem", () => openFilter(provider, filterHost)),
+    vscode.commands.registerCommand("xbsl.metadata.editFilter", () => openFilter(provider, filterHost)),
+    vscode.commands.registerCommand("xbsl.metadata.clearFilter", () => provider.applySelection(new Map())),
     vscode.commands.registerCommand("xbsl.metadata.groupMode", () => pickGroupMode(provider, context)),
     vscode.commands.registerCommand("xbsl.metadata.hideEmptyCategories", () => setEmptyHidden(provider, context, true)),
     vscode.commands.registerCommand("xbsl.metadata.showEmptyCategories", () => setEmptyHidden(provider, context, false))
