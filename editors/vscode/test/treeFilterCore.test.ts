@@ -14,7 +14,12 @@ import {
   FilterNode,
   FilterTree,
   filterPredicate,
+  FolderPlace,
+  isPlaceFilter,
   nodeStates,
+  placeFilterOf,
+  placesByFolder,
+  placeSelection,
   readSelection,
   selectAll,
   selectedCount,
@@ -305,6 +310,80 @@ test("the Subsystems branch without the engine: a descriptor inside a subsystem 
   assert.deepStrictEqual(chosenSubsystems(DESCRIPTORS, sales).map((s) => s.name), ["Продажи"]);
   // The descriptor has no checkbox of its own: its name alone keeps nothing.
   assert.deepStrictEqual(chosenSubsystems(DESCRIPTORS, new Set(["Партии::*"])), []);
+});
+
+test("filtering by one node: a subsystem whole, a package with its nested packages", () => {
+  const t = tree();
+  const stock = placeSelection(PROJECT, "Склад");
+  assert.deepStrictEqual(keysOf(stock), ["Склад::*"]);
+  assert.deepStrictEqual(statesOf(t, stock, [SUB, BATCHES, ARCHIVE, BATCHES_LOOSE, STOCK_LOOSE, SALES]), [
+    "checked", "checked", "checked", "checked", "checked", "unchecked",
+  ]);
+  const batches = placeSelection(PROJECT, "Склад::Партии");
+  assert.deepStrictEqual(passing(batches), [
+    "Склад\\Партии\\Архив\\АрхивПартий.yaml",
+    "Склад\\Партии\\ПартииТоваров.yaml",
+  ]);
+  // The form writes the very same choice: stored, it is not rewritten.
+  assert.deepStrictEqual(writeSelection(canonicalSelection(t, batches)), writeSelection(batches));
+});
+
+test("the filter is exactly one node: by that node's own button or by the same checkboxes in the form", () => {
+  const t = tree();
+  const only = (selection: Selection): string[] | undefined => {
+    const filter = placeFilterOf(t, selection);
+    return filter && [filter.project, ...[...filter.places].sort()];
+  };
+  assert.deepStrictEqual(only(placeSelection(PROJECT, "Склад::Партии")), [PROJECT, "Склад::Партии"]);
+  assert.deepStrictEqual(only(placeSelection(PROJECT, "Склад")), [PROJECT, "Склад"]);
+  // Checking the nested package and the objects of the package one by one is the same filter.
+  assert.deepStrictEqual(only(toggleNode(t, toggleNode(t, new Map(), ARCHIVE), BATCHES_LOOSE)), [PROJECT, "Склад::Партии"]);
+  // Two places, the root objects of a subsystem alone, nothing at all - no node is the filter.
+  assert.strictEqual(only(toggleNode(t, placeSelection(PROJECT, "Склад::Партии"), SALES)), undefined);
+  assert.strictEqual(only(toggleNode(t, new Map(), STOCK_LOOSE)), undefined);
+  assert.strictEqual(only(new Map()), undefined);
+  const archive: FolderPlace = { project: PROJECT, place: "Склад::Партии::Архив", kind: "package" };
+  assert.strictEqual(isPlaceFilter(placeFilterOf(t, placeSelection(PROJECT, "Склад::Партии::Архив")), archive), true);
+  assert.strictEqual(isPlaceFilter(placeFilterOf(t, placeSelection(PROJECT, "Склад::Партии")), archive), false);
+  assert.strictEqual(isPlaceFilter(undefined, archive), false);
+});
+
+test("a subsystem whose only item is one package: the filter by either is the filter by both", () => {
+  const Q = "D:\\repo\\Демо\\Доставка";
+  const answer: EngineProjectInfo = {
+    projects: [{ vendor: "Демо", name: "Доставка", dir: Q, subsystems: ["Логистика"] }],
+    packages: [{ subsystem: "Логистика", package: "Маршруты", dir: `${Q}\\Логистика\\Маршруты`, objects: 1 }],
+    objects: [
+      { kind: "Справочник", name: "Маршруты", path: `${Q}\\Логистика\\Маршруты\\Маршруты.yaml`, subsystem: "Логистика", package: "Маршруты", namespace: "Демо::Доставка::Логистика::Маршруты" },
+    ],
+  };
+  const lone = buildFilterTree({
+    projects: [{ dir: Q, name: "Доставка" }],
+    items: (answer.objects ?? []).map((o) => o.path),
+    pathOf: (p) => p,
+    projectOf: () => Q,
+    count: (items) => items.length,
+    placement: readPlacement(answer),
+    subsystems: [],
+  });
+  const project = pathKey(Q);
+  const filter = placeFilterOf(lone, placeSelection(project, "Логистика::Маршруты"))!;
+  assert.deepStrictEqual([...filter.places].sort(), ["Логистика", "Логистика::Маршруты"]);
+  assert.deepStrictEqual([...placeFilterOf(lone, placeSelection(project, "Логистика"))!.places].sort(), [
+    "Логистика", "Логистика::Маршруты",
+  ]);
+});
+
+test("the nodes that can filter: the places of the form by their folders, none for a nested descriptor", () => {
+  const places = placesByFolder(tree());
+  assert.deepStrictEqual(places.get(pathKey(`${P}\\Склад`)), { project: PROJECT, place: "Склад", kind: "subsystem" });
+  assert.deepStrictEqual(places.get(pathKey("d:/REPO/Демо/Учет/Склад/Партии/Архив/")), {
+    project: PROJECT, place: "Склад::Партии::Архив", kind: "package",
+  });
+  assert.strictEqual(places.size, 5); // three subsystems, two packages
+  const described = placesByFolder(tree(false));
+  assert.deepStrictEqual([...described.values()].map((p) => p.place).sort(), ["Продажи", "Склад"]);
+  assert.strictEqual(described.get(pathKey(`${P}\\Склад\\Партии`)), undefined);
 });
 
 test("the label of a project: partial subsystems marked, the rest counted", () => {

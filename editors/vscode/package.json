@@ -570,6 +570,30 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "xbsl.metadata.filterBySubsystemNode",
+        "title": "%cmd.metadata.filterBySubsystemNode%",
+        "category": "XBSL",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xbsl.metadata.filterByPackageNode",
+        "title": "%cmd.metadata.filterByPackageNode%",
+        "category": "XBSL",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "xbsl.metadata.clearSubsystemNodeFilter",
+        "title": "%cmd.metadata.clearSubsystemNodeFilter%",
+        "category": "XBSL",
+        "icon": "$(filter-filled)"
+      },
+      {
+        "command": "xbsl.metadata.clearPackageNodeFilter",
+        "title": "%cmd.metadata.clearPackageNodeFilter%",
+        "category": "XBSL",
+        "icon": "$(filter-filled)"
+      },
+      {
         "command": "xbsl.metadata.groupMode",
         "title": "%cmd.metadata.groupMode%",
         "category": "XBSL",
@@ -884,6 +908,22 @@
         },
         {
           "command": "xbsl.metadata.editFilter",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.filterBySubsystemNode",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.filterByPackageNode",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.clearSubsystemNodeFilter",
+          "when": "false"
+        },
+        {
+          "command": "xbsl.metadata.clearPackageNodeFilter",
           "when": "false"
         }
       ],
@@ -1463,6 +1503,46 @@
           "command": "xbsl.metadata.renamePackage",
           "when": "view == xbslMetadata && viewItem =~ /\\brenamepkg\\b/",
           "group": "4_edit@1"
+        },
+        {
+          "command": "xbsl.metadata.filterBySubsystemNode",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilterbysub\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "xbsl.metadata.filterBySubsystemNode",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilterbysub\\b/",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "xbsl.metadata.filterByPackageNode",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilterbypkg\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "xbsl.metadata.filterByPackageNode",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilterbypkg\\b/",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "xbsl.metadata.clearSubsystemNodeFilter",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilteredbysub\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "xbsl.metadata.clearSubsystemNodeFilter",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilteredbysub\\b/",
+          "group": "2_filter@1"
+        },
+        {
+          "command": "xbsl.metadata.clearPackageNodeFilter",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilteredbypkg\\b/",
+          "group": "inline@1"
+        },
+        {
+          "command": "xbsl.metadata.clearPackageNodeFilter",
+          "when": "view == xbslMetadata && viewItem =~ /\\bfilteredbypkg\\b/",
+          "group": "2_filter@1"
         },
         {
           "command": "xbsl.metadata.moveToPackage",
