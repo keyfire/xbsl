@@ -410,6 +410,27 @@ export function scaffoldSteps(result: {
   return steps;
 }
 
+/** What the tree asks before deleting an object, read from the engine's plan (delete-object).
+ *
+ * `files` are the names of the planned files in the plan's order. Which files belong to the
+ * object - its forms, the query of a virtual table, the WSDL descriptions of a SOAP service
+ * client - is the engine's decision, and the tree deletes that list and nothing of its own.
+ * `detail` holds the notes of the plan with the mentions left in the project, at most
+ * `maxLines` of them: the engine lists up to two hundred, too many for a dialog, so the rest is
+ * counted after "...".
+ */
+export function deletionPrompt(
+  plan: { deletes?: string[]; notes?: string[] },
+  maxLines = 12
+): { files: string[]; detail: string } {
+  const notes = plan.notes ?? [];
+  const shown = notes.slice(0, maxLines);
+  if (notes.length > maxLines) {
+    shown.push(`... +${notes.length - maxLines}`);
+  }
+  return { files: (plan.deletes ?? []).map(baseName), detail: shown.join("\n") };
+}
+
 /** The folders the renamed files left, deepest first - removed afterwards when they are empty.
  *
  * The parents of every old path up to the first folder a renamed file still lands in (a rename
