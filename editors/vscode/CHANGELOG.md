@@ -12,33 +12,21 @@
 ## Unreleased
 
 ### Added
-- **The metadata tree shows the packages of a subsystem.** In the "By subsystems" grouping a
-  subsystem holds its packages - nested ones under their parent, the number of objects in grey, the
-  full `Vendor::Project::Subsystem::Package` namespace in the tooltip - and the objects of its root
-  by class. The folders used to count only when they carried a subsystem descriptor, so the objects
-  of a package were mixed into the classes of the subsystem, and a subsystem without a descriptor
-  was not shown at all. The placement is the engine's answer (`xbsl/metaProjectInfo`): the tree is
-  drawn at once and completed when the answer arrives, and the engine is asked again only when files
-  appear, disappear or move. An object's tooltip names its namespace too.
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **Create, move into and rename a package from the tree.** **Create package** on a subsystem or a
-  package asks the name and goes straight on to the first object of the package - a folder without
-  objects is not a package. **Move to package...** on an object, or dragging the object onto a
-  subsystem or a package, moves it with the engine's `move-object`: the imports and full names the
-  move needs are updated across the project. **Rename package** renames the folder and every name
-  that spells it. The engine xbsl with the new commands is required.
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **Documentation links for the three new package rules.** The code of `yaml/wrong-namespace` and
-  `code/wrong-namespace` in the "Problems" panel opens the section on the qualified name of an
-  element, and the code of `code/package-resources-missing` the section on resources in code.
-  ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **The metadata tree shows the packages of a subsystem.** In the "By subsystems" grouping packages
+  sit under their subsystem. Objects of a package used to mix with those of the subsystem, and a
+  subsystem without a descriptor was not shown. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **Packages can be created, filled and renamed from the tree.** "Create package" goes straight on
+  to the first object, since an empty folder is not a package. "Move to package..." or dragging an
+  object onto a package moves it and updates imports and full names across the project. The commands
+  need an xbsl engine that has them. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **The three new package rules link to the documentation.** In the "Problems" panel
+  `code/package-resources-missing` opens the section on resources, and both `*/wrong-namespace`
+  rules open the one on qualified names. ([#56](https://github.com/keyfire/xbsl/pull/56))
 
 ### Changed
-- **A subsystem node offers "Create package" instead of a nested subsystem.** A subsystem is a
-  first-level folder of the project; "Add subsystem" stays on the project root and on the Subsystems
-  branch, and only a project root can be its parent. "Add <class>" on a category under a subsystem
-  or a package creates the object in that folder without asking.
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **A subsystem node offers "Create package" instead of a nested subsystem.** "Add subsystem" stays
+  on the project root and the Subsystems branch. "Add <class>" under a subsystem or a package
+  creates the object right there. ([#54](https://github.com/keyfire/xbsl/pull/54))
 
 ## 0.69.1
 

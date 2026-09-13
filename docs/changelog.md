@@ -28,232 +28,92 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
-- **The documentation guard catches a sentence that explains a change by naming who asked for
-  it.** The repository has one author, so that sentence gives the reader nothing to act on and
-  suggests the code was written for somebody else. Three of them were found by hand on one day,
-  in the docstrings of tests, and the oldest had been there since July. Both editions of the
-  pages and documents are read now, and with them the comments and docstrings of the engine, the
-  tests, the tools and the extension. The table comes from `docsguard@v0.10.0` and catches a
-  turn of phrase rather than a word: an owner in this toolkit is a metadata object, so
-  `owner table` and `the owner's kind` stay quiet.
-  ([#46](https://github.com/keyfire/xbsl/pull/46))
-- **Five checks for the wording and the characters of a comment, taken from a pass of one project's
-  comments through a style edit.** Each habit was caught by eye on one line and then chased through
-  the tree by a script, so the next occurrence came back unnoticed. `typography/non-keyboard`
-  reports an arrow, a comparison or a multiplication sign in a comment and writes the keyboard
-  spelling (`->`, `>=`, `<>`, `x`); it is on by default. `typography/en-dash-comment` reports the en
-  dash of a comment for a project that writes a hyphen there. The new `comment/` group holds
-  `comment/subjunctive`, `comment/first-person` and `comment/emphasis-caps`. The subjunctive rule
-  asks for a word of condition rather than the removal of the particle: in that pass removing it
-  alone turned hypotheses into statements about the code, and about ninety lines had to be
-  rewritten. The group and the en dash rule are off by default; a project turns them on with
-  `--enable`. Element descriptions are read too: these rules judge the `#` comments of a yaml, which
-  the older typography rules do not. ([#51](https://github.com/keyfire/xbsl/pull/51))
-- **Two more checks for comments: a condition written with a dash, and a name the project does not
-  have.** Both come from the same pass of one project's comments through a style edit, where each
-  was found by eye and then chased through the tree by a script. `comment/dash-condition` reports a
-  sentence like "the store is not set - the main one is taken" and suggests the wording with a word
-  of condition. It counts only a short left part that names something and ends in a state, followed
-  by a verb after the dash, so the legend of a value ("empty - the slot is free") stays quiet. On
-  the tree of that project before the edit it found 32 sentences: the edit had rewritten 22 of them
-  into conditions by hand, and the 9 it missed read the same way. `comment/unknown-name` is a
-  project rule. It collects the identifiers of the modules, the names of the element descriptions
-  and the platform catalog, and reports an identifier-like word of a comment that none of them
-  knows - a method renamed while its mention stayed. A case form of a known name, a line of
-  commented-out code and a chain that names another system are left alone. Over the same tree it
-  found all eight stale names the edit had fixed by hand, six of them in the comments of element
-  descriptions. Both rules are off by default. The dash is a convention of a project, and the name
-  of another product mentioned in prose has the shape of a renamed method: on foreign code 6 of the
-  7 findings of the name rule were real. ([#55](https://github.com/keyfire/xbsl/pull/55))
-- **`translation/english-shape` reads the English values of the translation dictionary.**
-  `xbsl translate --strict` measures how much of a project the dictionary covers and never reads
-  what the values say, so a mechanical edit of the English went through unnoticed. A verb ending
-  moved onto the adverb before it ("a second icon onlies clutter the row"), a passive kept the
-  Russian word order ("a variable is shadowed the parameter"), and a Russian line lost its capitals
-  while the English kept `NOT`. On a live dictionary the rule found 173 such traces, all of them
-  real, while the coverage stood at 100% and `--strict` passed. The rule is a tier B warning, on by
-  default. It judges only the files of the discovered `xbsl-translation` dictionary and gives each
-  of the three shapes its own message. There is no autofix, because only the author knows which word
-  was meant. The rule opens the new `translation/` group.
-  ([#52](https://github.com/keyfire/xbsl/pull/52))
-- **`yaml/wrong-namespace` and `code/wrong-namespace`: a full name that outlived a move of its
-  element.** `Vendor::Project::Subsystem[::Package]::Name` spells the placement of the element, so
-  moving the element into a package leaves every such name leading where the element is no more, and
-  the build answers "Unknown type". A generated list form keeps exactly such a row type, and the
-  linter had no reading of a qualified name in yaml at all. The rules judge a full name of the
-  file's own project against where the element lies - in every yaml value, in a module and in the
-  tables of a query - and the finding replaces the namespace when the element lies in one place. On
-  a project split into packages, 86 names stripped of the package segment gave 86 findings, and
-  `--fix` restored the tree byte for byte. ([#56](https://github.com/keyfire/xbsl/pull/56))
-- **`code/package-resources-missing`: the current resources package of a package without
-  resources.** `ResourcesPackage.Current()` returns the resources of the current namespace, and in a
-  module of a package that is the package, not its subsystem. A module that read icons by a computed
-  name was moved into a package without a resources folder, and the files of the subsystem were no
-  longer found - with no error at compile time or at run time. The rule reports the call when the
-  package keeps no resources folder of its own. ([#56](https://github.com/keyfire/xbsl/pull/56))
-- **An object moves into a package without breaking its references.** An element of a package lives
-  in the package's own namespace, so moving a file into a package folder is only half of the move:
-  every module and yaml of another subsystem that reached the element needs
-  `import Subsystem::Package`, a full type name spelling the old place stops resolving, and a server
-  build is where all of it surfaced. `move-object` (`meta_move_object`, `xbsl/metaMoveObject`) moves
-  the object with its forms, modules, list row and list table into a package, another package, the
-  subsystem root or another subsystem, and repairs what the move breaks: it adds the import of the
-  new place where a reference needs it - in both directions when the move crosses a subsystem
-  boundary - rewrites the qualified names, the full
-  `Vendor::Project::Subsystem::FormName.ListRowData` of a generated form included, and adds the
-  subsystem to `Using` where a new import needs it. The decision is made by the import and
-  visibility rules themselves, run before and after the move, so the move and the linter never
-  disagree. The project module and the yaml of a virtual table in another subsystem get the import
-  of the new package through the import rules themselves; a virtual table of the same subsystem
-  needs none and is left as it is. It refuses a taken name and a non-public element that another
-  subsystem would reach after the move, and names the imports it made unnecessary instead of
-  removing them. On a copy of a real project two moves into new packages left no missing import
-  behind, while the same files moved by hand gave exactly the findings the command repaired.
+- **The documentation guard catches a sentence naming who asked for a change.** The repository has
+  one author, so such a sentence makes the code look written for someone else. The guard reads both
+  editions of the documents and source comments. ([#46](https://github.com/keyfire/xbsl/pull/46))
+- **Five checks for the wording and characters of comments.** `typography/non-keyboard` is on by
+  default and suggests the keyboard form of an arrow or a math sign. `typography/en-dash-comment`,
+  `comment/subjunctive`, `comment/first-person` and `comment/emphasis-caps` turn on with `--enable`.
+  ([#51](https://github.com/keyfire/xbsl/pull/51))
+- **Two more comment checks, both off by default.** `comment/dash-condition` catches a dash used in
+  place of "if". `comment/unknown-name` flags a name that neither the project nor the platform
+  knows, such as a renamed method's old name. ([#55](https://github.com/keyfire/xbsl/pull/55))
+- **`translation/english-shape` checks the English of the translation dictionary.** A mechanical
+  edit like "a second icon onlies clutter the row" passed `xbsl translate --strict`, which only
+  measures coverage. The rule is on by default. ([#52](https://github.com/keyfire/xbsl/pull/52))
+- **`yaml/wrong-namespace` and `code/wrong-namespace` catch a full name that outlived a move.** Such
+  a name points to the old place, and the build answers "Unknown type". If only one element has that
+  name, the fix writes its namespace. ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **`code/package-resources-missing` reports `ResourcesPackage.Current()` in a package with no
+  resources folder.** The call returns the resources of the package, so a module moved into it stops
+  finding the subsystem's files without any error. ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **`move-object` moves an object between packages and subsystems without breaking references.** A
+  move by hand left imports missing and full names stale, and only a server build showed it. The
+  command moves the forms and modules along and repairs both by the linter's own rules.
   ([#54](https://github.com/keyfire/xbsl/pull/54), [#56](https://github.com/keyfire/xbsl/pull/56))
-- **`rename-package` renames a package with every name that spells it.** The folder with all its
-  files, `import Subsystem::Old`, the `Import` items and the qualified names across the project
-  (`meta_rename_package`, `xbsl/metaRenamePackage`). A file of another project under the root is
-  edited only where it spells the full name with this project's prefix.
+- **`rename-package` renames a package with every name that spells it.** It moves the folder and
+  rewrites imports, `Import` items and qualified names across the project. In other projects only
+  full names change. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **The LSP server serves `project-info` as `xbsl/metaProjectInfo`.** The metadata tree of the
+  editor uses it to place objects into subsystems and packages.
   ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **The LSP answers `xbsl/metaProjectInfo`** - the `project-info` answer, read only: the metadata
-  tree of the editor places objects into subsystems and packages by it.
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **`lint_paths` answers compactly on request, and the summary of every report counts the findings
-  by rule, by file and by severity.** A full answer of the MCP tool carried the text of every
-  finding - several hundred characters each, tens of thousands over one project run - when the
-  question was only whether the tree is clean and whether the pipeline would go red. The summary of
-  the shared report shape (`--format json` and the MCP tools alike) now carries `by_rule`, `by_file`
-  and `by_severity` (all three levels named, so a zero is a zero and not a missing key), and
-  `lint_paths(..., compact=True)` drops the list of findings: the summary stays, with its baseline
-  and CI-job records, and `errors` holds the full records of the error-level findings alone. Over
-  one project tree of 1417 files judged by the set of its CI job, with the frozen findings shown,
-  the answer went from 56.9 KB to 7.2 KB. ([#49](https://github.com/keyfire/xbsl/pull/49))
-- **`xbsl translate --check-duplicates [--against REF]` finds a key two dictionary files translate
-  before the merge does.** Two branches closed the same gaps in files of their own, each pipeline
-  passed, and the target branch failed at the dictionary load after the merge - ten keys translated
-  twice, four of them differently - while git had shown no conflict, since the files differed. The
-  check reads the dictionary files alone and lists the keys translated differently (a conflict, exit
-  code 1) and the keys translated the same way twice (a redundant copy, exit code 0). With
-  `--against origin/master` the files of the target branch are read out of git in one
-  `cat-file --batch` and laid over the working tree's, the same file on both sides counting as one,
-  so the branch sees the collision while it is still a branch. `--format json` carries both lists
-  with the places; the plain report counts the redundant copies in its summary, and the MCP
-  `translate_status` takes `against` and answers with the same report. On a live dictionary of 167
-  files: no conflicts, six redundant copies, under three seconds.
-  ([#48](https://github.com/keyfire/xbsl/pull/48))
-- **`translate_unused` answers within a time budget instead of staying silent.** A call with `since`
-  over a large project said nothing until the client gave up on it, half an hour later; the hang
-  itself - the child git inheriting the server's stdin - went in 0.105.0, and the silence stayed.
-  `budget_seconds` (300 by default) bounds the walk over the sources: past it the tool answers with
-  what it has read, `partial: true`, `sources` counting the files read of the total, and a `note`
-  saying how to go on. A partial list holds candidates rather than a verdict, so `prune` does
-  nothing on it. The command `xbsl translate --unused` prints its progress on stderr every 200
-  files, and `--format json` on stdout stays one document.
-  ([#47](https://github.com/keyfire/xbsl/pull/47))
-- **`translate_unused` takes a list of filters and names the ones nothing fell under.** A sweep over
-  the comments takes ten lines out, and whether the dictionary still keeps any of them was ten
-  calls, one `filter` each. `filter` now takes a string or a list, a row matching any of them, and
-  the answer carries `unmatched` - the substrings no orphan fell under, which for a sweep is the
-  half that matters: those lines the dictionary no longer holds.
-  ([#47](https://github.com/keyfire/xbsl/pull/47))
-- **`translate_entries` answers compactly and ten rows at a time.** The question it answers most is
-  how a word is translated already, and fifty full rows with the file, the line and the scope of
-  each came to ten kilobytes per call on a common stem. `compact` keeps `{key, kind, value}` per
-  row, the default page is ten rows, and the paging fields say what a page left out, as before.
-  ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`lint_paths` can answer compactly, and every report counts findings in `by_rule`, `by_file` and
+  `by_severity`.** A full MCP answer carried the text of every finding when the question was often
+  just whether the tree is clean. `compact=True` keeps the summary and the errors in full.
+  ([#49](https://github.com/keyfire/xbsl/pull/49))
+- **`xbsl translate --check-duplicates` finds a key that two dictionary files translate.** Git
+  merges such files cleanly, but differing translations break the load. `--against origin/master`
+  shows a branch the collision before the merge. ([#48](https://github.com/keyfire/xbsl/pull/48))
+- **`translate_unused` stops after `budget_seconds` and answers with what it has read.** A call with
+  `since` over a large project used to stay silent until the client gave up. An answer cut short
+  carries `partial: true`, and `prune` leaves it alone. `xbsl translate --unused` prints its
+  progress to stderr. ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`translate_unused` takes a list of filters and names the ones nothing matched.** Checking ten
+  removed comment lines used to take ten calls. After a comment sweep, a filter in `unmatched` is a
+  line the dictionary no longer holds. ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`translate_entries` answers compactly and ten rows at a time.** Fifty full rows took about ten
+  kilobytes per call, while the usual question is only how a word is translated. `compact` keeps
+  `{key, kind, value}` per row. ([#47](https://github.com/keyfire/xbsl/pull/47))
 
 ### Changed
-- **`project-info` answers what was asked and leaves the reference out.** The object kinds, section
-  kinds and access methods do not depend on the sources, yet came with every answer: 4 KB of
-  repetition, more than a narrow answer itself. They now come with `--reference` (`reference=true`
-  in `meta_project_info`) or with `--brief`. The answer lists `packages` following the same filters
-  as the objects, `--package` narrows to a package, and `--project` walks only the named project -
-  by `Name`, `Vendor::Name` or its folder: at a repository root with vendor examples beside the
-  project a narrow question took 10 KB and now takes 2 KB.
-  ([#53](https://github.com/keyfire/xbsl/pull/53))
-- **The findings of the import and visibility rules carry their namespaces in `data`.**
-  `code/missing-import`, `yaml/missing-import` and `yaml/localization-missing-import` report the
-  namespaces an import may name, the two `*/foreign-not-public` rules and `code/unused-import` the
-  namespace concerned, `yaml/missing-subsystem-usage` the subsystem and the one it uses. The message
-  is bilingual prose; a repair reads the data - the JSON report and the editor get it too.
+- **`project-info` answers the question asked and leaves out the reference sections.** They do not
+  depend on the sources yet came with every answer. `--reference` or `--brief` brings them back.
+  `--package` and `--project` narrow the answer. ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The import and visibility rules put their namespaces into the `data` of a finding.** The message
+  is prose in two languages, and `move-object` repairs imports from the data. The JSON report and
+  the editor receive it too. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **`add-subsystem` creates a subsystem only at the project root.** A folder inside a subsystem is a
+  package, so a descriptor there changed nothing, and such a parent is now refused. `new-object`
+  checks the name of a new package folder. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **Metadata commands that move files no longer leave empty folders behind.** `delete-object` also
+  finds the English-spelled forms of an object, `<Name>ObjectForm` and `ListRow<Name>`.
   ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **`add-subsystem` creates a subsystem only at the project root.** A subsystem is a first-level
-  folder of its project, and its finer division is a package; a descriptor written into a folder of
-  a subsystem sat in a package and changed nothing. Such a parent is now refused with a pointer to
-  creating the package with its first object. `new-object` into a folder that does not exist yet
-  checks the new package name as an identifier and reminds of the translation dictionary pair it
-  needs when the project has a dictionary. ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **A result that moves files leaves no empty folder behind**, and `delete-object` also finds the
-  English-spelled forms of an object (`<Name>ObjectForm`, `ListRow<Name>`).
-  ([#54](https://github.com/keyfire/xbsl/pull/54))
-- **`--since` also judges the pairs the change itself wrote into the dictionary.** A comment line
-  written in a branch and reworded in the same branch stands in the diff against the base as neither
-  a removed line nor an added one, so the pair that translated the first wording stayed in the
-  dictionary for good: `--strict` does not judge it, and `--unused --since` answered that the change
-  left nothing behind - 29 such pairs across three files on one task, over 400 on another. The
-  candidates of a change are now the keys on the lines it removed AND the entries its diff of the
-  dictionary files added or rewrote; each is judged against the working tree as before. The `since`
-  block sizes both sides: `files` of the change, `dictionary_files` and `dictionary_added` of the
-  dictionary diff. The help of `--unused` now points at `--format json` and the fields of a row
-  (`kind`, `key`, `value`, `file`, `line`, `scope`) - the machine shape was there, the pointer was
-  not. ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`--since` also judges the pairs the change itself wrote into the dictionary.** The first wording
+  of a comment reworded within one branch never shows in the diff, so its pair stayed for good. The
+  `--unused` help points at `--format json`. ([#47](https://github.com/keyfire/xbsl/pull/47))
 
 ### Fixed
-- **The import rules know the packages of a subsystem.** An element of a package lives in the
-  package's own namespace, and another subsystem reaches it only through
-  `import Subsystem::Package`: importing the subsystem does not bring it. The rules keyed every
-  element by its subsystem alone and read an import as one name, so `import Subsystem` covered a
-  package element and a qualified import was not read at all. A server build refused four such
-  references in three modules while the linter reported none. `code/missing-import` and
-  `yaml/missing-import` now ask for the package's own import and name the line to add;
-  `code/unused-import` reports an import of a subsystem that serves only elements of its packages;
-  the two `*/foreign-not-public` rules resolve `Subsystem::Package::Element` by the package it
-  names. A subsystem is a first-level folder of the project, its descriptor is optional, and a
-  reference inside one subsystem - between its root and its packages - still needs no import. On a
-  vendor library with about twenty packages nine false `yaml/missing-import` reports went away.
-  ([#53](https://github.com/keyfire/xbsl/pull/53))
-- **The import rules read the project module and the queries.** `code/missing-import` left the
-  module outside the subsystems alone, and neither import rule read a table after `FROM`/`JOIN`,
-  while the compiler resolves both against the imports: a server build refused a project module
-  calling a module of a package, and a virtual table whose query read a table of a package another
-  subsystem owns. Now the project module asks for the import of a package, `yaml/missing-import`
-  reads the paired `.xbql` of a virtual table and reports on its `Import` section, and
-  `code/missing-import` reads the tables of the `Query{...}` blocks, temporary and qualified tables
-  aside. The rule also reads a `Type<...>` literal, which the parsed tree keeps without its name.
-  ([#56](https://github.com/keyfire/xbsl/pull/56))
-- **The import rules read the names inside a string interpolation.** A name written in `%{...}` is
-  resolved against the imports of the module like any other, but `code/unused-import` did not count
-  it as a use and `code/missing-import` did not see it at all. A server build over a project with
-  packages showed both sides: an import serving nothing but such a name was reported unused, and the
-  build without it failed at the line of the string.
-  ([#53](https://github.com/keyfire/xbsl/pull/53))
-- **`code/unused-import` sees an import of a subsystem whose root keeps nothing.** Once every
-  element of a subsystem has moved into packages, the subsystem looked like an unknown namespace and
-  an import of it went unreported. A module naming a resource by a bare key keeps such an import.
-  ([#56](https://github.com/keyfire/xbsl/pull/56))
-- **The scaffolding places an object of a package.** A subsystem was looked for only in the folder
-  right above an object, so an object of a package came back with no subsystem and a namespace
-  without it - and a generated list form wrote its row type with that namespace. `object-info` and
-  `project-info` now answer the `package` and the full `Vendor::Project::Subsystem::Package`
-  namespace, and `project-info` lists a subsystem that has objects but no descriptor.
-  ([#53](https://github.com/keyfire/xbsl/pull/53))
-- **`style/redundant-tostring` no longer reports a `ToString()` call that is the only way to add a
-  number to a string.** The rule judged by the line: a `+` and a string literal anywhere on it made
-  every call on that line redundant, so `(A + B).ToString() + "px"` was reported and the way around
-  was a variable. The rule now judges by position - the call is redundant only as the right operand
-  of a `+` at its own bracket depth with a string literal among the operands to its left, which is
-  the one form the platform converts implicitly (the addition table of the documentation lists
-  `String + Object` and no `Number + String`). A call passed as an argument, a call with an argument
-  and a call followed by a member of its own stay quiet; a chain wrapped over several lines is
-  judged whole; the English spelling of the method is judged like the Russian one, which the rule
-  did not see before. On four corpora five findings of eight went and no new one came.
-  ([#49](https://github.com/keyfire/xbsl/pull/49))
-- **The dictionary refusal names every key translated differently, not the first one.** The load
-  used to stop at the first colliding key, so a merge that brought in four of them was four rounds
-  of "take one out, load again". Every file is read before the refusal, and one error lists the
-  section, the key and the translation in each file for all of them. The other refusals - a file
-  that does not parse, a broken token value - still stop at the first, since they are one file's
-  fault and the file is named. ([#48](https://github.com/keyfire/xbsl/pull/48))
+- **The import rules know the packages of a subsystem.** They took `import Subsystem` as enough for
+  its packages, while another subsystem needs `import Subsystem::Package`. `code/missing-import` and
+  `yaml/missing-import` now ask for it. ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The import rules read the project module and queries.** The compiler resolves both against the
+  imports, while the linter left them unchecked. The rules now ask for the imports there and in a
+  `Type<...>` literal. ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **The import rules read the names inside a string interpolation.** `code/missing-import` did not
+  see a name in `%{...}`, and `code/unused-import` called its import unused, though the build failed
+  without it. ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **`code/unused-import` sees an import of a subsystem with an empty root.** Once every element
+  moved into packages, the subsystem looked unknown and its import went unreported. A resource named
+  by a bare key still counts as a use. ([#56](https://github.com/keyfire/xbsl/pull/56))
+- **The metadata commands place an object of a package.** They looked for a subsystem only right
+  above the object, so a generated list form got a wrong row type. `object-info` and `project-info`
+  now answer the `package` and the full namespace. ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **`style/redundant-tostring` judges `ToString()` by its place in the expression.** It judged by
+  the line and flagged `(A + B).ToString() + "px"`, where the call is needed. The call is redundant
+  only after a string literal in the same sum. ([#49](https://github.com/keyfire/xbsl/pull/49))
+- **The dictionary refusal names every key translated differently, not just the first.** A merge
+  with four such keys used to take four rounds of "take one out, load again". One error now lists
+  them all with the translation in each file. ([#48](https://github.com/keyfire/xbsl/pull/48))
 
 ## 2026-09-12 – 0.104.0, 0.105.0
 
