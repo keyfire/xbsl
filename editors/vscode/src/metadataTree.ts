@@ -27,6 +27,8 @@ import {
   EnginePlacement,
   EngineProjectInfo,
   PackageGroup,
+  PackageTotal,
+  packageTotals,
   pathKey,
   projectPlacementOf,
   readPlacement,
@@ -34,6 +36,8 @@ import {
 import {
   buildFilterTree,
   canonicalSelection,
+  chosenPackageTotals,
+  chosenSubsystems,
   FilterTree,
   filterPredicate,
   hasChoice,
@@ -46,6 +50,7 @@ import {
   writeSelection,
 } from "./treeFilterCore";
 import { TreeFilterHost, TreeFilterPanel } from "./treeFilterPanel";
+import { carriesWsdl, wsdlFiles } from "./wsdlCore";
 import { docsCommandUri } from "./hoverDocs";
 import {
   groupResources,
@@ -384,6 +389,7 @@ interface Element {
   ownerType?: string;
   text: string;
   translations?: Translation[]; // LocalizedStrings: the files of the Localization section
+  wsdlPaths?: string[]; // SoapServiceClient: the WSDL descriptions beside it (wsdlCore)
 }
 
 // One language of the Localization section: the file with the strings translated into it.
@@ -440,6 +446,17 @@ async function collectFiles(root: string, ext: string): Promise<string[]> {
   const pattern = new vscode.RelativePattern(vscode.Uri.file(root), `**/*.${ext}`);
   const uris = await vscode.workspace.findFiles(pattern, "**/node_modules/**");
   return uris.map((u) => u.fsPath);
+}
+
+// The files of the folder a file lies in. A SOAP service client keeps its WSDL descriptions there;
+// the folder is read for such an element only, and a project has few of them.
+async function filesBeside(filePath: string): Promise<string[]> {
+  const dir = path.dirname(filePath);
+  try {
+    return (await fs.promises.readdir(dir)).map((name) => path.join(dir, name));
+  } catch {
+    return [];
+  }
 }
 
 interface Model {
@@ -545,6 +562,7 @@ async function parseModel(projectRootFor: (folder: vscode.WorkspaceFolder) => st
       queryPath: xbqlSet.has(queryPath.toLowerCase()) ? queryPath : undefined,
       ownerType: kind === FORM_KIND ? RE_OWNER_TYPE.exec(text)?.[1]?.split(".")[0] : undefined,
       text,
+      wsdlPaths: carriesWsdl(kind) ? wsdlFiles(path.basename(base), await filesBeside(yamlPath)) : undefined,
     });
   };
 
@@ -602,6 +620,7 @@ class XbslNode extends vscode.TreeItem {
   projectDir?: string; // project root: the folder a new subsystem goes into
   packageKey?: string; // package: its path under the subsystem (`Партии::Архив`)
   movable?: boolean; // an object "move to a package" and drag and drop can carry
+  wsdlPaths?: string[]; // SOAP service client and its WSDL node: the descriptions "Open WSDL" opens
 }
 
 // Set parent links across the whole built tree (for reveal), and give every node a STABLE, unique
@@ -644,8 +663,14 @@ function findNode(nodes: XbslNode[], pred: (n: XbslNode) => boolean): XbslNode |
 
 const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, "ru");
 
-function subsystemNode(sub: Subsystem): XbslNode {
-  const node = new XbslNode(sub.name, vscode.TreeItemCollapsibleState.None);
+// A subsystem of the Subsystems branch. Its packages, when the engine told of them, hang under it
+// with their nesting; the objects stay in their classes below the branch.
+function subsystemNode(sub: Subsystem, packages: PackageTotal[] = []): XbslNode {
+  const node = new XbslNode(
+    sub.name,
+    packages.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
+  );
+  node.children = packages.map(packageTotalNode);
   node.iconPath = new vscode.ThemeIcon("symbol-namespace");
   node.yamlPath = sub.yamlPath;
   node.folderDir = sub.dir;
@@ -659,7 +684,9 @@ function subsystemNode(sub: Subsystem): XbslNode {
   return node;
 }
 
-function subsystemsBranchNode(subsystems: Subsystem[]): XbslNode {
+function subsystemsBranchNode(
+  subsystems: Subsystem[], packagesOf: (sub: Subsystem) => PackageTotal[] = () => []
+): XbslNode {
   const node = new XbslNode(
     vscode.l10n.t("Subsystems"),
     subsystems.length ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None
@@ -667,8 +694,24 @@ function subsystemsBranchNode(subsystems: Subsystem[]): XbslNode {
   node.iconPath = new vscode.ThemeIcon("folder-library");
   node.description = String(subsystems.length);
   node.contextValue = "subsystems";
-  node.children = [...subsystems].sort(byName).map(subsystemNode);
+  node.children = [...subsystems].sort(byName).map((sub) => subsystemNode(sub, packagesOf(sub)));
   return node;
+}
+
+// The packages the Subsystems branch shows under a subsystem (packagesCore.packageTotals), counted
+// the way the grouping by subsystems counts them. Without the engine's answer - none.
+//
+// `keys` - the filter of this project is on: the elements come filtered already, and a package
+// nothing of which is chosen is left out, the way the grouping by subsystems leaves it out.
+function branchPackages(
+  elements: Element[], placement: EnginePlacement | undefined, projectDir: string | undefined,
+  keys?: ReadonlySet<string>
+): (sub: Subsystem) => PackageTotal[] {
+  const totals = packageTotals(elements, (el) => el.yamlPath, placement, projectDir ?? "", topLevelObjects);
+  return (sub) => {
+    const packages = totals.get(pathKey(sub.dir)) ?? [];
+    return keys ? chosenPackageTotals(packages, sub.name, keys) : packages;
+  };
 }
 
 // Subsystem node in the "By subsystems" mode: collapsible, carries its packages and its own
@@ -710,11 +753,25 @@ function packageNode(group: PackageGroup, children: XbslNode[], objects: number)
   return node;
 }
 
+// The same package node in the Subsystems branch: its nested packages and no objects under it.
+function packageTotalNode(total: PackageTotal): XbslNode {
+  return packageNode(total.group, total.children.map(packageTotalNode), total.objects);
+}
+
 // The objects a category shows at its top level - what its description counts.
 function countedObjects(categories: XbslNode[]): number {
   return categories
     .filter((c) => !/\bxbslResources\b/.test(c.contextValue ?? ""))
     .reduce((sum, c) => sum + (c.children?.length ?? 0), 0);
+}
+
+// The number countedObjects gives for the categories of these elements, without building them:
+// every object, plus the forms whose owner is not among the elements - a form with its owner sits
+// under that owner, the rest go to "Common forms". The Subsystems branch draws no categories.
+function topLevelObjects(elements: Element[]): number {
+  const objects = elements.filter((e) => e.kind !== FORM_KIND);
+  const ownerOf = formOwnerResolver(objects);
+  return objects.length + elements.filter((e) => e.kind === FORM_KIND && !ownerOf(e)).length;
 }
 
 // Project children in the "By subsystems" mode.
@@ -1102,6 +1159,34 @@ function translationNode(tr: Translation): XbslNode {
   return node;
 }
 
+// The WSDL descriptions of a SOAP service client (wsdlCore). One description - a click on the node
+// opens it; several - a node per file under it, in the platform's numbering.
+function wsdlNode(paths: string[]): XbslNode {
+  if (paths.length === 1) {
+    const node = wsdlFileNode(paths[0]);
+    node.label = "WSDL";
+    node.description = path.basename(paths[0]);
+    return node;
+  }
+  const node = new XbslNode("WSDL", vscode.TreeItemCollapsibleState.Collapsed);
+  node.iconPath = new vscode.ThemeIcon("code");
+  node.description = String(paths.length);
+  node.wsdlPaths = paths;
+  node.contextValue = "member wsdl";
+  node.children = paths.map(wsdlFileNode);
+  return node;
+}
+
+function wsdlFileNode(filePath: string): XbslNode {
+  const node = new XbslNode(path.basename(filePath), vscode.TreeItemCollapsibleState.None);
+  node.iconPath = new vscode.ThemeIcon("code");
+  node.wsdlPaths = [filePath];
+  node.resourceUri = vscode.Uri.file(filePath); // git statuses (color/badge), keeping our own icon
+  node.contextValue = "member wsdl";
+  node.command = { command: "xbsl.metadata.openWsdl", title: "", arguments: [node] };
+  return node;
+}
+
 function formNode(el: Element): XbslNode {
   const node = new XbslNode(el.name, vscode.TreeItemCollapsibleState.None);
   node.iconPath = new vscode.ThemeIcon(formIcon(el.name));
@@ -1186,6 +1271,9 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
       ...[...el.translations].sort((a, b) => a.lang.localeCompare(b.lang)).map(translationNode)
     );
   }
+  if (el.wsdlPaths?.length) {
+    groups.push(wsdlNode(el.wsdlPaths));
+  }
 
   const node = new XbslNode(
     el.name,
@@ -1197,6 +1285,7 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
   node.modulePath = el.modulePath;
   node.objectModulePath = el.objectModulePath;
   node.queryPath = el.queryPath;
+  node.wsdlPaths = el.wsdlPaths;
   node.offset = internals?.rootOffset; // the object root - for the properties panel
   node.children = groups;
   node.contextValue = [
@@ -1204,6 +1293,7 @@ function elementNode(el: Element, boundForms: Element[], namespace?: string): Xb
     el.modulePath ? "xbsl" : "",
     el.objectModulePath ? "objmod" : "",
     el.queryPath ? "xbql" : "",
+    el.wsdlPaths?.length ? "wsdl" : "",
     // Localized strings get translations right on the element - the "+" mirrors the cloud IDE.
     el.kind === LOCALIZED_STRINGS_KIND ? "addloc" : "",
     "movable",
@@ -1375,14 +1465,6 @@ function categoriesOf(
 
 type GroupMode = "kind" | "subsystem";
 
-// How many of these elements the categories show at their top level - what a package node counts:
-// every object, and every form without an owner among them (a bound form sits under its owner).
-function topLevelCount(elements: Element[]): number {
-  const objects = elements.filter((e) => e.kind !== FORM_KIND);
-  const ownerOf = formOwnerResolver(objects);
-  return objects.length + elements.filter((e) => e.kind === FORM_KIND && !ownerOf(e)).length;
-}
-
 // The project a path is drawn under: the deepest project folder holding it, else the first project.
 function projectResolver(projects: Project[]): (targetPath: string) => Project | undefined {
   return (targetPath: string): Project | undefined => {
@@ -1408,7 +1490,7 @@ function filterTreeOf(model: Model, placement: EnginePlacement | undefined): Fil
     items: model.elements,
     pathOf: (el) => el.yamlPath,
     projectOf: (p) => projectOf(p)?.dir ?? "",
-    count: topLevelCount,
+    count: topLevelObjects,
     placement,
     subsystems: model.subsystems,
   });
@@ -1441,14 +1523,22 @@ function buildRoots(
     : undefined;
 
   // Project children: "By object classes" - the Subsystems branch + categories by kind;
-  // "By subsystems" - the subsystem tree with the packages and the objects under it.
-  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[], projectDir: string): XbslNode[] =>
-    mode === "subsystem"
-      ? subsystemModeChildren(subs, elems, res, placement, projectDir, keysOf(projectDir))
-      : [
-          subsystemsBranchNode(subsystemViews(subs, placement, projectDir)),
-          ...categoriesOf(elems, showEmpty, hideEmpty, res, namespaceOf),
-        ];
+  // "By subsystems" - the subsystem tree with the packages and the objects under it. Under a
+  // filter both hide what nothing is chosen of: the Subsystems branch keeps a chosen package
+  // under its subsystem and drops the unchosen subsystems and packages.
+  const childrenOf = (elems: Element[], subs: Subsystem[], res: string[], projectDir: string): XbslNode[] => {
+    const keys = keysOf(projectDir);
+    if (mode === "subsystem") {
+      return subsystemModeChildren(subs, elems, res, placement, projectDir, keys);
+    }
+    const views = subsystemViews(subs, placement, projectDir);
+    return [
+      subsystemsBranchNode(
+        keys ? chosenSubsystems(views, keys) : views, branchPackages(elems, placement, projectDir, keys)
+      ),
+      ...categoriesOf(elems, showEmpty, hideEmpty, res, namespaceOf),
+    ];
+  };
 
   if (projects.length === 0) {
     // No Проект.yaml found - go without a project root.
@@ -2086,6 +2176,23 @@ async function openResourcePreview(filePath?: string, key?: string): Promise<voi
   resourcePanel.webview.html = resourcePreviewHtml(
     svgText, key, vscode.l10n.t("currentColor follows the editor theme")
   );
+}
+
+// "Open WSDL" on a SOAP service client or its WSDL node. The editor's own XML language claims the
+// `.wsdl` extension, so the description opens as XML; of several, the user picks one.
+async function openWsdl(node?: XbslNode): Promise<void> {
+  const paths = node?.wsdlPaths ?? [];
+  if (paths.length < 2) {
+    await openFile(paths[0]);
+    return;
+  }
+  const pick = await vscode.window.showQuickPick(
+    paths.map((filePath) => ({ label: path.basename(filePath), filePath })),
+    { placeHolder: vscode.l10n.t("Which WSDL description to open") }
+  );
+  if (pick) {
+    await openFile(pick.filePath);
+  }
 }
 
 async function reveal(node?: XbslNode): Promise<void> {
@@ -2944,6 +3051,12 @@ export function registerMetadataTree(
   // A changed file keeps its node; only appearing and disappearing files reshape the tree.
   resourceWatcher.onDidCreate(() => bump(true));
   resourceWatcher.onDidDelete(() => bump(true));
+  // A WSDL description that appears or goes away changes the WSDL node of its SOAP service client
+  // and moves no object, so the placement is kept.
+  const wsdlWatcher = vscode.workspace.createFileSystemWatcher("**/*.wsdl", false, true, false);
+  wsdlWatcher.onDidCreate(() => bump(false));
+  wsdlWatcher.onDidDelete(() => bump(false));
+  context.subscriptions.push(wsdlWatcher);
 
   context.subscriptions.push(
     view,
@@ -2966,6 +3079,7 @@ export function registerMetadataTree(
     vscode.commands.registerCommand("xbsl.metadata.openYaml", (n?: XbslNode) => openFile(n?.yamlPath)),
     vscode.commands.registerCommand("xbsl.metadata.openModule", (n?: XbslNode) => openFile(n?.modulePath)),
     vscode.commands.registerCommand("xbsl.metadata.openQuery", (n?: XbslNode) => openFile(n?.queryPath)),
+    vscode.commands.registerCommand("xbsl.metadata.openWsdl", (n?: XbslNode) => openWsdl(n)),
     vscode.commands.registerCommand("xbsl.metadata.openObjectModule", (n?: XbslNode) => openFile(n?.objectModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.openAppModule", (n?: XbslNode) => openFile(n?.appModulePath)),
     vscode.commands.registerCommand("xbsl.metadata.reveal", (n?: XbslNode) => reveal(n)),

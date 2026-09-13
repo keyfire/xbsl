@@ -51,8 +51,8 @@ def test_two_conflicts_in_two_pairs_of_files_are_refused_in_one_error(tmp_path: 
 
     text = str(refusal.value)
     assert ": 2" in text.splitlines()[0]
-    assert f"[tokens] Задачи: {a} = 'Tasks'; {b} = 'Jobs'" in text
-    assert f"[tokens] Склады: {b} = 'Warehouses'; {c} = 'Depots'" in text
+    assert f"[tokens] Задачи: {a}:4 = 'Tasks'; {b}:2 = 'Jobs'" in text
+    assert f"[tokens] Склады: {b}:3 = 'Warehouses'; {c}:2 = 'Depots'" in text
 
 
 def test_three_conflicts_across_three_files_and_two_sections_are_all_named(tmp_path: Path):
@@ -83,16 +83,17 @@ def test_a_key_translated_the_same_way_twice_loads_and_is_kept_as_a_duplicate(tm
     assert loaded.tokens == {"Задачи": "Tasks", "Склады": "Depots"}
     assert loaded.duplicates == [{
         "section": "tokens", "key": "Задачи",
-        "places": [{"file": str(a), "value": "Tasks"}, {"file": str(b), "value": "Tasks"}],
+        "places": [{"file": str(a), "line": 4, "value": "Tasks"},
+                   {"file": str(b), "line": 2, "value": "Tasks"}],
     }]
 
 
 def test_a_third_reading_that_matches_one_of_two_is_still_a_conflict():
     """Two files agreeing does not outvote the third: three places, two values, a conflict."""
     conflicts, duplicates = dictionary_module.collisions([
-        ("a.yaml", {"tokens": {"Задачи": "Tasks"}}),
-        ("b.yaml", {"tokens": {"Задачи": "Tasks"}}),
-        ("c.yaml", {"tokens": {"Задачи": "Jobs"}}),
+        ("a.yaml", {"tokens": [("Задачи", "Tasks", 1)]}),
+        ("b.yaml", {"tokens": [("Задачи", "Tasks", 1)]}),
+        ("c.yaml", {"tokens": [("Задачи", "Jobs", 1)]}),
     ])
 
     assert duplicates == []
@@ -101,8 +102,10 @@ def test_a_third_reading_that_matches_one_of_two_is_still_a_conflict():
 
 def test_the_rows_come_in_section_order_then_by_key():
     conflicts, duplicates = dictionary_module.collisions([
-        ("a.yaml", {"phrases": {"текст": "text"}, "tokens": {"Склады": "Depots", "Задачи": "Tasks"}}),
-        ("b.yaml", {"phrases": {"текст": "text"}, "tokens": {"Склады": "Stores", "Задачи": "Jobs"}}),
+        ("a.yaml", {"phrases": [("текст", "text", 5)],
+                    "tokens": [("Склады", "Depots", 2), ("Задачи", "Tasks", 3)]}),
+        ("b.yaml", {"phrases": [("текст", "text", 5)],
+                    "tokens": [("Склады", "Stores", 2), ("Задачи", "Jobs", 3)]}),
     ])
 
     assert [(row["section"], row["key"]) for row in conflicts] == [
@@ -113,12 +116,14 @@ def test_the_rows_come_in_section_order_then_by_key():
 
 def test_the_report_lines_carry_the_section_the_key_and_every_place():
     conflict = {"section": "tokens", "key": "Задачи",
-                "places": [{"file": "a.yaml", "value": "Tasks"}, {"file": "b.yaml", "value": "Jobs"}]}
+                "places": [{"file": "a.yaml", "line": 3, "value": "Tasks"},
+                           {"file": "b.yaml", "line": 5, "value": "Jobs"}]}
     duplicate = {"section": "phrases", "key": "текст",
-                 "places": [{"file": "a.yaml", "value": "text"}, {"file": "b.yaml", "value": "text"}]}
+                 "places": [{"file": "a.yaml", "line": 7, "value": "text"},
+                            {"file": "b.yaml", "line": 9, "value": "text"}]}
 
-    assert dictionary_module.collision_line(conflict) == "[tokens] Задачи: a.yaml = 'Tasks'; b.yaml = 'Jobs'"
-    assert dictionary_module.duplicate_line(duplicate) == "[phrases] текст = 'text': a.yaml, b.yaml"
+    assert dictionary_module.collision_line(conflict) == "[tokens] Задачи: a.yaml:3 = 'Tasks'; b.yaml:5 = 'Jobs'"
+    assert dictionary_module.duplicate_line(duplicate) == "[phrases] текст = 'text': a.yaml:7, b.yaml:9"
 
 
 # --- the same file at a ref is the same file -------------------------------------------------
@@ -127,17 +132,17 @@ def test_the_report_lines_carry_the_section_the_key_and_every_place():
 def test_overlay_reads_the_same_file_at_the_ref_as_one_file():
     """A key the working tree spells differently is its own edit; the rest of the ref's copy
     comes in under the ref's name, and a file the working tree lacks comes in whole."""
-    working = [("a.yaml", {"tokens": {"Задачи": "Jobs"}})]
+    working = [("a.yaml", {"tokens": [("Задачи", "Jobs", 4)]})]
     at_ref = [
-        ("a.yaml", {"tokens": {"Задачи": "Tasks", "Склады": "Depots"}}),
-        ("b.yaml", {"tokens": {"Партии": "Lots"}}),
+        ("a.yaml", {"tokens": [("Задачи", "Tasks", 4), ("Склады", "Depots", 5)]}),
+        ("b.yaml", {"tokens": [("Партии", "Lots", 4)]}),
     ]
 
     merged = dictionary_module.overlay(working, at_ref, "main")
 
     assert merged == working + [
-        ("main:a.yaml", {"tokens": {"Склады": "Depots"}}),
-        ("main:b.yaml", {"tokens": {"Партии": "Lots"}}),
+        ("main:a.yaml", {"tokens": [("Склады", "Depots", 5)]}),
+        ("main:b.yaml", {"tokens": [("Партии", "Lots", 4)]}),
     ]
     assert dictionary_module.collisions(merged) == ([], [])
 
@@ -149,12 +154,12 @@ def test_read_sections_names_the_files_relative_to_the_dictionary(tmp_path: Path
     _write(folder / "more", "b.yaml", "phrases:\n    текст: text\n", head="")
 
     assert dictionary_module.read_sections(folder) == [
-        ("a.yaml", {"tokens": {"Задачи": "Tasks"}}),
-        ("more/b.yaml", {"phrases": {"текст": "text"}}),
+        ("a.yaml", {"tokens": [("Задачи", "Tasks", 4)]}),
+        ("more/b.yaml", {"phrases": [("текст", "text", 2)]}),
     ]
     single = _write(tmp_path, "xbsl-translation.yaml", "tokens:\n    Задачи: Tasks\n")
     assert dictionary_module.read_sections(single) == [
-        ("xbsl-translation.yaml", {"tokens": {"Задачи": "Tasks"}}),
+        ("xbsl-translation.yaml", {"tokens": [("Задачи", "Tasks", 4)]}),
     ]
 
 
@@ -226,7 +231,7 @@ def test_the_files_at_a_ref_come_back_by_their_dictionary_names_without_the_mark
     assert sorted(copies) == ["010-base.yaml", "030-other.yaml"]
     assert copies["030-other.yaml"].startswith("version: 1")
     assert dictionary_module.sections_of("main:030-other.yaml", copies["030-other.yaml"]) == {
-        "tokens": {"Партии": "Lots", "Курсы": "Rates"},
+        "tokens": [("Партии", "Lots", 4), ("Курсы", "Rates", 5)],
     }
 
 
@@ -241,8 +246,8 @@ def test_a_branch_sees_the_collision_with_its_target_before_the_merge(branches):
     assert against["against"] == {"ref": "main", "files": 2, "added": 2}
     assert against["conflicts"] == [{
         "section": "tokens", "key": "Партии",
-        "places": [{"file": "020-feature.yaml", "value": "Batches"},
-                   {"file": "main:030-other.yaml", "value": "Lots"}],
+        "places": [{"file": "020-feature.yaml", "line": 4, "value": "Batches"},
+                   {"file": "main:030-other.yaml", "line": 4, "value": "Lots"}],
     }]
     assert [(row["key"], [place["file"] for place in row["places"]])
             for row in against["duplicates"]] == [("Курсы", ["020-feature.yaml", "main:030-other.yaml"])]
@@ -328,8 +333,8 @@ def test_the_check_passes_the_branch_alone_and_fails_it_against_the_target(branc
     code, lines = _run(capsys, [str(project), "--check-duplicates", "--against", "main"])
     assert code == 1
     assert lines[0].startswith("сравнение с main: файлов словаря там 2")
-    assert "  [tokens] Курсы = 'Rates': 020-feature.yaml, main:030-other.yaml" in lines
-    assert lines[-1] == "  [tokens] Партии: 020-feature.yaml = 'Batches'; main:030-other.yaml = 'Lots'"
+    assert "  [tokens] Курсы = 'Rates': 020-feature.yaml:5, main:030-other.yaml:5" in lines
+    assert lines[-1] == "  [tokens] Партии: 020-feature.yaml:4 = 'Batches'; main:030-other.yaml:4 = 'Lots'"
 
     code, out = _run(capsys, [str(project), "--check-duplicates", "--against", "main",
                               "--format", "json"])
@@ -358,7 +363,7 @@ def test_the_plain_report_counts_the_keys_translated_the_same_way_twice(branches
     _write(dictionary, "050-more.yaml", "tokens:\n    Задачи: Tasks\n")
 
     _code, lines = _run(capsys, [str(project)])
-    assert "ключей, переведённых одинаково в нескольких файлах: 1 (список – --check-duplicates)" in lines
+    assert "ключей, переведённых одинаково в нескольких местах: 1 (список – --check-duplicates)" in lines
 
     _code, out = _run(capsys, [str(project), "--format", "json"])
     assert [row["key"] for row in json.loads("\n".join(out))["dictionary_duplicates"]] == ["Задачи"]

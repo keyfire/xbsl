@@ -24,6 +24,7 @@
   "cmd.metadata.refresh": "Refresh the metadata tree",
   "cmd.metadata.openYaml": "Open description (yaml)",
   "cmd.metadata.openQuery": "Open query (xbql)",
+  "cmd.metadata.openWsdl": "Open WSDL",
   "cmd.metadata.openModule": "Open module (xbsl)",
   "cmd.metadata.openObjectModule": "Open object module (.Object.xbsl)",
   "cmd.metadata.previewForm": "Open in the form designer",

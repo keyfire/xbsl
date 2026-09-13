@@ -4,11 +4,13 @@
 // editors/vscode.
 
 import * as assert from "assert";
-import { EngineProjectInfo, readPlacement } from "../src/packagesCore";
+import { EngineProjectInfo, PackageTotal, packageTotals, pathKey, readPlacement } from "../src/packagesCore";
 import {
   buildFilterTree,
   canonicalSelection,
   CheckState,
+  chosenPackageTotals,
+  chosenSubsystems,
   FilterNode,
   FilterTree,
   filterPredicate,
@@ -261,6 +263,48 @@ test("select all, the count of the chosen objects, the nodes the grouped tree ke
     ["Склад", "Склад::Партии", "Склад::Партии::Архив", "Продажи"].map((place) => touches(keys, place)),
     [true, true, false, true]
   );
+});
+
+// The Subsystems branch of the grouping by classes, wired the way buildRoots wires it: the objects
+// that passed the filter, their package totals, then the subsystems and packages that stay.
+function branchUnder(selection: Selection): Array<[string, Array<[string, number, unknown[]]>]> {
+  const placement = readPlacement(ANSWER)!;
+  const keys = selection.get(PROJECT)!;
+  const passes = filterPredicate({ selection, projects: [P], projectOf, placement, subsystems: DESCRIPTORS })!;
+  const totals = packageTotals(ITEMS.filter(passes), (p) => p, placement, P, (items) => items.length);
+  const shape = (list: PackageTotal[]): Array<[string, number, unknown[]]> =>
+    list.map((total) => [total.group.name, total.objects, shape(total.children)]);
+  return chosenSubsystems(placement.projects[0].subsystems, keys).map((sub) => [
+    sub.name,
+    shape(chosenPackageTotals(totals.get(pathKey(sub.dir)) ?? [], sub.name, keys)),
+  ]);
+}
+
+test("the Subsystems branch under a filter by one package: that package under its subsystem, the rest hidden", () => {
+  const t = tree();
+  // The nested package alone: its subsystem and the enclosing package stay as the way to it.
+  assert.deepStrictEqual(branchUnder(toggleNode(t, new Map(), ARCHIVE)), [
+    ["Склад", [["Партии", 1, [["Архив", 1, []]]]]],
+  ]);
+  // The objects of the enclosing package alone: the nested package, unchecked, goes.
+  assert.deepStrictEqual(branchUnder(toggleNode(t, new Map(), BATCHES_LOOSE)), [
+    ["Склад", [["Партии", 1, []]]],
+  ]);
+  // The root objects of a subsystem alone: the subsystem stays, none of its packages does.
+  assert.deepStrictEqual(branchUnder(toggleNode(t, new Map(), STOCK_LOOSE)), [["Склад", []]]);
+  // A whole subsystem keeps all of its packages with their full numbers.
+  assert.deepStrictEqual(branchUnder(toggleNode(t, new Map(), SUB)), [
+    ["Склад", [["Партии", 2, [["Архив", 1, []]]]]],
+  ]);
+});
+
+test("the Subsystems branch without the engine: a descriptor inside a subsystem goes with that subsystem", () => {
+  const whole = readSelection({ [PROJECT]: ["Склад::*"] }).get(PROJECT)!;
+  assert.deepStrictEqual(chosenSubsystems(DESCRIPTORS, whole).map((s) => s.name), ["Склад", "Партии"]);
+  const sales = readSelection({ [PROJECT]: ["Продажи::*"] }).get(PROJECT)!;
+  assert.deepStrictEqual(chosenSubsystems(DESCRIPTORS, sales).map((s) => s.name), ["Продажи"]);
+  // The descriptor has no checkbox of its own: its name alone keeps nothing.
+  assert.deepStrictEqual(chosenSubsystems(DESCRIPTORS, new Set(["Партии::*"])), []);
 });
 
 test("the label of a project: partial subsystems marked, the rest counted", () => {

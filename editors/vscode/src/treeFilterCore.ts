@@ -23,6 +23,7 @@ import {
   EnginePlacement,
   isUnder,
   PackageGroup,
+  PackageTotal,
   pathKey,
   placeOf,
   ProjectPlacement,
@@ -87,7 +88,8 @@ export function placePasses(keys: ReadonlySet<string>, place: string): boolean {
 }
 
 /** Is anything under the place chosen - the place whole, its own objects or a place inside it?
- * The tree grouped by subsystems keeps a subsystem or a package node exactly when this holds. */
+ * The tree keeps a subsystem or a package node exactly when this holds - in the grouping by
+ * subsystems and in the Subsystems branch alike. */
 export function touches(keys: ReadonlySet<string>, place: string): boolean {
   if (covers(keys, place)) {
     return true;
@@ -98,6 +100,36 @@ export function touches(keys: ReadonlySet<string>, place: string): boolean {
     }
   }
   return false;
+}
+
+/** The subsystems a list keeps while the filter is on: those something of which is chosen.
+ *
+ * Without the engine's answer the tree lists every descriptor it found, and a descriptor inside a
+ * subsystem folder - a package with a descriptor it does not need - is listed as a subsystem of
+ * its own. Such a folder stays exactly when the subsystem holding it stays: the form offers no
+ * checkbox for it, and the objects in it pass with that subsystem.
+ */
+export function chosenSubsystems<T extends { name: string; dir: string }>(
+  subsystems: T[],
+  keys: ReadonlySet<string>
+): T[] {
+  const kept = subsystems.filter(
+    (s) => touches(keys, s.name) && !subsystems.some((other) => other !== s && isUnder(s.dir, other.dir))
+  );
+  return subsystems.filter((s) => kept.some((top) => top === s || isUnder(s.dir, top.dir)));
+}
+
+/** The packages the Subsystems branch keeps under a subsystem while the filter is on: a package
+ * nothing of which is chosen goes with its nested ones, the rest keep their nesting. The numbers
+ * stay as they came: the totals are counted over the objects that passed the filter. */
+export function chosenPackageTotals(
+  totals: PackageTotal[],
+  subsystem: string,
+  keys: ReadonlySet<string>
+): PackageTotal[] {
+  return totals
+    .filter((total) => touches(keys, placeKey(subsystem, total.group.key)))
+    .map((total) => ({ ...total, children: chosenPackageTotals(total.children, subsystem, keys) }));
 }
 
 // --- the tree of checkboxes -----------------------------------------------------------------

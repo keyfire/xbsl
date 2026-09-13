@@ -90,8 +90,8 @@ def test_a_name_that_spells_a_package_the_element_left_is_reported():
 
 
 def test_names_of_another_project_or_nobody_are_left_alone():
-    for row_type in (f"Внешний::Проект::Склад::{ROW}", "Демо::Учет::Склад::НетТакого.Ссылка",
-                     f"Склад::{ROW}"):
+    # The partial form is judged as well (tests/test_rule_partial_namespace.py).
+    for row_type in (f"Внешний::Проект::Склад::{ROW}", "Демо::Учет::Склад::НетТакого.Ссылка"):
         diags, _ = _lint(YAML_RULE, _form_in_package(row_type))
         assert diags == [], row_type
 
