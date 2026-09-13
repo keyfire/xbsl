@@ -6,6 +6,7 @@ import * as assert from "assert";
 import {
   allPackages,
   bucketItems,
+  deletionPrompt,
   EngineProjectInfo,
   folderPlace,
   readPlacement,
@@ -141,6 +142,28 @@ test("scaffoldSteps: renames first, an edit of a renamed file is read at its old
   assert.strictEqual(renamedEdit.readFrom, "D:\\p\\Склад\\Номенклатура.yaml");
   assert.strictEqual(renamedEdit.path, "D:\\p\\Склад\\Партии\\Номенклатура.yaml");
   assert.strictEqual((steps[2] as { readFrom: string }).readFrom, "D:\\p\\Продажи\\Заказы.xbsl");
+});
+
+test("deletionPrompt: the files are the engine's plan, the notes are cut for a dialog", () => {
+  // The plan of delete-object for a virtual table and a SOAP service client: the query and the
+  // WSDL descriptions are in it, and the tree deletes the list as the engine made it.
+  const deletes = [
+    "D:\\p\\Склад\\КлиентКурсовВалют.Wsdl.1.wsdl",
+    "D:\\p\\Склад\\КлиентКурсовВалют.Wsdl.2.wsdl",
+    "D:\\p\\Склад\\КлиентКурсовВалют.yaml",
+    "D:/p/Склад/ЗадачиСписокТаблица.xbql",
+  ];
+  const notes = ["Удаляется файлов: 4", "Оставшихся упоминаний: 3", "a.xbsl:1", "b.xbsl:2", "c.yaml:3"];
+  const prompt = deletionPrompt({ deletes, notes }, 3);
+  assert.deepStrictEqual(prompt.files, [
+    "КлиентКурсовВалют.Wsdl.1.wsdl",
+    "КлиентКурсовВалют.Wsdl.2.wsdl",
+    "КлиентКурсовВалют.yaml",
+    "ЗадачиСписокТаблица.xbql",
+  ]);
+  assert.strictEqual(prompt.detail, "Удаляется файлов: 4\nОставшихся упоминаний: 3\na.xbsl:1\n... +2");
+  assert.strictEqual(deletionPrompt({ deletes, notes: notes.slice(0, 2) }, 3).detail, notes.slice(0, 2).join("\n"));
+  assert.deepStrictEqual(deletionPrompt({}), { files: [], detail: "" });
 });
 
 test("vacatedDirs: the parents no renamed file lands in, deepest first", () => {

@@ -5788,6 +5788,28 @@ _IMPORT_LINE = re.compile(r"^[ \t]*импорт[ \t]+\S")
 #: is why the query suffix belongs to every walk that goes over an object's file family.
 _LIST_TABLE = "(?:СписокТаблица|ListTable)"
 
+#: A WSDL description of a SOAP service client, the part of the file name after the element:
+#: `<Имя>.Wsdl.1.wsdl`, and `<Имя>.Wsdl.2.wsdl` for a description the first one refers to. The
+#: documentation spells the file `<Имя>.Wsdl.1`, but a build carrying a file under that name
+#: fails to apply with "WSDL not found": the platform reads the name with the extension. The
+#: element has no property pointing at the file, so the name is the only link between them.
+_WSDL_DESCRIPTION = re.compile(r"Wsdl\.[1-9]\d*\.wsdl")
+
+
+def _file_owner(path: Path) -> str | None:
+    """The element a file of a folder belongs to: the part of the file name before the first dot.
+
+    An element's own files are its description and modules (`<Имя>.yaml`, `<Имя>.xbsl`,
+    `<Имя>.<Часть>.xbsl`), the `.xbql` query of a virtual table and the WSDL descriptions of a
+    SOAP service client. Every walk over an object's files - the family that deleting or moving
+    it takes along, the files a rename renames - reads them through this one test. None for any
+    other file of the folder.
+    """
+    owner, _dot, rest = path.name.partition(".")
+    if path.suffix in (".yaml", ".xbsl", ".xbql") or _WSDL_DESCRIPTION.fullmatch(rest):
+        return owner
+    return None
+
 
 class _Renamer:
     """Object name replacements in text: the identifier and its composite element names.
@@ -5946,9 +5968,11 @@ def op_rename_object(
     """Rename a configuration object and update references to it across all sources.
 
     The renamed files are the object's (yaml, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl`
-    modules), its forms' (`<Имя>Форма*`), the list row component's (`СтрокаСписка<Имя>`)
+    modules, the WSDL descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP service client with their
+    numbers kept), its forms' (`<Имя>Форма*`), the list row component's (`СтрокаСписка<Имя>`)
     and the virtual table of its list (`<Имя>СписокТаблица`, whose pair is a `.xbql`
-    query). Edited in texts: values of yaml reference keys
+    query). A description that names another one by its file name gets the new name in
+    that reference. Edited in texts: values of yaml reference keys
     (Тип/Таблица/ИсточникДанных/Форма/ТипФормы), `=...` bindings, .xbsl code (except
     string literals) and composite form names; in the yaml of the object itself and its
     forms - also `Имя:` and Заголовок/Представление (the old presentation is given by
@@ -5999,9 +6023,9 @@ def op_rename_object(
     # File renames: the file owner is the name part before the first dot.
     directory = hit.path.parent
     for path in sorted(directory.iterdir()):
-        if not path.is_file() or path.suffix not in (".yaml", ".xbsl", ".xbql"):
+        base = _file_owner(path) if path.is_file() else None
+        if base is None:
             continue
-        base = path.name.split(".", 1)[0]
         new_base = renamer.file_base(base)
         if new_base == base:
             continue
@@ -6052,6 +6076,36 @@ def op_rename_object(
         result.notes.append(f"{rel(path)}: замен – {count}")
         changed_files += 1
         total += count
+
+    # A description may name another one by its file name: the documentation tells to put the
+    # name of the loaded file in place of a reference the platform cannot resolve. The rename
+    # gives those files new names, so such a reference follows them. Only the name of a
+    # description changes (`<Имя>.Wsdl.2`, with the extension or without), never an address or
+    # a longer name that starts the same way.
+    description_name = re.compile(
+        rf"(?<![{_WORD}.]){re.escape(old_name)}(?=\.Wsdl\.[1-9]\d*(?![{_WORD}]))"
+    )
+    for rename in result.renames:
+        if not _WSDL_DESCRIPTION.fullmatch(rename.old_path.name.partition(".")[2]):
+            continue
+        if reader is None:
+            loaded = engine.load(rename.old_path)
+            if loaded.decode_error:
+                # Written back as UTF-8, a file in another encoding would lose its other letters.
+                result.notes.append(
+                    f"{rel(rename.old_path)}: описание не в UTF-8 – ссылки в нём на другие "
+                    "описания по имени файла не проверены, проверьте вручную"
+                )
+                continue
+            text = loaded.text
+        else:
+            text = reader(rename.old_path)
+        new_text, count = description_name.subn(new_name, text)
+        if count:
+            result.changes.append(FileChange(rename.new_path, new_text, created=False))
+            result.notes.append(f"{rel(rename.old_path)}: замен – {count}")
+            changed_files += 1
+            total += count
 
     if not result.renames and not result.changes:
         raise ScaffoldError(f"Ссылок на '{old_name}' не найдено – нечего переименовывать")
@@ -6109,16 +6163,16 @@ def object_family(yaml_path: Path, name: str) -> list[Path]:
     """The files of one object in its folder, the ones deleting or moving it takes along.
 
     Its yaml, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the `.xbql` query of a virtual
-    table, the forms, the row component and the virtual table of its list - every one with
-    its own pair (see _family_pattern). op_delete_object removes this set, op_move_object
+    table, the WSDL descriptions of a SOAP service client (`<Имя>.Wsdl.<N>.wsdl`), the forms,
+    the row component and the virtual table of its list - every one with its own pair (see
+    _family_pattern and _file_owner). op_delete_object removes this set, op_move_object
     carries it into another folder; op_rename_object renames the same set by the same naming
     rules of _Renamer.
     """
     family = _family_pattern(name)
     return [
         path for path in sorted(Path(yaml_path).parent.iterdir())
-        if path.is_file() and path.suffix in (".yaml", ".xbsl", ".xbql")
-        and family.match(path.name.split(".", 1)[0])
+        if path.is_file() and (owner := _file_owner(path)) is not None and family.match(owner)
     ]
 
 
@@ -6133,7 +6187,8 @@ def op_delete_object(
     component - and NAME every remaining reference instead of editing it.
 
     Deleted is the object's file family in its directory, the same one op_rename_object
-    renames: `<Имя>.yaml`, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the forms
+    renames: `<Имя>.yaml`, the `<Имя>.xbsl` / `<Имя>.<Часть>.xbsl` modules, the WSDL
+    descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP service client, the forms
     `<Имя>Форма*`, the card-list row component `СтрокаСписка<Имя>` and the virtual table
     of its list `<Имя>СписокТаблица` (every pair with it, the `.xbql` query included). The subsystem membership needs no separate cleanup - in 1C:Element a
     subsystem is the FOLDER the files live in, so removing the files removes the object
@@ -6196,9 +6251,10 @@ def op_delete_object(
             if ident.search(line):
                 references.append(f"{rel(path)}:{number}: {line.strip()[:160]}")
 
+    # `deletes` lists the files. What they are differs by kind - forms and a list table, the WSDL
+    # descriptions of a SOAP service client - so the note does not enumerate it.
     result.notes.append(
-        f"Удаляется файлов: {len(result.deletes)} (объект {hit.kind} '{hit.name}', "
-        f"формы и компонент строки списка)"
+        f"Удаляется файлов: {len(result.deletes)} (объект {hit.kind} '{hit.name}')"
     )
     shown = references[:200]
     if references:
@@ -6711,8 +6767,8 @@ def op_move_object(root: Path, yaml_path: Path, target_dir: Path, *,
     The folder is a package of the subsystem (a folder that does not exist yet becomes a new
     package), another package, the subsystem root, or a folder of another subsystem. Moved
     together (renames): the object's family of files (object_family - its yaml and modules,
-    the query of a virtual table, forms, row component, list table) and the translations of a
-    localized-strings element.
+    the query of a virtual table, the WSDL descriptions of a SOAP service client, forms, row
+    component, list table) and the translations of a localized-strings element.
 
     Edited, by the linter's rules run over the sources before and after the move - one
     placement model, not a copy of it:

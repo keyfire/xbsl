@@ -95,6 +95,18 @@ def is_resource_file(path: Path) -> bool:
     return path.suffix.lower() in restext.SUFFIX_KINDS
 
 
+def is_source_file(path: Path) -> bool:
+    """Whether the linter reads the file: a module or an element description (.xbsl, .yaml),
+    a query (.xbql) or a resource (see is_resource_file).
+
+    Anything else is no source even when a scaffolding operation writes it - the WSDL
+    description of a SOAP service client, renamed along with its element. Loaded as a source it
+    would be taken for yaml (make_source), and the lint of the written files would judge a
+    vendor's XML by the rules of the project's code.
+    """
+    return path.suffix in (".xbsl", ".yaml") or is_query_file(path) or is_resource_file(path)
+
+
 def make_source(path: Path, data: bytes) -> SourceFile:
     """Build a SourceFile from a path and bytes (shared by the disk and memory paths)."""
     if path.suffix == ".xbsl" or is_query_file(path):

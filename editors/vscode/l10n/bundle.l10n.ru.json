@@ -122,6 +122,7 @@
   "XBSL: this form is read-only – editing is disabled.": "XBSL: форма только для чтения – редактирование отключено.",
   "Delete": "Удалить",
   "XBSL: delete object \"{0}\"? Files: {1}. References are not updated.": "XBSL: удалить объект \"{0}\"? Файлы: {1}. Ссылки не обновляются.",
+  "XBSL: preparing to delete {0}...": "XBSL: подготовка удаления {0}...",
   "Catalogs": "Справочники",
   "Documents": "Документы",
   "Enumerations": "Перечисления",

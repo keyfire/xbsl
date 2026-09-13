@@ -34,8 +34,7 @@ def discover(paths: list[str]) -> list[Path]:
     for raw in paths:
         p = Path(raw)
         if p.is_file():
-            if (p.suffix in (".xbsl", ".yaml") or engine.is_query_file(p)
-                    or engine.is_resource_file(p)):
+            if engine.is_source_file(p):
                 out.append(p)
         elif p.is_dir():
             out.extend(engine.find_sources(p, "*.xbsl"))
@@ -806,7 +805,7 @@ def _scaffold_lint(paths: list[str]) -> dict | None:
     from xbsl.engine import load, run_sources
 
     try:
-        sources = [load(Path(p)) for p in paths]
+        sources = [load(Path(p)) for p in paths if engine.is_source_file(Path(p))]
         diags = run_sources(sources, scopes=("file",))
         return report.report(diags, len(sources))
     except _dataset.DatasetError:

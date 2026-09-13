@@ -29,7 +29,7 @@ from xbsl import (
     cijob, formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
-from xbsl.engine import RULES, active_rules, load, load_text, run, run_sources
+from xbsl.engine import RULES, active_rules, is_source_file, load, load_text, run, run_sources
 
 # mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
 # became MCPServer in mcp.server.mcpserver, and the old module is gone rather than aliased -
@@ -669,7 +669,7 @@ def _failed(exc: Exception, base: Path) -> dict:
 
 def _apply_and_lint(result: scaffold.ScaffoldResult, base: Path) -> dict:
     written = scaffold.apply_result(result)
-    sources = [load(Path(p)) for p in written]
+    sources = [load(Path(p)) for p in written if is_source_file(Path(p))]
     diags = run_sources(sources, scopes=("file",))
     out = {
         "files": [
@@ -1216,7 +1216,8 @@ def meta_rename_object(
     under it, a relative yaml_path resolves against it, and the answer names it as `root`
     next to absolute paths.
     Renames the object's files (yaml, modules, its forms `<Имя>Форма*`, the card-list row
-    component `СтрокаСписка<Имя>`) and rewrites references: yaml type/table/form keys,
+    component `СтрокаСписка<Имя>`, the WSDL descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP
+    service client with their numbers) and rewrites references: yaml type/table/form keys,
     `=` bindings, .xbsl code (string literals are left intact) and composite form names.
     Attributes, components or dynamic-list fields that merely share the old name are NOT
     touched. new_presentation/old_presentation update Заголовок/Представление values of the
@@ -1249,7 +1250,8 @@ def meta_delete_object(
     dry_run: bool = True,
 ) -> dict:
     """Delete a configuration object whole: the yaml/module pair, its forms `<Имя>Форма*`
-    and the card-list row component `СтрокаСписка<Имя>`, with their pairs. A subsystem in
+    and the card-list row component `СтрокаСписка<Имя>`, with their pairs, and the WSDL
+    descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP service client. A subsystem in
     1C:Element is the folder the files live in, so the membership goes away with the files.
     Every REMAINING mention of the name across the project is listed by file and line
     (string literals and comments included - a router string, seeding, dictionary keys)
@@ -1290,7 +1292,8 @@ def meta_move_object(
     target_dir – a package of the object's subsystem (a folder that does not exist yet becomes a
     new package), another package, the subsystem root or a folder of another subsystem. The
     object moves with its forms `<Имя>Форма*`, modules, list row and list table (and the
-    translations of a localized-strings element).
+    translations of a localized-strings element, the WSDL descriptions of a SOAP service
+    client).
     An element of a package lives in the package's own namespace: another subsystem reaches it
     only through `импорт Subsystem::Package`, while the root and the packages of one subsystem
     see each other. So the move adds that import where a reference now needs it - modules and

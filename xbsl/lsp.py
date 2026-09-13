@@ -1624,6 +1624,25 @@ def _make_server() -> "LanguageServer":
             reader=_sources_reader,
         )
 
+    @server.feature("xbsl/metaDeleteObject")
+    @server.thread()
+    def _meta_delete_object(params: object) -> dict:
+        """The plan of deleting an object whole: `deletes`, and the mentions left in `notes`.
+
+        Flat params {path} - the object's yaml - or {name}. The files are the ones delete-object
+        removes (scaffold.object_family): the forms, the query of a virtual table and the WSDL
+        descriptions of a SOAP service client go with the yaml and the modules. The editor
+        deletes the planned files itself, in one WorkspaceEdit that an undo brings back.
+        """
+        path = _opt_str(params, "path")
+        return _meta_op(
+            scaffold.op_delete_object,
+            _meta_root(params),
+            _opt_str(params, "name"),
+            yaml_path=Path(path) if path else None,
+            reader=_sources_reader,
+        )
+
     @server.feature("xbsl/metaRenamePackage")
     @server.thread()
     def _meta_rename_package(params: object) -> dict:

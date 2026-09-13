@@ -24,6 +24,7 @@ import { lspActive, lspRequest } from "./lspClient";
 import {
   allPackages,
   bucketItems,
+  deletionPrompt,
   EnginePlacement,
   EngineProjectInfo,
   PackageGroup,
@@ -2622,29 +2623,41 @@ async function addObjectForm(provider: XbslMetadataProvider, node?: XbslNode): P
   );
 }
 
-// Delete an object: its files (yaml + module + object module). References are not updated -
-// dangling ones are caught by the linter/deploy. With confirmation; the deletion is reversible
-// (VS Code undo).
+// Delete an object whole: the engine plans which files go (xbsl/metaDeleteObject, the CLI
+// delete-object when the server is older) - the yaml and modules, the forms, the row component,
+// the list table with its query, the WSDL descriptions of a SOAP service client - and names the
+// mentions left in the project. References are not updated - dangling ones are caught by the
+// linter/deploy. With confirmation; the deletion is reversible (VS Code undo).
 async function deleteObject(provider: XbslMetadataProvider, node?: XbslNode): Promise<void> {
-  if (!node?.yamlPath) {
+  const yamlPath = node?.yamlPath;
+  const root = yamlPath ? provider.rootFor(yamlPath) : undefined;
+  if (!yamlPath || !root) {
     return;
   }
-  const name = path.basename(node.yamlPath, ".yaml");
-  const files = [node.yamlPath, node.modulePath, node.objectModulePath].filter((f): f is string => !!f);
+  const name = path.basename(yamlPath, ".yaml");
+  const plan = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: vscode.l10n.t("XBSL: preparing to delete {0}...", name) },
+    () => callMeta("xbsl/metaDeleteObject", { root, path: yamlPath }, "delete-object", [root, "--path", yamlPath])
+  );
+  if (!plan) {
+    return;
+  }
+  if (plan.error || !plan.deletes?.length) {
+    void vscode.window.showWarningMessage(vscode.l10n.t("XBSL: {0}", plan.error ?? plan.notes?.[0] ?? name));
+    return;
+  }
+  const prompt = deletionPrompt(plan);
   const del = vscode.l10n.t("Delete");
   const pick = await vscode.window.showWarningMessage(
-    vscode.l10n.t('XBSL: delete object "{0}"? Files: {1}. References are not updated.', name, files.map((f) => path.basename(f)).join(", ")),
-    { modal: true },
+    vscode.l10n.t('XBSL: delete object "{0}"? Files: {1}. References are not updated.', name, prompt.files.join(", ")),
+    { modal: true, detail: prompt.detail },
     del
   );
   if (pick !== del) {
     return;
   }
-  const we = new vscode.WorkspaceEdit();
-  for (const f of files) {
-    we.deleteFile(vscode.Uri.file(f), { ignoreIfNotExists: true });
-  }
-  await vscode.workspace.applyEdit(we);
+  // Only the deletions are applied: the notes were the dialog's detail already.
+  await applyScaffold({ deletes: plan.deletes });
   provider.refresh();
 }
 
