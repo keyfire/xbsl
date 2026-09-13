@@ -27,11 +27,8 @@ What keeps both rules at zero false findings:
 
 - an operand the inference cannot name is not judged - a union with an unknown part, a type
   parameter, a column of a query the reading does not understand;
-- an operand that may be NARROWED at the cast - its path was compared, tested with `это`,
-  asserted with `!` or assigned earlier in the method - is not called a cast in place of `!`:
-  the compiler may already know the value is there, and then the same cast is redundant
-  instead. Whether the empty value is gone changes nothing for a redundant cast whose target
-  holds it, so that verdict still stands;
+- the operand is typed by its declarations, the way the compiler types it for this check: a
+  condition checked before the cast narrows nothing (see `typeinfer.CastSite`);
 - a type the project does not declare in a way the catalog reads stays unknown, and so does a
   relation between two types the catalog cannot prove (the contract an element implements is
   the one relation of the project it knows).
@@ -44,7 +41,7 @@ import hashlib
 from collections.abc import Iterable
 from pathlib import PurePosixPath
 
-from xbsl import i18n
+from xbsl import i18n, lexer
 from xbsl import parser as P
 from xbsl import typeinfer
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
@@ -64,6 +61,12 @@ MESSAGES = {
               "ничего не меняет – уберите приведение.",
         "en": "Redundant cast: the expression is already of type '{source}', and "
               "'{n[как]} {target}' changes nothing - remove the cast.",
+    },
+    "code/redundant-cast.wider": {
+        "ru": "Избыточное приведение: значение типа '{source}' уже относится к типу '{target}' – "
+              "приведение уберите, если этот тип не нужен объявлению или перегрузке.",
+        "en": "Redundant cast: a value of type '{source}' already is a '{target}' - remove the "
+              "cast unless a declaration or an overload needs that type.",
     },
     "code/cast-to-non-null.title": {
         "ru": "Приведение вместо настойчивой операции '!'",
@@ -359,30 +362,32 @@ def _judge_module(rel: str, fact: dict, pairs: dict[str, dict],
     except RecursionError:
         return
     lines = linemap(_TextSource(text))
+    tokens: list | None = None
     for site in sites:
         if site.source is None or site.target is None:
             continue
         verdict = typeinfer.cast_verdict(site.source, site.target, catalog.assignable)
-        if verdict == "insistent" and site.narrowable:
-            continue
         if verdict is None:
             continue
+        if tokens is None:
+            tokens = [t for t in lexer.tokenize(text) if t.kind not in ("COMMENT", "BOM", "EOF")]
         node = site.node
         line, col = lines.linecol(node.start)
         operand = node.operand
+        target = _target_text(text, node)
         if verdict == "redundant":
+            exact = site.source == site.target
+            key = "code/redundant-cast.found" if exact else "code/redundant-cast.wider"
             found[_REDUNDANT].append(Diagnostic(
                 rel, line, col, _REDUNDANT, Severity.WARNING,
-                i18n.t("code/redundant-cast.found", source=site.source.text(),
-                       target=_target_text(text, node)),
-                fix=_removal(text, node, operand),
+                i18n.t(key, source=site.source.text(), target=target),
+                fix=_removal(text, tokens, node, operand) if exact else None,
             ))
         else:
             found[_NON_NULL].append(Diagnostic(
                 rel, line, col, _NON_NULL, Severity.WARNING,
-                i18n.t("code/cast-to-non-null.found", source=site.source.text(),
-                       target=_target_text(text, node)),
-                fix=_non_null(text, node, operand),
+                i18n.t("code/cast-to-non-null.found", source=site.source.text(), target=target),
+                fix=_non_null(text, tokens, node, operand),
             ))
 
 
@@ -400,12 +405,19 @@ def _target_text(text: str, node) -> str:
 
 
 #: Operands that stay one primary expression without parentheses: a name, a member chain, a
-#: call, an index, a `!`, a literal - what `(<операнд>).Член` may lose its parentheses around.
+#: call, an index, a `!`, a literal - the parentheses around such an operand group nothing.
 _PRIMARY = (P.Name, P.Member, P.Call, P.Index, P.NonNull, P.Literal, P.This)
 
 
-def _wrapping_parens(text: str, node) -> tuple[int, int] | None:
-    """The offsets of `(` and `)` that wrap the cast exactly, when a member or an index follows."""
+def _grouping_parens(text: str, tokens: list, node) -> tuple[int, int] | None:
+    """The offsets of `(` and `)` that group exactly the cast, or None.
+
+    A parenthesis a call opens is not a grouping one: `Ф(X как Т)` keeps both. What stands
+    before the `(` tells them apart - a name or the closing `>` of the arguments of a generic
+    call makes it a call; an operator, a keyword or the start of the text makes it a group.
+    Only spaces may stand between the parentheses and the cast: a group spread over lines keeps
+    its line breaks, and the edit then removes the cast alone.
+    """
     left = node.start - 1
     while left >= 0 and text[left] in " \t":
         left -= 1
@@ -414,37 +426,41 @@ def _wrapping_parens(text: str, node) -> tuple[int, int] | None:
         right += 1
     if left < 0 or right >= len(text) or text[left] != "(" or text[right] != ")":
         return None
-    after = right + 1
-    if after < len(text) and text[after] in ".[":
-        # a `(` right before is a call's own parenthesis only when a name stands before it
-        before = left - 1
-        if before >= 0 and (text[before].isalnum() or text[before] in "_)]!"):
+    index = next((i for i, token in enumerate(tokens) if token.start == left), None)
+    if index is None:
+        return None
+    before = tokens[index - 1] if index > 0 else None
+    if before is not None:
+        if before.kind == "IDENT":
             return None
-        return left, right
-    return None
+        if before.kind == "OP" and before.value in (">", ")", "]", "!"):
+            return None
+    return left, right
 
 
-def _removal(text: str, node, operand) -> TextEdit | None:
+def _removal(text: str, tokens: list, node, operand) -> TextEdit | None:
     """`X как Т` -> `X`; `(X как Т).Член` -> `X.Член` when X is one primary expression."""
     if node.end <= operand.end:
         return None
-    parens = _wrapping_parens(text, node)
-    operand_text = text[operand.start:operand.end]
+    parens = _grouping_parens(text, tokens, node)
     if parens is not None and isinstance(operand, _PRIMARY):
-        return TextEdit(parens[0], parens[1] + 1, operand_text)
+        return TextEdit(parens[0], parens[1] + 1, text[operand.start:operand.end])
     return TextEdit(operand.end, node.end, "")
 
 
-def _non_null(text: str, node, operand) -> TextEdit | None:
+def _non_null(text: str, tokens: list, node, operand) -> TextEdit | None:
     """`X как Т` -> `X!`; an operand that is not one primary expression keeps its value in
     parentheses: `(А ?? Б)!`."""
     if node.end <= operand.end:
         return None
     operand_text = text[operand.start:operand.end]
     replacement = operand_text + "!" if isinstance(operand, _PRIMARY) else f"({operand_text})!"
-    parens = _wrapping_parens(text, node)
-    if parens is not None:
-        return TextEdit(parens[0], parens[1] + 1, replacement)
+    parens = _grouping_parens(text, tokens, node)
+    if parens is not None and isinstance(operand, _PRIMARY):
+        after = parens[1] + 1
+        # `(X как Т)== У` must not become `X!== У`: glued to `=`, the `!` reads as `!=`.
+        if after >= len(text) or text[after] != "=":
+            return TextEdit(parens[0], parens[1] + 1, replacement)
     return TextEdit(node.start, node.end, replacement)
 
 

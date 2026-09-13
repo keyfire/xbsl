@@ -31,6 +31,17 @@ from xbsl.typeinfer import ModuleScope, TypeSet, TABULAR_STANDARD_FIELDS, _MISSI
 
 _WORD_KINDS = ("IDENT", "KEYWORD")
 
+#: Fields every table of a kind may carry without declaring them: the service fields of a
+#: catalog, a document, a register, a tabular section. A column that reads one of them is typed
+#: only where `typeinfer.STANDARD_FIELDS` knows the type, but it never breaks the row - a field
+#: the project neither declares nor finds here does (see _BrokenQuery).
+_SERVICE_FIELDS = frozenset({
+    "Ссылка", "ПометкаУдаления", "Код", "Наименование", "Владелец", "Родитель", "ЭтоГруппа",
+    "Предопределенный", "ИмяПредопределенных", "Дата", "Номер", "Проведен", "Период",
+    "Регистратор", "НомерСтроки", "Активность", "ВидДвижения", "КлючЗаписи", "ВерсияДанных",
+    "КлючСтроки", "Представление",
+})
+
 #: The semantics of the constructs the compiler was asked about; one place to read them.
 NULL_THROUGH_REFERENCE = True
 NULL_ON_OUTER_JOIN_SIDE = True
@@ -58,6 +69,16 @@ def row_type(scope: ModuleScope, start: int, end: int) -> str | None:
     got = catalog.register_row(key, columns) if columns is not None else None
     cache[marker] = got
     return got
+
+
+class _BrokenQuery(Exception):
+    """The compiler refuses the query: the row it would produce is not there to be typed.
+
+    A field a table of the project does not have (`Реквизит ... не найден`) or a table the
+    project does not know fails the whole literal, and the compiler then types no column of it -
+    the probe project showed a single unknown field in the select list silencing every cast over
+    the row. Reading the other columns anyway would judge casts the compiler never judges.
+    """
 
 
 @dataclass
@@ -89,7 +110,10 @@ def row_columns(text: str, scope: ModuleScope) -> dict[str, TypeSet | None] | No
     merged: dict[str, TypeSet | None] | None = None
     order: list[str] = []
     for part in parts:
-        columns = _select_columns(part, scope)
+        try:
+            columns = _select_columns(part, scope)
+        except _BrokenQuery:
+            return None
         if columns is None:
             return None
         if merged is None:
@@ -168,7 +192,7 @@ def _select_columns(part: list, scope: ModuleScope) -> dict[str, TypeSet | None]
     select_end = index + ends[0] if ends else len(part)
     select_list = part[index:select_end]
     tables = _from_tables(part[select_end:], scope)
-    if tables is None:
+    if tables is None or any(table.element is None for table in tables.values()):
         return None
     columns: dict[str, TypeSet | None] = {}
     commas = _top_level_indexes(select_list, lambda t: t.kind == "OP" and t.value == ",")
@@ -316,11 +340,26 @@ def _field(table: _Table, name: str, scope: ModuleScope) -> TypeSet | None:
         if name in fields:
             return catalog.written(fields[name], None) if fields[name] else None
         standard = TABULAR_STANDARD_FIELDS.get(name)
-        return catalog.written(standard.replace("{}", table.element), None) if standard else None
+        if standard is None:
+            if not _service_field(name):
+                raise _BrokenQuery(name)
+            return None
+        return catalog.written(standard.replace("{}", table.element), None)
     written = catalog.field_written(table.element, name)
-    if written is _MISSING_FIELD or not written:
+    if written is _MISSING_FIELD:
+        if not _service_field(name):
+            raise _BrokenQuery(name)
         return None
-    return catalog.written(written, None)
+    return catalog.written(written, None) if written else None
+
+
+def _service_field(name: str) -> bool:
+    if name in _SERVICE_FIELDS:
+        return True
+    from xbsl import terms
+
+    russian = terms.russian(name, "properties") or terms.common_russian(name)
+    return bool(russian) and russian in _SERVICE_FIELDS
 
 
 def _expression_type(tokens: list, tables: dict[str, _Table], scope: ModuleScope) -> TypeSet | None:

@@ -1102,30 +1102,21 @@ class _Scopes:
 _NOT_DECLARED = object()
 
 
-def path_key(node: object) -> str | None:
-    """The stable path an expression reads - `Запись.Поле` - or None for anything else.
-
-    A path is what the compiler can narrow: after `если Х != Неопределено` the name, after
-    `если Запись.Поле это Строка` the member chain. A `!` reads the same path.
-    """
-    if isinstance(node, P.Name):
-        return node.name or None
-    if isinstance(node, P.Member) and not node.safe:
-        inner = path_key(node.obj)
-        return f"{inner}.{node.name}" if inner else None
-    if isinstance(node, P.NonNull):
-        return path_key(node.operand)
-    return None
-
-
 @dataclass
 class CastSite:
-    """One `<операнд> как <тип>` with what the module could say about both sides."""
+    """One `<операнд> как <тип>` with what the module could say about both sides.
+
+    The operand is typed by what its declarations say, not by what the code checked before the
+    cast: the compiler does the same. Its cast check reads the static type of the operand, and
+    none of the shapes that could narrow it - a comparison with the empty value in a condition,
+    an early return on that value, a type test in a condition or in a ternary, a `!` earlier in
+    the method, an assignment of a non-empty value - changes the verdict (shown on the probe
+    project of the cast rules: each of them still answers "use `!`" for a nullable parameter).
+    """
 
     node: object                 # the P.AsType node
     source: TypeSet | None       # the operand
     target: TypeSet | None       # the written type
-    narrowable: bool             # the operand path was tested or asserted before the cast
 
 
 class ModuleTyper:
@@ -1141,10 +1132,6 @@ class ModuleTyper:
         self.catalog = scope.catalog
         self.scopes = _Scopes()
         self.module_fields: dict[str, TypeSet | None] = {}
-        # (offset, path) of every place that may narrow a path: a comparison with the empty
-        # value, a type test, a `!`, an assignment. The walk is in source order, so the list
-        # is sorted by offset.
-        self.narrowing: list[tuple[int, str]] = []
         self.casts: list[CastSite] = []
 
     # -- the module ---------------------------------------------------------------------------
@@ -1174,7 +1161,6 @@ class ModuleTyper:
 
     def method(self, method: object, this_type: TypeSet | None) -> None:
         self.scopes = _Scopes()
-        self.narrowing = []
         self._this = this_type
         for param in getattr(method, "params", ()) or ():
             written = getattr(getattr(param, "type", None), "text", None)
@@ -1204,9 +1190,6 @@ class ModuleTyper:
         elif isinstance(node, P.Assign):
             self.expression(node.value)
             self.expression(node.target)
-            key = path_key(node.target)
-            if key:
-                self.narrowing.append((node.start, key))
         elif isinstance(node, P.ExprStmt):
             self.expression(node.expr)
         elif isinstance(node, P.UseStmt):
@@ -1271,7 +1254,7 @@ class ModuleTyper:
         """The type of an expression: a TypeSet, a StaticName, or None when it cannot be named.
 
         Every sub-expression is visited even when the whole stays unknown - a cast may sit
-        anywhere inside, and the narrowing marks are collected on the way.
+        anywhere inside.
         """
         if node is None or not isinstance(node, P.Node):
             return None
@@ -1285,31 +1268,19 @@ class ModuleTyper:
             source = self.expression(node.operand)
             written = getattr(getattr(node, "type", None), "text", None)
             target = self.catalog.written(written, self.scope.module) if written else None
-            key = path_key(node.operand)
-            narrowable = bool(key) and any(k == key for _o, k in self.narrowing)
             self.casts.append(CastSite(node, source if isinstance(source, TypeSet) else None,
-                                       target, narrowable))
+                                       target))
             return target
         if isinstance(node, P.NonNull):
             inner = self.expression(node.operand)
-            key = path_key(node.operand)
-            if key:
-                self.narrowing.append((node.start, key))
             return inner.without_undefined() if isinstance(inner, TypeSet) else None
         if isinstance(node, P.IsType):
             self.expression(node.operand)
-            key = path_key(node.operand)
-            if key:
-                self.narrowing.append((node.start, key))
             return TypeSet.of("Булево")
         if isinstance(node, P.Compare):
             parts = [node.first] + [right for _op, right in node.rest]
             for part in parts:
                 self.expression(part)
-            for part in parts:
-                key = path_key(part)
-                if key:
-                    self.narrowing.append((node.start, key))
             return TypeSet.of("Булево")
         if isinstance(node, P.Unary):
             inner = self.expression(node.operand)
