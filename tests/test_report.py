@@ -19,7 +19,12 @@ def test_report_shape_counts_and_order():
     payload = report.report(diags, 1)
 
     assert set(payload) == {"diagnostics", "summary"}
-    assert payload["summary"] == {"files": 1, "diagnostics": 3, "errors": 1, "warnings": 2}
+    assert payload["summary"] == {
+        "files": 1, "diagnostics": 3, "errors": 1, "warnings": 2,
+        "by_rule": {"code/brackets": 1, "typography/curly-quotes": 1, "whitespace/trailing": 1},
+        "by_file": {"X.xbsl": 3},
+        "by_severity": {"error": 1, "warning": 2, "info": 0},
+    }
 
     # Sorted by (path, line, col, rule)
     positions = [(d["line"], d["col"]) for d in payload["diagnostics"]]
@@ -38,7 +43,10 @@ def test_report_empty():
     payload = report.report([], 0)
     assert payload == {
         "diagnostics": [],
-        "summary": {"files": 0, "diagnostics": 0, "errors": 0, "warnings": 0},
+        "summary": {
+            "files": 0, "diagnostics": 0, "errors": 0, "warnings": 0,
+            "by_rule": {}, "by_file": {}, "by_severity": {"error": 0, "warning": 0, "info": 0},
+        },
     }
 
 

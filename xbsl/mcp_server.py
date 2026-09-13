@@ -213,6 +213,7 @@ def lint_paths(
     root: str | None = None,
     as_ci: bool = False,
     as_ci_job: str | None = None,
+    compact: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -240,10 +241,20 @@ def lint_paths(
                   linter twice as soon as the project checks a second tree - the sources in
                   one job, what `translate` wrote in another - and those judge different
                   sets. Without a name the first command wins and `as_ci.jobs` names the
-                  others; a part of the name is enough when only one job fits.
+                  others; a part of the name is enough when only one job fits;
+    compact     – answer without the list of findings: the summary alone, plus `errors` - the
+                  full records of the error-level findings, and nothing else. A full answer
+                  costs several hundred characters per finding, tens of thousands over one
+                  project run, when the question was only whether the tree is clean and
+                  whether the pipeline would go red: the counts of the summary answer that,
+                  and the errors are what a build fails on. Everything the summary carries
+                  about the baseline and the CI job stays.
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
-    Returns {diagnostics: [...], summary: {...}}; when a baseline applied, the summary also
+    Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors}). The
+    summary counts the findings by rule (`by_rule`), by file (`by_file`, the same absolute
+    paths the diagnostics carry) and by severity (`by_severity`, all three levels named).
+    When a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
     The stale entries are also NAMED, in `baseline_stale_entries`: {path, rule, message,
@@ -292,7 +303,7 @@ def lint_paths(
         # pipeline has to know which of them it reproduced), where the command actually
         # stands when an `include:` brought it, and the includes nobody fetched.
         payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
-    return payload
+    return report.compact(payload) if compact else payload
 
 
 @mcp.tool()
