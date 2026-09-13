@@ -1454,6 +1454,81 @@ _STRINGS_PARTNER_EN = (
     "Шаблоны:\n    Расширена: \"Extended (until $0)\"\n"
 )
 
+#: --- Packages of a subsystem: the project module, a query, a full name, the resources ------
+#: The supplier `Склад` keeps a package `Партии`; the project descriptor gives the full names
+#: their vendor and project.
+_PACKAGE_PROJECT_RU = "Поставщик: acme\nИмя: Проба\nВерсия: 1.0.0\n"
+_BATCHES_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f60
+Имя: ПартииТоваров
+ОбластьВидимости: ВПроекте
+"""
+_BATCH_CALC_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f61
+Имя: РасчетПартий
+ОбластьВидимости: ВПроекте
+"""
+_BATCH_CALC_XBSL_RU = "@ВПроекте\nметод Пересчитать()\n;\n"
+_PROJECT_CALL_RU = "{imports}\nметод Обновить()\n    РасчетПартий.Пересчитать()\n;\n"
+_BALANCES_YAML_RU = """\
+ВидЭлемента: ВиртуальнаяТаблица
+Ид: 1d1f5c60-0000-4000-8000-000000000f62
+Имя: ОстаткиПартий
+{imports}КлючевыеПоля:
+    - Ссылка
+"""
+_BALANCES_XBQL_RU = "ВЫБРАТЬ\n    Партия.Ссылка КАК Ссылка\nИЗ\n    ПартииТоваров КАК Партия\n"
+_BATCH_REPORTS_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f63
+Имя: ОтчетыПартий
+"""
+_BATCH_REPORTS_XBSL_RU = (
+    "метод Прочитать()\n"
+    "    знч Выборка = Запрос{{ВЫБРАТЬ Партия.Ссылка КАК Ссылка "
+    "ИЗ acme::Проба::{namespace}::ПартииТоваров КАК Партия}}\n"
+    "    Выборка.Выполнить()\n"
+    ";\n"
+)
+_BATCH_ICONS_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f64
+Имя: ЗначкиПартий
+"""
+_BATCH_ICONS_XBSL_RU = (
+    "метод Значок(Код: Строка): ДвоичныйОбъект.Ссылка?\n"
+    "    возврат ПакетРесурсов.Текущий().Получить(Код + \".svg\").Ссылка\n"
+    ";\n"
+)
+_BATCH_LIST_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f65
+Имя: ПартииТоваровФормаСписка
+Наследует:
+    Тип: ФормаСписка<Неопределено>
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f66
+        Имя: Строки
+        Тип: ДинамическийСписок<acme::Проба::{namespace}::ПартииТоваровФормаСписка.ДанныеСтрокиСписка>
+"""
+_PACKAGE_TOKENS = {
+    **_SUB_TOKENS, "Проба": "Probe", "Партии": "Batches", "ПартииТоваров": "GoodsBatches",
+    "РасчетПартий": "BatchCalculation", "Пересчитать": "Recalculate", "Обновить": "Refresh",
+    "ОстаткиПартий": "BatchBalances", "Партия": "Batch", "ОтчетыПартий": "BatchReports",
+    "Прочитать": "Read", "Выборка": "Selection", "ЗначкиПартий": "BatchIcons",
+    "Значок": "Icon", "Код": "Code", "Товары": "Goods",
+    "ПартииТоваровФормаСписка": "GoodsBatchesListForm", "Строки": "Rows",
+}
+
+
+def _package_files(**extra: str) -> dict[str, str]:
+    """The supplier subsystem with its package and the project descriptor, plus `extra`."""
+    return {"Проект.yaml": _PACKAGE_PROJECT_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+            "Склад/Партии/ПартииТоваров.yaml": _BATCHES_RU, **extra}
+
 
 SEEDS: list[Seed] = [
     Seed(
@@ -4551,11 +4626,122 @@ SEEDS: list[Seed] = [
               "prefix alone in either spelling - the shape naming/kind-in-name had before its fix. "
               "Closing it is a change of the rule judged against the standard, not a lookup.",
     ),
+    # --- packages of a subsystem -----------------------------------------------------------
+    Seed(
+        rule="code/missing-import",
+        expect=FINDING,
+        note="the project module calls a module of a package with only the subsystem imported",
+        files=_package_files(**{
+            "Склад/Партии/РасчетПартий.yaml": _BATCH_CALC_YAML_RU,
+            "Склад/Партии/РасчетПартий.xbsl": _BATCH_CALC_XBSL_RU,
+            "Проект.xbsl": _PROJECT_CALL_RU.format(imports="импорт Склад\n"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=CLEAN,
+        note="the same project module with the import of the package",
+        files=_package_files(**{
+            "Склад/Партии/РасчетПартий.yaml": _BATCH_CALC_YAML_RU,
+            "Склад/Партии/РасчетПартий.xbsl": _BATCH_CALC_XBSL_RU,
+            "Проект.xbsl": _PROJECT_CALL_RU.format(imports="импорт Склад::Партии\n"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=FINDING,
+        note="the query of a virtual table reads a table of a package its yaml does not import",
+        files=_package_files(**{
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОстаткиПартий.yaml": _BALANCES_YAML_RU.format(imports="Импорт:\n    - Склад\n"),
+            "Учет/ОстаткиПартий.xbql": _BALANCES_XBQL_RU,
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=CLEAN,
+        # The package import itself is not planted here: the translator leaves a qualified
+        # entry of `Import` Russian for now, and the seed would test that instead of the rule.
+        note="a virtual table reading a table at the root of the subsystem it imports",
+        files=_package_files(**{
+            "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОстаткиПартий.yaml": _BALANCES_YAML_RU.format(imports="Импорт:\n    - Склад\n"),
+            "Учет/ОстаткиПартий.xbql": _BALANCES_XBQL_RU.replace("ПартииТоваров", "Товары"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=FINDING,
+        note="a list form moved into a package spells its row type without the package segment",
+        files=_package_files(**{
+            "Склад/Партии/ПартииТоваровФормаСписка.yaml": _BATCH_LIST_RU.format(namespace="Склад"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=CLEAN,
+        note="the same row type with the package segment",
+        files=_package_files(**{
+            "Склад/Партии/ПартииТоваровФормаСписка.yaml": _BATCH_LIST_RU.format(
+                namespace="Склад::Партии"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="code/wrong-namespace",
+        expect=FINDING,
+        note="a query names a table of a package in full without the segment of the package",
+        files=_package_files(**{
+            "Склад/ОтчетыПартий.yaml": _BATCH_REPORTS_YAML_RU,
+            "Склад/ОтчетыПартий.xbsl": _BATCH_REPORTS_XBSL_RU.format(namespace="Склад"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="code/wrong-namespace",
+        expect=CLEAN,
+        note="the same full name with the segment of the package",
+        files=_package_files(**{
+            "Склад/ОтчетыПартий.yaml": _BATCH_REPORTS_YAML_RU,
+            "Склад/ОтчетыПартий.xbsl": _BATCH_REPORTS_XBSL_RU.format(namespace="Склад::Партии"),
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="code/package-resources-missing",
+        expect=FINDING,
+        note="the current resources package read in a package that keeps no resources folder",
+        files=_package_files(**{
+            "Склад/Ресурсы/Партия.svg": "<svg/>",
+            "Склад/Партии/ЗначкиПартий.yaml": _BATCH_ICONS_YAML_RU,
+            "Склад/Партии/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
+    Seed(
+        rule="code/package-resources-missing",
+        expect=CLEAN,
+        note="the same module once the package keeps a resources folder of its own",
+        files=_package_files(**{
+            "Склад/Партии/Ресурсы/Партия.svg": "<svg/>",
+            "Склад/Партии/ЗначкиПартий.yaml": _BATCH_ICONS_YAML_RU,
+            "Склад/Партии/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
+        }),
+        tokens=_PACKAGE_TOKENS,
+    ),
 ]
 
 
 def _lint(root: Path, rule: str) -> list:
-    paths = engine.find_sources(root, "*.xbsl") + engine.find_sources(root, "*.yaml")
+    # The query of a virtual table is a source of its own: the CLI collects it, so do the seeds.
+    paths = (engine.find_sources(root, "*.xbsl") + engine.find_sources(root, "*.yaml")
+             + engine.find_sources(root, "*.xbql"))
     return [d for d in engine.run(paths, select={rule}) if d.rule_id == rule]
 
 
