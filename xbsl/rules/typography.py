@@ -15,6 +15,11 @@ One more rule of the group reads yaml rather than code - typography/yo-in-text, 
 "ё" in the text a user reads (labels and the dictionary of localized strings). Its own
 section comment stands next to it, at the end of this module.
 
+Two rules judge the comments alone, an element description included: typography/non-keyboard
+(an arrow, a comparison or a multiplication sign that is not on the keyboard) and
+typography/en-dash-comment (the en dash, for a project that writes a hyphen in its code
+comments). Their section comment explains the choice of characters.
+
 THE RESOURCE FILES ARE JUDGED THE SAME WAY. A subsystem ships its `.css`, `.js`, `.svg` and
 `.html` to the browser untouched, so the prose there reaches the reader as surely as the
 prose of a module, and until now nobody looked at it (decided on 12.09.2026:
@@ -39,6 +44,7 @@ from xbsl import i18n, restext, uischema
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap, tokens
+from xbsl.rules import _comments
 from xbsl.rules.localization import _all_section_names
 from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _mapping_nodes
 
@@ -105,6 +111,39 @@ MESSAGES = {
               "смысл ('все' – не то же самое), поэтому замену делать вручную.",
         "en": "The letter 'ё' in text the user reads – '{word}': here it carries the meaning "
               "('все' is a different word), so the replacement is a manual decision.",
+    },
+    "typography/non-keyboard.title": {
+        "ru": "Знак не с клавиатуры в комментарии",
+        "en": "A character off the keyboard in a comment",
+    },
+    "typography/non-keyboard.found": {
+        "ru": "Знак '{char}' (U+{code}) в комментарии – его нет на клавиатуре, пишется "
+              "'{replacement}'.",
+        "en": "The character '{char}' (U+{code}) in a comment – it is not on the keyboard, "
+              "write '{replacement}'.",
+    },
+    "typography/non-keyboard.word": {
+        "ru": "Знак '{char}' (U+{code}) в комментарии – его нет на клавиатуре, пишется словом "
+              "('вверх', 'вниз').",
+        "en": "The character '{char}' (U+{code}) in a comment – it is not on the keyboard, "
+              "write the word ('up', 'down').",
+    },
+    "typography/en-dash-comment.title": {
+        "ru": "Среднее тире в комментарии",
+        "en": "En dash in a comment",
+    },
+    "typography/en-dash-comment.found": {
+        "ru": "Среднее тире U+2013 в комментарии – в комментариях кода пишется дефис '-'.",
+        "en": "En dash U+2013 in a comment – a code comment uses the hyphen '-'.",
+    },
+    "typography/en-dash-comment.off": {
+        "ru": "соглашение ПРОЕКТА, а не платформы: одна команда пишет в комментариях кода "
+              "только дефис, другая – среднее тире, и typography/em-dash называет его верным "
+              "знаком прозы. Проект включает правило в своём CI (--enable typography/en-dash-comment)",
+        "en": "a PROJECT convention rather than a platform one: one team writes only the hyphen "
+              "in code comments, another writes the en dash, which typography/em-dash names the "
+              "right character of prose. A project turns the rule on in its CI "
+              "(--enable typography/en-dash-comment)",
     },
 }
 i18n.register(MESSAGES)
@@ -235,6 +274,108 @@ def guillemets_in_comment(source: SourceFile) -> Iterable[Diagnostic]:
             source.rel, line, col, "typography/guillemets-comment", Severity.INFO,
             i18n.t("typography/guillemets-comment.found", code=f"{ord(ch):04X}"),
             fix=TextEdit(offset, offset + 1, _STRAIGHT[ch]),  # «» → straight " in a comment
+        )
+
+
+# --- characters off the keyboard, in a comment ----------------------------------------------
+#
+# An arrow, a comparison sign or a multiplication sign is not on the keyboard: a reader
+# cannot type it into a search, and the next author writes `->` next to it, so one idea gets
+# two spellings in the same tree. Each of them has a spelling from the keyboard, and the fix
+# writes it. The two vertical arrows are the exception: nothing from the keyboard stands for
+# them, so the finding asks for the word and carries no fix.
+#
+# Comments alone - of a module, of an element description, of a resource file. A string
+# literal keeps its characters: a label may well show an arrow. A currency sign in a comment
+# is data ("подпись у суммы: ₽") and is not judged either. The two rules of this section
+# read the comments through `_comments.lines` - the one walk shared with the `comment/`
+# group - so they judge the comments of an element description as well; the rules above
+# read a module and a resource file.
+
+#: Character -> its spelling from the keyboard. `<>` is the inequality of the language.
+_NON_KEYBOARD = {
+    "→": "->", "←": "<-", "↔": "<->", "⇒": "=>", "⇐": "<=", "⇔": "<=>",
+    "≥": ">=", "≤": "<=", "≠": "<>", "×": "x", "≈": "~", "±": "+-",
+}
+#: Characters with no spelling from the keyboard: the finding asks for the word.
+_NON_KEYBOARD_WORD = "↑↓"
+_NON_KEYBOARD_ALL = "".join(_NON_KEYBOARD) + _NON_KEYBOARD_WORD
+_EN_DASH = "–"  # U+2013
+
+
+def _comment_chars(source: SourceFile, chars: str):
+    """(char, line, column, offset) of every listed character in a comment of the file."""
+    text = source.text
+    if not any(ch in text for ch in chars):
+        return
+    for cl in _comments.lines(source):
+        for index, ch in enumerate(cl.text):
+            if ch in chars:
+                yield ch, cl.line, cl.column + index, cl.offset + index
+
+
+@rule("typography/non-keyboard", "typography/non-keyboard.title", "B", severity=Severity.WARNING)
+def non_keyboard(source: SourceFile) -> Iterable[Diagnostic]:
+    """An arrow, a comparison or a multiplication sign in a comment; the fix spells it.
+
+    The characters and what the fix writes instead:
+
+        →  ->     ←  <-     ↔  <->    ⇒  =>     ⇐  <=     ⇔  <=>
+        ≥  >=     ≤  <=     ≠  <>     ×  x      ≈  ~      ±  +-
+        ↑  ↓      no fix: the finding asks for the word
+
+    `<>` is how the language writes the inequality. The letter "ё", the em dash and the
+    en dash have rules of their own (`typography/yo-in-text`, `typography/em-dash`,
+    `typography/en-dash-comment`) and are not judged here.
+    """
+    text = source.text
+    for ch, line, col, offset in _comment_chars(source, _NON_KEYBOARD_ALL):
+        code = f"{ord(ch):04X}"
+        replacement = _NON_KEYBOARD.get(ch)
+        if replacement is None:
+            yield Diagnostic(
+                source.rel, line, col, "typography/non-keyboard", Severity.WARNING,
+                i18n.t("typography/non-keyboard.word", char=ch, code=code),
+            )
+            continue
+        yield Diagnostic(
+            source.rel, line, col, "typography/non-keyboard", Severity.WARNING,
+            i18n.t("typography/non-keyboard.found", char=ch, code=code, replacement=replacement),
+            fix=TextEdit(offset, offset + 1, _spaced(text, offset, replacement)),
+        )
+
+
+def _spaced(text: str, offset: int, replacement: str) -> str:
+    """The replacement of the character at `offset`, kept apart from a letter next to it.
+
+    Only the multiplication sign needs it: its replacement is itself a letter, and
+    "строка×столбец" written as "строкаxстолбец" reads as one word. Between digits
+    ("2×3") nothing is added.
+    """
+    if replacement != "x":
+        return replacement
+    left = " " if offset > 0 and text[offset - 1].isalpha() else ""
+    right = " " if offset + 1 < len(text) and text[offset + 1].isalpha() else ""
+    return f"{left}{replacement}{right}"
+
+
+@rule(
+    "typography/en-dash-comment", "typography/en-dash-comment.title", "B",
+    severity=Severity.INFO, enabled_by_default=False,
+    off_reason="typography/en-dash-comment.off",
+)
+def en_dash_in_comment(source: SourceFile) -> Iterable[Diagnostic]:
+    """The en dash in a comment, for a project that writes the hyphen there.
+
+    Off by default: `typography/em-dash` names the en dash as the right character of prose,
+    and which of the two a code comment follows is the choice of a project. The fix writes
+    the hyphen.
+    """
+    for _ch, line, col, offset in _comment_chars(source, _EN_DASH):
+        yield Diagnostic(
+            source.rel, line, col, "typography/en-dash-comment", Severity.INFO,
+            i18n.t("typography/en-dash-comment.found"),
+            fix=TextEdit(offset, offset + 1, "-"),  # en dash → hyphen
         )
 
 
