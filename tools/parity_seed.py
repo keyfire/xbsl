@@ -1443,6 +1443,19 @@ _DUPLICATE_BODY_RU = (
 )
 _DUPLICATE_TOKENS = {"Первый": "First", "Второй": "Second", "Собрать": "Assemble",
                      "А": "A", "Б": "B", "В": "C", "Г": "D"}
+# `{head}` is the name of the use variable with its `=`, or nothing for the unnamed form.
+_UNUSED_USE_RU = (
+    "метод Обновить()\n"
+    "    исп {head}КонтекстДоступа.Привилегированный()\n"
+    "    Записать()\n;\n"
+)
+_UNUSED_USE_TOKENS = {"Работа": "Work", "Обновить": "Refresh", "Привилегии": "Privileges",
+                      "Записать": "Store"}
+_TYPE_NAMED_LOCAL_RU = (
+    "метод Подпись(): Строка\n"
+    "    знч Надпись = \"метка\"\n"
+    "    возврат \"%{Надпись.Длина()}\"\n;\n"
+)
 _DESCRIPTOR_RU = (
     "Ид: 1d1f5c60-0000-4000-8000-000000000f49\n"
     "Поставщик: Acme\nИмя: Проба\nВерсия: {version}\n{presentation}"
@@ -4412,6 +4425,32 @@ SEEDS: list[Seed] = [
         note="the same method as a handler the platform calls itself",
         files={"Работа.xbsl": "@Обработчик\nметод Лишний()\n;\n"},
         tokens={"Работа": "Work", "Лишний": "Spare"},
+    ),
+    Seed(
+        rule="code/unused-local",
+        expect=FINDING,
+        note="a use-resource variable the method never reads",
+        files={"Работа.xbsl": _UNUSED_USE_RU.format(head="Привилегии = ")},
+        tokens=_UNUSED_USE_TOKENS,
+    ),
+    Seed(
+        rule="code/unused-local",
+        expect=CLEAN,
+        note="the same resource held by an unnamed use statement",
+        files={"Работа.xbsl": _UNUSED_USE_RU.format(head="")},
+        tokens=_UNUSED_USE_TOKENS,
+    ),
+    Seed(
+        rule="code/unused-local",
+        expect=CLEAN,
+        note="a local named like a platform type, read only inside a string interpolation",
+        files={"Работа.xbsl": _TYPE_NAMED_LOCAL_RU},
+        tokens={"Работа": "Work", "Подпись": "Caption", "Надпись": "Inscription"},
+        known="the translator gives a name inside a string interpolation the platform pair "
+              "before the project dictionary: the declaration takes the dictionary name "
+              "(Inscription), the read inside the interpolation becomes the platform type "
+              "(Label), and the English read resolves to nothing - the English snapshot of a "
+              "real project carries the same dead read",
     ),
     Seed(
         rule="code/duplicate-method-body",
