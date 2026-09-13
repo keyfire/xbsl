@@ -535,3 +535,246 @@ def test_an_explicit_baseline_outranks_the_job(tmp_path, monkeypatch):
         assert lsp.STATE.baseline_arg == "mine"
     finally:
         undo()
+
+
+# --- the translation dictionary next to a narrowed source root ----------------------------------
+
+_DICTIONARY_ENTRIES = (
+    "version: 1\n"
+    "language: en\n"
+    "\n"
+    "tokens:\n"
+    "    Задачи: Tasks\n"
+    "phrases:\n"
+    '    "задача закрывается только вручную.": "a task onlies closes by hand."\n'
+)
+
+#: An element description with a key given twice: `yaml/duplicate-key` needs no Element data,
+#: so it shows whether a document was judged at all in a clone without the data.
+_REPEATED_KEY = "ВидЭлемента: Справочник\nИмя: Склады\nИмя: Партии\n"
+
+_JUDGED_BY = {"translation/english-shape", "yaml/duplicate-key"}
+
+
+def _repository(tmp_path):
+    """A project directory with the dictionary next to it - the way a repository keeps both."""
+    root = tmp_path / "проект"
+    root.mkdir()
+    (root / "Задачи.yaml").write_text("ВидЭлемента: Справочник\nИмя: Задачи\n", encoding="utf-8")
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    entries = folder / "010-entries.yaml"
+    entries.write_text(_DICTIONARY_ENTRIES, encoding="utf-8")
+    return root, entries
+
+
+class _RightAway:
+    """A timer or a thread that runs its function on `start()`: the debounce made synchronous."""
+
+    def __init__(self, *args, target=None, **kwargs):
+        self.function = target if target is not None else args[1]
+        self.daemon = kwargs.get("daemon", False)
+
+    def start(self):
+        self.function()
+
+    def cancel(self):
+        pass
+
+
+@pytest.fixture
+def editor(tmp_path, monkeypatch):
+    """A server over tmp_path driven the way the editor drives it, with its publications kept.
+
+    `open` and `save` send the document notifications, `relint` asks for a whole-project pass,
+    and `published` holds the rule ids each file got last, by the file's canonical key. The
+    debounce runs synchronously, and the state singleton is given back as it was found.
+    """
+    pytest.importorskip("pygls", reason="the LSP handlers need the [lsp] extra")
+    import threading
+    from pathlib import Path
+    from types import SimpleNamespace
+
+    from pygls import uris
+    from pygls.workspace import Workspace
+
+    saved = dict(vars(lsp.STATE))
+    lsp.STATE.__init__()
+    lsp.STATE.select = set(_JUDGED_BY)
+    monkeypatch.setattr(lsp, "threading", SimpleNamespace(
+        Timer=_RightAway, Thread=_RightAway, Lock=threading.Lock,
+    ))
+    server = lsp._make_server()
+    server.lsp._workspace = Workspace(uris.from_fs_path(str(tmp_path)))
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+
+    def key(path):
+        return lsp._doc_key(Path(path), "")
+
+    published: dict[str, list[str]] = {}
+
+    def publish(uri, diagnostics=None, *args, **kwargs):
+        published[key(uris.to_fs_path(uri))] = sorted({d.code for d in diagnostics or []})
+
+    monkeypatch.setattr(server, "publish_diagnostics", publish)
+    monkeypatch.setattr(server, "show_message_log", lambda *args, **kwargs: None)
+
+    def notify(feature, path):
+        document = SimpleNamespace(uri=uris.from_fs_path(str(path)))
+        features[feature](SimpleNamespace(text_document=document))
+
+    def open_document(path):
+        server.workspace.put_text_document(lsp.lsp.TextDocumentItem(
+            uri=uris.from_fs_path(str(path)), language_id="yaml", version=1,
+            text=path.read_text(encoding="utf-8"),
+        ))
+        notify(lsp.lsp.TEXT_DOCUMENT_DID_OPEN, path)
+
+    def narrow(root):
+        # what `--project-root` leaves behind once the workspace folder is known
+        lsp.STATE.root = root
+        lsp.STATE.project_root_arg = root.name
+
+    try:
+        yield SimpleNamespace(
+            key=key, published=published, narrow=narrow, open=open_document,
+            save=lambda path: notify(lsp.lsp.TEXT_DOCUMENT_DID_SAVE, path),
+            relint=lambda: features["xbsl/relint"](None),
+        )
+    finally:
+        vars(lsp.STATE).clear()
+        vars(lsp.STATE).update(saved)
+
+
+def test_dictionary_sources_read_the_dictionary_next_to_the_root(tmp_path):
+    """The dictionary sits next to the project, so a root narrowed to the project leaves it out."""
+    root, entries = _repository(tmp_path)
+    (entries.parent / "склады").mkdir()
+    nested = entries.parent / "склады" / "020-entries.yaml"
+    nested.write_text(_DICTIONARY_ENTRIES, encoding="utf-8")
+
+    assert lsp.dictionary_sources(root) == [entries, nested]
+    assert not {entries, nested} & set(lsp.project_sources(root))
+
+
+def test_a_single_file_dictionary_above_the_root_is_one_source(tmp_path):
+    root = tmp_path / "исходники" / "проект"
+    root.mkdir(parents=True)
+    single = tmp_path / "xbsl-translation.yaml"
+    single.write_text(_DICTIONARY_ENTRIES, encoding="utf-8")
+
+    assert lsp.dictionary_sources(root) == [single]
+
+
+def test_a_dictionary_inside_the_root_is_left_to_the_project_sources(tmp_path):
+    """Without a narrowed root the dictionary is already a part of the pass: read once, not twice."""
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir()
+    (folder / "010-entries.yaml").write_text(_DICTIONARY_ENTRIES, encoding="utf-8")
+
+    assert lsp.dictionary_sources(tmp_path) == []
+    assert folder / "010-entries.yaml" in lsp.project_sources(tmp_path)
+
+
+def test_an_open_dictionary_file_outside_the_root_gets_its_findings(tmp_path, editor):
+    root, entries = _repository(tmp_path)
+    editor.narrow(root)
+
+    editor.open(entries)
+
+    assert editor.published[editor.key(entries)] == ["translation/english-shape"]
+
+
+def test_saving_keeps_the_findings_of_the_dictionary_file(tmp_path, editor):
+    """The pass that runs on save published an empty list over every document it had not read.
+
+    An open dictionary file got its findings on open and on every keystroke, and lost them to
+    the next save of any file - its own included.
+    """
+    root, entries = _repository(tmp_path)
+    editor.narrow(root)
+    editor.open(entries)
+
+    editor.save(entries)
+
+    assert editor.published[editor.key(entries)] == ["translation/english-shape"]
+
+
+def test_the_whole_project_pass_reports_the_dictionary_without_opening_it(tmp_path, editor):
+    """The pass reads what a lint run over the repository reads: the project and its dictionary."""
+    root, entries = _repository(tmp_path)
+    editor.narrow(root)
+
+    editor.relint()
+
+    assert editor.published.get(editor.key(entries)) == ["translation/english-shape"]
+
+
+@pytest.mark.needs_data  # the rule tokenizes the module
+def test_the_dictionary_leaves_the_unused_methods_of_the_project_audible(tmp_path, editor):
+    """The project rules of the pass read the project alone.
+
+    `code/unused-method` counts every word of every source as a mention, and a dictionary names
+    every method of the project. Handed to the project rules, the dictionary would silence the
+    rule, the way a lint run over the repository does.
+    """
+    root, entries = _repository(tmp_path)
+    (root / "Склады.yaml").write_text(
+        "ВидЭлемента: ОбщийМодуль\nИд: 8a2d6b41-0c93-47e5-bf18-25d7c3a90e64\nИмя: Склады\n"
+        "ОбластьВидимости: ВПроекте\n", encoding="utf-8")
+    module = root / "Склады.xbsl"
+    module.write_text("@НаСервере\nметод ПересчитатьОстатки()\n    возврат\n;\n", encoding="utf-8")
+    (entries.parent / "020-methods.yaml").write_text(
+        "version: 1\nlanguage: en\n\ntokens:\n    Склады: Warehouses\n"
+        "    ПересчитатьОстатки: RecalculateStock\n", encoding="utf-8")
+    lsp.STATE.select = {"code/unused-method", "translation/english-shape"}
+    editor.narrow(root)
+
+    editor.relint()
+
+    assert editor.published.get(editor.key(module)) == ["code/unused-method"]
+    assert editor.published.get(editor.key(entries)) == ["translation/english-shape"]
+
+
+def test_an_ordinary_yaml_outside_a_narrowed_root_is_not_judged(tmp_path, editor):
+    root, _entries = _repository(tmp_path)
+    stray = tmp_path / "Склады.yaml"
+    stray.write_text(_REPEATED_KEY, encoding="utf-8")
+    inside = root / "Склады.yaml"
+    inside.write_text(_REPEATED_KEY, encoding="utf-8")
+    editor.narrow(root)
+
+    editor.open(stray)
+    editor.open(inside)
+
+    assert editor.key(stray) not in editor.published
+    # control: the same text under the root is judged, so the silence above is the scope
+    assert editor.published[editor.key(inside)] == ["yaml/duplicate-key"]
+
+
+def test_without_a_narrowed_root_a_yaml_outside_the_folder_is_still_judged(tmp_path, editor):
+    """Only `--project-root` draws the line: the workspace folder is a default, not a boundary."""
+    folder = tmp_path / "папка"
+    folder.mkdir()
+    stray = tmp_path / "Склады.yaml"
+    stray.write_text(_REPEATED_KEY, encoding="utf-8")
+    lsp.STATE.root = folder
+
+    editor.open(stray)
+
+    assert editor.published[editor.key(stray)] == ["yaml/duplicate-key"]
+
+
+def test_the_editor_hands_over_the_dictionary_by_the_names_the_engine_discovers():
+    """The extension selects the dictionary files by glob, the engine finds the dictionary by
+    name: a second spelling of that name on the TypeScript side must not drift from the first."""
+    from pathlib import Path
+
+    from xbsl.translation import dictionary
+
+    extension = Path(__file__).resolve().parent.parent / "editors" / "vscode"
+    text = (extension / "src" / "lspDocumentsCore.ts").read_text(encoding="utf-8")
+
+    assert f'"**/{dictionary.DICTIONARY_DIR}/**/*.yaml"' in text
+    assert f'"**/{dictionary.DICTIONARY_FILE}"' in text
