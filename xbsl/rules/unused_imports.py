@@ -13,8 +13,8 @@ The earlier reading took every identifier of the module and kept an import alive
 spelled an element of the namespace. It never reported a single one of the imports the editor
 reports on a real project with packages: the word that kept them alive was the import line itself
 (`импорт Б` next to `импорт Б::П`, with an element named like its subsystem), a member after a dot
-(`Запрос.Параметры`), a field declaration, a property of the paired yaml, a named argument, a
-column of a query - none of which the compiler resolves as the element.
+(`Order.Goods`), a field declaration, a property of the paired yaml, a named argument, a column of
+a query - none of which the compiler resolves as the element.
 
 What the binder looks up, read off the compiler and checked against the editor's answer on several
 projects (the name of each mechanism is what the tests and the notes call it):
@@ -39,13 +39,15 @@ projects (the name of each mechanism is what the tests and the notes call it):
   the package of the module nor the root of its subsystem has one: then that namespace is used. A
   qualified key (`Ресурс{Б::ключ}`) marks nothing.
 - DECLARED TYPES - the types a value brings along without being written in the module: the type
-  of a property of the paired yaml the code names (a component under `Компоненты.` included), the
-  base type of the element, the result of a method or the type of a field of another element
-  reached through a static chain (`Модуль.Метод()`), the fields of the structures those types are,
-  and the attributes of an element whose derived type (`Элемент.Ссылка`) they are. A declared type
-  is followed only through the members the module names after a dot, and every root it holds is
-  marked. That over-reads on purpose: a declared type the code merely passes along is taken as
-  touched, which keeps an import at worst.
+  of a property the code names - of the paired yaml, a component under `Components.` included, or
+  of a base component of the project -, the base type of the element, the result of a method or
+  the type of a field of another element reached through a static chain (`Module.Method()`), what
+  a member the platform gives a manager returns (a derived type of the element), the fields of the
+  structures those types are, the attributes of an element whose derived type
+  (`Element.Reference`) they are, and a query column that passes a field of its table on as it is.
+  A declared type is followed only through the members the module names after a dot, and every
+  root it holds is marked. That over-reads on purpose: a declared type the code merely passes
+  along is taken as touched, which keeps an import at worst.
 
 The paired yaml is NOT a use in itself: its `Импорт:` section covers its own type positions, and
 an import of the element does not reach its modules (docs, "Модульная разработка"). The yaml has
