@@ -15,6 +15,7 @@ import {
   parentPath,
   ResourceFolder,
   resourceFolderTree,
+  resourceCodicon,
   resourcePathOf,
 } from "../src/resourceFoldersCore";
 
@@ -180,6 +181,22 @@ const file = (key: string) => ({ key, filePath: `${DIR}\\${key.split("/").join("
   assert.ok(!isFolderName("   "));
   assert.ok(!isFolderName("Значки/Темные"));
   assert.ok(!isFolderName("Значки\\Темные"));
+}
+
+// Without a file icon theme a resource file still tells its type by a codicon; the ids "file" and
+// "folder" never come back - the tree would hand them to the missing theme and draw nothing.
+{
+  assert.strictEqual(resourceCodicon("Значки/Логотип.SVG"), "file-media");
+  assert.strictEqual(resourceCodicon("Обложка.png"), "file-media");
+  assert.strictEqual(resourceCodicon("Вставки/api-absolute.js"), "file-code");
+  assert.strictEqual(resourceCodicon("Вставки/reset.css"), "symbol-color");
+  assert.strictEqual(resourceCodicon("Шрифты/Roboto.woff2"), "text-size");
+  assert.strictEqual(resourceCodicon("Тексты/Оферта.txt"), "symbol-file");
+  assert.strictEqual(resourceCodicon("README"), "symbol-file");
+  assert.strictEqual(resourceCodicon(".hidden"), "symbol-file");
+  for (const key of ["a.svg", "a.js", "a.css", "a.txt", "a", "a.xyz"]) {
+    assert.ok(!["file", "folder"].includes(resourceCodicon(key)), key);
+  }
 }
 
 console.log("resourcesCore: ok");

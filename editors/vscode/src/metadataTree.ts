@@ -71,6 +71,7 @@ import {
   isMovableResource,
   lastSegment,
   ResourceFolder,
+  resourceCodicon,
   resourceFolderTree,
   ResourceRef,
   resourcePathOf,
@@ -1013,8 +1014,10 @@ function categoryNode(group: string, icon: string, children: XbslNode[], createK
 // the addressing. The description of the resources stays where it is and is not movable.
 function resourceFileNode(file: ResourceFile, dir: string): XbslNode {
   const node = new XbslNode(lastSegment(file.key), vscode.TreeItemCollapsibleState.None);
-  node.iconPath = neutralIcon("file-media");
-  node.resourceUri = vscode.Uri.file(file.filePath); // git statuses; the icon stays ours
+  // The type of the file is told apart by its icon: with a file icon theme the tree draws it from
+  // the resourceUri, as the Explorer does; without one a codicon by the extension stands in.
+  node.iconPath = fileIconThemeActive() ? vscode.ThemeIcon.File : neutralIcon(resourceCodicon(file.key));
+  node.resourceUri = vscode.Uri.file(file.filePath); // git statuses and the file type icon
   node.tooltip = `Ресурс{${file.key}}`;
   node.resource = { dir, path: file.key, folder: false };
   node.contextValue = isMovableResource(node.resource) ? "xbslResource movableres" : "xbslResource";
@@ -1027,11 +1030,19 @@ function resourceFileNode(file: ResourceFile, dir: string): XbslNode {
   return node;
 }
 
+// Whether the workbench has a file icon theme: without one ThemeIcon.File draws nothing.
+function fileIconThemeActive(): boolean {
+  return !!vscode.workspace.getConfiguration("workbench").get<string | null>("iconTheme");
+}
+
 // A folder inside a Resources folder: its folders, then its files; the number of files under it
 // in the description, the way a package counts its objects.
 function resourceFolderNode(folder: ResourceFolder, dir: string): XbslNode {
   const node = new XbslNode(folder.name, vscode.TreeItemCollapsibleState.Collapsed);
-  node.iconPath = neutralIcon("folder");
+  // "symbol-folder" draws the same codicon as "folder". The id "folder" itself is ThemeIcon.Folder:
+  // with a resourceUri the tree hands it to the file icon theme, and a theme without folder icons
+  // (Seti) leaves the row blank.
+  node.iconPath = neutralIcon("symbol-folder");
   node.description = String(folder.count);
   node.resource = { dir, path: folder.path, folder: true };
   node.resourceUri = vscode.Uri.file(resourcePathOf(node.resource)); // git statuses of the folder
@@ -1051,7 +1062,7 @@ function resourceChildren(folder: ResourceFolder, dir: string): XbslNode[] {
 // The folder that owns a Resources dir - a subsystem or the project root.
 function resourceScopeNode(scope: ResourceScope): XbslNode {
   const node = new XbslNode(scope.scope, vscode.TreeItemCollapsibleState.Collapsed);
-  node.iconPath = neutralIcon("symbol-namespace");
+  node.iconPath = neutralIcon("symbol-folder"); // the Resources folder of that subsystem
   node.description = String(scope.files.length);
   node.resource = { dir: scope.dir, path: "", folder: true };
   node.contextValue = "xbslResourceScope addresfolder";
@@ -1717,6 +1728,11 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     if (structural) {
       this.formEmitter.fire();
     }
+  }
+
+  // The same files drawn anew without reading them: the file icon theme changed.
+  repaint(): void {
+    this.redraw();
   }
 
   // Another picture of the same files: a filter, the grouping, a toggle, the placement arriving.
@@ -3058,6 +3074,14 @@ export function registerMetadataTree(
 } {
   const provider = new XbslMetadataProvider(projectRootFor, context.workspaceState);
   provider.syncFilterContext();
+  // Resource files draw their type from the file icon theme, or from a codicon without one.
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration((e) => {
+      if (e.affectsConfiguration("workbench.iconTheme")) {
+        provider.repaint();
+      }
+    })
+  );
   sessionProvider = provider; // the panels ask the project language through it
   panelColumnFn = panelColumnFor; // where a form's own designer panel sits, when one is open
   const view = vscode.window.createTreeView("xbslMetadata", {

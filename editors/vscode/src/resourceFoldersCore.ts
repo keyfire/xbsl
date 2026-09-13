@@ -75,6 +75,34 @@ export function lastSegment(resourcePath: string): string {
 }
 
 // A path under a folder: `Styles` + `Dark` -> `Styles/Dark`, the resources folder + `Dark` -> `Dark`.
+// The codicon of a resource file by its extension - what the tree shows when no file icon theme is
+// set (with one, the theme draws the type from the file itself, the way the Explorer does). The ids
+// "file" and "folder" are left out on purpose: those two are ThemeIcon.File and ThemeIcon.Folder,
+// and the tree hands them back to the very theme that is missing.
+const RESOURCE_CODICONS: ReadonlyArray<readonly [extensions: readonly string[], codicon: string]> = [
+  [["svg", "png", "jpg", "jpeg", "gif", "webp", "ico", "bmp", "avif"], "file-media"],
+  [["js", "mjs", "cjs", "ts"], "file-code"],
+  [["css", "scss", "less"], "symbol-color"],
+  [["html", "htm", "xml", "xsd", "wsdl"], "code"],
+  [["json"], "json"],
+  [["md"], "markdown"],
+  [["woff", "woff2", "ttf", "otf", "eot"], "text-size"],
+  [["pdf"], "file-pdf"],
+  [["zip", "gz", "7z"], "file-zip"],
+];
+
+export function resourceCodicon(key: string): string {
+  const name = lastSegment(key);
+  const dot = name.lastIndexOf(".");
+  const extension = dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
+  for (const [extensions, codicon] of RESOURCE_CODICONS) {
+    if (extensions.includes(extension)) {
+      return codicon;
+    }
+  }
+  return "symbol-file";
+}
+
 export function childPath(folderPath: string, name: string): string {
   return folderPath ? `${folderPath}/${name}` : name;
 }
