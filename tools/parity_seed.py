@@ -4893,6 +4893,41 @@ SEEDS: list[Seed] = [
         }),
         tokens=_PARTIAL_TOKENS,
     ),
+    Seed(
+        rule="style/shadow-own-property",
+        expect=FINDING,
+        note="a local variable named like a property the object form inherits hides it "
+             "in either spelling of the property",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": "метод Проба()\n    знч Заголовок = 1\n;\n",
+        },
+        tokens={**_FORM_TOKENS, "Проба": "Probe", "Заголовок": "Title"},
+    ),
+    Seed(
+        rule="style/shadow-own-property",
+        expect=CLEAN,
+        note="a loop variable of that name is a declaration of another kind - the compiler "
+             "does not ask about it",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "ФормаЗаявки.yaml": _FORM_RU,
+            "ФормаЗаявки.xbsl": "метод Проба()\n    для Заголовок из [1, 2]\n    ;\n;\n",
+        },
+        tokens={**_FORM_TOKENS, "Проба": "Probe", "Заголовок": "Title"},
+    ),
+    Seed(
+        rule="style/shadow-own-property",
+        expect=FINDING,
+        note="the object module holds the record: an attribute and the reference are hidden, "
+             "and the English tree names the module Object",
+        files={
+            "Заявки.yaml": _CATALOG_RU + "Реквизиты:\n    -\n        Имя: Срок\n        Тип: Дата\n",
+            "Заявки.Объект.xbsl": "метод Проба()\n    знч Срок = 1\n    знч Ссылка = 2\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Срок": "Deadline", "Проба": "Probe"},
+    ),
 ]
 
 

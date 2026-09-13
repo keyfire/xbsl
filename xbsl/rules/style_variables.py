@@ -5,7 +5,9 @@ development standards) goes beyond the code-style conventions of style_naming:
 names must be concrete, unabbreviated and free of type words, boolean names come
 from the affirmative, constant names must not spell their value, and a variable
 must not shadow another project element's name. The rules here are the enforceable
-subset; every rule narrows itself to what tokens can prove.
+subset; every rule narrows itself to what tokens can prove. The one exception is
+style/shadow-own-property: it repeats a check of the platform compiler, so it reads the
+parsed module and the type catalog the way the compiler reads its meta objects.
 
 Deliberately NOT checked (tokens cannot tell a violation from a forced form):
 
@@ -28,17 +30,19 @@ Structure bodies are skipped throughout: field names are a serialization contrac
 
 from __future__ import annotations
 
+import dataclasses
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from functools import lru_cache
 
-from xbsl import i18n
+from xbsl import dataset, i18n, metamodel, terms, uischema
+from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import Token
+from xbsl.lexer import Token, linemap
 from xbsl.rules._syntax import code_tokens, declarations, signatures, type_expr
 from xbsl.rules.style_naming import _structure_ranges
 from xbsl.rules.environment import _pair_stem
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, value_of
 
 MESSAGES = {
@@ -108,16 +112,32 @@ MESSAGES = {
               "name the constant abstractly: TIMEOUT, not TIMEOUT_ONE_MINUTE.",
     },
     "style/shadow-own-property.title": {
-        "ru": "Переменная закрывает свойство своего элемента",
-        "en": "A variable shadows a property of its own element",
+        "ru": "Локальная переменная скрывает свойство объекта",
+        "en": "A local variable hides a property of the object",
     },
     "style/shadow-own-property.found": {
-        "ru": "Переменная '{name}' совпадает со свойством '{name}' этого же элемента "
-              "({kind}) – в теле метода имя разрешается в переменную, и присваивание "
-              "уходит не в свойство. Назовите переменную иначе.",
-        "en": "The variable '{name}' coincides with a property of the same element "
-              "({kind}) – inside the method body the name resolves to the variable, so an "
-              "assignment does not reach the property. Pick another name.",
+        "ru": "Локальная переменная '{name}' скрывает одноименное свойство {owner} – в теле "
+              "метода имя разрешается в переменную, и ни чтение, ни присваивание до свойства "
+              "не доходят. Назовите переменную иначе.",
+        "en": "The local variable '{name}' hides the same-named property {owner} – inside "
+              "the method the name resolves to the variable, so neither a read nor an "
+              "assignment reaches the property. Pick another name.",
+    },
+    "style/shadow-own-property.owner-component": {
+        "ru": "компонента {name}",
+        "en": "of the component {name}",
+    },
+    "style/shadow-own-property.owner-inherited": {
+        "ru": "типа {base}, от которого наследует компонент {name}",
+        "en": "of the type {base} that the component {name} inherits",
+    },
+    "style/shadow-own-property.owner-object": {
+        "ru": "объекта {name}",
+        "en": "of the object {name}",
+    },
+    "style/shadow-own-property.owner-structure": {
+        "ru": "структуры {name}",
+        "en": "of the structure {name}",
     },
     "style/shadow-project-name.title": {
         "ru": "Имя закрывает элемент проекта",
@@ -435,56 +455,306 @@ def shadow_project_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
 
 
 # --- style/shadow-own-property ------------------------------------------------------------
+#
+# The compiler of the platform warns in the IDE about a local variable that hides a property
+# of the object the method works on. The check is a question asked of every `знч`/`пер`/`исп`
+# statement: does the meta object of the type that owns the method carry a property of that
+# name? The name is compared letter for letter with either spelling of the property; a static
+# method has no instance to hide a property of and is never asked.
 
-#: Sections of the paired yaml whose entries are visible in the module body by name.
-_PROPERTY_SECTIONS = ("Свойства", "Реквизиты", "Properties", "Attributes")
-#: The module of an object carries the record's attributes; its yaml is the object's own.
-_OBJECT_MODULE_SUFFIX = ".Объект"
+#: The modules of an element that work on one of its facets: `Х.Объект.xbsl` holds the record
+#: of `Х.yaml` and `Х.НаборЗаписей.xbsl` its record set (`X.Object.xbsl` and `X.RecordSet.xbsl`
+#: in an English tree). The element's own module pairs with the yaml by the stem alone.
+_FACET_MODULES = {
+    ".Объект": "Объект", ".Object": "Объект",
+    ".НаборЗаписей": "НаборЗаписей", ".RecordSet": "НаборЗаписей",
+}
 _INTERFACE_KIND = "КомпонентИнтерфейса"
+_STRUCTURE_KIND = "Структура"
+#: The element kinds whose object module holds the record: the attributes, the tabular sections
+#: and the properties of the object facet (the reference, the version stamp) are the owner's.
+_RECORD_KINDS = frozenset(("Справочник", "Документ", "Обработка"))
+_RECORD_SECTIONS = ("Реквизиты", "ТабличныеЧасти")
+#: The registers whose record set module works on the record set facet (its filter).
+_REGISTER_KINDS = frozenset(("РегистрСведений", "РегистрНакопления"))
+#: A scheduled job: its module works on the job, which carries the properties of the platform
+#: job type and the parameters, under the name of the yaml section even when it is empty.
+_JOB_KIND = "ЗапланированноеЗадание"
+_JOB_PARAMETERS_SECTION = "Параметры"
+#: The deletion mode of an element. By default the platform deletes by a mark, and the mark is
+#: an attribute of the object named like that mode; an element deleted at once has none.
+_DELETION_MODE = "РежимУдаления"
+#: What the compiler adds to the meta object of every project interface component on top of
+#: the declared and the inherited properties (the component constants of the distribution).
+_COMPONENT_EXTRAS = (
+    "Компоненты", "СобственнаяМодифицированность", "РассчитаннаяМодифицированность",
+)
+#: The first word of a declaration statement and the blanks after it: the name follows.
+_DECLARATION_HEAD_RE = re.compile(r"\S+\s+")
+
+
+@lru_cache(maxsize=1)
+def _server_annotations() -> frozenset[str]:
+    """Both spellings of the annotation that compiles a method on the server."""
+    return frozenset(terms.key_forms("НаСервере"))
+
+
+@lru_cache(maxsize=1)
+def _client_annotations() -> frozenset[str]:
+    """Both spellings of the annotation that compiles a method on the client."""
+    return frozenset(terms.key_forms("НаКлиенте"))
+
+
+@lru_cache(maxsize=1)
+def _component_extras() -> frozenset[str]:
+    """The properties every project component carries, in both spellings."""
+    names = set(_COMPONENT_EXTRAS)
+    names.update(english for name in _COMPONENT_EXTRAS if (english := terms.common_english(name)))
+    return frozenset(names)
+
+
+@lru_cache(maxsize=None)
+def _inherited_properties(base: str) -> frozenset[str]:
+    """The properties of a platform component type, each in both spellings; empty when unknown.
+
+    The type catalog keeps the full set of a type with its bases expanded, so `Group` answers
+    for the properties of `Component` too. An event counts as well: a handler is bound by
+    assigning it (`Button.OnClick = &Handler`), and the compiler keeps events among the
+    properties - a local `OnHover` in a group hides the event. The English spelling is taken
+    from the owner's own classes first and from the component schema after that: the compiler
+    matches either spelling, and a translated tree names the same properties in English.
+    """
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return frozenset()
+    record = (catalog.get("type_members") or {}).get(base) or {}
+    names: set[str] = set()
+    for member in (*(record.get("properties") or ()), *(record.get("events") or ())):
+        names.add(member)
+        english = terms.member_english_of(base, member) or uischema.english_property(member)
+        if english:
+            names.add(english)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=None)
+def _facet_properties(facet: str) -> frozenset[str]:
+    """The properties of an element facet (`Справочник.Объект`) in both spellings.
+
+    The type catalog lists them per facet; the English spelling is the one the facet's own class
+    of the distribution declares - `Catalog.Object` is the `CatalogObject` class there, where the
+    reference is `Reference`, while the flat dictionary calls the same word `Link`.
+    """
+    try:
+        catalog = dataset.load_json("stdlib.json")
+    except dataset.DatasetError:
+        return frozenset()
+    record = (catalog.get("facet_members") or {}).get(facet) or {}
+    owner = (terms.english(facet, "facets") or "").replace(".", "")
+    names: set[str] = set()
+    for prop in record.get("properties") or ():
+        names.add(prop)
+        english = terms.member_english_of(owner, prop) if owner else None
+        if english:
+            names.add(english)
+    return frozenset(names)
+
+
+@lru_cache(maxsize=1)
+def _job_properties() -> frozenset[str]:
+    """What a scheduled job module can hide: the job type's properties and the parameters."""
+    names = set(_inherited_properties(_JOB_KIND))
+    section = metamodel.properties(_JOB_KIND).get(_JOB_PARAMETERS_SECTION)
+    if section is not None:
+        names.add(_JOB_PARAMETERS_SECTION)
+        if section.get("en"):
+            names.add(section["en"])
+    return frozenset(names)
+
+
+def _deletion_mark(kind: str, data: dict) -> list[str]:
+    """Both spellings of the deletion mark when the element keeps one, else nothing.
+
+    The metamodel gives the mode its default; the mark is present when the element leaves the
+    default or writes it out, in either spelling of the value.
+    """
+    record = metamodel.properties(kind).get(_DELETION_MODE)
+    mark = record.get("default") if record else None
+    if not isinstance(mark, str) or not mark:
+        return []
+    spellings = [mark]
+    english = terms.common_english(mark)
+    if english:
+        spellings.append(english)
+    written = value_of(data, _DELETION_MODE, kind)
+    return spellings if written is None or written in spellings else []
+
+
+for _cache in (
+    _server_annotations, _client_annotations, _component_extras, _inherited_properties,
+    _facet_properties, _job_properties,
+):
+    dataset.register_reset(_cache.cache_clear)
+
+
+def _named_items(value) -> Iterator[tuple[str, dict]]:
+    """(name, item) of the items of a yaml list section, skipping what carries no name."""
+    if not isinstance(value, list):
+        return
+    for item in value:
+        if isinstance(item, dict):
+            name = value_of(item, "Имя")
+            if isinstance(name, str) and name:
+                yield name, item
+
+
+def _is_true(value) -> bool:
+    """A yaml flag written either way: a Russian `True` stays a string for the loader."""
+    return value is True or value in ("Истина", "True", "true")
+
+
+def _owner_fact(source: SourceFile) -> dict | None:
+    """The map phase of a yaml: the properties its modules can hide, by the kind of the owner."""
+    data, err = _parsed(source)
+    if err is not None or not isinstance(data, dict):
+        return None
+    kind = object_kind(data)
+    if not kind:
+        return None
+    name = value_of(data, "Имя", kind)
+    if not isinstance(name, str) or not name:
+        return None
+    stem = _pair_stem(source.rel)
+    if kind == _INTERFACE_KIND:
+        own: list[str] = []
+        contextual: list[str] = []
+        for prop, item in _named_items(value_of(data, "Свойства", kind)):
+            own.append(prop)
+            if _is_true(value_of(item, "Контекстное")):
+                contextual.append(prop)
+        # A declared event is a property of the component as well; it never reaches the
+        # component context, where only the contextual properties live.
+        own.extend(event for event, _item in _named_items(value_of(data, "События", kind)))
+        base = ""
+        inherits = value_of(data, "Наследует", kind)
+        written = value_of(inherits, "Тип") if isinstance(inherits, dict) else None
+        if isinstance(written, str) and written.strip():
+            base = uischema.canonical_component(written.split("<", 1)[0].strip())
+        return {"k": "component", "stem": stem, "name": name, "base": base,
+                "own": own, "contextual": contextual}
+    if kind == _STRUCTURE_KIND:
+        fields = [field for field, _item in _named_items(value_of(data, "Поля", kind))]
+        return {"k": "fields", "stem": stem, "name": name, "names": fields} if fields else None
+    if kind in _RECORD_KINDS:
+        names = [
+            entry for section in _RECORD_SECTIONS
+            for entry, _item in _named_items(value_of(data, section, kind))
+        ]
+        names.extend(_deletion_mark(kind, data))
+        return {"k": "record", "stem": stem, "name": name, "kind": kind, "names": names}
+    if kind in _REGISTER_KINDS:
+        return {"k": "register", "stem": stem, "name": name, "kind": kind}
+    if kind == _JOB_KIND:
+        return {"k": "job", "stem": stem, "name": name}
+    return None
+
+
+def _local_declarations(body: list) -> Iterator[P.VarDecl]:
+    """Every `знч`/`пер`/`исп` statement of a method body: nested blocks and lambda bodies too.
+
+    A lambda is bound inside the method that holds it, so a declaration in its body is the
+    method's own for the compiler. Loop variables, `поймать` and parameters are other nodes
+    and never reach here - the compiler does not ask about them either.
+    """
+    stack: list[object] = [body]
+    while stack:
+        node = stack.pop()
+        if isinstance(node, (list, tuple)):
+            stack.extend(node)
+        elif isinstance(node, P.Node):
+            if isinstance(node, P.VarDecl):
+                yield node
+            # Fields, not vars(): the native build compiles the AST classes without __dict__.
+            stack.extend(getattr(node, f.name) for f in dataclasses.fields(node))
+
+
+def _name_position(source: SourceFile, decl: P.VarDecl) -> tuple[int, int]:
+    """(line, col) of the declared name; the statement start when the name is not found."""
+    head = _DECLARATION_HEAD_RE.match(source.text, decl.start)
+    offset = decl.start
+    if head is not None and source.text.startswith(decl.name, head.end()):
+        offset = head.end()
+    return linemap(source).linecol(offset)
+
+
+def _method_side(method: P.Method) -> str:
+    """"server" for a method compiled on the server alone, "client" otherwise.
+
+    A method of an interface component is compiled on the client unless it is marked for
+    the server; one marked for both is compiled twice and hides the property on the client.
+    """
+    names = {annotation.name for annotation in method.annotations}
+    if names & _server_annotations() and not names & _client_annotations():
+        return "server"
+    return "client"
+
+
+def _module_fact(source: SourceFile) -> dict | None:
+    """The map phase of a module: its local declarations with the side of the method.
+
+    The declarations of a local structure are settled right here: the owner of such a
+    method is the structure, and its fields are in the same file.
+    """
+    module, errors = P.parse(source)
+    if errors:
+        return None  # a module that does not parse is not compiled either
+    decls: list[list] = []
+    local: list[list] = []
+    for member in module.members:
+        if isinstance(member, P.Method):
+            if member.is_static:
+                continue
+            side = _method_side(member)
+            for decl in _local_declarations(member.body):
+                line, col = _name_position(source, decl)
+                decls.append([decl.name, line, col, side])
+        elif isinstance(member, P.Structure):
+            fields = {field.name for field in member.members if isinstance(field, P.ObjectField)}
+            for method in member.members:
+                if not isinstance(method, P.Method) or method.is_static:
+                    continue
+                for decl in _local_declarations(method.body):
+                    if decl.name in fields:
+                        line, col = _name_position(source, decl)
+                        local.append([decl.name, line, col, member.name])
+    if not decls and not local:
+        return None
+    stem = _pair_stem(source.rel)
+    facet = ""
+    for suffix, facet_name in _FACET_MODULES.items():
+        if stem.endswith(suffix):
+            stem, facet = stem[: -len(suffix)], facet_name
+            break
+    return {"k": "code", "stem": stem, "facet": facet, "decls": decls, "local": local}
 
 
 def _own_property_mapper(source: SourceFile) -> dict | None:
-    """The map phase: a yaml contributes the property names visible in its module, a module
-    the names it declares as VARIABLES (parameters are a separate, legitimate story)."""
+    """The map phase: a yaml names the properties of its owner, a module its declarations."""
     if source.kind == "yaml":
-        if not _HAVE_YAML:
-            return None
-        data, err = _parsed(source)
-        if err is not None or not isinstance(data, dict):
-            return None
-        kind = object_kind(data)
-        if not kind:
-            return None
-        names: list[str] = []
-        for section in _PROPERTY_SECTIONS:
-            items = data.get(section)
-            if not isinstance(items, list):
-                continue
-            for item in items:
-                if isinstance(item, dict):
-                    name = value_of(item, "Имя")
-                    if isinstance(name, str) and name:
-                        names.append(name)
-        if not names:
-            return None
-        return {"k": "props", "stem": _pair_stem(source.rel), "kind": kind,
-                "names": sorted(set(names))}
-    if source.kind != "xbsl":
-        return None
-    # Only variables: a PARAMETER named after a property is the ordinary way to pass its
-    # value in, and a corpus run shows it everywhere (nine such parameters on one project,
-    # all deliberate). A local variable of that name is the undersight the platform reports.
-    names = [
-        (tok.value, tok.line, tok.col)
-        for category, tok in _variable_names(source) if category != "param"
-    ]
-    if not names:
-        return None
-    stem = _pair_stem(source.rel)
-    # `Х.Объект.xbsl` is the object's module - its properties live in `Х.yaml`.
-    if stem.endswith(_OBJECT_MODULE_SUFFIX):
-        stem = stem[: -len(_OBJECT_MODULE_SUFFIX)]
-    return {"k": "vars", "stem": stem, "names": names}
+        return _owner_fact(source) if _HAVE_YAML else None
+    if source.kind == "xbsl":
+        return _module_fact(source)
+    return None
+
+
+def _shadow(rel: str, line: int, col: int, variable: str, owner_key: str, **owner) -> Diagnostic:
+    """One finding; `owner_key` picks how the owner of the hidden property is described."""
+    return Diagnostic(
+        rel, line, col, "style/shadow-own-property", Severity.WARNING,
+        i18n.t("style/shadow-own-property.found", name=variable,
+               owner=i18n.t(f"style/shadow-own-property.{owner_key}", **owner)),
+    )
 
 
 @rule(
@@ -492,30 +762,77 @@ def _own_property_mapper(source: SourceFile) -> dict | None:
     scope="project", severity=Severity.WARNING, mapper=_own_property_mapper,
 )
 def shadow_own_property(facts: dict[str, dict]) -> Iterable[Diagnostic]:
-    """A local variable named like a property of the element the module belongs to.
+    """A local variable named like a property of the object its method works on.
 
-    Judged are the two module shapes where such a property IS in scope: the module of an
-    interface component (the form properties) and the module of an object (the record
-    attributes). A manager module of a catalog carries no record in scope at all, and a
-    corpus run proves how much that matters - 58 of the 60 name coincidences on one project
-    live there and are perfectly legal.
+    The same question the compiler asks before the IDE warns, for the owners whose property
+    sets the sources and the platform data describe:
+
+    - a module of an interface component: the declared properties and events, the properties
+      and events of the platform type it inherits (`Inherits: Type: Group` brings `Title`,
+      `Width`, `Content`, `OnHover`...) and the three the compiler adds to every component
+      (`Components` and the two modification flags). A method marked for the server alone
+      works on the component context, where only the properties declared `Contextual` exist;
+    - the object module of a catalog, a document or a processing: the attributes, the tabular
+      sections, the properties of the object facet (the reference and the version stamp) and
+      the deletion mark while the element deletes by mark;
+    - the record set module of a register: the properties of the record set facet (the filter);
+    - the module of a scheduled job: the properties of the job type and the parameters;
+    - the module of a structure element: its fields; a local structure: the fields it declares.
+
+    Not judged, each for a reason the compiler shares: static methods (no instance), loop
+    variables, `поймать` and parameters (declarations of another kind - a parameter named after
+    a property is the ordinary way to pass its value in), and the other modules of an element -
+    the manager module of a catalog carries no record in scope. Silent where the data cannot
+    tell the set: a base type the catalog does not know, and the contextual properties of a
+    platform base type in a server method (the object of an object form is one - the extracted
+    data carries no contextual flag for platform properties).
     """
-    props = {
-        f["stem"]: (f["kind"], set(f["names"]))
-        for f in facts.values() if f["k"] == "props"
+    owners = {
+        fact["stem"]: fact for fact in facts.values()
+        if fact["k"] in ("component", "fields", "record", "register", "job")
     }
     for rel, fact in facts.items():
-        if fact["k"] != "vars":
+        if fact["k"] != "code":
             continue
-        found = props.get(fact["stem"])
-        if found is None:
+        for name, line, col, structure in fact["local"]:
+            yield _shadow(rel, line, col, name, "owner-structure", name=structure)
+        owner = owners.get(fact["stem"])
+        if owner is None:
             continue
-        kind, names = found
-        if kind != _INTERFACE_KIND and not rel.endswith(f"{_OBJECT_MODULE_SUFFIX}.xbsl"):
-            continue  # a manager module: the properties are not in scope here
-        for name, line, col in fact["names"]:
-            if name in names:
-                yield Diagnostic(
-                    rel, line, col, "style/shadow-own-property", Severity.WARNING,
-                    i18n.t("style/shadow-own-property.found", name=name, kind=kind),
+        if owner["k"] in ("record", "register") or fact["facet"]:
+            # A facet is in scope in its own module alone: the manager module of the element
+            # works with no record, and a facet module of a kind outside the lists is not judged.
+            if owner["k"] == "record" and fact["facet"] == "Объект":
+                names = set(owner["names"]) | _facet_properties(f"{owner['kind']}.Объект")
+            elif owner["k"] == "register" and fact["facet"] == "НаборЗаписей":
+                names = set(_facet_properties(f"{owner['kind']}.НаборЗаписей"))
+            else:
+                continue
+            for name, line, col, _side in fact["decls"]:
+                if name in names:
+                    yield _shadow(rel, line, col, name, "owner-object", name=owner["name"])
+            continue
+        if owner["k"] in ("fields", "job"):
+            names, owner_key = (
+                (set(owner["names"]), "owner-structure") if owner["k"] == "fields"
+                else (_job_properties(), "owner-object")
+            )
+            for name, line, col, _side in fact["decls"]:
+                if name in names:
+                    yield _shadow(rel, line, col, name, owner_key, name=owner["name"])
+            continue
+        own = set(owner["own"]) | _component_extras()
+        contextual = set(owner["contextual"])
+        inherited = _inherited_properties(owner["base"]) if owner["base"] else frozenset()
+        for name, line, col, side in fact["decls"]:
+            if side == "server":
+                if name in contextual:
+                    yield _shadow(rel, line, col, name, "owner-component", name=owner["name"])
+            elif name in own:
+                yield _shadow(rel, line, col, name, "owner-component", name=owner["name"])
+            elif name in inherited:
+                yield _shadow(
+                    rel, line, col, name, "owner-inherited", name=owner["name"],
+                    base=terms.type_english(owner["base"]) if i18n.current_lang() == "en"
+                    else owner["base"],
                 )
