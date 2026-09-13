@@ -43,8 +43,9 @@ reference loses its import" has one model, not a copy per surface.
 
 The yaml/missing-import rule: a yaml element (a form, an object...) that references an
 element of ANOTHER subsystem must list that subsystem in its own `Импорт:` section. A
-reference is either a type position (the string values of `Тип` keys, generic arguments
-included) or a navigation target (`ТипФормы`) - see _REFERENCE_KEYS. The namespace import in the paired `.xbsl` module does not cover the yaml – such
+reference is a type position (the string values of `Type` keys, generic arguments included),
+a navigation target (`FormType`) - see _REFERENCE_KEYS - or the table of a dynamic list, its
+main table and its joined tables (see _dynamic_list_tables). The namespace import in the paired `.xbsl` module does not cover the yaml – such
 a project deploys, but the component initialization fails at runtime.
 
 A third reference shape is a BINDING: a yaml string value opening with `=` holds an
@@ -264,6 +265,18 @@ MESSAGES = {
               "imported\"). The section needs the entry '- {sub}' - an import of the subsystem "
               "alone does not bring the elements of its packages, and an import in the paired "
               ".xbsl does not cover the markup bindings.",
+    },
+    "yaml/missing-import.list": {
+        "ru": "Таблица '{name}' динамического списка – из пространства имён '{sub}', а в секции "
+              "Импорт его нет: деплой упадёт на серверной компиляции (\"Пространство имен ... не "
+              "импортировано\"). Нужна строка '- {sub}' в секции Импорт – импорт одной "
+              "подсистемы элементы её пакетов не даёт, а импорт в парном .xbsl разметку не "
+              "покрывает.",
+        "en": "Table '{name}' of a dynamic list comes from namespace '{sub}' which the "
+              "{n[Импорт]} section does not list: the deploy fails at server compilation (\"the "
+              "namespace is not imported\"). The section needs the entry '- {sub}' - an import "
+              "of the subsystem alone does not bring the elements of its packages, and an import "
+              "in the paired .xbsl does not cover the markup.",
     },
     "yaml/missing-import.query": {
         "ru": "Таблица '{name}' запроса {query} (строка {query_line}) – из пространства имён "
@@ -502,6 +515,40 @@ def _query_table_roots(
     return [(root, written, line, col) for root, (written, line, col) in roots.items()]
 
 
+def _dynamic_list_tables(node: object) -> Iterable[str]:
+    """The table names the dynamic lists of a parsed yaml read, in document order.
+
+    A dynamic list is the mapping that declares a main table - the one property every list
+    carries, whether the list is the source of a table component or the default value of a
+    property. The table of its main table and of each of its joined tables names an element the
+    way a type position does, and the compiler resolves it against the imports of the yaml: a
+    server build refused a list whose main table lay in a package of another subsystem, and
+    another list whose joined table did, both with `Namespace ... is not imported` at the value
+    of the table, while the import of the package, a qualified table and a table of another
+    package of the same subsystem compiled clean. Both spellings of the keys are read. A mapping
+    with no main table is not a list: the joined tables of the reference input settings are left
+    alone, since what the compiler asks of those was not probed.
+    """
+    if isinstance(node, dict):
+        main = next((node[key] for key in _key_spellings("ОсновнаяТаблица") if key in node), None)
+        if isinstance(main, dict):
+            tables = [main]
+            joined = next(
+                (node[key] for key in _key_spellings("ПрисоединенныеТаблицы") if key in node), None,
+            )
+            if isinstance(joined, list):
+                tables.extend(item for item in joined if isinstance(item, dict))
+            for table in tables:
+                for key in _key_spellings("Таблица"):
+                    if isinstance(table.get(key), str):
+                        yield table[key]
+        for value in node.values():
+            yield from _dynamic_list_tables(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _dynamic_list_tables(item)
+
+
 @lru_cache(maxsize=1)
 def _import_key_re() -> re.Pattern[str]:
     """The top-level `Импорт:` key of a yaml, in either spelling."""
@@ -587,8 +634,9 @@ def _foreign_owner(
 
 def _yaml_import_mapper(source: SourceFile) -> dict | None:
     """The map phase: a descriptor contributes its place in the layout, an object yaml its
-    placement slice (name, visibility, imports) with its candidate type roots and binding
-    chain roots (stdlib settles here), a module its local types (the collision guard) and
+    placement slice (name, visibility, imports) with its candidate type roots, binding chain
+    roots and the roots of the tables of its dynamic lists (stdlib settles here), a module its
+    local types (the collision guard) and
     the names it declares - the paired yaml addresses those through the element name, so
     they explain a binding root the same way a local name does. A standalone query (the
     `.xbql` of a virtual table) contributes the roots of the tables it reads: the yaml of the
@@ -644,6 +692,16 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
                 if position is None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
+    # The tables of the dynamic lists. A plain chain resolves by its root (a virtual table of a
+    # register is written after a dot); a binding is an expression rather than a name, and a
+    # qualified table needs no import - neither parses as a single chain.
+    lists: list[tuple[str, str, int, int]] = []
+    for value in dict.fromkeys(_dynamic_list_tables(data)):
+        chains = _parse_type_string(value)
+        if not chains or len(chains) != 1 or chains[0][0] in stdlib:
+            continue
+        line, col = (_value_positions(source, value, "Таблица") or [(1, 1)])[0]
+        lists.append((chains[0][0], value, line, col))
     nm = value_of(data, "Имя", kind)
     # Where a table of the paired query is reported: the import section that lacks the entry,
     # or the head of the file when there is none.
@@ -657,6 +715,7 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
         "imports": imports,
         "cands": cands,
         "broots": _binding_chain_roots(source, data, stdlib),
+        "lists": lists,
         "anchor": linemap(source).linecol(anchor.start()) if anchor else (1, 1),
     }
 
@@ -696,7 +755,9 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         paired = declared_by_stem.get(fact["stem"], frozenset())
         candidates_here: list[tuple[str, str, int, int, str, dict]] = [
             (*c, "missing", {}) for c in fact["cands"]
-        ] + [(*c, "chain", {}) for c in fact["broots"] if c[0] not in paired]
+        ] + [(*c, "chain", {}) for c in fact["broots"] if c[0] not in paired] + [
+            (*c, "list", {}) for c in fact.get("lists", ())
+        ]
         # The tables of the paired query resolve against the imports of THIS yaml; the finding
         # stands where the entry has to be added, and names the line of the query.
         query = queries_by_stem.get(fact["stem"])
