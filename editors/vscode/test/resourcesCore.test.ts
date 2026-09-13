@@ -230,8 +230,8 @@ const file = (key: string) => ({ key, filePath: `${DIR}\\${key.split("/").join("
 {
   assert.strictEqual(resourceCodicon("Значки/Логотип.SVG"), "file-media");
   assert.strictEqual(resourceCodicon("Обложка.png"), "file-media");
-  assert.strictEqual(resourceCodicon("Вставки/api-absolute.js"), "file-code");
-  assert.strictEqual(resourceCodicon("Вставки/reset.css"), "symbol-color");
+  assert.strictEqual(resourceCodicon("Скрипты/app.js"), "file-code");
+  assert.strictEqual(resourceCodicon("Стили/base.css"), "symbol-color");
   assert.strictEqual(resourceCodicon("Шрифты/Roboto.woff2"), "text-size");
   assert.strictEqual(resourceCodicon("Тексты/Оферта.txt"), "symbol-file");
   assert.strictEqual(resourceCodicon("README"), "symbol-file");
