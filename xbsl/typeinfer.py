@@ -702,14 +702,19 @@ def _signature_results(head: str, member: str) -> set[str]:
 
 
 def _russian_member(head: str, member: str) -> str | None:
-    """The member name the catalog keys by (Russian) for a member written in either language."""
+    """The member name the catalog keys by (Russian) for a member written in either language.
+
+    An English member is taken only when the type itself spells the Russian one that way: the
+    flat dictionary keeps one spelling per word, and a word two types spell apart would type
+    the member of one by the member of the other.
+    """
     members = (_catalog().get("member_types") or {}).get(head) or {}
     if member in members:
         return member
     from xbsl import terms
 
     russian = terms.common_russian(member)
-    if russian and russian in members and terms.member_english_of(head, russian) in (member, None):
+    if russian and russian in members and terms.member_english_of(head, russian) == member:
         return russian
     return None
 
