@@ -15,11 +15,14 @@ shown to the compiler of the platform (the probe project of the cast rules):
   an outer join: the same type plus Null - the row may have nothing there;
 - `<выражение>.ЗаменитьNull(<значение>)`: the expression without Null, plus the value;
   without an argument the empty value takes the place of Null;
-- a literal, `CASE` over typed branches, `COUNT(...)`.
+- a literal, `CASE` over typed branches (no `ELSE` adds Null), `COUNT(...)`;
+- arithmetic over numbers (a number) and `+` over strings (a string), operands without Null;
+- `%Имя`: the code value of that name, when it is one type.
 
-Anything else - a parameter, arithmetic, a subquery, a batch with temporary tables - leaves the
-column unknown, and a block the reading does not understand as a whole leaves the ROW unknown:
-a cast over it is then never judged.
+Anything else - an aggregate that may be Null, a subquery, a batch with temporary tables -
+leaves the column unknown, and a block the reading does not understand as a whole leaves the ROW
+unknown: a cast over it is then never judged. So does a query the compiler refuses - a field its
+table does not have, in any clause, or a table the project does not have.
 """
 
 from __future__ import annotations
