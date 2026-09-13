@@ -44,7 +44,7 @@ def test_mcp_meta_field_and_info(mcp_module, tmp_path):
     info = mcp_module.meta_object_info(str(tmp_path), name="Товары")
     assert [f["name"] for f in info["fields"]] == ["Наименование", "Цвет"]
 
-    overview = mcp_module.meta_project_info(str(tmp_path))
+    overview = mcp_module.meta_project_info(str(tmp_path), reference=True)
     assert any(o["name"] == "Товары" for o in overview["objects"])
     assert "Справочник" in overview["creatable_kinds"]
 
@@ -299,7 +299,7 @@ def test_mcp_meta_set_access(mcp_module, tmp_path):
     assert info["access"]["default"] == "РазрешеноАутентифицированным"
     assert info["access"]["permissions"]["Чтение"] == "РазрешеноВсем"
 
-    overview = mcp_module.meta_project_info(str(tmp_path))
+    overview = mcp_module.meta_project_info(str(tmp_path), reference=True)
     товары = next(o for o in overview["objects"] if o["name"] == "Товары")
     assert товары["access_default"] == "РазрешеноАутентифицированным"
     assert "РазрешенияВычисляются" in overview["access_methods"]
