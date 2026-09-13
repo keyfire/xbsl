@@ -52,8 +52,11 @@ def test_dictionary_merges_directory_and_refuses_conflicts(tmp_path: Path):
     assert loaded.phrases == {"текст": "text"}
 
     (folder / "c.yaml").write_text("tokens:\n    Задачи: Jobs\n", encoding="utf-8")
-    with pytest.raises(dict_module.DictionaryError):
+    with pytest.raises(dict_module.DictionaryError) as refusal:
         dict_module.load(folder)
+    # the refusal names the key, both files and both readings - the line a person acts on
+    text = str(refusal.value)
+    assert "Задачи" in text and "a.yaml = 'Tasks'" in text and "c.yaml = 'Jobs'" in text
 
 
 def test_dictionary_validates_token_values(tmp_path: Path):
@@ -1285,8 +1288,10 @@ def test_the_literals_plane_merges_and_refuses_a_conflict(tmp_path: Path):
     assert not loaded.empty  # a plane of its own still fills the dictionary
 
     (folder / "c.yaml").write_text("literals:\n    Обложка: Jacket\n", encoding="utf-8")
-    with pytest.raises(dict_module.DictionaryError):
+    with pytest.raises(dict_module.DictionaryError) as refusal:
         dict_module.load(folder)
+    text = str(refusal.value)
+    assert "[literals] Обложка" in text and "b.yaml = 'Cover'" in text and "c.yaml = 'Jacket'" in text
 
 
 def test_literal_is_replaced_whole():

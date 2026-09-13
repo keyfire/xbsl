@@ -9,7 +9,11 @@ Modes compose from flags around one pass over the project:
   lands in the `{Vendor}/{Name}` its descriptor names, which is what deploys as it is;
 - `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
   name the sources use, and no problems were found - what a CI gate wants ("publish only a
-  fully translated, lint-clean configuration").
+  fully translated, lint-clean configuration");
+- `--check-duplicates [--against REF]`: the keys more than one dictionary file translates -
+  the conflicts the load would refuse and the redundant copies - read from the dictionary
+  files alone; with a git ref, the files of that ref count too, so a branch sees the collision
+  it would bring to the target branch before the merge.
 """
 
 from __future__ import annotations
@@ -388,6 +392,69 @@ MESSAGES = {
         "en": "the suggest mode does not read these flags: {names}. The run always covers the"
               " whole project; to look at a slice use --gaps or --entries",
     },
+    "translate.help.check-duplicates": {
+        "ru": "проверить файлы словаря на ключи, переведённые в нескольких файлах: по-разному –"
+              " конфликт, код возврата 1 (такой словарь не загружается вовсе, поэтому --strict"
+              " падает сам и называет все конфликты разом, отдельного ключа у него нет);"
+              " одинаково – лишний дубль, перечисляется при коде 0. Читает только словарь,"
+              " прохода по проекту не делает",
+        "en": "check the dictionary files for keys translated in several files: differently -"
+              " a conflict, exit code 1 (such a dictionary does not load at all, so --strict"
+              " fails on its own and names every conflict at once, it has no separate flag);"
+              " the same way - a redundant duplicate, listed with exit code 0. Reads the"
+              " dictionary alone, no pass over the project",
+    },
+    "translate.help.against": {
+        "ru": "git-ссылка (например origin/master), файлы словаря на которой добавляются к"
+              " файлам рабочего дерева: так ветка видит коллизию с целевой веткой до слияния."
+              " Тот же файл на ссылке и в рабочем дереве считается одним: ключ, у которого в"
+              " рабочем дереве другое значение, – не коллизия, а ключ, живущий только на"
+              " ссылке (и в файле, снятом в рабочем дереве), считается",
+        "en": "a git ref (say origin/master) whose dictionary files are added to the working"
+              " tree's: this is how a branch sees a collision with the target branch before"
+              " the merge. The same file at the ref and in the working tree counts as one: a"
+              " key the working tree spells differently is not a collision, while a key living"
+              " only at the ref (in a file the working tree removed too) counts",
+    },
+    "translate.check-unread-flags": {
+        "ru": "режим --check-duplicates не читает эти ключи: {names}. Проверка отвечает всем"
+              " списком по файлам словаря",
+        "en": "the --check-duplicates mode does not read these flags: {names}. The check"
+              " answers with the whole list over the dictionary files",
+    },
+    "translate.against-without-check": {
+        "ru": "--against читается только вместе с --check-duplicates",
+        "en": "--against is read only together with --check-duplicates",
+    },
+    "translate.against-header": {
+        "ru": "сравнение с {ref}: файлов словаря там {files}, пар оттуда, которых нет в"
+              " рабочем дереве: {added}",
+        "en": "compared against {ref}: {files} dictionary files there, {added} entries of"
+              " theirs the working tree does not carry",
+    },
+    "translate.conflicts-header": {
+        "ru": "ключей, переведённых по-разному в разных файлах: {count} – оставьте одно значение",
+        "en": "keys translated differently in different files: {count} - keep one value",
+    },
+    "translate.conflicts-none": {
+        "ru": "ключей, переведённых по-разному, нет",
+        "en": "no key is translated differently in two files",
+    },
+    "translate.duplicates-header": {
+        "ru": "ключей, переведённых одинаково в нескольких файлах: {count} – лишние копии снимают",
+        "en": "keys translated the same way in several files: {count} - the extra copies are"
+              " taken out",
+    },
+    "translate.duplicates-none": {
+        "ru": "ключей, переведённых одинаково дважды, нет",
+        "en": "no key is translated the same way twice",
+    },
+    "translate.summary-duplicates": {
+        "ru": "ключей, переведённых одинаково в нескольких файлах: {entries}"
+              " (список – --check-duplicates)",
+        "en": "keys translated the same way in several files: {entries}"
+              " (list them with --check-duplicates)",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -413,6 +480,9 @@ def _parser() -> argparse.ArgumentParser:
                         help=i18n.t("translate.help.redundant"))
     parser.add_argument("--prune", action="store_true", help=i18n.t("translate.help.prune"))
     parser.add_argument("--since", default="", help=i18n.t("translate.help.since"))
+    parser.add_argument("--check-duplicates", dest="check_duplicates", action="store_true",
+                        help=i18n.t("translate.help.check-duplicates"))
+    parser.add_argument("--against", default="", help=i18n.t("translate.help.against"))
     parser.add_argument("--table", action="store_true", help=i18n.t("translate.help.table"))
     parser.add_argument("--set", dest="set_file", help=i18n.t("translate.help.set"))
     parser.add_argument("--suggest", action="store_true", help=i18n.t("translate.help.suggest"))
@@ -480,6 +550,13 @@ def cli_main(argv: list[str] | None = None) -> int:
         print(i18n.t("translate.dry-run-without-out"), file=sys.stderr)
         return 2
 
+    # Before the dictionary is loaded, and that is the point: a dictionary with a conflict
+    # does not load, so a mode that lists the conflicts must answer without the load.
+    if args.check_duplicates:
+        return _check_duplicates(args, root)
+    if args.against:
+        return _refused(args, i18n.t("translate.against-without-check"))
+
     try:
         loaded, found = _load_dictionary(args.dictionary, root, dictionary_module)
     except dictionary_module.DictionaryError as exc:
@@ -532,9 +609,11 @@ def cli_main(argv: list[str] | None = None) -> int:
 
     lag = _dictionary_lag(report, root, found)
     if args.format == "json":
-        print(json.dumps(_as_json(report, args, found, lag), ensure_ascii=False, indent=1))
+        print(json.dumps(_as_json(report, args, found, lag, loaded.duplicates),
+                         ensure_ascii=False, indent=1))
     else:
-        _print_text(report, args, missing_tokens, missing_phrases, missing_literals, lag)
+        _print_text(report, args, missing_tokens, missing_phrases, missing_literals, lag,
+                    loaded.duplicates)
 
     if report.write_failed:
         # The tree is the job of a run with --out; a run that could not write it must not
@@ -614,10 +693,14 @@ def _no_dictionary(root: Path) -> int:
     return 2
 
 
-def _as_json(report, args, dictionary: Path | None, lag: dict | None = None) -> dict:
+def _as_json(report, args, dictionary: Path | None, lag: dict | None = None,
+             duplicates: list[dict] | None = None) -> dict:
     out = {
         "dictionary": str(dictionary) if dictionary else None,
         "dictionary_behind": lag,
+        # The keys two dictionary files translate the same way - the load keeps them, the
+        # redundant copy is what a person takes out (`--check-duplicates` lists the same).
+        "dictionary_duplicates": duplicates or [],
         "totals": report.totals(),
         "ready": _ready(report),
         "problems": report.problems,
@@ -712,7 +795,7 @@ def _dictionary_lag(report, root: Path, dictionary: Path | None) -> dict | None:
 
 
 def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
-                lag: dict | None = None) -> None:
+                lag: dict | None = None, duplicates: list[dict] | None = None) -> None:
     totals = report.totals()
     print(i18n.t("translate.summary", **{k: totals[k] for k in ("files", "surfaces", "translated", "coverage")}))
     print(i18n.t(
@@ -733,6 +816,8 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
         print(i18n.t("translate.summary-data-keys", keys=totals["data_keys"]))
     if totals["echoed_entries"]:
         print(i18n.t("translate.summary-redundant", entries=totals["echoed_entries"]))
+    if duplicates:
+        print(i18n.t("translate.summary-duplicates", entries=len(duplicates)))
     if totals["warnings"]:
         # The details, not only the count: a warning asks a person to look at ONE place, and
         # a bare number sends them hunting for it with the json mode.
@@ -993,6 +1078,57 @@ def _render_redundant(args, page: list, total: int, payload: dict) -> None:
         print(i18n.t("translate.pruned", removed=removed))
 
 
+def _check_duplicates(args, root: Path) -> int:
+    """The keys more than one dictionary file translates, before the load refuses them.
+
+    Two branches once closed the same gaps, each in a dictionary file of its own; each
+    pipeline passed, and the target branch failed at the dictionary load after the merge -
+    git saw no conflict, the files differed. This mode is the load's own reading of the files
+    (`dictionary.read_sections`) without the load: it answers where the load would stop, and
+    with `--against` the files of the target branch are read out of git and laid over the
+    working tree's, so the branch sees the collision BEFORE the merge. Two lists come back:
+    the keys translated differently, which fail the exit code, and the keys translated the
+    same way twice, which do not - the second copy is what a person takes out.
+    """
+    ignored = [flag for flag, attribute, absent in CHECK_IGNORES
+               if getattr(args, attribute) != absent]
+    if ignored:
+        return _refused(args, i18n.t("translate.check-unread-flags", names=", ".join(ignored)))
+    path = _dictionary_path(args, root)
+    if path is None:
+        return _no_dictionary(root)
+    payload = collisions_report(path, args.against)
+    if "error" in payload:
+        return _refused(args, payload["error"])
+    if args.format == "json":
+        print(json.dumps(payload, ensure_ascii=False, indent=1))
+    else:
+        _render_collisions(payload)
+    return 1 if payload["conflicts"] else 0
+
+
+def _render_collisions(payload: dict) -> None:
+    """The duplicates first and the conflicts last: the tail of the log is the verdict."""
+    from xbsl.translation import dictionary as dictionary_module
+
+    against = payload.get("against")
+    if against:
+        print(i18n.t("translate.against-header", **against))
+    duplicates, conflicts = payload["duplicates"], payload["conflicts"]
+    if duplicates:
+        print(i18n.t("translate.duplicates-header", count=len(duplicates)))
+        for row in duplicates:
+            print("  " + dictionary_module.duplicate_line(row))
+    else:
+        print(i18n.t("translate.duplicates-none"))
+    if conflicts:
+        print(i18n.t("translate.conflicts-header", count=len(conflicts)))
+        for row in conflicts:
+            print("  " + dictionary_module.collision_line(row))
+    else:
+        print(i18n.t("translate.conflicts-none"))
+
+
 def _list_entries(args, root: Path, loaded) -> int:
     path = _dictionary_path(args, root)
     if path is None:
@@ -1093,6 +1229,7 @@ def _apply_edits(args, root: Path, loaded) -> int:
 #: The modes that answer with a TABLE, in the order the dispatch below tries them: the flag and
 #: the parsed attribute behind it. Each of them returns before the writing pass ever runs.
 TABLE_MODES = (
+    ("--check-duplicates", "check_duplicates"),
     ("--set", "set_file"),
     ("--table", "table"),
     ("--entries", "entries"),
@@ -1135,6 +1272,12 @@ SUGGEST_IGNORES = (
     ("--limit", "limit", 0),
     ("--offset", "offset", 0),
 )
+
+#: Flags the check of the dictionary files does not read: the table flags (the check answers
+#: with the whole list - a collision cut off a page is one the merge still brings in), the
+#: base of the orphans-of-one-change mode and the removal of what was listed (which copy of
+#: a duplicated key goes is a decision about where the key belongs, not a mechanical one).
+CHECK_IGNORES = SUGGEST_IGNORES + (("--since", "since", ""), ("--prune", "prune", False))
 
 
 def _suggest(args, root: Path, loaded) -> int:
@@ -1267,6 +1410,57 @@ def dictionary_path_for(root: Path) -> Path | None:
     from xbsl.translation import entries as entries_module
 
     return entries_module.discover(root)
+
+
+def collisions_report(dictionary: Path, against: str = "") -> dict:
+    """The keys more than one dictionary file translates - the answer of `--check-duplicates`.
+
+    `{"dictionary", "against", "conflicts", "duplicates"}`, or `{"error"}` when a file does
+    not load or git cannot read the ref. `against` is None without a ref; with one it names
+    the ref, how many dictionary files it holds and how many of their entries the working
+    tree does not carry - zero says the ref adds nothing to what the working tree already
+    shows. The rows are those of `dictionary.collisions`, the files named relative to the
+    dictionary and the ref's copies as `ref:name`.
+    """
+    from xbsl.translation import dictionary as dictionary_module
+    from xbsl.translation import entries as entries_module
+
+    try:
+        files = dictionary_module.read_sections(dictionary)
+        compared = None
+        if against:
+            copies = entries_module.dictionary_at(dictionary, against)
+            # A copy whose text the working tree carries unchanged adds nothing to it, and
+            # most of a live dictionary is such copies: parsing them again doubled the run.
+            base = dictionary if dictionary.is_dir() else dictionary.parent
+            at_ref = [
+                (name, dictionary_module.sections_of(f"{against}:{name}", text))
+                for name, text in copies if not _same_text(base / name, text)
+            ]
+            merged = dictionary_module.overlay(files, at_ref, against)
+            added = sum(len(pairs) for _name, sections in merged[len(files):]
+                        for pairs in sections.values())
+            compared = {"ref": against, "files": len(copies), "added": added}
+            files = merged
+    except dictionary_module.DictionaryError as exc:
+        return {"error": i18n.t("translate.dictionary-error", error=exc)}
+    except ValueError as exc:
+        return {"error": str(exc)}
+    conflicts, duplicates = dictionary_module.collisions(files)
+    return {
+        "dictionary": str(dictionary), "against": compared,
+        "conflicts": conflicts, "duplicates": duplicates,
+    }
+
+
+def _same_text(path: Path, text: str) -> bool:
+    """Whether the file on disk reads as `text` - line endings aside, since a checkout may
+    carry the other kind while the blob keeps the committed one."""
+    try:
+        mine = path.read_text(encoding="utf-8-sig")
+    except OSError:
+        return False
+    return mine.replace("\r\n", "\n") == text.replace("\r\n", "\n")
 
 
 def load_for_tools(root: str) -> tuple[Path, object, str]:
