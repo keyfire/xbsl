@@ -639,6 +639,12 @@ name the files are rewritten across the project, and the lookups by a computed s
 note. **Delete folder** first shows every place that names the files, then deletes. A resource moves
 only within its own `Resources` folder.
 
+**Where a resource is used.** **Find All References** on a file or a folder lists the places that
+name it in the References view, the panel the editor's own search of references opens. The engine
+reads them the way a move does: `Resource{...}` keys and image property values, strings with the
+path, and strings with the folder and a computed file name. A key that lies in two folders is marked,
+because the reference may lead to either file. F4 goes to the next place.
+
 **Git status.** Object, form, subsystem and project rows carry the file's SCM decoration (color and
 badge) like the Explorer, while keeping their kind icon.
 
@@ -934,6 +940,7 @@ Every command of the extension. Generated from `package.json` – do not edit by
 | Move to folder... | `xbsl.metadata.moveResource` | Command Palette |
 | Rename folder | `xbsl.metadata.renameResourceFolder` | Command Palette |
 | Delete folder | `xbsl.metadata.deleteResourceFolder` | Command Palette |
+| Find All References | `xbsl.metadata.findResourceReferences` | panel / context menu |
 | Filter by subsystems and packages... | `xbsl.metadata.filterBySubsystem` | Command Palette |
 | Filter by subsystems and packages (active)... | `xbsl.metadata.editFilter` | panel / context menu |
 | Clear the subsystem and package filter | `xbsl.metadata.clearFilter` | Command Palette |

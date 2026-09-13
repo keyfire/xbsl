@@ -113,6 +113,31 @@ export async function callMeta(
   return undefined;
 }
 
+// A reading request: the engine's answer as it is. The LSP request when the server is up (it sees
+// the unsaved buffers), otherwise the CLI subcommand, which reads the disk and has no --dry-run to
+// take. undefined - no engine answered, and the install prompt is shown; {error} - the engine
+// refused, and the caller shows why.
+export async function queryEngine<T extends { error?: string }>(
+  lspMethod: string,
+  lspParams: Record<string, unknown>,
+  cliSubcommand: string,
+  cliArgs: string[],
+  cwd?: string
+): Promise<T | undefined> {
+  if (lspActive()) {
+    const viaLsp = await lspRequest<T>(lspMethod, lspParams);
+    if (viaLsp) {
+      return viaLsp;
+    }
+  }
+  const viaCli = await runCli<T>(cliPlan(cliSubcommand, cliArgs, false), cwd);
+  if (viaCli) {
+    return viaCli;
+  }
+  reportUnavailable();
+  return undefined;
+}
+
 // In CLI mode the engine reads files from disk: an unsaved buffer of the file being edited
 // must be saved before the call, otherwise applying the full new text would wipe the edits.
 export async function ensureSavedForCli(paths: string[]): Promise<boolean> {

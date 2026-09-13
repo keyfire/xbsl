@@ -74,7 +74,6 @@ export function lastSegment(resourcePath: string): string {
   return resourcePath.slice(resourcePath.lastIndexOf("/") + 1);
 }
 
-// A path under a folder: `Styles` + `Dark` -> `Styles/Dark`, the resources folder + `Dark` -> `Dark`.
 // The codicon of a resource file by its extension - what the tree shows when no file icon theme is
 // set (with one, the theme draws the type from the file itself, the way the Explorer does). The ids
 // "file" and "folder" are left out on purpose: those two are ThemeIcon.File and ThemeIcon.Folder,
@@ -103,6 +102,7 @@ export function resourceCodicon(key: string): string {
   return "symbol-file";
 }
 
+// A path under a folder: `Styles` + `Dark` -> `Styles/Dark`, the resources folder + `Dark` -> `Dark`.
 export function childPath(folderPath: string, name: string): string {
   return folderPath ? `${folderPath}/${name}` : name;
 }

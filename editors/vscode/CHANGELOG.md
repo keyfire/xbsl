@@ -12,6 +12,10 @@
 ## Unreleased
 
 ### Added
+- **"Find All References" on a resource file or folder of the metadata tree.** The places that name
+  it open in the References view by file, and F4 goes to the next one. Besides `Resource{...}` keys,
+  the list shows strings with the path and marks a key that lies in two folders. The command needs an
+  xbsl engine that has `resource-references`. ([#67](https://github.com/keyfire/xbsl/pull/67))
 - **The metadata tree can be filtered by subsystems and packages.** The filter button in the tree
   title opens a form with checkboxes and object counts, so a subsystem can be narrowed to some of
   its packages. The filter now also survives a window reload.

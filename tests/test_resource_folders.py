@@ -311,6 +311,95 @@ def test_emptied_dirs_are_the_folders_of_the_deleted_files_deepest_first(tmp_pat
     assert scaffold.emptied_dirs(deleted) == [tmp_path / "А" / "Б" / "В", tmp_path / "А"]
 
 
+# --- finding what names a resource ------------------------------------------------------------
+
+
+def _places(answer: dict, project: Path) -> list[tuple[str, int, str, str]]:
+    """(file under the project, line, kind, the text the range covers) of every place."""
+    places = []
+    for ref in answer["references"]:
+        start, end = ref["range"]["start"], ref["range"]["end"]
+        assert start["line"] == end["line"]
+        places.append((
+            Path(ref["path"]).relative_to(project).as_posix(), start["line"] + 1, ref["kind"],
+            ref["text"][start["character"]:end["character"]],
+        ))
+    return places
+
+
+def test_resource_references_name_the_places_a_move_would_touch(tmp_path):
+    project = _project(tmp_path)
+    resources = project / "Склад" / "Ресурсы"
+    answer = scaffold.resource_references(tmp_path, resources / "Стили" / "a.css")
+
+    assert (answer["resource"], answer["folder"], answer["resourcesDir"]) == (
+        "Стили/a.css", False, str(resources))
+    assert answer["total"] == 5
+    assert _places(answer, project) == [
+        ("Продажи/Заказы.xbsl", 5, "reference", "Демо::Учет::Склад::Стили/a.css"),
+        # The literal a comment documents is the same reference, as a rename treats it.
+        ("Склад/Остатки.xbsl", 1, "reference", "Стили/a.css"),
+        ("Склад/Остатки.xbsl", 3, "reference", "Стили/a.css"),
+        # A string with the folder and a computed name may read the file at run time.
+        ("Склад/Остатки.xbsl", 6, "computed", "Стили/%Имя"),
+        ("Склад/ФормаОстатков.yaml", 13, "string", "Стили/a.css"),
+    ]
+    # The line comes whole, so the range reads the place out of it.
+    assert answer["references"][2]["text"] == "    знч Ссылка = Ресурс{Стили/a.css}.Ссылка"
+
+    flag = _places(scaffold.resource_references(tmp_path, resources / "Стили" / "flag.svg"), project)
+    assert ("Продажи/ФормаЗаказа.yaml", 6, "reference", "Склад::Стили/flag.svg") in flag
+    assert ("Склад/ФормаОстатков.yaml", 9, "reference", "Стили/flag.svg") in flag
+    # A bare key of another subsystem without an import does not reach the folder.
+    assert not any(place[0] == "Продажи/Отчеты.xbsl" for place in flag)
+
+
+def test_resource_references_of_a_folder_take_every_file_and_the_strings_of_its_path(tmp_path):
+    project = _project(tmp_path)
+    answer = scaffold.resource_references(tmp_path, project / "Склад" / "Ресурсы" / "Стили")
+
+    assert answer["folder"] is True and answer["total"] == 11
+    # A string that goes through the folder is spanned up to the file it leads to.
+    assert [place for place in _places(answer, project) if place[2] != "reference"] == [
+        ("Склад/Остатки.xbsl", 4, "string", "Стили/b.js"),
+        ("Склад/Остатки.xbsl", 6, "string", "Стили/%Имя"),
+        ("Склад/ФормаОстатков.yaml", 13, "string", "Стили/a.css"),
+    ]
+
+
+def test_a_resource_reference_whose_key_two_folders_hold_is_marked_ambiguous(tmp_path):
+    project = _project(tmp_path, {"Склад/Партии/Ресурсы/Стили/a.css": "p {}\n"})
+    places = _places(
+        scaffold.resource_references(tmp_path, project / "Склад" / "Ресурсы" / "Стили" / "a.css"), project)
+    assert ("Склад/Остатки.xbsl", 3, "ambiguous", "Стили/a.css") in places
+    # A namespace settles it.
+    assert ("Продажи/Заказы.xbsl", 5, "reference", "Демо::Учет::Склад::Стили/a.css") in places
+
+
+def test_a_resource_reference_range_counts_characters_the_way_an_editor_does(tmp_path):
+    # A character outside the basic plane is two UTF-16 code units: an editor counts it so.
+    project = _project(tmp_path, {"Склад/Метки.xbsl": 'знч Метка = "\U0001F600" + Ресурс{logo.svg}\n'})
+    answer = scaffold.resource_references(tmp_path, project / "Склад" / "Ресурсы" / "logo.svg")
+    ref = next(r for r in answer["references"] if r["path"].endswith("Метки.xbsl"))
+    column = len('знч Метка = "') + 2 + len('" + Ресурс{')
+    assert ref["range"] == {"start": {"line": 0, "character": column},
+                            "end": {"line": 0, "character": column + len("logo.svg")}}
+
+
+def test_resource_references_refuse_what_no_key_names(tmp_path):
+    project = _project(tmp_path)
+    resources = project / "Склад" / "Ресурсы"
+    (resources / "Пустая").mkdir()
+    with pytest.raises(ScaffoldError, match="сам каталог ресурсов"):
+        scaffold.resource_references(tmp_path, resources)
+    with pytest.raises(ScaffoldError, match="описание ресурсов"):
+        scaffold.resource_references(tmp_path, resources / "Ресурсы.yaml")
+    with pytest.raises(ScaffoldError, match="нет файлов"):
+        scaffold.resource_references(tmp_path, resources / "Пустая")
+    with pytest.raises(ScaffoldError, match="Ресурс не найден"):
+        scaffold.resource_references(tmp_path, resources / "нет.svg")
+
+
 # --- surfaces -------------------------------------------------------------------------------------
 
 
@@ -390,7 +479,8 @@ def test_mcp_meta_resource_tools(mcp_module, tmp_path):
 
 
 def test_mcp_resource_tools_are_registered(mcp_module):
-    for name in ("meta_move_resource", "meta_rename_resource_folder", "meta_delete_resource_folder"):
+    for name in ("meta_move_resource", "meta_rename_resource_folder", "meta_delete_resource_folder",
+                 "meta_resource_references"):
         assert name in mcp_module.mcp.tools
 
 
@@ -417,3 +507,41 @@ def test_lsp_resource_requests_compute_only(tmp_path):
         {"root": str(tmp_path), "folderDir": str(resources), "newName": "Картинки"})
     assert "сам каталог ресурсов" in refused["error"]
     assert (resources / "logo.svg").is_file() and (resources / "Стили" / "a.css").is_file()
+
+
+def test_cli_resource_references_answer_json_without_a_dry_run(tmp_path, capsys):
+    project = _project(tmp_path)
+    resources = project / "Склад" / "Ресурсы"
+    code, answer = _run_cli(capsys, "resource-references", tmp_path, resources / "Стили" / "a.css")
+    assert code == 0 and answer["total"] == 5 and answer["references"][0]["kind"] == "reference"
+    code, err = _run_cli(capsys, "resource-references", tmp_path, resources)
+    assert code == 2 and "сам каталог ресурсов" in err["error"]
+    # A reading command has nothing to rehearse.
+    with pytest.raises(SystemExit):
+        cli.main(["resource-references", str(tmp_path), str(resources / "logo.svg"), "--dry-run"])
+
+
+def test_mcp_meta_resource_references(mcp_module, tmp_path):
+    project = _project(tmp_path)
+    answer = mcp_module.meta_resource_references(str(tmp_path), "Демо/Учет/Склад/Ресурсы/Стили", limit=2)
+    assert answer["root"] == str(tmp_path) and answer["total"] == 11
+    assert len(answer["references"]) == 2
+    assert answer["references"][0]["path"] == str(project / "Продажи" / "Заказы.xbsl")
+    err = mcp_module.meta_resource_references(str(tmp_path), "Демо/Учет/Склад/Ресурсы")
+    assert "сам каталог ресурсов" in err["error"] and err["root"] == str(tmp_path)
+
+
+def test_lsp_resource_references_request(tmp_path):
+    pytest.importorskip("pygls", reason="LSP-методы проверяются при установленном extra [lsp]")
+    from xbsl import lsp as lsp_module
+
+    server = lsp_module._make_server()
+    fm = getattr(server.lsp, "fm", None) or getattr(server.lsp, "_features", None)
+    features = getattr(fm, "features", fm)
+    resources = _project(tmp_path) / "Склад" / "Ресурсы"
+
+    answer = features["xbsl/metaResourceReferences"](
+        {"root": str(tmp_path), "path": str(resources / "Стили" / "flag.svg")})
+    assert answer["total"] == 6 and {ref["kind"] for ref in answer["references"]} == {"reference", "computed"}
+    refused = features["xbsl/metaResourceReferences"]({"root": str(tmp_path), "path": str(resources)})
+    assert "сам каталог ресурсов" in refused["error"]

@@ -829,6 +829,27 @@ usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--package P
 | `--brief` | no lists of objects and packages: the counts by kind and the reference sections |
 | `--reference` | add the reference sections (object kinds, section kinds, access methods) – about 4 KB, independent of the sources |
 
+### `xbsl resource-references`
+
+find the places that name a resource file or a folder: Resource{...} keys, image property values and lookups by a string; the answer is JSON with the file, the range and the line of each place; see also move-resource, which moves a resource and rewrites its keys
+
+```bash
+usage: xbsl resource-references [-h] root resource_path
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `resource_path` | a resource file or a folder inside the Resources folder of a subsystem or a package |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+
 ### `xbsl localization-info`
 
 the languages and translations of a LocalizedStrings element (candidates for add-localization; the texts are written by set-localization)

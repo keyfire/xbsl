@@ -621,5 +621,15 @@
   "XBSL: renaming the resource folder {0}...": "XBSL: переименование папки ресурсов {0}...",
   "XBSL: looking for what names {0}...": "XBSL: поиск ссылок на {0}...",
   "XBSL: delete the resource folder {0} with its files ({1})? The places that name them are listed below and are not edited.": "XBSL: удалить папку ресурсов {0} вместе с файлами ({1})? Места, которые на них ссылаются, перечислены ниже и не правятся.",
-  "XBSL: move {0} to {1}? The resource keys that name the files are updated across the project.": "XBSL: перенести {0} в {1}? Ключи ресурсов, которые указывают на эти файлы, обновятся по всему проекту."
+  "XBSL: move {0} to {1}? The resource keys that name the files are updated across the project.": "XBSL: перенести {0} в {1}? Ключи ресурсов, которые указывают на эти файлы, обновятся по всему проекту.",
+  "key in several folders": "ключ в нескольких каталогах",
+  "by a string": "по строке",
+  "computed name": "вычисляемое имя",
+  "Another resources folder this file sees holds the same key, so the reference may lead to either file.": "Такой же ключ есть ещё в одном каталоге ресурсов, видимом из этого файла, поэтому ссылка может вести к любому из файлов.",
+  "A string with the path: the file is looked up by it at run time.": "Строка с путём: по ней файл ищется при выполнении.",
+  "A string with the folder and a computed file name: at run time it may name this file.": "Строка с папкой и вычисляемым именем файла: при выполнении она может указать на этот файл.",
+  "{0} – places: {1}, files: {2}": "{0} – мест: {1}, файлов: {2}",
+  "Resource references": "Ссылки на ресурс",
+  "Places that name {0}": "Места, которые ссылаются на {0}",
+  "XBSL: nothing in the sources names {0}.": "XBSL: в исходниках нет ссылок на {0}."
 }

@@ -7401,6 +7401,10 @@ def _yaml_import_names(text: str) -> list[str]:
     return re.findall(r"^[ \t]*-[ \t]*(\S+?)[ \t]*\r?$", text[header_end:body_end], re.M)
 
 
+#: The rest of a path in a string: up to a space or a quote.
+_PATH_RUN = re.compile(r"[^\s\"']*")
+
+
 def _path_mentions(text: str, path: str, folder: bool) -> list[int]:
     """Offsets where a path stands in a string as a whole path or as its tail.
 
@@ -7450,7 +7454,8 @@ class _ResourceScan:
     for a deletion). A STRING literal that spells the path - `ResourcesPackage.Current().Get()`
     and the project's wrappers around it - is resolved only at run time, so the
     scan lists it and never edits it. The files under a resources folder are resources, not
-    sources, and are not read.
+    sources, and are not read. Every place the scan judges is kept in `mentions` with its span
+    as well: resource_references answers with them.
     """
 
     def __init__(self, root: Path, folder: _ResourceFolder, moves: Mapping[str, str | None],
@@ -7473,6 +7478,8 @@ class _ResourceScan:
         self.collisions: list[tuple[Path, int, str]] = []
         self.strings: list[tuple[Path, int, str]] = []
         self.computed: list[tuple[Path, int, str]] = []
+        # (file, start, end, kind) of every place above - the offsets of the text it spells.
+        self.mentions: list[tuple[Path, int, int, str]] = []
         self._visible: dict[Path, list[str]] = {}
         self._run()
 
@@ -7579,6 +7586,9 @@ class _ResourceScan:
             return False
         line = _line_of(text, body_start)
         written = body.strip()
+        written_start = body_start + len(body) - len(body.lstrip())
+        self._mention(path, text, written_start, written_start + len(written),
+                      "ambiguous" if len(holders) > 1 else "reference")
         if len(holders) > 1:
             self.ambiguous.append((path, line, written))
             return True
@@ -7599,6 +7609,11 @@ class _ResourceScan:
         """A string literal that spells the path: listed, never edited."""
         for index in _path_mentions(body, self.path, self.is_folder):
             self.strings.append((path, _line_of(text, start + index), _snippet(text, start + index)))
+            end = index + len(self.path)
+            if self.is_folder:
+                # The path of a folder goes on to the file it leads to: the place spans it whole.
+                end += len(_PATH_RUN.match(body, end).group(0))
+            self._mention(path, text, start + index, start + end, "string")
         if not self.computed_folder:
             return
         for index in _path_mentions(body, self.computed_folder, True):
@@ -7607,6 +7622,12 @@ class _ResourceScan:
                 self.computed.append(
                     (path, _line_of(text, start + index), _snippet(text, start + index))
                 )
+                self._mention(path, text, start + index, start + len(body), "computed")
+
+    def _mention(self, path: Path, text: str, start: int, end: int, kind: str) -> None:
+        """Keep a judged place with its span, and the text the span is measured on."""
+        self.texts.setdefault(path, text)
+        self.mentions.append((path, start, end, kind))
 
     def changes(self) -> list[FileChange]:
         """The edited sources with every rewritten key in place."""
@@ -7892,3 +7913,78 @@ def op_delete_resource_folder(root: Path, folder_dir: Path, *, reader=None) -> S
         if len(strings) > 200:
             result.notes.append(f"... и ещё {len(strings) - 200}")
     return result
+
+
+def _lsp_position(text: str, offset: int) -> dict[str, int]:
+    """The zero-based LSP position of an offset. The character is counted in UTF-16 code units,
+    the way an editor counts it: a character outside the basic plane takes two."""
+    line_start = text.rfind("\n", 0, offset) + 1
+    return {
+        "line": text.count("\n", 0, offset),
+        "character": len(text[line_start:offset].encode("utf-16-le")) // 2,
+    }
+
+
+def _line_text(text: str, offset: int) -> str:
+    """The whole source line an offset stands on, without its line break."""
+    start = text.rfind("\n", 0, offset) + 1
+    end = text.find("\n", offset)
+    return text[start:end if end != -1 else len(text)].rstrip("\r")
+
+
+def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict:
+    """Every place in the sources under a root that names a resource file or a folder of them.
+
+    The reading is the one a move of the resource makes (see _ResourceScan), so the answer names
+    what op_move_resource would rewrite or list. Each place has a kind:
+
+    - `reference` - a static reference that resolves to the file: a `Resource{...}` literal of
+      a module (a comment included) or of a yaml binding, the bare value of an image property;
+    - `ambiguous` - a static reference whose key two resources folders visible from the file
+      hold, this one among them;
+    - `string` - a string literal that spells the path, read at run time by
+      `ResourcesPackage.Current().Get()` or a wrapper of the project;
+    - `computed` - a string with the folder of the file and a computed name, which may name it.
+
+    For a folder, every file under it counts, and so does a string that spells the folder's
+    path. A place comes with its file, a zero-based LSP range and the text of its line, sorted
+    by file and position.
+
+    Refused: the resources folder itself, its description (`Resources.yaml`) and a folder
+    without files - a key names none of them.
+    """
+    root = _root_checked(root)
+    resource_path, folder, parts = _resource_folder_checked(root, resource_path, "Ресурс не найден")
+    key = "/".join(parts)
+    is_folder = resource_path.is_dir()
+    if is_folder:
+        files = _files_under(resource_path)
+        if not files:
+            raise ScaffoldError(f"В папке {resource_path} нет файлов – ключ Ресурс{{...}} её не называет")
+        moves: dict[str, str | None] = {
+            f"{key}/{path.relative_to(resource_path).as_posix()}": None for path in files
+        }
+    else:
+        if _is_resources_descriptor(resource_path, folder):
+            raise ScaffoldError(
+                f"{resource_path.name} – описание ресурсов (область видимости всего каталога), а не "
+                "ресурс: ключ Ресурс{...} его не называет"
+            )
+        moves = {key: None}
+    scan = _ResourceScan(root, folder, moves, key, is_folder, reader)
+    places = []
+    for path, start, end, kind in sorted(set(scan.mentions), key=lambda hit: (str(hit[0]), hit[1], hit[2])):
+        text = scan.texts[path]
+        places.append({
+            "path": str(path),
+            "kind": kind,
+            "range": {"start": _lsp_position(text, start), "end": _lsp_position(text, end)},
+            "text": _line_text(text, start),
+        })
+    return {
+        "resource": key,
+        "folder": is_folder,
+        "resourcesDir": str(folder.directory),
+        "total": len(places),
+        "references": places,
+    }

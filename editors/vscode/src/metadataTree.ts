@@ -73,6 +73,7 @@ import {
 import { formPathOfModule } from "./formDesignerCore";
 import { resourcePreviewHtml } from "./resourcePreviewCore";
 import { dropResources, registerResourceFolderCommands, ResourceTreeAccess } from "./resourceFolders";
+import { registerResourceReferenceCommands } from "./resourceReferences";
 import {
   isMovableResource,
   lastSegment,
@@ -1030,7 +1031,7 @@ function resourceFileNode(file: ResourceFile, dir: string): XbslNode {
   node.resourceUri = vscode.Uri.file(file.filePath); // git statuses and the file type icon
   node.tooltip = `Ресурс{${file.key}}`;
   node.resource = { dir, path: file.key, folder: false };
-  node.contextValue = isMovableResource(node.resource) ? "xbslResource movableres" : "xbslResource";
+  node.contextValue = isMovableResource(node.resource) ? "xbslResource movableres resrefs" : "xbslResource";
   // An svg goes to our own preview: the project's icons are fill="currentColor", and a
   // standalone viewer paints them black - invisible on a dark canvas. Other images open
   // with the editor's own viewers.
@@ -1057,7 +1058,7 @@ function resourceFolderNode(folder: ResourceFolder, dir: string): XbslNode {
   node.resource = { dir, path: folder.path, folder: true };
   node.resourceUri = vscode.Uri.file(resourcePathOf(node.resource)); // git statuses of the folder
   node.tooltip = folder.path;
-  node.contextValue = "xbslResourceFolder resfolder addresfolder movableres";
+  node.contextValue = "xbslResourceFolder resfolder addresfolder movableres resrefs";
   node.children = resourceChildren(folder, dir);
   return node;
 }
@@ -3316,7 +3317,9 @@ export function registerMetadataTree(
     )
   );
   // The folders of the Resources section: create, add files, move, rename, delete.
-  registerResourceFolderCommands(context, resourceTreeAccess(provider));
+  const resourceAccess = resourceTreeAccess(provider);
+  registerResourceFolderCommands(context, resourceAccess);
+  registerResourceReferenceCommands(context, resourceAccess);
 
   // The properties panel takes the Тип combo box candidates from here; the component palette
   // takes the project's interface components; the form designer's data panel resolves a

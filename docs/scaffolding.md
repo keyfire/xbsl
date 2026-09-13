@@ -45,6 +45,7 @@ xbsl rename-package . <package-dir> <new-name>         # the folder + imports + 
 xbsl move-resource . <resource> <folder>               # into another folder: files + keys
 xbsl rename-resource-folder . <folder> <new-name>      # the folder + the keys of its files
 xbsl delete-resource-folder . <folder>                 # the plan; --apply deletes and lists references
+xbsl resource-references . <resource>                  # the places that name a resource
 xbsl set-access . --name <object> --default <access-method>
 xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
 xbsl project-info .                                    # projects, subsystems, objects by kind
@@ -208,6 +209,13 @@ commands list such strings by file and line and leave them to the author. `delet
 references without editing them; without `--apply` it prints the plan. A move into the `Resources`
 folder of another subsystem or package is refused: the file would change its namespace, and a lookup
 by a string at the old place has nothing to rewrite.
+
+`resource-references` (MCP `meta_resource_references`) finds the places that name a resource file or
+a folder and changes nothing. It reads the sources the way a move does, and every place comes with its
+file, range, line and kind: `reference` for a static reference, `ambiguous` for a key two visible
+folders hold, `string` for a string with the path, `computed` for a string with the folder and a
+computed file name. The metadata tree of the VS Code extension shows the answer in the References
+view.
 
 ## Code templates
 

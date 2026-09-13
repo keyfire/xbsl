@@ -86,6 +86,7 @@
   "cmd.metadata.moveResource": "Move to folder...",
   "cmd.metadata.renameResourceFolder": "Rename folder",
   "cmd.metadata.deleteResourceFolder": "Delete folder",
+  "cmd.metadata.findResourceReferences": "Find All References",
   "cmd.metadata.filterBySubsystem": "Filter by subsystems and packages...",
   "cmd.metadata.editFilter": "Filter by subsystems and packages (active)...",
   "cmd.metadata.clearFilter": "Clear the subsystem and package filter",
