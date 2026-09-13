@@ -1,9 +1,9 @@
 """Tier C-2: unused local variables and loop variables.
 
-The two rules reproduce a warning of the platform's language server: `Неиспользуемая переменная`
-(diagnostic code UNUSED_VARIABLE, catalog keys `unused_variable__0` and
-`only_assign_variable__0`) - the check the IDE runs while it binds the names of a method body.
-What counts, as the IDE counts it (probed against the IDE on a project of its own):
+The two rules reproduce the IDE's warning about an unused variable, `Неиспользуемая переменная`,
+in both of its forms (a variable never read and a variable that is only assigned) - the check the
+IDE runs while it binds the names of a method body. What counts, as the IDE counts it (probed
+against the IDE on a project of its own):
 
 - tracked are the locals declared by `знч`, `пер` and `исп`, and the variable of a
   `для Х из ...` loop. Not reported as unused variables: the variable of `для Х = А по Б`,
