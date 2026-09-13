@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -94,6 +95,22 @@ MESSAGES = {
     "translate.since.diff-failed": {
         "ru": "git diff по \"{rev}\" не выполнен: {error}",
         "en": "git diff over \"{rev}\" failed: {error}",
+    },
+    "translate.unused.progress": {
+        "ru": "прочитано файлов: {read} из {total}",
+        "en": "files read: {read} of {total}",
+    },
+    "translate.unused.partial": {
+        "ru": "бюджет времени ({seconds} с) исчерпан: исходники прочитаны частично, {read}"
+              " файлов из {total}. Список – кандидаты, а не вердикт: пара, чьё употребление"
+              " лежит в непрочитанных файлах, тоже попала в него, поэтому снятие по такому"
+              " ответу не выполняется. Продолжить: больший budget_seconds либо более узкий"
+              " вопрос – filter, kind.",
+        "en": "the time budget ({seconds} s) ran out: the sources were read in part, {read}"
+              " files of {total}. The list holds candidates, not a verdict: an entry whose"
+              " use lies in a file not read is in it as well, so nothing is pruned on such"
+              " an answer. To go on: a larger budget_seconds, or a narrower question -"
+              " filter, kind.",
     },
 }
 i18n.register(MESSAGES)
@@ -405,7 +422,30 @@ def _marked_bodies(text: str, marker: str, pattern: re.Pattern) -> set[str]:
     return out
 
 
-def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
+#: How many files pass between two progress reports of the walk over the sources.
+PROGRESS_STEP = 200
+
+
+@dataclass
+class Surfaces:
+    """What the sources carry, as written, and how far the walk that read them got.
+
+    `read` of `total` files were looked at. `partial` says the deadline stopped the walk
+    before its last file - then the three sets describe what was read, not what the project
+    holds, and an entry whose use lies in a file not read looks like an orphan here. The
+    caller says so in its answer and prunes nothing on it.
+    """
+
+    names: set[str] = field(default_factory=set)
+    lines: set[str] = field(default_factory=set)
+    literals: set[str] = field(default_factory=set)
+    read: int = 0
+    total: int = 0
+    partial: bool = False
+
+
+def _surfaces(root: Path, dictionary, *, deadline: float | None = None,
+              progress=None) -> Surfaces:
     """(names, comment lines, literal bodies) the project's sources carry, as written.
 
     Read textually rather than taken from a translation pass: the pass records the gaps it
@@ -415,33 +455,49 @@ def _surfaces(root: Path, dictionary) -> tuple[set[str], set[str], set[str]]:
     can call an orphan "used" (a name that also occurs in prose), and that only leaves an
     entry in place; it cannot call a LIVE entry an orphan, which is the mistake that would
     delete a translation the project still needs.
+
+    `deadline` is a `time.monotonic()` value: the walk looks at the clock between files and
+    stops once it is past, with `partial` set - an answer with a caveat in place of a call
+    that says nothing until the client gives up on it. `progress(read, total)` is called
+    every PROGRESS_STEP files, so a long walk is seen to move.
     """
     from xbsl.translation import project as project_module
+
+    files = project_module._iter_files(root, dictionary)
+    out = Surfaces(total=len(files))
+    for path in files:
+        if deadline is not None and time.monotonic() >= deadline:
+            out.partial = True
+            break
+        _read_surfaces(root, path, out)
+        out.read += 1
+        if progress is not None and out.read % PROGRESS_STEP == 0:
+            progress(out.read, out.total)
+    return out
+
+
+def _read_surfaces(root: Path, path: Path, out: Surfaces) -> None:
+    """What one file adds to the surfaces."""
     from xbsl.translation import resourcefile as resource_module
 
-    names: set[str] = set()
-    lines: set[str] = set()
-    literals: set[str] = set()
-    for path in project_module._iter_files(root, dictionary):
-        # The PATH is translated too - every folder and file name goes through the same token
-        # plane - so a name that only ever stands in a path is used. A resource referenced by
-        # its file name alone (an icon next to the yaml that names it) is exactly that case.
-        for part in path.relative_to(root).parts:
-            names.update(_WORD_RE.findall(part))
-        resource = path.suffix.lower() in resource_module.SUFFIXES
-        if not resource and path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
-            continue
-        try:
-            text = path.read_text(encoding="utf-8-sig")
-        except (OSError, UnicodeDecodeError):
-            continue
-        if not resource:
-            # A stylesheet or a script is read for its PROSE alone. Its words are English
-            # code, and feeding them in would answer for a name no source declares any more.
-            names.update(_WORD_RE.findall(text))
-            literals.update(_LITERAL_RE.findall(text))
-        lines.update(_comment_bodies(path, text))
-    return names, lines, literals
+    # The PATH is translated too - every folder and file name goes through the same token
+    # plane - so a name that only ever stands in a path is used. A resource referenced by
+    # its file name alone (an icon next to the yaml that names it) is exactly that case.
+    for part in path.relative_to(root).parts:
+        out.names.update(_WORD_RE.findall(part))
+    resource = path.suffix.lower() in resource_module.SUFFIXES
+    if not resource and path.suffix not in (".yaml", ".xbsl", ".xbql", ".json"):
+        return
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError):
+        return
+    if not resource:
+        # A stylesheet or a script is read for its PROSE alone. Its words are English
+        # code, and feeding them in would answer for a name no source declares any more.
+        out.names.update(_WORD_RE.findall(text))
+        out.literals.update(_LITERAL_RE.findall(text))
+    out.lines.update(_comment_bodies(path, text))
 
 
 @dataclass
@@ -462,14 +518,32 @@ class Removal:
     names: set[str] = field(default_factory=set)
     lines: set[str] = field(default_factory=set)
     literals: set[str] = field(default_factory=set)
+    #: The dictionary side of the same change: how many dictionary files its diff names, how
+    #: many entries stand on the lines it ADDED, and the keys of those entries. A pair the
+    #: change itself wrote is a candidate of that change whatever the sources say - see
+    #: `_dictionary_side`.
+    dictionary_files: int = 0
+    dictionary_added: int = 0
+    added_keys: set[str] = field(default_factory=set)
+
+    def as_dict(self) -> dict:
+        """The `since` block of an answer: what was read, and how much of each side."""
+        return {
+            "base": self.base, "files": self.files,
+            "dictionary_files": self.dictionary_files,
+            "dictionary_added": self.dictionary_added,
+        }
 
 
-def removed_surfaces(root: Path, since: str) -> Removal:
+def removed_surfaces(root: Path, since: str, dictionary_path: Path | None = None) -> Removal:
     """Names, comment lines and literal bodies that `since` .. the sources on disk removed.
 
     `since` is a branch or a commit - then the diff runs from where the branch parted from
     HEAD to the WORKING TREE, so work not committed yet counts as part of the change - or a
     range `A..B`, handed to git as written, which is how a change already merged is examined.
+
+    `dictionary_path` brings in the other side of the same change: the entries the diff of
+    the dictionary files shows as ADDED (see `_dictionary_side`).
 
     Raises ValueError naming what failed: no git, not a repository, an unknown revision.
     """
@@ -494,7 +568,54 @@ def removed_surfaces(root: Path, since: str) -> Removal:
     )
     if code != 0:
         raise ValueError(i18n.t("translate.since.diff-failed", rev=since, error=error.strip()))
-    return _removal_of_diff(toplevel, spec, diff)
+    removal = _removal_of_diff(toplevel, spec, diff)
+    if dictionary_path is not None:
+        _dictionary_side(root, toplevel, spec, since, Path(dictionary_path), removal)
+    return removal
+
+
+def _dictionary_side(root: Path, toplevel: Path, spec: str, since: str,
+                     dictionary_path: Path, removal: Removal) -> None:
+    """The entries the change ADDED to the dictionary, read off the diff of its files.
+
+    The removed lines of the sources miss one case whole. A comment line written in a branch
+    and reworded in the same branch stands in the diff against the base as neither a removed
+    line nor an added one - the base never had the first wording - so the pair that
+    translated it stays in the dictionary for good: the strict pass does not judge it, and
+    the change-orphans mode answers that the change left nothing behind. One task grew 29
+    such pairs across three dictionary files that way; another over 400, taken out by a
+    throwaway script. The pairs the change itself wrote are candidates of that change too,
+    and the dictionary diff lists them: every added line that reads as an entry, the
+    explicit `? key` form included. The line carries no section, so a key is taken whatever
+    its kind - a candidate is only ever judged against the working tree, and an extra one
+    costs nothing.
+
+    A dictionary outside the repository has no diff to read and adds nothing.
+    """
+    try:
+        dictionary_path.resolve().relative_to(toplevel.resolve())
+    except ValueError:
+        return
+    code, diff, error = _git(
+        root, "diff", "--unified=0", "--no-color", "--no-ext-diff",
+        spec, "--", str(dictionary_path),
+    )
+    if code != 0:
+        raise ValueError(i18n.t("translate.since.diff-failed", rev=since, error=error.strip()))
+    in_hunk = False
+    for raw in diff.splitlines():
+        if raw.startswith("diff --git "):
+            removal.dictionary_files += 1
+            in_hunk = False
+        elif raw.startswith("@@"):
+            in_hunk = True
+        elif in_hunk and raw.startswith("+"):
+            line = raw[1:]
+            found = _EXPLICIT_KEY_RE.match(line) or _ENTRY_RE.match(line)
+            key = _key_of(found) if found else ""
+            if key:
+                removal.dictionary_added += 1
+                removal.added_keys.add(key)
 
 
 #: How long one git call may take before the mode gives up on it and says so. Generous for
@@ -592,35 +713,66 @@ def unused_entries(root: Path, dictionary_path: Path, dictionary=None,
     throwaway script.
 
     With `removed` the answer narrows to the orphans of ONE change: an entry is listed only
-    when what went missing from the project is what that change took out. The narrowing is an
-    intersection, never a shortcut - an entry the project still carries is not an orphan of
-    anybody's change - so a diff read too generously cannot cost a translation.
+    when what went missing from the project is what that change took out, or when the change
+    wrote the entry itself. The narrowing is an intersection, never a shortcut - an entry the
+    project still carries is not an orphan of anybody's change - so a diff read too
+    generously cannot cost a translation.
     """
-    names, lines, literals = _surfaces(root, dictionary)
-    out: list[Entry] = []
+    return orphans_of(root, dictionary_path, dictionary, removed).entries
+
+
+@dataclass
+class Orphans:
+    """The orphan entries, with the account of the walk behind the verdict.
+
+    `read` of `total` source files were looked at. With `partial` set the deadline stopped
+    the walk, and the list is one of CANDIDATES: an entry whose use lies in a file not read
+    is in it as well, so nothing may be pruned on its strength.
+    """
+
+    entries: list[Entry] = field(default_factory=list)
+    read: int = 0
+    total: int = 0
+    partial: bool = False
+
+
+def orphans_of(root: Path, dictionary_path: Path, dictionary=None,
+               removed: Removal | None = None, *, deadline: float | None = None,
+               progress=None) -> Orphans:
+    """The answer of `unused_entries` together with the walk's own account.
+
+    `deadline` and `progress` go to the walk over the sources (see `_surfaces`): a tool
+    that has to answer within its client's patience passes the one, a command that wants to
+    be seen moving passes the other.
+    """
+    surfaces = _surfaces(root, dictionary, deadline=deadline, progress=progress)
+    out = Orphans(read=surfaces.read, total=surfaces.total, partial=surfaces.partial)
     for entry in read_entries(dictionary_path):
         gone: list[str] = []
         if entry.kind == "phrase":
-            gone = [] if entry.key in lines else [entry.key]
+            gone = [] if entry.key in surfaces.lines else [entry.key]
             missing = removed.lines if removed else None
         elif entry.kind == "literal":
-            gone = [] if entry.key in literals else [entry.key]
+            gone = [] if entry.key in surfaces.literals else [entry.key]
             missing = removed.literals if removed else None
         else:
             # A qualified key (`<Owner>.<Name>`) gives one word to one owner, and the sources
             # spell the two halves apart: judging the dotted text as a name would call every
             # such entry an orphan. Both halves must still be there - an entry qualified by a
             # type the project no longer declares has nothing left to qualify.
-            gone = [part for part in entry.key.split(".") if part not in names]
+            gone = [part for part in entry.key.split(".") if part not in surfaces.names]
             missing = removed.names if removed else None
         if not gone:
             continue
         # The half that is gone is what the change must answer for: an entry orphaned because
         # its OWNER was deleted belongs to the change that deleted the owner, whatever else
-        # the key still spells.
-        if missing is not None and not all(part in missing for part in gone):
+        # the key still spells. A pair the change wrote itself is its own whatever the sources
+        # say: the line that used it may have been written and reworded inside the change,
+        # and the diff against the base shows neither wording.
+        if removed is not None and not all(part in missing for part in gone) \
+                and entry.key not in removed.added_keys:
             continue
-        out.append(entry)
+        out.entries.append(entry)
     return out
 
 
