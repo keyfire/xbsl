@@ -133,7 +133,7 @@ from xbsl.layout import (
     subsystem_of_key,
     vendor_keys,
 )
-from xbsl.lexer import Token, linemap, tokens
+from xbsl.lexer import Token, _skip_interpolation, linemap, tokens
 from xbsl.parser import parse
 from xbsl.rules import semantics
 from xbsl.rules.enum_values import _binding_values, _name_values
@@ -336,6 +336,59 @@ _BINDING_CHAIN = re.compile(
     r"(?<![\wА-Яа-яЁё.$])(?<!::)([А-ЯЁA-Z][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
     re.UNICODE,
 )
+
+
+#: The opening of a full interpolation inside a string literal, `%{` or `${`.
+_INTERPOLATION_OPEN = re.compile(r"[%$]\{")
+
+#: A string nested inside an interpolation expression: its text is not names.
+_NESTED_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
+
+#: Any identifier of an interpolation expression.
+_INTERPOLATION_IDENT = re.compile(r"[^\W\d]\w*")
+
+#: The root of a dotted chain inside an interpolation expression: the shape of
+#: `_BINDING_CHAIN`, and neither a member of a longer chain nor the tail of a qualified name.
+_INTERPOLATION_CHAIN = re.compile(
+    r"(?<![\wА-Яа-яЁё.$%:])([А-ЯЁA-Z][\wА-Яа-яЁё]*)\.([А-Яа-яЁёA-Za-z_][\wА-Яа-яЁё]*)",
+    re.UNICODE,
+)
+
+
+def _interpolation_bodies(raw: str, *, blank_strings: bool = True) -> list[tuple[int, str]]:
+    """The full interpolations of a string literal: (offset of the expression, its text).
+
+    `%{...}` and `${...}` hold code, and a name written there is a reference like any other:
+    the compiler resolves it against the imports of the module and refuses a missing one at
+    the line of the string. A server build over a project with packages showed both sides of
+    it - an import serving nothing but such a name was reported unused, and the build without
+    it failed. The balancing is the lexer's own, so a nested string or a collection literal
+    does not cut the expression short, and a sign after an odd run of backslashes is an
+    escaped character, as `code/undefined-name` reads it. With `blank_strings` the text of a
+    nested string is replaced by spaces of the same length: the offsets stay true, and words
+    in quotes are not taken for names.
+    """
+    if "%{" not in raw and "${" not in raw:
+        return []
+    out: list[tuple[int, str]] = []
+    pos = 0
+    while True:
+        found = _INTERPOLATION_OPEN.search(raw, pos)
+        if found is None:
+            return out
+        i = found.start()
+        backslashes = i
+        while backslashes > 0 and raw[backslashes - 1] == "\\":
+            backslashes -= 1
+        if (i - backslashes) % 2:  # an odd run of backslashes escapes the sign
+            pos = i + 1
+            continue
+        end = _skip_interpolation(raw, i + 2)
+        body = raw[i + 2:max(i + 2, end - 1)]
+        if blank_strings:
+            body = _NESTED_STRING.sub(lambda m: " " * len(m.group(0)), body)
+        out.append((i + 2, body))
+        pos = max(end, i + 2)
 
 
 def _binding_chain_roots(
@@ -748,8 +801,15 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
     imports = _module_imports(toks)
     if not imports:
         return None
-    idents = sorted({tok.value for tok in toks if tok.kind == "IDENT"})
-    return {"k": "mod", "path": str(source.path), "imports": imports, "idents": idents}
+    idents = {tok.value for tok in toks if tok.kind == "IDENT"}
+    # A name inside `%{...}` of a string is a use as well. Every word of the expression counts,
+    # nested strings included: here a word too many only keeps an import, never reports one.
+    for tok in toks:
+        if tok.kind == "STRING":
+            for _offset, body in _interpolation_bodies(tok.value, blank_strings=False):
+                idents.update(_INTERPOLATION_IDENT.findall(body))
+    return {"k": "mod", "path": str(source.path), "imports": imports,
+            "idents": sorted(idents)}
 
 
 @rule(
@@ -879,6 +939,18 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
             continue
         env = _method_names(method)
         for node in _nodes(method.body):
+            if isinstance(node, P.Literal) and node.kind == "STRING":
+                # The parser keeps an interpolation inside the literal, so its chains are read
+                # from the text, with the same subtractions as the chains of the code.
+                for offset, body in _interpolation_bodies(node.text):
+                    for chain in _INTERPOLATION_CHAIN.finditer(body):
+                        name = chain.group(1)
+                        if (name in env or name in declared_here or name in stdlib
+                                or name in _IMPLICIT):
+                            continue
+                        line, col = lm.linecol(node.start + offset + chain.start(1))
+                        roots.append((name, f"{name}.{chain.group(2)}", line, col))
+                continue
             if not isinstance(node, P.Member) or not isinstance(node.obj, P.Name):
                 continue
             name = node.obj.name

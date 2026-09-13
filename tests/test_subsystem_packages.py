@@ -243,6 +243,32 @@ def test_a_yaml_reference_inside_the_subsystem_needs_no_package_import():
     assert _lint(MISSING_YAML, _project({"Склад/ФормаЗаказа.yaml": form})) == []
 
 
+# The only use of a namespace may stand inside a string interpolation: a server build refused a
+# module whose import had been dropped as unused, at the line of `%{...}` (13.09.2026).
+
+_ROOT_MODULE = {
+    "Склад/Остатки.yaml": _module_yaml("Остатки", "ВПроекте"),
+    "Склад/Остатки.xbsl": '@ВПроекте\nметод Текст(): Строка\n    возврат ""\n;\n',
+}
+
+
+@pytest.mark.needs_data
+def test_a_chain_inside_a_string_interpolation_needs_the_import():
+    code = 'метод Т(): Строка\n    возврат "Остаток: %{Остатки.Текст()}"\n;\n'
+    diags = _lint(MISSING_CODE, _project({**_ROOT_MODULE, "Продажи/Заказы.xbsl": code}))
+    assert [(d.rule_id, d.line, d.col) for d in diags] == [(MISSING_CODE, 2, 25)]
+    assert "Остатки.Текст" in diags[0].message and "импорт Склад" in diags[0].message
+    covered = "импорт Склад\n\n" + code
+    assert _lint(MISSING_CODE, _project({**_ROOT_MODULE, "Продажи/Заказы.xbsl": covered})) == []
+
+
+@pytest.mark.needs_data
+def test_an_escaped_sign_and_a_nested_string_are_not_chains():
+    code = ('метод Т(): Строка\n'
+            '    возврат "\\%{Остатки.Текст()} и %{Строка("Остатки.Текст")}"\n;\n')
+    assert _lint(MISSING_CODE, _project({**_ROOT_MODULE, "Продажи/Заказы.xbsl": code})) == []
+
+
 # --- code/unused-import -----------------------------------------------------------------------
 
 
@@ -268,6 +294,16 @@ def test_both_imports_stay_when_the_root_and_the_package_are_mentioned():
     code = ("импорт Склад\nимпорт Склад::Партии\n\nметод Т(): Номенклатура.Ссылка?\n"
             "    РасчетПартий.Пересчитать()\n    возврат Неопределено\n;\n")
     assert _lint(UNUSED, _project({"Продажи/Заказы.xbsl": code})) == []
+
+
+@pytest.mark.needs_data
+def test_a_name_inside_a_string_interpolation_keeps_the_import_used():
+    code = 'импорт Склад\n\nметод Т(): Строка\n    возврат "Остаток: %{Остатки.Текст()}"\n;\n'
+    assert _lint(UNUSED, _project({**_ROOT_MODULE, "Продажи/Заказы.xbsl": code})) == []
+    # The control: the same module without the interpolation has no use for the import.
+    bare = code.replace("%{Остатки.Текст()}", "нет")
+    diags = _lint(UNUSED, _project({**_ROOT_MODULE, "Продажи/Заказы.xbsl": bare}))
+    assert [(d.rule_id, d.line) for d in diags] == [(UNUSED, 1)]
 
 
 @pytest.mark.needs_data
