@@ -582,9 +582,10 @@ Composite (nested) properties – `ContentHorizontalAlign { ... }`, say – are 
 editable: edit those in the yaml.
 
 **Creating objects.** A category root has an **Add &lt;class&gt;** action: it asks a name and a
-subsystem (folder), writes a minimal valid yaml (a fresh `Id`; a paired `.xbsl` for module kinds)
-and opens it. Classes are shown even when the project has none of them yet. Every class the engine
-can scaffold is there:
+folder (a subsystem, a package of one or the project root; a category under a subsystem or a package
+takes its folder without asking), writes a minimal valid yaml (a fresh `Id`; a paired `.xbsl` for
+module kinds) and opens it. Classes are shown even when the project has none of them yet. Every
+class the engine can scaffold is there:
 
 | | Classes |
 | --- | --- |
@@ -603,9 +604,19 @@ available to agents through its `meta_*` MCP tools and to any editor through the
 requests or the CLI subcommands. The tree only gathers parameters and applies the returned
 changes, and regular undo works.
 
-**Subsystems.** A **Subsystems** branch lists the subsystem folders (a click opens the subsystem
-file); **Add subsystem** creates a folder with a subsystem file. The project root has **Filter by
-subsystem** (multi-select) and **Clear filter**; the active filter is shown in grey.
+**Subsystems and packages.** A **Subsystems** branch lists the subsystems of the project - a
+first-level folder, with or without a subsystem file (a click opens the file when there is one);
+**Add subsystem** on the branch or on the project root creates a folder with a subsystem file at the
+project root. In the **By subsystems** grouping a subsystem holds its packages - folders below it,
+nested ones under their parent, the number of objects in grey and the full namespace in the
+tooltip - and the objects of its root by class. The placement comes from the engine
+(`xbsl/metaProjectInfo`): the tree is drawn at once and completed when the answer arrives. **Create
+package** on a subsystem or a package asks the name and the first object of the package - a folder
+without objects is not a package. **Move to package...** on an object, or dragging the object onto a
+subsystem or a package, moves it with the engine's `move-object`: the imports and full names the
+move needs are updated across the project. **Rename package** renames the folder and every name that
+spells it. The project root has **Filter by subsystem** (multi-select) and **Clear filter**; the
+active filter is shown in grey.
 
 **Git status.** Object, form, subsystem and project rows carry the file's SCM decoration (color and
 badge) like the Explorer, while keeping their kind icon.

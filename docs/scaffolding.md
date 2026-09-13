@@ -40,6 +40,8 @@ xbsl add-subsystem vendor/App <name>
 xbsl add-dependency . acme CurrencyConverter 2.0       # attach a library to the project
 xbsl rename-object . <old-name> <new-name>             # rename files + update references
 xbsl delete-object . --name <object>                   # the plan; --apply deletes and lists leftovers
+xbsl move-object . <object>.yaml <package-dir>         # into a package: files + imports + full names
+xbsl rename-package . <package-dir> <new-name>         # the folder + imports + full names
 xbsl set-access . --name <object> --default <access-method>
 xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
 xbsl project-info .                                    # projects, subsystems, objects by kind
@@ -165,6 +167,24 @@ so a Latin rename goes unnoticed: record it explicitly with `git mv <old> <new>`
 is recorded as a delete plus an add, and then every other clone on such a filesystem stops at
 "untracked working tree files would be overwritten by merge". There the file under the old name
 has to be deleted before pulling.
+
+`move-object` (MCP `meta_move_object`) moves an object into another folder of its project: a package
+of the subsystem - a folder that does not exist yet becomes one - another package, the subsystem
+root or another subsystem. The object takes its forms, modules, list row and list table along. An
+element of a package lives in the package's own namespace, so the move repairs what reached the
+object from its old place: a module or a yaml of another subsystem gets `import Subsystem::Package`
+or an `Import` item, the moved files get the imports of their old subsystem when the move crosses a
+subsystem boundary, a qualified name - the full `Vendor::Project::Subsystem::FormName.ListRowData`
+of a generated form included - is rewritten, and a subsystem that starts importing another one gets
+it in `Using`. What needs repairing is decided by the import and visibility rules of the linter, run
+before and after the move. Within one subsystem the root and the packages see each other, so the
+move adds no import there, and only the full names follow the files. The command refuses a taken
+name and a non-public element that another subsystem would reach from now on - the visibility is the
+author's decision. An import the move made unnecessary is named in `notes`, not removed:
+`code/unused-import` reports it. `rename-package` (MCP `meta_rename_package`) renames a package
+folder with all its files and rewrites `import Subsystem::Batches[::Archive]`, the `Import` items
+and the qualified names across the project. For a Cyrillic package name in a project with a
+translation dictionary both remind of the pair the name needs.
 
 ## Code templates
 

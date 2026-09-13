@@ -60,6 +60,31 @@ entry either - say what the behaviour was, not which class name was compared.
   of the three shapes its own message. There is no autofix, because only the author knows which word
   was meant. The rule opens the new `translation/` group.
   ([#52](https://github.com/keyfire/xbsl/pull/52))
+- **An object moves into a package without breaking its references.** An element of a package lives
+  in the package's own namespace, so moving a file into a package folder is only half of the move:
+  every module and yaml of another subsystem that reached the element needs
+  `import Subsystem::Package`, a full type name spelling the old place stops resolving, and a server
+  build is where all of it surfaced. `move-object` (`meta_move_object`, `xbsl/metaMoveObject`) moves
+  the object with its forms, modules, list row and list table into a package, another package, the
+  subsystem root or another subsystem, and repairs what the move breaks: it adds the import of the
+  new place where a reference needs it - in both directions when the move crosses a subsystem
+  boundary - rewrites the qualified names, the full
+  `Vendor::Project::Subsystem::FormName.ListRowData` of a generated form included, and adds the
+  subsystem to `Using` where a new import needs it. The decision is made by the import and
+  visibility rules themselves, run before and after the move, so the move and the linter never
+  disagree. It refuses a taken name and a non-public element that another subsystem would reach
+  after the move, and names the imports it made unnecessary instead of removing them. On a copy of a
+  real project two moves into new packages left no missing import behind, while the same files moved
+  by hand gave exactly the findings the command repaired.
+  ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **`rename-package` renames a package with every name that spells it.** The folder with all its
+  files, `import Subsystem::Old`, the `Import` items and the qualified names across the project
+  (`meta_rename_package`, `xbsl/metaRenamePackage`). A file of another project under the root is
+  edited only where it spells the full name with this project's prefix.
+  ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **The LSP answers `xbsl/metaProjectInfo`** - the `project-info` answer, read only: the metadata
+  tree of the editor places objects into subsystems and packages by it.
+  ([#54](https://github.com/keyfire/xbsl/pull/54))
 - **`lint_paths` answers compactly on request, and the summary of every report counts the findings
   by rule, by file and by severity.** A full answer of the MCP tool carried the text of every
   finding - several hundred characters each, tens of thousands over one project run - when the
@@ -113,6 +138,21 @@ entry either - say what the behaviour was, not which class name was compared.
   by `Name`, `Vendor::Name` or its folder: at a repository root with vendor examples beside the
   project a narrow question took 10 KB and now takes 2 KB.
   ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The findings of the import and visibility rules carry their namespaces in `data`.**
+  `code/missing-import`, `yaml/missing-import` and `yaml/localization-missing-import` report the
+  namespaces an import may name, the two `*/foreign-not-public` rules and `code/unused-import` the
+  namespace concerned, `yaml/missing-subsystem-usage` the subsystem and the one it uses. The message
+  is bilingual prose; a repair reads the data - the JSON report and the editor get it too.
+  ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **`add-subsystem` creates a subsystem only at the project root.** A subsystem is a first-level
+  folder of its project, and its finer division is a package; a descriptor written into a folder of
+  a subsystem sat in a package and changed nothing. Such a parent is now refused with a pointer to
+  creating the package with its first object. `new-object` into a folder that does not exist yet
+  checks the new package name as an identifier and reminds of the translation dictionary pair it
+  needs when the project has a dictionary. ([#54](https://github.com/keyfire/xbsl/pull/54))
+- **A result that moves files leaves no empty folder behind**, and `delete-object` also finds the
+  English-spelled forms of an object (`<Name>ObjectForm`, `ListRow<Name>`).
+  ([#54](https://github.com/keyfire/xbsl/pull/54))
 - **`--since` also judges the pairs the change itself wrote into the dictionary.** A comment line
   written in a branch and reworded in the same branch stands in the diff against the base as neither
   a removed line nor an added one, so the pair that translated the first wording stayed in the

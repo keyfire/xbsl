@@ -636,6 +636,52 @@ usage: xbsl delete-object [-h] [--name NAME] [--path PATH] [--apply] [--dry-run]
 | `--apply` | perform the deletion (without the flag the plan is printed: deletion is irreversible) |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
+### `xbsl move-object`
+
+move an object into another folder of its project - a package of the subsystem (a new folder becomes a package), its root or another subsystem; adds the import of the new namespace where it is needed now and rewrites the full names; see also rename-package, which renames a package
+
+```bash
+usage: xbsl move-object [-h] [--dry-run] root yaml_path target_dir
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `yaml_path` | the yaml of the object to move; its forms, modules and list row move along |
+| `target_dir` | the target folder - a subsystem or a package folder (a missing one is created) |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
+### `xbsl rename-package`
+
+rename a package of a subsystem: its folder with every file and the Subsystem::Package names in imports and full names across the project; see also move-object, which moves an object into a package
+
+```bash
+usage: xbsl rename-package [-h] [--dry-run] root package_dir new_name
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `package_dir` | the package folder (inside a subsystem folder) |
+| `new_name` | the new package name - an identifier |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
 ### `xbsl set-access`
 
 set the object's AccessControl.Разрешения; see also object-info for the current rights and the set this kind has
