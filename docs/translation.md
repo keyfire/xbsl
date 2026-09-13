@@ -106,6 +106,26 @@ The dictionary is a directory of yaml files, or one file, named `xbsl-translatio
 next to the project or above it. To fill it, drop a completed stub next to the ones already there.
 Two files disagreeing about one key are refused at load time.
 
+The refusal names every such key at once - the section, the key and the translation in each file -
+rather than the first one it meets. Two branches once closed the same gaps in files of their own;
+each pipeline was green, and the merged dictionary failed to load with ten keys translated twice,
+four of them differently. Taken one at a time, that was four loads.
+
+`--check-duplicates` asks the same question of the dictionary files without loading them, and before
+the merge. It lists the keys translated differently (a conflict, exit code 1) and the keys
+translated the same way in several files (a redundant copy, exit code 0 - listed because the second
+copy is what a person takes out). `--against REF` adds the dictionary files as a git ref has them,
+`origin/master` say, so a branch sees the collision it would bring to its target while it is still a
+branch. The same file at the ref and in the working tree counts as one file: a key the working tree
+spells differently is that file's own edit, while a key living only at the ref - in a file the
+working tree removed too - counts. `--format json` carries `conflicts` and `duplicates` as
+`{section, key, places: [{file, value}]}` and `against` with the ref, its file count and how many of
+its entries the working tree does not carry. `--strict` has no flag for this: a dictionary with a
+conflict does not load, so the strict pass fails on its own and names every conflict at once. The
+plain report counts the redundant copies in its summary. Measured on a live dictionary of 167 files:
+no conflicts, six keys translated the same way twice, two seconds alone and under three against the
+target branch - the copies whose text the working tree carries unchanged are not parsed again.
+
 **A qualified entry** (`Dictionary.Key: SignIn`) applies inside one namespace only. A key of a
 localized-strings dictionary may need a spelling the same word cannot have in code.
 
@@ -302,6 +322,28 @@ whose substitutions differ from its key's after translation, such as `%{AccountC
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
 
+## The English of the dictionary
+
+Coverage tells whether every name and every comment line has a translation. It does not tell whether
+the translation reads as English. A mechanical edit of the values, such as a replacement run over
+thousands of lines or a sweep that rewrote the Russian keys, leaves traces that `--strict` cannot
+see. The rule `translation/english-shape` - warning, on by default, file scope - reads the values of
+the dictionary files and reports three of them:
+
+- an ending glued onto a word that takes none: an adverb, an irregular participle or an auxiliary
+  spelled like a verb or a plural (`onlies`, `gones`, `hases`), and a regular participle in the
+  plural (`loadeds`);
+- a passive followed straight by a noun phrase without `by` ("a variable is shadowed the
+  parameter"), where the subject and the object kept the places of the Russian sentence;
+- capitals the Russian key does not have, such as "does NOT narrow" for a key that stresses nothing.
+  A stressed word in the Russian key excuses them, and so does the same Latin word in the key.
+  Abbreviations (`MB`, `URL`) and constants are never judged.
+
+The finding stands on the word in the dictionary file and comes without a fix, since only the author
+knows which word was meant. Only the files of the discovered dictionary are judged. A project
+without one hears nothing, and a lint run over the directory that holds both the project and its
+`xbsl-translation` checks the sources and the dictionary together.
+
 ## In the editor
 
 The rule `conventions/missing-translation` - info, off by default, project scope - shows the same
@@ -378,8 +420,23 @@ range `A..B` is handed to git as written, which is how a change already merged i
 Measured on a live project: 3297 orphans without a filter, 18 of them the change's own, nine names
 and nine comment lines. One call instead of nineteen calls with `--filter` a name at a time.
 
+A change is judged from both sides. Its diff of the sources gives the removed lines, and its diff of
+the dictionary files gives the pairs it added or rewrote, and those are candidates of the change as
+well. A comment line written in a branch and reworded in the same branch stands in the diff against
+the base as neither a removed line nor an added one, so the pair of the first wording used to stay
+in the dictionary for good: the strict pass does not judge it, and `--unused --since` answered that
+the change left nothing behind. Each candidate is still judged against the working tree, and only a
+key the project spells nowhere is answered with. The header, and the `since` block of
+`--format json`, size both sides: the files of the change, the dictionary files its diff names and
+the entries on their added lines.
+
 The removed lines come from `git diff`. A git that has not answered within a minute is refused,
 and the refusal names the other way round: the same list without git is narrowed by `--filter`.
+
+The walk over the sources reports its progress on stderr every 200 files, so a long run is seen to
+move; stdout stays the report, and `--format json` there is one document. In that shape every row of
+`unused` carries `kind`, `key`, `value`, `file`, `line` and `scope` - what a script reads instead of
+splitting the text rows on double spaces, which a key may hold itself.
 
 The narrowing is an intersection rather than a shortcut: a name the project still spells does not
 become an orphan however generously the diff reads. So an answer with neither a filter nor
@@ -418,18 +475,26 @@ never offered at all.
 **The MCP tools** are the same six, for an agent that fills the dictionary:
 
 - `translate_status` - coverage and what is left, the cheap check before deciding anything;
+  `against` names a git ref and adds the collision report of `--check-duplicates` against it;
 - `translate_gaps` - the untranslated entries by page (`kind`, `filter`, `limit`, `offset`),
   the answer naming the `dictionary` it read;
   `compact` returns only `{key, kind, count}` per row - the worklist shape that fits an
   answer when the full rows would not;
-- `translate_entries` - what the dictionary already says, with the file and line of each
-  entry, so a new word stays consistent with the accepted ones;
-- `translate_unused` - the opposite question: what the dictionary still says and the
-  project no longer has; `filter` narrows it to the names of one deleted component, `since`
-  to the orphans of one change (a branch, a commit or a range `A..B`), `prune` (off by
-  default) removes exactly the page the tool answers with, `compact` keeps only the key, the
-  kind, the file and the line, and `counts` sizes the orphans by kind; an answer with neither
-  `filter` nor `since` carries a `note` saying what its reading is worth;
+- `translate_entries` - what the dictionary already says, with the file and line of each entry, so a
+  new word stays consistent with the accepted ones; ten rows by default, and `compact` keeps
+  `{key, kind, value}` per row - the answer to "how is this term translated" without the places,
+  which came to ten kilobytes per call on a common stem;
+- `translate_unused` - the opposite question: what the dictionary still says and the project no
+  longer has; `filter` narrows it to the names of one deleted component - or to a list of substrings
+  at once, and the answer names in `unmatched` the ones no orphan fell under; `since` narrows it to
+  the orphans of one change (a branch, a commit or a range `A..B`): the keys on the lines it removed
+  and the pairs it added to the dictionary, both sides sized in the `since` block; `prune` (off by
+  default) removes exactly the page the tool answers with, `compact` keeps only the key, the kind,
+  the file and the line, and `counts` sizes the orphans by kind; `budget_seconds` (300 by default)
+  bounds the walk over the sources - past it the answer is what was read, marked `partial`, with
+  `sources` counting the files read of the total and a `note` on how to go on, a list of candidates
+  on which `prune` does nothing; an answer with neither `filter` nor `since` carries a `note` saying
+  what its reading is worth;
 - `translate_redundant` - the entries the platform answers itself, which the pass would spell
   the same way without them: the workarounds that hide a gap in the platform data or in the
   engine. `filter` narrows it, `prune` (off by default) removes exactly the page it answers
@@ -445,8 +510,9 @@ naming the next `offset`. `limit=0` returns the whole list, and for the gaps the
 `--missing`, which writes the entire remainder to a file as a dictionary stub.
 
 A new entry lands in `090-manual.yaml`, or in the file named by `target`, while an entry that
-already exists is corrected where it lives. The writer never duplicates a key, and a duplicate
-with a different value is refused when the dictionary loads.
+already exists is corrected where it lives. The writer never duplicates a key. A key two files
+translate differently is refused when the dictionary loads, and `--check-duplicates` lists every
+such key without loading it.
 
 ## Machine translation
 

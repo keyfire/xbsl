@@ -30,6 +30,137 @@ entry either - say what the behaviour was, not which class name was compared.
   turn of phrase rather than a word: an owner in this toolkit is a metadata object, so
   `owner table` and `the owner's kind` stay quiet.
   ([#46](https://github.com/keyfire/xbsl/pull/46))
+- **Five checks for the wording and the characters of a comment, taken from a pass of one project's
+  comments through a style edit.** Each habit was caught by eye on one line and then chased through
+  the tree by a script, so the next occurrence came back unnoticed. `typography/non-keyboard`
+  reports an arrow, a comparison or a multiplication sign in a comment and writes the keyboard
+  spelling (`->`, `>=`, `<>`, `x`); it is on by default. `typography/en-dash-comment` reports the en
+  dash of a comment for a project that writes a hyphen there. The new `comment/` group holds
+  `comment/subjunctive`, `comment/first-person` and `comment/emphasis-caps`. The subjunctive rule
+  asks for a word of condition rather than the removal of the particle: in that pass removing it
+  alone turned hypotheses into statements about the code, and about ninety lines had to be
+  rewritten. The group and the en dash rule are off by default; a project turns them on with
+  `--enable`. Element descriptions are read too: these rules judge the `#` comments of a yaml, which
+  the older typography rules do not. ([#51](https://github.com/keyfire/xbsl/pull/51))
+- **`translation/english-shape` reads the English values of the translation dictionary.**
+  `xbsl translate --strict` measures how much of a project the dictionary covers and never reads
+  what the values say, so a mechanical edit of the English went through unnoticed. A verb ending
+  moved onto the adverb before it ("a second icon onlies clutter the row"), a passive kept the
+  Russian word order ("a variable is shadowed the parameter"), and a Russian line lost its capitals
+  while the English kept `NOT`. On a live dictionary the rule found 173 such traces, all of them
+  real, while the coverage stood at 100% and `--strict` passed. The rule is a tier B warning, on by
+  default. It judges only the files of the discovered `xbsl-translation` dictionary and gives each
+  of the three shapes its own message. There is no autofix, because only the author knows which word
+  was meant. The rule opens the new `translation/` group.
+  ([#52](https://github.com/keyfire/xbsl/pull/52))
+- **`lint_paths` answers compactly on request, and the summary of every report counts the findings
+  by rule, by file and by severity.** A full answer of the MCP tool carried the text of every
+  finding - several hundred characters each, tens of thousands over one project run - when the
+  question was only whether the tree is clean and whether the pipeline would go red. The summary of
+  the shared report shape (`--format json` and the MCP tools alike) now carries `by_rule`, `by_file`
+  and `by_severity` (all three levels named, so a zero is a zero and not a missing key), and
+  `lint_paths(..., compact=True)` drops the list of findings: the summary stays, with its baseline
+  and CI-job records, and `errors` holds the full records of the error-level findings alone. Over
+  one project tree of 1417 files judged by the set of its CI job, with the frozen findings shown,
+  the answer went from 56.9 KB to 7.2 KB. ([#49](https://github.com/keyfire/xbsl/pull/49))
+- **`xbsl translate --check-duplicates [--against REF]` finds a key two dictionary files translate
+  before the merge does.** Two branches closed the same gaps in files of their own, each pipeline
+  passed, and the target branch failed at the dictionary load after the merge - ten keys translated
+  twice, four of them differently - while git had shown no conflict, since the files differed. The
+  check reads the dictionary files alone and lists the keys translated differently (a conflict, exit
+  code 1) and the keys translated the same way twice (a redundant copy, exit code 0). With
+  `--against origin/master` the files of the target branch are read out of git in one
+  `cat-file --batch` and laid over the working tree's, the same file on both sides counting as one,
+  so the branch sees the collision while it is still a branch. `--format json` carries both lists
+  with the places; the plain report counts the redundant copies in its summary, and the MCP
+  `translate_status` takes `against` and answers with the same report. On a live dictionary of 167
+  files: no conflicts, six redundant copies, under three seconds.
+  ([#48](https://github.com/keyfire/xbsl/pull/48))
+- **`translate_unused` answers within a time budget instead of staying silent.** A call with `since`
+  over a large project said nothing until the client gave up on it, half an hour later; the hang
+  itself - the child git inheriting the server's stdin - went in 0.105.0, and the silence stayed.
+  `budget_seconds` (300 by default) bounds the walk over the sources: past it the tool answers with
+  what it has read, `partial: true`, `sources` counting the files read of the total, and a `note`
+  saying how to go on. A partial list holds candidates rather than a verdict, so `prune` does
+  nothing on it. The command `xbsl translate --unused` prints its progress on stderr every 200
+  files, and `--format json` on stdout stays one document.
+  ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`translate_unused` takes a list of filters and names the ones nothing fell under.** A sweep over
+  the comments takes ten lines out, and whether the dictionary still keeps any of them was ten
+  calls, one `filter` each. `filter` now takes a string or a list, a row matching any of them, and
+  the answer carries `unmatched` - the substrings no orphan fell under, which for a sweep is the
+  half that matters: those lines the dictionary no longer holds.
+  ([#47](https://github.com/keyfire/xbsl/pull/47))
+- **`translate_entries` answers compactly and ten rows at a time.** The question it answers most is
+  how a word is translated already, and fifty full rows with the file, the line and the scope of
+  each came to ten kilobytes per call on a common stem. `compact` keeps `{key, kind, value}` per
+  row, the default page is ten rows, and the paging fields say what a page left out, as before.
+  ([#47](https://github.com/keyfire/xbsl/pull/47))
+
+### Changed
+- **`project-info` answers what was asked and leaves the reference out.** The object kinds, section
+  kinds and access methods do not depend on the sources, yet came with every answer: 4 KB of
+  repetition, more than a narrow answer itself. They now come with `--reference` (`reference=true`
+  in `meta_project_info`) or with `--brief`. The answer lists `packages` following the same filters
+  as the objects, `--package` narrows to a package, and `--project` walks only the named project -
+  by `Name`, `Vendor::Name` or its folder: at a repository root with vendor examples beside the
+  project a narrow question took 10 KB and now takes 2 KB.
+  ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **`--since` also judges the pairs the change itself wrote into the dictionary.** A comment line
+  written in a branch and reworded in the same branch stands in the diff against the base as neither
+  a removed line nor an added one, so the pair that translated the first wording stayed in the
+  dictionary for good: `--strict` does not judge it, and `--unused --since` answered that the change
+  left nothing behind - 29 such pairs across three files on one task, over 400 on another. The
+  candidates of a change are now the keys on the lines it removed AND the entries its diff of the
+  dictionary files added or rewrote; each is judged against the working tree as before. The `since`
+  block sizes both sides: `files` of the change, `dictionary_files` and `dictionary_added` of the
+  dictionary diff. The help of `--unused` now points at `--format json` and the fields of a row
+  (`kind`, `key`, `value`, `file`, `line`, `scope`) - the machine shape was there, the pointer was
+  not. ([#47](https://github.com/keyfire/xbsl/pull/47))
+
+### Fixed
+- **The import rules know the packages of a subsystem.** An element of a package lives in the
+  package's own namespace, and another subsystem reaches it only through
+  `import Subsystem::Package`: importing the subsystem does not bring it. The rules keyed every
+  element by its subsystem alone and read an import as one name, so `import Subsystem` covered a
+  package element and a qualified import was not read at all. A server build refused four such
+  references in three modules while the linter reported none. `code/missing-import` and
+  `yaml/missing-import` now ask for the package's own import and name the line to add;
+  `code/unused-import` reports an import of a subsystem that serves only elements of its packages;
+  the two `*/foreign-not-public` rules resolve `Subsystem::Package::Element` by the package it
+  names. A subsystem is a first-level folder of the project, its descriptor is optional, and a
+  reference inside one subsystem - between its root and its packages - still needs no import. On a
+  vendor library with about twenty packages nine false `yaml/missing-import` reports went away.
+  ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The import rules read the names inside a string interpolation.** A name written in `%{...}` is
+  resolved against the imports of the module like any other, but `code/unused-import` did not count
+  it as a use and `code/missing-import` did not see it at all. A server build over a project with
+  packages showed both sides: an import serving nothing but such a name was reported unused, and the
+  build without it failed at the line of the string.
+  ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **The scaffolding places an object of a package.** A subsystem was looked for only in the folder
+  right above an object, so an object of a package came back with no subsystem and a namespace
+  without it - and a generated list form wrote its row type with that namespace. `object-info` and
+  `project-info` now answer the `package` and the full `Vendor::Project::Subsystem::Package`
+  namespace, and `project-info` lists a subsystem that has objects but no descriptor.
+  ([#53](https://github.com/keyfire/xbsl/pull/53))
+- **`style/redundant-tostring` no longer reports a `ToString()` call that is the only way to add a
+  number to a string.** The rule judged by the line: a `+` and a string literal anywhere on it made
+  every call on that line redundant, so `(A + B).ToString() + "px"` was reported and the way around
+  was a variable. The rule now judges by position - the call is redundant only as the right operand
+  of a `+` at its own bracket depth with a string literal among the operands to its left, which is
+  the one form the platform converts implicitly (the addition table of the documentation lists
+  `String + Object` and no `Number + String`). A call passed as an argument, a call with an argument
+  and a call followed by a member of its own stay quiet; a chain wrapped over several lines is
+  judged whole; the English spelling of the method is judged like the Russian one, which the rule
+  did not see before. On four corpora five findings of eight went and no new one came.
+  ([#49](https://github.com/keyfire/xbsl/pull/49))
+- **The dictionary refusal names every key translated differently, not the first one.** The load
+  used to stop at the first colliding key, so a merge that brought in four of them was four rounds
+  of "take one out, load again". Every file is read before the refusal, and one error lists the
+  section, the key and the translation in each file for all of them. The other refusals - a file
+  that does not parse, a broken token value - still stop at the first, since they are one file's
+  fault and the file is named. ([#48](https://github.com/keyfire/xbsl/pull/48))
 
 ## 2026-09-12 – 0.104.0, 0.105.0
 

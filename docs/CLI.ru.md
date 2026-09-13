@@ -691,7 +691,9 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 обзор исходников: проекты, подсистемы, объекты
 
 ```bash
-usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] root
+usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--package PACKAGE]
+                         [--project PROJECT] [--brief] [--reference]
+                         root
 ```
 
 **Аргументы**
@@ -706,8 +708,11 @@ usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] ro
 |---|---|
 | `-h, --help` | показать эту справку и выйти |
 | `--kind KIND` | только объекты этого вида |
-| `--subsystem SUBSYSTEM` | только объекты этой подсистемы |
-| `--brief` | без перечня объектов: только счётчики по видам |
+| `--subsystem SUBSYSTEM` | только объекты этой подсистемы (с её пакетами) |
+| `--package PACKAGE` | только объекты этого пакета: путь под подсистемой или Подсистема::Пакет; вложенный пакет входит в тот, где лежит |
+| `--project PROJECT` | обходить только проекты с этим именем (Имя или Поставщик::Имя) либо проект в этом каталоге – корень репозитория держит не один проект |
+| `--brief` | без перечней объектов и пакетов: счётчики по видам и справочные разделы |
+| `--reference` | добавить справочные разделы (виды объектов, виды секций, методы доступа) – около 4 КБ, от исходников не зависят |
 
 ### `xbsl localization-info`
 

@@ -691,7 +691,9 @@ usage: xbsl object-info [-h] [--name NAME] [--path PATH] root
 sources overview: projects, subsystems, objects
 
 ```bash
-usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] root
+usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--package PACKAGE]
+                         [--project PROJECT] [--brief] [--reference]
+                         root
 ```
 
 **Arguments**
@@ -706,8 +708,11 @@ usage: xbsl project-info [-h] [--kind KIND] [--subsystem SUBSYSTEM] [--brief] ro
 |---|---|
 | `-h, --help` | show this help message and exit |
 | `--kind KIND` | only the objects of this kind |
-| `--subsystem SUBSYSTEM` | only the objects of this subsystem |
-| `--brief` | no list of objects: the counts by kind alone |
+| `--subsystem SUBSYSTEM` | only the objects of this subsystem (its packages included) |
+| `--package PACKAGE` | only the objects of this package: the path under the subsystem or Subsystem::Package; a nested package belongs to the one it lies in |
+| `--project PROJECT` | walk only the projects of this name (Name or Vendor::Name) or the project in this folder – a repository root holds more than one project |
+| `--brief` | no lists of objects and packages: the counts by kind and the reference sections |
+| `--reference` | add the reference sections (object kinds, section kinds, access methods) – about 4 KB, independent of the sources |
 
 ### `xbsl localization-info`
 

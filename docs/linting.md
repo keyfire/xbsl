@@ -15,16 +15,35 @@ rule id, rule group – the part of the id before `/` – or tier letter), `--fi
 `--baseline`/`--write-baseline`, `--element-version`, `--data-dir`, `--lang`,
 `--format text|json|codeclimate`.
 
-`--fix` repairs the mechanical findings in place, then reports whatever is left. It trims
-trailing whitespace, corrects typography characters (em dash to en dash, `…` to `...`, curly
-quotes and comment guillemets to straight ones) and normalizes mixed newlines to the dominant
-style. It applies unambiguous edits only, and only for rules active in the run, so
-`--fix --enable typography` also pays down the em-dash and guillemets debt. Anything that needs
-judgment stays where it is.
+`--fix` repairs the mechanical findings in place, then reports whatever is left. It trims trailing
+whitespace, corrects typography characters (em dash to en dash, `…` to `...`, curly quotes and
+comment guillemets to straight ones, a character off the keyboard in a comment to its keyboard
+spelling: `→` to `->`) and normalizes mixed newlines to the dominant style. It applies unambiguous
+edits only, and only for rules active in the run, so `--fix --enable typography` also pays down the
+em-dash and guillemets debt. The group holds `typography/en-dash-comment` too, so the same run turns
+the en dash of a comment into a hyphen; a project that writes the en dash there adds
+`--ignore typography/en-dash-comment`. Anything that needs judgment stays where it is.
+
+The `comment/` group judges how a comment is worded rather than which characters it holds:
+`comment/subjunctive` (the particle `бы` - the finding asks for a word of condition, because
+dropping the particle alone turns a hypothesis into a statement about the code),
+`comment/first-person` ("we", "our" and first-person plural verbs) and `comment/emphasis-caps` (a
+function word such as `НЕ` or `ТОЛЬКО` in capitals for emphasis). The rules read the comments of
+modules, element descriptions and resource files. They are off by default - on code that never
+adopted the convention they fire in bulk - and a project that did turns the group on in its CI with
+`--enable comment`. `--fix --enable comment/emphasis-caps` restores the case of a stressed word; the
+other two have no fix, the rephrase is the author's. A project that writes a hyphen in its code
+comments adds `--enable typography/en-dash-comment`.
 
 For editor integration there is `--stdin --filename NAME`: it checks a single buffer read from
 stdin and runs per-file rules only. The JSON payload (`{diagnostics, summary}`) is the same one
 the MCP server returns.
+
+The summary of that payload counts the findings by rule, by file and by severity - `by_rule`,
+`by_file` and `by_severity`, the last naming all three levels even at zero - so a run can be weighed
+without reading its list: which rules fire, in which files, and whether an error is among them. The
+MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary and the
+error-level findings alone.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting. The index
 holds the objects, with their `TabularParts`, module-declared local types and the member families
@@ -39,7 +58,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 194 rules of the base set** - severity, default state, scope, links to
+**The full list of all 200 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -81,8 +100,10 @@ business. With no archive next to the sources the library types stay unknown, ex
 before libraries were understood at all.
 
 The cross-file rules of tier D catch what the compiler reports late or not at all. A `Handler:`
-in yaml with no method in the paired module. A foreign-subsystem type used without an `Import:`
-entry. A `DynamicList` typed by the automatic list form that misses an attribute of its object. A
+in yaml with no method in the paired module. A foreign-subsystem type used without an import of its
+namespace - of the subsystem for an element at its root, of `Subsystem::Package` for an element of a
+package, since importing a subsystem does not bring its packages. A `DynamicList` typed by the
+automatic list form that misses an attribute of its object. A
 cross-component call `Components.X.Method()` that carries no visibility annotation. Environment
 mismatches: `@OnServer` called from a client handler without `@AvailableFromClient`, a client
 module used from an `HttpService`. Reserved names: a field or parameter named `Type` in either

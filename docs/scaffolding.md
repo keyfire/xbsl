@@ -43,6 +43,7 @@ xbsl delete-object . --name <object>                   # the plan; --apply delet
 xbsl set-access . --name <object> --default <access-method>
 xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
 xbsl project-info .                                    # projects, subsystems, objects by kind
+xbsl project-info . --package <package>                # the objects of one package
 ```
 
 The kind, the section, the annotations, the access methods and every identifier reach the CLI in
@@ -51,6 +52,15 @@ names them by their English equivalents - `Catalog`, `Attributes`, `OnServer`,
 `PermitAuthenticated` - which is why the examples above use placeholders.
 `xbsl new-object --help` lists the kinds a project can hold, spelled the way the command wants
 them.
+
+`project-info` answers narrowly. `--kind`, `--subsystem` and `--package` narrow the list of objects,
+`--brief` leaves the lists out and keeps the counts, and `--project` walks only the named project -
+by `Name`, `Vendor::Name` or its folder, since a repository root often holds examples beside the
+project. Every object carries its `subsystem`, its `package` (empty at the subsystem root, `Batches`
+or `Batches::Archive` inside one) and the full `namespace`, `Vendor::Project::Subsystem::Package` -
+the prefix the generated forms use for their row types. `packages` lists the packages of the listed
+objects with their folders. The object kinds, the section kinds and the access methods come with
+`--reference` or `--brief`: they do not depend on the sources.
 
 The sources themselves may be written in either language, and the scaffolding reads both. An
 object whose file spells its kind and its sections in English - `ElementKind: Catalog`,
