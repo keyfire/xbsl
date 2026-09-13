@@ -627,6 +627,18 @@ filter is kept per project across window reloads, and a package that was renamed
 out of it; a subsystem added while a filter is on stays hidden until it is ticked. The packages come
 from the engine (`xbsl/metaProjectInfo`); until it answers, the form lists subsystems only.
 
+**Resources and their folders.** The **Resources** section lists the files of a `Resources` folder
+as folders with their nesting and the number of files in grey; a file shows its name, and the
+tooltip gives its key - the spelling a `Resource{...}` reference takes. A click opens the file, an
+svg in a preview that follows the editor theme. **Create folder** on the section or on a folder asks
+the name and goes on to the first files, because an empty folder is not kept: resources of the same
+folder moved into it, or files added from disk. **Add resource files...** copies picked files into a
+folder. **Move to folder...** on a file or a folder, or dragging it onto a folder of the section,
+moves it with the engine's `move-resource`, and **Rename folder** renames a folder: the keys that
+name the files are rewritten across the project, and the lookups by a computed string are named in a
+note. **Delete folder** first shows every place that names the files, then deletes. A resource moves
+only within its own `Resources` folder.
+
 **Git status.** Object, form, subsystem and project rows carry the file's SCM decoration (color and
 badge) like the Explorer, while keeping their kind icon.
 

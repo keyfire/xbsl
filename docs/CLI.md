@@ -682,6 +682,75 @@ usage: xbsl rename-package [-h] [--dry-run] root package_dir new_name
 | `-h, --help` | show this help message and exit |
 | `--dry-run` | show the changes (with file texts) without writing anything |
 
+### `xbsl move-resource`
+
+move a resource file or a folder into another folder of the same Resources folder (a missing folder is created): the Resource{...} keys and the image property values naming the moved files are rewritten, the lookups by a string are listed in the notes; see also rename-resource-folder, which renames a folder
+
+```bash
+usage: xbsl move-resource [-h] [--dry-run] root resource_path target_dir
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `resource_path` | a resource file or a folder inside the Resources folder of a subsystem or a package |
+| `target_dir` | the target folder in the same Resources folder, or that folder itself |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
+### `xbsl rename-resource-folder`
+
+rename a folder inside a Resources folder: the files move, the Resource{...} keys naming them are rewritten across the project, the lookups by a string are listed in the notes; see also move- resource, which moves a resource into a folder, and delete-resource-folder
+
+```bash
+usage: xbsl rename-resource-folder [-h] [--dry-run] root folder_dir new_name
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `folder_dir` | a folder inside the Resources folder of a subsystem or a package |
+| `new_name` | the new folder name - it becomes a part of the resource key |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
+### `xbsl delete-resource-folder`
+
+delete a folder inside a Resources folder with every file and list the Resource{...} keys and the lookups by a string naming them; without `--apply` - the plan only; see also rename-resource-folder, which renames instead of removing
+
+```bash
+usage: xbsl delete-resource-folder [-h] [--apply] [--dry-run] root folder_dir
+```
+
+**Arguments**
+
+| Option | Description |
+|---|---|
+| `root` | the project root – the folder with Project.yaml (usually .) |
+| `folder_dir` | a folder inside the Resources folder of a subsystem or a package |
+
+**Options**
+
+| Option | Description |
+|---|---|
+| `-h, --help` | show this help message and exit |
+| `--apply` | perform the deletion (without the flag the plan is printed: deletion is irreversible) |
+| `--dry-run` | show the changes (with file texts) without writing anything |
+
 ### `xbsl set-access`
 
 set the object's AccessControl.Разрешения; see also object-info for the current rights and the set this kind has

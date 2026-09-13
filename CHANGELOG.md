@@ -20,10 +20,19 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+- **`move-resource`, `rename-resource-folder` and `delete-resource-folder` work with resource
+  folders.** A file moved by hand left its `Resource{...}` keys on the old path until a build
+  failed. The commands move the files and rewrite the keys; lookups by a computed string are listed,
+  not edited. ([#62](https://github.com/keyfire/xbsl/pull/62))
+
 ### Changed
 - **With `--project-root`, the LSP server skips yaml outside the root, except the dictionary.** Such
   a file got findings when opened and lost them at the next save. Modules are still checked wherever
   they are opened. ([#59](https://github.com/keyfire/xbsl/pull/59))
+- **`delete-object` and `delete-resource-folder` remove the folders their deletions empty.** A
+  package whose last object was deleted used to stay behind as an empty folder, which git does not
+  keep anyway. ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Fixed
 - **`yaml/missing-import` reads the tables of a dynamic list.** A list whose main or joined table

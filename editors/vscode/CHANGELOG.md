@@ -22,6 +22,13 @@
 - **The WSDL of a SOAP service client opens from the tree.** The client gets a "WSDL" node and an
   "Open WSDL" command, with a node per file when there are several. Nothing in the tree led to these
   files before. ([#60](https://github.com/keyfire/xbsl/pull/60))
+- **The Resources section shows folders.** A folder of thirty files used to read as thirty full keys
+  in a row. Folders now nest with the number of files in grey, and a file keeps its key in the
+  tooltip. ([#62](https://github.com/keyfire/xbsl/pull/62))
+- **Resource folders are created, renamed and deleted from the tree.** "Move to folder..." or a drag
+  moves a resource, and the engine rewrites the keys naming it; "Delete folder" lists those places
+  first. The commands need an xbsl engine that has them.
+  ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Fixed
 - **The Problems panel shows the findings of the translation dictionary.** With `xbsl.projectRoot`

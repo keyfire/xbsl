@@ -42,6 +42,9 @@ xbsl rename-object . <old-name> <new-name>             # rename files + update r
 xbsl delete-object . --name <object>                   # the plan; --apply deletes and lists leftovers
 xbsl move-object . <object>.yaml <package-dir>         # into a package: files + imports + full names
 xbsl rename-package . <package-dir> <new-name>         # the folder + imports + full names
+xbsl move-resource . <resource> <folder>               # into another folder: files + keys
+xbsl rename-resource-folder . <folder> <new-name>      # the folder + the keys of its files
+xbsl delete-resource-folder . <folder>                 # the plan; --apply deletes and lists references
 xbsl set-access . --name <object> --default <access-method>
 xbsl object-info . --name <object>                     # fields, tabulars, forms, namespace
 xbsl project-info .                                    # projects, subsystems, objects by kind
@@ -185,6 +188,22 @@ author's decision. An import the move made unnecessary is named in `notes`, not 
 folder with all its files and rewrites `import Subsystem::Batches[::Archive]`, the `Import` items
 and the qualified names across the project. For a Cyrillic package name in a project with a
 translation dictionary both remind of the pair the name needs.
+
+`move-resource` (MCP `meta_move_resource`) moves a resource file or a folder of them into another
+folder of the same `Resources` folder; a folder that does not exist yet is created by the move,
+because an empty folder is kept neither by git nor by a build. `rename-resource-folder` (MCP
+`meta_rename_resource_folder`) renames a folder inside it. A resource is addressed by its path under
+the folder, so both rewrite the static references that lead to the moved files: the `Resource{...}`
+literals of modules and yaml bindings and the bare values of image properties
+(`Image: Pictures/Flag.svg`). A key with a namespace names the folder of that subsystem or package;
+a bare key is looked for in every resources folder of the file's own subsystem and of the namespaces
+it imports, and a key two of them hold is named in `notes` instead of being rewritten. A lookup by a
+computed string (`ResourcesPackage.Current().Get("Folder/...")`) is resolved at run time: the
+commands list such strings by file and line and leave them to the author. `delete-resource-folder`
+(MCP `meta_delete_resource_folder`) deletes a folder with its files and lists both kinds of
+references without editing them; without `--apply` it prints the plan. A move into the `Resources`
+folder of another subsystem or package is refused: the file would change its namespace, and a lookup
+by a string at the old place has nothing to rewrite.
 
 ## Code templates
 
