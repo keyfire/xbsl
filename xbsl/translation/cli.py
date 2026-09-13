@@ -98,9 +98,12 @@ MESSAGES = {
         "en": "dictionary updated: {changed} changed, {added} added, {removed} removed",
     },
     "translate.help.unused": {
-        "ru": "показать пары словаря, ключей которых в проекте больше нет (то же: --stale)",
+        "ru": "показать пары словаря, ключей которых в проекте больше нет (то же: --stale)."
+              " Машинный вид – --format json: каждая строка unused несёт kind, key, value,"
+              " file, line и scope",
         "en": "list the dictionary entries whose key the project no longer carries"
-              " (same thing: --stale)",
+              " (same thing: --stale). The machine shape is --format json: every row of"
+              " unused carries kind, key, value, file, line and scope",
     },
     "translate.help.prune": {
         "ru": "снять найденные --unused (или --redundant) пары из словаря (правит файлы словаря)",
@@ -132,17 +135,20 @@ MESSAGES = {
     },
     "translate.help.since": {
         "ru": "сироты ОДНОЙ правки: оставить в --unused только ключи, которые встречались"
-              " лишь в строках, снятых этой правкой. Ветка или коммит – diff от точки"
-              " расхождения до рабочего дерева (незакоммиченное тоже считается); диапазон"
-              " A..B передаётся git как написан",
+              " лишь в строках, снятых этой правкой, и пары, которые эта же правка добавила"
+              " в словарь. Ветка или коммит – diff от точки расхождения до рабочего дерева"
+              " (незакоммиченное тоже считается); диапазон A..B передаётся git как написан",
         "en": "the orphans of ONE change: keep in --unused only the keys that occurred"
-              " nowhere but in the lines that change removed. A branch or a commit diffs from"
-              " the fork point to the WORKING TREE (uncommitted work counts too); a range"
-              " A..B is handed to git as written",
+              " nowhere but in the lines that change removed, and the entries the same"
+              " change added to the dictionary. A branch or a commit diffs from the fork"
+              " point to the WORKING TREE (uncommitted work counts too); a range A..B is"
+              " handed to git as written",
     },
     "translate.since-header": {
-        "ru": "снятые строки прочитаны по git diff {base} (файлов в правке: {files})",
-        "en": "the removed lines come from git diff {base} ({files} files in the change)",
+        "ru": "снятые строки прочитаны по git diff {base} (файлов в правке: {files},"
+              " добавленных правкой пар словаря: {added})",
+        "en": "the removed lines come from git diff {base} ({files} files in the change,"
+              " {added} dictionary entries the change added)",
     },
     "translate.unused-header": {
         "ru": "пар словаря без места в проекте: показано {shown} из {total}",
@@ -870,13 +876,14 @@ def _list_unused(args, root: Path, loaded) -> int:
     removed = None
     if args.since:
         try:
-            removed = entries_module.removed_surfaces(root, args.since)
+            removed = entries_module.removed_surfaces(root, args.since, path)
         except ValueError as exc:
             print(str(exc), file=sys.stderr)
             return 2
     needle = args.filter.casefold()
+    found = entries_module.orphans_of(root, path, loaded, removed, progress=_progress)
     rows = [
-        entry for entry in entries_module.unused_entries(root, path, loaded, removed)
+        entry for entry in found.entries
         if (args.kind in ("any", entry.kind))
         and (not needle or needle in entry.key.casefold() or needle in entry.value.casefold())
     ]
@@ -887,7 +894,7 @@ def _list_unused(args, root: Path, loaded) -> int:
         "unused": [entry.as_dict() for entry in page],
     }
     if removed is not None:
-        payload["since"] = {"base": removed.base, "files": removed.files}
+        payload["since"] = removed.as_dict()
     elif not needle:
         # Said in the answer rather than in the documentation: the number is large enough to
         # read as a worklist, and the run that treats it as one prunes the project's history.
@@ -900,10 +907,20 @@ def _list_unused(args, root: Path, loaded) -> int:
     return _emit(args, payload, page, lambda _rows: _render_unused(args, page, total, payload))
 
 
+def _progress(read: int, total: int) -> None:
+    """A line on stderr every PROGRESS_STEP files, so a long walk is seen to move.
+
+    On stderr, because stdout is the report: `--format json` there has to stay one document.
+    """
+    print(i18n.t("translate.unused.progress", read=read, total=total), file=sys.stderr,
+          flush=True)
+
+
 def _render_unused(args, page: list, total: int, payload: dict) -> None:
     since = payload.get("since")
     if since:
-        print(i18n.t("translate.since-header", base=since["base"][:12], files=since["files"]))
+        print(i18n.t("translate.since-header", base=since["base"][:12], files=since["files"],
+                     added=since["dictionary_added"]))
     if not total:
         print(i18n.t("translate.unused-none-since" if since else "translate.unused-none"))
         return
