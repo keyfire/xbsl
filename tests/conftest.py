@@ -50,6 +50,7 @@ _DATA_DEPENDENT = {
     "test_rule_module_level",  # the rule parses the module
     "test_rule_param_redeclared",  # the same module: the rule parses the method bodies
     "test_style_rules",
+    "test_rule_redundant_tostring",  # the rule tokenizes the module
     "test_mcp",
     "test_cli",
     "test_corpus",
