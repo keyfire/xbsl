@@ -105,12 +105,13 @@ The cross-file rules of tier D catch what the compiler reports late or not at al
 in yaml with no method in the paired module. A foreign-subsystem type used without an import of its
 namespace - of the subsystem for an element at its root, of `Subsystem::Package` for an element of a
 package, since importing a subsystem does not bring its packages. The project module is judged for
-the elements of packages, and the tables of a query count as references too - of a `Query{...}`
+the elements of packages and of subsystem roots, and the tables of a query count as references too - of a `Query{...}`
 block against the imports of the module, of the `.xbql` of a virtual table against the `Import`
 section of its yaml. A full name of the project that leads to a namespace where its element does not
 lie is reported with a fix. The tables of a dynamic list count as references of its yaml too, and a
 partial name `Subsystem::Name` is checked against the placement of its element the way a full name
-is. A `DynamicList` typed by the automatic list form that misses an
+is. The joined tables of the reference input settings count as references too, and a table must be
+public wherever a list or a query names it. A `DynamicList` typed by the automatic list form that misses an
 attribute of its object. A cross-component call `Components.X.Method()` that carries no visibility
 annotation. Environment mismatches: `@OnServer` called from a client handler without
 `@AvailableFromClient`, a client module used from an `HttpService`. Reserved names: a field or

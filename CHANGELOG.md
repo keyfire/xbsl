@@ -53,6 +53,16 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **The import rules read more tables.** A joined table of the reference input settings and a table
+  after a join condition (`FROM A LEFT JOIN B ON ..., C`) went unread, and `code/unused-import` could
+  call such an import unused. The project module now needs `import Subsystem` for an element of a
+  subsystem root as well. ([#88](https://github.com/keyfire/xbsl/pull/88))
+- **The visibility rules read the tables of lists and queries.** A non-public table of another
+  subsystem in a dynamic list, input settings, a `Query{...}` block or the query of a virtual table
+  breaks the build, and `yaml/foreign-not-public` and `code/foreign-not-public` now report it. ([#88](https://github.com/keyfire/xbsl/pull/88))
+- **`yaml/wrong-namespace` and `code/wrong-namespace` judge a partial name of an element kept in
+  several places.** The compiler looks only where the name leads, so the finding lists the places and
+  leaves the choice to the author. ([#88](https://github.com/keyfire/xbsl/pull/88))
 - **A translation dictionary no longer hides dead methods.** It names every method it translates,
   and `code/unused-method` took those names for uses, so a check of the project together with its
   dictionary found nothing. ([#82](https://github.com/keyfire/xbsl/pull/82))
