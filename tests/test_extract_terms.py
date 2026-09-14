@@ -185,3 +185,106 @@ def test_a_stated_term_does_not_unsettle_a_word_the_neighbourhood_knows():
     _members, common, _types = _scan_meta_objects(zipfile.ZipFile(car))
 
     assert "Строки" not in common  # two against one is not dominance, as it never was
+
+
+# --- the kind table: the fullest copy of the serializer enum, not the first ---------------
+
+
+def _kind_enum_blob(pairs: list[tuple[str, str]]) -> bytes:
+    """A class whose constant pool holds English/Russian kind pairs in order."""
+    import struct
+
+    strings: list[str] = []
+    for en, ru in pairs:
+        strings.extend((en, ru))
+    out = bytearray(b"\xca\xfe\xba\xbe" + b"\x00" * 4)
+    out += struct.pack(">H", len(strings) + 1)
+    for text in strings:
+        data = text.encode("utf-8")
+        out += b"\x01" + struct.pack(">H", len(data)) + data
+    return bytes(out)
+
+
+def _car_with_kind_tables(copies: list[tuple[str, list[tuple[str, str]]]]):
+    """A .car whose named jars each hold one copy of the kind enum."""
+    import io
+    import zipfile
+
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        for jar_name, pairs in copies:
+            jar = io.BytesIO()
+            with zipfile.ZipFile(jar, "w") as jz:
+                jz.writestr(
+                    "com/e1c/g5rt/demo/ProjectElementKindCmptEnum.class",
+                    _kind_enum_blob(pairs),
+                )
+            z.writestr(jar_name, jar.getvalue())
+    return zipfile.ZipFile(car)
+
+
+_HTTP_SOAP = [("HttpService", "HttpСервис"), ("SoapService", "SoapСервис")]
+_FULL_KINDS = _HTTP_SOAP + [
+    ("Catalog", "Справочник"),
+    ("CommonModule", "ОбщийМодуль"),
+    ("InterfaceComponent", "КомпонентИнтерфейса"),
+]
+
+
+def test_the_fullest_kind_table_wins_over_an_earlier_short_copy():
+    """A server-with-IDE archive can list a two-kind copy first; taking that one
+    dropped Catalog, CommonModule and InterfaceComponent from the metamodel.
+
+    Seen at least on 9.2.9+12 and 9.3.1+4. The scan does not read the version out of
+    the jar names, so a later build is handled the same way.
+    """
+    from xbsl.extract.terms import scan_kind_table
+
+    table = scan_kind_table(_car_with_kind_tables([
+        ("data/lib/chassis/modules/com.e1c.g5rt.appengine.core.reflection.common-9.2.9-1-proguard.jar",
+         _HTTP_SOAP),
+        ("data/ide/theia/plugins/@1c-appengine-plugin/bin/appengine-lsp/repo/"
+         "com.e1c.g5rt.lsp.server.appengine-9.3.1-1.jar", _FULL_KINDS),
+    ]))
+
+    assert table == {
+        "HttpСервис": "HttpService",
+        "SoapСервис": "SoapService",
+        "Справочник": "Catalog",
+        "ОбщийМодуль": "CommonModule",
+        "КомпонентИнтерфейса": "InterfaceComponent",
+    }
+
+
+def test_a_later_short_kind_table_does_not_replace_a_full_one():
+    from xbsl.extract.terms import scan_kind_table
+
+    table = scan_kind_table(_car_with_kind_tables([
+        ("data/lib/com.e1c.g5rt.full-1.0.jar", _FULL_KINDS),
+        ("data/lib/com.e1c.g5rt.tiny-1.0.jar", _HTTP_SOAP),
+    ]))
+
+    assert "Справочник" in table and len(table) == len(_FULL_KINDS)
+
+
+def test_a_single_full_kind_table_is_kept():
+    """A build that ships only the complete copy is not a special case of the scan."""
+    from xbsl.extract.terms import scan_kind_table
+
+    table = scan_kind_table(_car_with_kind_tables([
+        ("data/lib/com.e1c.g5rt.lsp.server.appengine-8.0.0-1.jar", _FULL_KINDS),
+    ]))
+    assert table["КомпонентИнтерфейса"] == "InterfaceComponent"
+    assert len(table) == len(_FULL_KINDS)
+
+
+def test_no_kind_enum_copy_answers_with_nothing():
+    import io
+    import zipfile
+
+    from xbsl.extract.terms import scan_kind_table
+
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("readme.txt", "no jars")
+    assert scan_kind_table(zipfile.ZipFile(car)) == {}

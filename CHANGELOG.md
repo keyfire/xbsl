@@ -30,6 +30,13 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **The extractor takes the fullest element-kind table from the distribution.** A
+  server-with-IDE archive can carry several copies of that table; the first one often names
+  only `HttpService` and `SoapService`, and kinds such as `Catalog`, `CommonModule` and
+  `InterfaceComponent` then drop out of the metamodel. Form properties were reported as
+  unknown. Seen at least on 9.2.9+12 and 9.3.1+4; the scan does not depend on the platform
+  version.
+
 - **Named arguments are checked against resolved local and module signatures.** Unknown and repeated names, positional arguments after named ones and missing required parameters are reported. Structure methods take precedence over module methods; shadowed receivers and ambiguous overloads are left alone. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Structure fields with non-generic platform types are checked for a missing default value.** Types such as `TextPosition` need `req`, a nullable marker or an initializer; scalar default values and locally shadowed type names are respected. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Dynamic-list expressions translate an explicit table alias reference as `Reference`.** Main and joined table aliases share the source scope, including filters; UI links and unrelated receivers retain their own meaning. English expression keys are handled too. ([#101](https://github.com/keyfire/xbsl/pull/101))
