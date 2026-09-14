@@ -492,3 +492,12 @@ def test_the_fixed_module_has_nothing_left_to_fix(tmp_path):
     text = module.read_bytes().decode("utf-8")
     assert [d.rule_id for d in left] == [REDUNDANT]  # the wider cast stays for the author
     assert "Место как МестаХранения.Ссылка" in text and "П как" not in text
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("previous", ["Склад.ВСтроку()", "знч А = Склад"])
+def test_cast_at_statement_start_removes_grouping_parentheses(previous):
+    module = ("метод Ф(Склад: Склады.Ссылка)\n    " + previous
+              + "\n    (Склад как Склады.Ссылка).ЗагрузитьОбъект()\n;\n")
+    fixed = _fixed(_project(module))
+    assert "\n    Склад.ЗагрузитьОбъект()\n" in fixed

@@ -3,7 +3,7 @@
 A fixable finding carries either a span edit (Diagnostic.fix, a TextEdit into the file's
 decoded text) or, for whole-file rules like whitespace/mixed-newline, no span edit – the
 fixer recognizes it by id and normalizes newlines. Only unambiguous, reversible mechanical
-fixes are attached (trailing whitespace, typography characters, newline style); anything
+fixes are attached (whitespace, typography, redundant casts and other code edits); anything
 that needs judgment is left to the author.
 
 The edits of one file are applied together: overlapping spans are resolved deterministically
@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 from xbsl.diagnostics import Diagnostic
 from xbsl.engine import SourceFile
@@ -83,3 +84,102 @@ def fix_source(source: SourceFile, diags: list[Diagnostic]) -> FixResult:
 def encode(source: SourceFile, text: str) -> bytes:
     """Encode the fixed text back to bytes, preserving the original UTF-8 BOM."""
     return text.encode("utf-8-sig" if source.had_bom else "utf-8")
+
+
+@dataclass
+class _AcceptedOccurrence:
+    original: Diagnostic
+    anchor: int
+    start: int
+    end: int
+
+
+def fix_paths(
+    files: list[Path], *, select=None, ignore=None, enable=None,
+    requested: list[Path] | None = None, baseline_path: Path | None = None,
+) -> tuple[list[Diagnostic], dict[str, int], list[tuple[Diagnostic, Diagnostic]]]:
+    """Apply fixes in bounded passes and return final diagnostics, counts and frozen matches.
+
+    Baseline occurrences are pinned before writing. Their anchors and protected spans move
+    with edits; later findings cannot spend their budgets, and messages with changing line
+    numbers remain accepted. The third return value pairs current and original diagnostics
+    for baseline.apply, so adapters retain the same decisions in their final reports.
+    """
+    from xbsl import baseline, engine
+
+    data = baseline.load(baseline_path, strict=True) if baseline_path is not None else None
+    wanted = {p.resolve() for p in requested} if requested is not None else None
+    fixed = 0
+    changed: set[Path] = set()
+    frozen: list[_AcceptedOccurrence] = []
+    for iteration in range(11):
+        sources = [engine.load(path) for path in files]
+        starts = {source.rel: [0] + [m.end() for m in _NEWLINE_RE.finditer(source.text)]
+                  for source in sources}
+
+        def offset(diagnostic: Diagnostic) -> int:
+            lines = starts[diagnostic.path]
+            return lines[min(diagnostic.line - 1, len(lines) - 1)] + diagnostic.col - 1
+
+        diagnostics = engine.run_sources(sources, select=select, ignore=ignore, enable=enable)
+        if wanted is not None:
+            diagnostics = [d for d in diagnostics if Path(d.path).resolve() in wanted]
+        if iteration == 0 and data is not None:
+            eligible = {id(d) for d in baseline.apply(diagnostics, data, baseline_path.parent)[0]}
+            for diagnostic in diagnostics:
+                if id(diagnostic) not in eligible:
+                    anchor = offset(diagnostic)
+                    edit = diagnostic.fix
+                    frozen.append(_AcceptedOccurrence(
+                        diagnostic, anchor, edit.start if edit else anchor,
+                        edit.end if edit else anchor + 1,
+                    ))
+        available = {}
+        for occurrence in frozen:
+            key = (occurrence.original.path, occurrence.original.rule_id, occurrence.anchor)
+            available.setdefault(key, []).append(occurrence)
+        accepted = []
+        for diagnostic in diagnostics:
+            matches = available.get((diagnostic.path, diagnostic.rule_id, offset(diagnostic)), [])
+            if matches:
+                accepted.append((diagnostic, matches.pop(0).original))
+        if iteration == 10:
+            break
+        accepted_ids = {id(current) for current, original in accepted}
+        by_path: dict[str, list[Diagnostic]] = {}
+        for diagnostic in diagnostics:
+            if id(diagnostic) not in accepted_ids:
+                by_path.setdefault(diagnostic.path, []).append(diagnostic)
+        progress = False
+        for source in sources:
+            own = by_path.get(source.rel, [])
+            protected = [f for f in frozen if f.original.path == source.rel]
+            if protected:
+                spans = [(f.start, max(f.end, f.start + 1)) for f in protected]
+                spans.extend((f.anchor, f.anchor + 1) for f in protected)
+                if any(f.original.rule_id in FULL_FILE_FIX_RULES for f in protected):
+                    spans = [(0, len(source.text))]
+                own = [d for d in own if d.fix is not None and not any(
+                    (d.fix.start < end and d.fix.end > start)
+                    or (d.fix.start == d.fix.end and start <= d.fix.start < end)
+                    for start, end in spans
+                )]
+            result = fix_source(source, own)
+            if result.changed:
+                edits = [d.fix for d in _select_edits(own)]
+
+                def moved(position: int) -> int:
+                    return position + sum(len(edit.new) - (edit.end - edit.start)
+                                          for edit in edits if edit.end <= position)
+
+                source.path.write_bytes(encode(source, result.text))
+                for occurrence in protected:
+                    occurrence.anchor = moved(occurrence.anchor)
+                    occurrence.start = moved(occurrence.start)
+                    occurrence.end = moved(occurrence.end)
+                changed.add(source.path)
+                fixed += result.applied
+                progress = True
+        if not progress:
+            break
+    return diagnostics, {"fixed": fixed, "files_changed": len(changed)}, accepted

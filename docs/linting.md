@@ -24,6 +24,14 @@ em-dash and guillemets debt. The group holds `typography/en-dash-comment` too, s
 the en dash of a comment into a hyphen; a project that writes the en dash there adds
 `--ignore typography/en-dash-comment`. Anything that needs judgment stays where it is.
 
+Code fixes are included too: redundant casts, unused imports and local names, non-null
+assertions, redundant guards and constructor literals. The sources are checked again between
+passes, so each edit uses current offsets. `--fix --baseline <file>` protects the occurrences
+accepted at the start of the run and never rewrites the baseline. Newly introduced lookalike
+findings do not take over that protection. Edits overlapping a protected occurrence are skipped;
+remaining findings are reported. At most ten passes run. `--fix` cannot be combined with
+`--write-baseline` or `--prune-baseline`.
+
 The `comment/` group judges how a comment is worded rather than which characters it holds:
 `comment/subjunctive` (the particle `бы` - the finding asks for a word of condition, because
 dropping the particle alone turns a hypothesis into a statement about the code),
@@ -245,7 +253,10 @@ Reasons come from the "Exclude the finding" lightbulb action of the
 or you write them by hand. `--write-baseline` keeps the reasons of the identities that survive a
 rewrite. The LSP server accepts the same `--baseline FILE` flag, so exclusions disappear in
 editors too. The identity includes the message text, so write and check the baseline under the
-same output language.
+same output language. References to source line numbers in known diagnostic templates are
+excluded from the identity, so moving an accepted finding does not make it new. Names and
+semantic numbers still distinguish findings; the displayed message keeps the current line
+number. Existing baseline files use the same matching without being rewritten.
 
 Only the entries of the rules the run actually carried count as stale. A rule left out of the set
 - by a narrowing `--select`, by being off by default, by being unknown to the installed plugin -

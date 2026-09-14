@@ -8,6 +8,8 @@ method that does not parse.
 
 from pathlib import Path
 
+import pytest
+
 from xbsl import engine, fixer, i18n
 
 RULES = {"code/unused-local", "code/unused-loop-var", "code/parse-error"}
@@ -275,3 +277,26 @@ def test_method_that_does_not_parse_is_skipped():
     rules = {x.rule_id for x in d}
     assert "code/parse-error" in rules
     assert [x.line for x in d if x.rule_id == "code/unused-local"] == [7]
+
+
+@pytest.mark.parametrize("header, read, expected", [
+    ("для Итог из Числа", "", [("code/unused-local", 2, 9), ("code/unused-loop-var", 3, 9)]),
+    ("для Итог из Числа", "        Печать(Итог)\n", [("code/unused-loop-var", 3, 9)]),
+    ("для Итог = 1 по 3", "", [("code/unused-local", 2, 9)]),
+    ("для Итог = 1 по 3", "        Печать(Итог)\n", []),
+    ("для итог из Числа", "        Печать(итог)\n", [("code/unused-local", 2, 9), ("code/unused-loop-var", 3, 9)]),
+    ("для итог из Числа", "        Печать(Итог)\n", [("code/unused-loop-var", 3, 9)]),
+])
+def test_redeclared_loop_name_keeps_original_binding_without_assignment(header, read, expected):
+    code = f"метод Обойти(Числа: Массив<Число>)\n    пер Итог = 0\n    {header}\n{read}    ;\n;\n"
+    diags = _lint(code)
+    assert _found(diags) == expected
+    assert all("только присваивается" not in d.message for d in diags)
+    assert all("присваивается значение" not in d.message for d in diags)
+
+
+def test_assignment_before_redeclared_loop_remains_an_assignment():
+    diags = _lint("метод Обойти(Числа: Массив<Число>)\n    пер Итог = 0\n"
+                  "    Итог = 2\n    для Итог из Числа\n    ;\n;\n")
+    assert _found(diags) == [("code/unused-local", 2, 9), ("code/unused-loop-var", 4, 9)]
+    assert "присваивается" in diags[0].message

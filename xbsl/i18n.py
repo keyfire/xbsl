@@ -240,8 +240,8 @@ _CORE_MESSAGES = {
         "en": "--fix writes files on disk and is incompatible with --stdin.",
     },
     "cli.fix-conflicts-baseline": {
-        "ru": "Режим --fix несовместим с --baseline / --write-baseline.",
-        "en": "--fix is incompatible with --baseline / --write-baseline.",
+        "ru": "Режим --fix несовместим с --write-baseline / --prune-baseline.",
+        "en": "--fix is incompatible with --write-baseline / --prune-baseline.",
     },
     "engine.param-bad-value": {
         "ru": "Значение '{value}' в переменной {env} не разобрано – взято умолчание "
@@ -338,10 +338,10 @@ _CORE_MESSAGES = {
               "(freeze the debt; paths in the file are relative to its directory)",
     },
     "cli.help.fix": {
-        "ru": "исправить механические находки на месте (хвостовые пробелы, типографские "
-              "символы, переводы строк) и вывести оставшиеся; правит только однозначно",
-        "en": "fix mechanical findings in place (trailing spaces, typographic "
-              "characters, line endings) and report the rest; only unambiguous fixes",
+        "ru": "применить однозначные правки оформления и кода вне списка принятых "
+              "замечаний и вывести оставшиеся",
+        "en": "apply unambiguous formatting and code fixes outside the baseline "
+              "and report the remaining findings",
     },
     "cli.help.jobs": {
         "ru": "процессов для файловых правил: 0 – авто (включается на больших проверках), "

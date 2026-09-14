@@ -39,7 +39,6 @@ import {
   dictionaryOutsideRoot,
   discoverDictionary,
   groupReportByFile,
-  isDictionaryFile,
   mergeReports,
   PathKind,
   readByRun,
@@ -51,6 +50,8 @@ import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActio
 let collection: vscode.DiagnosticCollection;
 let output: vscode.OutputChannel;
 const debounceTimers = new Map<string, NodeJS.Timeout>();
+// Identity tokens also reject a running buffer check after save, close, reset or a newer check.
+const bufferRequests = new Map<string, object>();
 let warnedOnce = false;
 
 // The latest fixable findings per document, stamped with a version (uri -> snapshot) - for Quick
@@ -69,8 +70,8 @@ function setFixSnapshot(uri: vscode.Uri, version: number, diags: RawDiag[]): voi
 
 // --- Workspace run state -----------------------------------------------------------------
 // One diagnostic collection, two producers:
-//  * the fast `--stdin` run owns the findings of the edited (dirty) buffer - a module, or a file
-//    of the translation dictionary;
+//  * the fast `--stdin` run owns the findings of the edited (dirty) module or project YAML,
+//    including the translation dictionary;
 //  * the whole-workspace run (on save, debounced, one at a time) replaces the findings of the
 //    files it read - the project root and the dictionary that serves it (see RunScope); it sees
 //    project rules that are out of reach for a single buffer. A document it did not read keeps
@@ -176,32 +177,29 @@ function runScopeFor(folder: vscode.WorkspaceFolder, quiet = false): RunScope {
   return { root, dictionary: dictionaryOutsideRoot(root, discoverDictionary(root, pathKind)) };
 }
 
-// The workspace folder whose project a file of the translation dictionary serves, or undefined for
-// any other file. The file's own folder is asked first; a dictionary may also sit above every
-// folder, next to the project a narrower folder holds.
-function dictionaryFolderOf(uri: vscode.Uri): vscode.WorkspaceFolder | undefined {
+// YAML belongs to a configured project root or its serving dictionary; unrelated YAML stays
+// outside the CLI checks. Modules remain eligible wherever they are opened, as in LSP mode.
+function yamlFolderOf(uri: vscode.Uri): vscode.WorkspaceFolder | undefined {
   if (uri.scheme !== "file" || !uri.fsPath.toLowerCase().endsWith(".yaml")) {
     return undefined;
   }
   const own = vscode.workspace.getWorkspaceFolder(uri);
-  const others = (vscode.workspace.workspaceFolders ?? []).filter(
-    (folder) => folder.uri.toString() !== own?.uri.toString()
-  );
-  for (const folder of own ? [own, ...others] : others) {
-    const root = projectRootFor(folder, true);
-    if (isDictionaryFile(uri.fsPath, discoverDictionary(root, pathKind))) {
-      return folder;
-    }
-  }
-  return undefined;
+  const others = (vscode.workspace.workspaceFolders ?? []).filter((folder) => folder !== own);
+  return (own ? [own, ...others] : others).find((folder) => readByRun(uri.fsPath, runScopeFor(folder, true)));
 }
 
-// The documents the `--stdin` check takes: modules, and the files of the translation dictionary.
-// The dictionary is judged by file rules alone (translation/english-shape among them), which is
-// exactly what a buffer check runs - so its findings follow the typing, as they do in LSP mode,
-// and the workspace run refreshes them on save.
 function isBufferLintable(doc: vscode.TextDocument): boolean {
-  return doc.languageId === "xbsl" || dictionaryFolderOf(doc.uri) !== undefined;
+  return doc.languageId === "xbsl" || yamlFolderOf(doc.uri) !== undefined;
+}
+
+function cancelBufferLint(uri: vscode.Uri): void {
+  const key = uri.toString();
+  const timer = debounceTimers.get(key);
+  if (timer !== undefined) {
+    clearTimeout(timer);
+    debounceTimers.delete(key);
+  }
+  bufferRequests.delete(key);
 }
 
 function cwdFor(uri: vscode.Uri): string | undefined {
@@ -222,10 +220,13 @@ function isLintableUri(uri: vscode.Uri): boolean {
 }
 
 async function lintDocument(doc: vscode.TextDocument): Promise<void> {
-  if (!isBufferLintable(doc)) {
+  if (lspActive() || doc.isClosed || !isBufferLintable(doc)) {
     return;
   }
   const settings = readSettings(doc.uri);
+  if (settings.run === "off") {
+    return;
+  }
   // A path relative to the workspace folder (the run's cwd), not a bare name: it is what matches
   // findings against baseline entries, and structure/xbsl-pair sees the real neighbor.
   const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
@@ -236,13 +237,17 @@ async function lintDocument(doc: vscode.TextDocument): Promise<void> {
         ? path.relative(folder.uri.fsPath, doc.uri.fsPath)
         : path.basename(doc.uri.fsPath);
   const version = doc.version;
+  const key = doc.uri.toString();
+  const request = {};
+  bufferRequests.set(key, request);
   const result = await lintBuffer(doc.getText(), filename, cwdFor(doc.uri), settings.linter);
-  if (result.error) {
-    reportProblem(result.error, result.notFound);
+  // Ownership can change without a version change, for example when the buffer is saved.
+  if (bufferRequests.get(key) !== request || doc.isClosed || lspActive() || doc.version !== version) {
     return;
   }
-  // Discard a stale result: the buffer changed while the linter was running.
-  if (doc.version !== version) {
+  bufferRequests.delete(key);
+  if (result.error) {
+    reportProblem(result.error, result.notFound);
     return;
   }
   const raw = (result.report?.diagnostics ?? []).filter((d) => ruleOverride(d.rule, doc.uri) !== "off");
@@ -269,11 +274,8 @@ function reportProblem(message: string, notFound = false): void {
 }
 
 function scheduleLint(doc: vscode.TextDocument, delay: number): void {
+  cancelBufferLint(doc.uri);
   const key = doc.uri.toString();
-  const prev = debounceTimers.get(key);
-  if (prev) {
-    clearTimeout(prev);
-  }
   debounceTimers.set(
     key,
     setTimeout(() => {
@@ -424,6 +426,13 @@ function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport,
     fresh.set(key, entry);
   }
   workspaceResults.set(folderKey, { scope, entries: fresh });
+  // A clean document now belongs to this disk report, including its absence of findings.
+  for (const doc of openDocs.values()) {
+    if (!doc.isDirty && doc.uri.scheme === "file" && readByRun(doc.uri.fsPath, scope)) {
+      cancelBufferLint(doc.uri);
+      setFixSnapshot(doc.uri, doc.version, fresh.get(doc.uri.toString())?.raw ?? []);
+    }
+  }
   for (const [key, entry] of fresh) {
     const doc = openDocs.get(key);
     if (doc && doc.isDirty) {
@@ -497,6 +506,11 @@ function lintOpenDocuments(): void {
 // Forget everything and start over: used by the restart command and on settings changes.
 function resetAndRelint(): void {
   warnedOnce = false;
+  for (const timer of debounceTimers.values()) {
+    clearTimeout(timer);
+  }
+  debounceTimers.clear();
+  bufferRequests.clear();
   activeRun?.cancel();
   for (const t of workspaceTimers.values()) {
     clearTimeout(t);
@@ -671,7 +685,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       const doc = e.document;
-      if (!isBufferLintable(doc)) {
+      // Saving can emit an empty change event; only text edits schedule buffer work.
+      if (e.contentChanges.length === 0 || !isBufferLintable(doc)) {
         return;
       }
       const settings = readSettings(doc.uri);
@@ -680,12 +695,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       }
     }),
     vscode.workspace.onDidSaveTextDocument((doc) => {
+      cancelBufferLint(doc.uri);
       const settings = readSettings(doc.uri);
       if (settings.run === "off") {
         return;
       }
       // A dictionary above every folder is saved into the run of the folder it serves.
-      const folder = vscode.workspace.getWorkspaceFolder(doc.uri) ?? dictionaryFolderOf(doc.uri);
+      const folder = vscode.workspace.getWorkspaceFolder(doc.uri) ?? yamlFolderOf(doc.uri);
       if (settings.workspaceLint && folder && isLintableUri(doc.uri)) {
         // The file on disk is now up to date - the whole-workspace run will replace the buffer's
         // findings with the full set (per-file and project rules together).
@@ -702,11 +718,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidCloseTextDocument((doc) => {
       const key = doc.uri.toString();
-      const t = debounceTimers.get(key);
-      if (t) {
-        clearTimeout(t);
-        debounceTimers.delete(key);
-      }
+      cancelBufferLint(doc.uri);
       fixStore.delete(key);
       // The file is still part of the project: bring back the findings of the last workspace run
       // (the closed buffer may have been dirty, its `--stdin` results die with it).
@@ -742,7 +754,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     vscode.commands.registerCommand("xbsl.lintProject", () => lintProject()),
     vscode.commands.registerCommand("xbsl.restartLinter", () => resetAndRelint()),
     vscode.languages.registerCodeActionsProvider(
-      { language: "xbsl" },
+      [{ language: "xbsl" }, { language: "yaml", scheme: "file", pattern: "**/*.yaml" }],
       new XbslCodeActionProvider((uri) => fixStore.get(uri.toString())),
       { providedCodeActionKinds: PROVIDED_KINDS }
     )
@@ -753,6 +765,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
+  bufferRequests.clear();
   for (const t of debounceTimers.values()) {
     clearTimeout(t);
   }

@@ -5849,6 +5849,39 @@ SEEDS: list[Seed] = [
                "Основное/Выгрузки.xbsl": _UPLOADS_XBSL_RU.format(call='ОбъектноеХранилище.Загрузить("файл.txt", Данные)')},
         tokens=_UPLOADS_TOKENS,
     ),
+    Seed(
+        rule="query/unknown-table", expect=FINDING,
+        note="a missing table after a comma in the FROM list",
+        files={"Заявки.yaml": _CATALOG_RU,
+               "Работа.xbsl": "метод Проверить()\n    знч Данные = Запрос{ВЫБРАТЬ 1 ИЗ Заявки, НетТаблицы}\n;\n"},
+        tokens={"Работа": "Work", "Проверить": "Check", "Данные": "Data", "Заявки": "Requests", "НетТаблицы": "MissingTable"},
+    ),
+    Seed(
+        rule="query/unknown-table", expect=CLEAN,
+        note="both comma-separated sources name a known table",
+        files={"Заявки.yaml": _CATALOG_RU,
+               "Работа.xbsl": "метод Проверить()\n    знч Данные = Запрос{ВЫБРАТЬ 1 ИЗ Заявки КАК А, Заявки КАК Б}\n;\n"},
+        tokens={"Работа": "Work", "Проверить": "Check", "Данные": "Data", "Заявки": "Requests", "А": "A", "Б": "B"},
+    ),
+    Seed(
+        rule="code/unused-local", expect=FINDING,
+        note="a repeated loop name does not assign the outer local",
+        files={"Работа.xbsl": "метод Проверить(Числа: Массив<Число>)\n    пер Итог = 0\n    для Итог из Числа\n    ;\n;\n"},
+        tokens={"Работа": "Work", "Проверить": "Check", "Числа": "Numbers", "Итог": "Total"},
+    ),
+    Seed(
+        rule="code/unused-local", expect=CLEAN,
+        note="reading a rejected loop name still reads the original declaration",
+        files={"Работа.xbsl": "метод Проверить(Числа: Массив<Число>)\n    пер Итог = 0\n    для Итог из Числа\n        Печать(Итог)\n    ;\n;\n"},
+        tokens={"Работа": "Work", "Проверить": "Check", "Числа": "Numbers", "Итог": "Total", "Печать": "Print"},
+    ),
+    Seed(
+        rule="code/unused-loop-var", expect=FINDING,
+        note="the rejected loop declaration remains unused when the body reads the original",
+        files={"Работа.xbsl": "метод Проверить(Числа: Массив<Число>)\n    пер Итог = 0\n    для Итог из Числа\n        Печать(Итог)\n    ;\n;\n"},
+        tokens={"Работа": "Work", "Проверить": "Check", "Числа": "Numbers", "Итог": "Total", "Печать": "Print"},
+    ),
+
 ]
 
 

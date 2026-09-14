@@ -83,8 +83,9 @@ severities and documentation links is in
 prints it on the spot. What tier D verifies in depth is in
 [the guide](https://github.com/keyfire/xbsl/blob/main/docs/linting.md#rules-in-depth).
 
-**Autofixes.** `--fix` repairs the mechanical findings in place: trailing whitespace, typography
-characters, mixed newlines. Anything that needs judgment it leaves alone.
+**Autofixes.** `--fix` applies available edits for the selected rules, including code fixes,
+then reports remaining findings. With `--baseline`, accepted occurrences are protected and the
+baseline file is not rewritten. Ambiguous or overlapping edits stay for manual review.
 
 **Baseline.** You can adopt a rule on an old codebase without cleaning all of it first. Freeze
 the current findings once, and only new code answers to the rule. The same file records point
