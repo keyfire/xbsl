@@ -1028,8 +1028,9 @@ export function propertyEdit(text: string, nodeOffset: number, key: string, valu
     }
     return undefined; // an object value is not edited by the panel
   }
-  // The property is absent - insert after the "Тип" line (or the node's first line).
-  const anchor = node.items.find((item) => isScalar(item.key) && String(item.key.value) === "Тип") ?? node.items[0];
+  // Metadata edits also run before the form designer loads its aliases.
+  // Both fixed platform spellings work in that case; fall back to the first line.
+  const anchor = node.items.find((item) => isScalar(item.key) && ["Тип", "Type"].includes(String(item.key.value))) ?? node.items[0];
   if (!anchor || !isScalar(anchor.key) || !anchor.key.range) {
     return undefined;
   }

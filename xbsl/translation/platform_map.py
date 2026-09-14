@@ -552,8 +552,11 @@ def kind_english(kind: str) -> str | None:
     english = terms.kinds_table().get(kind)
     if english:
         return english
-    # The metamodel builds the reverse map from the same proven constant; walking it forward
-    # here keeps one source of truth without exporting the constant.
+    # Old datasets mix stdlib type names (Enum) into the reverse map. Prefer the
+    # serializer vocabulary before consulting those aliases.
+    known = metamodel._KNOWN_KIND_SPELLINGS.get(kind)  # noqa: SLF001 - same-package data view
+    if known:
+        return known
     for en, ru in metamodel._english_kinds().items():  # noqa: SLF001 - same-package data view
         if ru == kind and en != kind:
             return en

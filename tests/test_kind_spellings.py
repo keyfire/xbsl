@@ -101,3 +101,16 @@ def test_project_overview_names_the_english_soap_client_by_its_kind(tmp_path, co
     assert info["object_counts"] == {"SoapСервис": 1, "КлиентSoapСервиса": 1}
     listed = scaffold.project_info(tmp_path, kind="КлиентSoapСервиса")["objects"]
     assert [(o["name"], o["kind"]) for o in listed] == [("CurrencyRates", "КлиентSoapСервиса")]
+
+
+def test_old_dataset_enum_type_does_not_override_serializer_kind(monkeypatch):
+    monkeypatch.setattr(terms, "kinds_table", dict)
+    monkeypatch.setattr(metamodel, "_english_kinds", lambda: {
+        "Enum": "Перечисление", "Enumeration": "Перечисление",
+    })
+    assert platform_map.kind_english("Перечисление") == "Enumeration"
+
+
+def test_dataset_serializer_spelling_still_wins(monkeypatch):
+    monkeypatch.setattr(terms, "kinds_table", lambda: {"Перечисление": "FutureEnumeration"})
+    assert platform_map.kind_english("Перечисление") == "FutureEnumeration"

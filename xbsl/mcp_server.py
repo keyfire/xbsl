@@ -245,7 +245,7 @@ def lint_paths(
                   one job, what `translate` wrote in another - and those judge different
                   sets. Without a name the first command wins and `as_ci.jobs` names the
                   others; a part of the name is enough when only one job fits;
-    compact     – answer without the list of findings: the summary alone, plus `errors` - the
+    compact     – omit the findings list and `summary.by_file`; keep counts and `errors` - the
                   full records of the error-level findings, and nothing else. A full answer
                   costs several hundred characters per finding, tens of thousands over one
                   project run, when the question was only whether the tree is clean and
@@ -2035,7 +2035,7 @@ def translate_unused(
     limit: int = 50,
     offset: int = 0,
     prune: bool = False,
-    compact: bool = False,
+    compact: bool | None = None,
     budget_seconds: float = 300,
 ) -> dict:
     """The opposite of translate_gaps: what the DICTIONARY still says and the project has not.
@@ -2070,11 +2070,14 @@ def translate_unused(
     limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
     prune  – REMOVE the listed entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
-             mistaken reading destroys a translation. It removes exactly the page it
-             answers with, so `kind`, `filter` and the page apply to the removal too;
-    compact – each row is only {key, kind, file, line}: the values are the bulk of a
-             page, and a cleaning pass needs the keys and their places, not the
-             translations;
+             mistaken reading destroys a translation. `kind`, `filter` and the page select
+             keys; all dictionary occurrences of those keys are removed, including repeats
+             outside the page. `removed` counts the physical occurrences;
+    compact – omitted: a preview lists full rows, a successful prune returns only counts.
+             False always includes full rows; True shortens preview rows to {key, kind,
+             file, line} and omits the list after pruning. `pruned` counts the removed
+             occurrences by kind and dictionary file; `counts` still covers all candidates.
+             A partial scan lists its candidates and never claims a removal;
     budget_seconds – how long the walk over the sources may take (300 by default). Past it
              the tool answers with what it has read: `partial` is true, `sources` counts the
              files read of the total, and `note` says how to go on (a larger budget, or a
@@ -2150,11 +2153,23 @@ def translate_unused(
         ]
     else:
         out["unused"] = [entry.as_dict() for entry in page]
-    if prune and page and not found.partial:
-        removed = entries_module.write_entries(
+    if prune and not found.partial:
+        selected = {(e.kind, e.key) for e in page}
+        # The writer removes every occurrence of a selected key, including repeated
+        # declarations beyond the page boundary. Count those same physical entries.
+        by_kind: dict[str, int] = {}
+        by_file: dict[str, int] = {}
+        for entry in found.entries:
+            if (entry.kind, entry.key) in selected:
+                by_kind[entry.kind] = by_kind.get(entry.kind, 0) + 1
+                by_file[entry.file] = by_file.get(entry.file, 0) + 1
+        result = entries_module.write_entries(
             path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
-        )
-        out["removed"] = removed["removed"]
+        ) if page else {"removed": 0}
+        out["removed"] = result["removed"]
+        out["pruned"] = {"by_kind": by_kind, "by_file": by_file}
+        if compact is not False:
+            out.pop("unused", None)
     return out
 
 

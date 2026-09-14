@@ -326,6 +326,8 @@ def test_the_real_server_describes_a_filter_as_a_string_or_a_list():
     assert {"type": "string"} in options
     assert {"type": "array", "items": {"type": "string"}} in options
     assert schema["properties"]["budget_seconds"]["default"] == 300
+    assert schema["properties"]["compact"]["default"] is None
+    assert {"type": "boolean"} in schema["properties"]["compact"]["anyOf"]
     entries_schema = next(tool for tool in tools if tool.name == "translate_entries").inputSchema
     assert entries_schema["properties"]["limit"]["default"] == 10
     assert entries_schema["properties"]["compact"]["default"] is False
@@ -349,3 +351,22 @@ def test_the_real_server_takes_a_list_through_a_call(tmp_path):
     answer = json.loads(content[0].text)
     assert [row["key"] for row in answer["unused"]] == ["СнятоеИмя"]
     assert answer["unmatched"] == ["нет-такого"]
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("detail", [None, False])
+def test_real_server_prune_default_and_explicit_detail(tmp_path, detail):
+    module = _real_server()
+    project = _project(tmp_path)
+    _dictionary(tmp_path / "vendor", _BASE_DICTIONARY + "    СнятоеИмя: RemovedName\n")
+    args = {"root": str(project), "prune": True}
+    if detail is not None:
+        args["compact"] = detail
+    try:
+        result = asyncio.run(module.mcp.call_tool("translate_unused", args))
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+    content = result[0] if isinstance(result, tuple) else result
+    answer = json.loads(content[0].text)
+    assert answer["removed"] == 1
+    assert ("unused" in answer) is (detail is False)
