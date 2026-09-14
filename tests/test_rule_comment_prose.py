@@ -285,7 +285,6 @@ def test_emphasis_caps_fix_lands_on_the_file_with_crlf(tmp_path):
     "# ответ в JSON, запрос в SQL",
     "# СКЛАД ЗАКРЫТ НА ПЕРЕУЧЁТ",
     "# условие ГДЕ НЕ Удалён",
-    "# значения складываются по ИЛИ, между группами - И",
     "# подпись \"НЕ ТРОГАТЬ\" показывается как есть",
     "# константа НОВАЯ_СТРОКА",
 ))
@@ -293,10 +292,11 @@ def test_emphasis_caps_leaves_abbreviations_citations_and_shouted_lines_alone(co
     assert _yaml(comment + "\n", CAPS) == []
 
 
-def test_emphasis_caps_phrase_is_reported_without_a_fix():
+def test_emphasis_caps_phrase_of_ordinary_words_is_fixed_word_by_word():
+    """Every word of the phrase is judged now, so none of them is left shouting."""
     diags = _yaml("# остаток читается ПОД ПРАВАМИ ПОЛЬЗОВАТЕЛЯ\n", CAPS)
 
-    assert [(d.col, d.fix) for d in diags] == [(20, None)]
+    assert [(d.col, d.fix.new) for d in diags] == [(20, "под"), (24, "правами"), (32, "пользователя")]
 
 
 def test_emphasis_caps_run_of_listed_words_is_fixed_word_by_word(tmp_path):

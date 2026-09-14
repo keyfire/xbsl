@@ -27,7 +27,7 @@ from typing import NamedTuple
 from xbsl import restext
 from xbsl.engine import SourceFile
 from xbsl.lexer import linemap, tokens
-from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _parsed
+from xbsl.rules.yaml_schema import _composed, _HAVE_YAML, _LOADER, _parsed
 
 if _HAVE_YAML:
     import yaml
@@ -107,12 +107,29 @@ def _scalar_ranges(root) -> list[tuple[int, int]]:
     return ranges
 
 
+def _lenient_composed(source: SourceFile):
+    """The node graph of a file that parses only leniently, or None.
+
+    The platform takes `\\'` inside a double-quoted scalar for a plain apostrophe, and so does
+    `_parsed`; the composer refuses the escape. The graph is composed from the text with every
+    `\\'` swapped for `\\"` - an escape of the same length, so the marks of the scalars stay
+    where they are in the file.
+    """
+    try:
+        return yaml.compose(source.text.replace("\\'", '\\"'), Loader=_LOADER)
+    except yaml.YAMLError:
+        return None
+
+
 def _yaml_lines(source: SourceFile) -> list[CommentLine]:
     """The `#` comments of an element description, trailing ones included.
 
     A file that does not parse gives nothing: without the scalars a comment cannot be told
     from a value, and a broken file has other rules to report it. A file of comments alone
-    composes to nothing as well - and there every `#` line is a comment.
+    composes to nothing as well - and there every `#` line is a comment. A file that parses
+    only leniently (a `\\'` in a double-quoted scalar, see `_parsed`) is composed the same
+    lenient way: read as a file of comments, the `#` of a color inside an HTML value became
+    a comment line that ran to the end of the value.
     """
     if not _HAVE_YAML:
         return []
@@ -121,6 +138,10 @@ def _yaml_lines(source: SourceFile) -> list[CommentLine]:
         _data, error = _parsed(source)
         if error is not None:
             return []
+        if "\\'" in source.text:
+            root = _lenient_composed(source)
+            if root is None:
+                return []
     ranges = _scalar_ranges(root) if root is not None else []
     starts = [r[0] for r in ranges]
     text = source.text
