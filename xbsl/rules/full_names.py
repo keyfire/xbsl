@@ -27,11 +27,12 @@ The check is narrow on purpose:
 
 - a full name is judged when its first two qualifiers are the vendor and the name of the
   project the file belongs to: a library or another project lies outside the sources;
-- a partial name is judged when its first qualifier is a subsystem of that project, and only
-  when the element lies in one place - two places leave the chain open to more than one reading.
-  A first qualifier that a declared library also uses - its vendor or one of its subsystems, read
-  from the archive next to the sources (xbsl.libs) - is not judged, and a declared library whose
-  archive is not found leaves every partial name of the project alone;
+- a partial name is judged when its first qualifier is a subsystem of that project. A first
+  qualifier that a declared library also uses - its vendor or one of its subsystems, read from
+  the archive next to the sources (xbsl.libs) - is not judged, and a declared library whose
+  archive is not found leaves every partial name of the project alone. A qualifier that names a
+  package of the module's own subsystem does not start a partial name at all: the IDE server
+  answered `Пакет::Имя` with an unknown namespace;
 - only an element the project declares is judged, and only when no element of that name lies
   at the written namespace: a name nobody declares is unknown rather than misplaced, and a type
   declared inside a module is not an element and is left alone as well. A chain that spells a
@@ -42,12 +43,21 @@ The check is narrow on purpose:
   separator or a file extension, or the key of a `Resource{...}` literal. A partial name shares
   its shape with a resource key (`Подсистема::путь/файл.svg`), which is why the tail is checked.
 
+The compiler looks for a qualified name in the namespace it spells and nowhere else, whether the
+element lies in one place or in several. The IDE server settled it for the partial form: with an
+element at the root of a subsystem and a namesake in its package, `Subsystem::Name` compiled
+clean as the element of the root - no ambiguity is reported; with two namesakes in two packages
+and none at the root, the same name was an unknown type in yaml and in a module, an unknown table
+in a query and in a dynamic list, and a dictionary not found in a localization reference. So a
+partial name of an element in several places is judged like a full one.
+
 The repair is mechanical when the element lies in one place: the namespace is replaced by the
 placement of the element, and the finding carries that edit. Two elements of the name in two
-places leave the choice to the author. Like the findings of the import and visibility rules
-(xbsl.rules.yaml_imports), a finding carries its facts in `Diagnostic.data` for a repair to
-read: `{"name": <the element>, "namespace": <the written placement>, "namespaces": [<where
-the element lies>]}`, placements without the prefix of the project.
+places leave the choice to the author: the finding lists the places and carries no edit. Like
+the findings of the import and visibility rules (xbsl.rules.yaml_imports), a finding carries its
+facts in `Diagnostic.data` for a repair to read: `{"name": <the element>, "namespace": <the
+written placement>, "namespaces": [<where the element lies>]}`, placements without the prefix of
+the project.
 """
 
 from __future__ import annotations
@@ -103,6 +113,15 @@ _TEXTS = {
         "en": "The partial name '{written}' leads to namespace '{namespace}', while element "
               "'{name}' lies in '{actual}': the compiler does not find it there (\"Unknown "
               "type\"). The prefix must be '{actual}::'.",
+    },
+    "partial-ambiguous": {
+        "ru": "Частичное имя '{written}' ведёт в пространство имён '{namespace}', а элементы "
+              "'{name}' лежат в '{actual}': компилятор ищет только там, куда ведёт имя, и его там "
+              "не найдёт (\"Неизвестный тип\"). Укажите пространство имён нужного элемента.",
+        "en": "The partial name '{written}' leads to namespace '{namespace}', while the "
+              "elements named '{name}' lie in '{actual}': the compiler looks only where the name "
+              "leads and does not find it there (\"Unknown type\"). Name the namespace of the "
+              "element meant.",
     },
 }
 MESSAGES = {
@@ -171,7 +190,12 @@ def _yaml_qualified_names(source: SourceFile) -> list[list]:
                 full = (chain + len(qualifiers[0]) + len(qualifiers[1]) + 4
                         if len(qualifiers) >= 3 else None)
                 lm = lm or linemap(source)
-                line, col = lm.linecol(start + match.start())
+                # A localization reference is marked from its `$`, the way the IDE server marks
+                # a dictionary it does not find; the repair still starts at the name.
+                mark = match.start()
+                if mark and raw[mark - 1] == "$":
+                    mark -= 1
+                line, col = lm.linecol(start + mark)
                 found.append([qualifiers, match.group(2), chain, full,
                               start + match.end(1) - 2, line, col, match.group(0)])
     return sorted(found, key=lambda entry: entry[2])
@@ -377,14 +401,13 @@ def _judge(facts: dict[str, dict], rule_id: str) -> Iterable[Diagnostic]:
                 continue
             if (project_dir, f"{written_key}::{name}") in namespaces:
                 continue
-            if not full and len(owners) > 1:
-                continue  # a partial name of an element in several places is left to the author
             if full:
                 actual = [f"{own}::{key}" for key in sorted(owners)]
                 key = "moved" if len(owners) == 1 else "ambiguous"
                 namespace = "::".join(qualifiers)
             else:
-                actual, key, namespace = sorted(owners), "partial", written_key
+                actual, namespace = sorted(owners), written_key
+                key = "partial" if len(owners) == 1 else "partial-ambiguous"
             yield Diagnostic(
                 rel, line, col, rule_id, Severity.ERROR,
                 i18n.t(f"{rule_id}.{key}", written=written, namespace=namespace,

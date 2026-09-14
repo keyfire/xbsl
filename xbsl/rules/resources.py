@@ -56,9 +56,13 @@ A Ресурсы-prefixed key is left to code/resource-bare-name, so one mistake
 twice; a backslash spelling is unproven and skipped rather than judged.
 
 The union spans the projects of the run - a resource of a foreign subsystem is never
-reported, which is deliberate: whether the compiler resolves across subsystems is
-untested, and a wider set can only silence the rule, never make it fire. Keys are matched
-exactly: the platform's lookup is case-sensitive while a Windows checkout is not.
+reported. That is narrower than the compiler: the IDE server resolves a bare key across the
+resources folders of the module's own subsystem (its root and its packages, a file in two
+packages being an ambiguous resource) and answered a file of another subsystem with an unknown
+resource, or, once the module imported the package holding it, with a resource not visible
+outside its subsystem. How a resource is published was not probed, so the rule keeps the union:
+a wider set can only silence it, never make it fire. Keys are matched exactly: the platform's
+lookup is case-sensitive while a Windows checkout is not.
 """
 
 from __future__ import annotations
@@ -344,6 +348,13 @@ def package_resources_missing(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     of another subsystem, whether named relative to the folder or by the path of that example,
     while the same reader at the root of a subsystem with the folder found its file. The path of
     the example found nothing there either.
+
+    A `Resource{...}` literal is another matter, and the message of the root does not offer it.
+    The IDE server resolves the key of a literal across the resources folders of the whole
+    subsystem: in a module at the root of a subsystem without a folder of its own, a file of
+    one of its packages compiled clean, the same name in two packages was an ambiguous resource,
+    and a file of another subsystem an unknown one - but which file such a literal reads at run
+    time was not put to a run, so the way out stays the folder of the subsystem.
 
     The folder is looked up on disk, both spellings: a module that is not on disk (a buffer, a
     fixture) is not judged. A place that has the folder is not judged either - whether the

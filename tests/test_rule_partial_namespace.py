@@ -125,12 +125,15 @@ def test_a_table_of_a_dynamic_list_is_read():
 
 
 def test_a_localization_reference_by_a_partial_name_is_read():
+    """The finding is marked from the `$` of the reference; the repair starts at the name."""
     card = (
         "ВидЭлемента: КомпонентИнтерфейса\nИмя: КарточкаЗаказа\nНаследует:\n    Тип: Группа\n"
         "    Заголовок: $Склад::ПодписиПартий.Заголовок\n"
     )
-    diags, _ = _lint(YAML_RULE, _project({"Продажи/КарточкаЗаказа.yaml": card}))
-    assert [(d.line, d.col) for d in diags] == [(5, 17)]
+    diags, sources = _lint(YAML_RULE, _project({"Продажи/КарточкаЗаказа.yaml": card}))
+    assert [(d.line, d.col) for d in diags] == [(5, 16)]
+    fix = diags[0].fix
+    assert sources[diags[0].path].text[fix.start:fix.end] == "Склад" and fix.new == "Склад::Партии"
 
 
 def test_a_first_qualifier_that_is_no_subsystem_is_left_alone():
@@ -138,14 +141,6 @@ def test_a_first_qualifier_that_is_no_subsystem_is_left_alone():
                       "Внешний::ПартииТоваров.Ссылка?", "Учет::Склад::ПартииТоваров.Ссылка?"):
         diags, _ = _lint(YAML_RULE, _project({"Продажи/КарточкаЗаказа.yaml": _card(type_text)}))
         assert diags == [], type_text
-
-
-def test_a_partial_name_of_an_element_in_two_places_is_left_alone():
-    diags, _ = _lint(YAML_RULE, _project({
-        "Склад/Архив/ПартииТоваров.yaml": _catalog("ПартииТоваров"),
-        "Продажи/КарточкаЗаказа.yaml": _card("Склад::ПартииТоваров.Ссылка?"),
-    }))
-    assert diags == []
 
 
 def test_a_chain_that_spells_a_package_whole_names_the_namespace():

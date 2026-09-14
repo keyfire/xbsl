@@ -28,9 +28,10 @@ reference loses its import" has one model, not a copy per surface.
 The yaml/missing-import rule: a yaml element (a form, an object...) that references an
 element of ANOTHER subsystem must list that subsystem in its own `Импорт:` section. A
 reference is a type position (the string values of `Type` keys, generic arguments included),
-a navigation target (`FormType`) - see _REFERENCE_KEYS - or the table of a dynamic list, its
-main table and its joined tables (see _dynamic_list_tables). The namespace import in the paired `.xbsl` module does not cover the yaml – such
-a project deploys, but the component initialization fails at runtime.
+a navigation target (`FormType`) - see _REFERENCE_KEYS - or the table of a list: the main table
+and the joined tables of a dynamic list, the joined tables of the reference input settings of a
+field (see _list_tables). The namespace import in the paired `.xbsl` module does not cover the
+yaml – such a project deploys, but the component initialization fails at runtime.
 
 A third reference shape is a BINDING: a yaml string value opening with `=` holds an
 expression, and the root of a dotted chain in it (`=ЧужойМодуль.Метод()`) reaches a
@@ -181,13 +182,16 @@ MESSAGES = {
               "{n[Импорт]} section of the paired yaml does not cover the code.",
     },
     "code/missing-import.root": {
-        "ru": "Обращение '{name}' из модуля вне подсистем (модуль проекта) – к элементу пакета "
-              "'{sub}', а строки 'импорт {sub}' в модуле нет: компиляция упадёт на этой строке. "
-              "Элемент пакета приходит только через импорт самого пакета.",
+        "ru": "Обращение '{name}' из модуля вне подсистем (модуль проекта) – к элементу "
+              "пространства имён '{sub}', а строки 'импорт {sub}' в модуле нет: компиляция упадёт "
+              "на этой строке. Модуль проекта не входит ни в одну подсистему, поэтому элемент "
+              "подсистемы доступен ему только через импорт: для элемента корня – импорт "
+              "подсистемы, для элемента пакета – импорт самого пакета.",
         "en": "'{name}' in a module outside any subsystem (the project module) reaches an "
-              "element of package '{sub}', and the module has no line `{n[импорт]} {sub}`: "
-              "compilation fails at this line. An element of a package comes only through an "
-              "import of the package itself.",
+              "element of namespace '{sub}', and the module has no line `{n[импорт]} {sub}`: "
+              "compilation fails at this line. The project module belongs to no subsystem, so an "
+              "element of a subsystem comes into it only through an import - of the subsystem for "
+              "an element at its root, of the package itself for an element of a package.",
     },
     "yaml/missing-subsystem-usage.title": {
         "ru": "Подсистема импортируется, но не объявлена используемой",
@@ -241,6 +245,18 @@ MESSAGES = {
               "namespace is not imported\"). The section needs the entry '- {sub}' - an import "
               "of the subsystem alone does not bring the elements of its packages, and an import "
               "in the paired .xbsl does not cover the markup.",
+    },
+    "yaml/missing-import.input": {
+        "ru": "Присоединённая таблица '{name}' настроек ввода ссылки – из пространства имён "
+              "'{sub}', а в секции Импорт его нет: деплой упадёт на серверной компиляции "
+              "(\"Пространство имен ... не импортировано\"). Нужна строка '- {sub}' в секции "
+              "Импорт – импорт одной подсистемы элементы её пакетов не даёт, а импорт в парном "
+              ".xbsl разметку не покрывает.",
+        "en": "Joined table '{name}' of the reference input settings comes from namespace "
+              "'{sub}' which the {n[Импорт]} section does not list: the deploy fails at server "
+              "compilation (\"the namespace is not imported\"). The section needs the entry "
+              "'- {sub}' - an import of the subsystem alone does not bring the elements of its "
+              "packages, and an import in the paired .xbsl does not cover the markup.",
     },
     "yaml/missing-import.query": {
         "ru": "Таблица '{name}' запроса {query} (строка {query_line}) – из пространства имён "
@@ -476,8 +492,29 @@ def _query_table_roots(
     return [(root, written, line, col) for root, (written, line, col) in roots.items()]
 
 
-def _dynamic_list_tables(node: object) -> Iterable[str]:
-    """The table names the dynamic lists of a parsed yaml read, in document order.
+def _qualified_query_table_roots(source: SourceFile) -> list[tuple[str, str, int, int]]:
+    """The qualified tables the queries of a file read: (the qualifiers and the element joined by
+    `::`, the table as written, line, col), one entry per root, first occurrence kept.
+
+    The shape of `_qualified_roots`: a qualified table needs no import, yet the IDE server refused
+    `Подсистема::Таблица` of a non-public element from another subsystem as not visible, in a
+    query block of a module and in the query of a virtual table alike - so the visibility rule
+    resolves it by the place it names.
+    """
+    roots: dict[str, tuple[str, int, int]] = {}
+    for qualifiers, segments in query_tables(source):
+        if not qualifiers:
+            continue
+        root = "::".join(t.value for t in (*qualifiers, segments[0]))
+        if root not in roots:
+            written = source.text[qualifiers[0].start:segments[-1].end]
+            roots[root] = (written, qualifiers[0].line, qualifiers[0].col)
+    return [(root, written, line, col) for root, (written, line, col) in roots.items()]
+
+
+def _list_tables(node: object) -> Iterable[tuple[str, str]]:
+    """(table name, shape) of every table a parsed yaml names for a list to read, in document
+    order: `list` for a dynamic list, `input` for the reference input settings of a field.
 
     A dynamic list is the mapping that declares a main table - the one property every list
     carries, whether the list is the source of a table component or the default value of a
@@ -486,28 +523,64 @@ def _dynamic_list_tables(node: object) -> Iterable[str]:
     server build refused a list whose main table lay in a package of another subsystem, and
     another list whose joined table did, both with `Namespace ... is not imported` at the value
     of the table, while the import of the package, a qualified table and a table of another
-    package of the same subsystem compiled clean. Both spellings of the keys are read. A mapping
-    with no main table is not a list: the joined tables of the reference input settings are left
-    alone, since what the compiler asks of those was not probed.
+    package of the same subsystem compiled clean.
+
+    The reference input settings of a field (`ReferencesInputSettings`, a setting per type) join
+    tables of their own to the list of choice, with no main table written: the joined tables of
+    a mapping without a main table are theirs - the platform keeps the list of joined tables on
+    no other type a yaml can describe (the choice parameters of `GetChoiceValues` are
+    built in code, where the table is a string the compiler does not check). The IDE server
+    answered those the way it answers a list: a table of a package of another subsystem is not
+    imported, a missing table is unknown, a non-public one is not visible, each at the value of
+    the table, and the import of the package or a table of the own subsystem compiles clean.
+    Both spellings of the keys are read.
     """
     if isinstance(node, dict):
-        main = next((node[key] for key in _key_spellings("ОсновнаяТаблица") if key in node), None)
-        if isinstance(main, dict):
-            tables = [main]
-            joined = next(
-                (node[key] for key in _key_spellings("ПрисоединенныеТаблицы") if key in node), None,
-            )
-            if isinstance(joined, list):
-                tables.extend(item for item in joined if isinstance(item, dict))
-            for table in tables:
-                for key in _key_spellings("Таблица"):
-                    if isinstance(table.get(key), str):
-                        yield table[key]
+        main_keys = [key for key in _key_spellings("ОсновнаяТаблица") if key in node]
+        joined = next(
+            (node[key] for key in _key_spellings("ПрисоединенныеТаблицы") if key in node), None,
+        )
+        tables = [node[key] for key in main_keys if isinstance(node[key], dict)]
+        if isinstance(joined, list):
+            tables.extend(item for item in joined if isinstance(item, dict))
+        shape = "list" if main_keys else "input"
+        for table in tables:
+            for key in _key_spellings("Таблица"):
+                if isinstance(table.get(key), str):
+                    yield table[key], shape
         for value in node.values():
-            yield from _dynamic_list_tables(value)
+            yield from _list_tables(value)
     elif isinstance(node, list):
         for item in node:
-            yield from _dynamic_list_tables(item)
+            yield from _list_tables(item)
+
+
+def _list_table_candidates(
+    source: SourceFile, data: dict, stdlib: frozenset[str], *, qualified: bool,
+) -> list[tuple[str, str, int, int, str]]:
+    """(root, the table as written, line, col, shape) of the list tables of a parsed yaml, one
+    entry per written table, first occurrence kept.
+
+    A plain chain resolves by its root (a virtual table of a register is written after a dot); a
+    binding is an expression rather than a name. A qualified table needs no import, so only the
+    visibility rules ask for it (`qualified`): its root keeps the whole chain of qualifiers, the
+    shape `_qualified_roots` gives, and resolves by the place it names.
+    """
+    out: list[tuple[str, str, int, int, str]] = []
+    for value, shape in dict.fromkeys(_list_tables(data)):
+        if "::" in value:
+            match = _QUALIFIED_TABLE.fullmatch(value) if qualified else None
+            if match is None:
+                continue
+            root = match.group(1) + match.group(2)
+        else:
+            chains = _parse_type_string(value)
+            if not chains or len(chains) != 1 or chains[0][0] in stdlib:
+                continue
+            root = chains[0][0]
+        line, col = (_value_positions(source, value, "Таблица") or [(1, 1)])[0]
+        out.append((root, value, line, col, shape))
+    return out
 
 
 @lru_cache(maxsize=1)
@@ -526,6 +599,13 @@ dataset.register_reset(_import_key_re.cache_clear)
 #: project is decided in the reduce, so a library (`Стд::...`) or a typo is left alone.
 _QUALIFIED = re.compile(
     r"(?<![\wА-Яа-яЁё.$:])((?:[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*::)+)([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)"
+)
+
+#: A qualified table of a list, whole: the qualifiers, the element and the segments after it (a
+#: virtual table of a register, `Склад::ОстаткиПартий.СрезПоследних`).
+_QUALIFIED_TABLE = re.compile(
+    r"((?:[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*::)+)([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)"
+    r"(?:\.[A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)*"
 )
 
 
@@ -653,16 +733,8 @@ def _yaml_import_mapper(source: SourceFile) -> dict | None:
                 if position is None:
                     position = (_value_positions(source, value, key) or [(1, 1)])[0]
                 cands.append((root, ".".join(chain), position[0], position[1]))
-    # The tables of the dynamic lists. A plain chain resolves by its root (a virtual table of a
-    # register is written after a dot); a binding is an expression rather than a name, and a
-    # qualified table needs no import - neither parses as a single chain.
-    lists: list[tuple[str, str, int, int]] = []
-    for value in dict.fromkeys(_dynamic_list_tables(data)):
-        chains = _parse_type_string(value)
-        if not chains or len(chains) != 1 or chains[0][0] in stdlib:
-            continue
-        line, col = (_value_positions(source, value, "Таблица") or [(1, 1)])[0]
-        lists.append((chains[0][0], value, line, col))
+    # The tables of the dynamic lists and of the reference input settings.
+    lists = _list_table_candidates(source, data, stdlib, qualified=False)
     nm = value_of(data, "Имя", kind)
     # Where a table of the paired query is reported: the import section that lacks the entry,
     # or the head of the file when there is none.
@@ -717,7 +789,7 @@ def missing_yaml_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         candidates_here: list[tuple[str, str, int, int, str, dict]] = [
             (*c, "missing", {}) for c in fact["cands"]
         ] + [(*c, "chain", {}) for c in fact["broots"] if c[0] not in paired] + [
-            (*c, "list", {}) for c in fact.get("lists", ())
+            (*c, {}) for c in fact.get("lists", ())
         ]
         # The tables of the paired query resolve against the imports of THIS yaml; the finding
         # stands where the entry has to be added, and names the line of the query.
@@ -771,9 +843,10 @@ _DEFAULT_SCOPE = "ВПодсистеме"  # the platform default when the prope
 def _visibility_mapper(source: SourceFile) -> dict | None:
     """The map phase: the same placement slice as above, the candidates also coming from the
     navigation key `FormType` (a form opened from another subsystem must be public), from the
-    roots of the binding chains and from the qualified names of both. A module contributes
-    its local types and the names it declares - a binding root the paired module declares is
-    addressed through the element's own name, not a reference."""
+    roots of the binding chains, from the qualified names of both and from the tables of the
+    lists, qualified ones included. A module contributes its local types and the names it
+    declares - a binding root the paired module declares is addressed through the element's own
+    name, not a reference."""
     if not _HAVE_YAML:
         return None
     if source.kind == "xbsl":
@@ -826,6 +899,9 @@ def _visibility_mapper(source: SourceFile) -> dict | None:
         "cands": cands,
         "broots": _binding_chain_roots(source, data, stdlib),
         "qroots": _qualified_positions(source, typed + bound),
+        # The tables of the lists, qualified ones included: the form needs no import, yet the
+        # table must be public all the same.
+        "lists": [c[:4] for c in _list_table_candidates(source, data, stdlib, qualified=True)],
     }
 
 
@@ -855,13 +931,18 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     local types are skipped, and a name no project element declares (a platform form like
     `ФормаЖурналаСобытий`) is unknown, not wrong. One diagnostic per target per file.
 
-    Three shapes are read: the type positions and navigation targets, the roots of the
-    binding chains (`=ЧужойМодуль.Метод()`, less what the paired module declares), and the
-    qualified names `Подсистема[::Пакет]::Элемент` of both. The last two were proven the same
-    way on a server build (02.09.2026): a binding to a non-public foreign module, a qualified
-    binding and a qualified call from code all fail with the same message at the reference
-    position - a qualified name needs no import, yet the element must be public. It resolves
-    by the place it names alone: a public namesake elsewhere does not reach it.
+    Four shapes are read: the type positions and navigation targets, the roots of the
+    binding chains (`=ЧужойМодуль.Метод()`, less what the paired module declares), the
+    qualified names `Подсистема[::Пакет]::Элемент` of both, and the tables of the lists. The
+    binding and the qualified name were proven the same way on a server build (02.09.2026): a
+    binding to a non-public foreign module, a qualified binding and a qualified call from code
+    all fail with the same message at the reference position - a qualified name needs no
+    import, yet the element must be public. It resolves by the place it names alone: a public
+    namesake elsewhere does not reach it. The tables were put to the IDE server: a non-public
+    table of another subsystem is refused as not visible at the value of the table - the main
+    table and a joined table of a dynamic list, a qualified main table, a joined table of the
+    reference input settings of a field - while a non-public table of the list's own subsystem
+    compiles clean.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -889,7 +970,7 @@ def foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         paired = declared_by_stem.get(fact.get("stem", ""), frozenset())
         candidates_here = list(fact["cands"]) + [
             c for c in fact.get("broots", ()) if c[0] not in paired
-        ] + list(fact.get("qroots", ()))
+        ] + list(fact.get("qroots", ())) + list(fact.get("lists", ()))
         reported: set[str] = set()
         for root, chain_name, line, col in candidates_here:
             if root in local_types or root in reported:
@@ -921,8 +1002,19 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
     `missing_code_import`). A type position is a place where the name can be nothing but a
     type, which is what keeps the reading of a name free of guesswork. The tables of the query
     blocks are the same kind of place: after FROM/JOIN a name is a table.
-    A standalone query (`.xbql`) is not a module - its tables belong to the yaml of the pair.
+    A standalone query (`.xbql`) is not a module - the imports its tables need belong to the yaml
+    of the pair (yaml/missing-import), so its fact carries the tables for the visibility rule
+    alone.
     """
+    if source.kind == "xbsl" and is_query_file(source.path):
+        try:
+            tables = _query_table_roots(source, semantics._stdlib_names())
+            qualified = _qualified_query_table_roots(source)
+        except DatasetError:
+            return None  # no language data - the query cannot be tokenized
+        if not tables and not qualified:
+            return None
+        return {"k": "qx", "path": str(source.path), "tables": tables, "qtables": qualified}
     if source.kind == "yaml":
         if not _HAVE_YAML:
             return None
@@ -943,7 +1035,7 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
             # see the chain roots below.
             "keys": sorted(k for k in data if isinstance(k, str)),
         }
-    if source.kind != "xbsl" or is_query_file(source.path):
+    if source.kind != "xbsl":
         return None
     try:
         local = sorted(semantics._file_local_types(source))
@@ -1017,7 +1109,8 @@ def _missing_import_mapper(source: SourceFile) -> dict | None:
             roots.append((name, f"{name}.{node.name}", line, col))
     return {"k": "mod", "path": str(source.path), "stem": _pair_stem(source.rel),
             "imports": imports, "cands": cands, "roots": roots, "local_types": local,
-            "tables": _query_table_roots(source, stdlib)}
+            "tables": _query_table_roots(source, stdlib),
+            "qtables": _qualified_query_table_roots(source)}
 
 
 def _method_names(method: P.Method) -> set[str]:
@@ -1082,13 +1175,14 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     the imports of the module like a type does (the refusal is "the table is in a namespace
     that is not imported"), less the temporary tables of the module and the qualified names.
 
-    A module outside every subsystem - the project module, `Проект.xbsl` - is judged for the
-    packages only. A server build refused a project module that called a common module of a
-    package while it imported the subsystem alone, so an element of a package asks for its own
-    import there as everywhere. For an element at the root of a subsystem nothing is asked, as
-    before: the root is the case such a module has always been left alone for, and a name the
-    root of any subsystem owns - or an element outside the subsystems carries - is not judged
-    against a package namesake either.
+    A module outside every subsystem - the project module, `Проект.xbsl` - is judged the same way
+    for every element: it belongs to no subsystem, so nothing resolves locally for it. A server
+    build refused a project module that called a common module of a package while it imported
+    the subsystem alone, and the IDE server refused the same module reaching the root of a
+    subsystem without `импорт Б` - a type, a call of a common module and a query table alike,
+    each at the position of the name - while a qualified table compiled clean. A name that an
+    element outside the subsystems carries as well is not judged: the namesake next to the
+    module resolves nearer.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -1132,7 +1226,7 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             if root in local_types:
                 continue
             if my_place is None:
-                candidates = _package_candidates(root, placement, unplaced)
+                candidates = _outside_candidates(root, placement, unplaced)
                 shape = "root"
             else:
                 candidates = _foreign_candidates(root, my_place, placement)
@@ -1149,18 +1243,17 @@ def missing_code_import(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             )
 
 
-def _package_candidates(
+def _outside_candidates(
     root: str, placement: dict[str, dict[str, object]], unplaced: set[str],
 ) -> tuple[str, ...]:
-    """The public package keys a plain name resolves to from a module outside every subsystem.
+    """The public placement keys a plain name resolves to from a module outside every subsystem.
 
-    Empty when the name is unknown, when an element outside the subsystems carries it too (the
-    namesake next to the module resolves nearer), when the root of a subsystem owns it (the
-    root is not judged for such a module, and the root namesake would stand first) or when no
-    owner is public (the visibility rule's case).
+    Every owner is foreign to such a module, the root of a subsystem as much as a package. Empty
+    when the name is unknown, when an element outside the subsystems carries it too (the namesake
+    next to the module resolves nearer) or when no owner is public (the visibility rule's case).
     """
     owners = placement.get(root)
-    if not owners or root in unplaced or any("::" not in key for key in owners):
+    if not owners or root in unplaced:
         return ()
     return tuple(sorted(key for key, vis in owners.items() if vis in _public_scopes()))
 
@@ -1198,6 +1291,28 @@ MESSAGES_CODE_VISIBILITY = {
               "{n[ВПроекте]} on the element; a @{n[ВПроекте]} annotation on the method does "
               "not help - the visibility of the element comes first.",
     },
+    "code/foreign-not-public.table": {
+        "ru": "Таблица запроса '{name}' лежит в пространстве имён '{sub}' и не публична "
+              "(ОбластьВидимости: {vis}): запрос подсистемы '{mine}' её не видит, и компиляция "
+              "упадёт на этой строке. Задайте у элемента ОбластьВидимости: ВПроекте – ни "
+              "импорт, ни квалифицированное имя таблицы видимость не дают.",
+        "en": "Query table '{name}' lives in namespace '{sub}' and is not public "
+              "({n[ОбластьВидимости]}: {vis}): a query of subsystem '{mine}' does not see it, and "
+              "compilation fails at this line. Set {n[ОбластьВидимости]}: {n[ВПроекте]} on the "
+              "element - neither an import nor a qualified name of the table makes it visible.",
+    },
+    "code/foreign-not-public.table-root": {
+        "ru": "Таблица запроса '{name}' лежит в пространстве имён '{sub}' и не публична "
+              "(ОбластьВидимости: {vis}): запрос модуля вне подсистем (модуля проекта) её не "
+              "видит, и компиляция упадёт на этой строке. Задайте у элемента "
+              "ОбластьВидимости: ВПроекте – ни импорт, ни квалифицированное имя таблицы "
+              "видимость не дают.",
+        "en": "Query table '{name}' lives in namespace '{sub}' and is not public "
+              "({n[ОбластьВидимости]}: {vis}): a query of the module outside any subsystem (the "
+              "project module) does not see it, and compilation fails at this line. Set "
+              "{n[ОбластьВидимости]}: {n[ВПроекте]} on the element - neither an import nor a "
+              "qualified name of the table makes it visible.",
+    },
 }
 i18n.register(MESSAGES_CODE_VISIBILITY)
 
@@ -1219,20 +1334,28 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     whose element is `InSubsystem` stays unreachable, because the type of the module is what
     the compiler judges first.
 
-    The facts are those of code/missing-import - the written type positions and the roots of
-    `Модуль.Метод()` chains, with everything the module itself explains subtracted in the
-    mapper - and the reduce mirrors foreign_not_public: a name the module's own subsystem
-    owns (at its root or in any of its packages) resolves locally, a target that is public
-    anywhere is at most a missing import (the sibling's case), a module-declared local type
-    and a section of the paired yaml are not references. What this rule adds is the place
-    OUTSIDE any subsystem: the project module (`Проект.xbsl`) belongs to none, so every
-    non-public element is foreign to it - the live case exactly, and the place where
-    code/missing-import stands down because such a module needs no import. A module outside
-    the subsystems is not judged against a name that an unplaced element carries as well (a
-    namesake next to it resolves nearer). A qualified `Подсистема[::Пакет]::Элемент` root - a
-    type position or the root of a call - is judged by the place it names: the form needs no
-    import, yet the element must be public (proven on a server build 02.09.2026, the same
-    refusal at the position of the name). One diagnostic per target per module.
+    The facts are those of code/missing-import - the written type positions, the roots of
+    `Модуль.Метод()` chains and the tables of the query blocks, with everything the module
+    itself explains subtracted in the mapper - and the reduce mirrors foreign_not_public: a
+    name the module's own subsystem owns (at its root or in any of its packages) resolves
+    locally, a target that is public anywhere is at most a missing import (the sibling's case),
+    a module-declared local type and a section of the paired yaml are not references. The
+    project module (`Проект.xbsl`) belongs to no subsystem, so every non-public element is
+    foreign to it - the live case exactly. A module outside the subsystems is not judged against
+    a name that an unplaced element carries as well (a namesake next to it resolves nearer). A
+    qualified `Подсистема[::Пакет]::Элемент` root - a type position or the root of a call - is
+    judged by the place it names: the form needs no import, yet the element must be public
+    (proven on a server build 02.09.2026, the same refusal at the position of the name). One
+    diagnostic per target per module.
+
+    A table of a query is such a reference too. The IDE server refused a non-public table of
+    another subsystem as not visible, at the position of the table: in a query block of a
+    module with the namespace imported, by a qualified name without an import, in the query of
+    a virtual table (`.xbql`, whose imports are those of its yaml - the finding stands in the
+    query all the same) and in the project module once it imports the subsystem; a public
+    table, and a non-public table of the query's own subsystem, compiled clean. So the tables of
+    the query blocks and of the standalone queries are read, plain and qualified, less the
+    temporary tables of the file and the names of the platform.
     """
     layout = _layout_from(facts)
     if not layout.known:
@@ -1254,12 +1377,12 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         else:
             unplaced.add(fact["name"])
     for rel, fact in facts.items():
-        if fact["k"] != "mod":
+        if fact["k"] not in ("mod", "qx"):
             continue
-        own_keys = paired_keys.get(fact["stem"], frozenset())
-        candidates_here = list(fact["cands"]) + [
-            c for c in fact.get("roots", ()) if c[0] not in own_keys
-        ]
+        own_keys = paired_keys.get(fact.get("stem", ""), frozenset())
+        candidates_here = [(*c, "found") for c in fact.get("cands", ())] + [
+            (*c, "found") for c in fact.get("roots", ()) if c[0] not in own_keys
+        ] + [(*c, "table") for key in ("tables", "qtables") for c in fact.get(key, ())]
         if not candidates_here:
             continue
         path = Path(fact["path"])
@@ -1267,7 +1390,7 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         mine = my_place.subsystem if my_place is not None else None
         project_dir = layout.project_dir_of(path)
         reported: set[str] = set()
-        for root, chain_name, line, col in candidates_here:
+        for root, chain_name, line, col, shape in candidates_here:
             if root in reported or root in local_types:
                 continue
             if my_place is None and root in unplaced:
@@ -1277,10 +1400,14 @@ def code_foreign_not_public(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 continue
             owner, vis = found
             reported.add(root)
+            if shape == "found" and not mine:
+                shape = "root"
+            elif shape == "table" and not mine:
+                shape = "table-root"
             yield Diagnostic(
                 rel, line, col, "code/foreign-not-public", Severity.ERROR,
                 i18n.t(
-                    "code/foreign-not-public.found" if mine else "code/foreign-not-public.root",
+                    f"code/foreign-not-public.{shape}",
                     name=chain_name, sub=owner, mine=mine or "",
                     vis=vis or i18n.name(_DEFAULT_SCOPE),
                 ),

@@ -6804,9 +6804,9 @@ def op_move_object(root: Path, yaml_path: Path, target_dir: Path, *,
       moved files themselves when the move crosses a subsystem boundary. Within one subsystem
       the root and the packages see each other, and nothing is written;
     - the same rules read the module outside the subsystems (the project module), which gets
-      the import of the package an element it names moved into, and the query of a virtual
-      table, whose yaml gets the import when the table it reads moved into a package of
-      another subsystem;
+      the import of the new place of an element it names - the subsystem or the package, the
+      module belongs to neither - and the query of a virtual table, whose yaml gets the import
+      when the table it reads moved into a package of another subsystem;
     - a qualified name that spells the old place (`Склад::Задачи`, the full
       `Поставщик::Проект::Склад::ЗадачиФормаСписка.ДанныеСтрокиСписка` of a generated form)
       is rewritten to the new one in every file of the project, the moved ones included, and
