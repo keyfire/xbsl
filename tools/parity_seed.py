@@ -1753,6 +1753,12 @@ _LAMBDA_TOTAL_TOKENS = {"Расчет": "Calculation", "Посчитать": "Co
                         "Сумма": "Total", "Элемент": "Item"}
 
 
+#: A server module that uploads bytes to the object storage - the platform keeps one upload of
+#: that name for compatibility and has a current one of another name and shape.
+_UPLOADS_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000fd1\nИмя: Выгрузки\nОкружение: Сервер\n"
+_UPLOADS_XBSL_RU = "метод Сохранить(Данные: Байты): ДвоичныйОбъект.Ссылка\n    знч Загруженный = {call}\n    возврат Загруженный.Ссылка\n;\n"
+_UPLOADS_TOKENS = {"Выгрузки": "Uploads", "Сохранить": "Save", "Данные": "Data", "Загруженный": "Uploaded"}
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/statement-no-effect",
@@ -5619,6 +5625,23 @@ SEEDS: list[Seed] = [
         english={"Calculation.xbsl": _LAMBDA_TOTAL_EN.format(
             start="[0]", change="Total[0] = Total[0] + Item", result="Total[0]")},
         tokens=_LAMBDA_TOTAL_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-api",
+        expect=FINDING,
+        note="a platform method deprecated in every form - the table of deprecated forms is keyed "
+             "Russian, the call is written in either script",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Выгрузки.yaml": _UPLOADS_YAML_RU,
+               "Основное/Выгрузки.xbsl": _UPLOADS_XBSL_RU.format(call="ОбъектноеХранилище.ЗагрузитьИзБайт(Данные)")},
+        tokens=_UPLOADS_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-api",
+        expect=CLEAN,
+        note="a current overload of a method that has a deprecated one - the arguments pick the form",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Выгрузки.yaml": _UPLOADS_YAML_RU,
+               "Основное/Выгрузки.xbsl": _UPLOADS_XBSL_RU.format(call='ОбъектноеХранилище.Загрузить("файл.txt", Данные)')},
+        tokens=_UPLOADS_TOKENS,
     ),
 ]
 

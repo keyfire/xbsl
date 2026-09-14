@@ -76,6 +76,7 @@ from . import (  # noqa: F401
     component_render,
     component_since,
     component_values,
+    deprecated_api,
     dynlist_decl,
     dynlist_fields,
     enum_defaults,

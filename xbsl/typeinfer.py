@@ -1618,19 +1618,44 @@ def _typed_sites_in(source) -> bool:
     return any(t.kind == "KEYWORD" and t.canonical in ("AS", "IS") for t in code_tokens(source))
 
 
+#: Further reasons for a module to carry its text into the reduce, besides the casts and the type
+#: checks: a project rule that types sites of its own registers a test of the module here
+#: (`wants_text`), and every rule of the typing keeps reducing ONE set of facts - a second set
+#: with other texts would miss the memo of `project_typings` and type the project twice.
+_TEXT_WANTED: list = []
+
+
+def wants_text(test) -> None:
+    """Register `test(source) -> bool`: a module it answers True for carries its text."""
+    if test not in _TEXT_WANTED:
+        _TEXT_WANTED.append(test)
+
+
+def _compatibility_mode(data: dict) -> list[int] | None:
+    """The compatibility mode a project description declares, as numbers; None when it is not one."""
+    value = data.get("РежимСовместимости", data.get("CompatibilityMode"))
+    if not isinstance(value, (str, int, float)):
+        return None
+    parts = str(value).strip().split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        return None
+    return [int(part) for part in parts]
+
+
 def project_fact(source) -> dict | None:
     """The per-file half of the project reach: what one file contributes to the catalog.
 
     A yaml gives its element, a module its declarations and - only when it casts or checks a
-    type, the sites the project rules judge - its text: the reduce types the module there. Shared
-    by every project rule that reads the typing (they reduce one set of facts, see
-    `project_typings`), and cached on the source.
+    type, the sites the project rules judge, or when a rule asked for it (`wants_text`) - its
+    text: the reduce types the module there. A project description gives its folder and the
+    compatibility mode it declares. Shared by every project rule that reads the typing (they
+    reduce one set of facts, see `project_typings`), and cached on the source.
     """
     from pathlib import PurePosixPath
 
     from xbsl.engine import is_query_file
     from xbsl.rules.environment import _pair_stem
-    from xbsl.rules.yaml_schema import _HAVE_YAML
+    from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed
 
     cached = source.cache.get("typeinfer_fact")
     if cached is not None:
@@ -1640,6 +1665,10 @@ def project_fact(source) -> dict | None:
     if source.kind == "yaml" and _HAVE_YAML:
         if PurePosixPath(path).name in _PROJECT_FILES:
             fact = {"k": "project", "root": str(PurePosixPath(path).parent)}
+            data, err = _parsed(source)
+            mode = _compatibility_mode(data) if err is None and isinstance(data, dict) else None
+            if mode:
+                fact["compat"] = mode
         else:
             element = element_fact(source)
             if element is not None:
@@ -1647,7 +1676,7 @@ def project_fact(source) -> dict | None:
     elif source.kind == "xbsl" and not is_query_file(source.path):
         tree, errors = P.parse(source)
         fact = {"k": "xbsl", "stem": _pair_stem(source.rel), **module_fact(source.rel, tree)}
-        if not errors and _typed_sites_in(source):
+        if not errors and (_typed_sites_in(source) or any(test(source) for test in _TEXT_WANTED)):
             fact["text"] = source.text
     if fact is not None:
         # What the reduce keys its memo by: the same facts twice (every project rule of the
@@ -1789,6 +1818,17 @@ class GuardSite:
     operand: object
     types: TypeSet | None
     right: TypeSet | None = None
+
+
+@dataclass
+class CallSite:
+    """One call of a member by name, `<получатель>.Имя(...)`, with what the module could say about
+    the receiver - a TypeSet, a StaticName for a type or an element used by its name, or None - and
+    about every argument (its name for a named one, and its set or None)."""
+
+    node: object                 # the P.Call node
+    owner: object
+    args: list[tuple[str | None, "TypeSet | None"]]
 
 
 @dataclass
@@ -2352,6 +2392,37 @@ class ModuleTyper:
                     sites.append(GuardSite(node, "safe", node.obj, _typed(evaluator, node.obj)))
         return sites
 
+    def calls(self, module: object, names: frozenset[str]) -> list[CallSite]:
+        """Every call of a member named one of `names`, in the module's methods, the methods of its
+        structures and the initializers of its fields."""
+        if not names:
+            return []
+        self._prepare(module)
+        pattern = re.compile(r"\.\s*(?:%s)(?![\w])" % "|".join(sorted(map(re.escape, names))))
+
+        def wanted(node: object) -> bool:
+            return (isinstance(node, P.Call) and isinstance(node.callee, P.Member)
+                    and node.callee.name in names)
+
+        def site(evaluator: _Evaluator, node) -> CallSite:
+            try:
+                owner = evaluator.value(node.callee.obj)
+            except RecursionError:
+                owner = None
+            return CallSite(node, owner, [(argument.name, _typed(evaluator, argument.value))
+                                          for argument in node.args])
+
+        sites: list[CallSite] = []
+        for evaluator, nodes in self._judged(module, pattern, True, wanted):
+            sites.extend(site(evaluator, node) for node in nodes)
+        level = self._module_level
+        for member in self.fields.values():
+            init = getattr(member, "init", None)
+            if init is None or level is None:
+                continue
+            sites.extend(site(level, node) for node in walk_nodes(init) if wanted(node))
+        return sites
+
     def checks(self, module: object) -> list[CheckSite]:
         """Every `это` of the module's own methods, the predicate form of `выбор` included."""
         sites: list[CheckSite] = []
@@ -2429,6 +2500,12 @@ class ModuleTyping:
         if "checks" not in self._sites:
             self._sites["checks"] = self.typer.checks(self.tree)
         return self._sites["checks"]
+
+    def calls(self, names: frozenset[str]) -> list[CallSite]:
+        key = "calls:" + "|".join(sorted(names))
+        if key not in self._sites:
+            self._sites[key] = self.typer.calls(self.tree, names)
+        return self._sites[key]
 
 
 def file_typing(source) -> ModuleTyping | None:
