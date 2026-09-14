@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.72.0
 
 ### Исправлено
 - **Каркас формы читает английскую форму так же, как русскую.** `Layout: Horizontal`, `Kind: Switch`
