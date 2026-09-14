@@ -244,7 +244,7 @@ def _add_english_keys(data: dict, pairs: dict) -> dict:
     if data.get("meta", {}).get("bilingual_keys") != "expand" or not pairs:
         return data
     for section in ("type_members", "member_types", "member_signatures", "bases", "type_ctors",
-                    "type_params", "member_type_params"):
+                    "type_params", "member_type_params", "deprecated_members"):
         entries = data.get(section)
         if not entries:
             continue
@@ -279,6 +279,20 @@ def _add_english_globals(data: dict, common: dict) -> dict:
     return data
 
 
+def nearest_last(ancestors, bases: dict) -> list[str]:
+    """The ancestors of a type in the order their members merge: the nearest one last.
+
+    `bases` holds the whole ancestor chain of a type, but not in the order of the chain - the
+    list is sorted by name. Merged in that order, a member two ancestors both declare took the
+    value of whichever sorted later, and an override of a nearer ancestor lost to its own base:
+    a catalog reflection inherited the main table of the base reflection (`TableReflection?`)
+    instead of the entity reflection's own (`TableReflection`). The chain is closed, so a more
+    derived ancestor has more ancestors of its own - ordering by that count puts it after every
+    ancestor it derives from. Unrelated ancestors of equal depth keep the stored order.
+    """
+    return sorted(ancestors, key=lambda base: len(bases.get(base, ())))
+
+
 def _expand_inherited(data: dict) -> dict:
     """Re-expand the own-members form of stdlib.json into full member sets.
 
@@ -310,7 +324,7 @@ def _expand_inherited(data: dict) -> dict:
     # left `Array` without a single one - a chain over any of its methods ended there.
     for name in set(own_returns) | {n for n in own_members if bases.get(n)}:
         merged: dict[str, str] = {}
-        for base in bases.get(name, ()):
+        for base in nearest_last(bases.get(name, ()), bases):
             merged.update(own_returns.get(base, {}))
         merged.update(own_returns.get(name, {}))
         if merged:
@@ -321,7 +335,7 @@ def _expand_inherited(data: dict) -> dict:
     full_signatures: dict[str, dict[str, list[str]]] = {}
     for name in set(own_signatures) | {n for n in own_members if bases.get(n)}:
         merged_sigs: dict[str, list[str]] = {}
-        for base in bases.get(name, ()):
+        for base in nearest_last(bases.get(name, ()), bases):
             merged_sigs.update(own_signatures.get(base, {}))
         merged_sigs.update(own_signatures.get(name, {}))
         if merged_sigs:
@@ -332,7 +346,7 @@ def _expand_inherited(data: dict) -> dict:
     full_method_params: dict[str, dict[str, list[str]]] = {}
     for name in set(own_method_params) | {n for n in own_members if bases.get(n)}:
         merged_params: dict[str, list[str]] = {}
-        for base in bases.get(name, ()):
+        for base in nearest_last(bases.get(name, ()), bases):
             merged_params.update(own_method_params.get(base, {}))
         merged_params.update(own_method_params.get(name, {}))
         if merged_params:

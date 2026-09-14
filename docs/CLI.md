@@ -47,7 +47,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--fix` | fix mechanical findings in place (trailing spaces, typographic characters, line endings) and report the rest; only unambiguous fixes |
 | `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
 | `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are printed as data |
-| `--where` | show the Element data root (path, source, versions) and exit |
+| `--where` | show the engine location, interpreter and Element data (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
 | `--lang {ru,en}` | linter output language (default: env XBSL_LANG / system locale / ru) |
@@ -56,7 +56,7 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--stdin` | check a single buffer from stdin (for editor integration); `--filename` sets the file kind and the reported path |
 | `--index` | instead of checking, print a JSON project index (objects, methods, form components) for editor navigation; the path is the project root |
 | `--filename NAME` | name of the buffer checked with `--stdin` (e.g. Form.xbsl); the extension sets the file kind |
-| `--version` | show the version and exit |
+| `--version` | show the version and engine location and exit |
 
 **Commands**
 

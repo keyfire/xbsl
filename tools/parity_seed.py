@@ -1234,6 +1234,13 @@ Attributes:
 """
 _BOOLEAN_TOKENS = {"Отметки": "Marks", "Успешно": "Successful", "НетОшибок": "NoErrors"}
 
+#: --- Initializers: `{head}`/`{tail}` are the required marker and the value, `{type}` a written type --
+_ORDER_FIELD_RU = "структура Заказ\n    {head}пер Номер: Число{tail}\n;\n"
+_ORDER_LOCAL_RU = "метод Посчитать(): Число\n    пер Итог: {type}\n    Итог = 1\n    возврат 1\n;\n"
+_ORDER_USE_RU = "метод Прочитать(Данные: Байты)\n    исп Поток: ПотокЧтения{tail}\n;\n"
+_INIT_TOKENS = {"Заказы": "Orders", "Заказ": "Order", "Номер": "Number", "Посчитать": "Count",
+                "Итог": "Total", "Прочитать": "Read", "Данные": "Data", "Поток": "Stream"}
+
 #: --- Cross-subsystem references: a consumer subsystem and a supplier subsystem -----------
 #: The consumer declares the supplier as used; the supplier is private to the auto-interface.
 _SUB_USE_RU = "Использование:\n    - Склад\n"
@@ -1442,6 +1449,47 @@ _STRINGS_DEFAULT_RU = _STRINGS_RU.format(
 _LABEL_RU = _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: Надпись\n        Значение: {value}\n"
 _STRINGS_TOKENS = {"Словарь": "Dictionary", "Приветствие": "Greeting", "Расширена": "Extended",
                    "Готово": "Done", "Карточка": "Card"}
+
+#: --- Repetitions: `{second}` is what the second branch or section names ------------------------
+_SIGNAL_WHEN_RU = (
+    "метод Разобрать(Значение: Объект): Число\n"
+    "    выбор Значение\n"
+    "        когда это Строка\n"
+    "            возврат 1\n"
+    "        когда {second}\n"
+    "            возврат 2\n"
+    "    ;\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_SIGNAL_ITEM_RU = (
+    "перечисление Сигнал\n    Красный,\n    Зеленый\n;\n\n"
+    "метод Разобрать(Значение: Сигнал): Число\n"
+    "    выбор Значение\n"
+    "        когда Сигнал.Красный\n"
+    "            возврат 1\n"
+    "        когда {second}\n"
+    "            возврат 2\n"
+    "    ;\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_SIGNAL_CATCH_RU = (
+    "метод Разобрать(): Число\n"
+    "    попытка\n"
+    "        возврат 1\n"
+    "    поймать Первое: ИсключениеНедопустимоеСостояние\n"
+    "        возврат 2\n"
+    "    поймать Второе: {second}\n"
+    "        возврат 3\n"
+    "    ;\n"
+    ";\n"
+)
+_SIGNAL_EXCEPTION_RU = "исключение ИсключениеСигнала\n    пер {field}: Строка = \"\"\n;\n"
+_SIGNAL_ENUM_RU = "перечисление Сигнал\n    Красный умолчание,\n    Зеленый{mark}\n;\n"
+_SIGNAL_TOKENS = {"Сигналы": "Signals", "Сигнал": "Signal", "Красный": "Red", "Зеленый": "Green",
+                  "Разобрать": "Parse", "Значение": "Value", "Первое": "First", "Второе": "Second",
+                  "ИсключениеСигнала": "SignalException", "Подробности": "Details"}
 
 #: --- Resources, components, modules ----------------------------------------------------
 _PICTURES_XBSL_RU = "метод Картинка(): ДвоичныйОбъект.Ссылка\n    возврат Ресурс{{{key}}}.Ссылка\n;\n"
@@ -1662,6 +1710,21 @@ _BATCH_PICKER_RU = """\
 """
 _PARTIAL_TOKENS = {**_PACKAGE_TOKENS, "ПодборПартий": "BatchPicker"}
 
+#: --- A typed receiver and a resource: `{kind}` is the declaration keyword ------------------------
+_BATCH_RECEIVER_RU = (
+    "структура Партия\n    {kind} Остаток: Число = 0\n;\n\n"
+    "метод Обнулить(Экземпляр: Партия)\n    Экземпляр.Остаток = 0\n;\n"
+)
+_BATCH_RESOURCE_RU = (
+    "метод Открыть(Данные: Байты): ПотокЧтения\n"
+    "    {kind} Поток = ПотокЧтения.ИзБайтов(Данные)\n"
+    "    возврат Поток\n"
+    ";\n"
+)
+_BATCH_RECEIVER_TOKENS = {"Партии": "Batches", "Партия": "Batch", "Остаток": "Balance",
+                          "Обнулить": "Reset", "Экземпляр": "Instance", "Открыть": "Open",
+                          "Данные": "Data", "Поток": "Stream"}
+
 #: --- The tables of a list and of a query, a partial name of two places, the project module ---
 #: A catalog at the root of the supplier, public or hidden (`{vis}` is the whole line or nothing).
 _STOCK_RU = """\
@@ -1753,7 +1816,55 @@ _LAMBDA_TOTAL_TOKENS = {"Расчет": "Calculation", "Посчитать": "Co
                         "Сумма": "Total", "Элемент": "Item"}
 
 
+#: A server module that uploads bytes to the object storage - the platform keeps one upload of
+#: that name for compatibility and has a current one of another name and shape.
+_UPLOADS_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c60-0000-4000-8000-000000000fd1\nИмя: Выгрузки\nОкружение: Сервер\n"
+_UPLOADS_XBSL_RU = "метод Сохранить(Данные: Байты): ДвоичныйОбъект.Ссылка\n    знч Загруженный = {call}\n    возврат Загруженный.Ссылка\n;\n"
+_UPLOADS_TOKENS = {"Выгрузки": "Uploads", "Сохранить": "Save", "Данные": "Data", "Загруженный": "Uploaded"}
+
 SEEDS: list[Seed] = [
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a call inside arithmetic does not make a valid statement',
+        files={"Проба.xbsl": 'метод Проба()\n    Функция() + 1\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a constructor result cannot be discarded',
+        files={"Проба.xbsl": 'метод Проба()\n    новый Массив<Число>()\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a ternary expression with a call still discards a value',
+        files={"Проба.xbsl": 'метод Проба()\n    Истина ? Функция() : 0\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='coalescing with a call still discards a value',
+        files={"Проба.xbsl": 'метод Проба()\n    Неопределено ?? Функция()\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=CLEAN,
+        note='a parenthesized call is a valid statement',
+        files={"Проба.xbsl": 'метод Проба()\n    (Функция())\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=CLEAN,
+        note='an initializer consumes the expression value',
+        files={"Проба.xbsl": 'метод Проба()\n    знч Значение = Функция() + 1\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
     Seed(
         rule="structure/xbsl-pair",
         expect=CLEAN,
@@ -4304,6 +4415,49 @@ SEEDS: list[Seed] = [
         files={"Переводы.yaml": _TRANSFERS_RU, "Переводы.xbsl": _GRANT_RU.format(rights="Сущность.Право.Изменение")},
         tokens=_TRANSFERS_TOKENS,
     ),
+    # --- initializers the compiler demands or refuses ----------------------------------------
+    Seed(
+        rule="code/required-field-default",
+        expect=FINDING,
+        note="a required field that also carries a default value",
+        files={"Заказы.xbsl": _ORDER_FIELD_RU.format(head="обз ", tail=" = 1")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/required-field-default",
+        expect=CLEAN,
+        note="the same field required and without a value",
+        files={"Заказы.xbsl": _ORDER_FIELD_RU.format(head="обз ", tail="")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=FINDING,
+        note="a local of a union type declared without a value",
+        files={"Заказы.xbsl": _ORDER_LOCAL_RU.format(type="Число|Строка")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=CLEAN,
+        note="the same union with the empty value, spelled as the platform names it",
+        files={"Заказы.xbsl": _ORDER_LOCAL_RU.format(type="Число|Строка|Неопределено")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=FINDING,
+        note="a use variable declared by type alone",
+        files={"Заказы.xbsl": _ORDER_USE_RU.format(tail="")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=CLEAN,
+        note="the same use variable opened in the declaration",
+        files={"Заказы.xbsl": _ORDER_USE_RU.format(tail=" = ПотокЧтения.ИзБайтов(Данные)")},
+        tokens=_INIT_TOKENS,
+    ),
     # --- references across a subsystem boundary ----------------------------------------
     Seed(
         rule="yaml/foreign-not-public",
@@ -4533,6 +4687,77 @@ SEEDS: list[Seed] = [
         note="the two sections with distinct keys",
         files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN},
         tokens=_STRINGS_TOKENS,
+    ),
+    # --- repetitions: a value, a type or a name written twice --------------------------------
+    Seed(
+        rule="code/duplicate-when",
+        expect=FINDING,
+        note="a type test repeated in the branches of a switch",
+        files={"Сигналы.xbsl": _SIGNAL_WHEN_RU.format(second="это Строка")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=CLEAN,
+        note="the second branch tests another type",
+        files={"Сигналы.xbsl": _SIGNAL_WHEN_RU.format(second="это Число")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=FINDING,
+        note="an item of an enumeration of the file repeated in the branches of a switch",
+        files={"Сигналы.xbsl": _SIGNAL_ITEM_RU.format(second="Сигнал.Красный")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=CLEAN,
+        note="the second branch names another item",
+        files={"Сигналы.xbsl": _SIGNAL_ITEM_RU.format(second="Сигнал.Зеленый")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-catch",
+        expect=FINDING,
+        note="one exception type caught by two sections",
+        files={"Сигналы.xbsl": _SIGNAL_CATCH_RU.format(second="ИсключениеНедопустимоеСостояние")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-catch",
+        expect=CLEAN,
+        note="the second section catches another type",
+        files={"Сигналы.xbsl": _SIGNAL_CATCH_RU.format(second="ИсключениеНедопустимыйАргумент")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=FINDING,
+        note="an exception field named like a property every exception has",
+        files={"Сигналы.xbsl": _SIGNAL_EXCEPTION_RU.format(field="Описание")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=CLEAN,
+        note="an exception field of a name of its own",
+        files={"Сигналы.xbsl": _SIGNAL_EXCEPTION_RU.format(field="Подробности")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=FINDING,
+        note="a second default item of an enumeration",
+        files={"Сигналы.xbsl": _SIGNAL_ENUM_RU.format(mark=" умолчание")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=CLEAN,
+        note="one default item",
+        files={"Сигналы.xbsl": _SIGNAL_ENUM_RU.format(mark="")},
+        tokens=_SIGNAL_TOKENS,
     ),
     # --- resources, declarations, calls --------------------------------------------------
     Seed(
@@ -5188,6 +5413,35 @@ SEEDS: list[Seed] = [
               "prefix alone in either spelling - the shape naming/kind-in-name had before its fix. "
               "Closing it is a change of the rule judged against the standard, not a lookup.",
     ),
+    # --- a read-only field through a typed receiver, a resource handed out ----------------------
+    Seed(
+        rule="code/assign-readonly",
+        expect=FINDING,
+        note="a value field written through a parameter typed with the structure of the file",
+        files={"Партии.xbsl": _BATCH_RECEIVER_RU.format(kind="знч")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=CLEAN,
+        note="the same field declared as a variable",
+        files={"Партии.xbsl": _BATCH_RECEIVER_RU.format(kind="пер")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/return-use-resource",
+        expect=FINDING,
+        note="a use resource returned from the method that opened it",
+        files={"Партии.xbsl": _BATCH_RESOURCE_RU.format(kind="исп")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/return-use-resource",
+        expect=CLEAN,
+        note="the same stream held by a value variable and closed by the caller",
+        files={"Партии.xbsl": _BATCH_RESOURCE_RU.format(kind="знч")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
     # --- packages of a subsystem -----------------------------------------------------------
     Seed(
         rule="code/missing-import",
@@ -5577,6 +5831,23 @@ SEEDS: list[Seed] = [
         english={"Calculation.xbsl": _LAMBDA_TOTAL_EN.format(
             start="[0]", change="Total[0] = Total[0] + Item", result="Total[0]")},
         tokens=_LAMBDA_TOTAL_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-api",
+        expect=FINDING,
+        note="a platform method deprecated in every form - the table of deprecated forms is keyed "
+             "Russian, the call is written in either script",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Выгрузки.yaml": _UPLOADS_YAML_RU,
+               "Основное/Выгрузки.xbsl": _UPLOADS_XBSL_RU.format(call="ОбъектноеХранилище.ЗагрузитьИзБайт(Данные)")},
+        tokens=_UPLOADS_TOKENS,
+    ),
+    Seed(
+        rule="code/deprecated-api",
+        expect=CLEAN,
+        note="a current overload of a method that has a deprecated one - the arguments pick the form",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Выгрузки.yaml": _UPLOADS_YAML_RU,
+               "Основное/Выгрузки.xbsl": _UPLOADS_XBSL_RU.format(call='ОбъектноеХранилище.Загрузить("файл.txt", Данные)')},
+        tokens=_UPLOADS_TOKENS,
     ),
 ]
 

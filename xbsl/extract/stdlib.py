@@ -56,7 +56,7 @@ import re
 import zipfile
 from pathlib import Path
 
-from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER
+from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER, nearest_last
 from xbsl.extract import _distro, classcode
 from xbsl.extract.terms import scan_kind_table
 
@@ -285,6 +285,52 @@ def page_type_params(raw: str) -> list[str]:
 #: signature block.
 DEPRECATED_MARK = "@Устарело"
 
+#: A page prints the form a member had in an OLDER version of the platform under a heading of
+#: its own, struck through (`<h3><del>ОсновнаяТаблица</del>...`), with the version line
+#: "Версия 7.0 и ниже" under it; the form of the current version sits under a plain heading
+#: nearby. The struck form is gone from the versions after the one it names - it is history,
+#: not an overload.
+_STRUCK_RE = re.compile(r"<del\b")
+#: The version line under a member heading: "Версия 8.0 и выше" (the form exists from that
+#: version on) or "Версия 9.0 и ниже" (up to that version). A form may carry both.
+_VERSION_LINE_RE = re.compile(r"Версия\s+(\d+(?:\.\d+)*)\s+и\s+(выше|ниже)")
+
+#: How far a printed form counts, highest first: a current form, a form kept for compatibility
+#: (`@Устарело` - it still exists), a form of an older version (struck - it does not). The data
+#: of a member is read from the forms of the highest rank the page prints for it, so a lower
+#: form speaks only for a member that has nothing better.
+RANK_CURRENT = 2
+RANK_DEPRECATED = 1
+RANK_OLDER_VERSION = 0
+
+
+def _member_chunks(section: str):
+    """(name, struck, body) for every member heading of a section, in page order.
+
+    `struck` tells a heading crossed out - the form of an older version (see _STRUCK_RE).
+    """
+    parts = _H3_RE.split(section)
+    # _H3_RE captures the heading text: parts = [before, name1, body1, name2, body2...]
+    for k in range(1, len(parts) - 1, 2):
+        name = _plain_text(parts[k])
+        if _PROP_NAME_RE.match(name):
+            yield name, bool(_STRUCK_RE.search(parts[k])), parts[k + 1]
+
+
+def _form_rank(struck: bool, signature: str) -> int:
+    if struck:
+        return RANK_OLDER_VERSION
+    return RANK_DEPRECATED if signature.lstrip().startswith(DEPRECATED_MARK) else RANK_CURRENT
+
+
+def _without_mark(signature: str) -> str:
+    """A signature with the compatibility mark taken off its head."""
+    stripped = signature.strip()
+    if stripped.startswith(DEPRECATED_MARK):
+        stripped = stripped[len(DEPRECATED_MARK):].strip()
+    return stripped
+
+
 #: A generic METHOD declares its own parameters right after the name:
 #: `ПрочитатьОбъект<ТипОбъекта>(Источник: ..., Тип: Тип<ТипОбъекта>): ТипОбъекта`.
 _METHOD_PARAMS_RE = re.compile(r"^([A-Za-zА-Яа-яЁё_][\wА-Яа-яЁё]*)<([^>]+)>\s*\(")
@@ -417,54 +463,55 @@ def page_constructors(raw: str, title: str) -> str:
     return CTOR_ARGS if seen else CTOR_NONE
 
 
-def page_member_types(raw: str) -> dict[str, str]:
+def page_member_types(raw: str, folded: list[tuple[str, list[str]]] | None = None) -> dict[str, str]:
     """Page member -> its result type (to infer the type of access chains).
 
     Signatures sit in code blocks after the H3 headings of the "Методы" (`Имя(...): Тип` -
     the return type) and "Свойства" (`Имя: Тип` - the property type) sections. The FULL
     docs spelling is stored (the generic parameter included - `ЧитаемоеМножество<Настройки>`
     keeps what `.Первый()` would answer); the consumers cut the nominal head at lookup
-    (dataset.member_type_head). Overloads that agree on the head alone degrade to the head,
-    overloads with differing heads drop the member (no common type can be inferred).
-    Inherited members carry no signatures on the page and are not collected.
+    (dataset.member_type_head). Inherited members carry no signatures on the page and are not
+    collected.
+
+    Only the forms of the highest rank count (see RANK_CURRENT). A method may carry a DEPRECATED
+    overload with a result of its own (`ReadObject` answers the parameter of the generic form and
+    `Object?` in the form kept for compatibility), and a property the form of an older version:
+    `ОсновнаяТаблица: ОтражениеТаблицы?` today, `ОсновнаяТаблица: ОтражениеТаблицы` under a
+    struck heading for 7.0 and below. Reading such forms as current ones either dropped the
+    member or folded it into the head and lost the empty value of the form the code meets.
+
+    Among the forms that count, overloads with differing heads drop the member (no common type
+    can be inferred). Forms that share the head and differ in the rest are not settled here, and
+    never silently - the member goes to `folded` as (name, the spellings):
+
+    - a METHOD keeps the head. Its overloads differ by design (`Получить()` answers a record and
+      `Получить(Период)` a record or nothing), the call picks one, and the rules that judge the
+      empty value of a call read `member_signatures`, not this. A union here would answer the
+      empty value for the call that has none - a cast of such a result would read as dropping it;
+    - a PROPERTY has one value, so two spellings of it mean the page does not say which one the
+      platform uses: no type is stored rather than one of them.
     """
     ma = _ARTICLE_RE.search(raw)
     if not ma:
         return {}
-    out: dict[str, str] = {}
-    heads: dict[str, str] = {}
-    dropped: set[str] = set()
-    # Whether a CURRENT (non-deprecated) form of the member has been seen: the overloads a page
-    # keeps for compatibility answer a result of their own, and reading both made the two
-    # disagree and dropped the member altogether. The forms sit under separate headings, so the
-    # decision cannot be made inside one of them.
-    current_of: dict[str, bool] = {}
+    forms: dict[str, list[tuple[int, str, str]]] = {}
+    properties: set[str] = set()
     for section in _H2_OPEN_RE.split(ma.group(1)):
         head = _plain_text(section[:200])
         is_method = head.startswith("Методы")
         if not is_method and not head.startswith("Свойства"):
             continue
-        # Chunks between H3s: the first is the section heading, then one member per chunk.
-        parts = _H3_RE.split(section)
-        # _H3_RE captures the heading text: parts = [before, name1, body1, name2, body2...]
-        for k in range(1, len(parts) - 1, 2):
-            name = _plain_text(parts[k])
-            if not _PROP_NAME_RE.match(name):
-                continue
-            body = parts[k + 1]
-            # A method may carry a DEPRECATED overload with a result of its own (`ReadObject`
-            # answers the parameter of the generic form and `Object?` in the form kept for
-            # compatibility). Reading both made the two disagree and dropped the member
-            # altogether; the current forms win, and a method that has none keeps the old.
+        for name, struck, body in _member_chunks(section):
+            if not is_method:
+                properties.add(name)
             for sig in [_plain_text(m.group(1)) for m in _SIG_CODE_RE.finditer(body)]:
-                deprecated = sig.lstrip().startswith(DEPRECATED_MARK)
                 if is_method:
                     paren = sig.rfind("):")
                     tail = sig[paren + 2:] if paren >= 0 else ""
                 else:
                     colon = sig.find(":")
                     # a property signature is `Имя: Тип` with the member's own name
-                    if colon < 0 or sig[:colon].strip() != name:
+                    if colon < 0 or _without_mark(sig[:colon]) != name:
                         continue
                     tail = sig[colon + 1:]
                 # The signature encodes the generic brackets as entities (&lt;/&gt;), with
@@ -477,28 +524,24 @@ def page_member_types(raw: str) -> dict[str, str]:
                 root = ret.group(1)
                 mf = _RETURN_FULL_RE.match(tail)
                 full = (mf.group(1) if mf else root).strip()
-                if deprecated and name in current_of:
-                    continue  # a form kept for compatibility never outranks a current one
-                if not deprecated and name in out and not current_of.get(name):
-                    # The first current form REPLACES what a deprecated one had said - the
-                    # overloads are compared among the current ones alone from here on.
-                    out.pop(name, None)
-                    heads.pop(name, None)
-                    dropped.discard(name)
-                if not deprecated:
-                    current_of[name] = True
-                if name in dropped:
-                    continue
-                if name in out:
-                    if heads[name] != root:
-                        del out[name]
-                        del heads[name]
-                        dropped.add(name)  # overloads with differing returns
-                    elif out[name] != full:
-                        out[name] = root  # the head is shared, the parameters differ
-                else:
-                    out[name] = full
-                    heads[name] = root
+                forms.setdefault(name, []).append((_form_rank(struck, sig), root, full))
+    out: dict[str, str] = {}
+    for name, found in forms.items():
+        best = max(rank for rank, _root, _full in found)
+        kept = [(root, full) for rank, root, full in found if rank == best]
+        if len({root for root, _full in kept}) != 1:
+            continue  # overloads with differing returns
+        spellings: list[str] = []
+        for _root, full in kept:
+            if full not in spellings:
+                spellings.append(full)
+        if len(spellings) == 1:
+            out[name] = spellings[0]
+            continue
+        if folded is not None:
+            folded.append((name, spellings))
+        if name not in properties:
+            out[name] = kept[0][0]  # the head is shared, the overloads differ in the rest
     return out
 
 
@@ -511,7 +554,7 @@ _TEMPLATE_PLACEHOLDER_RE = re.compile(r"\{[^{}]*\}")
 _PLACEHOLDER_STANDIN = "Project_Element_Name"
 
 
-def manager_member_types(raw: str) -> dict[str, str]:
+def manager_member_types(raw: str, folded: list[tuple[str, list[str]]] | None = None) -> dict[str, str]:
     """Manager member -> its result type, with the object's own name left as `{}`.
 
     The result type of a manager method is what types a chain over a project object: `Get()` of
@@ -521,16 +564,66 @@ def manager_member_types(raw: str) -> dict[str, str]:
     project object were the ones it could not read. The placeholder is swapped for an
     identifier-shaped stand-in before parsing and put back as `{}` after, so the tested parser
     is reused as it is.
+
+    A result that names placeholders more than once is left with its head: `SelectChanges` of
+    an exchange plan answers a selection of `{CatalogName}.Object`, `{DocumentName}.Object` and
+    the like - objects of other kinds, which the name of the plan cannot be put in for.
     """
     stand_in = _TEMPLATE_PLACEHOLDER_RE.sub(_PLACEHOLDER_STANDIN, raw)
-    return {
-        member: spelling.replace(_PLACEHOLDER_STANDIN, PLACEHOLDER)
-        for member, spelling in page_member_types(stand_in).items()
-    }
+    found: list[tuple[str, list[str]]] = []
+    types = page_member_types(stand_in, found)
+    if folded is not None:
+        folded.extend(
+            (member, [spelling.replace(_PLACEHOLDER_STANDIN, PLACEHOLDER) for spelling in spellings])
+            for member, spellings in found
+        )
+    out: dict[str, str] = {}
+    for member, spelling in types.items():
+        if spelling.count(_PLACEHOLDER_STANDIN) > 1:
+            spelling = spelling.split("<", 1)[0].split("|", 1)[0].strip().rstrip("?")
+        out[member] = spelling.replace(_PLACEHOLDER_STANDIN, PLACEHOLDER)
+    return out
 
 
 #: A comma of a parameter list that the documentation prints without a space after it.
 _TIGHT_COMMA_RE = re.compile(r",(?=\S)")
+
+
+def _ranked_signatures(raw: str) -> dict[str, list[tuple[int, str]]]:
+    """Method -> [(rank, signature)] of every signature block the page prints, in page order.
+
+    The signature is normalized the way a reader wants it: unescaped, the compatibility mark
+    taken off, a space after every comma. A block counts when it opens with the member's own
+    name, which leaves the example blocks under the same heading out.
+    """
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return {}
+    out: dict[str, list[tuple[int, str]]] = {}
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Методы"):
+            continue
+        for name, struck, body in _member_chunks(section):
+            for m in _SIG_CODE_RE.finditer(body):
+                printed = html.unescape(_plain_text(m.group(1))).strip()
+                text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
+                # A generic method prints its parameters between the name and the parenthesis
+                # (`ПрочитатьОбъект<ТипОбъекта>(...)`), and demanding `name(` dropped the whole
+                # signature - with it the result type and the parameter list of the method.
+                if method_type_params(text)[0] != name:
+                    continue
+                out.setdefault(name, []).append((_form_rank(struck, printed), text))
+    return out
+
+
+def _best_ranked(found: list[tuple[int, str]]) -> list[str]:
+    """The distinct signatures of the highest rank present, in page order."""
+    best = max(rank for rank, _text in found)
+    kept: list[str] = []
+    for rank, text in found:
+        if rank == best and text not in kept:
+            kept.append(text)
+    return kept
 
 
 def page_method_type_params(raw: str) -> dict[str, list[str]]:
@@ -538,30 +631,16 @@ def page_method_type_params(raw: str) -> dict[str, list[str]]:
 
     Such a result is fixed not by the owner's arguments but by the CALL: the code passes
     `Тип<Массив<Карточка>>`, and the parameter list is what tells a consumer that the result
-    name is a parameter and not a type it failed to find.
+    name is a parameter and not a type it failed to find. Read from the forms of the highest
+    rank, like the result type.
     """
-    ma = _ARTICLE_RE.search(raw)
-    if not ma:
-        return {}
     out: dict[str, list[str]] = {}
-    for section in _H2_OPEN_RE.split(ma.group(1)):
-        if not _plain_text(section[:200]).startswith("Методы"):
-            continue
-        parts = _H3_RE.split(section)
-        for k in range(1, len(parts) - 1, 2):
-            name = _plain_text(parts[k])
-            if not _PROP_NAME_RE.match(name):
-                continue
-            for m in _SIG_CODE_RE.finditer(parts[k + 1]):
-                sig = html.unescape(_plain_text(m.group(1))).strip()
-                if sig.startswith(DEPRECATED_MARK):
-                    continue
-                method, params = method_type_params(sig)
-                if method == name and params:
-                    known = out.setdefault(name, [])
-                    for param in params:
-                        if param not in known:
-                            known.append(param)
+    for name, found in _ranked_signatures(raw).items():
+        for text in _best_ranked(found):
+            for param in method_type_params(text)[1]:
+                known = out.setdefault(name, [])
+                if param not in known:
+                    known.append(param)
     return out
 
 
@@ -578,30 +657,84 @@ def page_member_signatures(raw: str) -> dict[str, list[str]]:
     two), so the strings simply accumulate; identical ones collapse. The docs print the list
     without a space after the comma - that is a rendering artifact of the page, not the
     platform's spelling, and it is normalized here so the hover card reads like code.
+
+    The forms of the highest rank are kept (see RANK_CURRENT): an overload of an older version
+    is not one the code can call today, and an overload kept for compatibility is listed only
+    for a method that has nothing but such overloads - the forms themselves, marks included,
+    are in `page_member_forms`.
+    """
+    out: dict[str, list[str]] = {}
+    for name, found in _ranked_signatures(raw).items():
+        out[name] = _best_ranked(found)
+    return out
+
+
+#: What the description of a form says it gave way to: a method or a property replaced by a
+#: member (`заменен на`, `заменено на`), renamed into one (`переименован в`), or - for a method
+#: the platform keeps as a shorthand - calling one (`Вызывает метод`). The text of the link that
+#: follows names the member to use.
+_REPLACEMENT_RE = re.compile(
+    r"(?:заменен[аоы]?\s+на|переименован[аоы]?\s+в|Вызывает\s+метод)\s+<a\b[^>]*>(.*?)</a>", re.S)
+#: Where the description of a form ends: the subsection of its exceptions or examples.
+_H4_OPEN_RE = re.compile(r"<h4\b")
+
+
+def page_member_forms(raw: str) -> dict[str, list[dict[str, str | bool]]]:
+    """Member -> every form the page prints, for a member with a form kept for compatibility.
+
+    The type data (`page_member_types`, `page_member_signatures`) holds what the code can use
+    today and drops the rest; a check of deprecated calls needs exactly the rest, with enough
+    around it to tell which overload a call binds to. So for a member that has at least one form
+    marked `@Устарело`, every form of it is listed in page order:
+
+    - `signature` - as `page_member_signatures` spells it (`Имя: Тип` for a property), the mark
+      taken off;
+    - `deprecated` - True for a form marked `@Устарело`;
+    - `since` / `until` - the version lines under the heading (`Версия 8.0 и выше`,
+      `Версия 9.0 и ниже`): the versions of the platform the form exists in. A struck heading
+      always says `until`;
+    - `replacement` - the member the description names instead (see _REPLACEMENT_RE), for a form
+      that is deprecated or of an older version.
+
+    A key is present only when it says something. Members with no marked form are left out: an
+    older form alone is history the compiler reports as an error, not a warning.
     """
     ma = _ARTICLE_RE.search(raw)
     if not ma:
         return {}
-    out: dict[str, list[str]] = {}
+    out: dict[str, list[dict[str, str | bool]]] = {}
     for section in _H2_OPEN_RE.split(ma.group(1)):
-        if not _plain_text(section[:200]).startswith("Методы"):
+        head = _plain_text(section[:200])
+        is_method = head.startswith("Методы")
+        if not is_method and not head.startswith("Свойства"):
             continue
-        parts = _H3_RE.split(section)
-        for k in range(1, len(parts) - 1, 2):
-            name = _plain_text(parts[k])
-            if not _PROP_NAME_RE.match(name):
-                continue
-            for m in _SIG_CODE_RE.finditer(parts[k + 1]):
-                text = _TIGHT_COMMA_RE.sub(", ", html.unescape(_plain_text(m.group(1))).strip())
-                # A generic method prints its parameters between the name and the parenthesis
-                # (`ПрочитатьОбъект<ТипОбъекта>(...)`), and demanding `name(` dropped the whole
-                # signature - with it the result type and the parameter list of the method.
-                if method_type_params(text)[0] != name:
-                    continue
-                found = out.setdefault(name, [])
-                if text not in found:
-                    found.append(text)
-    return out
+        for name, struck, body in _member_chunks(section):
+            for m in _SIG_CODE_RE.finditer(body):
+                printed = html.unescape(_plain_text(m.group(1))).strip()
+                text = _TIGHT_COMMA_RE.sub(", ", _without_mark(printed))
+                if is_method:
+                    if method_type_params(text)[0] != name:
+                        continue
+                else:
+                    written, colon, _type = text.partition(":")
+                    if not colon or written.strip() != name:
+                        continue
+                form: dict[str, str | bool] = {"signature": text}
+                deprecated = printed.startswith(DEPRECATED_MARK)
+                if deprecated:
+                    form["deprecated"] = True
+                for version in _VERSION_LINE_RE.finditer(_plain_text(body[:m.start()])):
+                    form["since" if version.group(2) == "выше" else "until"] = version.group(1)
+                if deprecated or struck:
+                    tail = body[m.end():]
+                    stop = _H4_OPEN_RE.search(tail)
+                    found = _REPLACEMENT_RE.search(tail[:stop.start()] if stop else tail)
+                    replacement = _plain_text(found.group(1)) if found else ""
+                    if _PROP_NAME_RE.match(replacement):
+                        form["replacement"] = replacement
+                out.setdefault(name, []).append(form)
+                break  # one signature per heading: the blocks after it are examples
+    return {name: forms for name, forms in out.items() if any(f.get("deprecated") for f in forms)}
 
 
 _H1_OPEN_RE = re.compile(r"<h1[^>]*>")
@@ -701,8 +834,9 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
 
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
-    the global context with per-name availability, managers, facets, member types, bases and
-    constructor kinds - the tuple main() unpacks."""
+    the global context with per-name availability, managers, facets, member types, bases,
+    constructor kinds, type parameters, the forms of deprecated members and the members whose
+    overloads were folded into a head - the tuple main() unpacks."""
     car = _distro.find_car(dist)
     names: set[str] = set()
     members: dict[str, set[str]] = {}
@@ -720,6 +854,9 @@ def extract(dist: Path) -> tuple:
     type_params: dict[str, list[str]] = {}
     method_params: dict[str, dict[str, list[str]]] = {}
     ctors: dict[str, str] = {}
+    deprecated: dict[str, dict[str, list[dict]]] = {}
+    folds: list[tuple[str, str, list[str]]] = []
+    english_keys: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -764,10 +901,14 @@ def extract(dist: Path) -> tuple:
                     # A name two packages give different environments is unjudgeable.
                     if global_env.setdefault(member, env) != env:
                         conflicted_env.add(member)
+            if eng and key:
+                english_keys.setdefault(eng, key)
             if props or methods or events:
-                rets = page_member_types(raw)
+                folded: list[tuple[str, list[str]]] = []
+                rets = page_member_types(raw, folded)
                 sigs = page_member_signatures(raw)
                 mparams = page_method_type_params(raw)
+                forms = page_member_forms(raw)
                 if key:
                     slot = types.setdefault(key, _empty_member_slot())
                     slot["properties"] |= props
@@ -779,6 +920,8 @@ def extract(dist: Path) -> tuple:
                         _merge_signatures(signatures.setdefault(key, {}), sigs)
                     if mparams:
                         method_params.setdefault(key, {}).update(mparams)
+                    if forms:
+                        deprecated.setdefault(key, {}).update(forms)
                 # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record
                 # and reference members go into a separate dictionary, under the Russian form.
                 facet_key = (title if _FACET_TITLE_RE.match(title) else "") or _english_facet_from_path(n)
@@ -791,6 +934,9 @@ def extract(dist: Path) -> tuple:
                         returns.setdefault(facet_key, {}).update(rets)
                     if sigs:
                         _merge_signatures(signatures.setdefault(facet_key, {}), sigs)
+                    if forms:
+                        deprecated.setdefault(facet_key, {}).update(forms)
+                folds.extend((key or facet_key or n, member, spellings) for member, spellings in folded)
             got = component_props(n, raw)
             if got is not None:
                 comp, props = got
@@ -821,9 +967,11 @@ def extract(dist: Path) -> tuple:
                     slot = managers.setdefault(kind, _empty_member_slot())
                     slot["properties"] |= props
                     slot["methods"] |= methods
-                rets = manager_member_types(raw)
+                folded = []
+                rets = manager_member_types(raw, folded)
                 if rets:
                     manager_returns.setdefault(kind, {}).update(rets)
+                folds.extend((kind, member, spellings) for member, spellings in folded)
                 continue
             raw = z.read(n).decode("utf-8", "replace")
             mt = _TITLE_RE.search(raw)
@@ -834,6 +982,8 @@ def extract(dist: Path) -> tuple:
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
     names |= TOPIC_ONLY_TYPES
+    with zipfile.ZipFile(car) as z:
+        _apply_deprecation_modes(z, deprecated, english_keys)
     documented = {
         "Std::" + "::".join(entry[len(STD_BASE):].split("/")[:-2]
                             + [entry[len(STD_BASE):].split("/")[-2][:-len("_ru")]])
@@ -855,7 +1005,8 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, returns, signatures, bases, ctors, type_params, method_params)
+            facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
+            folds)
 
 
 # --- Types the reference pages never describe ------------------------------------------
@@ -923,6 +1074,61 @@ def undocumented_types(
                     own[kind].add(spelled)
         found.append((english, russian, own, page["bases"], page["ctors"]))
     return found
+
+
+def _apply_deprecation_modes(car: zipfile.ZipFile, deprecated: dict[str, dict[str, list[dict]]],
+                             english_keys: dict[str, str]) -> None:
+    """Put the compatibility modes a deprecation applies in onto the deprecated forms.
+
+    The help marks the form and stops there, and the modes differ between members: the object
+    storage deprecates its old uploads from mode 8.0 on, while the shorthand readers of a JSON
+    reader are deprecated only in the newest mode - a project of an older mode calls them without
+    a word from the compiler. The metaobject class of the type states the range
+    (classcode.declared_deprecations), and the class is found by the English name of the type
+    (`<Name>CtMetaObject`).
+
+    The range goes onto a member only when every deprecated overload of it states the same one:
+    the class does not say which printed form an annotation belongs to. Such a form gets
+    `deprecated_modes`, [the first mode, the last one] with null for an open end. A deprecated
+    form without it has modes the data does not know (no classes in the distribution, or
+    overloads that disagree), and the rule holds its mark for the newest mode only.
+    """
+    wanted = {english: key for english, key in english_keys.items() if key in deprecated}
+    if not wanted:
+        return
+    ranges: dict[str, dict[str, set[tuple[str | None, str | None]]]] = {}
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not LSP_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            simple = inner.rsplit("/", 1)[-1]
+            if not simple.endswith(_CT_META_OBJECT_CLASS):
+                continue
+            key = wanted.get(simple[:-len(_CT_META_OBJECT_CLASS)])
+            if key is None:
+                continue
+            for member, since, until in classcode.declared_deprecations(jar.read(inner)):
+                ranges.setdefault(key, {}).setdefault(member, set()).add((since, until))
+    for key, members in ranges.items():
+        for member, found in members.items():
+            forms = (deprecated.get(key) or {}).get(member)
+            if not forms:
+                continue
+            if len(found) != 1:
+                print(f"  перегрузки устаревают в разных режимах, режим не записан: {key}.{member}")
+                continue
+            since, until = next(iter(found))
+            for form in forms:
+                if form.get("deprecated"):
+                    form["deprecated_modes"] = [since, until]
+
+
+#: The class that declares the members of a type for the compiler: `<English type name>` + this.
+_CT_META_OBJECT_CLASS = "CtMetaObject.class"
 
 
 def _markdown_pages(car: zipfile.ZipFile, documented: set[str]) -> dict[str, dict]:
@@ -1078,7 +1284,8 @@ def _own_members(
     own_returns: dict[str, dict[str, str]] = {}
     for name, member_types in returns.items():
         inherited = {}
-        for base in bases.get(name, ()):
+        # The nearest ancestor speaks last - the order the loader merges in (dataset.nearest_last).
+        for base in nearest_last(bases.get(name, ()), bases):
             inherited.update(returns.get(base, {}))
         own_returns[name] = {
             member: rtype for member, rtype in member_types.items()
@@ -1087,7 +1294,7 @@ def _own_members(
     own_signatures: dict[str, dict[str, list[str]]] = {}
     for name, member_sigs in signatures.items():
         inherited_sigs: dict[str, list[str]] = {}
-        for base in bases.get(name, ()):
+        for base in nearest_last(bases.get(name, ()), bases):
             inherited_sigs.update(signatures.get(base, {}))
         own_signatures[name] = {
             member: sigs for member, sigs in member_sigs.items()
@@ -1115,7 +1322,8 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, returns, signatures, bases, ctors, type_params, method_params) = extract(dist)
+     facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
+     folds) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1133,6 +1341,11 @@ def main(argv=None) -> int:
             # Members/bases/facets are stored under one name form; the loader adds the English
             # keys from terms.json. Older datasets without this marker carry both forms already.
             "bilingual_keys": "expand",
+            # member_types and member_signatures are read from the forms of the CURRENT version
+            # (RANK_CURRENT): the struck form of an older version no longer folds into them. Older
+            # datasets lost the empty value of such a member, and a consumer that trusts a plain
+            # type checks this marker first.
+            "member_forms": "current",
             "note": "двуязычные имена символов stdlib (русское из title + английское из пути)"
                     " + порождаемые члены по видам объектов (шаблонные страницы)"
                     " + встроенные свойства компонентов интерфейса (страницы наследников"
@@ -1192,6 +1405,15 @@ def main(argv=None) -> int:
         "member_type_params": {
             k: dict(sorted(v.items())) for k, v in sorted(method_params.items()) if v
         },
+        # Members with a form the documentation marks `@Устарело`, with EVERY form of such a
+        # member (page_member_forms): which overload a call binds to decides whether it is the
+        # deprecated one, and the versions a form exists in take part in that, as do the
+        # compatibility modes of the deprecation (`deprecated_modes`, _apply_deprecation_modes).
+        # Stored under the type whose page prints the forms; a consumer walks `bases` for an
+        # inherited member.
+        "deprecated_members": {
+            k: dict(sorted(v.items())) for k, v in sorted(deprecated.items()) if v
+        },
     }
 
     out = Path(args.out) if args.out else _distro.version_dir(version) / "stdlib.json"
@@ -1218,6 +1440,13 @@ def main(argv=None) -> int:
     print(f"  типов с сигнатурами методов: {len(signatures)}"
           f" (методов: {sum(len(v) for v in signatures.values())},"
           f" перегрузок: {sum(len(s) for v in signatures.values() for s in v.values())})")
+    print(f"  типов с устаревшими членами: {len(deprecated)}"
+          f" (членов: {sum(len(v) for v in deprecated.values())},"
+          f" устаревших форм: {sum(1 for v in deprecated.values() for f in v.values() for x in f if x.get('deprecated'))})")
+    # Named, not swallowed: a member whose overloads differ in the arguments of one head type is
+    # stored as that head, and the loss is for a human to judge - the way templates are reported.
+    for owner, member, spellings in folds:
+        print(f"  тип результата сведен к голове: {owner}.{member} ({' | '.join(spellings)})")
     return 0
 
 

@@ -1,9 +1,4 @@
-"""Tests of the code/statement-no-effect rule: an expression statement must have an effect.
-
-We catch typos the parser accepts as valid expression statements (`возрат 5`, `Х == 5`
-instead of `Х = 5`); a call, a creation and a throw count as effects, as do opaque
-literals (a rich string with interpolation, Запрос{}, Ресурс{}).
-"""
+"""Expression statements must be calls or throws, including inside full lambdas."""
 
 from __future__ import annotations
 
@@ -46,7 +41,7 @@ def test_catches_inside_lambda_body():
     assert len(diags) == 2
 
 
-def test_calls_creations_throws_are_effects():
+def test_only_calls_and_throws_are_valid_statements():
     diags = _lint(
         "метод Тест(Спс: Массив<Число>)\n"
         "    Сообщить(\"привет\")\n"
@@ -56,17 +51,17 @@ def test_calls_creations_throws_are_effects():
         "    выбросить новый Исключение(\"стоп\")\n"
         ";\n"
     )
-    assert diags == [], [d.message for d in diags]
+    assert [d.line for d in diags] == [4, 5]
 
 
-def test_interpolated_string_is_an_effect():
+def test_interpolated_string_still_drops_its_value():
     # a call may hide inside %{...} - the lexer keeps a rich string as a single token
     diags = _lint(
         "метод Тест(Журнал: Массив<Строка>)\n"
         "    \"%{Журнал.Очистить()}\"\n"
         ";\n"
     )
-    assert diags == []
+    assert len(diags) == 1
 
 
 def test_plain_string_statement_is_flagged():

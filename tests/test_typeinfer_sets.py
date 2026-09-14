@@ -241,58 +241,35 @@ def test_a_member_of_a_generic_type_is_typed_by_the_argument():
 
 @pytest.mark.needs_data
 def test_overloads_that_disagree_about_the_result_give_no_type():
-    """The zero-argument overload of the documentation yields the empty value, the others do not."""
+    """A call is typed by the overloads its arity admits: the provider asked for by name may be
+    missing, the default one may not. A generic overload among the admitted ones leaves the call
+    untyped, and the zero-argument form an older platform version had types nothing now."""
     catalog = _file_catalog()
-    assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 0) \
-        == ti.TypeSet(frozenset({"Строка"}), True)
+    assert catalog.platform_member("Криптография", "ПолучитьКриптопровайдер", True, 0) \
+        == ti.TypeSet.of("Криптопровайдер")
+    assert catalog.platform_member("Криптография", "ПолучитьКриптопровайдер", True, 1) \
+        == ti.TypeSet(frozenset({"Криптопровайдер"}), True)
     assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 1) is None
+    assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 0) is None
 
 
-_VERSIONED_BLOCK = (
-    '<h3 id="таблица">Таблица</h3> <p><code>Версия 8.0 и выше</code></p>'
-    " <pre><code>Таблица: ОтражениеТаблицы?</code></pre> <hr>\n"
-    '<h3 id="таблица-1"><del>Таблица</del></h3> <p><code>Версия 7.0 и ниже</code></p>'
-    " <pre><code>Таблица: ОтражениеТаблицы</code></pre> <hr>"
-)
+def test_a_catalog_without_the_current_forms_marker_is_not_trusted_with_plain_properties(monkeypatch):
+    """Such a catalog folded the forms of older versions into the head and lost the empty value."""
+    catalog = {"meta": {}, "bases": {}}
+    monkeypatch.setattr(ti, "_catalog", lambda: catalog)
 
-
-def test_a_property_the_page_prints_nullable_in_its_current_form_is_not_trusted(monkeypatch):
-    """The catalog folded both versions into the bare head; the current form admits the empty value."""
-    from xbsl import docs
-
-    ti._documented_types.cache_clear()
-    monkeypatch.setattr(docs, "available", lambda version=None: True)
-    monkeypatch.setattr(docs, "member_doc", lambda name, version=None: {"block": _VERSIONED_BLOCK})
-    try:
-        assert ti._documented_types("Отражение", "Таблица") == ("ОтражениеТаблицы?",)
-        assert ti._documented_alike("Отражение", "Таблица") is False
-    finally:
-        ti._documented_types.cache_clear()
-
-
-def test_a_property_documented_plain_in_every_form_is_trusted(monkeypatch):
-    from xbsl import docs
-
-    ti._documented_types.cache_clear()
-    block = '<h3 id="имя">Имя</h3> <pre><code>Имя: Строка</code></pre> <hr>'
-    monkeypatch.setattr(docs, "available", lambda version=None: True)
-    monkeypatch.setattr(docs, "member_doc", lambda name, version=None: {"block": block})
-    try:
-        assert ti._documented_alike("Задачи", "Имя") is True
-    finally:
-        ti._documented_types.cache_clear()
+    assert ti._trusted_plain("Задачи", "Имя") is False
+    catalog["meta"]["member_forms"] = "current"
+    assert ti._trusted_plain("Задачи", "Имя") is True
+    assert ti._trusted_plain("ОбсуждениеВзаимодействия", "ИдВнешнегоОбсуждения") is False
 
 
 @pytest.mark.needs_data
 def test_a_property_folded_from_two_versions_is_left_untyped():
     """The page prints the main table of a reflection nullable for the current platform and plain for
-    an old one; the catalog kept the plain head, the documentation check keeps the member untyped."""
-    from xbsl import docs
-
-    if not docs.available():
-        pytest.skip("the documentation database is not installed")
-    assert _file_catalog().platform_member("ОтражениеЭлементаПроектаСТаблицами", "ОсновнаяТаблица",
-                                           False) is None
+    an old one; the catalog keeps the current form, the empty value included."""
+    got = _file_catalog().platform_member("ОтражениеЭлементаПроектаСТаблицами", "ОсновнаяТаблица", False)
+    assert got is None or got.undefined
 
 
 @pytest.mark.needs_data

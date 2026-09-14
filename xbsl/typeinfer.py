@@ -898,66 +898,27 @@ def _has_default(param: str) -> bool:
     return False
 
 
-_CODE_RE = re.compile(r"<pre><code>(.*?)</code></pre>", re.S)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-@lru_cache(maxsize=None)
-def _documented_types(owner: str, member: str) -> tuple[str, ...] | None:
-    """The types the documentation page prints for a property, its current forms first.
-
-    None when the documentation is not installed or does not document the member.
-    """
-    import html
-
-    from xbsl import docs
-
-    try:
-        found = docs.member_doc(f"{owner}.{member}") if docs.available() else {}
-    except Exception:  # noqa: BLE001 - no documentation, nothing to compare with
-        return None
-    block = (found or {}).get("block")
-    if not block:
-        return None
-    current: list[str] = []
-    replaced: list[str] = []
-    for part in re.split(r"(?=<h3)", block):
-        target = replaced if "<del>" in part[: part.find("</h3>") + 1] else current
-        for code in _CODE_RE.findall(part):
-            text = html.unescape(_TAG_RE.sub("", code)).strip()
-            head, colon, written = text.partition(":")
-            if colon and head.strip() == member:
-                target.append(written.strip())
-    return tuple(current or replaced) or None
-
-
 #: Properties the documentation itself prints as plain while the editor's language server does not
 #: treat them as never empty. Every property and argument-less method the catalog calls plain was
-#: put through the editor behind `??` (about 8,700 members): the few disagreements were the folded
-#: versions `_documented_alike` catches, and this one, which no reading of the data explains.
-#: Pairs are (the declaring type, the member) in the catalog's spelling.
+#: put through the editor behind `??` (about 8,700 members), and with the struck forms of older
+#: versions no longer read as current this one is the only disagreement left: no reading of the data
+#: explains it. Pairs are (the declaring type, the member) in the catalog's spelling.
 _DISPUTED_PROPERTIES = frozenset({("ОбсуждениеВзаимодействия", "ИдВнешнегоОбсуждения")})
 
 
-def _documented_alike(owner: str, member: str) -> bool:
-    """Whether the documentation agrees with the catalog about a property the catalog calls plain.
+def _trusted_plain(owner: str, member: str) -> bool:
+    """Whether a property the catalog calls plain can be trusted to hold no empty value.
 
-    The catalog keeps one type per member. A page that prints a property for several platform
-    versions (`TableReflection?` for the current one, `TableReflection` for an old one) was
-    folded into the bare head of the type, and the empty value of the current form got lost
-    with it - a sweep of the catalog through the editor's language server found exactly such
-    properties among its disagreements. So a property is trusted as plain only when every current
-    form the page prints is the same text and none of them admits the empty value.
+    A page that prints a property for several platform versions (`TableReflection?` for the
+    current one, `TableReflection` under a struck heading for an old one) used to be folded into the
+    bare head of the type, and the empty value of the current form got lost with it. The extractor
+    reads the forms of the current version since `meta.member_forms` says "current"; a catalog
+    without the marker is not trusted with plain properties at all.
     """
+    if (_catalog().get("meta") or {}).get("member_forms") != "current":
+        return False
     bases = (_catalog().get("bases") or {}).get(owner) or ()
-    if any((holder, member) in _DISPUTED_PROPERTIES for holder in (owner, *bases)):
-        return False
-    documented = _documented_types(owner, member)
-    if documented is None:
-        return True
-    if len(set(documented)) > 1:
-        return False
-    return not any("?" in text or "Неопределено" in text for text in documented)
+    return not any((holder, member) in _DISPUTED_PROPERTIES for holder in (owner, *bases))
 
 
 def _type_param_bindings(head: str, args: tuple[str, ...], resolve) -> dict[str, TypeSet] | None:
@@ -1186,7 +1147,7 @@ class ProjectCatalog:
         documentation prints no signature for is typed by the catalog like a property. A type
         parameter of the method itself binds nothing here, and a result that names one is
         unknown. A property the catalog calls plain is trusted only as far as its documentation
-        page agrees (see `_documented_alike`)."""
+        catalog was extracted with the forms of the current version (see `_trusted_plain`)."""
         head, args = split_nominal(owner)
         member = _member_names(head).get(name)
         if member is None:
@@ -1228,7 +1189,7 @@ class ProjectCatalog:
         if key is not None:
             return self._row_key(bindings.get(key.group(1)), bool(key.group(2)))
         got = parse_type(written, resolve, bindings, unbound)
-        if got is not None and not got.undefined and not called and not _documented_alike(head, member):
+        if got is not None and not got.undefined and not called and not _trusted_plain(head, member):
             return None
         return got
 
@@ -1618,19 +1579,44 @@ def _typed_sites_in(source) -> bool:
     return any(t.kind == "KEYWORD" and t.canonical in ("AS", "IS") for t in code_tokens(source))
 
 
+#: Further reasons for a module to carry its text into the reduce, besides the casts and the type
+#: checks: a project rule that types sites of its own registers a test of the module here
+#: (`wants_text`), and every rule of the typing keeps reducing ONE set of facts - a second set
+#: with other texts would miss the memo of `project_typings` and type the project twice.
+_TEXT_WANTED: list = []
+
+
+def wants_text(test) -> None:
+    """Register `test(source) -> bool`: a module it answers True for carries its text."""
+    if test not in _TEXT_WANTED:
+        _TEXT_WANTED.append(test)
+
+
+def _compatibility_mode(data: dict) -> list[int] | None:
+    """The compatibility mode a project description declares, as numbers; None when it is not one."""
+    value = data.get("РежимСовместимости", data.get("CompatibilityMode"))
+    if not isinstance(value, (str, int, float)):
+        return None
+    parts = str(value).strip().split(".")
+    if not parts or not all(part.isdigit() for part in parts):
+        return None
+    return [int(part) for part in parts]
+
+
 def project_fact(source) -> dict | None:
     """The per-file half of the project reach: what one file contributes to the catalog.
 
     A yaml gives its element, a module its declarations and - only when it casts or checks a
-    type, the sites the project rules judge - its text: the reduce types the module there. Shared
-    by every project rule that reads the typing (they reduce one set of facts, see
-    `project_typings`), and cached on the source.
+    type, the sites the project rules judge, or when a rule asked for it (`wants_text`) - its
+    text: the reduce types the module there. A project description gives its folder and the
+    compatibility mode it declares. Shared by every project rule that reads the typing (they
+    reduce one set of facts, see `project_typings`), and cached on the source.
     """
     from pathlib import PurePosixPath
 
     from xbsl.engine import is_query_file
     from xbsl.rules.environment import _pair_stem
-    from xbsl.rules.yaml_schema import _HAVE_YAML
+    from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed
 
     cached = source.cache.get("typeinfer_fact")
     if cached is not None:
@@ -1640,6 +1626,10 @@ def project_fact(source) -> dict | None:
     if source.kind == "yaml" and _HAVE_YAML:
         if PurePosixPath(path).name in _PROJECT_FILES:
             fact = {"k": "project", "root": str(PurePosixPath(path).parent)}
+            data, err = _parsed(source)
+            mode = _compatibility_mode(data) if err is None and isinstance(data, dict) else None
+            if mode:
+                fact["compat"] = mode
         else:
             element = element_fact(source)
             if element is not None:
@@ -1647,7 +1637,7 @@ def project_fact(source) -> dict | None:
     elif source.kind == "xbsl" and not is_query_file(source.path):
         tree, errors = P.parse(source)
         fact = {"k": "xbsl", "stem": _pair_stem(source.rel), **module_fact(source.rel, tree)}
-        if not errors and _typed_sites_in(source):
+        if not errors and (_typed_sites_in(source) or any(test(source) for test in _TEXT_WANTED)):
             fact["text"] = source.text
     if fact is not None:
         # What the reduce keys its memo by: the same facts twice (every project rule of the
@@ -1789,6 +1779,17 @@ class GuardSite:
     operand: object
     types: TypeSet | None
     right: TypeSet | None = None
+
+
+@dataclass
+class CallSite:
+    """One call of a member by name, `<получатель>.Имя(...)`, with what the module could say about
+    the receiver - a TypeSet, a StaticName for a type or an element used by its name, or None - and
+    about every argument (its name for a named one, and its set or None)."""
+
+    node: object                 # the P.Call node
+    owner: object
+    args: list[tuple[str | None, "TypeSet | None"]]
 
 
 @dataclass
@@ -2352,6 +2353,38 @@ class ModuleTyper:
                     sites.append(GuardSite(node, "safe", node.obj, _typed(evaluator, node.obj)))
         return sites
 
+    def calls(self, module: object, names: frozenset[str]) -> list[CallSite]:
+        """Every call of a member named one of `names`, in the module's methods, the methods of its
+        structures and the initializers of its fields."""
+        if not names:
+            return []
+        self._prepare(module)
+        # Comments may separate the dot and the name; the AST below decides whether it is a call.
+        pattern = re.compile(r"(?<!\w)(?:%s)(?!\w)" % "|".join(sorted(map(re.escape, names))))
+
+        def wanted(node: object) -> bool:
+            return (isinstance(node, P.Call) and isinstance(node.callee, P.Member)
+                    and node.callee.name in names)
+
+        def site(evaluator: _Evaluator, node) -> CallSite:
+            try:
+                owner = evaluator.value(node.callee.obj)
+            except RecursionError:
+                owner = None
+            return CallSite(node, owner, [(argument.name, _typed(evaluator, argument.value))
+                                          for argument in node.args])
+
+        sites: list[CallSite] = []
+        for evaluator, nodes in self._judged(module, pattern, True, wanted):
+            sites.extend(site(evaluator, node) for node in nodes)
+        level = self._module_level
+        for member in self.fields.values():
+            init = getattr(member, "init", None)
+            if init is None or level is None:
+                continue
+            sites.extend(site(level, node) for node in walk_nodes(init) if wanted(node))
+        return sites
+
     def checks(self, module: object) -> list[CheckSite]:
         """Every `это` of the module's own methods, the predicate form of `выбор` included."""
         sites: list[CheckSite] = []
@@ -2429,6 +2462,12 @@ class ModuleTyping:
         if "checks" not in self._sites:
             self._sites["checks"] = self.typer.checks(self.tree)
         return self._sites["checks"]
+
+    def calls(self, names: frozenset[str]) -> list[CallSite]:
+        key = "calls:" + "|".join(sorted(names))
+        if key not in self._sites:
+            self._sites[key] = self.typer.calls(self.tree, names)
+        return self._sites[key]
 
 
 def file_typing(source) -> ModuleTyping | None:
@@ -2571,7 +2610,6 @@ def project_typings(facts: dict[str, dict]) -> dict[str, ModuleTyping]:
 def _reset_sets() -> None:
     global _last_project
     _member_names.cache_clear()
-    _documented_types.cache_clear()
     canonical_name.cache_clear()
     _facet_suffixes.cache_clear()
     _last_project = None
