@@ -42,7 +42,12 @@ for _code, _size in {
 
 _LDC, _LDC_W = 0x12, 0x13
 _INVOKE = (0xB6, 0xB7, 0xB8, 0xB9)  # virtual, special, static, interface
-_PUTSTATIC = 0xB3
+_GETSTATIC, _PUTSTATIC = 0xB2, 0xB3
+_ACONST_NULL = 0x01
+_ALOAD, _ASTORE = 0x19, 0x3A
+#: `aload_0`..`aload_3` and `astore_0`..`astore_3`: the local is in the opcode itself.
+_ALOAD_N = range(0x2A, 0x2E)
+_ASTORE_N = range(0x4B, 0x4F)
 _WIDE = 0xC4
 _TABLESWITCH, _LOOKUPSWITCH = 0xAA, 0xAB
 
@@ -172,39 +177,31 @@ def _method_code(blob: bytes, pool: dict[int, tuple[int, object]], position: int
     return code
 
 
-def _events(code: bytes, pool: dict[int, tuple[int, object]]) -> Iterator[tuple[str, str, list[str]]]:
-    """Walk one method and yield what its code does with names.
+def _walk(code: bytes) -> Iterator[tuple[int, int]]:
+    """(opcode, operand) of every instruction of one method, in order.
 
-    Two kinds of event: ("call", the called method, the string constants pushed since the
-    previous call) and ("store", the static field written, []). The arguments of a call are
-    whatever the code pushed before it, and a string argument is pushed by `ldc`. Everything
-    else on the stack - the owner, the numbers, the type sets - is of no interest here, so
-    the walker keeps only the strings and hands them over on the call.
+    The operand is the constant pool index of `ldc`, `ldc_w`, a call and a static field access,
+    the local variable of `aload`/`astore` (the short forms included, the widened ones too), and
+    -1 for anything else. The walk has to know the length of every instruction, a switch among
+    them, or it reads operand bytes as code from there on.
     """
-    pushed: list[str] = []
     at = 0
     while at < len(code):
         opcode = code[at]
-        if opcode == _LDC:
-            value = text(pool, code[at + 1])
-            if value is not None:
-                pushed.append(value)
-        elif opcode == _LDC_W:
-            value = text(pool, int.from_bytes(code[at + 1:at + 3], "big"))
-            if value is not None:
-                pushed.append(value)
-        elif opcode in _INVOKE:
-            name = called_method(pool, int.from_bytes(code[at + 1:at + 3], "big"))
-            if name:
-                yield "call", name, pushed
-            pushed = []
-        elif opcode == _PUTSTATIC:
-            name = field_name(pool, int.from_bytes(code[at + 1:at + 3], "big"))
-            if name:
-                yield "store", name, []
+        if opcode == _LDC or opcode in (_ALOAD, _ASTORE):
+            yield opcode, code[at + 1]
+        elif opcode in (_LDC_W, _GETSTATIC, _PUTSTATIC) or opcode in _INVOKE:
+            yield opcode, int.from_bytes(code[at + 1:at + 3], "big")
+        elif opcode in _ALOAD_N:
+            yield _ALOAD, opcode - _ALOAD_N.start
+        elif opcode in _ASTORE_N:
+            yield _ASTORE, opcode - _ASTORE_N.start
         elif opcode == _WIDE:
+            widened = code[at + 1]
+            if widened in (_ALOAD, _ASTORE):
+                yield widened, int.from_bytes(code[at + 2:at + 4], "big")
             # `wide iinc` carries two operands, every other widened instruction one
-            at += 6 if code[at + 1] == 0x84 else 4
+            at += 6 if widened == 0x84 else 4
             continue
         elif opcode in (_TABLESWITCH, _LOOKUPSWITCH):
             at += 1
@@ -217,7 +214,35 @@ def _events(code: bytes, pool: dict[int, tuple[int, object]]) -> Iterator[tuple[
             else:
                 at += 8 + int.from_bytes(code[at + 4:at + 8], "big") * 8
             continue
+        else:
+            yield opcode, -1
         at += 1 + _OPERAND_BYTES[opcode]
+
+
+def _events(code: bytes, pool: dict[int, tuple[int, object]]) -> Iterator[tuple[str, str, list[str]]]:
+    """Walk one method and yield what its code does with names.
+
+    Two kinds of event: ("call", the called method, the string constants pushed since the
+    previous call) and ("store", the static field written, []). The arguments of a call are
+    whatever the code pushed before it, and a string argument is pushed by `ldc`. Everything
+    else on the stack - the owner, the numbers, the type sets - is of no interest here, so
+    the walker keeps only the strings and hands them over on the call.
+    """
+    pushed: list[str] = []
+    for opcode, operand in _walk(code):
+        if opcode in (_LDC, _LDC_W):
+            value = text(pool, operand)
+            if value is not None:
+                pushed.append(value)
+        elif opcode in _INVOKE:
+            name = called_method(pool, operand)
+            if name:
+                yield "call", name, pushed
+            pushed = []
+        elif opcode == _PUTSTATIC:
+            name = field_name(pool, operand)
+            if name:
+                yield "store", name, []
 
 
 def builder_calls(blob: bytes) -> list[tuple[str, list[str]]]:
@@ -284,3 +309,102 @@ def declared_members(blob: bytes) -> dict[str, str]:
     pairs = dict(by_kind[PROPERTY_FACTORY])
     pairs.update(by_kind[METHOD_FACTORY])
     return pairs
+
+
+#: How a declaration of the platform says that a member is deprecated: an annotation object is
+#: made (`<init>` of the annotation class) and filed under a range of compatibility modes (`add`
+#: of the per-mode collection, two mode constants before it - the first and the last mode, the
+#: last pushed as null when the range is open). A mode is a static field named after its number.
+DEPRECATED_ANNOTATION_INIT = "DeprecatedG5Annotation.<init>"
+MODE_RANGE_ADD = "ElementCollectionInCmptMode$Builder.add"
+_MODE_FIELD_PREFIX = "CMODE_"
+#: A term with history is built in three calls: the builder is made, the spellings are added
+#: (the current pair first), the term is built - and usually stored into a local for later.
+_TERM_CHAIN_START = "Term$TermWithHistory.builder"
+_TERM_CHAIN_ADD = "Term$TermWithHistory$Builder.add"
+_TERM_CHAIN_BUILD = "Term$TermWithHistory$Builder.build"
+#: The calls that finish the declaration of a member.
+MEMBER_BUILDS = ("CtMetaMethodBuilder.build", "CtMetaPropBuilder.build")
+
+
+def _mode(field: str | None) -> str | None:
+    """`CMODE_9_0` -> `9.0`, anything else -> None."""
+    if not field or not field.startswith(_MODE_FIELD_PREFIX):
+        return None
+    parts = field[len(_MODE_FIELD_PREFIX):].split("_")
+    return ".".join(parts) if parts and all(part.isdigit() for part in parts) else None
+
+
+def declared_deprecations(blob: bytes) -> list[tuple[str, str | None, str | None]]:
+    """[(Russian member name, the first mode it is deprecated in, the last one or None)].
+
+    The documentation marks a deprecated member but does not say from which compatibility mode
+    the mark applies, and the modes differ: a method may be deprecated for every project or only
+    for a project of the newest mode, when the form that replaces it appeared. The class that
+    declares the member says it. A declaration is the stretch of code between two finished
+    members; the annotation may be made before the member is named (and kept in a local) or
+    after, so both are collected within the stretch and paired when the member is finished.
+
+    The member is named either by its two spellings pushed right before the builder call, or by
+    a term built earlier and loaded from a local - the shape of a member whose name has a
+    history. One tuple per annotation: a member with several deprecated overloads answers once
+    per overload, in the order they are declared.
+    """
+    pool, position = constant_pool(blob)
+    found: list[tuple[str, str | None, str | None]] = []
+    for code in _method_code(blob, pool, position):
+        pushed: list[str] = []
+        modes: list[str | None] | None = None
+        ranges: list[tuple[str | None, str | None]] = []
+        member: str | None = None
+        chain: tuple[str, str] | None = None
+        built: tuple[str, str] | None = None
+        locals_: dict[int, tuple[str, str]] = {}
+        loaded: tuple[str, str] | None = None
+        for opcode, operand in _walk(code):
+            if opcode in (_LDC, _LDC_W):
+                value = text(pool, operand)
+                if value is not None:
+                    pushed.append(value)
+            elif opcode == _ACONST_NULL:
+                if modes is not None:
+                    modes.append(None)
+            elif opcode == _GETSTATIC:
+                mode = _mode(field_name(pool, operand))
+                if modes is not None and mode is not None:
+                    modes.append(mode)
+            elif opcode == _ASTORE:
+                if built is not None:
+                    locals_[operand] = built
+                else:
+                    locals_.pop(operand, None)
+                built = None
+            elif opcode == _ALOAD:
+                if operand in locals_:
+                    loaded = locals_[operand]
+            elif opcode in _INVOKE:
+                name = called_method(pool, operand) or ""
+                if name.endswith(DEPRECATED_ANNOTATION_INIT):
+                    modes = []
+                elif name.endswith(MODE_RANGE_ADD) and modes is not None:
+                    if modes:
+                        ranges.append((modes[0], modes[1] if len(modes) > 1 else None))
+                    modes = None
+                elif name.endswith(_TERM_CHAIN_START):
+                    chain = None
+                elif name.endswith(_TERM_CHAIN_ADD):
+                    if chain is None and len(pushed) >= 2 and pushed[-2].isascii():
+                        chain = (pushed[-2], pushed[-1])
+                elif name.endswith(_TERM_CHAIN_BUILD):
+                    built = chain
+                elif any(name.endswith(factory) for factory in MEMBER_FACTORIES):
+                    if len(pushed) >= 2 and pushed[-2].isascii() and not pushed[-1].isascii():
+                        member = pushed[-1]
+                    elif loaded is not None:
+                        member = loaded[1]
+                elif any(name.endswith(finish) for finish in MEMBER_BUILDS):
+                    if member and ranges:
+                        found.extend((member, since, until) for since, until in ranges)
+                    member, ranges, loaded = None, [], None
+                pushed = []
+    return found

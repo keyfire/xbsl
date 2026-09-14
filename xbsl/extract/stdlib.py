@@ -856,6 +856,7 @@ def extract(dist: Path) -> tuple:
     ctors: dict[str, str] = {}
     deprecated: dict[str, dict[str, list[dict]]] = {}
     folds: list[tuple[str, str, list[str]]] = []
+    english_keys: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
         for n in (e for e in entries if e.startswith(STD_BASE) and e.endswith("/index.html")):
@@ -900,6 +901,8 @@ def extract(dist: Path) -> tuple:
                     # A name two packages give different environments is unjudgeable.
                     if global_env.setdefault(member, env) != env:
                         conflicted_env.add(member)
+            if eng and key:
+                english_keys.setdefault(eng, key)
             if props or methods or events:
                 folded: list[tuple[str, list[str]]] = []
                 rets = page_member_types(raw, folded)
@@ -979,6 +982,8 @@ def extract(dist: Path) -> tuple:
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
     names |= TOPIC_ONLY_TYPES
+    with zipfile.ZipFile(car) as z:
+        _apply_deprecation_modes(z, deprecated, english_keys)
     documented = {
         "Std::" + "::".join(entry[len(STD_BASE):].split("/")[:-2]
                             + [entry[len(STD_BASE):].split("/")[-2][:-len("_ru")]])
@@ -1069,6 +1074,61 @@ def undocumented_types(
                     own[kind].add(spelled)
         found.append((english, russian, own, page["bases"], page["ctors"]))
     return found
+
+
+def _apply_deprecation_modes(car: zipfile.ZipFile, deprecated: dict[str, dict[str, list[dict]]],
+                             english_keys: dict[str, str]) -> None:
+    """Put the compatibility modes a deprecation applies in onto the deprecated forms.
+
+    The help marks the form and stops there, and the modes differ between members: the object
+    storage deprecates its old uploads from mode 8.0 on, while the shorthand readers of a JSON
+    reader are deprecated only in the newest mode - a project of an older mode calls them without
+    a word from the compiler. The metaobject class of the type states the range
+    (classcode.declared_deprecations), and the class is found by the English name of the type
+    (`<Name>CtMetaObject`).
+
+    The range goes onto a member only when every deprecated overload of it states the same one:
+    the class does not say which printed form an annotation belongs to. Such a form gets
+    `deprecated_modes`, [the first mode, the last one] with null for an open end. A deprecated
+    form without it has modes the data does not know (no classes in the distribution, or
+    overloads that disagree), and the rule holds its mark for the newest mode only.
+    """
+    wanted = {english: key for english, key in english_keys.items() if key in deprecated}
+    if not wanted:
+        return
+    ranges: dict[str, dict[str, set[tuple[str | None, str | None]]]] = {}
+    for entry in car.namelist():
+        if not entry.endswith(".jar") or not LSP_JAR_RE.search(entry):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            simple = inner.rsplit("/", 1)[-1]
+            if not simple.endswith(_CT_META_OBJECT_CLASS):
+                continue
+            key = wanted.get(simple[:-len(_CT_META_OBJECT_CLASS)])
+            if key is None:
+                continue
+            for member, since, until in classcode.declared_deprecations(jar.read(inner)):
+                ranges.setdefault(key, {}).setdefault(member, set()).add((since, until))
+    for key, members in ranges.items():
+        for member, found in members.items():
+            forms = (deprecated.get(key) or {}).get(member)
+            if not forms:
+                continue
+            if len(found) != 1:
+                print(f"  перегрузки устаревают в разных режимах, режим не записан: {key}.{member}")
+                continue
+            since, until = next(iter(found))
+            for form in forms:
+                if form.get("deprecated"):
+                    form["deprecated_modes"] = [since, until]
+
+
+#: The class that declares the members of a type for the compiler: `<English type name>` + this.
+_CT_META_OBJECT_CLASS = "CtMetaObject.class"
 
 
 def _markdown_pages(car: zipfile.ZipFile, documented: set[str]) -> dict[str, dict]:
@@ -1347,8 +1407,10 @@ def main(argv=None) -> int:
         },
         # Members with a form the documentation marks `@Устарело`, with EVERY form of such a
         # member (page_member_forms): which overload a call binds to decides whether it is the
-        # deprecated one, and the versions a form exists in take part in that. Stored under the
-        # type whose page prints the forms; a consumer walks `bases` for an inherited member.
+        # deprecated one, and the versions a form exists in take part in that, as do the
+        # compatibility modes of the deprecation (`deprecated_modes`, _apply_deprecation_modes).
+        # Stored under the type whose page prints the forms; a consumer walks `bases` for an
+        # inherited member.
         "deprecated_members": {
             k: dict(sorted(v.items())) for k, v in sorted(deprecated.items()) if v
         },

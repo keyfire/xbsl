@@ -5,7 +5,10 @@ help pages (a struck heading for the form of an older version, the version line 
 the compatibility mark as a link inside the signature block). No distribution is needed.
 """
 
+import io
 import json
+import struct
+import zipfile
 
 from xbsl import dataset
 from xbsl.extract import stdlib as extractor
@@ -223,3 +226,155 @@ def test_the_nearest_ancestor_wins_a_member_two_ancestors_declare():
     assert dataset.nearest_last(["Объект", "ОтражениеСущности", "ОтражениеЭлемента"], data["bases"]) == [
         "Объект", "ОтражениеЭлемента", "ОтражениеСущности",
     ]
+
+
+# --- the compatibility modes a deprecation applies in (classcode.declared_deprecations) ----------------
+#
+# The class below is assembled by the test, byte for byte, in the shape of a declaration of members:
+# the two spellings of a member pushed before its builder, an annotation filed under a range of
+# modes, the builder finished. Only the layout of a class file is reproduced - a public standard.
+
+
+class _Pool:
+    def __init__(self) -> None:
+        self.blobs: list[bytes] = []
+
+    def _add(self, blob: bytes) -> int:
+        self.blobs.append(blob)
+        return len(self.blobs)
+
+    def text(self, value: str) -> int:
+        body = value.encode("utf-8")
+        return self._add(bytes([1]) + struct.pack(">H", len(body)) + body)
+
+    def string(self, value: str) -> int:
+        return self._add(bytes([8]) + struct.pack(">H", self.text(value)))
+
+    def klass(self, name: str) -> int:
+        return self._add(bytes([7]) + struct.pack(">H", self.text(name)))
+
+    def _ref(self, tag: int, owner: str, name: str, descriptor: str) -> int:
+        owner_index = self.klass(owner)
+        nat = self._add(bytes([12]) + struct.pack(">HH", self.text(name), self.text(descriptor)))
+        return self._add(bytes([tag]) + struct.pack(">HH", owner_index, nat))
+
+    def method(self, owner: str, name: str) -> int:
+        return self._ref(10, owner, name, "()V")
+
+    def field(self, owner: str, name: str) -> int:
+        return self._ref(9, owner, name, "Ljava/lang/Object;")
+
+
+def _class(steps: list[tuple]) -> bytes:
+    """A class with one method made of steps: ("ldc", text), ("call", "Owner.name"),
+    ("mode", "CMODE_9_0"), ("null",), ("store", local), ("load", local)."""
+    pool = _Pool()
+    code_name = pool.text("Code")
+    body = bytearray()
+    for step in steps:
+        kind = step[0]
+        if kind == "ldc":
+            body += bytes([0x13]) + struct.pack(">H", pool.string(step[1]))
+        elif kind == "call":
+            owner, name = step[1].rsplit(".", 1)
+            body += bytes([0xB6]) + struct.pack(">H", pool.method("demo/" + owner, name))
+        elif kind == "mode":
+            body += bytes([0xB2]) + struct.pack(">H", pool.field("demo/Modes", step[1]))
+        elif kind == "null":
+            body += bytes([0x01])
+        elif kind == "store":
+            body += bytes([0x3A, step[1]])
+        elif kind == "load":
+            body += bytes([0x19, step[1]])
+    body += bytes([0xB1])
+    code = struct.pack(">HHI", 8, 8, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class, super_class = pool.klass("Demo"), pool.klass("java/lang/Object")
+    method = struct.pack(">HHHH", 0, pool.text("members"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61) + struct.pack(">H", len(pool.blobs) + 1)
+            + b"".join(pool.blobs) + struct.pack(">HHHH", 0, this_class, super_class, 0)
+            + struct.pack(">H", 0) + struct.pack(">H", 1) + method + struct.pack(">H", 0))
+
+
+def _deprecated(first: str, last: str | None) -> list[tuple]:
+    return [("call", "DeprecatedG5Annotation.<init>"), ("mode", first),
+            ("mode", last) if last else ("null",), ("call", "ElementCollectionInCmptMode$Builder.add")]
+
+
+def test_a_deprecation_declared_before_the_member_is_named_belongs_to_it():
+    blob = _class([
+        ("ldc", "Count"), ("ldc", "Количество"), ("call", "CtMetaMethodBuilder.meth"),
+        ("call", "CtMetaMethodBuilder.build"),
+        *_deprecated("CMODE_9_0", None),
+        ("ldc", "ReadAll"), ("ldc", "ПрочитатьВсе"), ("call", "CtMetaMethodBuilder.meth"),
+        ("call", "CtMetaMethodBuilder.build"),
+    ])
+
+    assert extractor.classcode.declared_deprecations(blob) == [("ПрочитатьВсе", "9.0", None)]
+
+
+def test_a_member_named_by_a_stored_term_takes_the_deprecation_declared_after_it():
+    blob = _class([
+        ("call", "Term$TermWithHistory.builder"), ("ldc", "Load"), ("ldc", "Загрузить"),
+        ("mode", "CMODE_9_0"), ("call", "Term$TermWithHistory$Builder.add"),
+        ("ldc", "LoadOld"), ("ldc", "ЗагрузитьСтарое"), ("call", "Term$TermWithHistory$Builder.add"),
+        ("call", "Term$TermWithHistory$Builder.build"), ("store", 2),
+        ("load", 2), ("call", "CtMetaMethodBuilder.meth"),
+        *_deprecated("CMODE_8_0", "CMODE_9_0"),
+        ("call", "CtMetaMethodBuilder.build"),
+    ])
+
+    assert extractor.classcode.declared_deprecations(blob) == [("Загрузить", "8.0", "9.0")]
+
+
+def test_a_member_without_an_annotation_is_not_deprecated():
+    blob = _class([("ldc", "Count"), ("ldc", "Количество"), ("call", "CtMetaMethodBuilder.meth"),
+                   ("mode", "CMODE_9_0"), ("call", "CtMetaMethodBuilder.cmptMode"),
+                   ("call", "CtMetaMethodBuilder.build")])
+
+    assert extractor.classcode.declared_deprecations(blob) == []
+
+
+def _car_with(classes: dict[str, bytes]) -> zipfile.ZipFile:
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as out:
+        for name, blob in classes.items():
+            out.writestr(f"demo/{name}.class", blob)
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as out:
+        out.writestr("data/ide/plugins/bin/repo/demo.lsp.server.appengine-1.0.jar", jar.getvalue())
+    return zipfile.ZipFile(io.BytesIO(car.getvalue()))
+
+
+def test_the_mode_range_goes_onto_the_deprecated_forms_of_the_member():
+    declaration = _class([*_deprecated("CMODE_9_0", None), ("ldc", "ReadAll"), ("ldc", "ПрочитатьВсе"),
+                          ("call", "CtMetaMethodBuilder.meth"), ("call", "CtMetaMethodBuilder.build")])
+    deprecated = {"ЧтениеСкладов": {"ПрочитатьВсе": [
+        {"signature": "ПрочитатьВсе(): Массив<Строка>", "deprecated": True},
+        {"signature": "ПрочитатьВсе(Настройки: НастройкиЧтения): Массив<Строка>"},
+    ]}}
+
+    extractor._apply_deprecation_modes(_car_with({"WarehouseReaderCtMetaObject": declaration}),
+                                       deprecated, {"WarehouseReader": "ЧтениеСкладов"})
+
+    forms = deprecated["ЧтениеСкладов"]["ПрочитатьВсе"]
+    assert forms[0]["deprecated_modes"] == ["9.0", None]
+    assert "deprecated_modes" not in forms[1]
+
+
+def test_overloads_deprecated_in_different_modes_leave_the_mode_unstated():
+    declaration = _class([
+        *_deprecated("CMODE_8_0", None), ("ldc", "Load"), ("ldc", "Загрузить"),
+        ("call", "CtMetaMethodBuilder.meth"), ("call", "CtMetaMethodBuilder.build"),
+        *_deprecated("CMODE_9_0", None), ("ldc", "Load"), ("ldc", "Загрузить"),
+        ("call", "CtMetaMethodBuilder.meth"), ("call", "CtMetaMethodBuilder.build"),
+    ])
+    deprecated = {"ХранилищеСкладов": {"Загрузить": [
+        {"signature": "Загрузить(Поток: ПотокЧтения): Число", "deprecated": True},
+        {"signature": "Загрузить(Строка: Строка): Число", "deprecated": True},
+    ]}}
+
+    extractor._apply_deprecation_modes(_car_with({"WarehouseStorageCtMetaObject": declaration}),
+                                       deprecated, {"WarehouseStorage": "ХранилищеСкладов"})
+
+    assert all("deprecated_modes" not in form for form in deprecated["ХранилищеСкладов"]["Загрузить"])
