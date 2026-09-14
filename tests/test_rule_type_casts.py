@@ -322,6 +322,40 @@ def test_the_key_of_a_dynamic_list_row_is_a_reference_of_its_main_table():
     assert where == [(REDUNDANT, 2)]
 
 
+CARD_YAML = """ВидЭлемента: КомпонентИнтерфейса
+Имя: КарточкаСклада
+Наследует:
+    Тип: Группа
+    Содержимое:
+        -
+            Тип: ПолеВвода<Число>
+            Имя: ПолеОбъема
+        -
+            Тип: ПолеВвода<Число?>
+            Имя: ПолеОстатка
+"""
+
+CARD_XBSL = """@НаКлиенте
+метод Собрать()
+    знч Объем = Компоненты.ПолеОбъема.Значение как Число
+    знч Остаток = Компоненты.ПолеОстатка.Значение как Число
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_the_value_of_a_component_is_typed_by_the_paired_markup():
+    """The markup types the value the way it does for the guards against the empty value."""
+    files = _project(ROWS, **{
+        "Основное/КарточкаСклада.yaml": CARD_YAML,
+        "Основное/КарточкаСклада.xbsl": CARD_XBSL,
+    })
+    _sources, diags = _lint(files)
+    where = sorted((d.rule_id, d.line) for d in diags
+                   if d.path.replace("\\", "/") == "Основное/КарточкаСклада.xbsl")
+    assert where == sorted([(REDUNDANT, 3), (NON_NULL, 4)])
+
+
 OPERATORS = """перечисление Порядок
     Первый,
     Второй
