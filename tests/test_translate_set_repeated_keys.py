@@ -143,16 +143,21 @@ _PROJECT_YAML = (
 )
 
 
-@pytest.fixture
-def project(tmp_path: Path) -> tuple[Path, Path]:
-    """A project with one catalog and a dictionary that declares its name in three places."""
+def _catalog_project(tmp_path: Path) -> tuple[Path, Path]:
+    """A project with one catalog, `Задачи`: (the project, where its dictionary goes)."""
     folder = tmp_path / "vendor" / "app"
     folder.mkdir(parents=True)
     (folder / "Проект.yaml").write_bytes(_PROJECT_YAML.encode("utf-8"))
     (folder / "Задачи.yaml").write_bytes(
         "ВидЭлемента: Справочник\nИд: bbbbbbbb-1111-2222-3333-444444444444\nИмя: Задачи\n"
         .encode("utf-8"))
-    dictionary = tmp_path / "xbsl-translation"
+    return folder, tmp_path / "xbsl-translation"
+
+
+@pytest.fixture
+def project(tmp_path: Path) -> tuple[Path, Path]:
+    """The catalog project with a dictionary that declares the catalog's name in three places."""
+    folder, dictionary = _catalog_project(tmp_path)
     _write(dictionary, "010-base.yaml",
            "tokens:\n    Задачи: Tasks\n    Склады: Warehouses\n    Задачи: Tasks\n")
     _write(dictionary, "020-more.yaml", "tokens:\n    Задачи: Tasks\n")
@@ -201,3 +206,18 @@ def test_translate_set_writes_every_copy_and_answers_again(mcp_module, project):
     assert "error" not in again
     assert again["changed"] == 1
     assert dictionary_module.load(dictionary).tokens == {"Задачи": "Jobs", "Склады": "Depots"}
+
+
+def test_translate_unused_prunes_a_repeated_key_and_keeps_the_entry_below_it(
+    mcp_module, tmp_path: Path,
+):
+    """The prune list names the orphan once per place; the entry below it is still in use."""
+    folder, dictionary = _catalog_project(tmp_path)
+    _write(dictionary, "010-base.yaml",
+           "tokens:\n    Партии: Lots\n    Партии: Lots\n    Задачи: Tasks\n")
+
+    answer = mcp_module.translate_unused(str(folder), filter="Партии", prune=True)
+
+    assert [(row["key"], row["line"]) for row in answer["unused"]] == [("Партии", 4), ("Партии", 5)]
+    assert answer["removed"] == 2
+    assert dictionary_module.load(dictionary).tokens == {"Задачи": "Tasks"}
