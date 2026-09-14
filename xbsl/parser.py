@@ -1638,6 +1638,14 @@ class _Parser:
         t = self.peek()
         if t.kind == "KEYWORD":
             c = t.canonical
+            nxt = self.peek(1)
+            if nxt.kind == "OP" and nxt.value == "->" and self.at_name():
+                # A short lambda whose single parameter is a keyword usable as a name - the
+                # grammar takes any name there: `Типы.Фильтровать(Тип -> Тип != ...)`. The
+                # branches below would read `Type` as the start of a type literal, `Query` as
+                # a query and `Method` as a full lambda or a call, and the arrow broke the
+                # enclosing call.
+                return self.static_feature()
             if c == "THROW":
                 self.advance()
                 value = None
@@ -1736,9 +1744,7 @@ class _Parser:
                 break
         if is_lambda and self.eat_op(")") and self.at_op("->"):
             self.advance()
-            body = None
-            if not self.expression_ended():
-                body = self.expression()
+            body = self.lambda_simple_body()
             return Lambda(lb.start, self.toks[self.pos - 1].end, params, body, None)
         self.rollback(snap)
         self.advance()  # (
@@ -1760,12 +1766,40 @@ class _Parser:
         name = Name(start_tok.start, self.toks[self.pos - 1].end, "::".join(segs))
         if self.at_op("->"):  # lambdaShort with a single parameter
             self.advance()
-            body = None
-            if not self.expression_ended():
-                body = self.expression()
+            body = self.lambda_simple_body()
             return Lambda(name.start, self.toks[self.pos - 1].end,
                           [Param(name.start, name.end, segs[-1], None, None)], body, None)
         return self.maybe_call(name)
+
+    def lambda_simple_body(self) -> Expr | Assign | None:
+        """The body of a short lambda: an expression or an assignment.
+
+        The grammar gives the short body the same shape as an expression statement, so any
+        assignment operator may follow the expression:
+        `Список.ДляКаждого(Элемент -> Элемент.Значение = 1)`, `() -> Счетчик += 1`. The
+        reference corpus writes it that way to fill fields of the elements, and the IDE server
+        accepts it silently. The operator belongs to the lambda, not to the construct around
+        it: the lambda ends where the right-hand side ends, the same greedy reading the
+        platform makes. A named call argument `Имя = значение` does not compete for the `=`:
+        call_args recognizes the name before any value is parsed, and a lambda starts with
+        its parameters, never with `Имя =`.
+
+        While the body stopped at the expression, the `=` broke the enclosing call, and a
+        module with a single such lambda dropped out of every rule that skips a file with
+        parse errors.
+        """
+        if self.expression_ended():
+            return None
+        body = self.expression()
+        if not self.at_op(*_ASSIGN_OPS):
+            return body
+        op = self.advance()
+        value = None
+        if not self.expression_ended():
+            value = self.expression()
+        else:
+            self.error(i18n.t("parser.expected-expr-after-assign"), op)
+        return Assign(body.start, self.toks[self.pos - 1].end, body, op.value, value)
 
     def creator(self) -> Expr:
         start = self.advance().start  # NEW

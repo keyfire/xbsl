@@ -614,6 +614,9 @@ def _walk_expr(expr: P.Expr | None, scope: set[str], findings: list) -> None:
             inner = set(scope) | {p.name for p in expr.params}
             if isinstance(expr.body_expr, P.Expr):
                 _walk_expr(expr.body_expr, inner, findings)
+            elif isinstance(expr.body_expr, P.Assign):
+                _walk_expr(expr.body_expr.target, inner, findings)
+                _walk_expr(expr.body_expr.value, inner, findings)
             if expr.body_stmts is not None:
                 _walk_body(expr.body_stmts, inner, findings)
         return
