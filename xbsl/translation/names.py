@@ -26,7 +26,7 @@ from pathlib import Path
 
 from xbsl import metamodel
 from xbsl.lexer import tokens
-from xbsl.engine import SourceFile
+from xbsl.engine import RESOURCE_DIRS, SourceFile
 from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
 
 #: `Имя:` / `Name:` of a yaml node, any nesting (a list item dash counts as indent).
@@ -297,6 +297,103 @@ def component_names(root: Path, loader) -> frozenset[str]:
             continue
         out |= declared_in_yaml(source)
     return frozenset(out)
+
+
+def resource_keys(root: Path) -> frozenset[str]:
+    """Every file below a folder of resources of the project as a reference addresses it - the
+    path relative to that folder - and every folder on the way: `Значки`, `Значки/Флаг.svg`.
+
+    A reference to a name outside this set is not a file of the project. The platform ships a
+    library of pictures a project may name the same way (`Время.svg`), and those carry names
+    of their own in each language; the project dictionary has nothing to say about them.
+    """
+    out: set[str] = set()
+    for folder in (path for name in RESOURCE_DIRS for path in root.rglob(name)):
+        hidden = any(part.startswith(".") for part in folder.relative_to(root).parts)
+        if hidden or not folder.is_dir():
+            continue
+        for path in folder.rglob("*"):
+            if not path.is_file():
+                continue
+            parts = path.relative_to(folder).parts
+            for end in range(1, len(parts) + 1):
+                out.add("/".join(parts[:end]))
+    return frozenset(out)
+
+
+def component_methods(root: Path, loader) -> dict[str, frozenset[str]]:
+    """{interface component of the project: the methods its module declares}.
+
+    What a form calls on a node of such a component (`Компоненты.<Node>.<Method>()`) is then
+    told apart from a built-in command of a platform component spelled the same way: a
+    component of the project declared a method spelled like the refresh command, and the call
+    took the platform's `Refresh` while the declaration waited for a dictionary entry.
+    """
+    out: dict[str, frozenset[str]] = {}
+    for path in sorted(root.rglob("*.yaml")):
+        if any(part.startswith(".") for part in path.relative_to(root).parts):
+            continue
+        module = path.with_suffix(".xbsl")
+        if not module.is_file():
+            continue
+        try:
+            source = loader(path)
+        except OSError:
+            continue
+        if not _COMPONENT_KIND_RE.search(source.text):
+            continue
+        data, error = _parsed(source)
+        name = value_of(data, "Имя", object_kind(data)) if error is None else None
+        if not isinstance(name, str) or not name:
+            continue
+        try:
+            toks = tokens(loader(module))
+        except OSError:
+            continue
+        out[name] = frozenset(
+            toks[index + 1].value
+            for index, tok in enumerate(toks[:-1])
+            if tok.kind == "KEYWORD" and tok.canonical == "METHOD"
+            and toks[index + 1].kind == "IDENT"
+        )
+    return out
+
+
+def form_nodes(path: Path, loader) -> dict[str, str]:
+    """{node name: the component its node is} of the component tree the module at `path` pairs with.
+
+    The type is the one the node names - its head, without the namespace and the type
+    arguments. A module that pairs with no interface component has no nodes.
+    """
+    if not path.name.endswith(".xbsl"):
+        return {}
+    pair = path.with_name(f"{path.name[: -len('.xbsl')]}.yaml")
+    if not pair.is_file():
+        return {}
+    try:
+        data, error = _parsed(loader(pair))
+    except OSError:
+        return {}
+    if error is not None or object_kind(data) != _COMPONENT_KIND:
+        return {}
+    out: dict[str, str] = {}
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            name = node.get("Имя", node.get("Name"))
+            kind = node.get("Тип", node.get("Type"))
+            if isinstance(name, str) and isinstance(kind, str):
+                out.setdefault(name, kind.split("<", 1)[0].rsplit("::", 1)[-1].strip())
+            for key, value in node.items():
+                # A declared property names a TYPE too, and it is not a node of the tree.
+                if key not in ("Свойства", "Properties"):
+                    walk(value)
+        elif isinstance(node, list):
+            for item in node:
+                walk(item)
+
+    walk(data)
+    return out
 
 
 def dictionary_scopes(root: Path, loader) -> frozenset[str]:

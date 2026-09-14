@@ -24,6 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from xbsl import engine, i18n, libs, scaffold, terms
+from xbsl.engine import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
 from xbsl.translation.code import Resolver, has_cyrillic, translate_code
@@ -329,7 +330,10 @@ def _language_dir(language: str) -> str:
     return language[:1].upper() + language[1:].lower()
 
 
-def _translate_component(part: str, resolver: Resolver, report: FileReport) -> str:
+def _translate_component(part: str, resolver: Resolver, report: FileReport,
+                         resource: bool = False) -> str:
+    """One part of a path in the tree; `resource` - a file or a directory below the resources,
+    whose name is the project's and is spelled by the dictionary alone (Resolver.resource_name)."""
     fixed = _FIXED_COMPONENTS.get(part)
     if fixed:
         return fixed
@@ -341,15 +345,43 @@ def _translate_component(part: str, resolver: Resolver, report: FileReport) -> s
         if not has_cyrillic(piece):
             pieces.append(piece)
             continue
-        replacement, plane = resolver.identifier(piece, after_dot=bool(pieces))
+        if resource:
+            replacement, plane = resolver.resource_name(piece)
+        else:
+            replacement, plane = resolver.identifier(piece, after_dot=bool(pieces))
         if plane == "user":
             report.user_done += 1
         if replacement is None:
-            report.note_missing(piece, 0, 0, plane)
+            if resource:
+                report.note_token(piece, 0, 0, resource=True)
+            else:
+                report.note_missing(piece, 0, 0, plane)
             pieces.append(piece)
         else:
             pieces.append(replacement)
     return ".".join(pieces)
+
+
+def _resource_parts(parts: tuple[str, ...]) -> list[bool]:
+    """Which parts of a path name a resource of the project - everything below the folder of
+    resources of a subsystem, except the descriptor of that folder.
+
+    The folder itself and the subsystems above it are names of the project's structure and go
+    the way they always went; the descriptor of the folder, a yaml file named like the folder
+    and lying inside it, is the platform's own file name.
+    """
+    flags = [False] * len(parts)
+    below = False
+    for index, part in enumerate(parts):
+        if below:
+            descriptor = (
+                index == len(parts) - 1 and part.endswith(".yaml")
+                and part[: -len(".yaml")] in RESOURCE_DIRS
+            )
+            flags[index] = not descriptor
+        elif part in RESOURCE_DIRS:
+            below = True
+    return flags
 
 
 def translate_project(
@@ -386,6 +418,8 @@ def translate_project(
         project_names_module.component_names(root, engine.load),
         _collect_data_values(files),
         project_names_module.collect_types(root, engine.load),
+        component_methods=project_names_module.component_methods(root, engine.load),
+        resource_keys=project_names_module.resource_keys(root),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
     report = ProjectReport(root=root)
@@ -407,6 +441,7 @@ def translate_project(
                 translated = translate_code(
                     source, resolver, file_report,
                     owner=project_names_module.module_owner(path, engine.load),
+                    form_nodes=project_names_module.form_nodes(path, engine.load),
                 )
         elif path.suffix == ".json":
             translated = _translate_json_bytes(path.read_bytes(), dictionary, fields, file_report)
@@ -415,7 +450,10 @@ def translate_project(
                 path.read_bytes(), path.suffix, dictionary, file_report)
         else:
             translated = path.read_bytes()
-        new_rel_parts = [_translate_component(part, resolver, file_report) for part in rel.parts]
+        new_rel_parts = [
+            _translate_component(part, resolver, file_report, resource=resource)
+            for part, resource in zip(rel.parts, _resource_parts(rel.parts))
+        ]
         report.files[rel_str] = file_report
         new_rel = Path(*new_rel_parts)
         if str(new_rel) != rel_str:

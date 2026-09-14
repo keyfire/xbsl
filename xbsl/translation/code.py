@@ -44,7 +44,7 @@ from functools import lru_cache
 
 from xbsl import dataset, lexer, terms, typeinfer
 from xbsl import parser as P
-from xbsl.engine import SourceFile
+from xbsl.engine import RESOURCE_DIRS, SourceFile
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
@@ -84,11 +84,19 @@ class Resolver:
         component_names: frozenset[str] = frozenset(),
         data_values: frozenset[str] = frozenset(),
         project_types: frozenset[str] = frozenset(),
+        component_methods: dict[str, frozenset[str]] | None = None,
+        resource_keys: frozenset[str] = frozenset(),
     ) -> None:
         self.dictionary = dictionary
         self.project_names = project_names
         self.dictionary_scopes = dictionary_scopes
         self.component_names = component_names
+        #: {interface component of the project: the methods its module declares} - what a form
+        #: calls on a node of that component is the project's method (see names.component_methods).
+        self.component_methods = component_methods or {}
+        #: The files and folders below the resources of the project, as a reference addresses
+        #: them (see names.resource_keys): a reference to anything else is not the project's file.
+        self.resource_keys = resource_keys
         #: Cyrillic string VALUES of the project's json resources. A code literal spelled
         #: exactly like one of them is usually COMPARED against that data, and translating
         #: the literal parts the comparison from values no translation ever touches.
@@ -163,6 +171,23 @@ class Resolver:
             # No platform table is consulted here at all, so the entry is what translates the
             # key - it is never one of those the platform answers itself.
             self.note_entry_only(name, hit, scope)
+            return hit, "user"
+        return None, "missing"
+
+    def resource_name(self, name: str) -> tuple[str | None, str]:
+        """A name of the project's resource tree: a file or a directory below the resources.
+
+        The project named its files itself, and every place that spells such a name - the
+        file of the tree, a value of a yaml property, a path in a string, the body of
+        `Ресурс{...}` - asks this one question, so the places cannot part. The dictionary
+        answers alone. A platform word that happens to spell the file is no name of it: the
+        file of the tree once took `CreateCopy.svg` from the compiler dictionary while the form
+        went on asking for the Russian file, and the build found no such resource.
+        """
+        hit = self.dictionary.token(name)
+        if hit is not None:
+            # No platform table is asked here, so the entry is what renames the file.
+            self.note_entry_only(name, hit)
             return hit, "user"
         return None, "missing"
 
@@ -307,11 +332,14 @@ def apply_edits(text: str, edits: list[Edit]) -> str:
 
 
 def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
-                   owner: ModuleOwner | None = None) -> str:
+                   owner: ModuleOwner | None = None,
+                   form_nodes: dict[str, str] | None = None) -> str:
     """The translated text of one module (or standalone query file).
 
     `owner` is what the element of the module puts in scope of its methods (see
-    names.module_owner); without it a bare name is a property of nothing.
+    names.module_owner); without it a bare name is a property of nothing. `form_nodes` are the
+    nodes of the component tree the module pairs with and the components they are (see
+    names.form_nodes).
     """
     edits: list[Edit] = []
     toks = lexer.tokens(source)
@@ -319,7 +347,8 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
     collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits,
                         inferred_locals=inferred_locals(source, resolver.project_names),
                         type_ranges=type_ranges(source),
-                        owner_scopes=owner_scopes(source, owner))
+                        owner_scopes=owner_scopes(source, owner),
+                        form_nodes=form_nodes)
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -341,6 +370,7 @@ def collect_token_edits(
     type_ranges: list[tuple[int, int]] | None = None,
     method: MethodScope | None = None,
     owner_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
+    form_nodes: dict[str, str] | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -355,9 +385,12 @@ def collect_token_edits(
     stands in (see MethodScope): an interpolation reads the names that method declares, and
     the walk over the fragment starts from what the walk over the module knew there.
     `owner_scopes` are the methods of the module with the names its element puts in scope of
-    each (see owner_scopes).
+    each (see owner_scopes). `form_nodes` are the nodes of the component tree the module pairs
+    with (see names.form_nodes): a member reached through one of them is judged by its component.
     """
-    del text  # spans address the outer text through `base`; kept for symmetry of callers
+    # The paths inside `Ресурс{...}` are spelled first, off the text: the tokens of such a path
+    # are file names, and the walk below must not read them as code.
+    resource_tokens = _resource_literal_edits(text, toks, base, resolver, report, edits, at)
     prev_dot = False
     prev_ident = ""
     #: The ROOT of the current dotted chain: `Components.Tags.Remove` is a member of a
@@ -469,7 +502,7 @@ def collect_token_edits(
             if kind in ("IDENT", "KEYWORD"):
                 prev_ident = tok.value
             continue
-        if kind == "KEYWORD":
+        if kind == "KEYWORD" and index not in resource_tokens:
             replacement = None
             if in_query:
                 replacement = platform_map.query_keyword_english(tok.value)
@@ -477,7 +510,7 @@ def collect_token_edits(
                 replacement = platform_map.keyword_english().get(tok.value)
             if replacement and replacement != tok.value:
                 edits.append((base + tok.start, base + tok.end, replacement))
-        elif kind == "IDENT":
+        elif kind == "IDENT" and index not in resource_tokens:
             field_of = struct_name if pending_field else ""
             pending_field = False
             if field_of:
@@ -519,7 +552,8 @@ def collect_token_edits(
                 )
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
-                                 chain_root=chain_root,
+                                 chain_root=_member_chain_root(toks, index, chain_root, form_nodes,
+                                                               resolver),
                                  receiver_is_local=prev_dot and prev_ident in local_names,
                                  reference=_reference_reading(
                                      toks, index, prev_dot, type_scope, chain_root,
@@ -1238,6 +1272,35 @@ def _platform_facet(toks: list, index: int, local_names: dict[str, str],
     return platform_map.facet_of(owner.value, toks[index].value)
 
 
+def _member_chain_root(toks: list, index: int, chain_root: str,
+                       form_nodes: dict[str, str] | None, resolver: Resolver) -> str:
+    """The root the member at `index` is judged by: `chain_root`, or none for a method of the
+    project reached through a node of the form.
+
+    After `Компоненты.<Node>.` the ui vocabulary answers, because a built-in command of a
+    platform component keeps its own spelling. A node whose component is the PROJECT's and
+    declares the method (see names.component_methods) is the other case: the call names the
+    project's method, and the ui vocabulary's command of the same spelling is not what it calls
+    - a component of the project declared a method spelled like the refresh command, and the
+    call went out as `Refresh` while the declaration waited for a dictionary entry. Such a
+    member is read as a name after a dot like any other, which is the gate of the project's own
+    names. Only a member of the node itself is judged, one step past the node: a deeper chain
+    reads the value of that member.
+    """
+    if not form_nodes or index < 4 or chain_root not in _COMPONENT_ROOTS:
+        return chain_root
+    dot, node, root_dot, root = toks[index - 1], toks[index - 2], toks[index - 3], toks[index - 4]
+    if not (dot.kind == "OP" and dot.value == "." and node.kind == "IDENT"
+            and root_dot.kind == "OP" and root_dot.value == "."
+            and root.kind == "IDENT" and root.value in _COMPONENT_ROOTS):
+        return chain_root
+    before = toks[index - 5] if index >= 5 else None
+    if before is not None and before.kind == "OP" and before.value == ".":
+        return chain_root
+    methods = resolver.component_methods.get(form_nodes.get(node.value, ""), frozenset())
+    return "" if toks[index].value in methods else chain_root
+
+
 def _type_identifier_edit(tok, base, after_dot, resolver, report, edits, at=None) -> None:
     """A name inside a TYPE expression of the code, resolved the way a yaml type is.
 
@@ -1625,25 +1688,109 @@ def _resource_path_edits(tok, base, resolver, report, edits, at=None) -> None:
     bare = value[1:-1]
     if not _looks_like_resource_path(bare):
         return
-    offset = 1
-    for segment in re.split(r"([/\\])", bare):
+    _resource_segment_edits(bare, base + tok.start + 1, resolver, report, edits,
+                            at if at is not None else (tok.line, tok.col))
+
+
+def _resource_segment_edits(path: str, start: int, resolver, report, edits,
+                            at: tuple[int, int]) -> None:
+    """The edits of the names in a path that addresses a resource, `path` standing at `start`.
+
+    A segment is renamed the way the tree renames a part of a path: piece by piece between its
+    dots, the extension left as it is. The segments up to the folder of resources, when the
+    path spells it, name the structure of the project and go the way names go; everything below
+    it is a file or a directory of the project's resources (Resolver.resource_name). A piece
+    holding an interpolation is code, and the code was translated as code already.
+    """
+    segments = re.split(r"([/\\])", path)
+    names_only = [segment for segment in segments if segment not in ("/", "\\")]
+    last_dir = max((index for index, segment in enumerate(names_only) if segment in RESOURCE_DIRS),
+                   default=-1)
+    offset = 0
+    position = -1
+    for segment in segments:
         if segment in ("/", "\\"):
             offset += len(segment)
             continue
+        position += 1
+        # Below the folder a name is the project's when the project HAS such a file or folder
+        # there; a picture of the platform's library keeps the reading it always had.
+        resource = position > last_dir and (
+            "/".join(names_only[last_dir + 1:position + 1]) in resolver.resource_keys
+        )
         stem, dot, extension = segment.rpartition(".")
-        name = stem if dot and extension.lower() in _RESOURCE_SUFFIXES else segment
-        if has_cyrillic(name) and not (set("%${}") & set(name)):
-            replacement, plane = resolver.identifier(name)
-            if plane == "user":
-                report.user_done += 1
-            if replacement is None:
-                line, col = at if at is not None else (tok.line, tok.col)
-                report.note_token(name, line, col)
-                report.resource_tokens.add(name)
-            elif replacement != name:
-                start = base + tok.start + offset
-                edits.append((start, start + len(name), replacement))
+        if dot and extension.lower() in _RESOURCE_SUFFIXES:
+            pieces = stem.split(".") + [extension]
+        else:
+            pieces = segment.split(".")
+        piece_offset = offset
+        for piece in pieces:
+            if has_cyrillic(piece) and not (set("%${}") & set(piece)):
+                if resource:
+                    replacement, plane = resolver.resource_name(piece)
+                else:
+                    replacement, plane = resolver.identifier(piece)
+                if plane == "user":
+                    report.user_done += 1
+                if replacement is None:
+                    report.note_token(piece, *at, resource=resource)
+                elif replacement != piece:
+                    edits.append((start + piece_offset, start + piece_offset + len(piece),
+                                  replacement))
+            piece_offset += len(piece) + 1
         offset += len(segment)
+
+
+def _resource_literal_edits(text: str, toks: list, base: int, resolver, report, edits,
+                            at: tuple[int, int] | None) -> set[int]:
+    """The edits of the paths inside `Ресурс{...}` literals; the indices of the tokens done.
+
+    The body is read off the source text rather than glued back from tokens - a file name may
+    hold characters the lexer splits (`adv-auto.svg`). A subsystem named before `::` is a name
+    of the project's structure and is left to the walk; the path after it addresses the
+    resources and is spelled here, the same way the file of the tree is.
+    """
+    done: set[int] = set()
+    words = _resource_words()
+    for index, tok in enumerate(toks):
+        if tok.kind != "IDENT" or tok.value not in words or index + 1 >= len(toks):
+            continue
+        opener = toks[index + 1]
+        if opener.kind != "OP" or opener.value != "{" or opener.start != tok.end:
+            continue
+        closer_index = next(
+            (position for position in range(index + 2, len(toks))
+             if toks[position].kind == "OP" and toks[position].value == "}"),
+            None,
+        )
+        if closer_index is None or toks[closer_index].line != opener.line:
+            continue
+        body = text[opener.end:toks[closer_index].start]
+        namespace_end = body.rfind("::")
+        path_start = opener.end + (namespace_end + 2 if namespace_end >= 0 else 0)
+        path = text[path_start:toks[closer_index].start]
+        lead = len(path) - len(path.lstrip())
+        path = path.strip()
+        if not path or not has_cyrillic(path):
+            continue
+        if path.replace("\\", "/") not in resolver.resource_keys:
+            # No file of the project answers to the path - a picture of the platform's library,
+            # or a file the project does not have: the walk reads it the way it always did.
+            continue
+        place = at if at is not None else (opener.line, opener.col)
+        _resource_segment_edits(path, base + path_start + lead, resolver, report, edits, place)
+        done.update(position for position in range(index + 2, closer_index)
+                    if toks[position].start >= path_start)
+    return done
+
+
+@lru_cache(maxsize=1)
+def _resource_words() -> frozenset[str]:
+    """Both spellings of the resource literal (`Ресурс{...}` and `Resource{...}`)."""
+    return frozenset(terms.key_forms("Ресурс"))
+
+
+dataset.register_reset(_resource_words.cache_clear)
 
 
 _SHORT_NAME_RE = re.compile(r"[_\w][\w0-9]*", re.UNICODE)
