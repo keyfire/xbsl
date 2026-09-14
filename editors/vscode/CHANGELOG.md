@@ -9,6 +9,21 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Changed
+
+- **The subsystem tree lists objects directly under subsystems and packages.** Forms stay with their
+  owners and resources keep their own section, reducing the number of folders to expand.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
+### Fixed
+
+- **Project root paths use the editor's platform case rules.** On Windows, yaml files reach the LSP
+  server even when `xbsl.projectRoot` uses a different letter case. The selector is anchored at the
+  resolved root, while Linux keeps case-sensitive matching.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
 ## 0.72.0
 
 ### Fixed

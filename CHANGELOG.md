@@ -18,6 +18,36 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **Seven checks catch declaration errors and deprecated platform calls before deployment.** They
+  report missing initializers, defaults on required fields, escaping scoped resources, repeated
+  declarations, case values and catch types, and calls bound only to deprecated platform overloads.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
+- **An optional unused-constant check finds declarations the project never reads.** Enable
+  `code/unused-constant` explicitly when cleaning up a project.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
+### Changed
+
+- **Discarded expressions are reported as build errors even when they contain calls.**
+  `code/statement-no-effect` now accepts only method calls and throws as expression statements.
+  Read-only assignments also cover fields reached through a local structure receiver.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+- **Version diagnostics identify the imported engine location.** `--version`, `--where`, MCP
+  environment information and the LSP startup log distinguish installed copies and source checkouts
+  that share a version number. ([#98](https://github.com/keyfire/xbsl/pull/98))
+
+### Fixed
+
+- **Current property types retain their nullable alternatives.** The extractor separates historical
+  member forms from current ones and resolves inherited members in order, so an older signature no
+  longer erases the empty value from a current property type.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
 ## 2026-09-14 – 0.107.0, 0.108.0
 
 ### Added
