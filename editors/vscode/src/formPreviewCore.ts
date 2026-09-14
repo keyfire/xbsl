@@ -61,6 +61,7 @@ const PREVIEW_STRINGS_RU = {
   label: "Надпись",
   button: "Кнопка",
   checkbox: "Флажок",
+  switch: "Переключатель",
   section: "Секция",
   mainCommand: "Основная команда",
   form: "форма",
@@ -208,11 +209,36 @@ function valueHtml(v: string | undefined, placeholder = ""): string {
   return esc(v);
 }
 
+// A literal of the platform's `Boolean?` at the key: true or false, null for `Undefined`, and
+// undefined for anything else - a binding, an expression, no value at all. Each of the three
+// literals has a Russian and an English spelling, and a form written in English uses the second.
+// The yaml reader turns a bare `True` and `False` into booleans rather than text, so a boolean node
+// is taken as it is before the text is compared.
+function booleanLiteral(map: unknown, key: string): boolean | null | undefined {
+  const node = get(map, key);
+  if (!isScalar(node)) {
+    return undefined;
+  }
+  if (typeof node.value === "boolean") {
+    return node.value;
+  }
+  switch (String(node.value)) {
+    case "Истина":
+    case "True":
+      return true;
+    case "Ложь":
+    case "False":
+      return false;
+    case "Неопределено":
+    case "Undefined":
+      return null;
+    default:
+      return undefined;
+  }
+}
+
 function isTrue(map: unknown, key: string): boolean {
-  // `Истина` and `True` are the platform's own pair - a form written in English spells the
-  // second one, and the frame must read it the same way.
-  const value = prop(map, key);
-  return value === "Истина" || value === "True";
+  return booleanLiteral(map, key) === true;
 }
 
 // -- mapping properties to styles -----------------------------------------------------------
@@ -607,6 +633,36 @@ function renderUnknown(node: unknown, type: string, layout = ""): string {
   return `<div ${tagAttrs(node, "unknown col")}><span class="uname">${label}</span>${inner}</div>`;
 }
 
+// The mark of a checked box: drawn here rather than taken from an icon font, so it keeps the small
+// size the platform gives it inside a 24-pixel box.
+const CHECK_MARK = `<svg class="cmark" viewBox="0 0 10 8" aria-hidden="true"><path d="M1 4.2l2.6 2.5L9 1.2"/></svg>`;
+
+// A checkbox comes in the three kinds of the `CheckboxKind` enumeration, drawn apart by the platform:
+//   `Checkbox` (and `Auto`) - a box with a check mark;
+//   `Switch` - a pill with a thumb, at the start while off and at the end while on;
+//   `CheckboxThreeState` - the same box, which shows a dash while the value holds `Undefined`.
+// The kind is compared in the Russian spelling, the one the ui schema names. A literal value places
+// the mark or the thumb where the platform would; a binding is computed at run time, so the frame
+// draws it unchecked. The colors are MEASURED on a deployed form: an outline with no fill, gray
+// while off and blue while on, and the mark or the thumb takes the same color.
+function renderCheckbox(node: unknown, layout: string): string {
+  const kind = prop(node, "Вид");
+  const value = booleanLiteral(node, "Значение");
+  if (kind === "Переключатель") {
+    const caption = valueHtml(prop(node, "Заголовок"), s("switch"));
+    const track = `<span class="swt${value === true ? " on" : ""}"><span class="knob"></span></span>`;
+    return `<label ${tagAttrs(node, "chk", layout)}>${track}${caption}</label>`;
+  }
+  let box = `<span class="cbox"></span>`;
+  if (value === true) {
+    box = `<span class="cbox on">${CHECK_MARK}</span>`;
+  } else if (value === null && kind === "ФлажокТриСостояния") {
+    // A two-state box has no third look: `Undefined` leaves it unchecked.
+    box = `<span class="cbox mixed"><span class="cdash"></span></span>`;
+  }
+  return `<label ${tagAttrs(node, "chk", layout)}>${box}${valueHtml(prop(node, "Заголовок"), s("checkbox"))}</label>`;
+}
+
 // Field commands (Команды: a single command or a command-interface fragment/group) show as
 // compact icons at the input's edge - the platform places them next to the field.
 function fieldCommands(node: unknown): string {
@@ -708,7 +764,7 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
       );
     }
     case "Флажок":
-      return `<label ${tagAttrs(node, "chk", layout)}><span class="cbox"></span>${valueHtml(prop(node, "Заголовок"), s("checkbox"))}</label>`;
+      return renderCheckbox(node, layout);
     case "Кнопка":
     case "КнопкаФормы":
     case "ОбычнаяКоманда":

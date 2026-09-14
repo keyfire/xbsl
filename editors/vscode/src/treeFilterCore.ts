@@ -14,7 +14,8 @@
 // package holds both objects of its own and packages. The state of a node is derived from the
 // choice and never stored. The choice written back from the states is canonical: a node whose
 // items are all checked is written as its whole key, and a key no checkbox stands for is dropped -
-// which is how a renamed or deleted package leaves the stored filter.
+// which is how a deleted package, or one renamed outside the tree, leaves the stored filter. A
+// package renamed by the command of the tree takes its keys along (followRenames).
 //
 // Without the engine's answer the packages are unknown. The form then lists the subsystems found
 // by their descriptors, and nothing is dropped: a key that cannot be checked is kept as it is.
@@ -638,6 +639,80 @@ export function placeFilterOf(tree: FilterTree, selection: Selection): PlaceFilt
 /** Is the filter exactly this place? */
 export function isPlaceFilter(filter: PlaceFilter | undefined, place: FolderPlace): boolean {
   return !!filter && filter.project === place.project && filter.places.has(place.place);
+}
+
+// --- a renamed place ----------------------------------------------------------------------
+
+/** A package renamed from the tree: its placement key before and after. */
+export interface PlaceRename {
+  project: string; // the project key: pathKey of its folder
+  from: string; // `Склад::Партии`
+  to: string; // `Склад::Лоты`
+}
+
+/** The key of a place once its own name is `name`: the last segment replaced, the enclosing
+ * places kept - `Склад::Партии::Архив` renamed to `Старое` is `Склад::Партии::Старое`. */
+export function renamedPlace(place: string, name: string): string {
+  const cut = place.lastIndexOf(SEPARATOR);
+  return cut < 0 ? name : place.slice(0, cut + SEPARATOR.length) + name;
+}
+
+/** The choice with the keys of a renamed place moved to its new name.
+ *
+ * A key moves when it is the place itself (the objects lying right in it), its whole key, or a key
+ * of a place nested in it - a nested package keeps its path under the new name. Keys of other
+ * places and of other projects stay: `Склад::ПартииТоваров` is not inside `Склад::Партии`.
+ */
+export function renamePlaceKeys(selection: Selection, rename: PlaceRename): Selection {
+  const keys = selection.get(rename.project);
+  if (!keys?.size || rename.from === rename.to) {
+    return selection;
+  }
+  const inside = (key: string): boolean => key === rename.from || key.startsWith(rename.from + SEPARATOR);
+  if (![...keys].some(inside)) {
+    return selection;
+  }
+  const next = copySelection(selection);
+  next.set(rename.project, new Set([...keys].map((key) => (inside(key) ? rename.to + key.slice(rename.from.length) : key))));
+  return next;
+}
+
+function listsPlace(projectNode: FilterNode, place: string): boolean {
+  const visit = (node: FilterNode): boolean =>
+    ((node.kind === "subsystem" || node.kind === "package") && node.place === place) || node.children.some(visit);
+  return projectNode.children.some(visit);
+}
+
+export interface FollowedRenames {
+  selection: Selection;
+  followed: PlaceRename[]; // the keys moved: the tree lists the new place
+  waiting: PlaceRename[]; // the tree still lists the old place, or knows nothing of the packages
+}
+
+/** Move the keys of renamed places once the tree lists them under the new names.
+ *
+ * The command knows the new name at once, the tree learns it from the engine's next answer. Until
+ * that answer the tree lists the old place, and a key moved right away would name a place with no
+ * checkbox - the canonical form would drop it, and a filter by that one package would switch off.
+ * So a rename waits for a tree that lists the new place, and only then the keys move. A tree whose
+ * project the engine placed and which lists neither name says the place is gone - deleted or
+ * renamed once more: that rename is forgotten, and the keys of the old place leave the choice the
+ * way any key with no checkbox does.
+ */
+export function followRenames(tree: FilterTree, selection: Selection, renames: readonly PlaceRename[]): FollowedRenames {
+  let next = selection;
+  const followed: PlaceRename[] = [];
+  const waiting: PlaceRename[] = [];
+  for (const rename of renames) {
+    const projectNode = tree.projects.find((p) => p.project === rename.project);
+    if (projectNode && listsPlace(projectNode, rename.to)) {
+      next = renamePlaceKeys(next, rename);
+      followed.push(rename);
+    } else if (!projectNode?.packagesKnown || listsPlace(projectNode, rename.from)) {
+      waiting.push(rename);
+    }
+  }
+  return { selection: next, followed, waiting };
 }
 
 // --- storage ------------------------------------------------------------------------------
