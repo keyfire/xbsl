@@ -59,11 +59,14 @@ export async function uiComponent(name: string): Promise<UiComponentRecord | und
 interface FormKeyPairs {
   aliases: Record<string, string>;
   types: Record<string, string>;
+  values: Record<string, Record<string, string>>; // property -> {English value: Russian value}
 }
 
 let keyAliasesPromise: Promise<FormKeyPairs> | undefined;
 
-/** Pairs of the form structure keys (`Content` -> `Содержимое`), asked once per session.
+/** Pairs of the form keys (`Content`), of the node types (`UsualCommand`) and of the values of
+ * the enumerated properties (`Layout: Horizontal`) with their Russian spellings, asked once per
+ * session.
  *
  * The designer parses the yaml itself, so it needs the pairs the engine keeps: without them an
  * English form renders as an empty frame. An engine that does not know the request answers
@@ -74,9 +77,12 @@ export function formKeyAliases(): Promise<FormKeyPairs> {
     keyAliasesPromise = lspRequest<{
       aliases?: Record<string, string>;
       types?: Record<string, string>;
+      values?: Record<string, Record<string, string>>;
     }>("xbsl/formKeys", {})
-      .then((res) => ({ aliases: res?.aliases ?? {}, types: res?.types ?? {} }))
-      .catch(() => ({ aliases: {}, types: {} }));
+      // An engine older than the value pairs answers without `values`: the frame then reads the
+      // enumerated properties in Russian only, as before.
+      .then((res) => ({ aliases: res?.aliases ?? {}, types: res?.types ?? {}, values: res?.values ?? {} }))
+      .catch(() => ({ aliases: {}, types: {}, values: {} }));
   }
   return keyAliasesPromise;
 }

@@ -179,9 +179,10 @@ i18n.register(MESSAGES)
 #: Union members that are a VALUE rather than a type with an open set of values.
 _LITERAL_MEMBERS = frozenset({"Авто"})
 
-#: Types whose nested node the compiler demands literally. Extend only
-#: with types shown to behave the same - see the module docstring on why the data cannot say.
-_LITERAL_TYPE_NAMES = ("АбсолютныйШрифт", "АбсолютныйЦвет")
+#: Types whose nested node the compiler demands literally. The list lives in uischema - the form
+#: designer of the editor reads the members of the same types; extend it there, and only with
+#: types shown to behave the same (the module docstring says why the data cannot tell).
+_LITERAL_TYPE_NAMES = uischema.LITERAL_VALUE_TYPES
 
 
 @lru_cache(maxsize=1)

@@ -506,7 +506,7 @@ class Designer implements StructureHost, DataHost {
     // same way, and without them the frame would come up empty (the tree is looked up by the
     // Russian key). Asked once per session and cached by the client.
     const pairs = await formKeyAliases();
-    setFormKeyAliases(pairs.aliases, pairs.types);
+    setFormKeyAliases(pairs.aliases, pairs.types, pairs.values);
     // The localized texts of the project, in the editor's language: a `$Dictionary.Key` value is
     // drawn as the words the user will see rather than as the key's last segment.
     setLocalizationStrings(await localizationStrings(vscode.env.language.startsWith("ru") ? "Ru" : "En"));
@@ -1310,8 +1310,11 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   /* Недоступный компонент (Доступность: Ложь или вычисляемая): платформа рисует такое поле
      серой заливкой без рамки - редактировать нечего, а место поле занимает прежнее. Правило
      наследуется вниз, поэтому классом помечен и сам узел, и его содержимое. */
-  .dis .inp, .inp.dis { background: var(--fp-dis-bg); border-color: transparent; }
-  .dis .cbox, .dis .rdo { border-color: var(--fp-dis-border); }
+  /* The selectors stop at the component's own parts: the core marks every inaccessible node of
+     the subtree itself and leaves the mark off a node that sets Enabled back to True, so a rule
+     reaching down from an ancestor would gray out that node as well. */
+  .fld.dis > .inp { background: var(--fp-dis-bg); border-color: transparent; }
+  .chk.dis > .cbox, .rgrp.dis .rdo { border-color: var(--fp-dis-border); }
   /* Вложенный проектный компонент, отрисованный по его собственному yaml. */
   .subc { position: relative; min-width: 24px; }
   /* СтандартнаяКарточка: скругление 16, волосяная рамка, без тени - как на платформе. */
@@ -1351,8 +1354,8 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   .swt.on { border-color: var(--fp-check); justify-content: flex-end; }
   .swt.on .knob { background: var(--fp-check); }
   /* An inaccessible checkbox or switch keeps its state in the gray of a closed field. */
-  .dis .swt, .dis .cbox.on, .dis .cbox.mixed { border-color: var(--fp-dis-border); color: var(--fp-dis-border); }
-  .dis .swt .knob { background: var(--fp-dis-border); }
+  .chk.dis > .swt, .chk.dis > .cbox.on, .chk.dis > .cbox.mixed { border-color: var(--fp-dis-border); color: var(--fp-dis-border); }
+  .chk.dis > .swt .knob { background: var(--fp-dis-border); }
   /* Кнопки: скругление 8, 16px medium; primary - жёлтая с оливковым текстом, обычная серая,
      дополнительная - синий текст, пилюли шапки - мягкая заливка и полное скругление. */
   .btn { border: none; background: var(--fp-btn2-bg); color: var(--fp-btn2-fg); border-radius: 8px;
