@@ -51,7 +51,9 @@ from . import (  # noqa: F401
     style_layout,
     style_literals,
     style_naming,
+    style_scopes,
     style_strings,
+    style_ternary,
     style_types,
     style_variables,
 )
