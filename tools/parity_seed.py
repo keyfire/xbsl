@@ -1234,6 +1234,13 @@ Attributes:
 """
 _BOOLEAN_TOKENS = {"Отметки": "Marks", "Успешно": "Successful", "НетОшибок": "NoErrors"}
 
+#: --- Initializers: `{head}`/`{tail}` are the required marker and the value, `{type}` a written type --
+_ORDER_FIELD_RU = "структура Заказ\n    {head}пер Номер: Число{tail}\n;\n"
+_ORDER_LOCAL_RU = "метод Посчитать(): Число\n    пер Итог: {type}\n    Итог = 1\n    возврат 1\n;\n"
+_ORDER_USE_RU = "метод Прочитать(Данные: Байты)\n    исп Поток: ПотокЧтения{tail}\n;\n"
+_INIT_TOKENS = {"Заказы": "Orders", "Заказ": "Order", "Номер": "Number", "Посчитать": "Count",
+                "Итог": "Total", "Прочитать": "Read", "Данные": "Data", "Поток": "Stream"}
+
 #: --- Cross-subsystem references: a consumer subsystem and a supplier subsystem -----------
 #: The consumer declares the supplier as used; the supplier is private to the auto-interface.
 _SUB_USE_RU = "Использование:\n    - Склад\n"
@@ -4351,6 +4358,49 @@ SEEDS: list[Seed] = [
         note="the same handler handing out a computed right",
         files={"Переводы.yaml": _TRANSFERS_RU, "Переводы.xbsl": _GRANT_RU.format(rights="Сущность.Право.Изменение")},
         tokens=_TRANSFERS_TOKENS,
+    ),
+    # --- initializers the compiler demands or refuses ----------------------------------------
+    Seed(
+        rule="code/required-field-default",
+        expect=FINDING,
+        note="a required field that also carries a default value",
+        files={"Заказы.xbsl": _ORDER_FIELD_RU.format(head="обз ", tail=" = 1")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/required-field-default",
+        expect=CLEAN,
+        note="the same field required and without a value",
+        files={"Заказы.xbsl": _ORDER_FIELD_RU.format(head="обз ", tail="")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=FINDING,
+        note="a local of a union type declared without a value",
+        files={"Заказы.xbsl": _ORDER_LOCAL_RU.format(type="Число|Строка")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=CLEAN,
+        note="the same union with the empty value, spelled as the platform names it",
+        files={"Заказы.xbsl": _ORDER_LOCAL_RU.format(type="Число|Строка|Неопределено")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=FINDING,
+        note="a use variable declared by type alone",
+        files={"Заказы.xbsl": _ORDER_USE_RU.format(tail="")},
+        tokens=_INIT_TOKENS,
+    ),
+    Seed(
+        rule="code/declaration-needs-init",
+        expect=CLEAN,
+        note="the same use variable opened in the declaration",
+        files={"Заказы.xbsl": _ORDER_USE_RU.format(tail=" = ПотокЧтения.ИзБайтов(Данные)")},
+        tokens=_INIT_TOKENS,
     ),
     # --- references across a subsystem boundary ----------------------------------------
     Seed(

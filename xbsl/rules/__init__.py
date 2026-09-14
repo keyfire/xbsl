@@ -36,6 +36,7 @@ from . import (  # noqa: F401
     code_ternary,
     control_flow,
     duplicate_imports,
+    initializers,
     interpolation,
     lambda_capture,
     locals_usage,
