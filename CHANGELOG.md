@@ -38,6 +38,9 @@ entry either - say what the behaviour was, not which class name was compared.
   value. ([#71](https://github.com/keyfire/xbsl/pull/71))
 
 ### Changed
+- **`xbsl/formKeys` also answers the values of enumerated properties.** The new `values` field pairs
+  English and Russian values per property, and the answer names command classes and the members of
+  inline fonts and colors. A client that reads an English form no longer has to guess. ([#83](https://github.com/keyfire/xbsl/pull/83))
 - **`xbsl.typeinfer` answers with a set of types and knows the project's own names.** It used to
   name a single type from the platform catalog, so a query column, a union parameter or a structure
   from another module stayed unknown. ([#74](https://github.com/keyfire/xbsl/pull/74))

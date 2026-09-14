@@ -12,6 +12,10 @@
 ## Unreleased
 
 ### Fixed
+- **The form frame reads an English form the way it reads a Russian one.** `Layout: Horizontal`,
+  `Kind: Switch` or `Visible: False` fell back to the defaults, and an English form drew a different
+  frame. The engine now sends the value pairs. Bold text of an `AbsoluteFont` shows too, and a field
+  with `Enabled: True` inside a disabled group is no longer gray. ([#83](https://github.com/keyfire/xbsl/pull/83))
 - **An absolute `xbsl.projectRoot` works in LSP mode.** A root such as `D:\Projects\tasks`,
   `./src/app` or `src/app/` matched no file, so the project's yaml never reached the language
   server: VS Code compares the pattern with a lower-case drive letter. ([#78](https://github.com/keyfire/xbsl/pull/78))
