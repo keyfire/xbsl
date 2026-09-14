@@ -386,10 +386,18 @@ def collect_token_edits(
             # module ("variable is already defined"). Only the translator can see this - the
             # dictionary is global, the collision is local.
             for local in sorted(local_names):
-                translated, _plane = resolver.identifier(local)
+                translated, _plane = resolver.identifier(local, scope=method_name)
                 if translated:
                     line, col = at if at is not None else local_places.get(local, (0, 0))
                     report.note_name(f"method:{method_name}", local, translated, line, col)
+            # A platform type the method reads as the root of a static access stands in the same
+            # namespace: a local translated into the type's word hides the type, and the access
+            # reads the local instead - a parameter named for a transfer encoding took the word
+            # of the encoding type, and `Encoding.Iso8859_1` asked a string for a property.
+            for root, spelling, line, col in _static_type_roots(
+                    toks, index, local_names, owner_names, query_ranges, base):
+                report.note_name(f"method:{method_name}", root, spelling,
+                                 *(at if at is not None else (line, col)))
             # The METHODS of one module share a namespace of their own, and the language has
             # no overloading: two of them under one name is a module the compiler refuses.
             # Met live - two Russian words that English spells alike, and the tree went out
@@ -644,6 +652,39 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
                 if places is not None:
                     places.setdefault(name, (toks[position].line, toks[position].col))
         index += 1
+    return out
+
+
+def _static_type_roots(toks: list, start: int, local_names: dict[str, str],
+                       owner_names: frozenset[str], query_ranges: list[tuple[int, int]],
+                       base: int) -> list[tuple[str, str, int, int]]:
+    """(name, the English spelling of its type, line, col) for every platform type the method
+    that begins at `start` reads as the root of a static access (`Кодировка.Utf8`).
+
+    The root is what the walk reads as a static root: a name opening a chain, followed by a
+    dot, that is neither a name of the method nor a property the module's element puts in
+    scope. A query block is left out - its roots are tables, not types.
+    """
+    out: list[tuple[str, str, int, int]] = []
+    for index in range(start + 1, len(toks)):
+        tok = toks[index]
+        if tok.kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
+            break
+        if tok.kind != "IDENT" or tok.value.isascii():
+            continue
+        prev = toks[index - 1]
+        nxt = toks[index + 1] if index + 1 < len(toks) else None
+        if prev.kind == "OP" and prev.value == ".":
+            continue
+        if nxt is None or nxt.kind != "OP" or nxt.value != ".":
+            continue
+        if tok.value in local_names or tok.value in owner_names:
+            continue
+        if _inside(query_ranges, base + tok.start):
+            continue
+        spelling = platform_map.type_english(tok.value)
+        if spelling:
+            out.append((tok.value, spelling, tok.line, tok.col))
     return out
 
 
