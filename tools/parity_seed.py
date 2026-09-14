@@ -1561,6 +1561,76 @@ _BATCH_PICKER_RU = """\
 """
 _PARTIAL_TOKENS = {**_PACKAGE_TOKENS, "ПодборПартий": "BatchPicker"}
 
+#: --- The tables of a list and of a query, a partial name of two places, the project module ---
+#: A catalog at the root of the supplier, public or hidden (`{vis}` is the whole line or nothing).
+_STOCK_RU = """\
+ВидЭлемента: Справочник
+Ид: 1d1f5c60-0000-4000-8000-000000000f68
+Имя: ОстаткиСклада
+{vis}"""
+_STOCK_PUBLIC = "ОбластьВидимости: ВПроекте\n"
+_BATCH_CHOICE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f69
+Имя: ВыборПартии
+Импорт:
+    - Склад
+Наследует:
+    Тип: Группа
+    Содержимое:
+        -
+            Тип: ПолеВвода<ОстаткиСклада.Ссылка?>
+            Имя: ПолеОстатка
+            НастройкиВводаСсылок:
+                НастройкиПоТипу:
+                    -
+                        Ключ: ОстаткиСклада.Ссылка
+                        Значение:
+                            ПрисоединенныеТаблицы:
+                                -
+                                    Таблица: {table}
+                                    Псевдоним: Партия
+"""
+_STOCK_REPORTS_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f6a
+Имя: ОтчетыСклада
+"""
+_STOCK_REPORTS_XBSL_RU = (
+    "{imports}\n"
+    "метод Прочитать()\n"
+    "    знч Выборка = Запрос{{ВЫБРАТЬ Остаток.Ссылка КАК Ссылка ИЗ ОстаткиСклада КАК Остаток{tail}}}\n"
+    "    Выборка.Выполнить()\n"
+    ";\n"
+)
+#: The table after a join condition: the item of the FROM list the reading used to stop before.
+_AFTER_JOIN = " ЛЕВОЕ СОЕДИНЕНИЕ ОстаткиСклада КАК Второй ПО Истина, ПартииТоваров КАК Партия"
+_STOCK_CALC_YAML_RU = """\
+ВидЭлемента: ОбщийМодуль
+Ид: 1d1f5c60-0000-4000-8000-000000000f6b
+Имя: РасчетСклада
+ОбластьВидимости: ВПроекте
+"""
+_BATCH_CARD_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000f6c
+Имя: КарточкаПартии
+Наследует:
+    Тип: Группа
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f6d
+        Имя: Партия
+        Тип: {type}
+"""
+_ARCHIVE_BATCHES_RU = _BATCHES_RU.replace("000000000f60", "000000000f6e")
+_EDGE_TOKENS = {
+    **_PARTIAL_TOKENS, "ОстаткиСклада": "StockBalances", "ВыборПартии": "BatchChoice",
+    "ПолеОстатка": "BalanceField", "ОтчетыСклада": "StockReports", "Остаток": "Balance",
+    "Второй": "Second", "РасчетСклада": "StockCalculation", "КарточкаПартии": "BatchCard",
+    "Архив": "Archive",
+}
+
 
 SEEDS: list[Seed] = [
     Seed(
@@ -4887,6 +4957,146 @@ SEEDS: list[Seed] = [
             "Склад/ЗначкиПартий.xbsl": _BATCH_ICONS_XBSL_RU,
         }),
         tokens=_PARTIAL_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=FINDING,
+        note="the reference input settings of a field join a table of a package the yaml does not import",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ВыборПартии.yaml": _BATCH_CHOICE_RU.format(table="ПартииТоваров"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/missing-import",
+        expect=CLEAN,
+        note="the same settings joining a table at the root of the subsystem the yaml imports",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ВыборПартии.yaml": _BATCH_CHOICE_RU.format(table="ОстаткиСклада"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/foreign-not-public",
+        expect=FINDING,
+        note="a dynamic list reads a hidden table of another subsystem",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=""),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ПодборПартий.yaml": _BATCH_PICKER_RU.format(table="ОстаткиСклада"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/foreign-not-public",
+        expect=CLEAN,
+        note="the same list once the table is public",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ПодборПартий.yaml": _BATCH_PICKER_RU.format(table="ОстаткиСклада"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/foreign-not-public",
+        expect=FINDING,
+        note="a query block reads a hidden table of another subsystem",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=""),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОтчетыСклада.yaml": _STOCK_REPORTS_YAML_RU,
+            "Учет/ОтчетыСклада.xbsl": _STOCK_REPORTS_XBSL_RU.format(imports="импорт Склад\n", tail=""),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/foreign-not-public",
+        expect=CLEAN,
+        note="the same query once the table is public",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОтчетыСклада.yaml": _STOCK_REPORTS_YAML_RU,
+            "Учет/ОтчетыСклада.xbsl": _STOCK_REPORTS_XBSL_RU.format(imports="импорт Склад\n", tail=""),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=FINDING,
+        note="a query reads a table of a package after a join condition without importing the package",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОтчетыСклада.yaml": _STOCK_REPORTS_YAML_RU,
+            "Учет/ОтчетыСклада.xbsl": _STOCK_REPORTS_XBSL_RU.format(
+                imports="импорт Склад\n", tail=_AFTER_JOIN),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=CLEAN,
+        note="the same query with the import of the package",
+        files=_package_files(**{
+            "Склад/ОстаткиСклада.yaml": _STOCK_RU.format(vis=_STOCK_PUBLIC),
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/ОтчетыСклада.yaml": _STOCK_REPORTS_YAML_RU,
+            "Учет/ОтчетыСклада.xbsl": _STOCK_REPORTS_XBSL_RU.format(
+                imports="импорт Склад\nимпорт Склад::Партии\n", tail=_AFTER_JOIN),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=FINDING,
+        note="the project module calls a module at the root of a subsystem without importing it",
+        files=_package_files(**{
+            "Склад/РасчетСклада.yaml": _STOCK_CALC_YAML_RU,
+            "Склад/РасчетСклада.xbsl": _BATCH_CALC_XBSL_RU,
+            "Проект.xbsl": _PROJECT_CALL_RU.format(imports="").replace("РасчетПартий", "РасчетСклада"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="code/missing-import",
+        expect=CLEAN,
+        note="the same project module with the import of the subsystem",
+        files=_package_files(**{
+            "Склад/РасчетСклада.yaml": _STOCK_CALC_YAML_RU,
+            "Склад/РасчетСклада.xbsl": _BATCH_CALC_XBSL_RU,
+            "Проект.xbsl": _PROJECT_CALL_RU.format(imports="импорт Склад\n").replace(
+                "РасчетПартий", "РасчетСклада"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=FINDING,
+        note="a partial name of a catalog kept in two packages leads to the root, where it is not",
+        files=_package_files(**{
+            "Склад/Архив/ПартииТоваров.yaml": _ARCHIVE_BATCHES_RU,
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/КарточкаПартии.yaml": _BATCH_CARD_RU.format(type="Склад::ПартииТоваров.Ссылка?"),
+        }),
+        tokens=_EDGE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/wrong-namespace",
+        expect=CLEAN,
+        note="the same partial name with the segment of one of the packages",
+        files=_package_files(**{
+            "Склад/Архив/ПартииТоваров.yaml": _ARCHIVE_BATCHES_RU,
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/КарточкаПартии.yaml": _BATCH_CARD_RU.format(
+                type="Склад::Партии::ПартииТоваров.Ссылка?"),
+        }),
+        tokens=_EDGE_TOKENS,
     ),
     Seed(
         rule="style/shadow-own-property",

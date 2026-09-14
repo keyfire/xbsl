@@ -153,14 +153,11 @@ def test_the_list_in_the_default_value_of_a_property_is_read():
 
 
 def test_a_table_outside_a_dynamic_list_is_not_read():
-    """A mapping with no main table is not a list: here the joined tables of the reference
-    input settings of a field, which the compiler was not probed on."""
+    """A `Table` key that belongs to no main table and to no list of joined tables is not read."""
     form = (
         "ВидЭлемента: КомпонентИнтерфейса\nИмя: ПодборТоваров\nИмпорт:\n    - Склад\n"
         "Наследует:\n    Тип: Группа\n    Содержимое:\n        -\n"
         "            Тип: ПолеВвода<Номенклатура.Ссылка?>\n"
-        "            НастройкиВводаСсылки:\n                ПрисоединенныеТаблицы:\n"
-        "                    -\n                        Таблица: ПартииТоваров\n"
         "            Таблица: ПартииТоваров\n"
     )
     assert _lint(_project({"Продажи/ПодборТоваров.yaml": form})) == []

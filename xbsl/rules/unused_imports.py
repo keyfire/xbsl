@@ -84,11 +84,11 @@ from xbsl.layout import Layout, subsystem_of_key
 from xbsl.lexer import Token, tokens
 from xbsl.rules._syntax import (
     WORD_KINDS,
-    _query_table_at,
     _query_vocabulary,
     code_tokens,
     query_alias_intro,
     query_block_tokens,
+    query_from_items,
     query_ranges,
     query_table_intro,
     query_tables,
@@ -546,32 +546,12 @@ def _query_columns(source: SourceFile) -> list[list[str]]:
     out: list[list[str]] = []
     for span in query_ranges(source):
         block = query_block_tokens(source, span)
-        n = len(block)
         aliases: dict[str, str] = {}
-        i = 0
-        while i < n:
-            if not (block[i].kind in WORD_KINDS and block[i].value.upper() in intro):
-                i += 1
-                continue
-            j = i + 1
-            while True:
-                table, j = _query_table_at(block, j)
-                if table is None:
-                    break
-                element = table[1][0].value
-                aliases[table[1][-1].value] = element
-                if (j + 1 < n and block[j].kind in WORD_KINDS
-                        and block[j].value.upper() in alias_intro and block[j + 1].kind in WORD_KINDS):
-                    aliases[block[j + 1].value] = element
-                    j += 2
-                elif j < n and block[j].kind in WORD_KINDS and block[j].value.upper() not in vocabulary:
-                    aliases[block[j].value] = element
-                    j += 1
-                if j < n and block[j].kind == "OP" and block[j].value == ",":
-                    j += 1
-                    continue
-                break
-            i = max(j, i + 1)
+        for (_qualifiers, segments), alias in query_from_items(block):
+            element = segments[0].value
+            aliases[segments[-1].value] = element
+            if alias is not None:
+                aliases[alias.value] = element
         for i, tok in enumerate(block):
             if not (tok.kind in WORD_KINDS and tok.value.upper() in select):
                 continue

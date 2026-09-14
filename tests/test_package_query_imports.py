@@ -3,7 +3,8 @@
 The project module (`Проект.xbsl`) belongs to no subsystem, and code/missing-import used to
 leave it alone. A server build refused a project module that called a common module of a
 package while it imported the subsystem alone, so an element of a package now asks for its
-own import there too; an element at the root of a subsystem still asks for nothing.
+own import there too (the root of a subsystem asks for its import as well - see
+tests/test_rule_query_table_references.py).
 
 A table after FROM/JOIN names an element the way a type position does. The query of a
 virtual table (`.xbql`) resolves its tables against the Import section of the yaml of the
@@ -83,20 +84,6 @@ def test_the_import_of_the_package_covers_the_project_module():
     for line in ("импорт Склад::Партии", "импорт Демо::Учет::Склад::Партии"):
         files = _project({"Проект.xbsl": f"{line}\n\n{CALL}"})
         assert _lint(MISSING_CODE, files) == [], line
-
-
-def test_an_element_at_the_root_asks_the_project_module_for_nothing():
-    code = "метод Т(): Номенклатура.Ссылка?\n    возврат Неопределено\n;\n"
-    assert _lint(MISSING_CODE, _project({"Проект.xbsl": code})) == []
-
-
-def test_a_root_namesake_keeps_the_project_module_silent():
-    """A name the root of another subsystem owns as well is not judged against the package."""
-    files = _project({
-        "Проект.xbsl": CALL,
-        "Продажи/РасчетПартий.yaml": _module_yaml("РасчетПартий"),
-    })
-    assert _lint(MISSING_CODE, files) == []
 
 
 def test_a_module_in_a_folder_of_the_project_root_is_not_taken_for_the_project_module():
@@ -241,12 +228,13 @@ def test_a_parameter_in_the_table_position_is_not_a_table():
     assert _lint(MISSING_CODE, _query_module(body, "")) == []
 
 
-def test_the_visibility_rule_does_not_read_the_tables():
-    """A non-public table stays the visibility rules' business, and they do not read queries."""
+def test_a_hidden_table_is_no_import_finding():
+    """A non-public table is the visibility rule's business, not an import one."""
     body = ("    знч Выборка = Запрос{ВЫБРАТЬ З.Ссылка КАК Ссылка ИЗ Закрытый КАК З}\n"
             "    Выборка.Выполнить()\n")
     files = {**_query_module(body), f"{BASE}/Склад/Партии/Закрытый.yaml": _catalog("Закрытый", None)}
-    assert _lint(MISSING_CODE, files) == [] and _lint(CODE_VISIBILITY, files) == []
+    assert _lint(MISSING_CODE, files) == []
+    assert [d.rule_id for d in _lint(CODE_VISIBILITY, files)] == [CODE_VISIBILITY]
 
 
 def test_a_type_literal_is_a_written_type():
