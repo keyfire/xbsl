@@ -35,7 +35,7 @@ entry either - say what the behaviour was, not which class name was compared.
   only `HttpService` and `SoapService`, and kinds such as `Catalog`, `CommonModule` and
   `InterfaceComponent` then drop out of the metamodel. Form properties were reported as
   unknown. Seen at least on 9.2.9+12 and 9.3.1+4; the scan does not depend on the platform
-  version.
+  version. ([#102](https://github.com/keyfire/xbsl/pull/102))
 
 - **Named arguments are checked against resolved local and module signatures.** Unknown and repeated names, positional arguments after named ones and missing required parameters are reported. Structure methods take precedence over module methods; shadowed receivers and ambiguous overloads are left alone. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Structure fields with non-generic platform types are checked for a missing default value.** Types such as `TextPosition` need `req`, a nullable marker or an initializer; scalar default values and locally shadowed type names are respected. ([#101](https://github.com/keyfire/xbsl/pull/101))
