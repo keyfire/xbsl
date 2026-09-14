@@ -1669,6 +1669,21 @@ _BATCH_PICKER_RU = """\
 """
 _PARTIAL_TOKENS = {**_PACKAGE_TOKENS, "ПодборПартий": "BatchPicker"}
 
+#: --- A typed receiver and a resource: `{kind}` is the declaration keyword ------------------------
+_BATCH_RECEIVER_RU = (
+    "структура Партия\n    {kind} Остаток: Число = 0\n;\n\n"
+    "метод Обнулить(Экземпляр: Партия)\n    Экземпляр.Остаток = 0\n;\n"
+)
+_BATCH_RESOURCE_RU = (
+    "метод Открыть(Данные: Байты): ПотокЧтения\n"
+    "    {kind} Поток = ПотокЧтения.ИзБайтов(Данные)\n"
+    "    возврат Поток\n"
+    ";\n"
+)
+_BATCH_RECEIVER_TOKENS = {"Партии": "Batches", "Партия": "Batch", "Остаток": "Balance",
+                          "Обнулить": "Reset", "Экземпляр": "Instance", "Открыть": "Open",
+                          "Данные": "Data", "Поток": "Stream"}
+
 #: --- The tables of a list and of a query, a partial name of two places, the project module ---
 #: A catalog at the root of the supplier, public or hidden (`{vis}` is the whole line or nothing).
 _STOCK_RU = """\
@@ -5285,6 +5300,35 @@ SEEDS: list[Seed] = [
         known="the English standard puts the kind word LAST (ButtonType), and the rule matches the "
               "prefix alone in either spelling - the shape naming/kind-in-name had before its fix. "
               "Closing it is a change of the rule judged against the standard, not a lookup.",
+    ),
+    # --- a read-only field through a typed receiver, a resource handed out ----------------------
+    Seed(
+        rule="code/assign-readonly",
+        expect=FINDING,
+        note="a value field written through a parameter typed with the structure of the file",
+        files={"Партии.xbsl": _BATCH_RECEIVER_RU.format(kind="знч")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=CLEAN,
+        note="the same field declared as a variable",
+        files={"Партии.xbsl": _BATCH_RECEIVER_RU.format(kind="пер")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/return-use-resource",
+        expect=FINDING,
+        note="a use resource returned from the method that opened it",
+        files={"Партии.xbsl": _BATCH_RESOURCE_RU.format(kind="исп")},
+        tokens=_BATCH_RECEIVER_TOKENS,
+    ),
+    Seed(
+        rule="code/return-use-resource",
+        expect=CLEAN,
+        note="the same stream held by a value variable and closed by the caller",
+        files={"Партии.xbsl": _BATCH_RESOURCE_RU.format(kind="знч")},
+        tokens=_BATCH_RECEIVER_TOKENS,
     ),
     # --- packages of a subsystem -----------------------------------------------------------
     Seed(
