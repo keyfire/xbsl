@@ -34,7 +34,7 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token, linemap, tokens
 from xbsl.parser import parse
-from xbsl.rules._typesets import walk_nodes
+from xbsl.typeinfer import walk_nodes
 
 RULE_ID = "style/redundant-scope"
 

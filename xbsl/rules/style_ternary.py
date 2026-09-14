@@ -38,7 +38,7 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token, linemap, tokenize, tokens
 from xbsl.parser import parse
-from xbsl.rules._typesets import walk_nodes
+from xbsl.typeinfer import walk_nodes
 from xbsl.rules.style_literals import _keyword
 from xbsl.rules.yaml_imports import _interpolation_bodies
 from xbsl.rules.yaml_schema import _HAVE_YAML, _composed, _mapping_nodes, yaml

@@ -51,6 +51,17 @@ entry either - say what the behaviour was, not which class name was compared.
   value. ([#71](https://github.com/keyfire/xbsl/pull/71))
 
 ### Changed
+- **`comment/emphasis-caps` reads more than its list of function words.** It now catches a capital
+  letter inside a sentence, a negation glued on, an ordinary word in capitals and the English line of a
+  comment, and tells an abbreviation by the file itself. The comment walk no longer takes an HTML value
+  with `\'` in a yaml for a comment. ([#92](https://github.com/keyfire/xbsl/pull/92))
+- **`comment/first-person` reads the English line of a translated comment.** A `phrases` value such as
+  "we build it from the name" passed while its Russian key was reported. Literals, often a text for
+  the user, are not judged. ([#85](https://github.com/keyfire/xbsl/pull/85))
+- **The guard, `is` check and cast rules read one type inference.** The first two kept their own copy
+  of type sets and of the query-column reader, and each copy knew shapes the other did not. Now the
+  type check also reads computed query columns and entity contracts, the guard an element of a typed
+  array, and a cast the value of a component in the paired markup. ([#93](https://github.com/keyfire/xbsl/pull/93))
 - **`xbsl/formKeys` also answers the values of enumerated properties.** The new `values` field pairs
   English and Russian values per property, and the answer names command classes and the members of
   inline fonts and colors. A client that reads an English form no longer has to guess. ([#83](https://github.com/keyfire/xbsl/pull/83))

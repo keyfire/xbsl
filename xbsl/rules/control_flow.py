@@ -54,7 +54,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
-from xbsl.rules._typesets import walk_nodes
+from xbsl.typeinfer import walk_nodes
 
 MESSAGES = {
     "code/unreachable-statement.title": {

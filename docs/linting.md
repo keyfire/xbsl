@@ -27,8 +27,11 @@ the en dash of a comment into a hyphen; a project that writes the en dash there 
 The `comment/` group judges how a comment is worded rather than which characters it holds:
 `comment/subjunctive` (the particle `бы` - the finding asks for a word of condition, because
 dropping the particle alone turns a hypothesis into a statement about the code),
-`comment/first-person` ("we", "our" and first-person plural verbs), `comment/emphasis-caps` (a
-function word such as `НЕ` or `ТОЛЬКО` in capitals for emphasis) and `comment/dash-condition` (a
+`comment/first-person` ("we", "our" and first-person plural verbs, and the English line of a
+comment that the translation dictionary keeps), `comment/emphasis-caps` (a word in capitals for
+emphasis: a function word, any word the file also writes in small letters, a one-letter word
+inside a sentence, a negation glued on, and the capitals of the English line of a comment in the
+dictionary) and `comment/dash-condition` (a
 condition written with a dash, as in "the store is not set - the main one is taken"; the finding
 suggests the wording with a word of condition). The rules read the comments of
 modules, element descriptions and resource files. They are off by default - on code that never
@@ -195,9 +198,11 @@ arguments of its receiver: `OnChangeEvent<String>.NewValue` is a string. A struc
 gets its type from the module that declares it. A row of `Query{...}` is typed by its select list
 and the yaml of the tables it reads; a field through a reference and the joined side of a left join
 carry `Null`, which `ReplaceNull` removes. The comparison is the compiler's, and a condition checked
-earlier narrows nothing. What the inference cannot name is not judged: a lambda parameter, a union
-with an unknown part, a method whose overloads disagree, a column of a query the compiler would
-refuse. The rules therefore miss some of the IDE's warnings and add none of their own.
+earlier narrows nothing. All four read one inference: over the whole project for the cast rules and
+the type check, over the module and the markup of its component for the guard, which runs on every
+keystroke. What the inference cannot name is not judged: a lambda parameter without a type, a union
+with an unknown part, a method whose overloads for the given arguments disagree, a column of a query
+the compiler would refuse. The rules therefore miss some of the IDE's warnings and add none of their own.
 
 Detailed group descriptions live in [RULES.md](/RULES): `query/` (a composite type in `IN` with
 a subquery), `project/` (project properties), `naming/` (the naming standard, the `[morph]`

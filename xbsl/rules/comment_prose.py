@@ -58,8 +58,6 @@ from xbsl.rules.translation_values import (
 )
 from xbsl.rules.yaml_schema import _composed
 from xbsl.rules import _comments
-from xbsl.rules.translation_values import _entries, _is_dictionary_file, _position
-from xbsl.rules.yaml_schema import _composed
 
 MESSAGES = {
     "comment/subjunctive.title": {

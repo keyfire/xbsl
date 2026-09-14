@@ -366,6 +366,14 @@ In VS Code the findings appear even when `xbsl.projectRoot` narrows the checks t
 folder. The extension sends the dictionary files to the language server as you type, and the server
 adds the dictionary to the project-wide check.
 
+Two rules of the `comment/` group read the dictionary too, because a `phrases` value is the English
+line of a comment. `comment/first-person` reports "we", "our" or "I" there, and
+`comment/emphasis-caps` reports capitals of emphasis: those a stressed key passed on to its
+translation, a prefix in capitals ("UNfilled") and the article of a phrase in capitals. The capitals
+a key without stress does not have stay with `translation/english-shape`, so a word is reported
+once. Literals, tokens and terms are not read by them. Both rules are off by default and come with
+`--enable comment`.
+
 ## In the editor
 
 The rule `conventions/missing-translation` - info, off by default, project scope - shows the same

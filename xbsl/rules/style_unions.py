@@ -46,7 +46,7 @@ from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token, linemap, tokens
 from xbsl.parser import parse
-from xbsl.rules._typesets import canonical_name, walk_nodes
+from xbsl.typeinfer import canonical_name, walk_nodes
 
 RULE_ID = "style/redundant-union-member"
 
