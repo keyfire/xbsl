@@ -54,6 +54,9 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **The LSP server keeps the findings of a module opened outside the project root.** The
+  whole-project check runs on every save and used to clear the findings of every open file it had
+  not read. Now they stay until the file is closed. ([#78](https://github.com/keyfire/xbsl/pull/78))
 - **`translate` keeps the spelling of a name's declaration.** A local, a parameter, a lambda
   parameter, a `catch` variable or a property of the module's own element named like a platform
   type took the type's spelling in `Name.Member` and inside `%{...}`. The English build then met a

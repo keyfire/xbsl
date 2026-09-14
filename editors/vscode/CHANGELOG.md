@@ -12,6 +12,14 @@
 ## Unreleased
 
 ### Fixed
+- **An absolute `xbsl.projectRoot` works in LSP mode.** A root such as `D:\Projects\tasks`,
+  `./src/app` or `src/app/` matched no file, so the project's yaml never reached the language
+  server: VS Code compares the pattern with a lower-case drive letter. ([#78](https://github.com/keyfire/xbsl/pull/78))
+- **CLI mode shows the findings of the translation dictionary.** Without the language server the
+  extension checked only the project root and open modules, so `translation/english-shape` never
+  reached the Problems panel. Now the dictionary is checked as you type and on save. ([#78](https://github.com/keyfire/xbsl/pull/78))
+- **In CLI mode, a module opened outside the project root keeps its findings after a save.** The
+  project check used to clear them, and a module opened after the check got none at all. ([#78](https://github.com/keyfire/xbsl/pull/78))
 - **The form frame draws a switch as a switch.** A `Checkbox` with `Kind: Switch` looked like a
   plain box. It is now a pill whose thumb sits where a literal `Value` puts it, and a
   `CheckboxThreeState` box shows a dash for `Undefined`. ([#77](https://github.com/keyfire/xbsl/pull/77))

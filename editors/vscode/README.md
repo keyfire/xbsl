@@ -20,16 +20,17 @@ checks and scaffolding run through the CLI:
 
 In CLI mode two producers feed one diagnostic collection. The buffer state decides which one runs.
 
-- **While you type.** On a dirty buffer the extension runs
-  `xbsl --stdin --filename <name> --format json` over the live text. Only per-file rules take
+- **While you type.** On a dirty buffer of a module or a translation dictionary file, the extension
+  runs `xbsl --stdin --filename <name> --format json` over the live text. Only per-file rules take
   part, so the answer comes back fast; the run itself is debounced. Its result replaces the
   diagnostics of *that buffer only*.
-- **When you save.** Saving any `.xbsl` or `.yaml` file runs `xbsl <workspace folder> --format json`
-  in the background. That run is debounced too, and at most one runs at a time: a save in the
-  middle of a run cancels the stale one and starts over. The result covers per-file and
-  project-scope rules, so it replaces the diagnostics of *every* file in the folder. Buffers that
-  are dirty again by then are the exception: they keep their live `--stdin` diagnostics until the
-  next save.
+- **When you save.** Saving any `.xbsl` or `.yaml` file runs `xbsl <project root> --format json` in
+  the background. If the translation dictionary lies outside the root, `xbsl <dictionary>` runs next
+  to it, so project rules never see the dictionary. The check is debounced too, and only one runs at
+  a time: a save in the middle of a check cancels the stale one and starts over. The result covers
+  per-file and project-scope rules, so it replaces the diagnostics of every file the check read.
+  Buffers that are dirty again by then keep their live `--stdin` diagnostics until the next save.
+  Modules opened outside the project root keep theirs too: the check does not read them.
 
 That leaves no duplicates and loses no rule. A clean file shows the full picture of the workspace
 run, a file being edited shows the instant per-file picture, and each save reconciles the two.

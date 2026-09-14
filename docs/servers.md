@@ -21,6 +21,9 @@ VS Code, Neovim, JetBrains.
 With `--project-root` the server also checks the project's translation dictionary. Other yaml files
 outside the root are not checked.
 
+The whole-project check reads only the root and the dictionary. Any other open file, such as a module
+outside the root, keeps the findings of its own check until you close it.
+
 Everything an editor needs for code is standard LSP, so a plain client works with no extra
 wiring. On top of that the server answers private `xbsl/*` requests. The VS Code panels are built
 on them, and another editor would use the same requests to reproduce those panels:
