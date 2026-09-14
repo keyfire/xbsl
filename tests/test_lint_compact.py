@@ -1,7 +1,7 @@
 """The compact answer of `lint_paths`: counts instead of the list of findings, errors whole.
 
-The report's summary counts the findings by rule, by file and by severity in every mode; the
-compact mode of the MCP tool drops the list itself and keeps the error-level records alone.
+The full summary counts findings by rule, file and severity. Compact mode omits the
+per-file map and finding list while keeping counts and complete error-level records.
 """
 
 import importlib
@@ -47,7 +47,7 @@ def test_compact_drops_the_list_and_keeps_the_errors_whole():
     full["summary"]["baselined"] = 4  # what a caller adds after report() has to survive
     compact = report.compact(full)
     assert set(compact) == {"summary", "errors"}
-    assert compact["summary"] == full["summary"]
+    assert compact["summary"] == {k: v for k, v in full["summary"].items() if k != "by_file"}
     assert compact["errors"] == [d for d in full["diagnostics"] if d["severity"] == "error"]
     assert compact["errors"][0]["message"] == "m"
     assert "diagnostics" in full  # the source payload is left as it was
@@ -97,7 +97,7 @@ def test_compact_answer_carries_the_counts_and_the_errors_only(server, tmp_path)
     compact = server.lint_paths([str(tmp_path)], ignore=_NO_PAIR, compact=True)
 
     assert "diagnostics" not in compact
-    assert compact["summary"] == full["summary"]
+    assert compact["summary"] == {k: v for k, v in full["summary"].items() if k != "by_file"}
     assert full["summary"]["errors"] >= 1 and full["summary"]["warnings"] >= 1
     errors = [d for d in full["diagnostics"] if d["severity"] == "error"]
     assert compact["errors"] == errors  # whole records: rule, position and message
@@ -105,8 +105,9 @@ def test_compact_answer_carries_the_counts_and_the_errors_only(server, tmp_path)
 
     counts = compact["summary"]
     assert sum(counts["by_rule"].values()) == full["summary"]["diagnostics"]
-    assert set(counts["by_file"]) == {d["path"] for d in full["diagnostics"]}
-    assert all(Path(p).is_absolute() for p in counts["by_file"])
+    assert "by_file" not in counts
+    assert set(full["summary"]["by_file"]) == {d["path"] for d in full["diagnostics"]}
+    assert all(Path(p).is_absolute() for p in full["summary"]["by_file"])
     assert counts["by_severity"]["error"] == full["summary"]["errors"]
     assert counts["by_severity"]["warning"] == full["summary"]["warnings"]
 
@@ -145,4 +146,17 @@ def test_compact_answer_keeps_the_baseline_record(server, tmp_path):
     assert answer["summary"]["baselined"] == 1
     assert answer["summary"]["baseline"].endswith(".xbsllint-baseline")
     assert answer["summary"]["diagnostics"] == 0 and answer["errors"] == []
-    assert answer["summary"]["by_rule"] == {} and answer["summary"]["by_file"] == {}
+    assert answer["summary"]["by_rule"] == {} and "by_file" not in answer["summary"]
+
+
+def test_compact_omits_file_map_without_mutating_full_report():
+    full = report.report([
+        _diag(f"File{i}.xbsl", 1, "whitespace/trailing", Severity.WARNING)
+        for i in range(50)
+    ], 50)
+    answer = report.compact(full)
+    assert "by_file" not in answer["summary"]
+    assert answer["summary"]["warnings"] == 50
+    assert answer["summary"]["files"] == 50
+    assert len(full["summary"]["by_file"]) == 50
+    assert len(full["diagnostics"]) == 50

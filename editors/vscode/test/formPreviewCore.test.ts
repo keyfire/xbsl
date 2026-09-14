@@ -209,6 +209,15 @@ const apply = (text: string, edit: { start: number; end: number; newText: string
   edit ? text.slice(0, edit.start) + edit.newText + text.slice(edit.end) : text;
 
 const groupOff = FORM.indexOf("Тип: Группа");
+// Insertion follows the type even when Name is the first key.
+setFormKeyAliases({});
+for (const [typeKey, nameKey] of [["Type", "Name"], ["Тип", "Имя"]]) {
+  const source = `    ${nameKey}: Control\n    ${typeKey}: InputField\n`;
+  const edited = apply(source, propertyEdit(source, 4, "ReadOnly", "True"));
+  check(`property insertion follows ${typeKey}`, edited === source + "    ReadOnly: True\n");
+}
+
+setFormKeyAliases({});
 const replaced = apply(FORM, propertyEdit(FORM, groupOff, "Компоновка", "Горизонтальная"));
 check("правка: замена значения", replaced.includes("Компоновка: Горизонтальная") && !replaced.includes("Компоновка: Вертикальная"));
 check("правка: результат парсится", renderFormPreview(replaced).ok);

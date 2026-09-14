@@ -216,8 +216,34 @@ def test_translate_unused_prunes_a_repeated_key_and_keeps_the_entry_below_it(
     _write(dictionary, "010-base.yaml",
            "tokens:\n    Партии: Lots\n    Партии: Lots\n    Задачи: Tasks\n")
 
-    answer = mcp_module.translate_unused(str(folder), filter="Партии", prune=True)
+    answer = mcp_module.translate_unused(str(folder), filter="Партии", prune=True, compact=False)
 
     assert [(row["key"], row["line"]) for row in answer["unused"]] == [("Партии", 4), ("Партии", 5)]
     assert answer["removed"] == 2
+    assert dictionary_module.load(dictionary).tokens == {"Задачи": "Tasks"}
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_set_text_names_every_rewritten_location(project, tmp_path, capsys, lang):
+    folder, dictionary = project
+    batch = tmp_path / "batch.json"
+    batch.write_text(json.dumps([{"key": "Задачи", "value": "Jobs"}], ensure_ascii=False),
+                     encoding="utf-8")
+    assert cli.cli_main([str(folder), "--set", str(batch), "--lang", lang]) == 0
+    lines = capsys.readouterr().out.splitlines()
+    for file, line in [("010-base.yaml", 4), ("010-base.yaml", 6), ("020-more.yaml", 4)]:
+        assert any(f"{dictionary / file}:{line}:" in text and "Jobs" in text for text in lines)
+
+
+def test_prune_counts_repeated_occurrences_beyond_page(mcp_module, tmp_path):
+    folder, dictionary = _catalog_project(tmp_path)
+    file = _write(dictionary, "010-base.yaml",
+                  "tokens:\n    Партии: Lots\n    Партии: Lots\n    Задачи: Tasks\n")
+    answer = mcp_module.translate_unused(str(folder), filter="Партии", prune=True, limit=1)
+    assert answer["removed"] == 2
+    assert answer["pruned"] == {
+        "by_kind": {"token": 2}, "by_file": {str(file): 2},
+    }
+    assert "unused" not in answer
     assert dictionary_module.load(dictionary).tokens == {"Задачи": "Tasks"}

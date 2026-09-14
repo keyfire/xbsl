@@ -535,8 +535,10 @@ never offered at all.
   at once, and the answer names in `unmatched` the ones no orphan fell under; `since` narrows it to
   the orphans of one change (a branch, a commit or a range `A..B`): the keys on the lines it removed
   and the pairs it added to the dictionary, both sides sized in the `since` block; `prune` (off by
-  default) removes exactly the page the tool answers with, `compact` keeps only the key, the kind,
-  the file and the line, and `counts` sizes the orphans by kind; `budget_seconds` (300 by default)
+  default) removes the selected keys, including repeated declarations outside the page. After
+  removal the default answer omits the list: `removed` counts occurrences and `pruned.by_kind` /
+  `pruned.by_file` group them; `compact=false` includes full rows. Preview remains full by default,
+  with `compact=true` keeping only key, kind, file and line. `counts` covers all filtered candidates; `budget_seconds` (300 by default)
   bounds the walk over the sources - past it the answer is what was read, marked `partial`, with
   `sources` counting the files read of the total and a `note` on how to go on, a list of candidates
   on which `prune` does nothing; an answer with neither `filter` nor `since` carries a `note` saying

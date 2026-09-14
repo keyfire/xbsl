@@ -1222,7 +1222,7 @@ def _apply_edits(args, root: Path, loaded) -> int:
     else:
         print(i18n.t("translate.applied", **result))
         for row in result.get("rewritten") or []:
-            print("  " + i18n.t("translate.rewritten", kind=row["kind"], key=row["key"],
+            print(f"  {row['file']}:{row['line']}: " + i18n.t("translate.rewritten", kind=row["kind"], key=row["key"],
                                 was=row["was"], now=row["now"]))
         if refused:
             print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)

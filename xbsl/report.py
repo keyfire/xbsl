@@ -2,8 +2,8 @@
 
 One contract for structured output – a list of diagnostics plus a summary – so that the CLI and the
 MCP adapter cannot drift apart. Editors (the VS Code extension) consume the same JSON. The summary
-carries the counts by rule, by file and by severity (breakdown()), and compact() is the same
-payload without the list of findings – what a reader wants when the list is too long to carry.
+carries the counts by rule, by file and by severity (breakdown()), and compact() omits the
+per-file map and the list of findings – what a reader wants when the list is too long to carry.
 
 CI integration lives here too: codeclimate() renders the diagnostics as a GitLab Code Quality
 report (a subset of the Code Climate issue format), which GitLab shows as a widget on merge
@@ -84,16 +84,18 @@ def report(diags: list[Diagnostic], n_files: int) -> dict:
 
 
 def compact(payload: dict) -> dict:
-    """The payload of report() without its list of findings.
+    """The payload of report() without its list of findings or per-file map.
 
-    The summary already counts the findings by rule, by file and by severity, so a reader
-    asking "is the tree clean, and what fires where" has the answer without the text of every
-    finding - which is what the list costs: several hundred characters each, tens of thousands
+    The summary keeps counts by rule and severity; the unbounded per-file map is available
+    in the full report. A reader asking "is the tree clean, and which rules fire" does not
+    need the text of every finding - which is what the list costs: several hundred characters each, tens of thousands
     over one project run. The errors alone keep their full records, under `errors`, because an
     error is what a build fails on and the reader has to see which one. Every other key of the
     payload (the environment, the baseline record, the CI job) stays as it was.
     """
     out = dict(payload)
+    out["summary"] = {key: value for key, value in payload["summary"].items()
+                      if key != "by_file"}
     findings = out.pop("diagnostics", [])
     out["errors"] = [d for d in findings if d["severity"] == "error"]
     return out

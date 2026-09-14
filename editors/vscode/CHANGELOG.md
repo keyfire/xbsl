@@ -9,6 +9,13 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+
+- **New metadata properties follow `Type` in English YAML.** The insertion works in a fresh
+  editor session before the form designer has been opened. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
 ## 0.73.0
 
 ### Changed
