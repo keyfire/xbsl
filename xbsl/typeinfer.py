@@ -898,66 +898,27 @@ def _has_default(param: str) -> bool:
     return False
 
 
-_CODE_RE = re.compile(r"<pre><code>(.*?)</code></pre>", re.S)
-_TAG_RE = re.compile(r"<[^>]+>")
-
-
-@lru_cache(maxsize=None)
-def _documented_types(owner: str, member: str) -> tuple[str, ...] | None:
-    """The types the documentation page prints for a property, its current forms first.
-
-    None when the documentation is not installed or does not document the member.
-    """
-    import html
-
-    from xbsl import docs
-
-    try:
-        found = docs.member_doc(f"{owner}.{member}") if docs.available() else {}
-    except Exception:  # noqa: BLE001 - no documentation, nothing to compare with
-        return None
-    block = (found or {}).get("block")
-    if not block:
-        return None
-    current: list[str] = []
-    replaced: list[str] = []
-    for part in re.split(r"(?=<h3)", block):
-        target = replaced if "<del>" in part[: part.find("</h3>") + 1] else current
-        for code in _CODE_RE.findall(part):
-            text = html.unescape(_TAG_RE.sub("", code)).strip()
-            head, colon, written = text.partition(":")
-            if colon and head.strip() == member:
-                target.append(written.strip())
-    return tuple(current or replaced) or None
-
-
 #: Properties the documentation itself prints as plain while the editor's language server does not
 #: treat them as never empty. Every property and argument-less method the catalog calls plain was
-#: put through the editor behind `??` (about 8,700 members): the few disagreements were the folded
-#: versions `_documented_alike` catches, and this one, which no reading of the data explains.
-#: Pairs are (the declaring type, the member) in the catalog's spelling.
+#: put through the editor behind `??` (about 8,700 members), and with the struck forms of older
+#: versions no longer read as current this one is the only disagreement left: no reading of the data
+#: explains it. Pairs are (the declaring type, the member) in the catalog's spelling.
 _DISPUTED_PROPERTIES = frozenset({("ОбсуждениеВзаимодействия", "ИдВнешнегоОбсуждения")})
 
 
-def _documented_alike(owner: str, member: str) -> bool:
-    """Whether the documentation agrees with the catalog about a property the catalog calls plain.
+def _trusted_plain(owner: str, member: str) -> bool:
+    """Whether a property the catalog calls plain can be trusted to hold no empty value.
 
-    The catalog keeps one type per member. A page that prints a property for several platform
-    versions (`TableReflection?` for the current one, `TableReflection` for an old one) was
-    folded into the bare head of the type, and the empty value of the current form got lost
-    with it - a sweep of the catalog through the editor's language server found exactly such
-    properties among its disagreements. So a property is trusted as plain only when every current
-    form the page prints is the same text and none of them admits the empty value.
+    A page that prints a property for several platform versions (`TableReflection?` for the
+    current one, `TableReflection` under a struck heading for an old one) used to be folded into the
+    bare head of the type, and the empty value of the current form got lost with it. The extractor
+    reads the forms of the current version since `meta.member_forms` says "current"; a catalog
+    without the marker is not trusted with plain properties at all.
     """
+    if (_catalog().get("meta") or {}).get("member_forms") != "current":
+        return False
     bases = (_catalog().get("bases") or {}).get(owner) or ()
-    if any((holder, member) in _DISPUTED_PROPERTIES for holder in (owner, *bases)):
-        return False
-    documented = _documented_types(owner, member)
-    if documented is None:
-        return True
-    if len(set(documented)) > 1:
-        return False
-    return not any("?" in text or "Неопределено" in text for text in documented)
+    return not any((holder, member) in _DISPUTED_PROPERTIES for holder in (owner, *bases))
 
 
 def _type_param_bindings(head: str, args: tuple[str, ...], resolve) -> dict[str, TypeSet] | None:
@@ -1186,7 +1147,7 @@ class ProjectCatalog:
         documentation prints no signature for is typed by the catalog like a property. A type
         parameter of the method itself binds nothing here, and a result that names one is
         unknown. A property the catalog calls plain is trusted only as far as its documentation
-        page agrees (see `_documented_alike`)."""
+        catalog was extracted with the forms of the current version (see `_trusted_plain`)."""
         head, args = split_nominal(owner)
         member = _member_names(head).get(name)
         if member is None:
@@ -1228,7 +1189,7 @@ class ProjectCatalog:
         if key is not None:
             return self._row_key(bindings.get(key.group(1)), bool(key.group(2)))
         got = parse_type(written, resolve, bindings, unbound)
-        if got is not None and not got.undefined and not called and not _documented_alike(head, member):
+        if got is not None and not got.undefined and not called and not _trusted_plain(head, member):
             return None
         return got
 
@@ -2648,7 +2609,6 @@ def project_typings(facts: dict[str, dict]) -> dict[str, ModuleTyping]:
 def _reset_sets() -> None:
     global _last_project
     _member_names.cache_clear()
-    _documented_types.cache_clear()
     canonical_name.cache_clear()
     _facet_suffixes.cache_clear()
     _last_project = None
