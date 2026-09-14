@@ -2,9 +2,11 @@
 
 `Запрос{ВЫБРАТЬ Т.Ссылка КАК Ссылка ИЗ Товары КАК Т}.Выполнить()` is iterated row by row, and the
 compiler types every column of that row by the select list - the field a column reads, as its
-table declares it. The cast rules need exactly that: `Запись.Ссылка как Товары.Ссылка` is the
-commonest redundant cast of a live project, and the type of the operand lives in the yaml of
-the catalog the query reads.
+table declares it. Every rule that reads the typing (`typeinfer.project_typings`) needs exactly
+that: `Запись.Ссылка как Товары.Ссылка` is the commonest redundant cast of a live project, a
+check of a column with `это` is judged the same way, and the type of the operand lives in the
+yaml of the catalog the query reads. A later part of `UNION` is read by position - the first
+part names the columns.
 
 Only the shapes whose type follows from the declarations are answered, and each of them was
 shown to the compiler of the platform (the probe project of the cast rules):
@@ -131,9 +133,9 @@ def row_columns_from_tokens(tokens: list, scope: ModuleScope,
         return None
     merged: dict[str, TypeSet | None] | None = None
     order: list[str] = []
-    for part in parts:
+    for number, part in enumerate(parts):
         try:
-            columns = _select_columns(part, scope, parameter)
+            columns = _select_columns(part, scope, parameter, named=number == 0)
         except _BrokenQuery:
             return None
         if columns is None:
@@ -194,8 +196,11 @@ def _is_word(token, spellings: frozenset[str]) -> bool:
     return token.kind in _WORD_KINDS and token.value.upper() in spellings
 
 
-def _select_columns(part: list, scope: ModuleScope,
-                    parameter=None) -> dict[str, TypeSet | None] | None:
+def _select_columns(part: list, scope: ModuleScope, parameter=None,
+                    named: bool = True) -> dict[str, TypeSet | None] | None:
+    """{column: its type} of one SELECT part. Only the first part of a union names the columns:
+    a later one is read by position (`named` off), so its expressions need no alias of their own
+    and may repeat a name."""
     select = _words("SELECT")
     if not part or not _is_word(part[0], select):
         return None
@@ -234,9 +239,11 @@ def _select_columns(part: list, scope: ModuleScope,
             expression = item[:alias_at[-1]]
         else:
             expression = item
-            if not (expression[-1].kind in _WORD_KINDS and _is_path(expression)):
+            if named and not (expression[-1].kind in _WORD_KINDS and _is_path(expression)):
                 return None
             name = expression[-1].value
+        if not named:
+            name = f"#{len(columns)}"
         if name in columns:
             return None
         columns[name] = _expression_type(expression, tables, scope, parameter)

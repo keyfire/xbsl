@@ -13,8 +13,8 @@ import pytest
 
 from xbsl import engine
 from xbsl.cli import discover
-from xbsl.rules import _typesets as T
-from xbsl.rules import _querytypes as Q
+from xbsl.rules.redundant_checks import display
+from xbsl.typeinfer import TypeSet
 
 GUARD = "code/redundant-undefined-guard"
 CHECK = "code/redundant-type-check"
@@ -33,122 +33,21 @@ def _module(body: str, params: str = "") -> str:
 
 
 # --- data-free pieces ---------------------------------------------------------------------------
-
-
-def test_the_signature_reader_counts_optional_and_variadic_parameters():
-    fewest, most, result, generic = T._signature('Найти(Строка: Строка, От: Число = 0): Число?')
-    assert (fewest, most, result, generic) == (1, 2, "Число?", False)
-    assert T._signature("Шаблон(Шаблон: Строка, ...Аргументы: Объект?): Строка")[:2] == (1, 10_000)
-    assert T._signature("Очистить()")[2] is None
-
-
-def test_a_default_with_a_comma_inside_quotes_is_one_parameter():
-    shape = T._signature('Соединить(Разделитель: Строка = ", ", Хвост: Булево = Ложь): Строка')
-    assert shape[:2] == (0, 2)
-
-
-def test_a_generic_method_is_marked_generic():
-    shape = T._signature("ПервыйИлиУмолчание<ТипУмолчания>(Умолчание: ТипЭлемента|ТипУмолчания): "
-                         "ТипЭлемента|ТипУмолчания")
-    assert shape[3] is True
+# The inference itself (written types, the members of the catalog, the documentation check) is
+# tested with the rest of the type sets in test_typeinfer_sets.py.
 
 
 def test_the_display_of_a_set_writes_the_empty_value_the_source_way():
-    assert T.TypeSet(frozenset({"Строка"}), True).display() == "Строка?"
-    assert T.TypeSet(frozenset({"Строка", "Число"}), True).display() == "Строка|Число|?"
-    assert T.TypeSet(frozenset({"Строка", "Число"})).key() == "Строка|Число"
+    assert display(TypeSet(frozenset({"Строка"}), True)) == "Строка?"
+    assert display(TypeSet(frozenset({"Строка", "Число"}), True)) == "Строка|Число|?"
+    assert TypeSet(frozenset({"Строка", "Число"})).text() == "Строка|Число"
 
 
-# --- the written types ------------------------------------------------------------------------
-
-
-@pytest.mark.needs_data
-def test_written_types_read_as_sets_in_either_language():
-    assert T.parse_type("Строка|Число|?") == T.TypeSet(frozenset({"Строка", "Число"}), True)
-    assert T.parse_type("Строка|Число?") == T.TypeSet(frozenset({"Строка", "Число"}), True)
-    assert T.parse_type("String?") == T.parse_type("Строка?")
-    assert T.parse_type("Массив<Строка?>") == T.single("Массив<Строка|?>")
-
-
-@pytest.mark.needs_data
-def test_a_type_the_reader_cannot_compare_answers_nothing():
-    assert T.parse_type("неизвестно") is None
-    assert T.parse_type("()->ничто") is None
-    assert T.parse_type("Основное::Задачи.Ссылка") is None
-
-
-@pytest.mark.needs_data
-def test_a_member_of_a_generic_type_is_typed_by_the_argument():
-    assert T.member_result("СобытиеПриИзменении<Строка>", "НовоеЗначение", None) == T.single("Строка")
-    got = T.member_result("СобытиеПриИзменении<Строка|?>", "НовоеЗначение", None)
-    assert got == T.TypeSet(frozenset({"Строка"}), True)
-    # A raw receiver binds nothing, and a member typed by the parameter is unknown.
-    assert T.member_result("СобытиеПриИзменении", "НовоеЗначение", None) is None
-
-
-@pytest.mark.needs_data
-def test_overloads_that_disagree_about_the_result_give_no_type():
-    """The zero-argument overload of the documentation yields the empty value, the others do not."""
-    assert T.member_result("Массив<Строка>", "ПервыйИлиУмолчание", 0) == T.TypeSet(frozenset({"Строка"}), True)
-    assert T.member_result("Массив<Строка>", "ПервыйИлиУмолчание", 1) is None
-
-
-_VERSIONED_BLOCK = (
-    '<h3 id="таблица">Таблица</h3> <p><code>Версия 8.0 и выше</code></p>'
-    " <pre><code>Таблица: ОтражениеТаблицы?</code></pre> <hr>\n"
-    '<h3 id="таблица-1"><del>Таблица</del></h3> <p><code>Версия 7.0 и ниже</code></p>'
-    " <pre><code>Таблица: ОтражениеТаблицы</code></pre> <hr>"
-)
-
-
-def test_a_property_the_page_prints_nullable_in_its_current_form_is_not_trusted(monkeypatch):
-    """The catalog folded both versions into the bare head; the current form admits the empty value."""
-    from xbsl import docs
-
-    T._documented_types.cache_clear()
-    monkeypatch.setattr(docs, "available", lambda version=None: True)
-    monkeypatch.setattr(docs, "member_doc", lambda name, version=None: {"block": _VERSIONED_BLOCK})
-    try:
-        assert T._documented_types("Отражение", "Таблица") == ("ОтражениеТаблицы?",)
-        assert T._documented_alike("Отражение", "Таблица") is False
-    finally:
-        T._documented_types.cache_clear()
-
-
-def test_a_property_documented_plain_in_every_form_is_trusted(monkeypatch):
-    from xbsl import docs
-
-    T._documented_types.cache_clear()
-    block = '<h3 id="имя">Имя</h3> <pre><code>Имя: Строка</code></pre> <hr>'
-    monkeypatch.setattr(docs, "available", lambda version=None: True)
-    monkeypatch.setattr(docs, "member_doc", lambda name, version=None: {"block": block})
-    try:
-        assert T._documented_alike("Задачи", "Имя") is True
-    finally:
-        T._documented_types.cache_clear()
-
-
-@pytest.mark.needs_data
-def test_a_property_folded_from_two_versions_is_left_untyped():
-    """The page prints the main table of a reflection nullable for the current platform and plain for
-    an old one; the catalog kept the plain head, the documentation check keeps the member untyped."""
-    from xbsl import docs
-
-    if not docs.available():
-        pytest.skip("the documentation database is not installed")
-    assert T.member_result("ОтражениеЭлементаПроектаСТаблицами", "ОсновнаяТаблица", None) is None
-
-
-@pytest.mark.needs_data
-def test_a_disputed_property_is_left_untyped_while_the_data_still_calls_it_plain():
-    """The entry is evidence from the editor; once the data admits the empty value it is redundant."""
-    from xbsl import dataset
-
-    for owner, member in T._DISPUTED_PROPERTIES:
-        written = (dataset.load_json("stdlib.json")["member_types"].get(owner) or {}).get(member)
-        got = T.parse_type(written)
-        assert got is not None and not got.undefined, f"{owner}.{member} is no longer plain - drop it"
-        assert T.member_result(owner, member, None) is None
+def test_the_display_names_a_structure_of_the_module_the_way_the_module_writes_it():
+    local = {"Модуль.Позиция": "Позиция"}
+    assert display(TypeSet.of("Модуль.Позиция"), local) == "Позиция"
+    assert display(TypeSet.of("Массив<Модуль.Позиция?>"), local) == "Массив<Позиция?>"
+    assert display(TypeSet.of("Другой.Позиция"), local) == "Другой.Позиция"
 
 
 # --- code/redundant-undefined-guard ------------------------------------------------------------
@@ -278,6 +177,30 @@ def test_a_name_declared_further_down_is_not_read_as_a_property(tmp_path):
 
 
 @pytest.mark.needs_data
+def test_a_parameter_of_a_project_type_is_judged_without_the_project(tmp_path):
+    """The file does not see the element, and it needs not: only the empty value of the type is judged."""
+    body = "    знч Первая = Задача ?? Неопределено\n    знч Вторая = Пустая ?? Неопределено\n"
+    found = _run(tmp_path, {"Модуль.xbsl": _module(body, "Задача: Задачи.Ссылка, Пустая: Задачи.Ссылка?")}, GUARD)
+    assert [d.line for d in found] == [2]
+
+
+@pytest.mark.needs_data
+def test_a_member_of_a_bare_type_name_is_left_to_the_project(tmp_path):
+    """A name the module does not declare may be an object of the project as well as a type of the
+    platform, and the file cannot tell which: the static member stays unjudged."""
+    body = "    знч Ключ = Ууид.Случайный() ?? Ууид.Случайный()\n"
+    assert _run(tmp_path, {"Модуль.xbsl": _module(body)}, GUARD) == []
+
+
+@pytest.mark.needs_data
+def test_an_element_of_a_typed_array_is_never_empty(tmp_path):
+    """The index of `Массив<Строка>` reads the argument of the array, the way the cast rules read it."""
+    body = '    знч Первый = Строки[0] ?? ""\n    знч Второй = Пустые[0] ?? ""\n'
+    found = _run(tmp_path, {"Модуль.xbsl": _module(body, "Строки: Массив<Строка>, Пустые: Массив<Строка?>")}, GUARD)
+    assert [d.line for d in found] == [2]
+
+
+@pytest.mark.needs_data
 def test_an_untyped_lambda_parameter_stays_unknown(tmp_path):
     body = "    знч Отобранные = Строки.Фильтровать(Э -> (Э ?? \"\") == \"а\")\n"
     assert _run(tmp_path, {"Модуль.xbsl": _module(body, "Строки: Массив<Строка>")}, GUARD) == []
@@ -366,6 +289,14 @@ def test_a_union_is_decided_only_when_all_of_it_fits(tmp_path):
 
 
 @pytest.mark.needs_data
+def test_a_generic_type_fits_its_base_with_the_same_argument(tmp_path):
+    body = ("    знч Первый = Строки это ЧитаемыйМассив<Строка>\n"
+            "    знч Второй = Строки это ЧитаемыйМассив<Число>\n")
+    found = _run(tmp_path, {"Модуль.xbsl": _module(body, "Строки: Массив<Строка>")}, CHECK)
+    assert [d.line for d in found] == [2]
+
+
+@pytest.mark.needs_data
 def test_the_predicate_form_of_a_case_reads_the_subject(tmp_path):
     body = "    выбор Номер\n        когда это Число\n            возврат\n    ;\n"
     found = _run(tmp_path, {"Модуль.xbsl": _module(body, "Номер: Число")}, CHECK)
@@ -435,6 +366,34 @@ def test_a_query_column_is_typed_by_the_fields_of_the_project(tmp_path):
     assert [d.line for d in found] == [22, 24]
 
 
+_COMPUTED_COLUMNS = """метод Проверка()
+    для Запись из Запрос{
+        ВЫБРАТЬ
+            ВЫБОР КОГДА Т.Цена > 0 ТОГДА 1 ИНАЧЕ 0 КОНЕЦ КАК Знак,
+            Т.Цена + 1 КАК Следующая
+        ИЗ Товары КАК Т
+    }.Выполнить()
+        знч Первый = Запись.Знак это Число
+        знч Второй = Запись.Следующая это Число
+    ;
+    для Итог из Запрос{
+        ВЫБРАТЬ КОЛИЧЕСТВО(*) КАК Всего, МАКСИМУМ(Т.Цена) КАК Наибольшая
+        ИЗ Товары КАК Т
+    }.Выполнить()
+        знч Третий = Итог.Всего это Число
+        знч Четвертый = Итог.Наибольшая это Число
+    ;
+;
+"""
+
+
+@pytest.mark.needs_data
+def test_a_computed_query_column_is_typed_like_the_cast_rules_type_it(tmp_path):
+    """A choice over numbers, arithmetic and a count are numbers; the maximum over no rows is Null."""
+    found = _run(tmp_path, {"Товары.yaml": _GOODS, "Отчет.xbsl": _COMPUTED_COLUMNS}, CHECK)
+    assert [d.line for d in found] == [8, 9, 15]
+
+
 @pytest.mark.needs_data
 def test_a_query_over_an_object_the_project_names_twice_is_left_alone(tmp_path):
     files = {"Товары.yaml": _GOODS, "Второе/Товары.yaml": _GOODS, "Отчет.xbsl": _QUERY_MODULE}
@@ -451,10 +410,3 @@ def test_a_batch_query_is_left_alone(tmp_path):
     module = _QUERY_MODULE.replace("        ОБЪЕДИНИТЬ ВСЕ\n", "        ;\n")
     found = _run(tmp_path, {"Товары.yaml": _GOODS, "Отчет.xbsl": module}, CHECK)
     assert found == []
-
-
-def test_the_column_reader_answers_nothing_for_an_expression_it_does_not_know():
-    """Plain data in, plain data out: the shapes travel from a worker to the reduce phase."""
-    fields = {"товары": {"цена": "Число"}}
-    assert Q.resolve([["lit", "Число"], ["lit", "Число"]], fields.get) is not None
-    assert Q.resolve([["chain", "Нет", False, ["Цена"], None]], fields.get) is None
