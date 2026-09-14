@@ -1,0 +1,16 @@
+ElementKind: InterfaceComponent
+Id: 5b1e7d2f-3c8e-4d66-8f2b-8e4c3d0a1b22
+Name: ПриложениеЗадач
+VisibilityScope: InSubsystem
+Inherits:
+    Type: StandardClientApplicationWithSections
+    NavigationPanelOrientation: Vertical
+    NavigationPanelCommandInterface:
+        Type: CommandInterfaceFragment
+        Items:
+            -
+                Type: NavigationCommand
+                Presentation: Задачи
+            -
+                Type: CommandInterfaceGroup
+                Presentation: Отчеты

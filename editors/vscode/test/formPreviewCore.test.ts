@@ -1,6 +1,8 @@
 // Tests of the form wireframe rendering (yaml -> HTML) and of the targeted property edits
 // that serve the metadata properties panel. Run with plain node (see npm test).
 
+import * as fs from "fs";
+import * as path from "path";
 import { collectComponentTypes, collectDataOffsets, collectResourceImages, nearestOffset, propertyEdit, renderFormPreview, restoredTargetUri, selectionForCursor, middleEllipsis, setFormKeyAliases, setLocalizationStrings } from "../src/formPreviewCore";
 
 let failures = 0;
@@ -775,6 +777,58 @@ const chip = renderFormPreview([
   "",
 ].join("\n"));
 check("эллипсис: полный текст в подсказке", chip.ok && chip.html.includes('title="=Объект.Размещение=='));
+
+// --- an English form draws the frame of its Russian twin ----------------------------------
+// The twin in test/fixtures/frame-twin is the engine's own translation (`xbsl translate`) of the
+// Russian form: keys, node types and the values of enumerated properties are spelled in English,
+// captions and node names stay as they were. pairs.json is cut out of the engine's `xbsl/formKeys`
+// answer for exactly the names the English files use. Compared without the node offsets, the
+// tooltips and the base type label - those show the source as written.
+
+const TWIN_DIR = path.join(process.cwd(), "test", "fixtures", "frame-twin");
+const twin = (name: string): string => fs.readFileSync(path.join(TWIN_DIR, name), "utf8");
+const TWIN_PAIRS = JSON.parse(twin("pairs.json")) as {
+  aliases: Record<string, string>;
+  types: Record<string, string>;
+  values: Record<string, Record<string, string>>;
+};
+const TWIN_RESOURCES = { "copy.svg": "data:image/svg+xml;base64,Q09QWQ==" };
+
+function frameOf(text: string): string {
+  const r = renderFormPreview(text, TWIN_RESOURCES);
+  return r.ok
+    ? r.html.replace(/ data-off="\d+"/g, "").replace(/ title="[^"]*"/g, "").replace(/<span class="form-type">[^<]*<\/span>/g, "")
+    : "";
+}
+
+setFormKeyAliases(TWIN_PAIRS.aliases, TWIN_PAIRS.types, TWIN_PAIRS.values);
+const panelRu = frameOf(twin("tasks-panel.ru.yaml"));
+const panelEn = frameOf(twin("tasks-panel.en.yaml"));
+const appRu = frameOf(twin("tasks-app.ru.yaml"));
+const appEn = frameOf(twin("tasks-app.en.yaml"));
+check("twin: both panels render", panelRu !== "" && panelEn !== "");
+check("twin: the English panel draws the frame of the Russian one", panelEn === panelRu);
+check("twin: the English application draws the frame of the Russian one", appEn !== "" && appEn === appRu);
+// What the equality stands on: each converted reading shows up in the English frame.
+check("twin: Layout Horizontal is a row", panelEn.includes("grp row"));
+check("twin: Visible False dims the node", /class="lbl off"/.test(panelEn));
+check("twin: Enabled False closes the group content, Enabled True reopens a field", (panelEn.match(/class="fld dis"/g) ?? []).length === 1 && panelEn.includes('class="fld"'));
+check("twin: VerticalScroll True scrolls", panelEn.includes("height:120px;overflow-y:auto"));
+check("twin: HorizontalStretch False hugs the content", panelEn.includes("align-self:flex-start"));
+check("twin: Kind Switch and CheckboxThreeState", panelEn.includes('class="swt on"') && panelEn.includes('class="cbox mixed"'));
+check("twin: Kind Main, severity and the icon display kind of buttons", panelEn.includes("btn primary dng-hi") && panelEn.includes("btn dng-mid") && panelEn.includes("btn link ico"));
+check("twin: the Bold flag of an AbsoluteFont", panelEn.includes("font-size:20px;font-weight:600"));
+check("twin: the widths in columns", panelEn.includes("grid-column:span 2") && panelEn.includes("width:calc(50% - 12px)") && panelEn.includes("grid-column:1 / -1"));
+check("twin: spacing and indent", panelEn.includes("gap:8px 16px") && panelEn.includes("padding-left:32px"));
+check("twin: carousel, matrix and bento", panelEn.includes("overflow-x:auto") && panelEn.includes("repeat(auto-fill,minmax(200px,1fr))") && panelEn.includes("repeat(auto-fill,minmax(160px,1fr))"));
+check("twin: a ListForm has the search bar", panelEn.includes('class="searchbar"'));
+check("twin: a UsualCommand in the content is a button", panelEn.includes(">Обновить</button>"));
+check("twin: NavigationPanelOrientation Vertical and a CommandInterfaceGroup", appEn.includes('class="app vert"') && appEn.includes("codicon-chevron-down"));
+check("twin: the image of an English form is collected", JSON.stringify(collectResourceImages(twin("tasks-panel.en.yaml"))) === JSON.stringify(["copy.svg"]));
+// Without the value pairs the keys and types alone do not make the English frame the same.
+setFormKeyAliases(TWIN_PAIRS.aliases, TWIN_PAIRS.types);
+check("twin: without the value pairs the English frame differs", frameOf(twin("tasks-panel.en.yaml")) !== panelRu);
+setFormKeyAliases({});
 
 // The summary closes the file: a check written after it would print FAIL and still exit with 0.
 if (failures > 0) {

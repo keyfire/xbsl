@@ -1,0 +1,127 @@
+ElementKind: InterfaceComponent
+Id: 4a0f6c1e-2b7d-4c55-9e1a-7d3b2c9f0a11
+Name: ПанельЗадач
+VisibilityScope: InSubsystem
+Inherits:
+    Type: ListForm<Undefined>
+    Title: Задачи недели
+    MainCommand:
+        Type: UsualCommand
+        Presentation: Сохранить
+    Content:
+        Type: Group
+        Layout: Vertical
+        VerticalItemsSpacing: Half
+        HorizontalIndent: Double
+        Content:
+            -
+                Type: StandardCard
+                DisplayKind: Banner
+                HorizontalStretch: True
+                Content:
+                    Type: Label
+                    Value: Новые задачи появляются сверху.
+                    Font:
+                        Type: AbsoluteFont
+                        Size: 20
+                        Bold: True
+            -
+                Type: Group
+                Layout: Horizontal
+                ContentHorizontalAlign: End
+                ContentVerticalAlign: Center
+                HorizontalStretch: True
+                Content:
+                    -
+                        Type: Checkbox
+                        Kind: Switch
+                        Title: Напоминать
+                        Value: True
+                    -
+                        Type: Checkbox
+                        Kind: CheckboxThreeState
+                        Title: Частично
+                        Value: Undefined
+                    -
+                        Type: Button
+                        Kind: Additional
+                        TitleDisplayKind: Icon
+                        Image: copy.svg
+                        Title: Копировать
+                    -
+                        Type: Button
+                        Kind: Main
+                        ActionSeverity: High
+                        Title: Удалить
+                    -
+                        Type: Button
+                        ActionSeverity: Medium
+                        Title: Сбросить
+            -
+                Type: Group
+                Layout: ByColumns
+                Content:
+                    -
+                        Type: Edit<String>
+                        Title: Название
+                        WidthInColumns: Double
+                    -
+                        Type: Edit<String>
+                        Title: Код
+                        WidthInColumns: Half
+                    -
+                        Type: Label
+                        Value: Во всю строку
+                        WidthInColumns: Unlimited
+            -
+                Type: Group
+                Layout: Carousel
+                HorizontalAlignInGroup: Center
+                Content:
+                    -
+                        Type: Label
+                        Value: Слайд
+            -
+                Type: Group
+                Layout: Matrix
+                Content:
+                    -
+                        Type: Label
+                        Value: Ячейка
+            -
+                Type: Group
+                Layout: Bento
+                Content:
+                    -
+                        Type: Label
+                        Value: Блок
+            -
+                Type: Group
+                Height: 120
+                VerticalScroll: True
+                Content:
+                    -
+                        Type: Label
+                        Value: Прокручиваемая область
+            -
+                Type: Label
+                Value: Не растягивается
+                HorizontalStretch: False
+            -
+                Type: Label
+                Value: Скрытая надпись
+                Visible: False
+            -
+                Type: Group
+                Enabled: False
+                Content:
+                    -
+                        Type: Edit<String>
+                        Title: Закрытое поле
+                    -
+                        Type: Edit<String>
+                        Title: Открытое поле
+                        Enabled: True
+            -
+                Type: UsualCommand
+                Presentation: Обновить

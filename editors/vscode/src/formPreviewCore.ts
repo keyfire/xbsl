@@ -25,16 +25,29 @@ let _keyAliases: Record<string, string> = {};
 
 let _typeAliases: Record<string, string> = {};
 
+// {property: {English value: the Russian value}} of the enumerated properties, from the same
+// answer. The frame compares such a value with the Russian word the schema uses, and an English
+// form writes `Horizontal` instead. The table is keyed by the property: one English word is a
+// different value in different enumerations.
+let _valueAliases: Record<string, Record<string, string>> = {};
+
 export function setFormKeyAliases(
   aliases: Record<string, string>,
   types: Record<string, string> = {},
+  values: Record<string, Record<string, string>> = {},
 ): void {
   _keyAliases = aliases ?? {};
   _typeAliases = types ?? {};
+  _valueAliases = values ?? {};
 }
 
 function canonicalKey(key: string): string {
   return _keyAliases[key] ?? key;
+}
+
+// Every spelling of a key: the Russian one and the English ones that answer to it.
+function keySpellings(key: string): string[] {
+  return [key, ...Object.keys(_keyAliases).filter((spelling) => _keyAliases[spelling] === key)];
 }
 
 // {"Dictionary.Key": text} of the project, filled from the engine (`xbsl/localizationStrings`)
@@ -114,6 +127,21 @@ function prop(map: unknown, key: string): string | undefined {
   return str(get(map, key));
 }
 
+// The value of an enumerated property in the word the schema uses: `Horizontal` of `Layout` comes
+// back as the Russian word. A value without a pair - the Russian word itself, a binding, a value of
+// a property the engine did not describe - comes back as written.
+function enumProp(map: unknown, key: string): string | undefined {
+  const value = prop(map, key);
+  return value === undefined ? undefined : _valueAliases[key]?.[value] ?? value;
+}
+
+// A property value for a tooltip: a boolean literal in the frame's own words, whichever spelling
+// the file uses, and anything else as written.
+function shownValue(map: unknown, key: string): string | undefined {
+  const literal = booleanLiteral(map, key);
+  return literal === true ? "Истина" : literal === false ? "Ложь" : prop(map, key);
+}
+
 // Component type without generic parameters: "ПолеВвода<Строка>" -> "ПолеВвода".
 function baseType(map: unknown): string | undefined {
   const t = prop(map, "Тип");
@@ -146,19 +174,19 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   // often mutually exclusive (a desktop footer and a mobile one) - and everything else is drawn
   // as is. The node stays in place either way, so the yaml and the wireframe keep one shape.
   const visibility = prop(node, "Видимость");
-  const hidden = visibility === "Ложь";
+  const hidden = booleanLiteral(node, "Видимость") === false;
   const conditional = visibility !== undefined && visibility.startsWith("=");
   // Availability is drawn the way the platform draws it - a gray fill with no border - both when
   // it is switched off outright and when it is computed: the frame cannot know which way the
   // expression goes, and a field that may be closed reads better closed.
   const availability = prop(node, "Доступность");
-  const inaccessible = _inaccessible || availability === "Ложь"
+  const inaccessible = _inaccessible || booleanLiteral(node, "Доступность") === false
     || (availability !== undefined && availability.startsWith("="));
   const tip = [
     prop(node, "Тип"),
     prop(node, "Имя"),
-    hidden ? "Видимость: Ложь" : conditional ? `Видимость: ${visibility}` : undefined,
-    availability !== undefined ? `Доступность: ${availability}` : undefined,
+    hidden || conditional ? `Видимость: ${shownValue(node, "Видимость")}` : undefined,
+    availability !== undefined ? `Доступность: ${shownValue(node, "Доступность")}` : undefined,
   ].filter(Boolean).join(" · ");
   const titleAttr = tip ? ` title="${esc(tip)}"` : "";
   const mark = (hidden ? " off" : conditional ? " cond" : "") + (inaccessible ? " dis" : "");
@@ -253,8 +281,8 @@ function growStyle(node: unknown, horizontalParent: boolean): string {
   }
   if (horizontalParent ? growV : growH) {
     parts.push("align-self:stretch");
-  } else if (prop(node, horizontalParent ? "РастягиватьПоВертикали" : "РастягиватьПоГоризонтали") === "Ложь") {
-    // An explicit Ложь opts out of the container's cross-axis stretch (.form-body stretches
+  } else if (booleanLiteral(node, horizontalParent ? "РастягиватьПоВертикали" : "РастягиватьПоГоризонтали") === false) {
+    // An explicit `False` opts out of the container's cross-axis stretch (.form-body stretches
     // its children by default), so the component hugs its content like on the platform.
     parts.push("align-self:flex-start");
   }
@@ -280,7 +308,7 @@ function numOf(node: unknown, key: string): string | undefined {
 function clipStyle(node: unknown): string {
   const parts: string[] = [];
   const axis = (scroll: string, size: string, max: string, css: string) => {
-    if (prop(node, scroll) === "Истина") {
+    if (isTrue(node, scroll)) {
       parts.push(`${css}:auto`);
     } else if (numOf(node, size) || numOf(node, max)) {
       parts.push(`${css}:hidden`);
@@ -331,7 +359,7 @@ function columnWidthStyle(node: unknown, byColumns: boolean): string {
   if (!byColumns) {
     return "";
   }
-  const value = prop(node, "ШиринаВКолонках");
+  const value = enumProp(node, "ШиринаВКолонках");
   if (value === undefined || value === "Авто") {
     return "";
   }
@@ -385,9 +413,9 @@ const ALIGN_CSS: Record<string, string> = {
 // overrides the bulk setting. The wireframe used to read the second one and apply it as the
 // first, so a group asking to sit at the end of its parent instead pushed its own content there.
 function contentAlignStyle(node: unknown): string {
-  const horizontal = prop(node, "Компоновка") === "Горизонтальная";
-  const h = prop(node, "ВыравниваниеСодержимогоПоГоризонтали");
-  const v = prop(node, "ВыравниваниеСодержимогоПоВертикали");
+  const horizontal = enumProp(node, "Компоновка") === "Горизонтальная";
+  const h = enumProp(node, "ВыравниваниеСодержимогоПоГоризонтали");
+  const v = enumProp(node, "ВыравниваниеСодержимогоПоВертикали");
   const parts: string[] = [];
   const main = horizontal ? h : v;
   const cross = horizontal ? v : h;
@@ -404,8 +432,8 @@ function contentAlignStyle(node: unknown): string {
 // flexbox (align-self); along the MAIN axis the same effect is an auto margin, which is what the
 // browser leaves for exactly this case.
 function selfAlignStyle(node: unknown, horizontalParent: boolean): string {
-  const h = prop(node, "ВыравниваниеВГруппеПоГоризонтали");
-  const v = prop(node, "ВыравниваниеВГруппеПоВертикали");
+  const h = enumProp(node, "ВыравниваниеВГруппеПоГоризонтали");
+  const v = enumProp(node, "ВыравниваниеВГруппеПоВертикали");
   const main = horizontalParent ? h : v;
   const cross = horizontalParent ? v : h;
   // Stretching WINS over the alignment: the platform says so outright ("Истина - Элемент
@@ -426,7 +454,7 @@ function selfAlignStyle(node: unknown, horizontalParent: boolean): string {
   return parts.join(";");
 }
 
-// Color {Тип: АбсолютныйЦвет, Значение: RGB(595964)} and font {Размер, Начертание/Насыщенность}.
+// Color {Type: AbsoluteColor, Value: RGB(595964)} and font {Type: AbsoluteFont, Size, Bold}.
 function textStyle(node: unknown): string {
   const parts: string[] = [];
   const rgb = prop(get(node, "Цвет"), "Значение");
@@ -439,8 +467,9 @@ function textStyle(node: unknown): string {
   if (size && /^\d+$/.test(size)) {
     parts.push(`font-size:${size}px`);
   }
-  const face = (prop(font, "Начертание") ?? "") + (prop(font, "Насыщенность") ?? "");
-  if (face.includes("Жирн")) {
+  // The weight of an `AbsoluteFont` is a flag of its own, `Bold`; the type has no face or weight
+  // property to read a word from.
+  if (isTrue(font, "Полужирный")) {
     parts.push("font-weight:600");
   }
   return parts.join(";");
@@ -472,7 +501,7 @@ const INDENT_PX: Record<string, number> = {
 };
 
 function indentOf(node: unknown, key: string): number | undefined {
-  const value = prop(node, key);
+  const value = enumProp(node, key);
   return value !== undefined && value in INDENT_PX ? INDENT_PX[value] : undefined;
 }
 
@@ -507,7 +536,7 @@ function spacingStyle(node: unknown): string {
 // Everything but the first two used to render as a plain column, which is why a row of four
 // advantages showed up as four stacked cards.
 function layoutClass(node: unknown): { cls: string; horizontal: boolean; style: string; byColumns: boolean } {
-  const layout = prop(node, "Компоновка");
+  const layout = enumProp(node, "Компоновка");
   switch (layout) {
     case "Горизонтальная":
       return { cls: "row", horizontal: true, style: "flex-wrap:nowrap", byColumns: false };
@@ -646,7 +675,7 @@ const CHECK_MARK = `<svg class="cmark" viewBox="0 0 10 8" aria-hidden="true"><pa
 // draws it unchecked. The colors are measured on a deployed form: an outline with no fill, gray
 // while off and blue while on, and the mark or the thumb takes the same color.
 function renderCheckbox(node: unknown, layout: string): string {
-  const kind = prop(node, "Вид");
+  const kind = enumProp(node, "Вид");
   const value = booleanLiteral(node, "Значение");
   if (kind === "Переключатель") {
     const caption = valueHtml(prop(node, "Заголовок"), s("switch"));
@@ -697,10 +726,11 @@ function renderComponent(node: unknown, horizontalParent: boolean, byColumnsPare
   // An override switches the state for this node AND for everything under it; the flag is
   // restored on the way out, so a sibling of an inaccessible group stays as it was.
   const availability = prop(node, "Доступность");
+  const accessible = booleanLiteral(node, "Доступность");
   const outerInaccessible = _inaccessible;
-  if (availability === "Ложь" || (availability !== undefined && availability.startsWith("="))) {
+  if (accessible === false || (availability !== undefined && availability.startsWith("="))) {
     _inaccessible = true;
-  } else if (availability === "Истина") {
+  } else if (accessible === true) {
     _inaccessible = false;
   }
   try {
@@ -726,7 +756,7 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
     case "Группа":
       return renderGroup(node, "grp", boxed);
     case "СтандартнаяКарточка": {
-      const banner = prop(node, "ВидОтображения") === "Баннер";
+      const banner = enumProp(node, "ВидОтображения") === "Баннер";
       return renderGroup(node, banner ? "card banner" : "card", boxed);
     }
     case "Надпись": {
@@ -769,10 +799,10 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
     case "КнопкаФормы":
     case "ОбычнаяКоманда":
     case "НавигационнаяКоманда": {
-      const kind = prop(node, "Вид");
+      const kind = enumProp(node, "Вид");
       let cls = kind === "Основная" ? "btn primary" : kind === "Дополнительная" ? "btn link" : "btn";
       // The platform tints dangerous actions; the wireframe follows with red and amber.
-      const danger = prop(node, "ОпасностьДействия");
+      const danger = enumProp(node, "ОпасностьДействия");
       if (danger === "Высокая") {
         cls += " dng-hi";
       } else if (danger === "Средняя") {
@@ -784,7 +814,7 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
       const image = prop(node, "Изображение");
       const src = image ? _resources[image] : undefined;
       const icon = image ? (src ? `<img class="bico" src="${esc(src)}" alt="">` : `<span class="bico-ph">🖼</span>`) : undefined;
-      const head = prop(node, "ВидОтображенияЗаголовка");
+      const head = enumProp(node, "ВидОтображенияЗаголовка");
       let inner: string;
       if (head === "Иконка" && icon) {
         cls += " ico";
@@ -1046,7 +1076,7 @@ function renderNavPanel(inherit: unknown): string {
   const logoName = prop(theme, "Логотип");
   const logoSrc = logoName ? _resources[logoName] : undefined;
   const logo = logoSrc ? `<img class="applogo" src="${esc(logoSrc)}" alt="">` : "";
-  const vertical = prop(inherit, "ОриентацияПанелиНавигации") === "Вертикальная";
+  const vertical = enumProp(inherit, "ОриентацияПанелиНавигации") === "Вертикальная";
   const bar = `<div class="navbar${vertical ? " vert" : ""}">${logo}${items.join("")}</div>`;
   const body = `<div class="appbody"></div>`;
   return `<div class="app${vertical ? " vert" : ""}">${bar}${body}</div>`;
@@ -1085,7 +1115,7 @@ export function renderFormPreview(
     `<span class="form-type">${esc(baseTypeName)}</span>${renderHeaderCommands(inherit)}</div>`;
   // A list form gets its chrome from the platform, not from the yaml: the search bar above
   // the list is drawn so the wireframe reads like the page the user will see.
-  const searchBar = baseTypeName.startsWith("ФормаСписка")
+  const searchBar = baseType(inherit) === "ФормаСписка"
     ? `<div class="searchbar"><span class="codicon codicon-search"></span>${esc(s("search"))}</div>`
     : "";
   const body =
@@ -1105,11 +1135,15 @@ export function renderFormPreview(
 // an image extension, not a binding (=...) and not a URL. The host resolves these against the
 // project's Ресурсы directories and passes them to renderFormPreview as data URIs (so the
 // wireframe shows the real image instead of the placeholder glyph).
-const RESOURCE_IMAGE_RE = /Изображение:\s*([^\s="][^\s"]*\.(?:svg|png|jpe?g|gif|webp))\b/gi;
+// The key is matched in each of its spellings: an English form writes `Image: info.svg`.
+function resourceImageRe(): RegExp {
+  const keys = keySpellings("Изображение").map((key) => key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(`(?:${keys.join("|")}):\\s*([^\\s="][^\\s"]*\\.(?:svg|png|jpe?g|gif|webp))\\b`, "gi");
+}
 
 export function collectResourceImages(text: string): string[] {
   const seen = new Set<string>();
-  for (const m of text.matchAll(RESOURCE_IMAGE_RE)) {
+  for (const m of text.matchAll(resourceImageRe())) {
     if (!m[1].includes("://")) {
       seen.add(m[1]);
     }

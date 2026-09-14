@@ -1428,11 +1428,20 @@ def _make_server() -> "LanguageServer":
         # empty frame. The pairs come from the platform dictionary, never from a guess.
         from xbsl import formmodel, uischema
 
-        # Three maps: the structure keys, the component types and the component PROPERTIES -
-        # a frame reads `Значение`, `Заголовок`, `Компоновка` as much as `Содержимое`.
-        aliases = dict(uischema.property_aliases())
+        # The keys: the members of an inline value object (`Size` of a font), the component
+        # PROPERTIES - a frame reads `Value`, `Title`, `Layout` as much as `Content` - and the
+        # structure keys, each later table winning over the one before.
+        aliases = dict(uischema.literal_member_aliases())
+        aliases.update(uischema.property_aliases())
         aliases.update(formmodel.key_aliases())  # the structure keys win: they are exact
-        return {"aliases": aliases, "types": uischema.component_aliases()}
+        # The types go beyond the palette (a button's `UsualCommand`), and the values of the
+        # enumerated properties travel in a field of their own, keyed by the property: the same
+        # English word is a different value in different enumerations.
+        return {
+            "aliases": aliases,
+            "types": uischema.type_aliases(),
+            "values": uischema.value_aliases(),
+        }
 
     @server.feature("xbsl/metaKeys")
     def _meta_keys(params: object = None) -> dict:

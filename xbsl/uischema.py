@@ -51,6 +51,13 @@ _LATIN_NAME_RE = re.compile(r"[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*")
 #: A bound value: the metamodel declares `DataBinding<Boolean>` where yaml writes a Булево block.
 _BINDING_RE = re.compile(r"^DataBinding<(.+)>$")
 
+#: Value types a form spells out as a node of their own inside a component property -
+#: `Шрифт: {Тип: АбсолютныйШрифт, Размер: 14}` - and whose node the compiler demands literally.
+#: Which types behave so cannot be derived from the data (see the `yaml/no-expression-in-literal`
+#: rule in rules/component_values.py, the first reader of this list): extend only with types
+#: shown to behave the same.
+LITERAL_VALUE_TYPES = ("АбсолютныйШрифт", "АбсолютныйЦвет")
+
 
 def available(version: str | None = None) -> bool:
     """Whether the ui schema has been generated for the data version."""
@@ -375,9 +382,88 @@ def enum_value_english(prop: str, value: str) -> str | None:
     return _property_value_aliases().get(canonical_property(prop), {}).get(value)
 
 
+# --- pairs for surfaces outside python (the form designer of the editor) -------------------
+
+
+@lru_cache(maxsize=1)
+def _value_aliases() -> dict[str, dict[str, str]]:
+    table: dict[str, dict[str, str]] = {}
+    for prop, pairs in _property_value_aliases().items():
+        claimed: dict[str, set[str]] = {}
+        for russian, english in pairs.items():
+            claimed.setdefault(english, set()).add(russian)
+        resolved = {english: next(iter(names)) for english, names in claimed.items() if len(names) == 1}
+        if resolved:
+            table[prop] = resolved
+    return table
+
+
+def value_aliases() -> dict[str, dict[str, str]]:
+    """{property: {English value: the value the schema uses}} - for surfaces outside python.
+
+    The form designer of the editor reads the yaml itself and compares an enumerated property
+    with the schema's own word (`Компоновка: Горизонтальная`), while an English form writes
+    `Layout: Horizontal`. Keyed by the property, as the table it inverts: one English word stands
+    for different values in different enumerations. An English value that two values of one
+    property share is dropped rather than guessed.
+    """
+    return {prop: dict(pairs) for prop, pairs in _value_aliases().items()}
+
+
+@lru_cache(maxsize=1)
+def _type_aliases() -> dict[str, str]:
+    out = dict(_english_components())
+    claimed: dict[str, set[str]] = {}
+    for english in metamodel.class_names():
+        russian = terms.russian(english, "types")
+        if russian and english.isascii() and english not in out:
+            claimed.setdefault(english, set()).add(russian)
+    out.update({english: next(iter(names)) for english, names in claimed.items() if len(names) == 1})
+    return out
+
+
+def type_aliases() -> dict[str, str]:
+    """{English type name: the name the schema uses} of the palette and of the metamodel classes.
+
+    component_aliases() covers the palette, and a form node names more than the palette carries:
+    the command of a button (`UsualCommand`), a group of a navigation panel. Those are classes
+    of the metamodel - what a yaml node can be - and the term dictionary names them in Russian.
+    The palette pairs come first; a class is added under its English name unless that name is a
+    palette one already. The rest of the type catalog stays out: nothing in it is written as the
+    type of a form node, and it would more than double the answer.
+    """
+    return dict(_type_aliases())
+
+
+@lru_cache(maxsize=1)
+def _literal_member_aliases() -> dict[str, str]:
+    claimed: dict[str, set[str]] = {}
+    for owner in LITERAL_VALUE_TYPES:
+        record = _outside_component(owner) or {}
+        for member in record.get("props") or {}:
+            english = terms.member_english_of(owner, member) or terms.common_english(member)
+            if english and english.isascii():
+                claimed.setdefault(english, set()).add(member)
+    return {english: next(iter(names)) for english, names in claimed.items() if len(names) == 1}
+
+
+def literal_member_aliases() -> dict[str, str]:
+    """{English member: the Russian member} of the value types a form writes inline.
+
+    `Шрифт: {Тип: АбсолютныйШрифт, Размер: 14, Полужирный: Истина}` is `Font: {Type: AbsoluteFont,
+    Size: 14, Bold: True}` in an English form. These keys are members of a type, not properties of
+    a component, so property_aliases() does not carry them; the pairs come from the member tables
+    of the distribution (LITERAL_VALUE_TYPES names the types).
+    """
+    return dict(_literal_member_aliases())
+
+
 def _reset() -> None:
     _ui_terms.cache_clear()
     _property_value_aliases.cache_clear()
+    _value_aliases.cache_clear()
+    _type_aliases.cache_clear()
+    _literal_member_aliases.cache_clear()
     _outside_component.cache_clear()
     _outside_names.cache_clear()
     _english_components.cache_clear()
