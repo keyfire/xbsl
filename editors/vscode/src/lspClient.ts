@@ -13,7 +13,7 @@ import {
 import { baselineForLint } from "./excludeAction";
 import { ciJobArgs, ciSettings } from "./report";
 import { pipInstallCommand, runInstallTask } from "./installer";
-import { lspDocumentSelector } from "./lspDocumentsCore";
+import { DocumentFilterShape, lspDocumentSelector } from "./lspDocumentsCore";
 import { needsServerRestart } from "./lspRestartCore";
 import { applyOverride, engineRuleArgs } from "./ruleConfig";
 import { docCode } from "./ruleDocs";
@@ -72,6 +72,20 @@ export async function lspRequest<T>(method: string, params: unknown): Promise<T 
 interface SpawnPlan {
   command: string;
   args: string[];
+}
+
+// The document selector in the form the language client takes. A glob anchored at a directory
+// becomes vscode.RelativePattern. The protocol types a filter pattern as a string, but
+// vscode-languageclient 9 passes the pattern to vscode.languages.match unchanged, and VS Code
+// compares the base of a RelativePattern with a document path without regard to case except on
+// Linux (see lspDocumentsCore.ts; the test of that core holds the client to major version 9).
+export function languageClientSelector(filters: DocumentFilterShape[]): LanguageClientOptions["documentSelector"] {
+  const selector = filters.map((filter) =>
+    typeof filter.pattern === "object"
+      ? { language: filter.language, pattern: new vscode.RelativePattern(filter.pattern.base, filter.pattern.pattern) }
+      : filter
+  );
+  return selector as unknown as LanguageClientOptions["documentSelector"];
 }
 
 // What to launch the server with: the explicit command from the setting, otherwise the
@@ -144,8 +158,9 @@ function buildClient(output: vscode.OutputChannel): { client: LanguageClient; pl
   };
   const clientOptions: LanguageClientOptions = {
     // yaml is limited to the sources root so unrelated repository yamls are not linted - all
-    // but the translation dictionary next to the project (see lspDocumentsCore).
-    documentSelector: lspDocumentSelector(projectRoot),
+    // but the translation dictionary next to the project (see lspDocumentsCore). A relative root
+    // is taken below the first workspace folder, as the server takes it.
+    documentSelector: languageClientSelector(lspDocumentSelector(projectRoot, folder?.uri.fsPath)),
     outputChannel: output,
     diagnosticCollectionName: "xbsl-lsp",
     middleware: {

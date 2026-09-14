@@ -13,20 +13,32 @@
 // file of the dictionary that serves the root (in_project_scope in xbsl/lsp.py), and its
 // whole-project pass runs the file rules over that dictionary as well.
 //
-// The pattern of the root is built from the path the setting names, not pasted from it. VS Code
-// matches a string pattern against the fsPath of the document, case-sensitively, and that fsPath
-// carries the drive letter in LOWER case (d:\projects\tasks). A root written the way Explorer
-// copies it, `D:\Projects\tasks`, became `**/D:\Projects\tasks/**/*.yaml` and matched no file at
-// all, and so did `./src/app` and a root ending in a separator: the server understood each of them,
-// but no yaml of the project reached it. So the drive letter is dropped, `.` steps vanish, `..`
-// takes the step before it, and the directory names are joined with `/`, which the glob matches
-// against either separator. What is left marks the root wherever it lies; a same-named directory
+// The yaml of a narrowed root is selected by a pattern anchored at the root directory, the way the
+// server resolves `--project-root`: an absolute root as it is, a relative one below the workspace
+// folder. lspClient.ts turns it into vscode.RelativePattern, and VS Code compares the base of such a
+// pattern with the path of a document the way it compares paths everywhere - without regard to case
+// except on Linux. A root typed as `d:\projects\TASKS` therefore selects the yaml of
+// `D:\Projects\Tasks`, which the server takes for the same directory. A string pattern cannot do
+// that: VS Code matches it case-sensitively, against a path with the drive letter in lower case.
+//
+// A relative root with no workspace folder has no directory to anchor at, and keeps a string
+// pattern built from its directory names (rootYamlPattern): the drive letter is dropped, `.` steps
+// vanish, `..` takes the step before it, and the names are joined with `/`, which the glob matches
+// against either separator. That pattern marks the root wherever it lies; a same-named directory
 // elsewhere is turned away by the server, as a copy of the sources under the same relative path is.
 
-// A document filter of the language client: the shape vscode-languageclient takes as is.
+import * as path from "path";
+
+// A glob anchored at a directory, in a shape the core builds without the vscode module.
+export interface BasePattern {
+  base: string;
+  pattern: string;
+}
+
+// A document filter of the language client.
 export interface DocumentFilterShape {
   language: string;
-  pattern?: string;
+  pattern?: string | BasePattern;
 }
 
 // The two forms of the dictionary the engine discovers: a directory of yaml files at any depth,
@@ -70,11 +82,26 @@ export function rootYamlPattern(projectRoot: string): string {
   return `**/${segments.map(literal).join("/")}/**/*.yaml`;
 }
 
-export function lspDocumentSelector(projectRoot: string): DocumentFilterShape[] {
+// The directory a narrowed root names: below the workspace folder when the root is relative, as
+// the server resolves it. Undefined without a root, and for a relative root with no folder open.
+export function rootBase(projectRoot: string, folder?: string): string | undefined {
+  const root = projectRoot.trim();
+  if (!root) {
+    return undefined;
+  }
+  if (folder) {
+    return path.resolve(folder, root);
+  }
+  return path.isAbsolute(root) ? path.resolve(root) : undefined;
+}
+
+// `folder` is the first workspace folder, the one the server resolves a relative root against.
+export function lspDocumentSelector(projectRoot: string, folder?: string): DocumentFilterShape[] {
   // xbql is the standalone query of a virtual table: the server serves it for completion (the
   // whole file is one query) and publishes no diagnostics for it.
   const selector: DocumentFilterShape[] = [{ language: "xbsl" }, { language: "xbql" }];
-  const pattern = rootYamlPattern(projectRoot);
+  const base = rootBase(projectRoot, folder);
+  const pattern = base !== undefined ? { base, pattern: ALL_YAML } : rootYamlPattern(projectRoot);
   selector.push({ language: "yaml", pattern });
   if (pattern === ALL_YAML) {
     // The whole folder is the project, and the dictionary is simply one more yaml in it.
