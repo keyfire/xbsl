@@ -21,7 +21,6 @@ from collections.abc import Iterable
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
-from xbsl.lexer import tokens
 from xbsl.rules._syntax import code_tokens
 
 MESSAGES = {
@@ -54,10 +53,6 @@ MESSAGES = {
         "ru": "Не закрыт блок '{word}' – ожидается ';'.",
         "en": "Unclosed block '{word}' – ';' expected.",
     },
-    "code/ternary-and-or.title": {
-        "ru": "Составное условие тернарного оператора без скобок",
-        "en": "Compound ternary condition without parentheses",
-    },
     "code/query-in-loop.title": {
         "ru": "Запрос внутри цикла",
         "en": "A query inside a loop",
@@ -69,14 +64,6 @@ MESSAGES = {
         "en": "A query inside a '{word}' loop (line {line}): every turn is a round trip of its "
               "own to the database. Collect the values of the turns into an array and run one "
               "query with an 'IN (%Values)' condition.",
-    },
-    "code/ternary-and-or.compound": {
-        "ru": "Условие тернарного оператора с '{word}' без скобок: "
-              "'А {word} Б ? X : Y' парсится как 'А {word} (Б ? X : Y)'. "
-              "Взять условие в скобки: '((А {word} Б) ? X : Y)'.",
-        "en": "Ternary operator condition with '{word}' without parentheses: "
-              "'A {word} B ? X : Y' parses as 'A {word} (B ? X : Y)'. "
-              "Wrap the condition in parentheses: '((A {word} B) ? X : Y)'.",
     },
 }
 i18n.register(MESSAGES)
@@ -217,66 +204,3 @@ def query_in_loop(source: SourceFile) -> Iterable[Diagnostic]:
         return []
     _compute(source)
     return source.cache.get("loop_queries") or []
-
-
-def _new_frame(line: int | None) -> dict:
-    # and_or – position of the last 'и'/'или' at this depth level (before '?'),
-    # pending – position of the '?' seen after and_or (waiting for ':' to confirm a ternary)
-    return {"and_or": None, "pending": None, "line": line}
-
-
-@rule(
-    "code/ternary-and-or",
-    "code/ternary-and-or.title",
-    "C",
-    severity=Severity.ERROR,
-)
-def ternary_compound_condition(source: SourceFile) -> Iterable[Diagnostic]:
-    """The ternary '?:' binds tighter than 'и'/'или': 'A и B ? X : Y' == 'A и (B ? X : Y)'.
-
-    The Element compiler fails with "Incompatible types of logical operator operands" /
-    "Булево cannot be assigned to ...". We catch it by tokens: at the same bracket depth
-    level 'и'/'или' appear, then '?', then ':' – the condition is not parenthesized.
-    Correct: '((A и B) ? X : Y)' – there 'и' sits deeper and the sequence does not match.
-    """
-    if source.kind != "xbsl":
-        return []
-    diags: list[Diagnostic] = []
-    frames: list[dict] = [_new_frame(None)]
-
-    for t in tokens(source):
-        if t.kind == "COMMENT":
-            continue
-        if t.kind == "EOF":
-            break
-        top = frames[-1]
-        # Outside brackets an expression lives on one line – a new line resets the state.
-        if len(frames) == 1 and top["line"] != t.line:
-            frames[0] = top = _new_frame(t.line)
-
-        if t.kind == "KEYWORD" and t.canonical in ("AND", "OR"):
-            if top["pending"] is None:
-                top["and_or"] = (t.line, t.col, t.value)
-        elif t.kind == "OP":
-            v = t.value
-            if v in _OPEN_CH:
-                frames.append(_new_frame(t.line))
-            elif v in _CLOSE_CH:
-                if len(frames) > 1:
-                    frames.pop()
-            elif v == "?":
-                if top["and_or"] is not None and top["pending"] is None:
-                    top["pending"] = (t.line, t.col)
-            elif v == ":":
-                if top["pending"] is not None:
-                    line, col = top["pending"]
-                    _, _, word = top["and_or"]
-                    diags.append(Diagnostic(
-                        source.rel, line, col, "code/ternary-and-or", Severity.ERROR,
-                        i18n.t("code/ternary-and-or.compound", word=word),
-                    ))
-                frames[-1] = _new_frame(top["line"])
-            elif v in (",", ";", "="):
-                frames[-1] = _new_frame(top["line"])
-
-    return diags

@@ -1404,11 +1404,7 @@ class _Parser:
 
     def log_fact(self) -> Expr:
         # rulelogFact: [не] logPrimary [это [не] Тип | как Тип]
-        if self.at_kw("NOT"):
-            op = self.advance()
-            operand = self.log_fact()
-            return Unary(op.start, operand.end, op.value, operand)
-        left = self.log_primary()
+        left = self.log_negation()
         while self.at_kw("IS", "AS"):
             kw = self.advance()
             if kw.canonical == "IS":
@@ -1433,6 +1429,23 @@ class _Parser:
                 t = self.compound_type()
                 left = AsType(left.start, self.toks[self.pos - 1].end, left, t)
         return left
+
+    def log_negation(self) -> Expr:
+        """`[не] logPrimary` - the head of rulelogFact.
+
+        The grammar gives `не` the PRIMARY alone and puts `это`/`как` after the negation, so
+        `не Значение это Строка` is `(не Значение) это Строка`: the platform refuses it with a type
+        error on the operand of `не` unless the value is a boolean, and `не Флаг это Булево` is a
+        check whose result is known in advance. A comparison stays under the negation
+        (`не Количество > 0` is `не (Количество > 0)` - a comparison is part of the primary), while
+        `и`/`или` lie beyond it. A second `не` in a row is a syntax error for the platform; the
+        parser reads it permissively, as the negation of a negation.
+        """
+        if self.at_kw("NOT"):
+            op = self.advance()
+            operand = self.log_negation()
+            return Unary(op.start, operand.end, op.value, operand)
+        return self.log_primary()
 
     def log_primary(self) -> Expr:
         # rulelogPrimary: chained comparisons a < b <= c
