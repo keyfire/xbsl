@@ -8,6 +8,12 @@ name inside strings), nor in comments. The mention search counts raw word tokens
 FULL text of every project file, so a name inside a string or a comment also counts as a
 use – deliberately conservative: better silence than a false positive.
 
+The translation dictionary is not a project file in that sense, wherever it lies. It names
+every method it translates - in its keys, in its comments, in the phrases that keep a name as
+it is - so its words would keep every method alive: a run over the folder holding the project
+and its dictionary reported nothing, while a run over the project alone reported the dead
+methods. Its files contribute no mentions.
+
 Guards (such methods are never reported):
 
 - a method with an annotation that means a call from OUTSIDE the project code: the
@@ -50,6 +56,7 @@ from xbsl import dataset, i18n, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.rules._syntax import annotations_before, code_tokens
+from xbsl.rules.yaml_schema import is_translation_dictionary
 
 MESSAGES = {
     "code/unused-method.title": {
@@ -124,7 +131,10 @@ def _pair_stem(rel: str) -> str:
 def _unused_mapper(source: SourceFile) -> dict | None:
     """The map phase. Every file contributes its word-mention counter slice; a yaml also
     flags an HTTP service pair, a module also lists its unannotated method declarations
-    (positions included). The mention counting joins in the reduce."""
+    (positions included). The mention counting joins in the reduce. A translation dictionary
+    contributes nothing: it names every method without using any."""
+    if source.kind == "yaml" and is_translation_dictionary(source):
+        return None
     fact: dict = {"k": source.kind, "stem": _pair_stem(source.rel)}
     # Every word-like token of every file (code, yaml, strings, comments) is a mention.
     fact["mentions"] = dict(Counter(_WORD_RE.findall(source.text)))

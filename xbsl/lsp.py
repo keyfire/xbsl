@@ -397,10 +397,9 @@ def dictionary_sources(root: Path) -> list[Path]:
     panel after the first pass, and a save refreshes them the way it refreshes the project's yaml.
 
     The project rules do not get them. A project rule that needs the dictionary reads it from disk
-    (`conventions/missing-translation` does), and as a source the dictionary would change the
-    verdict on the project: `code/unused-method` counts every word of every source as a mention,
-    and the dictionary names every method, so the rule would fall silent the way it does in a lint
-    run over the repository.
+    (`conventions/missing-translation` does), and the rules that judge the project by the words of
+    its sources leave a dictionary out on their own - it names every method and element without
+    using any (`code/unused-method` among them) - so the pass would gain nothing from it.
 
     A dictionary inside the root is already among the project sources and is not added twice;
     there it reaches the project rules, as it does in the CLI.
