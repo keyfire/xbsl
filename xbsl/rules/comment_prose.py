@@ -32,6 +32,13 @@ The three read the same comment lines (`_comments.lines`), skip what stands insi
 or backticks (a quoted label or a cited identifier is data, not the author's voice), and
 are OFF by default: on a code base that never adopted the convention they fire in bulk,
 and a project that did turns the group on with `--enable comment` in its CI.
+
+A translated comment has an English half, and `comment/first-person` reads it too. A project
+that translates its sources keeps the English line of every comment as a `phrases` value of
+its `xbsl-translation` dictionary, and the translated tree takes its comments from there: "we
+build it from the name" is the same author speaking as "we" that the Russian check reports.
+Only that section is read - a `literals` value is a string of the code, often a text the user
+reads ("I accept the terms"), and `tokens` and `terms` hold names.
 """
 
 from __future__ import annotations
@@ -43,6 +50,8 @@ from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.rules import _comments
+from xbsl.rules.translation_values import _entries, _is_dictionary_file, _position
+from xbsl.rules.yaml_schema import _composed
 
 MESSAGES = {
     "comment/subjunctive.title": {
@@ -84,6 +93,14 @@ MESSAGES = {
         "en": "The first-person plural verb \"{word}\" (we do) in a comment - a comment is "
               "impersonal: write that something is checked, or that the code checks it, not "
               "that we check it.",
+    },
+    "comment/first-person.english": {
+        "ru": "Первое лицо \"{word}\" в английской строке комментария (значение словаря "
+              "перевода) – комментарий безличен на любом языке: действует код, модуль или "
+              "объект, а не автор.",
+        "en": "The first person \"{word}\" in the English line of a comment (a value of the "
+              "translation dictionary) - a comment is impersonal in any language: the code, the "
+              "module or the object acts, not the author.",
     },
     "comment/first-person.off": {
         "ru": "соглашение ПРОЕКТА о слоге комментариев, а не платформы: на чужом коде "
@@ -346,7 +363,11 @@ def _verb_hit(word: str) -> bool:
     severity=Severity.WARNING, enabled_by_default=False, off_reason="comment/first-person.off",
 )
 def first_person(source: SourceFile) -> Iterable[Diagnostic]:
-    """The author speaking as "we" in a comment: a pronoun or a first-person plural verb."""
+    """The author speaking as "we" in a comment: a pronoun or a first-person plural verb.
+
+    In a translation dictionary the English lines of the comments are read as well
+    (`_english_first_person`).
+    """
     for cl in _comments.lines(source):
         text = _prose(cl.text)
         for m in _WORD.finditer(text):
@@ -360,6 +381,92 @@ def first_person(source: SourceFile) -> Iterable[Diagnostic]:
             yield Diagnostic(
                 source.rel, cl.line, cl.column + m.start(), "comment/first-person",
                 Severity.WARNING, i18n.t(key, word=m.group(1)),
+            )
+    yield from _english_first_person(source)
+
+
+# --- comment/first-person: the English line of a translated comment ------------------------
+
+#: The English first person, both numbers: a pronoun, a possessive, a reflexive and the
+#: imperative "let's". A verb needs no list - an English verb carries its pronoun. A word glued
+#: to a slash, a dot, a hyphen or a backslash is a path, a file or a code (`en-us`, `I/O`).
+_ENGLISH_PERSON = re.compile(
+    r"(?<![\w'./\\-])(we|us|our|ours|ourselves|i|me|my|mine|myself|let's)(?![\w/\\-])",
+    re.IGNORECASE,
+)
+
+#: A word right before a capital "I" that makes the letter a name or a numeral: "the letter I",
+#: "part I", "type I".
+_I_AS_NAME_AFTER = frozenset("""
+    a an the letter letters part phase type stage level class grade chapter section volume tier
+""".split())
+
+#: The box-drawing characters of a separator line: a heading drawn with them names a section
+#: rather than opening a sentence ("── My details ──" repeats the caption of a panel).
+_RULE_CHARS = frozenset("─━═")
+
+_LATIN_LETTER = re.compile(r"[A-Za-z]")
+_LATIN_WORDS = re.compile(r"[A-Za-z]+")
+
+
+def _opens_english_sentence(text: str, at: int, key: str) -> bool:
+    """Whether a capitalized word at `at` of an English comment line opens a sentence.
+
+    A capital that does not open one marks a name - a caption of the interface cited without
+    quotes ("on the right - My data"), a page title ("Contact Us"). At the start of the value
+    the Russian key decides: a line that goes on from the line above starts with a small
+    letter there, and so does its translation.
+    """
+    head = text[:at]
+    cut = max(head.rfind("."), head.rfind("!"), head.rfind("?"))
+    if _LATIN_LETTER.search(head[cut + 1:]):
+        return False
+    if cut >= 0:
+        return True
+    if any(ch in _RULE_CHARS for ch in head):
+        return False
+    first = next((ch for ch in key if ch.isalpha()), "")
+    return not first or first.isupper()
+
+
+def _english_person_hit(text: str, m: re.Match, key: str) -> bool:
+    """Whether a match of `_ENGLISH_PERSON` is the author speaking in the first person."""
+    word = m.group(1)
+    if word.lower() == "i":
+        if word != "I":
+            return False  # a loop variable or an index
+        before = _LATIN_WORDS.findall(text[:m.start()])
+        if before and before[-1].lower() in _I_AS_NAME_AFTER:
+            return False
+        return text[m.end():m.end() + 1] not in (".", ")")
+    if len(word) > 1 and word.isupper():
+        return word != "US"  # the country; a pronoun in capitals is still the first person
+    if word[0].isupper():
+        return _opens_english_sentence(text, m.start(), key)
+    return True
+
+
+def _english_first_person(source: SourceFile) -> Iterable[Diagnostic]:
+    """The first person in the `phrases` values of a translation dictionary file."""
+    if source.kind != "yaml" or "phrases:" not in source.text:
+        return
+    if not _is_dictionary_file(source.path):
+        return
+    root = _composed(source)
+    if root is None:
+        return
+    for section, key_node, value_node in _entries(root):
+        if section != "phrases" or not value_node.value:
+            continue
+        text = _prose(value_node.value)
+        for m in _ENGLISH_PERSON.finditer(text):
+            if not _english_person_hit(text, m, key_node.value):
+                continue
+            word = m.group(1)
+            line, column = _position(source, value_node, word, m.start(), True)
+            yield Diagnostic(
+                source.rel, line, column, "comment/first-person", Severity.WARNING,
+                i18n.t("comment/first-person.english", word=word),
             )
 
 
