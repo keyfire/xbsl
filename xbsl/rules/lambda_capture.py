@@ -10,12 +10,13 @@ each binding with the body that owns it - the method itself or a lambda at some 
 is an assignment (`=`, `+=`, `-=`, `*=`, `/=`) whose target is a bare name bound by an
 enclosing body, in the short form (`() -> Счётчик += 1`) and the full one (`метод() -> ... ;`),
 however deep in the blocks of the lambda, and a parenthesized name alike. Which bindings count
-was settled by the editor's own language server on a probe project of its own:
+was settled by the language server of the platform IDE on probe projects written for this rule:
 
 - captured and reported: a `пер` variable and a parameter of the method, and - for a lambda
   inside a lambda - a `пер` variable or a parameter of the outer lambda;
-- not this rule's case: a `знч` variable, the variable of a `для` loop and of `поймать` are
-  read-only wherever they are assigned, and the compiler says so in a message of its own;
+- not this rule's case: a `знч` or `исп` variable and the variable of a `для` loop or of
+  `поймать` are read-only wherever they are assigned, and the compiler says so in a message of
+  its own;
 - a lambda parameter named like a local of the code around it is refused, and the name keeps
   meaning the outer variable - so an assignment to it inside the body is reported. A variable
   declared again inside the body (refused as well) takes the name over, and a loop of the body
