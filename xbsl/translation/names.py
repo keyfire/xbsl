@@ -20,12 +20,14 @@ attributes and their kin - the platform declares them, the sources only mention 
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
 from xbsl import metamodel
 from xbsl.lexer import tokens
 from xbsl.engine import SourceFile
+from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
 
 #: `Имя:` / `Name:` of a yaml node, any nesting (a list item dash counts as indent).
 _NAME_LINE_RE = re.compile(
@@ -290,6 +292,102 @@ def collect_structure_fields(root: Path, loader) -> dict[str, str]:
         field: next(iter(group)) if len(group) == 1 else ""
         for field, group in owners.items()
     }
+
+
+#: The element kinds whose OBJECT module works on the record: the attributes and the tabular
+#: sections of the element are bare names in every method of that module.
+_RECORD_KINDS = frozenset(("Справочник", "Документ", "Обработка"))
+_RECORD_SECTIONS = ("Реквизиты", "ТабличныеЧасти")
+_COMPONENT_KIND = "КомпонентИнтерфейса"
+_STRUCTURE_KIND = "Структура"
+#: The tail of an object module, in both spellings the platform accepts
+#: (`Задачи.Объект.xbsl`, `Tasks.Object.xbsl`); either pairs with the yaml of the element.
+_OBJECT_MODULE_TAILS = (".Объект", ".Object")
+
+
+@dataclass(frozen=True)
+class ModuleOwner:
+    """The names the element of a module puts in scope of that module's methods.
+
+    A method of an interface component works on the component, and its own properties are bare
+    names there; so are the attributes and the tabular sections of the record in the object
+    module of a catalog, a document or a processing, and the fields in the module of a
+    structure element. Such a name may be spelled like a platform type, and then `Имя.Член`
+    reads the property, not the type - the translator has to know that, or the uses of the
+    property take the type's spelling while its declaration takes the dictionary's.
+
+    Only the names the PROJECT declares are here: an inherited property is a platform word and
+    reads the same either way. Two methods see less. A static method has no instance at all, and
+    a method a component compiles on the server alone works on the CONTEXT of the component,
+    which holds only the properties marked contextual - `contextual` lists those, and stays None
+    for an owner that is not a component.
+    """
+
+    names: frozenset[str] = frozenset()
+    contextual: frozenset[str] | None = None
+
+    def visible(self, *, static: bool, server_only: bool) -> frozenset[str]:
+        """The names a method of the module sees: none for a static one, fewer on the server."""
+        if static:
+            return frozenset()
+        if server_only and self.contextual is not None:
+            return self.contextual
+        return self.names
+
+
+def _item_names(data: dict, section: str, kind: str) -> list[tuple[str, dict]]:
+    """(name, item) of every named item of a yaml list section."""
+    items = value_of(data, section, kind)
+    if not isinstance(items, list):
+        return []
+    out: list[tuple[str, dict]] = []
+    for item in items:
+        name = value_of(item, "Имя") if isinstance(item, dict) else None
+        if isinstance(name, str) and name:
+            out.append((name, item))
+    return out
+
+
+def _is_true(value: object) -> bool:
+    """A yaml flag written either way: the Russian spelling of `True` loads as a string."""
+    return value is True or value in ("Истина", "True", "true")
+
+
+def module_owner(path: Path, loader) -> ModuleOwner:
+    """The owner of the module at `path`, read off the yaml it pairs with; empty when none.
+
+    `Имя.xbsl` pairs with `Имя.yaml` and speaks for an interface component or a structure
+    element; `Имя.Объект.xbsl` pairs with the same yaml and speaks for the record of a catalog,
+    a document or a processing. Any other module - a common module, the manager module of a
+    catalog - has no instance to work on, and its owner is empty.
+    """
+    stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else ""
+    if not stem:
+        return ModuleOwner()
+    facet = next((tail for tail in _OBJECT_MODULE_TAILS if stem.endswith(tail)), "")
+    pair = path.with_name(f"{stem[: len(stem) - len(facet)]}.yaml")
+    if not pair.is_file():
+        return ModuleOwner()
+    try:
+        data, error = _parsed(loader(pair))
+    except OSError:
+        return ModuleOwner()
+    kind = object_kind(data) if error is None else None
+    if not kind:
+        return ModuleOwner()
+    if facet:
+        if kind not in _RECORD_KINDS:
+            return ModuleOwner()
+        return ModuleOwner(frozenset(
+            name for section in _RECORD_SECTIONS for name, _item in _item_names(data, section, kind)
+        ))
+    if kind == _COMPONENT_KIND:
+        properties = _item_names(data, "Свойства", kind)
+        contextual = (name for name, item in properties if _is_true(value_of(item, "Контекстное")))
+        return ModuleOwner(frozenset(name for name, _item in properties), frozenset(contextual))
+    if kind == _STRUCTURE_KIND:
+        return ModuleOwner(frozenset(name for name, _item in _item_names(data, "Поля", kind)))
+    return ModuleOwner()
 
 
 def collect(root: Path, loader) -> frozenset[str]:
