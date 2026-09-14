@@ -488,7 +488,9 @@ def canonical_kind(value: str) -> str:
 #: the stdlib TYPE spelling (`Перечисление` -> `Enum`), while an English project's yaml
 #: says `ElementKind: Enumeration` - live issue #1: such objects fell out of the metadata
 #: tree into "Other". A dataset regenerated with 0.54.1+ carries its own distribution's
-#: table (terms.kinds_table) and wins over this constant.
+#: table (terms.kinds_table) and wins over this constant. The extension keeps the same
+#: table (`SERIALIZER_KIND_SPELLINGS` in editors/vscode/src/metadataCore.ts), and
+#: tests/test_kind_spellings.py holds the two together.
 _KNOWN_KIND_SPELLINGS: dict[str, str] = {
     "КлючДоступа": "AccessKey", "Справочник": "Catalog",
     "ФрагментКомандногоИнтерфейса": "CommandInterfaceFragment", "ОбщийМодуль": "CommonModule",
@@ -512,6 +514,7 @@ _KNOWN_KIND_SPELLINGS: dict[str, str] = {
     "ПараметрыРаботыКлиента": "ClientWorkParameters",
     "ИнтегрируемоеПриложение": "IntegrableApplication",
     "HttpСервис": "HttpService", "SoapСервис": "SoapService",
+    "КлиентSoapСервиса": "SoapServiceClient",
 }
 
 
