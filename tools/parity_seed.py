@@ -1344,6 +1344,35 @@ _GRANT_RU = (
 )
 _TRANSFERS_TOKENS = {"Переводы": "Transfers", "Ключ": "Key"}
 
+#: --- Assignments to read-only names: `{kind}` is the declaration keyword, `{target}` the name --
+_READONLY_LOCAL_RU = (
+    "метод Пересчитать(): Число\n"
+    "    {kind} Остаток = 1\n"
+    "    Остаток = 2\n"
+    "    возврат Остаток\n"
+    ";\n"
+)
+_READONLY_LOOP_RU = (
+    "метод Пересчитать(Остатки: Массив<Число>)\n"
+    "    для Остаток из Остатки\n"
+    "        пер Копия = Остаток\n"
+    "        {target} = 0\n"
+    "        Копия.ВСтроку()\n"
+    "    ;\n"
+    ";\n"
+)
+_READONLY_FIELD_RU = (
+    "структура Партия\n"
+    "    {kind} Остаток: Число = 0\n"
+    "\n"
+    "    метод Обнулить()\n"
+    "        этот.Остаток = 0\n"
+    "    ;\n"
+    ";\n"
+)
+_READONLY_TOKENS = {"Остатки": "Balances", "Остаток": "Balance", "Пересчитать": "Recount",
+                    "Копия": "Copy", "Партия": "Batch", "Обнулить": "Reset"}
+
 #: --- Localized strings -------------------------------------------------------------------
 _STRINGS_RU = """\
 ВидЭлемента: ЛокализованныеСтроки
@@ -4798,6 +4827,49 @@ SEEDS: list[Seed] = [
         files={"Проверки.xbsl": "метод Проба(Флаг: Булево)\n    если Флаг\n        Проба(Ложь)\n"
                                 "        область\n            Проба(Ложь)\n        ;\n    ;\n;\n"},
         tokens=_CHECKS_TOKENS,
+    ),
+    # --- assignments to read-only names ------------------------------------------------------
+    Seed(
+        rule="code/assign-readonly",
+        expect=FINDING,
+        note="a value local assigned again",
+        files={"Остатки.xbsl": _READONLY_LOCAL_RU.format(kind="знч")},
+        tokens=_READONLY_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=CLEAN,
+        note="the same local declared as a variable",
+        files={"Остатки.xbsl": _READONLY_LOCAL_RU.format(kind="пер")},
+        tokens=_READONLY_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=FINDING,
+        note="the variable of a loop assigned in its body",
+        files={"Остатки.xbsl": _READONLY_LOOP_RU.format(target="Остаток")},
+        tokens=_READONLY_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=CLEAN,
+        note="a copy of the loop variable assigned instead",
+        files={"Остатки.xbsl": _READONLY_LOOP_RU.format(target="Копия")},
+        tokens=_READONLY_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=FINDING,
+        note="a value field of a structure assigned through the object keyword",
+        files={"Остатки.xbsl": _READONLY_FIELD_RU.format(kind="знч")},
+        tokens=_READONLY_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-readonly",
+        expect=CLEAN,
+        note="the same field declared as a variable",
+        files={"Остатки.xbsl": _READONLY_FIELD_RU.format(kind="пер")},
+        tokens=_READONLY_TOKENS,
     ),
     # --- names, identifiers, the descriptor -------------------------------------------------
     Seed(

@@ -38,6 +38,7 @@ from . import (  # noqa: F401
     lambda_capture,
     locals_usage,
     module_level,
+    readonly_targets,
     ref_fields,
     resources,
     return_mismatch,
