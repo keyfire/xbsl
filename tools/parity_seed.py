@@ -4446,11 +4446,6 @@ SEEDS: list[Seed] = [
         note="a local named like a platform type, read only inside a string interpolation",
         files={"Работа.xbsl": _TYPE_NAMED_LOCAL_RU},
         tokens={"Работа": "Work", "Подпись": "Caption", "Надпись": "Inscription"},
-        known="the translator gives a name inside a string interpolation the platform pair "
-              "before the project dictionary: the declaration takes the dictionary name "
-              "(Inscription), the read inside the interpolation becomes the platform type "
-              "(Label), and the English read resolves to nothing - the English snapshot of a "
-              "real project carries the same dead read",
     ),
     Seed(
         rule="code/duplicate-method-body",

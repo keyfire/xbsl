@@ -42,12 +42,13 @@ import re
 from collections import Counter
 from functools import lru_cache
 
-from xbsl import lexer, terms, typeinfer
+from xbsl import dataset, lexer, terms, typeinfer
 from xbsl import parser as P
 from xbsl.engine import SourceFile
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
+from xbsl.translation.names import ModuleOwner
 from xbsl.translation.reporting import FileReport
 from xbsl.translation.rewrap import rewrap_comments
 
@@ -273,14 +274,20 @@ def apply_edits(text: str, edits: list[Edit]) -> str:
     return text
 
 
-def translate_code(source: SourceFile, resolver: Resolver, report: FileReport) -> str:
-    """The translated text of one module (or standalone query file)."""
+def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
+                   owner: ModuleOwner | None = None) -> str:
+    """The translated text of one module (or standalone query file).
+
+    `owner` is what the element of the module puts in scope of its methods (see
+    names.module_owner); without it a bare name is a property of nothing.
+    """
     edits: list[Edit] = []
     toks = lexer.tokens(source)
     ranges = _syntax.query_ranges(source)
     collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits,
                         inferred_locals=inferred_locals(source, resolver.project_names),
-                        type_ranges=type_ranges(source))
+                        type_ranges=type_ranges(source),
+                        owner_scopes=owner_scopes(source, owner))
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -300,6 +307,8 @@ def collect_token_edits(
     root_scope: str = "",
     inferred_locals: dict[str, MethodTypes] | None = None,
     type_ranges: list[tuple[int, int]] | None = None,
+    method: MethodScope | None = None,
+    owner_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -310,7 +319,11 @@ def collect_token_edits(
     declarations name none. A fragment has no methods and passes nothing. `type_ranges` are
     the spans of the TYPE expressions (see type_ranges): a name inside one is a type or a
     facet, never a member - `Заявки.Ссылка` as a type is `Tasks.Reference`, the very same
-    words as a member access are `Tasks.Link`.
+    words as a member access are `Tasks.Link`. `method` is the method a fragment of the module
+    stands in (see MethodScope): an interpolation reads the names that method declares, and
+    the walk over the fragment starts from what the walk over the module knew there.
+    `owner_scopes` are the methods of the module with the names its element puts in scope of
+    each (see owner_scopes).
     """
     del text  # spans address the outer text through `base`; kept for symmetry of callers
     prev_dot = False
@@ -323,7 +336,7 @@ def collect_token_edits(
     # word cannot carry globally. The stack follows nesting, so a constructor inside a
     # constructor keeps its own namespace.
     ctor_stack: list[tuple[str, int]] = []
-    method_name = ""
+    method_name = method.name if method is not None else ""
     pending_ctor = False
     depth = 0
     #: Words already rewritten as part of a query PHRASE - they must not be judged again.
@@ -334,10 +347,15 @@ def collect_token_edits(
     #: the type - taking the type spelling there turns it into an undefined variable. The
     #: TYPE is what opens the namespace of a member: `Root.Услуги` where `Root: JsonRoot` is a
     #: field of that structure, and the dictionary may spell it for that structure alone.
-    #: Cleared at every method boundary.
-    local_names: dict[str, str] = {}
+    #: Cleared at every method boundary; a fragment starts from its method's (see MethodScope).
+    local_names: dict[str, str] = dict(method.local_names) if method is not None else {}
     #: What the inference knows about the locals of the current method (see inferred_locals).
-    method_types: MethodTypes | None = None
+    method_types: MethodTypes | None = method.types if method is not None else None
+    #: Where a fragment stands in the module text, when its own offsets do not say it.
+    place = method.place if method is not None else None
+    #: The names the element of the module puts in scope of the current method: a property
+    #: named like a platform type is the property there, just as a local is the local.
+    owner_names: frozenset[str] = method.owner_names if method is not None else frozenset()
     #: The structure whose fields are being declared right now, and whether the next name
     #: belongs to it. The fields of one structure share a namespace: two Russian words
     #: translated into one English word are a structure the compiler refuses.
@@ -354,6 +372,7 @@ def collect_token_edits(
             pending_field = False
             local_places: dict[str, tuple[int, int]] = {}
             local_names = _method_locals(toks, index, resolver.project_names, local_places)
+            owner_names = _owner_names_at(owner_scopes, base + tok.start)
             method_token = _next_ident_token(toks, index)
             method_name = method_token.value if method_token is not None else ""
             method_types = (inferred_locals or {}).get(method_name)
@@ -448,7 +467,8 @@ def collect_token_edits(
                 type_scope = local_names.get(prev_ident, "") if prev_dot and not field_of else ""
                 if prev_dot and not field_of and not type_scope and method_types is not None:
                     # A local declared more than once in the method is typed by the place.
-                    type_scope = method_types.type_at(prev_ident, base + tok.start)
+                    type_scope = method_types.type_at(
+                        prev_ident, base + tok.start if place is None else place)
                 if not prev_dot and ctor_stack and _is_named_argument(toks, index):
                     scope = ctor_stack[-1][0]
                 elif not prev_dot and tok.value in local_names and method_name:
@@ -459,7 +479,7 @@ def collect_token_edits(
                 nxt = toks[index + 1] if index + 1 < len(toks) else None
                 static_root = (
                     not prev_dot and nxt is not None and nxt.kind == "OP" and nxt.value == "."
-                    and tok.value not in local_names
+                    and tok.value not in local_names and tok.value not in owner_names
                 )
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
@@ -479,7 +499,10 @@ def collect_token_edits(
         elif kind == "STRING":
             _string_edits(tok, base, resolver, report, edits, at,
                           data=not in_query and not _inside(resolvable, tok.start),
-                          group_argument=is_group_argument(toks, index))
+                          group_argument=is_group_argument(toks, index),
+                          method=MethodScope(method_name, local_names, method_types,
+                                             base + tok.start if place is None else place,
+                                             owner_names))
         if kind in ("IDENT", "KEYWORD"):
             if not prev_dot:
                 chain_root = tok.value
@@ -570,7 +593,10 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
     `project_names` tells such a facet from a namespace-qualified name (see _declared_type).
 
     The method ends at the `;` that closes it; a nested declaration inside it belongs to the
-    same scope for this purpose.
+    same scope for this purpose - the variable of a `catch` section and the parameters of a
+    lambda included. `Строка -> Строка.Длина()` reads the parameter, and a lambda often names
+    its parameter after a platform type: left out of this table, the parameter took the
+    dictionary's spelling where it is declared and the type's where it is read.
     """
     out: dict[str, str] = {}
     depth = 0
@@ -599,7 +625,7 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
             pass  # a statement separator - the method ends at a `;` on its own line
         if tok.kind == "KEYWORD" and tok.canonical in ("METHOD", "CONSTRUCTOR"):
             break
-        if tok.kind == "KEYWORD" and tok.canonical in ("VAR", "VAL", "REQ", "USE", "FOR"):
+        if tok.kind == "KEYWORD" and tok.canonical in ("VAR", "VAL", "REQ", "USE", "FOR", "CATCH"):
             position = index + 1
             while position < len(toks) and toks[position].kind == "KEYWORD":
                 position += 1
@@ -611,7 +637,53 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
                 )
                 if places is not None:
                     places.setdefault(name, (toks[position].line, toks[position].col))
+        if tok.kind == "OP" and tok.value == "->":
+            for position in _lambda_parameters(toks, index):
+                name = toks[position].value
+                out[name] = _declared_type(toks, position, project_names)
+                if places is not None:
+                    places.setdefault(name, (toks[position].line, toks[position].col))
         index += 1
+    return out
+
+
+def _lambda_parameters(toks: list, arrow: int) -> list[int]:
+    """The positions of the parameter names of the lambda whose `->` stands at `arrow`.
+
+    A short lambda puts its one name right before the arrow (`Строка -> ...`); a parenthesized
+    one lists them, each opening the list or following a comma and maybe carrying a type
+    (`(Строка: Строка, Индекс) -> ...`).
+    """
+    if arrow == 0:
+        return []
+    before = toks[arrow - 1]
+    if before.kind == "IDENT":
+        return [arrow - 1]
+    if before.kind != "OP" or before.value != ")":
+        return []
+    depth = 0
+    position = arrow - 1
+    while position >= 0:
+        tok = toks[position]
+        if tok.kind == "OP" and tok.value == ")":
+            depth += 1
+        elif tok.kind == "OP" and tok.value == "(":
+            depth -= 1
+            if depth == 0:
+                break
+        position -= 1
+    out: list[int] = []
+    depth = 0
+    for inner in range(position, arrow - 1):
+        tok = toks[inner]
+        if tok.kind == "OP" and tok.value in "([{<":
+            depth += 1
+        elif tok.kind == "OP" and tok.value in ")]}>":
+            depth -= 1
+        elif depth == 1 and tok.kind == "IDENT":
+            prev = toks[inner - 1]
+            if prev.kind == "OP" and prev.value in ("(", ","):
+                out.append(inner)
     return out
 
 
@@ -779,6 +851,78 @@ class MethodTypes:
         env = typeinfer.method_env(self.method, returns=self.returns, at=offset)
         got = env.variables.get(name)
         return _type_scope_of(got, self.project_names) if got is not None else ""
+
+
+@dataclasses.dataclass(frozen=True)
+class MethodScope:
+    """The method a code fragment stands in, as the walk over the module read it.
+
+    A string interpolation is code of the method around the string: `"%{Надпись.Длина()}"`
+    reads the local the method declared, even where a platform type carries the same name. The
+    fragment is tokenized apart from the module, and on its own it knew nothing of the method -
+    a local named like a type then read as a static call on the type, the platform pair came
+    before the dictionary, and the declaration went out under the dictionary's word while the
+    read inside the string took the type's: a variable nothing reads and a call of a member the
+    type does not have. So the walk hands the fragment what it learned at the head of the
+    method: the declared names with the types they hold (`local_names`, `types`), the method
+    `name`, which qualifies a dictionary entry written for one method's local, and the names
+    the element of the module puts in scope of the method (`owner_names`, see owner_scopes).
+
+    `place` is where the string stands in the module text. A name declared twice in one method
+    is typed by the block around its place, and an offset inside a fragment says nothing about
+    that when the fragment is the text of a dictionary entry rather than a piece of the module.
+    """
+
+    name: str
+    local_names: dict[str, str]
+    types: MethodTypes | None
+    place: int | None = None
+    owner_names: frozenset[str] = frozenset()
+
+
+@lru_cache(maxsize=1)
+def _annotation_forms() -> tuple[frozenset[str], frozenset[str]]:
+    """Both spellings of the annotations that compile a method on the server and on the client."""
+    server = frozenset(terms.key_forms("НаСервере"))
+    return server, frozenset(terms.key_forms("НаКлиенте"))
+
+
+dataset.register_reset(_annotation_forms.cache_clear)
+
+
+def owner_scopes(source: SourceFile, owner: ModuleOwner | None,
+                 ) -> list[tuple[int, int, frozenset[str]]]:
+    """[(start, end, names)] of the module's methods that see names of the module's element.
+
+    Read off the parser's tree, which says what the tokens do not: whether a method is static
+    (no instance, no names) and which side compiles it - a component method marked for the
+    server alone sees the contextual properties only (see names.ModuleOwner). The methods of a
+    local structure work on that structure and are not listed; neither is anything the parser
+    gave up on - a method missing here keeps reading its names as it always did.
+    """
+    if owner is None or not owner.names:
+        return []
+    module, _errors = P.parse(source)
+    server, client = _annotation_forms()
+    out: list[tuple[int, int, frozenset[str]]] = []
+    for member in module.members:
+        if not isinstance(member, P.Method):
+            continue
+        marks = {annotation.name for annotation in member.annotations}
+        names = owner.visible(static=member.is_static,
+                              server_only=bool(marks & server) and not marks & client)
+        if names:
+            out.append((member.start, member.end, names))
+    return out
+
+
+def _owner_names_at(scopes: list[tuple[int, int, frozenset[str]]] | None, offset: int,
+                    ) -> frozenset[str]:
+    """The owner's names the method starting around `offset` sees; empty outside every scope."""
+    for start, end, names in scopes or ():
+        if start <= offset < end:
+            return names
+    return frozenset()
 
 
 def _type_scope_of(inferred: typeinfer.Inferred, project_names: frozenset[str]) -> str:
@@ -1199,7 +1343,8 @@ def _named_group_edits(tok, base, resolver, report, edits, at=None) -> None:
 
 
 def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = True,
-                  group_argument: bool = False) -> None:
+                  group_argument: bool = False, method: MethodScope | None = None) -> None:
+    """The edits of one string literal; `method` is the method it stands in (see MethodScope)."""
     value = tok.value
     if group_argument:
         # The argument of Group() is a NAME, not prose: the literals plane must not answer for
@@ -1209,7 +1354,7 @@ def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = T
             _name_edit(body, base + tok.start + 1, resolver, report, edits,
                        at if at is not None else (tok.line, tok.col))
         return
-    if data and _literal_edit(tok, base, resolver, report, edits, at):
+    if data and _literal_edit(tok, base, resolver, report, edits, at, method=method):
         # The whole literal is gone, and with it every span inside it - a group name included:
         # an entry that names a pattern spells its groups the way it wants them.
         return
@@ -1218,18 +1363,10 @@ def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = T
         inner = value[start:end]
         inner_tokens = lexer.tokenize(inner)
         collect_token_edits(inner, inner_tokens, base + tok.start + start, [], resolver, report,
-                            edits, at=at or (tok.line, tok.col))
+                            edits, at=at or (tok.line, tok.col), method=method)
     for start, name in shorts:
-        replacement, plane = resolver.identifier(name)
-        if plane == "user":
-            report.user_done += 1
-        if replacement:
-            if replacement != name:
-                edits.append((base + tok.start + start, base + tok.start + start + len(name),
-                              replacement))
-        else:
-            line, col = at if at is not None else (tok.line, tok.col)
-            report.note_token(name, line, col)
+        _short_name_edit(name, base + tok.start + start, resolver, report, edits,
+                         at if at is not None else (tok.line, tok.col), method)
     _named_group_edits(tok, base, resolver, report, edits, at)
     _resource_path_edits(tok, base, resolver, report, edits, at)
     if has_cyrillic(value):
@@ -1251,7 +1388,8 @@ def _body_of(tok) -> str | None:
     return value[1:-1]
 
 
-def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
+def _literal_edit(tok, base, resolver, report, edits, at=None, *,
+                  method: MethodScope | None = None) -> bool:
     """Replace the WHOLE literal when the literals plane names it; True when it did.
 
     The key is the text between the quotes exactly as the source writes it - interpolations
@@ -1261,7 +1399,8 @@ def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
     needs to be: the dictionary refused on load any value that is not a literal body
     (`dictionary.literal_body_error`), so what arrives fits between two quotes as it stands.
     The code INSIDE the replacement is then translated by the ordinary interpolation pass, so
-    an entry never has to spell out what the names inside it will be renamed to.
+    an entry never has to spell out what the names inside it will be renamed to - in the method
+    the literal stands in, the way the names of the key would have been.
     """
     body = _body_of(tok)
     if body is None:
@@ -1279,8 +1418,9 @@ def _literal_edit(tok, base, resolver, report, edits, at=None) -> bool:
         # its key - that keeps the coverage and the comparison alike. One note per text per
         # file: a wizard that checks its page code eight times is one place to look, not eight.
         report.warnings.append(("literal-data-value", line, col, body))
-    replacement = translate_interpolations(translated, resolver, report, at=(line, col))
-    check_placeholders(body, replacement, resolver, report, (line, col))
+    replacement = translate_interpolations(translated, resolver, report, at=(line, col),
+                                           method=method)
+    check_placeholders(body, replacement, resolver, report, (line, col), method=method)
     if replacement != body:
         edits.append((base + tok.start + 1, base + tok.end - 1, replacement))
     return True
@@ -1297,6 +1437,7 @@ def placeholder_expressions(text: str) -> list[str]:
 
 def check_placeholders(
     key: str, replacement: str, resolver: Resolver, report: FileReport, at: tuple[int, int],
+    method: MethodScope | None = None,
 ) -> None:
     """A named literal must carry the substitutions of its key - translated or as written.
 
@@ -1307,12 +1448,14 @@ def check_placeholders(
     what the pass would WRITE for either side: the key's substitutions translated the ordinary
     way against the translation's after its own pass - so an entry may spell a name in either
     language, and only a name that ends up different is a mismatch. Order does not matter: a
-    translation may put the substitutions where its grammar wants them.
+    translation may put the substitutions where its grammar wants them. Both sides are read in
+    the `method` the literal stands in, the one reading the pass gives the replacement.
     """
     if not any(sign in key or sign in replacement for sign in "%$"):
         return
     scratch = FileReport(path=report.path)  # the key's pass counts toward nothing
-    expected = placeholder_expressions(translate_interpolations(key, resolver, scratch, at=at))
+    expected = placeholder_expressions(
+        translate_interpolations(key, resolver, scratch, at=at, method=method))
     found = placeholder_expressions(replacement)
     if sorted(expected) != sorted(found):
         report.note_placeholders(key, at[0], at[1], expected, found)
@@ -1503,28 +1646,43 @@ def translate_expression(
 
 def translate_interpolations(
     text: str, resolver: Resolver, report: FileReport, at: tuple[int, int] | None = None,
+    method: MethodScope | None = None,
 ) -> str:
     """Translate ONLY the code inside `%{...}` / `${...}`, leaving the prose untouched.
 
     A presentation template is text a person reads with expressions embedded in it: the prose
     is data (the localization dictionaries translate it), while the expression names a
-    property that has just been renamed.
+    property that has just been renamed. The text of a named literal of a module is read in
+    the `method` the literal stands in (see MethodScope); a yaml template has none.
     """
     edits: list[Edit] = []
     spans, shorts = _interpolations(text)
     for start, end in spans:
         inner = text[start:end]
-        collect_token_edits(inner, lexer.tokenize(inner), start, [], resolver, report, edits, at=at)
+        collect_token_edits(inner, lexer.tokenize(inner), start, [], resolver, report, edits, at=at,
+                            method=method)
     for offset, name in shorts:
-        replacement, plane = resolver.identifier(name)
-        if plane == "user":
-            report.user_done += 1
-        if replacement and replacement != name:
-            edits.append((offset, offset + len(name), replacement))
-        elif replacement is None:
-            line, col = at if at is not None else (0, 0)
-            report.note_token(name, line, col)
+        _short_name_edit(name, offset, resolver, report, edits,
+                         at if at is not None else (0, 0), method)
     return apply_edits(text, edits)
+
+
+def _short_name_edit(name: str, start: int, resolver: Resolver, report: FileReport,
+                     edits: list[Edit], at: tuple[int, int], method: MethodScope | None) -> None:
+    """Translate the NAME of a short-form interpolation (`%Имя`) standing at `start`.
+
+    The name is read the way the code reads a bare name: a local of the method answers to an
+    entry written for that method first (`Метод.Имя`), and then to the plain one.
+    """
+    scope = method.name if method is not None and name in method.local_names else ""
+    replacement, plane = resolver.identifier(name, scope=scope)
+    if plane == "user":
+        report.user_done += 1
+    if replacement:
+        if replacement != name:
+            edits.append((start, start + len(name), replacement))
+        return
+    report.note_token(name, *at)
 
 
 _TYPE_WORD_RE = re.compile(r"[_\w][\w0-9]*", re.UNICODE)

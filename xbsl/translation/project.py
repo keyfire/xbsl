@@ -403,7 +403,10 @@ def translate_project(
             if path.suffix == ".yaml":
                 translated = translate_yaml(source, resolver, file_report)
             else:
-                translated = translate_code(source, resolver, file_report)
+                translated = translate_code(
+                    source, resolver, file_report,
+                    owner=project_names_module.module_owner(path, engine.load),
+                )
         elif path.suffix == ".json":
             translated = _translate_json_bytes(path.read_bytes(), dictionary, fields, file_report)
         elif path.suffix.lower() in RESOURCE_SUFFIXES:
