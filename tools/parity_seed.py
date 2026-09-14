@@ -1637,6 +1637,29 @@ SEEDS: list[Seed] = [
         tokens={"Модуль": "Module", "Проба": "Probe"},
     ),
     Seed(
+        rule="style/redundant-union-member",
+        expect=FINDING,
+        note="a union member the object type covers - the type names are read in both spellings",
+        files={"Модуль.xbsl": "метод Проба(Значение: Строка|Объект): Число\n    возврат 1\n;\n"},
+        tokens={"Модуль": "Module", "Проба": "Probe", "Значение": "Value"},
+    ),
+    Seed(
+        rule="style/redundant-union-member",
+        expect=FINDING,
+        note="a generic member its read-only base covers - the catalog bases are keyed by one "
+             "spelling of the type",
+        files={"Модуль.xbsl": "метод Проба(Значение: Массив<Строка>|ЧитаемыйМассив<Строка>): Число\n"
+                              "    возврат 1\n;\n"},
+        tokens={"Модуль": "Module", "Проба": "Probe", "Значение": "Value"},
+    ),
+    Seed(
+        rule="style/redundant-union-member",
+        expect=CLEAN,
+        note="a union whose members add a type each",
+        files={"Модуль.xbsl": "метод Проба(Значение: Строка|Число|?): Число\n    возврат 1\n;\n"},
+        tokens={"Модуль": "Module", "Проба": "Probe", "Значение": "Value"},
+    ),
+    Seed(
         rule="query/unknown-table",
         expect=FINDING,
         note="a query over a table of neither the platform nor the project",
@@ -4185,6 +4208,49 @@ SEEDS: list[Seed] = [
                "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
                "Учет/Расчеты.yaml": _CALC_YAML_RU,
                "Учет/Расчеты.xbsl": "импорт Склад\n\nметод Первый(): Товары.Ссылка?\n    возврат Неопределено\n;\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-import",
+        expect=FINDING,
+        note="a package imported by its short and by its full name - the project prefix is read "
+             "off the descriptor in both spellings",
+        files=_package_files(**{
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/Расчеты.yaml": _CALC_YAML_RU,
+            "Учет/Расчеты.xbsl": "импорт Склад::Партии\nимпорт acme::Проба::Склад::Партии\n\n"
+                                 "метод Первый(): ПартииТоваров.Ссылка?\n    возврат Неопределено\n;\n",
+        }),
+        tokens={**_PACKAGE_TOKENS, **_CALC_TOKENS},
+    ),
+    Seed(
+        rule="code/duplicate-import",
+        expect=CLEAN,
+        note="the same module with one import of the package",
+        files=_package_files(**{
+            "Учет/Подсистема.yaml": _SUB_USE_RU,
+            "Учет/Расчеты.yaml": _CALC_YAML_RU,
+            "Учет/Расчеты.xbsl": "импорт Склад::Партии\n\n"
+                                 "метод Первый(): ПартииТоваров.Ссылка?\n    возврат Неопределено\n;\n",
+        }),
+        tokens={**_PACKAGE_TOKENS, **_CALC_TOKENS},
+    ),
+    Seed(
+        rule="yaml/duplicate-import",
+        expect=FINDING,
+        note="a subsystem listed twice in the import section of an element - the key in both spellings",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU + "Импорт:\n    - Склад\n    - Склад\n"},
+        tokens=_CALC_TOKENS,
+    ),
+    Seed(
+        rule="yaml/duplicate-import",
+        expect=CLEAN,
+        note="the same section with the subsystem listed once",
+        files={"Учет/Подсистема.yaml": _SUB_USE_RU, "Склад/Подсистема.yaml": _SUB_PRIVATE_RU,
+               "Склад/Товары.yaml": _GOODS_RU.format(vis="ВПроекте"),
+               "Учет/Расчеты.yaml": _CALC_YAML_RU + "Импорт:\n    - Склад\n"},
         tokens=_CALC_TOKENS,
     ),
     Seed(
