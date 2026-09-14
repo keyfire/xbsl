@@ -69,14 +69,14 @@ def test_ternary_compound_condition_flagged():
     assert len(d) == 1 and "скобки" in d[0].message
 
 
-def test_ternary_compound_condition_or_flagged_without_parens():
+def test_ternary_plain_or_condition_compiles_and_is_not_flagged():
+    # the ternary takes the whole `А или Б` as its condition - only the form after `это` differs
     content = (
         "метод Ф(А: Булево, Б: Булево): Число\n"
         "    возврат А или Б ? 1 : 0\n"
         ";\n"
     )
-    d = _lint("М.xbsl", content, select={"code/ternary-and-or"})
-    assert len(d) == 1 and "или" in d[0].message
+    assert _lint("М.xbsl", content, select={"code/ternary-and-or"}) == []
 
 
 def test_ternary_parenthesized_condition_ok():

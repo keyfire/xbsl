@@ -4955,6 +4955,23 @@ SEEDS: list[Seed] = [
                                 "        область\n            Проба(Ложь)\n        ;\n    ;\n;\n"},
         tokens=_CHECKS_TOKENS,
     ),
+    Seed(
+        rule="code/ternary-and-or",
+        expect=FINDING,
+        note="the ternary of a type check on the right of the conjunction - the keywords and the "
+             "number branches are read in both spellings",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево, Значение: Объект?): Число\n"
+                                "    возврат Флаг и Значение это Строка ? 1 : 0\n;\n"},
+        tokens={**_CHECKS_TOKENS, "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/ternary-and-or",
+        expect=CLEAN,
+        note="the plain conjunction before the ternary: the ternary takes the whole condition",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево, Второй: Булево): Число\n"
+                                "    возврат Флаг и Второй ? 1 : 0\n;\n"},
+        tokens={**_CHECKS_TOKENS, "Второй": "Second"},
+    ),
     # --- assignments to read-only names ------------------------------------------------------
     Seed(
         rule="code/assign-readonly",
