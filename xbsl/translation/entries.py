@@ -997,6 +997,13 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     An edit is `{key, value, kind}`. An emptied value REMOVES the entry: a half-filled stub
     is not a translation, and leaving it would claim coverage the project does not have.
 
+    An existing key is written in EVERY place the dictionary declares it: twice in one file or
+    once more in another. The load accepts such a copy while its value is the same
+    (`Dictionary.duplicates`) and leaves taking it out to a person, so the writer keeps the
+    copy and gives it the new value too. Correcting only the last place turned the copy into a
+    conflict the next load refused, and a removal left the copy translating the key. A key
+    the batch names twice is written once, by its last edit.
+
     `comment` is the head line a NEWLY created file gets. The caller knows what the batch is
     for, the writer does not: a file written from the MCP tool used to arrive announcing that
     it came from the editor panel, and the line was corrected by hand afterwards.
@@ -1005,7 +1012,16 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     than writes are what an editor needs: the language server never writes to disk, so the
     client applies the result as a workspace edit and the user keeps undo.
     """
-    known = {(entry.kind, entry.key): entry for entry in read_entries(dictionary_path)}
+    # Every place of a key, in file order: the lookups keep the last one, the writer needs all.
+    places: dict[tuple[str, str], list[Entry]] = {}
+    for entry in read_entries(dictionary_path):
+        places.setdefault((entry.kind, entry.key), []).append(entry)
+    known = {pair: found[-1] for pair, found in places.items()}
+    # The last edit of each existing key. Two edits of one key used to reach the same line
+    # twice, and the second one - a removal, or a rewrite of the two-line explicit form - cut
+    # into the line that had moved up in its place: an unrelated entry was lost. The prune
+    # lists hand a key over once per place, so a repeated key arrived exactly that way.
+    decided: dict[tuple[str, str], dict] = {}
     by_file: dict[Path, list[tuple[Entry, dict]]] = {}
     fresh: list[dict] = []
     refused: list[dict] = []
@@ -1024,10 +1040,12 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
             # the entry by then. The same check answers here, while the value is still in hand.
             refused.append({"key": key, "kind": kind, "reason": reason})
             continue
-        entry = known.get((kind, key))
-        if entry is None:
-            fresh.append({"key": key, "kind": kind, "value": str(edit.get("value") or "")})
+        if (kind, key) in places:
+            decided[(kind, key)] = edit
         else:
+            fresh.append({"key": key, "kind": kind, "value": str(edit.get("value") or "")})
+    for pair, edit in decided.items():
+        for entry in places[pair]:
             by_file.setdefault(Path(entry.file), []).append((entry, edit))
 
     changed = removed = 0
