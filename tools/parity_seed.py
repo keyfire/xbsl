@@ -1562,6 +1562,26 @@ _BATCH_PICKER_RU = """\
 _PARTIAL_TOKENS = {**_PACKAGE_TOKENS, "ПодборПартий": "BatchPicker"}
 
 
+#: A total the lambda body keeps in a variable of the method (the change the compiler refuses)
+#: or in an element of a captured array (a change of the object, which it accepts).
+_LAMBDA_TOTAL_RU = (
+    "метод Посчитать(Числа: Массив<Число>): Число\n"
+    "    пер Сумма = {start}\n"
+    "    Числа.ДляКаждого(Элемент -> {change})\n"
+    "    возврат {result}\n"
+    ";\n"
+)
+_LAMBDA_TOTAL_EN = (
+    "method Count(Numbers: Array<Number>): Number\n"
+    "    var Total = {start}\n"
+    "    Numbers.ForEach(Item -> {change})\n"
+    "    return {result}\n"
+    ";\n"
+)
+_LAMBDA_TOTAL_TOKENS = {"Расчет": "Calculation", "Посчитать": "Count", "Числа": "Numbers",
+                        "Сумма": "Total", "Элемент": "Item"}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="structure/xbsl-pair",
@@ -4922,6 +4942,27 @@ SEEDS: list[Seed] = [
             "Заявки.Объект.xbsl": "метод Проба()\n    знч Срок = 1\n    знч Ссылка = 2\n;\n",
         },
         tokens={"Заявки": "Applications", "Срок": "Deadline", "Проба": "Probe"},
+    ),
+    Seed(
+        rule="code/lambda-changes-outer-local",
+        expect=FINDING,
+        note="a lambda body adds to a variable of the method it captured",
+        files={"Расчет.xbsl": _LAMBDA_TOTAL_RU.format(start="0", change="Сумма += Элемент",
+                                                      result="Сумма")},
+        english={"Calculation.xbsl": _LAMBDA_TOTAL_EN.format(start="0", change="Total += Item",
+                                                             result="Total")},
+        tokens=_LAMBDA_TOTAL_TOKENS,
+    ),
+    Seed(
+        rule="code/lambda-changes-outer-local",
+        expect=CLEAN,
+        note="the same total kept in an element of the captured array - the variable itself "
+             "does not change",
+        files={"Расчет.xbsl": _LAMBDA_TOTAL_RU.format(
+            start="[0]", change="Сумма[0] = Сумма[0] + Элемент", result="Сумма[0]")},
+        english={"Calculation.xbsl": _LAMBDA_TOTAL_EN.format(
+            start="[0]", change="Total[0] = Total[0] + Item", result="Total[0]")},
+        tokens=_LAMBDA_TOTAL_TOKENS,
     ),
 ]
 
