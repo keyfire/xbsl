@@ -13,6 +13,9 @@
 
 ### Fixed
 
+- **CLI mode checks project YAML while typing and offers its quick fixes.** Late results from an older buffer no longer replace newer diagnostics or the report produced on save. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Form preview renders ordinary footer commands and italic, underlined and struck-out text.** English forms use English property names and boolean values in tips; obsolete built-in names no longer hide project components with the same names. ([#100](https://github.com/keyfire/xbsl/pull/100))
+
 - **New metadata properties follow `Type` in English YAML.** The insertion works in a fresh
   editor session before the form designer has been opened. ([#99](https://github.com/keyfire/xbsl/pull/99))
 

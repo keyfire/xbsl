@@ -30,6 +30,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **Automatic fixes respect accepted findings.** CLI `--fix` and MCP `lint_paths(fix=true)` apply available code fixes outside the baseline, preserve its file, and report the remaining findings. Accepted occurrences stay protected across passes and line shifts; fixes that overlap them are skipped. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Removing a redundant cast also removes unnecessary parentheses at the start of a statement.** ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Unknown query tables are checked throughout comma-separated source lists,** including sources following join conditions. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **A loop declaration reusing an existing name no longer counts as an assignment to the original local.** Reads in its body follow the original binding; counted loops and letter case are handled consistently. ([#100](https://github.com/keyfire/xbsl/pull/100))
+
 - **Older language data translates the enumeration kind as `Enumeration`.** The serializer
   spelling takes precedence over the stdlib type alias `Enum`. ([#99](https://github.com/keyfire/xbsl/pull/99))
 - **Text output from `translate --set` names each rewritten location.** Repeated keys in one
