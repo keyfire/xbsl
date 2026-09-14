@@ -30,6 +30,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **Named arguments are checked against resolved local and module signatures.** Unknown and repeated names, positional arguments after named ones and missing required parameters are reported. Structure methods take precedence over module methods; shadowed receivers and ambiguous overloads are left alone. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Structure fields with non-generic platform types are checked for a missing default value.** Types such as `TextPosition` need `req`, a nullable marker or an initializer; scalar default values and locally shadowed type names are respected. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Dynamic-list expressions translate an explicit table alias reference as `Reference`.** Main and joined table aliases share the source scope, including filters; UI links and unrelated receivers retain their own meaning. English expression keys are handled too. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Redundant `SkipUndefined()` calls are reported for known non-nullable collection elements.** The iterable fix uses `ToArray()` to preserve array materialization. Sequence calls receive a warning without an automatic rewrite. ([#101](https://github.com/keyfire/xbsl/pull/101))
+
 - **Automatic fixes respect accepted findings.** CLI `--fix` and MCP `lint_paths(fix=true)` apply available code fixes outside the baseline, preserve its file, and report the remaining findings. Accepted occurrences stay protected across passes and line shifts; fixes that overlap them are skipped. ([#100](https://github.com/keyfire/xbsl/pull/100))
 - **Removing a redundant cast also removes unnecessary parentheses at the start of a statement.** ([#100](https://github.com/keyfire/xbsl/pull/100))
 - **Unknown query tables are checked throughout comma-separated source lists,** including sources following join conditions. ([#100](https://github.com/keyfire/xbsl/pull/100))
