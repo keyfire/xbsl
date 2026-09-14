@@ -29,6 +29,7 @@ from . import (  # noqa: F401
 # Tier C – code structure, basic syntax and local variables:
 from . import (  # noqa: F401
     annotations_dup,
+    assignments,
     call_arity,
     code_structure,
     code_syntax,

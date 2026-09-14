@@ -1467,6 +1467,24 @@ _STRINGS_PARTNER_EN = (
     "Шаблоны:\n    Расширена: \"Extended (until $0)\"\n"
 )
 
+#: --- Assignments rejected by their shape: an assignment to itself, a target that is no place --
+#: `{type}` is the declared type with its initializer, `{op}` the compound operator.
+_COUNTER_RU = (
+    "структура Счетчик\n"
+    "    пер Итог: {type}\n"
+    "\n"
+    "    метод Удвоить()\n"
+    "        этот.Итог {op} этот.Итог\n"
+    "    ;\n"
+    ";\n"
+)
+_NODE_RU = "структура Узел\n    пер Значение: Число = 0\n;\n\n"
+_NODE_TARGET_RU = _NODE_RU + "метод Проба(Пустой: Узел?)\n    {target} = 1\n;\n"
+_NODE_CAST_RU = _NODE_RU + "метод Проба(Объ: Объект)\n    {target} = новый Узел()\n;\n"
+_ASSIGNMENT_TOKENS = {"Расчеты": "Calculations", "Проба": "Probe", "Итог": "Total",
+                      "Счетчик": "Counter", "Удвоить": "Double", "Узел": "Node",
+                      "Значение": "Value", "Пустой": "Empty", "Объ": "Obj"}
+
 #: --- Packages of a subsystem: the project module, a query, a full name, the resources ------
 #: The supplier `Склад` keeps a package `Партии`; the project descriptor gives the full names
 #: their vendor and project.
@@ -4497,6 +4515,67 @@ SEEDS: list[Seed] = [
         files={"Первый.xbsl": _DUPLICATE_BODY_RU.format(annotation="@Обработчик\n"),
                "Второй.xbsl": _DUPLICATE_BODY_RU.format(annotation="@Обработчик\n")},
         tokens=_DUPLICATE_TOKENS,
+    ),
+    # --- assignments the compiler rejects by their shape -------------------------------------
+    Seed(
+        rule="code/self-assignment",
+        expect=FINDING,
+        note="a local assigned to itself",
+        files={"Расчеты.xbsl": "метод Проба(): Число\n    пер Итог = 1\n    Итог = Итог\n"
+                               "    возврат Итог\n;\n"},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/self-assignment",
+        expect=CLEAN,
+        note="the same local assigned an expression over itself",
+        files={"Расчеты.xbsl": "метод Проба(): Число\n    пер Итог = 1\n    Итог = Итог + 1\n"
+                               "    возврат Итог\n;\n"},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/self-assignment",
+        expect=FINDING,
+        note="a number field multiplied by itself through the object keyword - the type comes "
+             "from the field declaration",
+        files={"Расчеты.xbsl": _COUNTER_RU.format(type="Число = 0", op="*=")},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/self-assignment",
+        expect=CLEAN,
+        note="a string field joined with itself compiles - the string type has to be known in "
+             "both spellings",
+        files={"Расчеты.xbsl": _COUNTER_RU.format(type="Строка = \"\"", op="+=")},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-target",
+        expect=FINDING,
+        note="a member written through the safe access",
+        files={"Расчеты.xbsl": _NODE_TARGET_RU.format(target="Пустой?.Значение")},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-target",
+        expect=CLEAN,
+        note="the same member written through the insistent operator",
+        files={"Расчеты.xbsl": _NODE_TARGET_RU.format(target="Пустой!.Значение")},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-target",
+        expect=FINDING,
+        note="a cast on the left side of an assignment",
+        files={"Расчеты.xbsl": _NODE_CAST_RU.format(target="Объ как Узел")},
+        tokens=_ASSIGNMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/assign-target",
+        expect=CLEAN,
+        note="the cast in parentheses before a member access",
+        files={"Расчеты.xbsl": _NODE_CAST_RU.format(target="(Объ как Узел).Значение")},
+        tokens=_ASSIGNMENT_TOKENS,
     ),
     # --- conditions ------------------------------------------------------------------------
     Seed(
