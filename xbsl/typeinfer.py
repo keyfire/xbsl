@@ -2359,7 +2359,8 @@ class ModuleTyper:
         if not names:
             return []
         self._prepare(module)
-        pattern = re.compile(r"\.\s*(?:%s)(?![\w])" % "|".join(sorted(map(re.escape, names))))
+        # Comments may separate the dot and the name; the AST below decides whether it is a call.
+        pattern = re.compile(r"(?<!\w)(?:%s)(?!\w)" % "|".join(sorted(map(re.escape, names))))
 
         def wanted(node: object) -> bool:
             return (isinstance(node, P.Call) and isinstance(node.callee, P.Member)

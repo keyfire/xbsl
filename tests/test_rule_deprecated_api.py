@@ -56,7 +56,7 @@ TABLE = {
 
 @pytest.fixture(autouse=True)
 def _table(monkeypatch):
-    names = frozenset({"ЗагрузитьИзБайт", "UploadFromBytes", "Загрузить", "ПрочитатьОбъект",
+    names = frozenset({"ЗагрузитьИзБайт", "UploadFromBytes", "Upload", "Загрузить", "ПрочитатьОбъект",
                        "ПрочитатьСоответствие", "ПрочитатьСодержимоеКакМассив"})
     monkeypatch.setattr(D, "_deprecated", lambda: (TABLE, names))
 
@@ -252,3 +252,20 @@ def test_a_deprecation_without_stated_modes_holds_in_the_newest_mode_only():
     assert not form.deprecated_in((8, 0), None)
     assert form.depends_on_mode()
     assert not D._form("Прочитать(): Строка", True, "", "", ("", ""), "").depends_on_mode()
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("callee", ["ОбъектноеХранилище.Загрузить", "ObjectStorage.Upload"])
+def test_named_argument_uses_the_parameters_direct_english_spelling(callee):
+    found = _project("9.0", f"    знч Загруженное = {callee}(InputStream = Поток, Size = 5)\n")
+
+    assert [line for line, _col in _places(found)] == [2]
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("member", ["ЗагрузитьИзБайт", "UploadFromBytes"])
+def test_comment_between_dot_and_method_name_does_not_hide_the_call(member):
+    body = f"    знч Загруженное = ObjectStorage. // continue the call\n        {member}(Данные)\n"
+    found = _project("9.0", body)
+
+    assert [line for line, _col in _places(found)] == [3]

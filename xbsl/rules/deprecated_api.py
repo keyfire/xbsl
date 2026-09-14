@@ -429,7 +429,10 @@ def _admits(form: _Form, site: typeinfer.CallSite, catalog: typeinfer.ProjectCat
                 position += 1  # a variadic parameter takes every positional argument after it
             bound.append((param, value))
             continue
-        param = by_name.get(name) or by_name.get(terms.common_russian(name) or "")
+        param = by_name.get(name)
+        if param is None:
+            # The reverse dictionary loses homonyms; match each declared parameter's spelling.
+            param = next((item for item in params if terms.common_english(item.name) == name), None)
         if param is None:
             return False
         bound.append((param, value))
