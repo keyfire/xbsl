@@ -60,7 +60,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 210 rules of the base set** - severity, default state, scope, links to
+**The full list of all 211 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -115,7 +115,8 @@ attribute of its object. A cross-component call `Components.X.Method()` that car
 annotation. Environment mismatches: `@OnServer` called from a client handler without
 `@AvailableFromClient`, a client module used from an `HttpService`. Reserved names: a field or
 parameter named `Type` in either language spelling, a component property named like a built-in one.
-Methods that nothing references. And top-level yaml properties measured against the configuration
+Methods that nothing references; a file that does not parse still counts as a mention there, and
+the translation dictionary does not. And top-level yaml properties measured against the configuration
 metamodel. The `query/` group parses `Query{ ... }` blocks and verifies the `FROM` and `JOIN` tables
 against the project objects and their `TabularParts`. A block with constructs outside the supported
 subset - temporary tables, unions, subqueries - is skipped whole rather than guessed.
@@ -138,6 +139,13 @@ interpolation of a string or a query literal count. A named argument `Name = val
 is not reported, as in the IDE, and neither are a `catch` variable or a parameter. An unused `use`
 name is fixed by dropping it, since `use Expression` holds the resource until the end of the same
 scope.
+
+`code/lambda-changes-outer-local` walks the same block scopes and reports an error the compiler
+finds only when the build is applied. A lambda body may not assign a local variable declared outside
+the lambda: a `var` variable or a parameter of the method or of an outer lambda. A member or an
+element of the captured value may change, and so may a variable or a parameter of the lambda itself.
+A `val`, `use`, loop or catch variable is read-only everywhere and gets a compiler error of its own,
+so the rule does not report it.
 
 `code/unused-import` asks whether the compiler ever looked up a type in the imported namespace. A
 word of the module keeps nothing by itself: the import line, a member after a dot and a local named

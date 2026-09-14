@@ -112,6 +112,12 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   // scopes shows this very case (a `пер` under a parameter of the same name), not
   // the page about how a declaration is written.
   { match: (r) => r === "code/param-redeclared", page: "topics/name-scope" },
+  // The ban stands in the section about capturing the context of the lambda page.
+  {
+    match: (r) => r === "code/lambda-changes-outer-local",
+    page: "topics/lambda-expression",
+    anchor: "захват-контекста",
+  },
   { match: (r) => r === "code/loop-header", page: "topics/for-in-loop", anchor: "синтаксис" },
   { match: (r) => r === "code/invalid-string-escape", page: "topics/escape-sequence" },
   { match: (r) => r === "code/dead-interpolation", page: "topics/string-interpolation" },

@@ -28,6 +28,9 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **`code/lambda-changes-outer-local` reports a lambda that assigns a local declared outside it.**
+  The platform does not compile such code, and the linter let it through. Changing a member or an
+  element of the captured value stays allowed. ([#84](https://github.com/keyfire/xbsl/pull/84))
 - **`code/redundant-cast` and `code/cast-to-non-null` report the casts the platform IDE warns
   about.** A cast to the type a value already has, or one that only drops `Undefined`, passed the
   linter, and one project had 65 of them. The fix removes the cast or puts `!` in its place.
@@ -57,6 +60,12 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **A translation dictionary no longer hides dead methods.** It names every method it translates,
+  and `code/unused-method` took those names for uses, so a check of the project together with its
+  dictionary found nothing. ([#82](https://github.com/keyfire/xbsl/pull/82))
+- **The "never used" rules count the words of a file that does not parse.**
+  `code/client-available-unused` and `yaml/unused-component` dropped such a file whole, so a method
+  or a component used only there was reported. ([#79](https://github.com/keyfire/xbsl/pull/79))
 - **`--set` and `translate_set` write a key in every place the dictionary declares it.** A repeated
   key got the new value on one line only, so the next load refused the dictionary, and a removal left
   the copy translating. A key named twice in one batch no longer takes the neighbouring entry along.
