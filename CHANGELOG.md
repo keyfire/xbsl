@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-14 – 0.107.0, 0.108.0, 0.109.0
 
 ### Added
 
@@ -31,26 +31,6 @@ entry either - say what the behaviour was, not which class name was compared.
   `code/unused-constant` explicitly when cleaning up a project.
   ([#98](https://github.com/keyfire/xbsl/pull/98))
 
-### Changed
-
-- **Discarded expressions are reported as build errors even when they contain calls.**
-  `code/statement-no-effect` now accepts only method calls and throws as expression statements.
-  Read-only assignments also cover fields reached through a local structure receiver.
-  ([#98](https://github.com/keyfire/xbsl/pull/98))
-- **Version diagnostics identify the imported engine location.** `--version`, `--where`, MCP
-  environment information and the LSP startup log distinguish installed copies and source checkouts
-  that share a version number. ([#98](https://github.com/keyfire/xbsl/pull/98))
-
-### Fixed
-
-- **Current property types retain their nullable alternatives.** The extractor separates historical
-  member forms from current ones and resolves inherited members in order, so an older signature no
-  longer erases the empty value from a current property type.
-  ([#98](https://github.com/keyfire/xbsl/pull/98))
-
-## 2026-09-14 – 0.107.0, 0.108.0
-
-### Added
 - **Five rules report assignments and jumps that roll the build back.** `code/self-assignment` and
   `code/assign-target` catch `X = X` and a left side such as `Obj?.Value`, `code/assign-readonly` a new
   value for a `val`, `use`, loop or `catch` variable, `code/unreachable-statement` code after `return`,
@@ -89,6 +69,15 @@ entry either - say what the behaviour was, not which class name was compared.
   not edited. ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Changed
+
+- **Discarded expressions are reported as build errors even when they contain calls.**
+  `code/statement-no-effect` now accepts only method calls and throws as expression statements.
+  Read-only assignments also cover fields reached through a local structure receiver.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+- **Version diagnostics identify the imported engine location.** `--version`, `--where`, MCP
+  environment information and the LSP startup log distinguish installed copies and source checkouts
+  that share a version number. ([#98](https://github.com/keyfire/xbsl/pull/98))
+
 - **`comment/emphasis-caps` reads more than its list of function words.** It now catches a capital
   letter inside a sentence, a negation glued on, an ordinary word in capitals and the English line of a
   comment, and tells an abbreviation by the file itself. The comment walk no longer takes an HTML value
@@ -118,6 +107,12 @@ entry either - say what the behaviour was, not which class name was compared.
   keep anyway. ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Fixed
+
+- **Current property types retain their nullable alternatives.** The extractor separates historical
+  member forms from current ones and resolves inherited members in order, so an older signature no
+  longer erases the empty value from a current property type.
+  ([#98](https://github.com/keyfire/xbsl/pull/98))
+
 - **`code/ternary-and-or` no longer calls every `A and B ? X : Y` a compile error.** That ternary takes the whole
   condition and compiles; only a ternary right after `is Type` belongs to the check and breaks the line. The rule now
   reports that form alone, and the fix puts the condition in parentheses. ([#97](https://github.com/keyfire/xbsl/pull/97))
