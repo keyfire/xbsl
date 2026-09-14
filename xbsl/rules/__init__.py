@@ -33,6 +33,7 @@ from . import (  # noqa: F401
     code_structure,
     code_syntax,
     interpolation,
+    lambda_capture,
     locals_usage,
     module_level,
     ref_fields,
