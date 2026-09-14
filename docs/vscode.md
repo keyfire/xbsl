@@ -272,6 +272,10 @@ A finding whose repair belongs in another file gets a lightbulb of its own.
 | `xbsl.deploy.*` | – | The deploy settings: the elemctl binary, the `.env`, the target application. See [Deploy](#deploy); the elemctl path and the application id are shared with debugging. |
 | `xbsl.debug.*` | – | Debugging: the platform adapter directory, the Java launcher, opening the debuggee on start. See [Debugging](#debugging). |
 
+In LSP mode, yaml selection is anchored at the resolved project root. Relative roots are resolved
+from the first workspace folder. Root path matching ignores letter case on Windows and follows VS
+Code's case-sensitive matching on Linux.
+
 ## Rules: levels and disabling
 
 The old settings (`xbsl.groups.*`, `linter.select` / `.enable` / `.ignore`) are still read by the

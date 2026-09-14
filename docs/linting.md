@@ -63,7 +63,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 222 rules of the base set** - severity, default state, scope, links to
+**The full list of all 229 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -159,6 +159,14 @@ They read one file and run on every keystroke; where the verdict needs a type th
 receiver of `Obj.Field = ...`, the type of a value switched by `case` - they stay silent and leave the case
 to the compiler.
 
+Six more file checks cover missing initializers, required fields with defaults, resources returned
+as their scope closes, repeated declarations, case values and catch types. Assignments to read-only
+fields are checked through receivers whose structure or exception type is known from the same file.
+Unknown receiver types and constant expressions that require evaluation remain the compiler's
+responsibility. `code/statement-no-effect` reports any expression statement other than a call or
+throw as an error, even if an inner expression calls a method. Assigned values and short lambda
+results are consumed and remain valid.
+
 `code/unused-import` asks whether the compiler ever looked up a type in the imported namespace. A
 word of the module keeps nothing by itself: the import line, a member after a dot and a local named
 like an element are not uses. A value can be one. A property of the paired yaml or the result of a
@@ -203,6 +211,12 @@ the type check, over the module and the markup of its component for the guard, w
 keystroke. What the inference cannot name is not judged: a lambda parameter without a type, a union
 with an unknown part, a method whose overloads for the given arguments disagree, a column of a query
 the compiler would refuse. The rules therefore miss some of the IDE's warnings and add none of their own.
+
+`code/deprecated-api` checks calls of deprecated platform methods. It selects overloads using the
+project compatibility mode and the number, names and inferred types of arguments, and reports only
+when every matching form is deprecated. Unknown types keep ambiguous calls silent. This requires a
+catalog with extracted deprecation metadata; project-defined deprecated declarations are not
+checked.
 
 Detailed group descriptions live in [RULES.md](/RULES): `query/` (a composite type in `IN` with
 a subquery), `project/` (project properties), `naming/` (the naming standard, the `[morph]`
