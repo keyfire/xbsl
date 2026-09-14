@@ -532,7 +532,9 @@ naming the next `offset`. `limit=0` returns the whole list, and for the gaps the
 `--missing`, which writes the entire remainder to a file as a dictionary stub.
 
 A new entry lands in `090-manual.yaml`, or in the file named by `target`, while an entry that
-already exists is corrected where it lives. The writer never duplicates a key. A key translated
+already exists is corrected where it lives, in every place when the dictionary declares the key
+more than once. An emptied value removes every copy, and which copy to take out is left to a person,
+the way `--check-duplicates` lists it. The writer never duplicates a key. A key translated
 differently in two places, two files or twice in one, is refused when the dictionary loads, and
 `--check-duplicates` lists every such key without loading it.
 

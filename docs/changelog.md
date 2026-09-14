@@ -57,6 +57,13 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **`--set` and `translate_set` write a key in every place the dictionary declares it.** A repeated
+  key got the new value on one line only, so the next load refused the dictionary, and a removal left
+  the copy translating. A key named twice in one batch no longer takes the neighbouring entry along.
+  ([#81](https://github.com/keyfire/xbsl/pull/81))
+- **An English SOAP service client keeps its kind without the kind table in the data.** The fallback
+  spellings, used with no data or with data extracted before 0.54.1, lacked `SoapServiceClient`, so
+  the project overview counted such a client apart and a filter by kind missed it. ([#80](https://github.com/keyfire/xbsl/pull/80))
 - **The LSP server keeps the findings of a module opened outside the project root.** The
   whole-project check runs on every save and used to clear the findings of every open file it had
   not read. Now they stay until the file is closed. ([#78](https://github.com/keyfire/xbsl/pull/78))
