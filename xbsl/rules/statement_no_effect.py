@@ -1,17 +1,24 @@
-"""Tier C: an expression statement must have an effect (a call, a creation, a throw).
+"""Tier C: an expression statement must be a method call or a throw.
 
-An expression used as a statement computes a value and drops it - legal syntax, so a
-keyword typo parses fine and silently does nothing: `возрат 5` becomes two harmless
-expression statements (a name and a number), `Х == 5` written instead of `Х = 5` is a
-dropped comparison. The rule flags an expression statement whose subtree contains no
-Call, New or Throw.
+The compiler takes an expression as a statement only when it is a method call (plain, `?.`,
+through a module or a variable holding a lambda) or a `выбросить`; an assignment is a
+statement of its own. Every other expression statement is a build error - the value is
+computed and nothing uses it. That covers the typos the parser accepts (`возрат 5` becomes
+two statements, a name and a number; `Х == 5` instead of `Х = 5` is a dropped comparison),
+and it covers statements that do run code: `Метод() + 1`, `новый Массив<Число>()`,
+`Флаг ? Метод() : 0`, `Пустая ?? Метод()`, `Метод()!`, `Метод()[0]`, a rich string with
+`%{Метод()}` inside, `Запрос{...}`, a lambda. Parentheses change nothing: the parser unwraps
+them, so `(Метод())` stays a call and `(Имя)` stays a name - the compiler reads them the
+same way.
 
-Conservative corners (kept effectful so the rule stays at zero false positives):
-- a lambda is NOT entered when judging the statement that drops it (its body does not
-  run), but lambda bodies are walked for their own statements;
-- a rich string with interpolation may call methods inside `%{...}`/`${...}` - the
-  lexer keeps it one opaque token, so it counts as an effect;
-- `Запрос{...}` and resolvable literals (`Ресурс{...}`) are opaque - count as an effect.
+The two cases get two messages. With nothing inside that runs code, the statement does
+nothing at all and is most likely a typo. With a call or `новый` inside, the call runs but
+its result is dropped, and the statement still does not build.
+
+Walked: the bodies of methods (module, structure and enumeration methods) and full lambda
+bodies at any depth, including every nested block. The expression body of a short lambda
+(`Н -> Н + 1`) is a value, not a statement, and is not judged. A file with a parse error is
+left to `code/parse-error`: recovery stubs would read as statements here.
 """
 
 from __future__ import annotations
@@ -36,48 +43,59 @@ MESSAGES = {
         "en": "The expression statement has no effect: the value is computed and dropped "
               "(possibly a typo)",
     },
+    "code/statement-no-effect.value-dropped": {
+        "ru": "Значение выражения не используется, и такой оператор не соберётся: оператором "
+              "может быть только вызов метода, присваивание или 'выбросить'. Сохраните результат "
+              "в переменную или оставьте один вызов",
+        "en": "The value of the expression is not used, and such a statement does not build: a "
+              "statement can only be a method call, an assignment or '{n[выбросить]}'. Assign "
+              "the result to a variable or keep the call alone",
+    },
 }
 i18n.register(MESSAGES)
 
-_OPAQUE_LITERALS = ("QUERY", "RESOLVABLE")
+
+def _is_statement(expr: P.Expr) -> bool:
+    """A call or a throw - the only expressions the compiler takes as a statement."""
+    return isinstance(expr, (P.Call, P.Throw))
 
 
-def _has_effect(expr: P.Expr | None) -> bool:
+def _runs_code(expr: P.Expr | None) -> bool:
+    """Does the expression call, create or throw anything (a lambda body does not run)?"""
     if expr is None:
         return False
     if isinstance(expr, (P.Call, P.New, P.Throw)):
         return True
     if isinstance(expr, P.Literal):
-        if expr.kind in _OPAQUE_LITERALS:
-            return True
+        # A rich string is one lexer token; a call may hide inside `%{...}`/`${...}`.
         return expr.kind == "STRING" and ("%{" in expr.text or "${" in expr.text)
     if isinstance(expr, P.Lambda):
-        return False  # the body does not run when the lambda value is dropped
+        return False
     if isinstance(expr, P.Unary):
-        return _has_effect(expr.operand)
+        return _runs_code(expr.operand)
     if isinstance(expr, P.Binary):
-        return _has_effect(expr.left) or _has_effect(expr.right)
+        return _runs_code(expr.left) or _runs_code(expr.right)
     if isinstance(expr, P.Compare):
-        return _has_effect(expr.first) or any(_has_effect(r) for _op, r in expr.rest)
+        return _runs_code(expr.first) or any(_runs_code(r) for _op, r in expr.rest)
     if isinstance(expr, (P.IsType, P.AsType, P.NonNull)):
-        return _has_effect(expr.operand)
+        return _runs_code(expr.operand)
     if isinstance(expr, P.Ternary):
-        return _has_effect(expr.cond) or _has_effect(expr.then) or _has_effect(expr.otherwise)
+        return _runs_code(expr.cond) or _runs_code(expr.then) or _runs_code(expr.otherwise)
     if isinstance(expr, P.Coalesce):
-        return _has_effect(expr.left) or _has_effect(expr.right)
+        return _runs_code(expr.left) or _runs_code(expr.right)
     if isinstance(expr, P.Member):
-        return _has_effect(expr.obj)
+        return _runs_code(expr.obj)
     if isinstance(expr, P.Index):
-        return _has_effect(expr.obj) or _has_effect(expr.index)
+        return _runs_code(expr.obj) or _runs_code(expr.index)
     if isinstance(expr, P.ArrayLit):
-        return any(_has_effect(item) for item in expr.items)
+        return any(_runs_code(item) for item in expr.items)
     if isinstance(expr, P.MapLit):
-        return any(_has_effect(k) or _has_effect(v) for k, v in expr.entries)
-    return False  # Name, This, GlobalAccess, MethodRef, plain literals
+        return any(_runs_code(k) or _runs_code(v) for k, v in expr.entries)
+    return False  # Name, This, GlobalAccess, MethodRef, plain and opaque literals
 
 
 def _visit_expr(expr: P.Expr | None, out: list[P.ExprStmt]) -> None:
-    """Collect no-effect statements from lambda bodies nested in an expression."""
+    """Collect the offending statements of lambda bodies nested in an expression."""
     if expr is None:
         return
     if isinstance(expr, P.Lambda):
@@ -134,7 +152,7 @@ def _visit_expr(expr: P.Expr | None, out: list[P.ExprStmt]) -> None:
 def _walk_body(stmts: list[P.Stmt], out: list[P.ExprStmt]) -> None:
     for st in stmts:
         if isinstance(st, P.ExprStmt):
-            if not _has_effect(st.expr):
+            if not _is_statement(st.expr):
                 out.append(st)
             _visit_expr(st.expr, out)
         elif isinstance(st, P.VarDecl):
@@ -183,9 +201,12 @@ def _walk_body(stmts: list[P.Stmt], out: list[P.ExprStmt]) -> None:
             _visit_expr(st.value, out)
 
 
-@rule("code/statement-no-effect", "code/statement-no-effect.title", "C")
+@rule(
+    "code/statement-no-effect", "code/statement-no-effect.title", "C",
+    severity=Severity.ERROR,
+)
 def statement_no_effect(source: SourceFile) -> Iterable[Diagnostic]:
-    """An expression statement must call, create or throw - otherwise it does nothing."""
+    """An expression statement must be a method call or a throw - anything else does not build."""
     if source.kind != "xbsl":
         return
     module, errors = parse(source)
@@ -213,7 +234,8 @@ def statement_no_effect(source: SourceFile) -> Iterable[Diagnostic]:
     lm = linemap(source)
     for st in found:
         line, col = lm.linecol(st.start)
+        key = "value-dropped" if _runs_code(st.expr) else "found"
         yield Diagnostic(
-            source.rel, line, col, "code/statement-no-effect", Severity.WARNING,
-            i18n.t("code/statement-no-effect.found"),
+            source.rel, line, col, "code/statement-no-effect", Severity.ERROR,
+            i18n.t(f"code/statement-no-effect.{key}"),
         )

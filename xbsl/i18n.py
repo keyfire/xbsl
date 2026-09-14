@@ -358,8 +358,8 @@ _CORE_MESSAGES = {
               "--format json the same records are printed as data",
     },
     "cli.help.where": {
-        "ru": "показать корень данных Элемента (путь, источник, версии) и выйти",
-        "en": "show the Element data root (path, source, versions) and exit",
+        "ru": "показать установку движка, интерпретатор и данные Элемента (путь, источник, версии) и выйти",
+        "en": "show the engine location, interpreter and Element data (path, source, versions) and exit",
     },
     "cli.help.element-version": {
         "ru": "версия данных Элемента (по умолчанию – последняя из бандла)",
@@ -453,8 +453,8 @@ _CORE_MESSAGES = {
         "en": "show this help message and exit",
     },
     "cli.help.version": {
-        "ru": "показать версию и выйти",
-        "en": "show the version and exit",
+        "ru": "показать версию и путь установки движка и выйти",
+        "en": "show the version and engine location and exit",
     },
     "cli.version.plugins": {
         "ru": "надстройки: {list}",

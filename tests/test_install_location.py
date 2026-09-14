@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 
 import xbsl
-from xbsl import __version__, cli, environment
+from xbsl import __version__, cli, dataset, environment
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,7 +56,11 @@ def test_where_names_the_location_and_the_interpreter_before_the_data(tmp_path, 
     empty = tmp_path / "no-data"
     empty.mkdir()
 
-    assert cli.main(["--where", "--data-dir", str(empty), "--lang", "ru"]) == 0
+    previous_root = dataset.pinned_root()
+    try:
+        assert cli.main(["--where", "--data-dir", str(empty), "--lang", "ru"]) == 0
+    finally:
+        dataset.set_data_root(previous_root)
 
     lines = capsys.readouterr().out.splitlines()
     assert lines[:3] == [

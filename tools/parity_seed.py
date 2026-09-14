@@ -1755,6 +1755,48 @@ _LAMBDA_TOTAL_TOKENS = {"Расчет": "Calculation", "Посчитать": "Co
 
 SEEDS: list[Seed] = [
     Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a call inside arithmetic does not make a valid statement',
+        files={"Проба.xbsl": 'метод Проба()\n    Функция() + 1\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a constructor result cannot be discarded',
+        files={"Проба.xbsl": 'метод Проба()\n    новый Массив<Число>()\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='a ternary expression with a call still discards a value',
+        files={"Проба.xbsl": 'метод Проба()\n    Истина ? Функция() : 0\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=FINDING,
+        note='coalescing with a call still discards a value',
+        files={"Проба.xbsl": 'метод Проба()\n    Неопределено ?? Функция()\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=CLEAN,
+        note='a parenthesized call is a valid statement',
+        files={"Проба.xbsl": 'метод Проба()\n    (Функция())\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
+        rule="code/statement-no-effect",
+        expect=CLEAN,
+        note='an initializer consumes the expression value',
+        files={"Проба.xbsl": 'метод Проба()\n    знч Значение = Функция() + 1\n;\nметод Функция(): Число\n    возврат 1\n;\n'},
+        tokens={"Проба": "Probe", "Функция": "Function", "Значение": "Value"},
+    ),
+    Seed(
         rule="structure/xbsl-pair",
         expect=CLEAN,
         note="a module extending a generated type is described by the element's own yaml",
