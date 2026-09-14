@@ -14,6 +14,8 @@ import {
   hasChoice,
   nodeStates,
   packagesKnown,
+  PlaceRename,
+  renamePlaceKeys,
   selectAll,
   selectedCount,
   Selection,
@@ -77,7 +79,17 @@ export class TreeFilterPanel {
     await created.reload(true);
   }
 
-  // Read the tree again. The choice being edited is written back against it, so a package renamed
+  /** Keys of packages renamed from the tree move in the choice being edited too, at the moment
+   * they move in the applied one: otherwise the next reload drops the old key from this choice,
+   * and "Apply" writes a filter without the package. */
+  public static followRenames(renames: readonly PlaceRename[]): void {
+    const open = TreeFilterPanel.current;
+    if (open) {
+      open.working = renames.reduce((selection, rename) => renamePlaceKeys(selection, rename), open.working);
+    }
+  }
+
+  // Read the tree again. The choice being edited is written back against it, so a package deleted
   // meanwhile leaves the choice here the same way it leaves the stored one.
   private async reload(fromApplied: boolean): Promise<void> {
     const { tree, pending } = await this.host.form();

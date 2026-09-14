@@ -14,13 +14,17 @@ import {
   FilterNode,
   FilterTree,
   filterPredicate,
+  followRenames,
   FolderPlace,
   isPlaceFilter,
   nodeStates,
   placeFilterOf,
+  PlaceRename,
   placesByFolder,
   placeSelection,
   readSelection,
+  renamedPlace,
+  renamePlaceKeys,
   selectAll,
   selectedCount,
   Selection,
@@ -397,6 +401,107 @@ test("the label of a project: partial subsystems marked, the rest counted", () =
     more: 2,
   });
   assert.deepStrictEqual(summarize(new Set(["Склад"])).items, [{ name: "Склад", partial: true }]);
+});
+
+// --- a package renamed by the command of the tree -------------------------------------------
+
+// The engine's answer after "Rename package" turned `Склад::Партии` into `Склад::Лоты`: the folder
+// moved with its nested package and the objects of both.
+const moveFolder = (p: string): string => p.replace(`${P}\\Склад\\Партии`, `${P}\\Склад\\Лоты`);
+const RENAMED: EngineProjectInfo = {
+  projects: ANSWER.projects,
+  packages: (ANSWER.packages ?? []).map((pkg) => ({ ...pkg, package: pkg.package.replace(/^Партии/, "Лоты"), dir: moveFolder(pkg.dir) })),
+  objects: (ANSWER.objects ?? []).map((o) => ({
+    ...o,
+    path: moveFolder(o.path),
+    package: o.package ? o.package.replace(/^Партии/, "Лоты") : o.package,
+    namespace: o.namespace?.replace("Склад::Партии", "Склад::Лоты"),
+  })),
+};
+// The answer after the package was deleted instead.
+const DELETED: EngineProjectInfo = {
+  projects: ANSWER.projects,
+  packages: [],
+  objects: (ANSWER.objects ?? []).filter((o) => !o.package),
+};
+
+function treeOf(answer: EngineProjectInfo): FilterTree {
+  return buildFilterTree({
+    projects: [{ dir: P, name: "Учет", title: "Демо::Учет" }],
+    items: (answer.objects ?? []).map((o) => o.path),
+    pathOf: (p) => p,
+    projectOf,
+    count: (items) => items.length,
+    placement: readPlacement(answer),
+    subsystems: DESCRIPTORS,
+  });
+}
+
+const TO_LOTS: PlaceRename = { project: PROJECT, from: "Склад::Партии", to: "Склад::Лоты" };
+
+test("the key of a renamed place: the last segment replaced", () => {
+  assert.strictEqual(renamedPlace("Склад::Партии", "Лоты"), "Склад::Лоты");
+  assert.strictEqual(renamedPlace("Склад::Партии::Архив", "Старое"), "Склад::Партии::Старое");
+  assert.strictEqual(renamedPlace("Склад", "Запасы"), "Запасы");
+});
+
+test("renaming moves the keys of the place: its objects, its whole key, its nested packages", () => {
+  const stored = readSelection({
+    [PROJECT]: ["Склад::Партии", "Склад::Партии::Архив::*", "Склад::ПартииПоставщиков::*", "Продажи::*", "Склад"],
+    "d:/elsewhere/проект": ["Склад::Партии::*"],
+  });
+  assert.deepStrictEqual(writeSelection(renamePlaceKeys(stored, TO_LOTS)), {
+    "d:/elsewhere/проект": ["Склад::Партии::*"], // another project keeps its own package of that name
+    [PROJECT]: ["Продажи::*", "Склад", "Склад::Лоты", "Склад::Лоты::Архив::*", "Склад::ПартииПоставщиков::*"],
+  });
+  assert.deepStrictEqual(keysOf(stored).includes("Склад::Партии"), true, "the given choice is not changed in place");
+  // A nested package renamed: the enclosing package keeps its keys.
+  const nested = readSelection({ [PROJECT]: ["Склад::Партии", "Склад::Партии::Архив::*"] });
+  assert.deepStrictEqual(
+    keysOf(renamePlaceKeys(nested, { project: PROJECT, from: "Склад::Партии::Архив", to: "Склад::Партии::Старое" })),
+    ["Склад::Партии", "Склад::Партии::Старое::*"]
+  );
+  // Nothing of the place chosen: the same choice comes back.
+  const other = readSelection({ [PROJECT]: ["Продажи::*"] });
+  assert.strictEqual(renamePlaceKeys(other, TO_LOTS), other);
+});
+
+test("the filter by a renamed package survives the answer that shows the new name", () => {
+  const byPackage = placeSelection(PROJECT, "Склад::Партии");
+  // The answer before the rename still lists the old package: the keys stay, the rename waits.
+  const early = followRenames(tree(), byPackage, [TO_LOTS]);
+  assert.strictEqual(early.selection, byPackage);
+  assert.deepStrictEqual([early.followed, early.waiting], [[], [TO_LOTS]]);
+  // The answer with the new name. Read against it as they are, the keys name no checkbox: the
+  // canonical form drops them, and the filter by that one package switches off.
+  const renamed = treeOf(RENAMED);
+  assert.deepStrictEqual(writeSelection(canonicalSelection(renamed, byPackage)), {});
+  const moved = followRenames(renamed, byPackage, [TO_LOTS]);
+  assert.deepStrictEqual([moved.followed, moved.waiting], [[TO_LOTS], []]);
+  assert.deepStrictEqual(keysOf(moved.selection), ["Склад::Лоты::*"]);
+  assert.deepStrictEqual(writeSelection(canonicalSelection(renamed, moved.selection)), writeSelection(moved.selection));
+  // The filter lets the objects of the renamed package through, the nested package included, and
+  // the renamed node is the one whose button clears the filter.
+  const passes = filterPredicate({ selection: moved.selection, projects: [P], projectOf, placement: readPlacement(RENAMED), subsystems: [] })!;
+  assert.deepStrictEqual((RENAMED.objects ?? []).map((o) => o.path).filter(passes).map((p) => p.slice(P.length + 1)), [
+    "Склад\\Лоты\\Архив\\АрхивПартий.yaml",
+    "Склад\\Лоты\\ПартииТоваров.yaml",
+  ]);
+  assert.deepStrictEqual([...placeFilterOf(renamed, moved.selection)!.places], ["Склад::Лоты"]);
+});
+
+test("a rename no answer can confirm: forgotten when the package is gone, kept while nothing is known", () => {
+  const byPackage = placeSelection(PROJECT, "Склад::Партии");
+  // Deleted before the answer came: the tree lists neither name, so the rename is forgotten and the
+  // keys leave with the canonical form, like those of any deleted package.
+  const deleted = followRenames(treeOf(DELETED), byPackage, [TO_LOTS]);
+  assert.deepStrictEqual([deleted.followed, deleted.waiting], [[], []]);
+  assert.strictEqual(deleted.selection, byPackage);
+  // Without the engine the tree knows no packages at all: the rename waits for an answer.
+  assert.deepStrictEqual(followRenames(tree(false), byPackage, [TO_LOTS]).waiting, [TO_LOTS]);
+  // A project the tree does not draw waits as well.
+  const elsewhere: PlaceRename = { project: "d:/elsewhere/проект", from: "Касса::Смены", to: "Касса::Сессии" };
+  assert.deepStrictEqual(followRenames(treeOf(RENAMED), byPackage, [elsewhere]).waiting, [elsewhere]);
 });
 
 test("the stored choice: malformed values read as nothing, the keys come back sorted", () => {

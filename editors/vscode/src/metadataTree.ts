@@ -41,15 +41,18 @@ import {
   chosenSubsystems,
   FilterTree,
   filterPredicate,
+  followRenames,
   FolderPlace,
   hasChoice,
   isPlaceFilter,
   PlaceFilter,
   placeFilterOf,
   placeKey,
+  PlaceRename,
   placesByFolder,
   placeSelection,
   readSelection,
+  renamedPlace,
   sameSelection,
   Selection,
   summarize,
@@ -1744,6 +1747,9 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
   // The filter by subsystems and packages: the chosen placement keys per project
   // (treeFilterCore), kept in the workspace state so a reload of the window keeps it.
   private selection: Selection;
+  // Packages renamed from the tree whose keys have not moved yet: they move when a tree built from
+  // the engine's answer lists the new name (treeFilterCore.followRenames).
+  private renames: PlaceRename[] = [];
   private filterContext?: boolean; // the value last given to FILTER_CONTEXT
   // The filter form reads the tree again when the files or the engine's answer change.
   private readonly formEmitter = new vscode.EventEmitter<void>();
@@ -1901,7 +1907,41 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       this.model = await parseModel(this.projectRootFor);
     }
     void this.askPlacement();
-    return { tree: filterTreeOf(this.model, this.placement), pending: this.placementRequest !== undefined };
+    const tree = filterTreeOf(this.model, this.placement);
+    // The form reads the choice against this tree, so a rename it already shows moves the keys
+    // first; the tree view draws the moved choice as well.
+    if (this.followRenames(tree)) {
+      this.redraw();
+    }
+    return { tree, pending: this.placementRequest !== undefined };
+  }
+
+  // A package renamed by the command of the tree: the filter keeps it under the new name. The keys
+  // move once an answer of the engine shows that name; `forgetRename` takes it back when the rename
+  // was not applied after all.
+  renamedPlace(rename: PlaceRename): void {
+    this.renames.push(rename);
+  }
+
+  forgetRename(rename: PlaceRename): void {
+    this.renames = this.renames.filter((r) => r !== rename);
+  }
+
+  // Move the keys of the renames this tree already shows - in the stored choice and in the choice
+  // being edited in the open form alike. Returns whether the stored choice changed.
+  private followRenames(filterTree: FilterTree): boolean {
+    if (!this.renames.length) {
+      return false;
+    }
+    const { selection, followed, waiting } = followRenames(filterTree, this.selection, this.renames);
+    this.renames = waiting;
+    TreeFilterPanel.followRenames(followed);
+    if (sameSelection(selection, this.selection)) {
+      return false;
+    }
+    this.selection = selection;
+    void this.memento?.update(FILTER_STATE_KEY, writeSelection(selection));
+    return true;
   }
 
   // The toolbar shows the filled filter icon while a filter is on (FILTER_CONTEXT). Before the
@@ -1916,8 +1956,9 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
     }
   }
 
-  // A package renamed or deleted, a subsystem gone: its keys leave the stored choice as soon as
-  // the engine's answer shows it. Only an answer can tell - without one every key is kept.
+  // A package deleted or renamed outside the tree, a subsystem gone: its keys leave the stored
+  // choice as soon as the engine's answer shows it. Only an answer can tell - without one every key
+  // is kept. A package renamed by the command of the tree has its keys moved before this runs.
   private dropStaleKeys(filterTree: FilterTree): void {
     if (!this.placement || !this.selection.size) {
       return;
@@ -2014,6 +2055,7 @@ class XbslMetadataProvider implements vscode.TreeDataProvider<XbslNode> {
       }
       void this.askPlacement();
       const filterTree = filterTreeOf(this.model, this.placement);
+      this.followRenames(filterTree);
       this.dropStaleKeys(filterTree);
       this.syncFilterContext();
       this.roots = buildRoots(this.model, this.selection, this.groupMode, this.hideEmpty, this.placement, filterTree);
@@ -2386,15 +2428,17 @@ const IDENTIFIER = /^[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё0-9_]*$/;
 
 // Apply the engine result and show what was inserted: reveal in the tree + cursor in the editor
 // (the point of interest is sent by the engine in the cursor field of the edited file).
+// Resolves to whether the changes were applied: an engine refusal or an edit the editor turned down
+// leaves the files as they were.
 async function applyAndReveal(
   provider: XbslMetadataProvider,
   result: ScaffoldResult,
   revealPred?: (n: XbslNode) => boolean,
   openEdited = true
-): Promise<void> {
+): Promise<boolean> {
   const paths = await applyScaffold(result);
   if (!paths.length) {
-    return;
+    return false;
   }
   if (revealPred) {
     provider.requestReveal(revealPred);
@@ -2402,12 +2446,12 @@ async function applyAndReveal(
   // A move or a package rename edits files all over the project: none of them is the point of
   // interest, the node in the tree is.
   if (!openEdited) {
-    return;
+    return true;
   }
   const edited = (result.files ?? []).find((f) => !f.created && f.cursor);
   const target = edited ?? (result.files ?? [])[0];
   if (!target) {
-    return;
+    return true;
   }
   const uri = vscode.Uri.file(target.path);
   const doc = await vscode.workspace.openTextDocument(uri);
@@ -2417,6 +2461,7 @@ async function applyAndReveal(
     editor.selection = new vscode.Selection(pos, pos);
     revealContent(editor, pos);
   }
+  return true;
 }
 
 async function askIdentifier(prompt: string, value: string): Promise<string | undefined> {
@@ -2884,13 +2929,24 @@ async function renamePackage(provider: XbslMetadataProvider, node?: XbslNode): P
   if (!result) {
     return;
   }
+  // The filter of the tree keeps the package under its new name. The rename is handed over before
+  // the files move - the engine may answer with the new folders at any moment after that - and
+  // taken back when nothing was applied.
+  const place = node.filterPlace;
+  const rename = place ? { project: place.project, from: place.place, to: renamedPlace(place.place, name) } : undefined;
+  if (rename) {
+    provider.renamedPlace(rename);
+  }
   const renamed = pathKey(path.join(path.dirname(packageDir), name));
-  await applyAndReveal(
+  const applied = await applyAndReveal(
     provider,
     result,
     (n) => !!n.folderDir && pathKey(n.folderDir) === renamed && /\bpackage\b/.test(n.contextValue ?? ""),
     false
   );
+  if (rename && !applied) {
+    provider.forgetRename(rename);
+  }
 }
 
 const TREE_MIME = "application/vnd.code.tree.xbslmetadata";
