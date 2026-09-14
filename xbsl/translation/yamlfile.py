@@ -205,12 +205,10 @@ def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
     m = _RESOURCE_VALUE_RE.match(value)
     if m:
         stem, extension = m.group(1), m.group(2)
-        replacement = resolver.dictionary.token(stem)
+        # A file name is spelled the way the tree spells the file (Resolver.resource_name).
+        replacement, _plane = resolver.resource_name(stem)
         if replacement:
             report.user_done += 1
-            # A file name is spelled by the dictionary alone - no platform table names the
-            # project's own resources - so the entry is what renames the file with it.
-            resolver.note_entry_only(stem, replacement)
             _set_scalar(node, f"{replacement}.{extension}", edits)
         else:
             line, col = _at(node)
