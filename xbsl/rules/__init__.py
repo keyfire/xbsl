@@ -43,6 +43,7 @@ from . import (  # noqa: F401
     module_level,
     readonly_targets,
     ref_fields,
+    repetitions,
     resources,
     return_mismatch,
     statement_no_effect,

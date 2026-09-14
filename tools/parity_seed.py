@@ -1450,6 +1450,47 @@ _LABEL_RU = _CARD_HEAD_RU + "Содержимое:\n    -\n        Тип: На�
 _STRINGS_TOKENS = {"Словарь": "Dictionary", "Приветствие": "Greeting", "Расширена": "Extended",
                    "Готово": "Done", "Карточка": "Card"}
 
+#: --- Repetitions: `{second}` is what the second branch or section names ------------------------
+_SIGNAL_WHEN_RU = (
+    "метод Разобрать(Значение: Объект): Число\n"
+    "    выбор Значение\n"
+    "        когда это Строка\n"
+    "            возврат 1\n"
+    "        когда {second}\n"
+    "            возврат 2\n"
+    "    ;\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_SIGNAL_ITEM_RU = (
+    "перечисление Сигнал\n    Красный,\n    Зеленый\n;\n\n"
+    "метод Разобрать(Значение: Сигнал): Число\n"
+    "    выбор Значение\n"
+    "        когда Сигнал.Красный\n"
+    "            возврат 1\n"
+    "        когда {second}\n"
+    "            возврат 2\n"
+    "    ;\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_SIGNAL_CATCH_RU = (
+    "метод Разобрать(): Число\n"
+    "    попытка\n"
+    "        возврат 1\n"
+    "    поймать Первое: ИсключениеНедопустимоеСостояние\n"
+    "        возврат 2\n"
+    "    поймать Второе: {second}\n"
+    "        возврат 3\n"
+    "    ;\n"
+    ";\n"
+)
+_SIGNAL_EXCEPTION_RU = "исключение ИсключениеСигнала\n    пер {field}: Строка = \"\"\n;\n"
+_SIGNAL_ENUM_RU = "перечисление Сигнал\n    Красный умолчание,\n    Зеленый{mark}\n;\n"
+_SIGNAL_TOKENS = {"Сигналы": "Signals", "Сигнал": "Signal", "Красный": "Red", "Зеленый": "Green",
+                  "Разобрать": "Parse", "Значение": "Value", "Первое": "First", "Второе": "Second",
+                  "ИсключениеСигнала": "SignalException", "Подробности": "Details"}
+
 #: --- Resources, components, modules ----------------------------------------------------
 _PICTURES_XBSL_RU = "метод Картинка(): ДвоичныйОбъект.Ссылка\n    возврат Ресурс{{{key}}}.Ссылка\n;\n"
 _PICTURES_TOKENS = {"Проба": "Probe", "Основное": "Main", "Своя": "Own", "Картинки": "Pictures",
@@ -4646,6 +4687,77 @@ SEEDS: list[Seed] = [
         note="the two sections with distinct keys",
         files={"Словарь.yaml": _STRINGS_DEFAULT_RU, "Локализация/En/Словарь.yaml": _STRINGS_PARTNER_EN},
         tokens=_STRINGS_TOKENS,
+    ),
+    # --- repetitions: a value, a type or a name written twice --------------------------------
+    Seed(
+        rule="code/duplicate-when",
+        expect=FINDING,
+        note="a type test repeated in the branches of a switch",
+        files={"Сигналы.xbsl": _SIGNAL_WHEN_RU.format(second="это Строка")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=CLEAN,
+        note="the second branch tests another type",
+        files={"Сигналы.xbsl": _SIGNAL_WHEN_RU.format(second="это Число")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=FINDING,
+        note="an item of an enumeration of the file repeated in the branches of a switch",
+        files={"Сигналы.xbsl": _SIGNAL_ITEM_RU.format(second="Сигнал.Красный")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-when",
+        expect=CLEAN,
+        note="the second branch names another item",
+        files={"Сигналы.xbsl": _SIGNAL_ITEM_RU.format(second="Сигнал.Зеленый")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-catch",
+        expect=FINDING,
+        note="one exception type caught by two sections",
+        files={"Сигналы.xbsl": _SIGNAL_CATCH_RU.format(second="ИсключениеНедопустимоеСостояние")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-catch",
+        expect=CLEAN,
+        note="the second section catches another type",
+        files={"Сигналы.xbsl": _SIGNAL_CATCH_RU.format(second="ИсключениеНедопустимыйАргумент")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=FINDING,
+        note="an exception field named like a property every exception has",
+        files={"Сигналы.xbsl": _SIGNAL_EXCEPTION_RU.format(field="Описание")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=CLEAN,
+        note="an exception field of a name of its own",
+        files={"Сигналы.xbsl": _SIGNAL_EXCEPTION_RU.format(field="Подробности")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=FINDING,
+        note="a second default item of an enumeration",
+        files={"Сигналы.xbsl": _SIGNAL_ENUM_RU.format(mark=" умолчание")},
+        tokens=_SIGNAL_TOKENS,
+    ),
+    Seed(
+        rule="code/duplicate-declaration",
+        expect=CLEAN,
+        note="one default item",
+        files={"Сигналы.xbsl": _SIGNAL_ENUM_RU.format(mark="")},
+        tokens=_SIGNAL_TOKENS,
     ),
     # --- resources, declarations, calls --------------------------------------------------
     Seed(
