@@ -4521,6 +4521,49 @@ SEEDS: list[Seed] = [
         files={"Проверки.xbsl": "метод Проба(Значение: Объект)\n    если Значение это не Строка\n        возврат\n    ;\n;\n"},
         tokens=_CHECKS_TOKENS,
     ),
+    Seed(
+        rule="style/boolean-ternary",
+        expect=FINDING,
+        note="a ternary with the true and the false keyword for branches - the literals and the "
+             "negation of the fix are read in both spellings",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево): Булево\n    возврат Флаг ? Ложь : Истина\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/boolean-ternary",
+        expect=CLEAN,
+        note="the negated condition the fix writes in place of that ternary",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево): Булево\n    возврат не Флаг\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/boolean-ternary",
+        expect=FINDING,
+        note="the same ternary in a binding of a form property - an English key and an English "
+             "expression",
+        files={
+            "Заявки.yaml": _CATALOG_RU,
+            "ФормаЗаявки.yaml": _FORM_RU + "    Содержимое:\n        Тип: Надпись\n        Имя: Метка\n"
+                                           "        Видимость: '=Объект.Ссылка == Неопределено ? Ложь : Истина'\n",
+        },
+        tokens={**_FORM_TOKENS, "Метка": "Label"},
+    ),
+    Seed(
+        rule="style/redundant-scope",
+        expect=FINDING,
+        note="a scope that is the only statement of a branch - the keyword is read in both spellings",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево)\n    если Флаг\n        область\n"
+                                "            Проба(Ложь)\n        ;\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
+    Seed(
+        rule="style/redundant-scope",
+        expect=CLEAN,
+        note="a scope next to another statement of the branch - it limits what it declares",
+        files={"Проверки.xbsl": "метод Проба(Флаг: Булево)\n    если Флаг\n        Проба(Ложь)\n"
+                                "        область\n            Проба(Ложь)\n        ;\n    ;\n;\n"},
+        tokens=_CHECKS_TOKENS,
+    ),
     # --- names, identifiers, the descriptor -------------------------------------------------
     Seed(
         rule="naming/underscore",
