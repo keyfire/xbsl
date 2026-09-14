@@ -274,8 +274,12 @@ def build_parser() -> argparse.ArgumentParser:
     listed = ", ".join(f"{p['name']} {p['version']}" for p in plugins.installed())
     if listed:
         plugin_note = "; " + i18n.t("cli.version.plugins", list=listed)
+    # The copy that answers, last on the line and still on the FIRST line: the version is
+    # read with `| head -1`, and a worktree, an editable checkout and a release print the same
+    # number (see environment.location).
+    location_note = "; " + i18n.t("cli.version.location", path=environment.location())
     parser.add_argument("--version", action="version", help=i18n.t("cli.help.version"),
-                        version=f"xbsl {__version__}{data_note}{plugin_note}")
+                        version=f"xbsl {__version__}{data_note}{plugin_note}{location_note}")
     return parser
 
 
@@ -1160,6 +1164,10 @@ def _check_main(argv: list[str]) -> int:
         dataset.set_version(args.element_version)
 
     if args.where:
+        # The engine first, then the data it reads: a data root says little until it is
+        # known which copy of the engine - and under which interpreter - resolved it.
+        print(i18n.t("cli.where.location", path=environment.location()))
+        print(i18n.t("cli.where.python", path=sys.executable))
         print(f"корень данных: {dataset.data_root()}")
         print(f"источник: {dataset.data_root_source()}")
         try:

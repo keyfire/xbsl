@@ -9,12 +9,29 @@ file, and nothing used to say so - the diagnosis went through site-packages of b
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from xbsl import __version__, dataset, i18n, plugins
 
 
+def location() -> str:
+    """The directory the engine is imported from: the site-packages of an installed copy, or
+    the root of a source checkout (an editable install, a worktree, a folder on PYTHONPATH).
+
+    The version does not say which copy answered. One machine easily carries four - a pipx
+    venv, the interpreter's own site-packages, an editable checkout and a worktree of it - and
+    unreleased code prints the number of the last release: a check made seconds before
+    `self-update` reached the copy on PATH read that copy's old number as a stale editable
+    install. The interpreter does not settle it either, since an editable checkout and its
+    worktree run under the same one. The path is the imported code itself, never the install
+    metadata, which is exactly what goes stale.
+    """
+    return str(Path(__file__).resolve().parent.parent)
+
+
 def snapshot() -> dict:
-    """The environment as data: engine, interpreter, Element data versions, plugins."""
+    """The environment as data: engine, where it is imported from, interpreter, Element data
+    versions, plugins."""
     try:
         data = {
             "default": dataset.default_version(),
@@ -30,6 +47,7 @@ def snapshot() -> dict:
         data = None
     return {
         "engine": __version__,
+        "location": location(),
         "python": sys.executable,
         "data": data,
         "plugins": plugins.installed(),
@@ -107,6 +125,7 @@ def note() -> str:
     listed = ", ".join(f"{p['name']} {p['version']}" for p in info["plugins"]) or "нет"
     return (
         f"python {info['python']}; "
+        f"установка: {info['location']}; "
         f"данные Элемента: {data['default'] if data else 'нет'}"
         + (f" из {data['root']}" if data else "")
         + f"; надстройки: {listed}"

@@ -460,6 +460,18 @@ _CORE_MESSAGES = {
         "ru": "надстройки: {list}",
         "en": "plugins: {list}",
     },
+    "cli.version.location": {
+        "ru": "установка: {path}",
+        "en": "location: {path}",
+    },
+    "cli.where.location": {
+        "ru": "установка: {path}",
+        "en": "location: {path}",
+    },
+    "cli.where.python": {
+        "ru": "интерпретатор: {path}",
+        "en": "interpreter: {path}",
+    },
     "cli.help.commands.header": {
         "ru": "команды:",
         "en": "commands:",

@@ -109,10 +109,13 @@ def list_rules(select: list[str] | None = None, ignore: list[str] | None = None)
 
 @mcp.tool()
 def version_info() -> dict:
-    """The environment answering: engine version, interpreter, data version, plugins.
+    """The environment answering: engine version, location, interpreter, data version, plugins.
 
     Two environments with diverged plugin versions (the editor's LSP, the agent's MCP)
-    answer differently on the same file - this names which one is talking.
+    answer differently on the same file - this names which one is talking. `location` is the
+    directory the engine is imported from, site-packages or a source checkout: a worktree, an
+    editable checkout and a release print the same version, and one interpreter runs the first
+    two.
     """
     return environment.snapshot()
 
