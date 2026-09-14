@@ -14,7 +14,10 @@ What counts as a use, and why the two sides are counted differently:
   component in prose;
 - in a MODULE, any word of the text counts, a comment and a string literal included. That is
   deliberately lax, exactly as in `code/unused-method`: a component may be created by name
-  from a string (an HTML container bridge), and doubt has to silence the finding.
+  from a string (an HTML container bridge), and doubt has to silence the finding;
+- a YAML that does not parse counts like a module, with every word of its text: its values
+  cannot be told from its keys any more, and a file the linter failed to read is no evidence
+  that nothing in it places the component.
 
 Never reported:
 
@@ -142,7 +145,13 @@ def _unused_component_mapper(source: SourceFile) -> dict | None:
         return fact
     if not _HAVE_YAML:
         return None
-    data, _err = _parsed(source)
+    data, err = _parsed(source)
+    if err is not None:
+        # The values cannot be told from the keys in a file that did not parse, but its words
+        # are still text: all of them count, so a component placed only there is not called
+        # dead. What the file declares itself stays unjudged - `yaml/valid` reports the break.
+        fact["uses"] = sorted(_names(source.text))
+        return fact
     fact["uses"] = sorted(_value_names(data))
     kind = object_kind(data)
     if kind != formmodel.COMPONENT_ELEMENT_KIND:

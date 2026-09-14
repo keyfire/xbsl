@@ -1300,6 +1300,12 @@ def _client_use_mapper(source: SourceFile) -> dict | None:
     mention wherever this module runs (a string literal, the body of an `@OnClient` method)
     and everything else. The reduce adds the second set only for a module whose pair does run
     on the client.
+
+    The words come from the lexer, and so do the method bodies that split them; the parser is
+    needed for the declarations alone. A module that does not parse therefore still counts as
+    a caller - dropping it would report every method called only from there, which is what a
+    gap in the parser once did to a vendor library - and only its own declarations are left
+    unjudged: the parse failure has a diagnostic of its own.
     """
     if not _HAVE_YAML:
         return None
@@ -1328,16 +1334,15 @@ def _client_use_mapper(source: SourceFile) -> dict | None:
     decls: list[tuple[str, int, int]] = []
     if any(name in source.text for name in available):
         module, errors = parse(source)
-        if errors:
-            return None  # a broken file is code/parse-error territory
-        lm = linemap(source)
-        for member in module.members:
-            if not isinstance(member, P.Method) or member.is_static:
-                continue
-            if not {a.name for a in member.annotations} & available:
-                continue
-            line, col = lm.linecol(member.start)
-            decls.append((member.name, line, col))
+        if not errors:
+            lm = linemap(source)
+            for member in module.members:
+                if not isinstance(member, P.Method) or member.is_static:
+                    continue
+                if not {a.name for a in member.annotations} & available:
+                    continue
+                line, col = lm.linecol(member.start)
+                decls.append((member.name, line, col))
     _names, methods = _module_decls(toks)
     bodies = _method_bodies(toks, methods, _decl_anchors(toks))
     client_ranges = [
