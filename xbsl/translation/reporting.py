@@ -46,6 +46,10 @@ class FileReport:
     warnings: list[tuple[str, int, int, str]] = field(default_factory=list)
     #: {name: [(line, col), ...]} of the names the platform tables answered.
     platform_tokens: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    #: {name: [(line, col), ...]} of the platform TYPES read where only a type can stand - a
+    #: type expression, the root of a static call. The gate holds there for a project TYPE of
+    #: that name alone, so the project-wide reduce judges them against the declared types.
+    platform_type_tokens: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: Missing tokens that name resource FILES - the stub annotates them for the filler.
     resource_tokens: set[str] = field(default_factory=set)
     #: Keys of a json resource that name a field of a project structure: renamed with the
@@ -96,6 +100,10 @@ class FileReport:
         declarations, so it records the answers and lets the project-wide reduce decide.
         """
         self.platform_tokens.setdefault(name, []).append((line, col))
+
+    def note_platform_type_answer(self, name: str, line: int, col: int) -> None:
+        """Remember a platform TYPE read where only a type can stand (see platform_type_tokens)."""
+        self.platform_type_tokens.setdefault(name, []).append((line, col))
 
     def note_token(self, name: str, line: int, col: int, *, resource: bool = False) -> None:
         self.user_missing += 1
