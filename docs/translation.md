@@ -665,3 +665,10 @@ Before, they lived only in a status-bar message that closes itself in a few seco
 that line names each refusal's reason. When there was nothing left to ask, the line says so in
 words instead of three zeroes, and when every offer came from a local literal match without a
 single request, it says that too.
+
+### Dynamic-list reference expressions
+
+In a dynamic-list source, `Items.Ссылка` uses `Reference` when `Items` is an explicit
+alias of the main or a joined table. This applies to expression properties in that source,
+including filters. Unrelated receivers and UI link properties keep their ordinary reading.
+A scoped project dictionary entry can override the reference spelling.

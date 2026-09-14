@@ -740,7 +740,44 @@ def _component_prop(comp_type: str | None, key: str) -> dict | None:
     return _any_component_prop().get(key)
 
 
-def _walk_component_mapping(node, resolver, report, edits, owner: str = "") -> None:
+def _source_aliases(node) -> frozenset[str]:
+    """Explicit aliases of one dynamic-list source, including joined tables."""
+    if not isinstance(node, yaml.MappingNode):
+        return frozenset()
+    names = {written: canonical
+             for canonical in ("ОсновнаяТаблица", "ПрисоединенныеТаблицы", "Псевдоним")
+             for written in terms.key_forms(canonical)}
+    def fields(mapping):
+        return {names.get(key.value, key.value): value for key, value in mapping.value
+                if isinstance(key, yaml.ScalarNode)}
+    source = fields(node)
+    tables = [source.get("ОсновнаяТаблица")]
+    joined = source.get("ПрисоединенныеТаблицы")
+    if isinstance(joined, yaml.SequenceNode):
+        tables.extend(joined.value)
+    aliases = []
+    for table in tables:
+        if isinstance(table, yaml.MappingNode):
+            alias = fields(table).get("Псевдоним")
+            if isinstance(alias, yaml.ScalarNode) and isinstance(alias.value, str):
+                aliases.append(alias.value)
+    return frozenset(aliases)
+
+
+def _dynamic_list_type(written: str) -> bool:
+    """A dynamic list itself or a standard table containing one, in either language."""
+    dynamic = terms.forms("ДинамическийСписок", "types")
+    if written.strip() in dynamic:
+        return True
+    match = re.fullmatch(r"\s*([^<>]+)<([^<>]+)>\s*", written)
+    return bool(
+        match and uischema.canonical_component(match[1].strip()) == "Таблица"
+        and match[2].strip() in dynamic
+    )
+
+
+def _walk_component_mapping(node, resolver, report, edits, owner: str = "",
+                            query_aliases: frozenset[str] = frozenset()) -> None:
     comp_type = None
     written_type = ""
     for knode, vnode in node.value:
@@ -752,7 +789,7 @@ def _walk_component_mapping(node, resolver, report, edits, owner: str = "") -> N
     for knode, vnode in node.value:
         if isinstance(knode, yaml.ScalarNode):
             _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner,
-                                 sibling_type=written_type)
+                                 sibling_type=written_type, query_aliases=query_aliases)
 
 
 #: An event key of a component: the platform names its own events this way, and a project
@@ -787,7 +824,8 @@ def _typed_value(node, type_name: str, resolver, report, edits) -> None:
 
 
 def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner: str = "",
-                         sibling_type: str = "") -> None:
+                         sibling_type: str = "",
+                         query_aliases: frozenset[str] = frozenset()) -> None:
     """One key of a node below the metamodel's reach; `sibling_type` is the node's own `Type`
     as written - the type a default value is judged against when the node is a property."""
     key = knode.value
@@ -832,12 +870,15 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
                 line, col = _at(knode)
                 report.note_token(key, line, col)
     if isinstance(vnode, yaml.MappingNode):
-        _walk_component_mapping(vnode, resolver, report, edits, owner)
+        aliases = query_aliases
+        if uischema.canonical_property(key) == "Источник" and _dynamic_list_type(sibling_type):
+            aliases = _source_aliases(vnode)
+        _walk_component_mapping(vnode, resolver, report, edits, owner, aliases)
         return
     if isinstance(vnode, yaml.SequenceNode):
         for item in vnode.value:
             if isinstance(item, yaml.MappingNode):
-                _walk_component_mapping(item, resolver, report, edits, owner)
+                _walk_component_mapping(item, resolver, report, edits, owner, query_aliases)
             elif isinstance(item, yaml.ScalarNode):
                 _generic_scalar(item, resolver, report, edits)
         return
@@ -872,9 +913,10 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
     if value.startswith(("=", "$")):
         _generic_scalar(vnode, resolver, report, edits)
         return
-    if key in _EXPR_VALUE_KEYS:
+    if key in terms.key_forms("Выражение"):
         if has_cyrillic(value):
-            _set_scalar(vnode, translate_expression(value, resolver, report, at=_at(vnode)), edits)
+            _set_scalar(vnode, translate_expression(value, resolver, report, at=_at(vnode),
+                                                           query_aliases=query_aliases), edits)
         return
     if key in _IDENT_VALUE_KEYS or _is_event_key(key):
         _identifier_value(vnode, resolver, report, edits)

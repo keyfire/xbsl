@@ -1,13 +1,12 @@
 """A declaration must not rely on a default value the type does not have.
 
-code/collection-field-needs-req (a structure field with a generic type) and
+code/collection-field-needs-req (a structure field of a catalog type) and
 code/var-needs-init (a variable declared by type alone) both read the `type_ctors` section
 of the catalog. The catalog is PINNED here instead of being read from the machine: the tests
 then describe the rules, not the vintage of the generated data.
 
 The lexer still needs language.json, so the module is data-dependent (tests/conftest.py).
-The sources under test are XBSL fixtures, so they are Russian - that is the language of the
-samples, not of the file.
+The XBSL fixtures exercise both language spellings; comments and docstrings are English.
 """
 
 from pathlib import Path
@@ -25,6 +24,17 @@ VAR_RULE = "code/var-needs-init"
 CATALOG = {
     "type_ctors": {
         "Массив": "empty",
+        "ПозицияВТексте": "args",
+        "TextPosition": "args",
+        "TextRange": "args",
+        "AbsoluteColor": "args",
+        "Version": "args",
+        "Locale": "args",
+        "EmailAddress": "args",
+        "Bytes": "args",
+        "ButtonKind": "none",
+        "Map": "empty",
+        "UnknownCtor": "unknown",
         "Соответствие": "empty",
         "ЧитаемыйМассив": "args",
         "ReadableArray": "args",
@@ -37,6 +47,7 @@ CATALOG = {
     },
     "bases": {
         "ВидКнопки": ["Объект", "Перечисление"],
+        "ButtonKind": ["Объект", "Перечисление"],
         "ОтветHttp": ["Закрываемое", "Объект"],
         "HttpResponse": ["Закрываемое", "Объект"],
     },
@@ -111,7 +122,7 @@ def test_legal_field_forms_are_silent(catalog, tmp_path, field):
 
 
 def test_plain_type_name_is_left_alone(catalog, tmp_path):
-    """The narrowing: String has an argument-taking constructor and a default value both."""
+    """String has an argument-taking constructor and an intrinsic default value."""
     assert _run(tmp_path, "структура Тело\n    пер Имя: Строка\n;\n", FIELD_RULE) == []
 
 
@@ -199,3 +210,69 @@ def test_both_rules_are_silent_without_the_catalog_section(monkeypatch, tmp_path
     finally:
         type_defaults._ctor_kinds.cache_clear()
         type_defaults._no_default_types.cache_clear()
+
+
+@pytest.mark.parametrize("type_name", [
+    "ПозицияВТексте", "TextPosition", "TextRange", "HttpResponse",
+    "AbsoluteColor", "Version", "Locale", "EmailAddress",
+])
+def test_bare_field_without_default_is_flagged(catalog, tmp_path, type_name):
+    code = f"structure Body\n    var position: {type_name}\n;\n"
+    diags = _run(tmp_path, code, FIELD_RULE)
+    assert len(diags) == 1
+    assert diags[0].line == 2 and type_name in diags[0].message
+    assert "req var position" in diags[0].message
+
+
+@pytest.mark.parametrize("field", [
+    "req var position: TextPosition",
+    "var req position: TextPosition",
+    "обз пер position: ПозицияВТексте",
+    "пер обз position: ПозицияВТексте",
+    "var position: TextPosition?",
+    "var position: TextPosition = new TextPosition(0, 0)",
+    "var position: TextPosition|Undefined",
+    "var value: String",
+    "var value: Bytes",
+    "var value: ButtonKind",
+    "var value: Map<String, Number>",
+    "var value: UncataloguedType",
+    "var value: UnknownCtor",
+    "var value: Custom.TextPosition",
+])
+def test_bare_field_legal_or_unresolved_forms_are_silent(catalog, tmp_path, field):
+    assert _run(tmp_path, f"structure Body\n    {field}\n;\n", FIELD_RULE) == []
+
+
+def test_local_structure_shadows_bare_platform_type(catalog, tmp_path):
+    code = "structure TextPosition\n    var value: String\n;\nstructure Body\n    var position: TextPosition\n;\n"
+    assert _run(tmp_path, code, FIELD_RULE) == []
+
+
+def test_local_variable_with_argument_constructor_is_outside_field_rule(catalog, tmp_path):
+    code = "method Probe()\n    var position: TextPosition\n;\n"
+    assert _run(tmp_path, code, FIELD_RULE) == []
+
+
+@pytest.mark.parametrize("type_name", [
+    "Строка", "String", "Число", "Number", "Булево", "Boolean", "Дата", "Date",
+    "ДатаВремя", "DateTime", "Время", "Time", "Момент", "Instant",
+    "Длительность", "Duration", "Ууид", "Uuid", "Байты", "Bytes",
+])
+def test_scalar_default_is_independent_of_constructor(catalog, monkeypatch, tmp_path, type_name):
+    data = {**CATALOG, "type_ctors": {**CATALOG["type_ctors"], type_name: "args"}}
+    monkeypatch.setattr(type_defaults, "_catalog", lambda: data)
+    type_defaults._ctor_kinds.cache_clear()
+    code = f"structure Body\n    var value: {type_name}\n;\n"
+    assert _run(tmp_path, code, FIELD_RULE) == []
+
+
+def test_local_enumeration_shadows_bare_platform_type(catalog, tmp_path):
+    code = "enum TextPosition\n    default Start\n;\nstructure Body\n    var value: TextPosition\n;\n"
+    assert _run(tmp_path, code, FIELD_RULE) == []
+
+
+def test_current_module_name_shadows_bare_platform_type(catalog, tmp_path):
+    module = tmp_path / "TextPosition.xbsl"
+    module.write_text("structure Body\n    var value: TextPosition\n;\n", encoding="utf-8")
+    assert engine.run([module], select={FIELD_RULE}) == []

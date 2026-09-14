@@ -371,6 +371,7 @@ def collect_token_edits(
     method: MethodScope | None = None,
     owner_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
     form_nodes: dict[str, str] | None = None,
+    query_aliases: frozenset[str] = frozenset(),
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -532,7 +533,8 @@ def collect_token_edits(
             if not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
                 _type_identifier_edit(tok, base, prev_dot, resolver, report, edits, at)
             elif not tok.value.isascii():
-                scope = field_of or (prev_ident if prev_dot else root_scope)
+                query_receiver = _query_reference_receiver(toks, index, query_aliases)
+                scope = field_of or query_receiver or (prev_ident if prev_dot else root_scope)
                 # The type of the receiver, when its declaration names one: the SECOND
                 # namespace a member answers to. The receiver as written stays the first -
                 # an entry qualified by the variable a project reads its json into was
@@ -558,12 +560,13 @@ def collect_token_edits(
                     _platform_facet(toks, index, local_names, owner_names, resolver)
                     if prev_dot and not in_query else None
                 )
-                _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
+                _identifier_edit(tok, base, in_query, prev_dot or bool(query_receiver),
+                                 resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
                                  chain_root=_member_chain_root(toks, index, chain_root, form_nodes,
                                                                resolver),
                                  receiver_is_local=prev_dot and prev_ident in local_names,
-                                 reference=_reference_reading(
+                                 reference="query" if query_receiver else _reference_reading(
                                      toks, index, prev_dot, type_scope, chain_root,
                                      resolver.project_names),
                                  platform_facet=platform_facet)
@@ -902,6 +905,28 @@ def _load_follows(toks: list, index: int) -> bool:
 _COMPONENT_ROOTS = ("Компоненты", "Components")
 
 
+def _query_reference_receiver(toks: list, index: int, aliases: frozenset[str]) -> str:
+    """The direct query alias owning this reference field, ignoring comment trivia."""
+    if not aliases or toks[index].value != platform_map.REFERENCE_FACET:
+        return ""
+    previous = []
+    for position in range(index - 1, -1, -1):
+        token = toks[position]
+        if token.kind in ("COMMENT", "NEWLINE"):
+            continue
+        previous.append(token)
+        if len(previous) == 3:
+            break
+    if len(previous) < 2 or previous[0].value != ".":
+        return ""
+    receiver = previous[1]
+    if receiver.kind != "IDENT" or receiver.value not in aliases:
+        return ""
+    if len(previous) == 3 and previous[2].value in (".", "?.", "::"):
+        return ""
+    return receiver.value
+
+
 def _reference_reading(toks: list, index: int, after_dot: bool, type_scope: str,
                        chain_root: str, project_names: frozenset[str]) -> str:
     """How the receiver tells the reference member at `index` from the link property.
@@ -1181,6 +1206,11 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
                      scope: str = "", type_scope: str = "", static_root: bool = False,
                      chain_root: str = "", receiver_is_local: bool = False,
                      reference: str = "", platform_facet: str | None = None) -> None:
+    if reference == "query":
+        # A table alias may itself match a UI root or a platform type name.
+        receiver_is_local = True
+        chain_root = ""
+        reference = "facet"
     if in_query:
         keyword = platform_map.query_keyword_english(tok.value)
         if keyword:
@@ -1896,7 +1926,7 @@ def _interpolations(value: str) -> tuple[list[tuple[int, int]], list[tuple[int, 
 
 def translate_expression(
     text: str, resolver: Resolver, report: FileReport, at: tuple[int, int] | None = None,
-    scope: str = "",
+    scope: str = "", query_aliases: frozenset[str] = frozenset(),
 ) -> str:
     """A code fragment out of a yaml value (an expression, a bare name, a chain).
 
@@ -1905,7 +1935,7 @@ def translate_expression(
     """
     edits: list[Edit] = []
     collect_token_edits(text, lexer.tokenize(text), 0, [], resolver, report, edits, at=at,
-                        root_scope=scope)
+                        root_scope=scope, query_aliases=query_aliases)
     return apply_edits(text, edits)
 
 

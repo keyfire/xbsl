@@ -71,7 +71,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 229 rules of the base set** - severity, default state, scope, links to
+**The full list of all 230 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -439,3 +439,15 @@ lint:
     reports:
       codequality: gl-code-quality-report.json
 ```
+
+### Resolved signatures and collection types
+
+`code/call-arity` and `code/call-arity-cross` bind named arguments to a known signature,
+including required parameters after optional ones. Overloads, generated manager methods
+and unresolved receivers are not guessed. `code/collection-field-needs-req` also covers
+non-generic platform types without a default value, while honoring scalar defaults and
+local type declarations; it does not resolve bare project types across files.
+
+`code/redundant-skip-undefined` warns only when file-level inference knows that the
+collection element excludes `Undefined`. Its iterable fix calls `ToArray()` so that the
+result is still a materialized array. Sequence calls have no automatic rewrite.
