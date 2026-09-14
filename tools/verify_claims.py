@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from xbsl.rules.undefined_names import _ENTITY_COMMON, _IMPLICIT, _UNDOCUMENTED  # noqa: E402
 from xbsl.rules.unknown_members import _COMMON_MEMBERS  # noqa: E402
+from xbsl.rules.type_defaults import _SCALAR_DEFAULT_NAMES  # noqa: E402
 
 #: A name that certainly does not exist - the control of every module.
 CONTROL = "ЗаведомоНетТакогоИмениВПлатформе"
@@ -80,8 +81,20 @@ class Module:
 
 _READ = "    знч Прочитано{n} = {name}"
 _CALL = "    {name}()"
+_DEFAULT_INIT = "    пер Значение{n}: {name}"
 
 RECIPES: dict[tuple[str, str], tuple[str, str]] = {
+    # Intrinsic defaults: an argument-taking constructor does not prevent default initialization.
+    ("_SCALAR_DEFAULT_NAMES", "Строка"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Число"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Булево"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Дата"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "ДатаВремя"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Время"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Момент"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Длительность"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Ууид"): ("common", _DEFAULT_INIT),
+    ("_SCALAR_DEFAULT_NAMES", "Байты"): ("common", _DEFAULT_INIT),
     # _IMPLICIT: roots the module kind itself provides.
     ("_IMPLICIT", "Компоненты"): ("form", _READ),
     ("_IMPLICIT", "Components"): ("form", _READ),
@@ -108,6 +121,7 @@ RECIPES: dict[tuple[str, str], tuple[str, str]] = {
 }
 
 TABLES = {
+    "_SCALAR_DEFAULT_NAMES": _SCALAR_DEFAULT_NAMES,
     "_IMPLICIT": _IMPLICIT,
     "_UNDOCUMENTED": _UNDOCUMENTED,
     "_ENTITY_COMMON": _ENTITY_COMMON,

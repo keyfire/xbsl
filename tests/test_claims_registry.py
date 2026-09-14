@@ -21,6 +21,7 @@ import pytest
 from xbsl import dataset
 from xbsl.rules.undefined_names import _ENTITY_COMMON, _IMPLICIT, _UNDOCUMENTED
 from xbsl.rules.unknown_members import _COMMON_MEMBERS
+from xbsl.rules.type_defaults import _SCALAR_DEFAULT_NAMES
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -61,6 +62,7 @@ def test_every_claimed_name_has_a_recipe():
 
 def test_the_registry_covers_the_tables_of_the_rules():
     """The registry looks at THE tables of the rules, not at a copy of its own."""
+    assert TABLES["_SCALAR_DEFAULT_NAMES"] is _SCALAR_DEFAULT_NAMES
     assert TABLES["_IMPLICIT"] is _IMPLICIT
     assert TABLES["_UNDOCUMENTED"] is _UNDOCUMENTED
     assert TABLES["_ENTITY_COMMON"] is _ENTITY_COMMON

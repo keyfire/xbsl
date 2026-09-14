@@ -4,7 +4,7 @@ Two rules of one family, both reading the `type_ctors` section of the type catal
 documentation says the type is constructed: `empty` - a constructor callable with no
 arguments, `args` - constructors that all demand arguments, `none` - no constructor at all):
 
-- code/collection-field-needs-req - a structure field with a generic type;
+- code/collection-field-needs-req - a structure field of a catalog type;
 - code/var-needs-init - a variable declared by type alone.
 
 A declaration with no initializer is initialized with the DEFAULT VALUE of its type, and a
@@ -26,10 +26,11 @@ correct forms mirror the reference-field rule:
 - `var texts: ReadableArray<String>?` - a nullable type defaults to `Undefined`;
 - `var texts: ReadableArray<String> = <String>[]` - an explicit initializer.
 
-Deliberate narrowing: only a type WRITTEN WITH A TYPE ARGUMENT (`Head<...>`) is judged. For a
-bare name the constructor fact alone would mislead - `String`, `Boolean` and `Date` are `args`
-(their constructors parse a value) and yet have a default value of their own. A generic head
-has no such exception in the catalog.
+Bare catalog types are judged too: `TextPosition` has a constructor requiring a line and
+column, so a structure field of that type also needs `req`, `?` or an initializer. Constructor
+facts do not describe intrinsic defaults: scalar value types (including `Bytes`) are excluded,
+as are enumeration, singleton and annotation hierarchies. Unknown constructor kinds are not
+evidence. A local structure or enumeration of the same name shadows the catalog.
 
 The variable side (code/var-needs-init). `var response: HttpResponse` (declare first, assign
 inside a `try`) does not compile - the type is only ever obtained from the platform. Flagged
@@ -48,9 +49,9 @@ Scope differs, and for one reason - a namesake. A bare name may belong to a proj
 rather than to the catalog, and real projects do declare a structure or an object whose name
 is also that of a platform type without a constructor. So code/var-needs-init is project-wide
 (it does not run in single-file mode): the reduce drops a candidate shadowed by a project
-object or by a type declared in any module. The field rule needs no such check and stays
-file-scoped, instant in the editor: a project type cannot be generic, so a type WRITTEN with
-an argument is always the catalog's.
+object or by a type declared in any module. The field rule stays file-scoped and checks the
+local type declarations before interpreting a bare name as a catalog type. Dotted project types remain outside this rule; names declared in
+other files are not resolved by a file pass.
 
 Both rules quote the fix in the SPELLING THE MODULE USES: the keyword forms are taken from
 the language data, so an English module is never advised of a keyword that is not in its
@@ -75,16 +76,16 @@ from xbsl.rules.semantics import _file_local_types, _object_name_fast
 
 MESSAGES = {
     "code/collection-field-needs-req.title": {
-        "ru": "Поле-коллекция структуры без 'обз'",
-        "en": "Structure collection field without 'req'",
+        "ru": "Поле структуры без значения по умолчанию и 'обз'",
+        "en": "Structure field without a default value or 'req'",
     },
     "code/collection-field-needs-req.missing": {
-        "ru": "Поле структуры '{name}' имеет тип '{type}', у которого нет конструктора без "
-              "аргументов, значит нет и значения по умолчанию – применение сборки падает с "
+        "ru": "Поле структуры '{name}' имеет тип '{type}', у которого нет значения по "
+              "умолчанию и конструктора без аргументов – применение сборки падает с "
               "'не может быть проинициализировано значением по умолчанию'. Правильно: "
               "'{req} {kw} {name}: {type}' либо '{type}?'.",
-        "en": "Structure field '{name}' has the type '{type}', which has no argument-less "
-              "constructor and therefore no default value – applying the build fails with "
+        "en": "Structure field '{name}' has the type '{type}', which has no default value "
+              "or argument-less constructor – applying the build fails with "
               "'cannot be initialized with a default value'. Correct: '{req} {kw} {name}: "
               "{type}' or '{type}?'.",
     },
@@ -111,7 +112,12 @@ i18n.register(MESSAGES)
 #: Named in Russian here because that is the spelling the catalog stores in `bases`; the
 #: English twin of each is added from the platform dictionary, never guessed.
 _DEFAULTABLE_BASE_NAMES = ("Перечисление", "Аннотация", "Одиночка")
-_CTOR_EMPTY = "empty"
+# Intrinsic scalar defaults exist independently of the constructors printed by the catalog.
+# Each intrinsic default has a compiler recipe in tools/verify_claims.py.
+_SCALAR_DEFAULT_NAMES = (
+    "Строка", "Число", "Булево", "Дата", "ДатаВремя", "Время", "Момент", "Длительность",
+    "Ууид", "Байты",
+)
 _CTOR_NONE = "none"
 #: A `const` always carries a value and a `catch` name is bound by the runtime - only a plain
 #: variable declaration can ask for a default value that is not there.
@@ -162,6 +168,24 @@ def _no_default_types() -> frozenset[str]:
 
 
 @lru_cache(maxsize=1)
+def _scalar_default_types() -> frozenset[str]:
+    """Both dictionary spellings of scalar types with an intrinsic default value."""
+    return frozenset(form for name in _SCALAR_DEFAULT_NAMES for form in terms.forms(name, "types"))
+
+
+def _field_has_no_default(head: str, generic: bool) -> bool:
+    """Only known constructor facts can prove a field needs an initializer."""
+    if _ctor_kinds().get(head) not in {"args", _CTOR_NONE}:
+        return False
+    if generic:
+        return True
+    bases = (_catalog().get("bases") or {}).get(head, ())
+    return head not in _scalar_default_types() and not any(
+        base in _defaultable_bases() for base in bases
+    )
+
+
+@lru_cache(maxsize=1)
 def _keyword_pairs() -> dict[str, tuple[str, str]]:
     """{canonical keyword: (Latin form, Cyrillic form)} out of the language data.
 
@@ -192,6 +216,7 @@ dataset.register_reset(_ctor_kinds.cache_clear)
 dataset.register_reset(_defaultable_bases.cache_clear)
 dataset.register_reset(_no_default_types.cache_clear)
 dataset.register_reset(_keyword_pairs.cache_clear)
+dataset.register_reset(_scalar_default_types.cache_clear)
 
 
 def _head_and_generic(alternative: list[Token]) -> tuple[str, bool] | None:
@@ -224,6 +249,7 @@ def collection_field_needs_req(source: SourceFile) -> Iterable[Diagnostic]:
         return []
     toks = code_tokens(source)
     n = len(toks)
+    local_types = _file_local_types(source) | {source.path.stem.split(".", 1)[0]}
     diags: list[Diagnostic] = []
 
     for i, has_req in structure_field_decls(source):
@@ -241,7 +267,7 @@ def collection_field_needs_req(source: SourceFile) -> Iterable[Diagnostic]:
         if parsed is None:
             continue
         head, generic = parsed
-        if not generic or kinds.get(head, _CTOR_EMPTY) == _CTOR_EMPTY:
+        if (not generic and head in local_types) or not _field_has_no_default(head, generic):
             continue
         type_text = "".join(t.value for t in te.alternatives[0])
         for name in names:
