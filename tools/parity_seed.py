@@ -1274,6 +1274,60 @@ _SUMMARY_XBSL_RU = "импорт Склад\n\nметод СрокСводки()
 _VISIBILITY_TOKENS = {**_SUB_TOKENS, "СрокиТоваров": "GoodsDeadlines", "БлижайшийСрок": "NearestDeadline",
                       "Сводка": "Summary", "СрокСводки": "SummaryDeadline"}
 
+#: --- Control flow: `{head}` opens a condition or a loop, `{result}` is a result type ----------
+_FLOW_RETURN_RU = (
+    "метод Остаток(Полный: Булево): Число\n"
+    "    {head}возврат 1\n"
+    "    {tail}Полный.ВСтроку()\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_FLOW_NEVER_RU = (
+    "метод Отказ(): {result}\n"
+    "    выбросить новый ИсключениеНедопустимоеСостояние(\"склад\")\n"
+    ";\n"
+    "\n"
+    "метод Остаток(): Число\n"
+    "    Отказ()\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_FLOW_ENUM_RU = (
+    "перечисление Склад\n"
+    "    Открыт,\n"
+    "    Закрыт\n"
+    ";\n"
+    "\n"
+    "метод Остаток(Состояние: Склад): Число\n"
+    "    выбор Состояние\n"
+    "        когда Склад.Открыт\n"
+    "            возврат 1\n"
+    "        когда {last}\n"
+    "            возврат 2\n"
+    "    ;\n"
+    "    возврат 0\n"
+    ";\n"
+)
+_FLOW_BREAK_RU = (
+    "метод Остаток(Полный: Булево)\n"
+    "    {head}\n"
+    "        прервать\n"
+    "    {tail}\n"
+    ";\n"
+)
+_FLOW_FINALLY_RU = (
+    "метод Остаток(Полный: Булево)\n"
+    "    попытка\n"
+    "        Полный.ВСтроку()\n"
+    "    вконце\n"
+    "        {exit}\n"
+    "    ;\n"
+    ";\n"
+)
+_FLOW_TOKENS = {"Склады": "Warehouses", "Склад": "Warehouse", "Остаток": "Balance",
+                "Полный": "Full", "Отказ": "Refuse", "Открыт": "Opened", "Закрыт": "Closed",
+                "Состояние": "State"}
+
 #: --- Computed access control -----------------------------------------------------------
 _RECORDS_RU = """\
 ВидЭлемента: Справочник
@@ -4401,6 +4455,79 @@ SEEDS: list[Seed] = [
         files={"Вкладка.yaml": _TAB_YAML_RU, "Вкладка.xbsl": "@ВПодсистеме\nметод Загрузить()\n    возврат\n;\n",
                "Маршрутизатор.yaml": _ROUTER_YAML_RU, "Маршрутизатор.xbsl": _ROUTER_XBSL_RU},
         tokens=_TAB_TOKENS,
+    ),
+    # --- control flow: code nothing reaches, jumps with nowhere to go ------------------------
+    Seed(
+        rule="code/unreachable-statement",
+        expect=FINDING,
+        note="a statement after a return",
+        files={"Склады.xbsl": _FLOW_RETURN_RU.format(head="", tail="")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/unreachable-statement",
+        expect=CLEAN,
+        note="the return inside a condition leaves the statement after it reachable",
+        files={"Склады.xbsl": _FLOW_RETURN_RU.format(head="если Полный\n        ",
+                                                     tail=";\n    ")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/unreachable-statement",
+        expect=FINDING,
+        note="a statement after a call of a method of the file that never returns",
+        files={"Склады.xbsl": _FLOW_NEVER_RU.format(result="никогда")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/unreachable-statement",
+        expect=CLEAN,
+        note="the same call of a method that returns",
+        files={"Склады.xbsl": _FLOW_NEVER_RU.format(result="Число")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/unreachable-statement",
+        expect=FINDING,
+        note="a statement after a switch over every item of an enumeration of the file",
+        files={"Склады.xbsl": _FLOW_ENUM_RU.format(last="Склад.Закрыт")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/unreachable-statement",
+        expect=CLEAN,
+        note="the switch leaves an item out",
+        files={"Склады.xbsl": _FLOW_ENUM_RU.format(last="Склад.Открыт")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/misplaced-jump",
+        expect=FINDING,
+        note="a break with no loop around it",
+        files={"Склады.xbsl": _FLOW_BREAK_RU.format(head="если Полный", tail=";")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/misplaced-jump",
+        expect=CLEAN,
+        note="the same break inside a loop",
+        files={"Склады.xbsl": _FLOW_BREAK_RU.format(head="пока Полный", tail=";")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/misplaced-jump",
+        expect=FINDING,
+        note="a return out of a finally section",
+        files={"Склады.xbsl": _FLOW_FINALLY_RU.format(exit="возврат")},
+        tokens=_FLOW_TOKENS,
+    ),
+    Seed(
+        rule="code/misplaced-jump",
+        expect=CLEAN,
+        note="a throw in a finally section is allowed",
+        files={"Склады.xbsl": _FLOW_FINALLY_RU.format(
+            exit="выбросить новый ИсключениеНедопустимоеСостояние(\"склад\")")},
+        tokens=_FLOW_TOKENS,
     ),
     # --- components, modules, queries ----------------------------------------------------
     Seed(
