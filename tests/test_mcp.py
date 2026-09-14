@@ -572,3 +572,71 @@ def test_lint_paths_names_the_engine_and_the_rule_set_it_judged_by(tmp_path, mon
         assert 0 <= rules["plugin"] <= rules["active"]
     finally:
         sys.modules.pop("xbsl.mcp_server", None)
+
+
+@pytest.mark.parametrize("no_baseline", [False, True])
+def test_lint_paths_fix_uses_ci_baseline_and_defaults_to_read_only(tmp_path, monkeypatch, no_baseline):
+    from xbsl import baseline, engine
+
+    m = _with_stub(monkeypatch)
+    source = tmp_path / "Sample.xbsl"
+    original = "метод Ф()  \n    знч А = 1  \n;\n"
+    source.write_text(original, encoding="utf-8", newline="")
+    rule = "whitespace/trailing"
+    frozen = tmp_path / "accepted.json"
+    baseline.write(frozen, engine.run([source], select={rule})[:1])
+    before = frozen.read_bytes()
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "lint:\n  script:\n    - xbsl . --select whitespace/trailing --baseline accepted.json\n",
+        encoding="utf-8",
+    )
+    try:
+        readonly = m.lint_paths([str(source)], as_ci=True)
+        assert len(readonly["diagnostics"]) == 1
+        assert source.read_text(encoding="utf-8") == original
+        result = m.lint_paths([str(source)], as_ci=True, fix=True, no_baseline=no_baseline)
+        assert result["diagnostics"] == []
+        expected = "метод Ф()\n    знч А = 1\n;\n" if no_baseline else "метод Ф()  \n    знч А = 1\n;\n"
+        assert source.read_text(encoding="utf-8") == expected
+        assert frozen.read_bytes() == before
+        assert result["summary"].get("baselined", 0) == (0 if no_baseline else 1)
+        assert result["summary"]["fixed"] == (2 if no_baseline else 1)
+        assert result["summary"]["files_changed"] == 1
+        assert "as_ci" in result["summary"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+@pytest.mark.parametrize("original, expected, rules, accepted_line", [
+    ("// first \u2014\n// frozen \u2013\n", "// first -\n// frozen \u2013\n",
+     ["typography/em-dash", "typography/en-dash-comment"], 2),
+    ("import Alpha\nimport Alpha\nimport Beta\nimport Beta\n",
+     "import Alpha\nimport Beta\nimport Beta\n", ["code/duplicate-import"], 4),
+    ("Import:\n  - Alpha\n  - Alpha\n  - Beta\n  - Beta\n",
+     "Import:\n  - Alpha\n  - Beta\n  - Beta\n", ["yaml/duplicate-import"], 5),
+])
+def test_mcp_fix_reports_the_original_accepted_occurrences(tmp_path, monkeypatch, original, expected, rules, accepted_line):
+    from xbsl import baseline, engine
+
+    m = _with_stub(monkeypatch)
+    source = tmp_path / ("Sample.yaml" if rules[0].startswith("yaml/") else "Sample.xbsl")
+    source.write_text(original, encoding="utf-8", newline="")
+    frozen = tmp_path / "accepted.json"
+    findings = engine.run([source], select=set(rules))
+    accepted = next(d for d in findings if d.line == accepted_line)
+    baseline.save(frozen, {"files": {source.name: {accepted.rule_id: {accepted.message: 1}}}})
+    before = frozen.read_bytes()
+    try:
+        result = m.lint_paths([str(source)], select=rules, baseline=str(frozen), fix=True)
+        assert source.read_text(encoding="utf-8") == expected
+        assert frozen.read_bytes() == before
+        assert result["diagnostics"] == []
+        assert result["summary"]["baselined"] == 1
+        assert result["summary"]["baseline_stale"] == 0
+        later = m.lint_paths([str(source)], select=rules, baseline=str(frozen))
+        assert later["diagnostics"] == []
+        assert later["summary"]["baselined"] == 1
+        assert later["summary"]["baseline_stale"] == 0
+        assert frozen.read_bytes() == before
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)

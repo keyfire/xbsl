@@ -46,7 +46,9 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
+from string import Formatter
 
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic
@@ -117,9 +119,65 @@ def _identity_path(diag_path: str, base_dir: Path) -> str:
 _PATH_IN_MESSAGE = re.compile(r"[^\s\"'()<>]*[\\/][^\s\"'()<>]*\.(?:yaml|xbsl|xbql|json)")
 
 
-def _identity_message(message: str, base_dir: Path) -> str:
-    """The message with every path it names in the baseline's own form."""
-    return _PATH_IN_MESSAGE.sub(lambda hit: _identity_path(hit.group(0), base_dir), message)
+# Only reviewed positional fields participate. Counts such as duplicate-bodies.lines,
+# namespace names and every other semantic value remain part of the identity.
+_POSITION_FIELDS = {
+    "code/bound-property-assign.msg": "line",
+    "yaml/computed-binding-assigned.msg": "line",
+    "code/unclosed-resource.early-exit": "line",
+    "code/query-in-loop.body": "line",
+    "code/duplicate-import.repeated": "line",
+    "yaml/duplicate-import.repeated": "line",
+    "yaml/localization-key-unique.found": "line",
+    "yaml/localization-key-unique.cross": "line",
+    "code/param-redeclared.found": "line",
+    "code/duplicate-declaration.type": "line",
+    "code/duplicate-declaration.field": "line",
+    "code/duplicate-declaration.item": "line",
+    "code/duplicate-declaration.default": "line",
+    "code/duplicate-declaration.method-case": "line",
+    "code/duplicate-declaration.constant": "line",
+    "code/duplicate-declaration.local": "line",
+    "yaml/duplicate-key.repeat": "line",
+    "yaml/missing-import.query": "query_line",
+}
+_POSITION_MESSAGES: dict[str, list[tuple[str, str]]] = {}
+for _message_id, _field in _POSITION_FIELDS.items():
+    _POSITION_MESSAGES.setdefault(_message_id.split(".", 1)[0], []).append((_message_id, _field))
+
+
+@lru_cache(maxsize=128)
+def _position_pattern(template: str, position: str) -> re.Pattern:
+    """Match a complete translated template, capturing only its vetted position field.
+
+    Other fields, including translated n[...] names, match their rendered values but stay
+    byte-for-byte in the identity. Patterns follow the registered templates, not copies.
+    """
+    parts = []
+    for literal, field, format_spec, conversion in Formatter().parse(template):
+        parts.append(re.escape(literal))
+        if field == position:
+            parts.append(r"(?P<position>\d+)")
+        elif field is not None:
+            parts.append(".*?")
+    return re.compile("".join(parts), re.DOTALL)
+
+
+def _identity_message(message: str, base_dir: Path, rule_id: str | None = None) -> str:
+    """Normalize paths and vetted display positions without changing diagnostic text."""
+    message = _PATH_IN_MESSAGE.sub(lambda hit: _identity_path(hit.group(0), base_dir), message)
+    candidates = _POSITION_MESSAGES.get(rule_id, [])
+    if candidates:
+        # Standalone baseline callers need the builtin message registry too.
+        from xbsl import rules  # noqa: F401
+
+        for message_id, position in candidates:
+            for template in (i18n.translations(message_id) or {}).values():
+                match = _position_pattern(template, position).fullmatch(message)
+                if match is not None:
+                    return (message[:match.start("position")] + "{" + position + "}"
+                            + message[match.end("position"):])
+    return message
 
 
 def _entry_count(value) -> int:
@@ -156,7 +214,7 @@ def reasons_of(data: dict, base_dir: Path) -> dict[tuple[str, str, str], str]:
             for message, value in per_message.items():
                 reason = _entry_reason(value)
                 if reason:
-                    out[(path, rule_id, _identity_message(message, base_dir))] = reason
+                    out[(path, rule_id, _identity_message(message, base_dir, rule_id))] = reason
     return out
 
 
@@ -172,7 +230,7 @@ def build(
     files: dict[str, dict[str, dict[str, object]]] = {}
     for d in sorted(diags, key=lambda x: x.sort_key()):
         path = _identity_path(d.path, base_dir)
-        message = _identity_message(d.message, base_dir)
+        message = _identity_message(d.message, base_dir, d.rule_id)
         per_rule = files.setdefault(path, {})
         per_message = per_rule.setdefault(d.rule_id, {})
         per_message[message] = _entry_count(per_message.get(message, 0)) + 1
@@ -227,7 +285,7 @@ def save(path: Path, data: dict) -> None:
     path.write_text(bom + text, encoding="utf-8", newline=newline)
 
 
-def load(path: Path) -> dict:
+def load(path: Path, *, strict: bool = False) -> dict:
     if not path.is_file():
         raise BaselineError(i18n.t("baseline.missing", path=path))
     try:
@@ -239,7 +297,40 @@ def load(path: Path) -> dict:
     files = data.get("files") if isinstance(data, dict) else None
     if not isinstance(files, dict):
         raise BaselineError(i18n.t("baseline.invalid", path=path))
+    if strict:
+        _validate_for_fix(data, path)
     return data
+
+
+def _validate_for_fix(data: dict, path: Path) -> None:
+    """Reject any malformed budget before an operation that writes source files.
+
+    Legacy files may omit metadata and use bare integer counts. Current reasoned entries
+    carry a count and an optional string reason; neither shape permits coercing a count.
+    """
+    def invalid() -> None:
+        raise BaselineError(i18n.t("baseline.invalid", path=path))
+
+    if "meta" in data:
+        meta = data["meta"]
+        if not isinstance(meta, dict):
+            invalid()
+        if "format" in meta and (type(meta["format"]) is not int or meta["format"] != _FORMAT):
+            invalid()
+        if any(key in meta and not isinstance(meta[key], str) for key in ("tool", "note")):
+            invalid()
+    for per_rule in data["files"].values():
+        if not isinstance(per_rule, dict):
+            invalid()
+        for per_message in per_rule.values():
+            if not isinstance(per_message, dict):
+                invalid()
+            for value in per_message.values():
+                count = value.get("count") if isinstance(value, dict) else value
+                if type(count) is not int or count < 0:
+                    invalid()
+                if isinstance(value, dict) and "reason" in value and not isinstance(value["reason"], str):
+                    invalid()
 
 
 def roots_of(paths: list[Path], base_dir: Path) -> list[str] | None:
@@ -336,11 +427,15 @@ def stale_entries(
     to `not_checked_entries`.
     """
     out: list[dict] = []
+    remaining_used = dict(used)
     for path, rule_id, message, value in _entries(data, rules, wanted=True, roots=roots):
         count = _entry_count(value)
         # Spent by identity, reported as WRITTEN: the caller drops the entry by its own key.
-        spent = message if base_dir is None else _identity_message(message, base_dir)
-        left = count - used.get((path, rule_id, spent), 0)
+        spent = message if base_dir is None else _identity_message(message, base_dir, rule_id)
+        key = (path, rule_id, spent)
+        consumed = min(max(count, 0), remaining_used.get(key, 0))
+        remaining_used[key] = remaining_used.get(key, 0) - consumed
+        left = count - consumed
         if count > 0 and left > 0:
             out.append({
                 "path": path, "rule": rule_id, "message": message,
@@ -384,6 +479,7 @@ def without_entries(data: dict, entries: list[dict]) -> dict:
 def apply(
     diags: list[Diagnostic], data: dict, base_dir: Path, rules: set[str] | None = None,
     roots: list[str] | None = None,
+    accepted: list[tuple[Diagnostic, Diagnostic]] | None = None,
 ) -> tuple[list[Diagnostic], int, int, list[dict]]:
     """Filter the findings through the baseline.
 
@@ -398,6 +494,14 @@ def apply(
     count and out of the stale list; `not_checked_entries` names them. Without the
     arguments the counts stay as they were: every entry judged.
     """
+    if accepted is not None:
+        # A fix run pins occurrences once. Count their ORIGINAL identities for the budget,
+        # while removing their current diagnostic objects: messages can contain line numbers.
+        _, suppressed, unused, stale = apply(
+            [original for current, original in accepted], data, base_dir, rules, roots,
+        )
+        frozen = {id(current) for current, original in accepted}
+        return [d for d in diags if id(d) not in frozen], suppressed, unused, stale
     budgets: dict[tuple[str, str, str], int] = {}
     total_budget = 0
     for path, per_rule in data.get("files", {}).items():
@@ -412,7 +516,7 @@ def apply(
                     # Two entries of one identity meet when a file carries a message frozen
                     # on Windows and its twin frozen on Linux: their budgets add up rather
                     # than one replacing the other.
-                    key = (path, rule_id, _identity_message(message, base_dir))
+                    key = (path, rule_id, _identity_message(message, base_dir, rule_id))
                     budgets[key] = budgets.get(key, 0) + count
                     if (rules is None or rule_id in rules) and _in_reach(path, roots):
                         total_budget += count
@@ -421,7 +525,7 @@ def apply(
     suppressed = 0
     for d in sorted(diags, key=lambda x: x.sort_key()):
         key = (_identity_path(d.path, base_dir), d.rule_id,
-               _identity_message(d.message, base_dir))
+               _identity_message(d.message, base_dir, d.rule_id))
         left = budgets.get(key, 0)
         if left > 0:
             budgets[key] = left - 1
@@ -468,7 +572,7 @@ def add_entries(
     added: dict[tuple[str, str, str], int] = {}
     for d in sorted(kept, key=lambda x: x.sort_key()):
         key = (_identity_path(d.path, base_dir), d.rule_id,
-               _identity_message(d.message, base_dir))
+               _identity_message(d.message, base_dir, d.rule_id))
         added[key] = added.get(key, 0) + 1
     files = data.get("files")
     if not isinstance(files, dict):
@@ -488,7 +592,7 @@ def add_entries(
         # The entry is matched by identity but kept under the key as WRITTEN: a message
         # naming a file may carry the separators of another host.
         written = next(
-            (k for k in per_message if _identity_message(k, base_dir) == message), None,
+            (k for k in per_message if _identity_message(k, base_dir, rule_id) == message), None,
         )
         if written is None:
             per_message[message] = {"count": count, "reason": reason} if reason else count

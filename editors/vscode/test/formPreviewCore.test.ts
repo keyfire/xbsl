@@ -839,6 +839,66 @@ setFormKeyAliases(TWIN_PAIRS.aliases, TWIN_PAIRS.types);
 check("twin: without the value pairs the English frame differs", frameOf(twin("tasks-panel.en.yaml")) !== panelRu);
 setFormKeyAliases({});
 
+// Supported commands, font flags and source-language tooltips.
+setFormKeyAliases({ ...TWIN_PAIRS.aliases, UsualCommands: "ОбычныеКоманды", Italic: "Наклонный", Underline: "Подчеркивание", Strikeout: "Зачеркивание" }, TWIN_PAIRS.types, TWIN_PAIRS.values);
+for (const [name, source, expected] of [
+  ["Russian", `Наследует:
+  Тип: Форма
+  ОсновнаяКоманда: {Тип: ОбычнаяКоманда, Представление: Save}
+  ОбычныеКоманды:
+    - {Тип: ОбычнаяКоманда, Представление: Export}
+  КомандыЗаписи:
+    - {Тип: ОбычнаяКоманда, Представление: Invalid}
+  Содержимое:
+    Тип: Надпись
+    Значение: Sample
+    Видимость: Ложь
+    Доступность: Истина
+    Шрифт: {Тип: АбсолютныйШрифт, Наклонный: Истина, Подчеркивание: Истина, Зачеркивание: Истина}
+`, ["Видимость: Ложь", "Доступность: Истина"]],
+  ["English", `Inherits:
+  Type: Form
+  MainCommand: {Type: UsualCommand, Presentation: Save}
+  UsualCommands:
+    - {Type: UsualCommand, Presentation: Export}
+  Content:
+    Type: Label
+    Value: Sample
+    Visible: false
+    Enabled: True
+    Font: {Type: AbsoluteFont, Italic: True, Underline: True, Strikeout: true}
+`, ["Visible: False", "Enabled: True"]],
+] as const) {
+  const preview = renderFormPreview(source);
+  const html = preview.ok ? preview.html : "";
+  const footer = html.slice(html.indexOf('class="cmdbar footer"'));
+  check(`${name}: usual commands follow the main command in the footer`, footer.includes(">Save</button>") && footer.includes(">Export</button>") && footer.indexOf(">Save</button>") < footer.indexOf(">Export</button>"));
+  check(`${name}: unsupported write commands are not drawn`, !html.includes(">Invalid</button>"));
+  check(`${name}: font flags compose without replacing each other`, html.includes("font-style:italic") && html.includes("text-decoration:underline line-through"));
+  check(`${name}: tooltip uses source property names and boolean literals`, expected.every((tip) => html.includes(tip)));
+}
+const ordinaryMap = renderFormPreview(`Наследует:
+  ОбычныеКоманды:
+    Export: {Тип: ОбычнаяКоманда, Представление: Export}
+  Содержимое: {Тип: Надпись, Значение: Sample}
+`);
+check("usual command maps render without a main command", ordinaryMap.ok && ordinaryMap.html.includes('class="cmdbar footer"') && ordinaryMap.html.includes(">Export</button>"));
+for (const [flags, expected] of [
+  ["Наклонный: Ложь, Подчеркивание: Истина, Зачеркивание: Ложь", "text-decoration:underline"],
+  ["Наклонный: Ложь, Подчеркивание: Ложь, Зачеркивание: Истина", "text-decoration:line-through"],
+  ["Наклонный: =Flag, Подчеркивание: Ложь, Зачеркивание: Ложь", ""],
+]) {
+  const preview = renderFormPreview(`Наследует:\n  Содержимое:\n    Тип: Надпись\n    Значение: Sample\n    Шрифт: {${flags}}\n`);
+  const html = preview.ok ? preview.html : "";
+  check(`font flags: ${expected || "computed flag is not true"}`, preview.ok && !html.includes("font-style:italic") && (expected ? html.includes(expected) : !html.includes("text-decoration:")));
+}
+for (const name of ["ПолеВыбора", "КнопкаФормы"]) {
+  const source = `Наследует:\n  Содержимое:\n    Тип: ${name}\n`;
+  check(`${name}: a project component is discovered instead of a nonexistent builtin`, collectComponentTypes(source).includes(name));
+  const preview = renderFormPreview(source, {}, { [name]: "Наследует:\n  Содержимое: {Тип: Надпись, Значение: Custom component}\n" });
+  check(`${name}: a project component renders its own content`, preview.ok && preview.html.includes("Custom component"));
+}
+setFormKeyAliases({});
 // The summary closes the file: a check written after it would print FAIL and still exit with 0.
 if (failures > 0) {
   console.error(`итого: ${failures} FAIL`);

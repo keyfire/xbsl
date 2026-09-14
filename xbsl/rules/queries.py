@@ -37,6 +37,7 @@ from xbsl.rules._syntax import (
     query_words,
     WORD_KINDS,
     query_alias_pairs,
+    query_from_items,
     query_block_tokens,
     query_ranges,
 )
@@ -145,46 +146,16 @@ def _query_tables(source: SourceFile) -> Iterable[tuple]:
     interpolation) or where an unsupported word occurs yields no expressions at all - silence
     instead of guessing.
     """
-    toks = tokens(source)
-    for start, end in query_ranges(source):
-        block = [t for t in toks if start <= t.start < end and t.kind not in ("COMMENT", "BOM")]
-        tables: list[list] = []
-        supported = True
-        i, n = 0, len(block)
-        while i < n:
-            t = block[i]
-            if t.kind in _WORD_KINDS and t.value.upper() in _UNSUPPORTED:
-                supported = False
-                break
-            if t.kind in _WORD_KINDS and t.value.upper() in _TABLE_INTRO:
-                j = i + 1
-                if j >= n or block[j].kind not in _WORD_KINDS:
-                    supported = False  # a subquery/interpolation in the table position
-                    break
-                ns: list = []
-                segs = [block[j]]
-                j += 1
-                while (
-                    j + 1 < n
-                    and block[j].kind == "OP" and block[j].value == "::"
-                    and block[j + 1].kind in _WORD_KINDS
-                ):
-                    ns.append(segs.pop())  # everything before the last :: segment is the namespace
-                    segs.append(block[j + 1])
-                    j += 2
-                while (
-                    j + 1 < n
-                    and block[j].kind == "OP" and block[j].value == "."
-                    and block[j + 1].kind in _WORD_KINDS
-                ):
-                    segs.append(block[j + 1])
-                    j += 2
-                tables.append((ns, segs))
-                i = j
-                continue
-            i += 1
-        if supported:
-            yield from tables
+    for span in query_ranges(source):
+        block = query_block_tokens(source, span)
+        if any(t.kind in _WORD_KINDS and t.value.upper() in _UNSUPPORTED for t in block):
+            continue
+        # Preserve the conservative boundary for subqueries and interpolated sources.
+        if any(t.kind in _WORD_KINDS and t.value.upper() in _TABLE_INTRO
+               and (i + 1 == len(block) or block[i + 1].kind not in _WORD_KINDS)
+               for i, t in enumerate(block)):
+            continue
+        yield from (table for table, _alias in query_from_items(block))
 
 
 def _catalog_slice(source: SourceFile) -> tuple[str, dict] | None:

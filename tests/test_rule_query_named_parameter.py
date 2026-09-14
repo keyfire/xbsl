@@ -58,3 +58,9 @@ def test_every_named_parameter_of_the_block_is_reported():
     )
     assert [x.line for x in d] == [3, 3]
     assert "&Код" in d[0].message and "&Вид" in d[1].message
+
+
+def test_named_parameter_in_from_is_already_rejected():
+    diags = _lint("метод Ф()\n    знч З = Запрос{ВЫБРАТЬ 1 ИЗ &Таблица}\n;\n")
+    assert len(diags) == 1 and diags[0].rule_id == _RULE
+    assert "&Таблица" in diags[0].message

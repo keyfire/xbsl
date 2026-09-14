@@ -201,7 +201,8 @@ def _grouping_parens(text: str, tokens: list, node) -> tuple[int, int] | None:
 
     A parenthesis a call opens is not a grouping one: `Ф(X как Т)` keeps both. What stands
     before the `(` tells them apart - a name or the closing `>` of the arguments of a generic
-    call makes it a call; an operator, a keyword or the start of the text makes it a group.
+    call makes it a call on the same line; an operator, a keyword or a new statement
+    makes it a group, following Parser.starts_a_line.
     Only spaces may stand between the parentheses and the cast: a group spread over lines keeps
     its line breaks, and the edit then removes the cast alone.
     """
@@ -217,7 +218,7 @@ def _grouping_parens(text: str, tokens: list, node) -> tuple[int, int] | None:
     if index is None:
         return None
     before = tokens[index - 1] if index > 0 else None
-    if before is not None:
+    if before is not None and tokens[index].line == before.end_line:
         if before.kind == "IDENT":
             return None
         if before.kind == "OP" and before.value in (">", ")", "]", "!"):

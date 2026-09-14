@@ -122,7 +122,7 @@ def version_info() -> dict:
 
 def _through_baseline(
     diags: list, files: list[Path], path: str | None, disabled: bool, rules: set[str],
-    asked: list[Path],
+    asked: list[Path], accepted: list | None = None,
 ) -> tuple[list, dict]:
     """The findings the baseline leaves, plus the summary keys describing what it took.
 
@@ -143,7 +143,7 @@ def _through_baseline(
     data = baseline_data.load(found)
     roots = baseline_data.roots_of(asked, found.parent)
     kept, suppressed, unused, stale = baseline_data.apply(
-        diags, data, found.parent, rules, roots,
+        diags, data, found.parent, rules, roots, accepted=accepted,
     )
     summary = {
         "baseline": str(found),
@@ -217,6 +217,7 @@ def lint_paths(
     as_ci: bool = False,
     as_ci_job: str | None = None,
     compact: bool = False,
+    fix: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -229,6 +230,9 @@ def lint_paths(
     baseline    – a baseline file to apply; without it the project's own `.xbsllint-baseline`
                   is looked up above the checked files, exactly as the CLI does;
     no_baseline – report the frozen findings too;
+    fix         – apply unambiguous formatting and code fixes on disk, only outside the
+                  baseline; default false. Rechecks after each pass and reports remaining
+                  findings, with summary.fixed and summary.files_changed;
     as_ci       – check with the rule set the project's CI job runs: the --select/--ignore/
                   --enable flags and the baseline of the xbsl command in `.gitlab-ci.yml`
                   (or a GitHub workflow) next to the project, ADDED to whatever this call
@@ -287,18 +291,32 @@ def lint_paths(
             no_baseline = job.no_baseline
     files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
-    diags = _filter_requested(
-        run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
-    )
+    fix_summary = {}
+    fix_accepted = None
+    if fix:
+        from xbsl import fixer
+
+        target = named
+        if target is None and not no_baseline:
+            target = baseline_data.discover(requested if requested is not None else files)
+        diags, fix_summary, fix_accepted = fixer.fix_paths(
+            files, select=chosen[0], ignore=chosen[1], enable=chosen[2],
+            requested=requested, baseline_path=None if no_baseline else target,
+        )
+    else:
+        diags = _filter_requested(
+            run(files, select=chosen[0], ignore=chosen[1], enable=chosen[2]), requested,
+        )
     counted = requested if requested is not None else files
     active = active_rules(*chosen)
     diags, extra = _through_baseline(
         diags, counted, str(named) if named else None, no_baseline, {r.id for r in active},
-        [Path(p) for p in asked],
+        [Path(p) for p in asked], accepted=fix_accepted,
     )
     payload = report.report(diags, len(counted))
     payload["summary"].update(environment.provenance(active))
     payload["summary"].update(extra)
+    payload["summary"].update(fix_summary)
     payload["summary"]["root"] = str(base)
     if job is not None:
         # The shared record: the file and the job, the rule set as data and as the sentence a

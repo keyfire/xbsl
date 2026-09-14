@@ -185,12 +185,14 @@ class _Walk:
                 return local
         return None
 
-    def _declare(self, kind: str, name: str, at: int, decl: P.VarDecl | None = None) -> None:
+    def _declare(self, kind: str, name: str, at: int, decl: P.VarDecl | None = None,
+                 *, bind: bool = True) -> None:
         if not name:
             return
         anchor = self._name_token(at, name) if kind in _TRACKED else None
         local = _Local(kind, name, anchor, decl)
-        self.scopes[-1][name] = local
+        if bind:
+            self.scopes[-1][name] = local
         if kind in _TRACKED:
             self.tracked.append(local)
 
@@ -200,13 +202,15 @@ class _Walk:
             local.read = True
 
     def _loop_variable(self, kind: str, name: str, at: int) -> None:
-        """The variable of a loop: a new name of the loop scope - or an outer local the loop
-        assigns, when the name is already bound (a loop over an existing variable)."""
-        outer = self._resolve(name) if name else None
-        if outer is not None:
-            outer.assigned = True
-        else:
-            self._declare(kind, name, at)
+        """A loop declares a variable, even when its name illegally repeats an outer one.
+
+        The compiler rejects case-insensitive duplicates but leaves the ORIGINAL binding
+        active: an exact-name read in the body uses the outer local, while the rejected
+        loop declaration remains unused. A loop header never assigns the outer local.
+        """
+        duplicate = any(name.casefold() == declared.casefold()
+                        for scope in self.scopes for declared in scope) if name else False
+        self._declare(kind, name, at, bind=not duplicate)
 
     # --- a method ---------------------------------------------------------------------
 

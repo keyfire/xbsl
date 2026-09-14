@@ -135,11 +135,16 @@ function enumProp(map: unknown, key: string): string | undefined {
   return value === undefined ? undefined : _valueAliases[key]?.[value] ?? value;
 }
 
-// A property value for a tooltip: a boolean literal in the frame's own words, whichever spelling
-// the file uses, and anything else as written.
-function shownValue(map: unknown, key: string): string | undefined {
+// Tooltips follow the property's spelling in the source, including boolean literals.
+function propertyTip(map: unknown, key: string): string {
+  const spelling = isMap(map)
+    ? map.items.find((item) => isScalar(item.key) && canonicalKey(String(item.key.value)) === key)?.key
+    : undefined;
+  const name = str(spelling) ?? key;
   const literal = booleanLiteral(map, key);
-  return literal === true ? "Истина" : literal === false ? "Ложь" : prop(map, key);
+  const value = literal === true ? (name === key ? "Истина" : "True")
+    : literal === false ? (name === key ? "Ложь" : "False") : prop(map, key);
+  return `${name}: ${value}`;
 }
 
 // Component type without generic parameters: "ПолеВвода<Строка>" -> "ПолеВвода".
@@ -185,8 +190,8 @@ function tagAttrs(node: unknown, cls: string, style?: string): string {
   const tip = [
     prop(node, "Тип"),
     prop(node, "Имя"),
-    hidden || conditional ? `Видимость: ${shownValue(node, "Видимость")}` : undefined,
-    availability !== undefined ? `Доступность: ${shownValue(node, "Доступность")}` : undefined,
+    hidden || conditional ? propertyTip(node, "Видимость") : undefined,
+    availability !== undefined ? propertyTip(node, "Доступность") : undefined,
   ].filter(Boolean).join(" · ");
   const titleAttr = tip ? ` title="${esc(tip)}"` : "";
   const mark = (hidden ? " off" : conditional ? " cond" : "") + (inaccessible ? " dis" : "");
@@ -471,6 +476,16 @@ function textStyle(node: unknown): string {
   // property to read a word from.
   if (isTrue(font, "Полужирный")) {
     parts.push("font-weight:600");
+  }
+  if (isTrue(font, "Наклонный")) {
+    parts.push("font-style:italic");
+  }
+  const decorations = [
+    isTrue(font, "Подчеркивание") ? "underline" : "",
+    isTrue(font, "Зачеркивание") ? "line-through" : "",
+  ].filter(Boolean);
+  if (decorations.length > 0) {
+    parts.push(`text-decoration:${decorations.join(" ")}`);
   }
   return parts.join(";");
 }
@@ -764,7 +779,6 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
       return `<span ${tagAttrs(node, "lbl", joinStyle(textStyle(node), layout))}>${valueHtml(text, s("label"))}</span>`;
     }
     case "ПолеВвода":
-    case "ПолеВыбора":
     case "ВыборЗначения": {
       const cap = prop(node, "Заголовок");
       // A required field gets the platform's red asterisk before the caption.
@@ -796,7 +810,6 @@ function renderComponentBody(node: unknown, horizontalParent: boolean, byColumns
     case "Флажок":
       return renderCheckbox(node, layout);
     case "Кнопка":
-    case "КнопкаФормы":
     case "ОбычнаяКоманда":
     case "НавигационнаяКоманда": {
       const kind = enumProp(node, "Вид");
@@ -931,7 +944,7 @@ function renderFooterCommands(inherit: unknown): string {
   if (main) {
     buttons.push(main);
   }
-  buttons.push(...collectCommands(inherit, ["КомандыЗаписи"], "btn"));
+  buttons.push(...collectCommands(inherit, ["ОбычныеКоманды"], "btn"));
   return buttons.length > 0 ? `<div class="cmdbar footer">${buttons.join("")}</div>` : "";
 }
 
@@ -1155,7 +1168,7 @@ export function collectResourceImages(text: string): string[] {
 // Component type names the wireframe draws itself - there is no point looking for their yaml.
 const DRAWN_TYPES = new Set([
   "ПроизвольныйШаблонФормы", "Группа", "СтандартнаяКарточка", "Надпись",
-  "ПолеВвода", "ПолеВыбора", "ВыборЗначения", "Флажок", "Кнопка", "КнопкаФормы",
+  "ПолеВвода", "ВыборЗначения", "Флажок", "Кнопка",
   "ОбычнаяКоманда", "НавигационнаяКоманда", "Картинка", "Таблица", "ПроизвольныйСписок",
   "Страницы", "РедакторHtml", "ВыборФайлов", "СписокФайлов", "КонтейнерHtml",
 ]);

@@ -305,41 +305,6 @@ def _emit_report(text: str, out: str | None) -> None:
     Path(out).write_text(text + "\n", encoding="utf-8", newline="\n")
 
 
-def _apply_fixes(sources, diagnostics, args) -> int:
-    """--fix: rewrite files with the mechanical fixes, then report the remaining findings."""
-    from xbsl import fixer
-
-    by_path = {d.path: [] for d in diagnostics}
-    for d in diagnostics:
-        by_path[d.path].append(d)
-
-    fixed = files_changed = 0
-    for src in sources:
-        result = fixer.fix_source(src, by_path.get(src.rel, []))
-        if result.changed:
-            src.path.write_bytes(fixer.encode(src, result.text))
-            files_changed += 1
-            fixed += result.applied
-
-    remaining = [d for d in diagnostics if not fixer.is_fixable(d)]
-    if args.format == "json":
-        _emit_report(json.dumps(report.report(remaining, len(sources)), ensure_ascii=False),
-                     args.out)
-    elif args.format == "codeclimate":
-        _emit_report(json.dumps(report.codeclimate(remaining), ensure_ascii=False), args.out)
-    elif args.out:
-        lines = [d.format() for d in sorted(remaining, key=lambda x: x.sort_key())]
-        _emit_report("\n".join(lines), args.out)
-    else:
-        for d in sorted(remaining, key=lambda x: x.sort_key()):
-            print(d.format())
-    print(
-        i18n.t("cli.fix-summary", fixed=fixed, files=files_changed, left=len(remaining)),
-        file=sys.stderr,
-    )
-    return 1 if any(d.severity.value == "error" for d in remaining) else 0
-
-
 #: The metadata scaffolding in the order the help and the reference list it: one family
 #: sharing a parser (_scaffold_parser) and a handler (_scaffold_main) across every name.
 _META_COMMANDS = (
@@ -1288,7 +1253,7 @@ def _check_main(argv: list[str]) -> int:
     if args.fix and args.stdin:
         print(i18n.t("cli.fix-needs-files"), file=sys.stderr)
         return 2
-    if args.fix and (args.baseline or args.write_baseline):
+    if args.fix and (args.write_baseline or args.prune_baseline):
         print(i18n.t("cli.fix-conflicts-baseline"), file=sys.stderr)
         return 2
 
@@ -1323,21 +1288,29 @@ def _check_main(argv: list[str]) -> int:
             print(i18n.t("cli.nothing-collected", paths=", ".join(f"'{p}'" for p in asked)),
                   file=sys.stderr)
         if args.fix:
-            # --fix rewrites the buffers in place - it needs the sources in this process.
-            sources = [load(p) for p in files]
-            diagnostics = _filter_requested(
-                run_sources(sources, select=select, ignore=ignore, enable=enable), requested,
-            )
-            return _apply_fixes(sources, diagnostics, args)
-        from xbsl.engine import run_parallel
+            from xbsl import fixer
 
-        diagnostics = _filter_requested(
-            run_parallel(
-                files, select=select, ignore=ignore, enable=enable,
-                jobs=args.jobs, element_version=args.element_version or None,
-            ),
-            requested,
-        )
+            target = Path(args.baseline) if args.baseline else None
+            if target is None and not args.no_baseline:
+                target = baseline.discover(requested if requested is not None else files)
+            try:
+                diagnostics, fix_summary, fix_accepted = fixer.fix_paths(
+                    files, select=select, ignore=ignore, enable=enable,
+                    requested=requested, baseline_path=target,
+                )
+            except baseline.BaselineError as exc:
+                print(str(exc), file=sys.stderr)
+                return 2
+        else:
+            from xbsl.engine import run_parallel
+
+            diagnostics = _filter_requested(
+                run_parallel(
+                    files, select=select, ignore=ignore, enable=enable,
+                    jobs=args.jobs, element_version=args.element_version or None,
+                ),
+                requested,
+            )
         if requested is not None:
             files = requested  # the counters below speak of what was asked for
 
@@ -1376,6 +1349,7 @@ def _check_main(argv: list[str]) -> int:
         roots = baseline.roots_of(asked, Path(args.baseline).parent)
         diagnostics, suppressed, unused, stale = baseline.apply(
             diagnostics, data, Path(args.baseline).parent, carried, roots,
+            accepted=fix_accepted if args.fix else None,
         )
         not_checked = baseline.not_checked_entries(data, carried, roots)
         # The stale entries are named, not just counted: without the list the only way to
@@ -1406,6 +1380,8 @@ def _check_main(argv: list[str]) -> int:
     if args.format == "json":
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
+        if args.fix:
+            payload["summary"].update(fix_summary)
         payload["summary"].update(environment.provenance(active))
         if adopted is not None:
             # The record the MCP server already answered with, now in the terminal's report
@@ -1468,6 +1444,10 @@ def _check_main(argv: list[str]) -> int:
                            **baseline.not_checked_split(not_checked)),
                     file=sys.stderr,
                 )
+
+    if args.fix:
+        print(i18n.t("cli.fix-summary", fixed=fix_summary["fixed"],
+                     files=fix_summary["files_changed"], left=len(diagnostics)), file=sys.stderr)
 
     return 1 if any(d.severity.value == "error" for d in diagnostics) else 0
 

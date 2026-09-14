@@ -6,6 +6,8 @@ conftest skip list when the data has not been generated.
 
 import json
 
+import pytest
+
 from xbsl import cli
 
 _TRAILING = "метод Ф(): Число\n    возврат 1  \n;\n"  # trailing whitespace on line 2
@@ -787,3 +789,100 @@ def test_save_keeps_the_line_endings_and_the_bom_of_an_existing_file(tmp_path):
     bl.write_bytes(b"\xef\xbb\xbf" + crlf)
     baseline.save(bl, payload)
     assert bl.read_bytes() == b"\xef\xbb\xbf" + crlf  # and keeps its BOM
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_duplicate_import_identity_keeps_names_and_reasons_but_not_display_lines(tmp_path, lang):
+    from xbsl import baseline, engine, i18n
+
+    i18n.set_lang(lang)
+    source = tmp_path / "Sample.xbsl"
+    source.write_bytes(b"import Alpha1\nimport Alpha1\nimport Beta2\nimport Beta2\n")
+    rule = "code/duplicate-import"
+    before = engine.run([source], select={rule})
+    accepted = next(d for d in before if d.line == 4)
+    legacy = {"files": {source.name: {rule: {accepted.message: {"count": 1, "reason": "retained"}}}}}
+    source.write_bytes(b"import Alpha1\nimport Beta2\nimport Beta2\nimport Gamma3\nimport Gamma3\n")
+    after = engine.run([source], select={rule})
+    kept, suppressed, unused, stale = baseline.apply(after, legacy, tmp_path)
+    assert len(kept) == 1 and "Gamma3" in kept[0].message
+    assert (suppressed, unused, stale) == (1, 0, [])
+    rebuilt = baseline.build([d for d in after if "Beta2" in d.message], tmp_path,
+                             reasons=baseline.reasons_of(legacy, tmp_path))
+    assert list(rebuilt["files"][source.name][rule].values()) == [{"count": 1, "reason": "retained"}]
+    assert baseline.apply(after, rebuilt, tmp_path)[1:] == (1, 0, [])
+    added = baseline.add_entries(legacy, after, tmp_path)
+    assert len(added) == 1 and "Gamma3" in added[0]["message"]
+    assert legacy["files"][source.name][rule][accepted.message] == {"count": 1, "reason": "retained"}
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_merged_legacy_import_keys_spend_each_accepted_occurrence_once(tmp_path, lang):
+    from xbsl import baseline, engine, i18n
+
+    i18n.set_lang(lang)
+    source = tmp_path / "Sample.xbsl"
+    source.write_bytes(b"import Beta2\nimport Beta2\n")
+    rule = "code/duplicate-import"
+    findings = engine.run([source], select={rule})
+    first = findings[0].message
+    second = i18n.t("code/duplicate-import.repeated", name="Beta2", line=8)
+    data = {"files": {source.name: {rule: {
+        first: {"count": 1, "reason": "first"},
+        second: {"count": 1, "reason": "second"},
+    }}}}
+    kept, suppressed, unused, stale = baseline.apply(findings, data, tmp_path)
+    assert kept == [] and suppressed == 1 and unused == 1
+    assert len(stale) == 1
+    assert stale[0]["message"] == second and stale[0]["reason"] == "second"
+    assert stale[0]["count"] == 1
+
+
+_POSITIONAL_MESSAGES = [
+    ("code/bound-property-assign.msg", "line"),
+    ("yaml/computed-binding-assigned.msg", "line"),
+    ("code/unclosed-resource.early-exit", "line"),
+    ("code/query-in-loop.body", "line"),
+    ("code/duplicate-import.repeated", "line"),
+    ("yaml/duplicate-import.repeated", "line"),
+    ("yaml/localization-key-unique.found", "line"),
+    ("yaml/localization-key-unique.cross", "line"),
+    ("code/param-redeclared.found", "line"),
+    ("code/duplicate-declaration.type", "line"),
+    ("code/duplicate-declaration.field", "line"),
+    ("code/duplicate-declaration.item", "line"),
+    ("code/duplicate-declaration.default", "line"),
+    ("code/duplicate-declaration.method-case", "line"),
+    ("code/duplicate-declaration.constant", "line"),
+    ("code/duplicate-declaration.local", "line"),
+    ("yaml/duplicate-key.repeat", "line"),
+    ("yaml/missing-import.query", "query_line"),
+]
+
+
+@pytest.mark.parametrize("lang", ["ru", "en"])
+@pytest.mark.parametrize("message_id, position", _POSITIONAL_MESSAGES)
+def test_baseline_vetted_display_positions_do_not_change_identity(tmp_path, lang, message_id, position):
+    from dataclasses import replace
+    from string import Formatter
+    from xbsl import baseline, i18n
+    from xbsl.diagnostics import Diagnostic, Severity
+
+    i18n.set_lang(lang)
+    template = i18n.translations(message_id)[lang]
+    names = [name for _, name, _, _ in Formatter().parse(template)
+             if name and not name.startswith("n[") and name != position]
+    fields = {name: "Item42" for name in names}
+    original = Diagnostic(str(tmp_path / "Sample.xbsl"), 2, 1, message_id.split(".")[0],
+                          Severity.WARNING, i18n.t(message_id, **fields, **{position: 17}))
+    moved = replace(original, line=3, message=i18n.t(message_id, **fields, **{position: 29}))
+    legacy = {"files": {"Sample.xbsl": {original.rule_id: {original.message: 1}}}}
+    assert baseline.apply([moved], legacy, tmp_path) == ([], 1, 0, [])
+    rebuilt = baseline.build([original], tmp_path)
+    assert baseline.apply([moved], rebuilt, tmp_path) == ([], 1, 0, [])
+    fields[names[0]] = "Different43"
+    different = replace(moved, message=i18n.t(message_id, **fields, **{position: 29}))
+    assert baseline.apply([different], legacy, tmp_path)[0] == [different]
+    unrelated = replace(moved, rule_id="custom/unrelated")
+    unrelated_data = {"files": {"Sample.xbsl": {unrelated.rule_id: {original.message: 1}}}}
+    assert baseline.apply([unrelated], unrelated_data, tmp_path)[0] == [unrelated]

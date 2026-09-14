@@ -1,5 +1,7 @@
 """query/unknown-table: tables of Запрос{...} blocks against the project objects."""
 
+import pytest
+
 from xbsl import engine
 from xbsl.cli import discover
 
@@ -147,3 +149,39 @@ def test_platform_entity_table_silent(tmp_path):
         "        ВЫБРАТЬ 1 ИЗ Пользователи КАК П"
     ))
     assert diags == []
+
+
+@pytest.mark.parametrize("inner, missing", [
+    ("ВЫБРАТЬ 1 ИЗ Товар КАК Т, НетТаблицы КАК Н", "НетТаблицы"),
+    ("SELECT 1 FROM Товар AS T, НетТаблицы AS N", "НетТаблицы"),
+    ("ВЫБРАТЬ 1 ИЗ Товар, Остаток, Товар.НетЧасти", "НетЧасти"),
+    ("ВЫБРАТЬ 1 ИЗ Товар КАК Т СОЕДИНЕНИЕ Остаток КАК О ПО Т.Ссылка = О.Ссылка, НетТаблицы КАК Н", "НетТаблицы"),
+])
+def test_every_comma_separated_table_is_checked(tmp_path, inner, missing):
+    source = _query(inner)
+    diags = _project(tmp_path, source)
+    assert len(diags) == 1 and missing in diags[0].message
+    at = source.splitlines()[diags[0].line - 1][diags[0].col - 1:]
+    assert at.startswith(missing)
+
+
+@pytest.mark.parametrize("inner", [
+    "ВЫБРАТЬ 1 ИЗ Товар, Остаток, Товар.Цены",
+    "SELECT 1 FROM Товар T, Остаток O, Товар.Цены P",
+    "ВЫБРАТЬ Т.Ссылка, НетТаблицы ИЗ Товар КАК Т",
+    "ВЫБРАТЬ 1 ИЗ Товар КАК Т ГДЕ Т.Код В (1, 2, 3)",
+    "ВЫБРАТЬ 1 ИЗ Товар, Чужой.Объект, Остаток.СрезПоследних",
+    "ВЫБРАТЬ 1 ПОМЕСТИТЬ ВТ ИЗ Товар, НетТаблицы",
+    "ВЫБРАТЬ 1 ИЗ (ВЫБРАТЬ 1 ИЗ Товар), НетТаблицы",
+])
+def test_comma_controls_keep_existing_conservative_boundaries(tmp_path, inner):
+    assert _project(tmp_path, _query(inner)) == []
+
+
+def test_standalone_query_checks_the_second_table(tmp_path):
+    _project(tmp_path, _query("ВЫБРАТЬ 1 ИЗ Товар"))
+    query = tmp_path / "Проверка.xbql"
+    query.write_text("ВЫБРАТЬ 1 ИЗ Товар, НетТаблицы", encoding="utf-8")
+    diags = engine.run(discover([str(tmp_path)]), select={_RULE})
+    assert len(diags) == 1 and diags[0].path.endswith("Проверка.xbql")
+    assert "НетТаблицы" in diags[0].message
