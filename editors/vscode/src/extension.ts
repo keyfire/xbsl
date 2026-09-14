@@ -10,7 +10,7 @@ import { registerFormPalette } from "./formPalette";
 import { DesignerAccess, registerFormDesigner } from "./formDesigner";
 import { createFormStructureModel, registerFormStructureCommands } from "./formStructure";
 import { baselineForLint, registerExcludeAction } from "./excludeAction";
-import { lintBuffer, lintPath, makeDiagnostic, RunHandle, toDiagnostic } from "./linter";
+import { lintBuffer, lintPath, makeDiagnostic, toDiagnostic } from "./linter";
 import {
   activateLsp,
   lspActive,
@@ -35,7 +35,17 @@ import { registerPalettePicker } from "./palettes";
 import { pipInstallCommand, runInstallTask } from "./installer";
 import { engineRuleArgs, primeRuleCatalogue, registerRuleConfig, ruleOverride } from "./ruleConfig";
 import { registerRulesPanel } from "./rulesPanel";
-import { groupReportByFile, resolveMessageLanguage } from "./workspaceCore";
+import {
+  dictionaryOutsideRoot,
+  discoverDictionary,
+  groupReportByFile,
+  isDictionaryFile,
+  mergeReports,
+  PathKind,
+  readByRun,
+  resolveMessageLanguage,
+  RunScope,
+} from "./workspaceCore";
 import { FixSnapshot, PROVIDED_KINDS, XbslCodeActionProvider } from "./codeActions";
 
 let collection: vscode.DiagnosticCollection;
@@ -59,9 +69,12 @@ function setFixSnapshot(uri: vscode.Uri, version: number, diags: RawDiag[]): voi
 
 // --- Workspace run state -----------------------------------------------------------------
 // One diagnostic collection, two producers:
-//  * the fast `--stdin` run owns the findings of the edited (dirty) buffer;
-//  * the whole-workspace run (on save, debounced, one at a time) replaces the findings of all
-//    other files - it sees project rules that are out of reach for a single buffer.
+//  * the fast `--stdin` run owns the findings of the edited (dirty) buffer - a module, or a file
+//    of the translation dictionary;
+//  * the whole-workspace run (on save, debounced, one at a time) replaces the findings of the
+//    files it read - the project root and the dictionary that serves it (see RunScope); it sees
+//    project rules that are out of reach for a single buffer. A document it did not read keeps
+//    what the check of its buffer found.
 
 // One file's share of the last completed workspace run: the findings converted for the collection,
 // and the raw ones they came from - the raw ones restore the Quick Fix snapshot when the file is
@@ -72,14 +85,21 @@ interface WorkspaceEntry {
   raw: RawDiag[];
 }
 
-// The last completed run per workspace folder: file uri -> its entry.
-const workspaceResults = new Map<string, Map<string, WorkspaceEntry>>();
+// The last completed run of a workspace folder: what it read, and the entry of every file it
+// reported on (file uri -> entry).
+interface WorkspaceRun {
+  scope: RunScope;
+  entries: Map<string, WorkspaceEntry>;
+}
+
+// The last completed run per workspace folder.
+const workspaceResults = new Map<string, WorkspaceRun>();
 // Debounce timers of scheduled workspace runs, per folder.
 const workspaceTimers = new Map<string, NodeJS.Timeout>();
 // Runs waiting in the chain (not started yet), per folder - they deduplicate frequent saves.
 const queuedRuns = new Map<string, Promise<void>>();
-// The single currently executing run; a new save of the same folder cancels it.
-let activeRun: { folderKey: string; handle: RunHandle } | undefined;
+// The single currently executing run (its processes); a new save of the same folder cancels it.
+let activeRun: { folderKey: string; cancel: () => void } | undefined;
 // Workspace runs execute strictly one after another.
 let runChain: Promise<void> = Promise.resolve();
 
@@ -123,18 +143,65 @@ function readSettings(resource?: vscode.Uri): Settings {
 // Source root for project-wide runs and for the navigation index: the xbsl.projectRoot setting
 // (a path relative to the workspace folder, or absolute). Lets us avoid linting unrelated
 // repository directories (examples, copies) that make project rules (Ид uniqueness and the like)
-// produce false positives. Empty or non-existent - the workspace folder itself.
-function projectRootFor(folder: vscode.WorkspaceFolder): string {
+// produce false positives. Empty or non-existent - the workspace folder itself. `quiet` is for the
+// checks that run on every keystroke: a missing root is reported by the runs, not once per key.
+function projectRootFor(folder: vscode.WorkspaceFolder, quiet = false): string {
   const raw = (vscode.workspace.getConfiguration("xbsl", folder.uri).get<string>("projectRoot") || "").trim();
   if (!raw) {
     return folder.uri.fsPath;
   }
   const abs = path.isAbsolute(raw) ? raw : path.join(folder.uri.fsPath, raw);
   if (!fs.existsSync(abs)) {
-    output.appendLine(vscode.l10n.t('XBSL: xbsl.projectRoot "{0}" not found – using the workspace folder.', raw));
+    if (!quiet) {
+      output.appendLine(vscode.l10n.t('XBSL: xbsl.projectRoot "{0}" not found – using the workspace folder.', raw));
+    }
     return folder.uri.fsPath;
   }
   return abs;
+}
+
+function pathKind(p: string): PathKind {
+  try {
+    const stat = fs.statSync(p);
+    return stat.isDirectory() ? "dir" : stat.isFile() ? "file" : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// What the next workspace run of the folder reads: its project root, and the translation
+// dictionary when that lies outside the root.
+function runScopeFor(folder: vscode.WorkspaceFolder, quiet = false): RunScope {
+  const root = projectRootFor(folder, quiet);
+  return { root, dictionary: dictionaryOutsideRoot(root, discoverDictionary(root, pathKind)) };
+}
+
+// The workspace folder whose project a file of the translation dictionary serves, or undefined for
+// any other file. The file's own folder is asked first; a dictionary may also sit above every
+// folder, next to the project a narrower folder holds.
+function dictionaryFolderOf(uri: vscode.Uri): vscode.WorkspaceFolder | undefined {
+  if (uri.scheme !== "file" || !uri.fsPath.toLowerCase().endsWith(".yaml")) {
+    return undefined;
+  }
+  const own = vscode.workspace.getWorkspaceFolder(uri);
+  const others = (vscode.workspace.workspaceFolders ?? []).filter(
+    (folder) => folder.uri.toString() !== own?.uri.toString()
+  );
+  for (const folder of own ? [own, ...others] : others) {
+    const root = projectRootFor(folder, true);
+    if (isDictionaryFile(uri.fsPath, discoverDictionary(root, pathKind))) {
+      return folder;
+    }
+  }
+  return undefined;
+}
+
+// The documents the `--stdin` check takes: modules, and the files of the translation dictionary.
+// The dictionary is judged by file rules alone (translation/english-shape among them), which is
+// exactly what a buffer check runs - so its findings follow the typing, as they do in LSP mode,
+// and the workspace run refreshes them on save.
+function isBufferLintable(doc: vscode.TextDocument): boolean {
+  return doc.languageId === "xbsl" || dictionaryFolderOf(doc.uri) !== undefined;
 }
 
 function cwdFor(uri: vscode.Uri): string | undefined {
@@ -155,7 +222,7 @@ function isLintableUri(uri: vscode.Uri): boolean {
 }
 
 async function lintDocument(doc: vscode.TextDocument): Promise<void> {
-  if (doc.languageId !== "xbsl") {
+  if (!isBufferLintable(doc)) {
     return;
   }
   const settings = readSettings(doc.uri);
@@ -218,18 +285,23 @@ function scheduleLint(doc: vscode.TextDocument, delay: number): void {
 
 // --- Workspace run -----------------------------------------------------------------------
 
-// The last completed run's result for a file: an entry (possibly with no findings) if the file's
-// folder has already been checked, and undefined if no run has completed yet.
+// The last completed run's result for a file: an entry (possibly with no findings) if a completed
+// run read the file, and undefined otherwise - no run has completed yet, or no run reads the file
+// (a module opened outside the root), whose findings then come from the check of its buffer. The
+// run of the file's own folder is asked first; a dictionary above every folder is read by the run
+// of the folder it serves.
 function workspaceBaseline(uri: vscode.Uri): Pick<WorkspaceEntry, "diags" | "raw"> | undefined {
-  const folder = vscode.workspace.getWorkspaceFolder(uri);
-  if (!folder) {
+  if (uri.scheme !== "file") {
     return undefined;
   }
-  const store = workspaceResults.get(folder.uri.toString());
-  if (!store) {
-    return undefined;
+  const own = vscode.workspace.getWorkspaceFolder(uri)?.uri.toString();
+  const runs = [...workspaceResults].sort(([a], [b]) => Number(b === own) - Number(a === own));
+  for (const [, run] of runs) {
+    if (readByRun(uri.fsPath, run.scope)) {
+      return run.entries.get(uri.toString()) ?? { diags: [], raw: [] };
+    }
   }
-  return store.get(uri.toString()) ?? { diags: [], raw: [] };
+  return undefined;
 }
 
 // Debounced entry point: repeated saves within the window collapse into a single run.
@@ -257,7 +329,7 @@ function enqueueWorkspaceRun(folder: vscode.WorkspaceFolder, notify = false): Pr
     return queued; // not started yet - it will pick up the fresh files from disk anyway
   }
   if (activeRun && activeRun.folderKey === key) {
-    activeRun.handle.cancel(); // its result would describe files that no longer exist in that shape
+    activeRun.cancel(); // its result would describe files that no longer exist in that shape
   }
   const run = runChain.then(() => {
     queuedRuns.delete(key);
@@ -270,12 +342,25 @@ function enqueueWorkspaceRun(folder: vscode.WorkspaceFolder, notify = false): Pr
 
 async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean): Promise<void> {
   const settings = readSettings(folder.uri);
-  const handle = lintPath(projectRootFor(folder), folder.uri.fsPath, settings.linter, settings.workspaceTimeout);
-  activeRun = { folderKey: folder.uri.toString(), handle };
+  const scope = runScopeFor(folder);
+  const cwd = folder.uri.fsPath;
+  const project = lintPath(scope.root, cwd, settings.linter, settings.workspaceTimeout);
+  // A dictionary outside the root is checked by a run of its own, side by side with the project:
+  // the same run would hand it to the project rules (see RunScope).
+  const dictionary = scope.dictionary
+    ? lintPath(scope.dictionary, cwd, settings.linter, settings.workspaceTimeout)
+    : undefined;
+  activeRun = {
+    folderKey: folder.uri.toString(),
+    cancel: () => {
+      project.cancel();
+      dictionary?.cancel();
+    },
+  };
   const started = Date.now();
-  const result = await handle.result;
+  const [result, dictionaryResult] = await Promise.all([project.result, dictionary?.result]);
   activeRun = undefined;
-  if (result.canceled) {
+  if (result.canceled || dictionaryResult?.canceled) {
     output.appendLine(vscode.l10n.t('XBSL: the workspace run "{0}" was canceled – the files changed.', folder.name));
     return;
   }
@@ -289,18 +374,32 @@ async function runWorkspaceLint(folder: vscode.WorkspaceFolder, notify: boolean)
     }
     return;
   }
-  if (result.report) {
-    applyWorkspaceReport(folder, result.report);
-    const s = result.report.summary;
-    const stats = s ? vscode.l10n.t("{0} findings in {1} files", s.diagnostics, s.files) : vscode.l10n.t("done");
-    output.appendLine(vscode.l10n.t('XBSL: workspace run "{0}": {1}, {2} ms.', folder.name, stats, Date.now() - started));
+  if (!result.report) {
+    return;
   }
+  let report = result.report;
+  let read: RunScope = { root: scope.root };
+  if (dictionaryResult?.report) {
+    report = mergeReports([report, dictionaryResult.report]);
+    read = scope;
+  } else if (dictionaryResult?.error) {
+    // The project half still stands. The dictionary is left out of what the run read, so its
+    // files keep the findings they had instead of being cleared by a run that never got to them.
+    output.appendLine(
+      vscode.l10n.t('XBSL: the workspace run "{0}" failed: {1}', `${folder.name}: ${scope.dictionary}`, dictionaryResult.error)
+    );
+  }
+  applyWorkspaceReport(folder, report, read);
+  const s = report.summary;
+  const stats = s ? vscode.l10n.t("{0} findings in {1} files", s.diagnostics, s.files) : vscode.l10n.t("done");
+  output.appendLine(vscode.l10n.t('XBSL: workspace run "{0}": {1}, {2} ms.', folder.name, stats, Date.now() - started));
 }
 
-// Distributes the run's findings across the folder's files, replacing whatever was there before.
-// The exception is dirty buffers: their findings belong to the live `--stdin` run until the buffer
-// is saved (a run over the files on disk simply does not see them).
-function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport): void {
+// Distributes the run's findings across the files it read, replacing whatever was there before.
+// The exceptions are dirty buffers - their findings belong to the live `--stdin` run until the
+// buffer is saved (a run over the files on disk simply does not see them) - and the documents the
+// run did not read, whose findings came from the check of their buffers alone.
+function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport, scope: RunScope): void {
   const folderKey = folder.uri.toString();
   const openDocs = new Map<string, vscode.TextDocument>();
   for (const doc of vscode.workspace.textDocuments) {
@@ -324,7 +423,7 @@ function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport)
     }
     fresh.set(key, entry);
   }
-  workspaceResults.set(folderKey, fresh);
+  workspaceResults.set(folderKey, { scope, entries: fresh });
   for (const [key, entry] of fresh) {
     const doc = openDocs.get(key);
     if (doc && doc.isDirty) {
@@ -336,15 +435,20 @@ function applyWorkspaceReport(folder: vscode.WorkspaceFolder, report: RawReport)
       setFixSnapshot(entry.uri, doc.version, entry.raw);
     }
   }
-  // Files with no findings left: everything in this folder that the fresh run did not mention
-  // is now clean.
+  // Files with no findings left: everything the fresh run read and did not mention is now clean.
+  // The run's silence says nothing about a document it did not read - a module opened outside the
+  // root keeps what the check of its buffer found - nor about a file of another folder's run.
   const stale: vscode.Uri[] = [];
   collection.forEach((uri) => {
     const key = uri.toString();
     if (fresh.has(key)) {
       return;
     }
-    if (vscode.workspace.getWorkspaceFolder(uri)?.uri.toString() !== folderKey) {
+    if (uri.scheme !== "file" || !readByRun(uri.fsPath, scope)) {
+      return;
+    }
+    const owner = vscode.workspace.getWorkspaceFolder(uri);
+    if (owner && owner.uri.toString() !== folderKey) {
       return;
     }
     const doc = openDocs.get(key);
@@ -384,7 +488,7 @@ async function lintProject(): Promise<void> {
 
 function lintOpenDocuments(): void {
   for (const doc of vscode.workspace.textDocuments) {
-    if (doc.languageId === "xbsl") {
+    if (isBufferLintable(doc)) {
       void lintDocument(doc);
     }
   }
@@ -393,7 +497,7 @@ function lintOpenDocuments(): void {
 // Forget everything and start over: used by the restart command and on settings changes.
 function resetAndRelint(): void {
   warnedOnce = false;
-  activeRun?.handle.cancel();
+  activeRun?.cancel();
   for (const t of workspaceTimers.values()) {
     clearTimeout(t);
   }
@@ -544,7 +648,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push(
     vscode.workspace.onDidOpenTextDocument((doc) => {
-      if (doc.languageId !== "xbsl") {
+      if (!isBufferLintable(doc)) {
         return;
       }
       const settings = readSettings(doc.uri);
@@ -567,7 +671,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
     vscode.workspace.onDidChangeTextDocument((e) => {
       const doc = e.document;
-      if (doc.languageId !== "xbsl") {
+      if (!isBufferLintable(doc)) {
         return;
       }
       const settings = readSettings(doc.uri);
@@ -580,14 +684,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       if (settings.run === "off") {
         return;
       }
-      const folder = vscode.workspace.getWorkspaceFolder(doc.uri);
+      // A dictionary above every folder is saved into the run of the folder it serves.
+      const folder = vscode.workspace.getWorkspaceFolder(doc.uri) ?? dictionaryFolderOf(doc.uri);
       if (settings.workspaceLint && folder && isLintableUri(doc.uri)) {
         // The file on disk is now up to date - the whole-workspace run will replace the buffer's
         // findings with the full set (per-file and project rules together).
         scheduleWorkspaceLint(folder);
-        return;
+        // ...if the run reads the file at all. A module outside the root is checked on its own,
+        // or with "linter.run": "onSave" it would never be checked.
+        if (!isBufferLintable(doc) || readByRun(doc.uri.fsPath, runScopeFor(folder, true))) {
+          return;
+        }
       }
-      if (doc.languageId === "xbsl") {
+      if (isBufferLintable(doc)) {
         void lintDocument(doc);
       }
     }),
@@ -652,7 +761,7 @@ export function deactivate(): void {
     clearTimeout(t);
   }
   workspaceTimers.clear();
-  activeRun?.handle.cancel();
+  activeRun?.cancel();
   collection?.dispose();
   output?.dispose();
 }

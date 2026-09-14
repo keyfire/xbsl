@@ -5,7 +5,19 @@ import * as assert from "assert";
 import * as path from "path";
 import { computeRange, FixEdit, RawDiag } from "../src/report";
 import { anchorKey, fixIndex } from "../src/codeActionsCore";
-import { groupReportByFile, resolveMessageLanguage } from "../src/workspaceCore";
+import {
+  DICTIONARY_DIR,
+  DICTIONARY_FILE,
+  dictionaryOutsideRoot,
+  discoverDictionary,
+  groupReportByFile,
+  isDictionaryFile,
+  mergeReports,
+  PathKind,
+  readByRun,
+  resolveMessageLanguage,
+} from "../src/workspaceCore";
+import { DICTIONARY_PATTERNS } from "../src/lspDocumentsCore";
 import { needsServerRestart, SERVER_ARG_SETTINGS } from "../src/lspRestartCore";
 
 let failed = 0;
@@ -90,12 +102,95 @@ test("an explicit language setting wins over the display language", () => {
   assert.equal(resolveMessageLanguage(" en ", "ru"), "en");
 });
 
-// -----------------------------------------------------------------------------
+// --- what a workspace run reads: the root and the dictionary outside it -----------------------
 
-console.log(`\nитого: ${passed} ok, ${failed} fail`);
-if (failed > 0) {
-  process.exit(1);
+const repository = path.resolve("repo");
+const projectRoot = path.join(repository, "src", "app");
+const dictionaryDir = path.join(repository, DICTIONARY_DIR);
+
+// A disk of the given directories and files: every parent of an entry is a directory too.
+function disk(dirs: string[], files: string[] = []): (p: string) => PathKind {
+  const directories = new Set<string>();
+  for (const entry of [...dirs, ...files.map((f) => path.dirname(f))]) {
+    for (let current = entry; ; current = path.dirname(current)) {
+      directories.add(current);
+      if (path.dirname(current) === current) {
+        break;
+      }
+    }
+  }
+  const plain = new Set(files);
+  return (p) => (plain.has(p) ? "file" : directories.has(p) ? "dir" : undefined);
 }
+
+test("the dictionary is discovered next to the root or above it, the way the engine finds it", () => {
+  assert.strictEqual(discoverDictionary(projectRoot, disk([projectRoot, dictionaryDir])), dictionaryDir);
+  // the nearest one wins: a dictionary inside the root is found before the one above
+  const inside = path.join(projectRoot, DICTIONARY_DIR);
+  assert.strictEqual(discoverDictionary(projectRoot, disk([inside, dictionaryDir])), inside);
+});
+
+test("a single-file dictionary is discovered, and a directory of the file's name is not taken for it", () => {
+  const single = path.join(repository, DICTIONARY_FILE);
+  assert.strictEqual(discoverDictionary(projectRoot, disk([projectRoot], [single])), single);
+  assert.strictEqual(discoverDictionary(projectRoot, disk([projectRoot, single])), undefined);
+  assert.strictEqual(discoverDictionary(projectRoot, disk([projectRoot])), undefined);
+});
+
+test("the names match the patterns the LSP client selects the dictionary by", () => {
+  assert.deepStrictEqual([...DICTIONARY_PATTERNS], [`**/${DICTIONARY_DIR}/**/*.yaml`, `**/${DICTIONARY_FILE}`]);
+});
+
+test("only a dictionary outside the root is checked apart: the run over the root reads one inside it", () => {
+  assert.strictEqual(dictionaryOutsideRoot(projectRoot, dictionaryDir), dictionaryDir);
+  assert.strictEqual(dictionaryOutsideRoot(projectRoot, path.join(projectRoot, DICTIONARY_DIR)), undefined);
+  assert.strictEqual(dictionaryOutsideRoot(projectRoot, undefined), undefined);
+});
+
+test("a run reads the root and the dictionary checked apart, and nothing else", () => {
+  const scope = { root: projectRoot, dictionary: dictionaryDir };
+  assert.ok(readByRun(path.join(projectRoot, "Main", "Tasks.xbsl"), scope));
+  assert.ok(readByRun(path.join(dictionaryDir, "batch", "020-entries.yaml"), scope));
+  // a copy of the sources, a sibling with a longer name, a hidden directory the engine skips
+  assert.ok(!readByRun(path.join(repository, "examples", "src", "app", "Main", "Tasks.xbsl"), scope));
+  assert.ok(!readByRun(path.join(repository, "src", "application", "Tasks.xbsl"), scope));
+  assert.ok(!readByRun(path.join(projectRoot, ".backup", "Tasks.xbsl"), scope));
+  // without the dictionary run its files are not the run's to clear
+  assert.ok(!readByRun(path.join(dictionaryDir, "010-entries.yaml"), { root: projectRoot }));
+});
+
+test("a single-file dictionary is read as that one file", () => {
+  const single = path.join(repository, DICTIONARY_FILE);
+  assert.ok(readByRun(single, { root: projectRoot, dictionary: single }));
+  assert.ok(!readByRun(path.join(repository, "other.yaml"), { root: projectRoot, dictionary: single }));
+});
+
+if (process.platform === "win32") {
+  test("on Windows the drive letter and the case of a directory do not split one path in two", () => {
+    // VS Code hands a document over as d:\..., the setting may say D:\...
+    const lower = projectRoot.replace(/^[A-Z]:/, (drive) => drive.toLowerCase());
+    assert.ok(readByRun(path.join(lower, "Main", "Tasks.xbsl"), { root: projectRoot.toUpperCase() }));
+  });
+}
+
+test("the buffer check takes the yaml files of the dictionary and nothing next to them", () => {
+  assert.ok(isDictionaryFile(path.join(dictionaryDir, "010-entries.yaml"), dictionaryDir));
+  assert.ok(isDictionaryFile(path.join(dictionaryDir, "batch", "020-entries.YAML"), dictionaryDir));
+  assert.ok(!isDictionaryFile(path.join(dictionaryDir, "README.md"), dictionaryDir));
+  assert.ok(!isDictionaryFile(path.join(repository, `my-${DICTIONARY_DIR}`, "010-entries.yaml"), dictionaryDir));
+  assert.ok(!isDictionaryFile(path.join(projectRoot, "Tasks.yaml"), dictionaryDir));
+  assert.ok(!isDictionaryFile(path.join(dictionaryDir, "010-entries.yaml"), undefined));
+});
+
+test("the reports of the two runs add up to one", () => {
+  const merged = mergeReports([
+    { diagnostics: [diag("a.xbsl", 1, 1, "x")], summary: { files: 10, diagnostics: 1, errors: 0, warnings: 1 } },
+    { diagnostics: [diag("b.yaml", 2, 2, "y"), diag("c.yaml", 3, 3, "y")], summary: { files: 5, diagnostics: 2, errors: 1, warnings: 1 } },
+  ]);
+  assert.deepStrictEqual(merged.diagnostics.map((d) => d.path), ["a.xbsl", "b.yaml", "c.yaml"]);
+  assert.deepStrictEqual(merged.summary, { files: 15, diagnostics: 3, errors: 1, warnings: 2 });
+  assert.strictEqual(mergeReports([{ diagnostics: [] }]).summary, undefined);
+});
 
 // --- lspRestartCore: a settings change that re-arguments the server -----------------------
 
@@ -128,3 +223,12 @@ test("asking for the CI job's rule set asks for a server restart", () => {
 test("an unrelated extension's settings are ignored", () => {
   assert.ok(!needsServerRestart((s) => s.startsWith("editor.")));
 });
+
+// -----------------------------------------------------------------------------
+// The summary stays below every test: a test registered after it would run without a say in
+// the exit code.
+
+console.log(`\nитого: ${passed} ok, ${failed} fail`);
+if (failed > 0) {
+  process.exit(1);
+}
