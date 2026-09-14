@@ -81,6 +81,12 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **`code/ternary-and-or` no longer calls every `A and B ? X : Y` a compile error.** That ternary takes the whole
+  condition and compiles; only a ternary right after `is Type` belongs to the check and breaks the line. The rule now
+  reports that form alone, and the fix puts the condition in parentheses. ([#97](https://github.com/keyfire/xbsl/pull/97))
+- **The parser reads `not Value is String` as `(not Value) is String`, as the platform does.** It used to put the
+  whole check under `not`, so a redundant cast or a known-in-advance check of a negation went unreported.
+  ([#97](https://github.com/keyfire/xbsl/pull/97))
 - **A platform type keeps its spelling where only a type can stand.** A field, attribute or method
   named like a platform type held that type in type expressions and before a facet, so the English
   tree mixed spellings. A type expression, a static call root and a facet owner now take the
