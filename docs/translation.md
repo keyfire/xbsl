@@ -153,12 +153,24 @@ The exceptions stay with the platform: the built-in items a collection dispatche
 are the standard code, name and owner attributes, and the facet after a dot in a type
 expression.
 
+A type is the platform's wherever only a type can stand: in a type expression, at the root of a
+static call and right before a facet, as in `Entity.Privilege`. A field, an attribute or a method
+the project spelled the same way holds nothing there. Only a type the project declares under that
+name answers to the dictionary, so its declaration and its uses still move together.
+
 A name in scope is not a type either. A local, a parameter, a loop or `catch` variable, a lambda
 parameter and a property of the module's own element may be spelled like a platform type, and then
 `Name.Member` keeps the spelling of the declaration. Such a word still reads as the type in a static
 method, which has no element, and in a component method compiled on the server alone, which sees
 only the contextual properties. The code inside a string interpolation belongs to its method and
 sees the same names, types and dictionary entries.
+
+A resource file is the project's name at every place it stands. The file of the tree, a yaml
+property, a path in a string and the body of `Resource{...}` take the dictionary's word together, or
+keep the file's own name together. A picture of the platform's library is not the project's and
+keeps the reading it always had. A method a component of the project declares, called through a node
+of a form, is the project's word too, while a built-in command of a platform component keeps the
+spelling of the ui vocabulary.
 
 ## What is left alone
 
@@ -327,6 +339,10 @@ is reported with its own place, as in
 `method:RolesString - 'Number' <- ... (Module.xbsl:2:9), ... (Module.xbsl:5:13)`. A namespace on
 its own would leave the reader to find two words among the fifteen a method declares, and the two
 are rarely neighbours.
+
+A platform type a method reads as the root of a static access stands in the same namespace. A local
+translated into the type's word hides the type in the English tree, so the pair is reported with
+both places, and an entry qualified by the method (`Method.Local`) separates them.
 
 Two more problems come from the dictionary itself, and both were found on a real project whose
 English build failed while the coverage stood at 100%. The first is an entry that spells a platform

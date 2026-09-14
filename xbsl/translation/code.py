@@ -460,7 +460,7 @@ def collect_token_edits(
             # reads the local instead - a parameter named for a transfer encoding took the word
             # of the encoding type, and `Encoding.Iso8859_1` asked a string for a property.
             for root, spelling, line, col in _static_type_roots(
-                    toks, index, local_names, owner_names, query_ranges, base):
+                    toks, index, local_names, owner_names, query_ranges, base, resolver):
                 report.note_name(f"method:{method_name}", root, spelling,
                                  *(at if at is not None else (line, col)))
             # The METHODS of one module share a namespace of their own, and the language has
@@ -728,13 +728,14 @@ def _method_locals(toks: list, start: int, project_names: frozenset[str] = froze
 
 def _static_type_roots(toks: list, start: int, local_names: dict[str, str],
                        owner_names: frozenset[str], query_ranges: list[tuple[int, int]],
-                       base: int) -> list[tuple[str, str, int, int]]:
+                       base: int, resolver: Resolver) -> list[tuple[str, str, int, int]]:
     """(name, the English spelling of its type, line, col) for every platform type the method
     that begins at `start` reads as the root of a static access (`Кодировка.Utf8`).
 
     The root is what the walk reads as a static root: a name opening a chain, followed by a
     dot, that is neither a name of the method nor a property the module's element puts in
-    scope. A query block is left out - its roots are tables, not types.
+    scope. A query block is left out - its roots are tables, not types. The type is the
+    resolver's: a type the project declares under that name is not the platform's.
     """
     out: list[tuple[str, str, int, int]] = []
     for index in range(start + 1, len(toks)):
@@ -753,7 +754,7 @@ def _static_type_roots(toks: list, start: int, local_names: dict[str, str],
             continue
         if _inside(query_ranges, base + tok.start):
             continue
-        spelling = platform_map.type_english(tok.value)
+        spelling = resolver.platform_type(tok.value)
         if spelling:
             out.append((tok.value, spelling, tok.line, tok.col))
     return out

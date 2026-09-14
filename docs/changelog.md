@@ -81,6 +81,17 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **A platform type keeps its spelling where only a type can stand.** A field, attribute or method
+  named like a platform type held that type in type expressions and before a facet, so the English
+  tree mixed spellings. A type expression, a static call root and a facet owner now take the
+  platform's spelling unless the project declares a type of that name. ([#94](https://github.com/keyfire/xbsl/pull/94))
+- **A resource file and a method of the project's own component are spelled alike everywhere.** The
+  file could take a platform word while a form kept its own name, and a call through a form node took a
+  built-in command. Both now follow the project dictionary; pictures of the platform library read as
+  before. ([#95](https://github.com/keyfire/xbsl/pull/95))
+- **A local that hides a platform type of the same English word is a collision.** With such a parameter
+  the English tree read the parameter where the method meant the type, and `--strict` passed while the
+  build failed. The report now names both places. ([#96](https://github.com/keyfire/xbsl/pull/96))
 - **The import rules read more tables.** A joined table of the reference input settings and a table
   after a join condition (`FROM A LEFT JOIN B ON ..., C`) went unread, and `code/unused-import` could
   call such an import unused. The project module now needs `import Subsystem` for an element of a
