@@ -107,6 +107,7 @@ from . import (  # noqa: F401
     unknown_members,
     unused_imports,
     unused_methods,
+    unused_constants,
     url_params,
     access_control,
     yaml_deletion,

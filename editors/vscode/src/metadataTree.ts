@@ -790,14 +790,7 @@ function packageTotalNode(total: PackageTotal): XbslNode {
   return packageNode(total.group, total.children.map(packageTotalNode), total.objects);
 }
 
-// The objects a category shows at its top level - what its description counts.
-function countedObjects(categories: XbslNode[]): number {
-  return categories
-    .filter((c) => !/\bxbslResources\b/.test(c.contextValue ?? ""))
-    .reduce((sum, c) => sum + (c.children?.length ?? 0), 0);
-}
-
-// The number countedObjects gives for the categories of these elements, without building them:
+// The number of top-level objects, without building their nodes:
 // every object, plus the forms whose owner is not among the elements - a form with its owner sits
 // under that owner, the rest go to "Common forms". The Subsystems branch draws no categories.
 function topLevelObjects(elements: Element[]): number {
@@ -809,7 +802,7 @@ function topLevelObjects(elements: Element[]): number {
 // Project children in the "By subsystems" mode.
 //
 // With the engine's placement: the subsystems of the project (a descriptor is optional), under
-// each - its packages with their nesting and the objects of its root by classes; under a package
+// each - its packages with their nesting and the objects ordered by kind and name; under a package
 // - its nested packages and its objects. Which subsystem and package an object belongs to is the
 // engine's answer, never guessed here (packagesCore.bucketItems).
 //
@@ -898,11 +891,11 @@ function subsystemModeChildren(
   const buildSub = (s: Subsystem): XbslNode =>
     subsystemGroupNode(s, [
       ...(childSubs.get(s.dir) ?? []).sort(byName).map(buildSub),
-      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false, resBySub.get(s.dir) ?? []),
+      ...categoriesOf(elemsBySub.get(s.dir) ?? [], false, false, resBySub.get(s.dir) ?? [], undefined, false),
     ]);
   return [
     ...topSubs.filter((s) => !keys || touches(keys, s.name)).sort(byName).map(buildSub),
-    ...categoriesOf(rootElems, false, false, rootRes),
+    ...categoriesOf(rootElems, false, false, rootRes, undefined, false),
   ];
 }
 
@@ -917,7 +910,7 @@ function packagedChildren(
 ): XbslNode[] {
   const project = placement.projects.find((p) => p.dir === projectDir);
   if (!project) {
-    return categoriesOf(elements, false, false, resources);
+    return categoriesOf(elements, false, false, resources, undefined, false);
   }
   const namespaceOf = (el: Element): string | undefined => placement.objects.get(pathKey(el.yamlPath))?.namespace;
   const byElement = bucketItems(elements, (el) => el.yamlPath, project, placement);
@@ -934,9 +927,9 @@ function packagedChildren(
       const nested = [...pkg.children].filter(chosen).sort(byName).map(buildPackage);
       const categories = categoriesOf(
         elementSlot?.packages.get(pkg.key) ?? [], false, false,
-        resourceSlot?.packages.get(pkg.key) ?? [], namespaceOf
+        resourceSlot?.packages.get(pkg.key) ?? [], namespaceOf, false
       );
-      const objects = countedObjects(categories) + nested.reduce((sum, n) => sum + n.objects, 0);
+      const objects = topLevelObjects(elementSlot?.packages.get(pkg.key) ?? []) + nested.reduce((sum, n) => sum + n.objects, 0);
       return { node: packageNode(pkg, [...nested.map((n) => n.node), ...categories], objects), objects };
     };
     const descriptor = descriptors.find((d) => pathKey(d.dir) === pathKey(group.dir));
@@ -944,12 +937,12 @@ function packagedChildren(
     nodes.push(
       subsystemGroupNode(view, [
         ...[...group.packages].filter(chosen).sort(byName).map((pkg) => buildPackage(pkg).node),
-        ...categoriesOf(elementSlot?.root ?? [], false, false, resourceSlot?.root ?? [], namespaceOf),
+        ...categoriesOf(elementSlot?.root ?? [], false, false, resourceSlot?.root ?? [], namespaceOf, false),
       ])
     );
   }
   nodes.sort((a, b) => String(a.label).localeCompare(String(b.label), "ru"));
-  return [...nodes, ...categoriesOf(byElement.outside, false, false, byResource.outside, namespaceOf)];
+  return [...nodes, ...categoriesOf(byElement.outside, false, false, byResource.outside, namespaceOf, false)];
 }
 
 // The subsystems to list: the engine's, when it answered for this project (a subsystem without a
@@ -1472,7 +1465,7 @@ function formOwnerResolver(objects: Element[]): (form: Element) => string | unde
 // categories are shown only without a filter (showEmptyCreatable) - under a filter they are noise.
 function categoriesOf(
   elements: Element[], showEmptyCreatable: boolean, hideEmpty: boolean, resources: string[] = [],
-  namespaceOf?: (el: Element) => string | undefined
+  namespaceOf?: (el: Element) => string | undefined, groupByKind = true
 ): XbslNode[] {
   const forms = elements.filter((e) => e.kind === FORM_KIND);
   const objects = elements.filter((e) => e.kind !== FORM_KIND);
@@ -1499,7 +1492,9 @@ function categoriesOf(
     createKinds?: string[];
   }
   const cats = new Map<string, Cat>();
-  for (const obj of [...objects].sort(byName)) {
+  const compareObjects = groupByKind ? byName : (a: Element, b: Element): number =>
+    metaFor(a.kind).order - metaFor(b.kind).order || byName(a, b);
+  for (const obj of [...objects].sort(compareObjects)) {
     const meta = metaFor(obj.kind);
     const node = elementNode(obj, formsByOwner.get(obj.name) ?? [], namespaceOf?.(obj));
     const cat = cats.get(meta.group) ?? { icon: meta.icon, order: meta.order, elements: [] };
@@ -1565,7 +1560,8 @@ function categoriesOf(
   }
 
   roots.sort((a, b) => a.order - b.order || String(a.node.label).localeCompare(String(b.node.label), "ru"));
-  return roots.map((r) => r.node);
+  return roots.flatMap(({ node }) => groupByKind || /\bxbslResources\b/.test(node.contextValue ?? "")
+    ? [node] : node.children ?? []);
 }
 
 type GroupMode = "kind" | "subsystem";
