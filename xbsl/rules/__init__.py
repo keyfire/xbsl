@@ -32,6 +32,7 @@ from . import (  # noqa: F401
     call_arity,
     code_structure,
     code_syntax,
+    duplicate_imports,
     interpolation,
     lambda_capture,
     locals_usage,
@@ -55,6 +56,7 @@ from . import (  # noqa: F401
     style_strings,
     style_ternary,
     style_types,
+    style_unions,
     style_variables,
 )
 
