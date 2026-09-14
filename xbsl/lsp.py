@@ -7,7 +7,8 @@ every keystroke does not pay for interpreter startup and dataset loading.
 Features:
     - live per-file diagnostics on open and change (file-scope rules, debounced);
     - whole-project diagnostics on save (file and project rules over the source root, file
-      rules over the translation dictionary that serves the project);
+      rules over the translation dictionary that serves the project); an open document the
+      pass does not read keeps the findings of its own per-file check until it is closed;
     - go-to-definition, completion and hover over the in-memory project index;
     - quick fix (code action) for findings that carry a mechanical fix.
 
@@ -254,6 +255,10 @@ class _State:
         # the project findings of the opened file would vanish from the Problems panel until
         # the next save, which is exactly how it looked to the user.
         self.project_diags: dict[str, list[Diagnostic]] = {}
+        # The keys of the files the last whole-project pass read, None before the first pass. A
+        # document outside this set - a module opened outside the root - owes its findings to
+        # the per-file pass alone, so the whole-project pass must not answer for it.
+        self.pass_read: Optional[set[str]] = None
         self.file_timers: dict[str, threading.Timer] = {}
         self.project_timer: Optional[threading.Timer] = None
         self.project_lock = threading.Lock()
@@ -448,6 +453,16 @@ def _make_server() -> "LanguageServer":
     def uri_key(uri: str) -> str:
         return _doc_key(uri_to_path(uri), uri)
 
+    def open_keys() -> set[str]:
+        """The keys of the documents open in the editor right now.
+
+        pygls keeps them in its workspace: it adds a document before the open handler runs and
+        drops it before the close handler does. The whole-project pass runs in a thread of its
+        own, so the map is copied before it is walked.
+        """
+        documents = getattr(server.workspace, "text_documents", None) or {}
+        return {uri_key(uri) for uri in list(documents)}
+
     def language_of(path: Path) -> str:
         if engine.is_query_file(path):
             return "xbql"
@@ -535,10 +550,12 @@ def _make_server() -> "LanguageServer":
             return
         build_project_index()  # navigation comes alive before the lint of the whole project
         try:
-            sources = [engine.load(p) for p in project_sources(root)]
+            project_paths = project_sources(root)
+            sources = [engine.load(p) for p in project_paths]
             diags = engine.run_sources(sources, select=STATE.select, ignore=STATE.ignore, enable=STATE.enable)
             # The dictionary gets the file rules alone (see dictionary_sources).
-            dictionary = [engine.load(p) for p in dictionary_sources(root)]
+            dictionary_paths = dictionary_sources(root)
+            dictionary = [engine.load(p) for p in dictionary_paths]
             diags += engine.run_sources(dictionary, select=STATE.select, ignore=STATE.ignore,
                                         enable=STATE.enable, scopes=("file",))
             diags, problem = apply_baseline_file(diags, STATE.baseline)
@@ -567,15 +584,29 @@ def _make_server() -> "LanguageServer":
                 if d.rule_id in project_ids:
                     project_diags.setdefault(key, []).append(d)
             STATE.project_diags = project_diags
+            # What this pass can answer for: the files it read, and whatever it found. An open
+            # document beyond that - a module opened outside the root, a file of another
+            # checkout - got its findings from the per-file pass, and an empty list published
+            # from here would wipe them on every save. The key is taken straight from the path:
+            # it equals the one a round trip through the uri gives, at a thirtieth of the cost.
+            read = {_doc_key(p, "") for p in project_paths + dictionary_paths}
+            STATE.pass_read = read
+            answered = read | set(by_key)
+            still_open = open_keys()
             open_dirty = set(STATE.dirty)
+
+            def stands(key: str) -> bool:
+                """Whether the live per-file picture of a document outlasts this pass."""
+                return key in open_dirty or (key not in answered and key in still_open)
+
             for key in set(STATE.published) | set(by_key):
-                if key in open_dirty:
-                    continue  # a dirty buffer keeps its live per-file picture
+                if stands(key):
+                    continue
                 # An open document is answered at the uri the editor itself used.
                 server.publish_diagnostics(
                     STATE.published.get(key) or uri_of[key], by_key.get(key, []),
                 )
-            kept = {k: u for k, u in STATE.published.items() if k in open_dirty}
+            kept = {k: u for k, u in STATE.published.items() if stands(k)}
             STATE.published = {k: STATE.published.get(k) or uri_of[k] for k in by_key} | kept
         finally:
             STATE.project_lock.release()
@@ -651,7 +682,21 @@ def _make_server() -> "LanguageServer":
 
     @server.feature(lsp.TEXT_DOCUMENT_DID_CLOSE)
     def _did_close(params: lsp.DidCloseTextDocumentParams) -> None:
-        STATE.dirty.discard(uri_key(params.text_document.uri))
+        uri = params.text_document.uri
+        key = uri_key(uri)
+        STATE.dirty.discard(key)
+        # A check still waiting out the typing pause would read the file from disk and publish
+        # findings for a document nobody has open.
+        timer = STATE.file_timers.pop(uri, None)
+        if timer:
+            timer.cancel()
+        # The findings of a document the whole-project pass does not read came from the per-file
+        # pass alone, and nothing refreshes them once the document is closed. Before the first
+        # pass the server cannot tell which documents those are; that pass clears them, because
+        # the document is no longer open.
+        read = STATE.pass_read
+        if read is not None and key not in read and key in STATE.published:
+            server.publish_diagnostics(STATE.published.pop(key), [])
 
     @server.feature("xbsl/relint")
     def _relint(params: object = None) -> dict:
