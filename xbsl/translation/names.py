@@ -205,6 +205,57 @@ def _next_name(toks: list, index: int, skip_keywords: bool = False) -> str:
     return ""
 
 
+def declared_types(source: SourceFile) -> set[str]:
+    """Names this source declares as a TYPE: the element a yaml describes, the structures,
+    exceptions and enumerations of a module.
+
+    Told apart from the rest of the declarations because a type is the one thing a project
+    can name after a platform type and mean by that name wherever a type stands. A field, an
+    attribute, a method or a property spelled like a platform type is never what a type
+    expression names: `Пользователи.Ссылка` is the platform's users catalog even in a project
+    whose structure has a field spelled like the catalog.
+    """
+    if source.kind == "yaml":
+        data, error = _parsed(source)
+        kind = object_kind(data) if error is None else None
+        if not kind:
+            return set()
+        name = value_of(data, "Имя", kind)
+        return {name} if isinstance(name, str) and name and not name.isascii() else set()
+    if source.kind != "xbsl":
+        return set()
+    out: set[str] = set()
+    toks = tokens(source)
+    for index, tok in enumerate(toks[:-1]):
+        if tok.kind != "KEYWORD" or tok.canonical not in ("STRUCTURE", "ENUMERATION", "EXCEPTION"):
+            continue
+        prev = toks[index - 1] if index else None
+        name = toks[index + 1]
+        # A declaration opens its line and names the type on the same line; the keyword
+        # elsewhere is a type word in an expression (`поймать Ошибка: Исключение`), and the
+        # name on the next line has nothing to do with it.
+        if prev is not None and prev.line == tok.line:
+            continue
+        if name.kind == "IDENT" and name.line == tok.line and not name.value.isascii():
+            out.add(name.value)
+    return out
+
+
+def collect_types(root: Path, loader) -> frozenset[str]:
+    """Every TYPE name declared under the project root (see declared_types)."""
+    out: set[str] = set()
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix not in (".yaml", ".xbsl"):
+            continue
+        if any(part.startswith(".") for part in path.relative_to(root).parts):
+            continue
+        try:
+            out |= declared_types(loader(path))
+        except OSError:
+            continue
+    return frozenset(out)
+
+
 def declared(source: SourceFile) -> set[str]:
     """Names this source declares in the PROJECT-WIDE namespace (yaml names, module methods).
 

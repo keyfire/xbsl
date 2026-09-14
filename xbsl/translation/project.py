@@ -385,6 +385,7 @@ def translate_project(
         project_names_module.dictionary_scopes(root, engine.load),
         project_names_module.component_names(root, engine.load),
         _collect_data_values(files),
+        project_names_module.collect_types(root, engine.load),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
     report = ProjectReport(root=root)

@@ -57,6 +57,11 @@ _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 #: One span replacement in the decoded text: (start, end, new text).
 Edit = tuple[int, int, str]
 
+#: The plane of a platform TYPE read where only a type can stand - a type expression, the root
+#: of a static call. The project gate does not hold there (see Resolver.platform_type), so the
+#: answer becomes a gap only when the project declares a TYPE of that name.
+PLATFORM_TYPE = "platform-type"
+
 
 def has_cyrillic(text: str) -> bool:
     return _CYRILLIC_RE.search(text) is not None
@@ -78,6 +83,7 @@ class Resolver:
         dictionary_scopes: frozenset[str] = frozenset(),
         component_names: frozenset[str] = frozenset(),
         data_values: frozenset[str] = frozenset(),
+        project_types: frozenset[str] = frozenset(),
     ) -> None:
         self.dictionary = dictionary
         self.project_names = project_names
@@ -87,6 +93,9 @@ class Resolver:
         #: exactly like one of them is usually COMPARED against that data, and translating
         #: the literal parts the comparison from values no translation ever touches.
         self.data_values = data_values
+        #: The names the project declares as TYPES (see names.declared_types) - the only
+        #: project names that can stand where the platform's type does.
+        self.project_types = project_types
         #: {entry key: the platform's own spelling} for the entries that answered where the
         #: platform answers the same word, and the keys that answered where it does not.
         #: An entry is judged an echo only when every place it answered agrees, so a word the
@@ -182,13 +191,13 @@ class Resolver:
         """
         if static_root:
             # `Strings.Join(...)` - a name with a dot after it that the platform knows as a
-            # TYPE is the type, whatever else the project called by the same word. A project
-            # cannot redefine a platform type, so the gate must not hold here: it once turned
-            # a static call into an undefined variable, because a structure field elsewhere
-            # carried the same name.
-            platform_type = platform_map.type_english(name)
+            # TYPE is the type, whatever else the project called by the same word: the gate
+            # must not hold here. It once turned a static call into an undefined variable,
+            # because a structure field elsewhere carried the same name. A TYPE the project
+            # declares under that name is the exception (see platform_type).
+            platform_type = self.platform_type(name)
             if platform_type:
-                return platform_type, "platform"
+                return platform_type, PLATFORM_TYPE
         if reference == "facet":
             scoped = self.dictionary.scoped_token(name, scope, type_scope)
             if scoped is not None:
@@ -251,6 +260,25 @@ class Resolver:
             return hit, "user"
         return self._platform_type_reading(name, after_dot)
 
+    def platform_type(self, name: str) -> str | None:
+        """The English spelling of the platform TYPE `name` stands for where a type stands.
+
+        A type expression, the root of a static call and the owner of a facet name a type, and
+        the only project names that can mean one are the types the project declares. Any other
+        name of the project spelled like a platform type - a field, an attribute, a method, a
+        property - leaves the type to the platform: the users catalog of a type expression came
+        out `Пользователи.Reference` in a project whose structure had a field spelled like the
+        catalog, half of it gated, half of it translated, and the build knew neither. A project
+        TYPE spelled like a platform one answers to the dictionary, as every name the project
+        declares does, so its declaration and its uses move together.
+
+        The platform's generic entity (`Entity`) is a type too, though no type pair spells it:
+        the catalog knows it as the owner of facets, and the flat dictionary spells it.
+        """
+        if not name or name in self.project_types:
+            return None
+        return platform_map.type_english(name) or platform_map.facet_owner_english(name)
+
     def _platform_type_reading(self, name: str, after_dot: bool) -> tuple[str | None, str]:
         """What `type_name` answers when the dictionary says nothing - its own tail."""
         if after_dot:
@@ -259,6 +287,10 @@ class Resolver:
             facet = platform_map.facet_suffix_english(name)
             if facet:
                 return facet, "platform"
+        if not after_dot:
+            platform_type = self.platform_type(name)
+            if platform_type:
+                return platform_type, PLATFORM_TYPE
         if name in self.project_names:
             return None, "missing"
         platform = platform_map.ident_english(name)
@@ -481,13 +513,18 @@ def collect_token_edits(
                     not prev_dot and nxt is not None and nxt.kind == "OP" and nxt.value == "."
                     and tok.value not in local_names and tok.value not in owner_names
                 )
+                platform_facet = (
+                    _platform_facet(toks, index, local_names, owner_names, resolver)
+                    if prev_dot and not in_query else None
+                )
                 _identifier_edit(tok, base, in_query, prev_dot, resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
                                  chain_root=chain_root,
                                  receiver_is_local=prev_dot and prev_ident in local_names,
                                  reference=_reference_reading(
                                      toks, index, prev_dot, type_scope, chain_root,
-                                     resolver.project_names))
+                                     resolver.project_names),
+                                 platform_facet=platform_facet)
         elif kind == "NUMBER":
             _duration_edit(tok, base, edits)
         elif kind == "PATTERN":
@@ -1067,12 +1104,22 @@ def _member_by_owner(scope: str, type_scope: str, name: str) -> str | None:
 def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at=None,
                      scope: str = "", type_scope: str = "", static_root: bool = False,
                      chain_root: str = "", receiver_is_local: bool = False,
-                     reference: str = "") -> None:
+                     reference: str = "", platform_facet: str | None = None) -> None:
     if in_query:
         keyword = platform_map.query_keyword_english(tok.value)
         if keyword:
             edits.append((base + tok.start, base + tok.end, keyword))
             return
+    if after_dot and platform_facet:
+        # `Сущность.Право.Чтение`: right after a platform type stands its FACET (see
+        # _platform_facet), and the facet table spells it. The project gate does not hold
+        # here: a project attribute spelled like the facet left it Russian after an English
+        # entity, a type path neither language has, and every access check of the module
+        # read an undefined variable.
+        resolver.note_platform_win(tok.value, platform_facet)
+        if platform_facet != tok.value:
+            edits.append((base + tok.start, base + tok.end, platform_facet))
+        return
     # The receiver as written is read as a platform TYPE only when it is not a local of the
     # method: a variable named like a type is the variable, and its members are those of ITS
     # type - declared or inferred - never the namesake's. A local holding a project object
@@ -1155,6 +1202,8 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
         report.user_done += 1
     elif plane == "platform":
         report.note_platform_answer(tok.value, tok.line, tok.col)
+    elif plane == PLATFORM_TYPE:
+        report.note_platform_type_answer(tok.value, tok.line, tok.col)
     if replacement:
         if replacement != tok.value:
             edits.append((base + tok.start, base + tok.end, replacement))
@@ -1162,6 +1211,31 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
     if plane in ("missing", "platform-gap"):
         line, col = at if at is not None else (tok.line, tok.col)
         report.note_missing(tok.value, line, col, plane)
+
+
+def _platform_facet(toks: list, index: int, local_names: dict[str, str],
+                    owner_names: frozenset[str], resolver: Resolver) -> str | None:
+    """The English facet word at `index` when a platform type stands right before the dot.
+
+    `Сущность.Право` names the privilege facet of the generic entity, the way `Задачи.Ссылка`
+    names a facet in a type expression. The owner has to open the chain and to BE the type:
+    a local, or a property of the module's element, spelled like the entity is that name, and
+    the word after it is its member; so is a type the project declares under the same name.
+    Anything else answers None and keeps the member reading.
+    """
+    if index < 2:
+        return None
+    dot, owner = toks[index - 1], toks[index - 2]
+    if dot.kind != "OP" or dot.value != "." or owner.kind != "IDENT":
+        return None
+    before = toks[index - 3] if index >= 3 else None
+    if before is not None and before.kind == "OP" and before.value == ".":
+        return None
+    if owner.value in local_names or owner.value in owner_names:
+        return None
+    if not resolver.platform_type(owner.value):
+        return None
+    return platform_map.facet_of(owner.value, toks[index].value)
 
 
 def _type_identifier_edit(tok, base, after_dot, resolver, report, edits, at=None) -> None:
@@ -1176,6 +1250,8 @@ def _type_identifier_edit(tok, base, after_dot, resolver, report, edits, at=None
         report.user_done += 1
     elif plane == "platform":
         report.note_platform_answer(tok.value, tok.line, tok.col)
+    elif plane == PLATFORM_TYPE:
+        report.note_platform_type_answer(tok.value, tok.line, tok.col)
     if replacement:
         if replacement != tok.value:
             edits.append((base + tok.start, base + tok.end, replacement))

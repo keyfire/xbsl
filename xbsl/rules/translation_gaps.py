@@ -144,18 +144,28 @@ def _gaps_mapper(source: SourceFile) -> dict | None:
         return {"error": str(exc)}
     return {
         "declared": sorted(names.declared(source)),
+        "declared_types": sorted(names.declared_types(source)),
         # A hint for every name the client may be asked to translate - the ones the dictionary
         # does not cover AND the ones the platform answered (those become gaps as soon as the
         # project turns out to declare the same word).
         "suggest": {
             name: platform_suggestion(name)
-            for name in (*report.missing_tokens, *report.platform_tokens)
+            for name in (*report.missing_tokens, *report.platform_tokens,
+                         *report.platform_type_tokens)
             if platform_suggestion(name)
         },
         "missing": {name: places[:1] + [len(places)] for name, places in report.missing_tokens.items()},
         "platform": {
             name: places[:1] + [len(places)]
             for name, places in report.platform_tokens.items()
+            if not loaded.token(name)
+        },
+        # A platform TYPE read where only a type stands is the project's gap only when the
+        # project declares a TYPE of that name: a field or a method spelled the same way does
+        # not hold the translator there, and must not make the editor ask for an entry.
+        "platform_types": {
+            name: places[:1] + [len(places)]
+            for name, places in report.platform_type_tokens.items()
             if not loaded.token(name)
         },
         "phrases": {text: places[:1] + [len(places)] for text, places in report.missing_phrases.items()},
@@ -170,6 +180,9 @@ def _gaps_mapper(source: SourceFile) -> dict | None:
 )
 def missing_translation(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     declared = {name for fact in facts.values() for name in (fact.get("declared") or ())}
+    declared_types = {
+        name for fact in facts.values() for name in (fact.get("declared_types") or ())
+    }
     for rel, fact in sorted(facts.items()):
         error = fact.get("error")
         if error:
@@ -189,7 +202,11 @@ def missing_translation(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             )
         # A word the platform tables answer is a gap too when the PROJECT declares it: the
         # translator refuses the platform spelling there, so the file would keep the Russian.
-        for name, entry in sorted((fact.get("platform") or {}).items()):
+        platform = dict(fact.get("platform") or {})
+        for name, entry in (fact.get("platform_types") or {}).items():
+            if name in declared_types and name not in platform:
+                platform[name] = entry
+        for name, entry in sorted(platform.items()):
             if name not in declared:
                 continue
             (line, col), count = entry[0], entry[1]

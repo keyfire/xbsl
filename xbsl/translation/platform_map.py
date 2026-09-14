@@ -21,7 +21,8 @@ from xbsl import dataset, metamodel, terms, typeinfer, uischema
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
                    ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
-                   _unanimous_enum_value, _member_names, reference_only_members):
+                   _unanimous_enum_value, _member_names, reference_only_members,
+                   _platform_facets, _facet_owners):
         cached.cache_clear()
 
 
@@ -162,6 +163,46 @@ def query_keyword_english(word: str) -> str | None:
 def facet_suffix_english(name: str) -> str | None:
     """The English spelling of a facet suffix (the part after the dot of a type)."""
     return terms.facet_suffix_english(name)
+
+
+@lru_cache(maxsize=1)
+def _platform_facets() -> frozenset[str]:
+    """`Owner.Facet` of every facet the type catalog declares (`Сущность.Право` and kin)."""
+    try:
+        std = dataset.load_json("stdlib.json") or {}
+    except Exception:  # noqa: BLE001 - no data, no facets
+        return frozenset()
+    return frozenset(name for name in (std.get("facet_members") or {}) if "." in name)
+
+
+@lru_cache(maxsize=1)
+def _facet_owners() -> frozenset[str]:
+    """The types the facets of the catalog belong to - the part before the last dot."""
+    return frozenset(facet.rpartition(".")[0] for facet in _platform_facets())
+
+
+def facet_owner_english(name: str) -> str | None:
+    """The English spelling of a platform type known only as the OWNER of facets, or None.
+
+    The generic entity of the catalog (`Entity`, whose facets are the reference, the object,
+    the privilege and the rest) has no type pair, and the flat dictionary is what spells it; a
+    name that owns no facet of the catalog answers nothing here.
+    """
+    if not name or name not in _facet_owners():
+        return None
+    return ident_english(name)
+
+
+def facet_of(owner: str, name: str) -> str | None:
+    """The English spelling of `name` as a FACET the platform type `owner` declares, or None.
+
+    `Сущность.Право.Чтение` reads a value of the privilege facet of the generic entity: after
+    the platform type the word is the facet, spelled by the facet table (`Privilege`), however
+    the project spells a word of its own that looks the same.
+    """
+    if not owner or not name or f"{owner}.{name}" not in _platform_facets():
+        return None
+    return facet_suffix_english(name)
 
 
 @lru_cache(maxsize=1)
