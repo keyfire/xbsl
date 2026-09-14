@@ -970,6 +970,7 @@ export function registerFormDesigner(
     label: vscode.l10n.t("Label"),
     button: vscode.l10n.t("Button"),
     checkbox: vscode.l10n.t("Checkbox"),
+    switch: vscode.l10n.t("Switch"),
     section: vscode.l10n.t("Section"),
     mainCommand: vscode.l10n.t("Main command"),
     form: vscode.l10n.t("form"),
@@ -1238,6 +1239,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-btn2-bg: rgba(128,128,128,.25); --fp-btn2-fg: var(--vscode-foreground);
     --fp-link: var(--vscode-textLink-foreground); --fp-danger: #ff3e33;
     --fp-focus: var(--vscode-focusBorder); --fp-sel-bg: rgba(64,128,255,.12);
+    --fp-check: var(--vscode-inputOption-activeBorder, var(--vscode-focusBorder));
   }
   #frame .theme-light {
     --fp-bg: #ffffff; --fp-fg: #1c1c1f; --fp-fg2: #81818a; --fp-val: #4d4d54;
@@ -1248,6 +1250,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-btn2-bg: #dbdbdb; --fp-btn2-fg: #1c1c1f;
     --fp-link: #007aff; --fp-danger: #ff3e33;
     --fp-focus: #1668dc; --fp-sel-bg: rgba(22,104,220,.08);
+    --fp-check: #278bf9;
   }
   #frame .theme-dark {
     --fp-bg: #1a1a1a; --fp-fg: #ededf2; --fp-fg2: #84848c; --fp-val: #b8b8bf;
@@ -1258,6 +1261,7 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
     --fp-btn2-bg: #3d3d44; --fp-btn2-fg: #ededf2;
     --fp-link: #3395ff; --fp-danger: #ff3e33;
     --fp-focus: #2f81f7; --fp-sel-bg: rgba(47,129,247,.16);
+    --fp-check: #3395ff;
   }
   /* The platform types everything in Noto Sans Display: captions and cells 14px, values,
      buttons and tabs 16px, the form title 24px regular. */
@@ -1330,9 +1334,25 @@ ${cspMeta(nonce, { style: webview.cspSource, font: webview.cspSource, img: `data
   /* Флажок и радиокнопка: платформенные 24px с рамкой 1.6 и скруглением 6 / кругом. */
   .chk, .radio { display: inline-flex; align-items: center; gap: 8px; font-size: 16px; line-height: 24px; color: var(--fp-fg); }
   .cbox, .rdo { width: 24px; height: 24px; border: 1.6px solid var(--fp-input-border); box-sizing: border-box; flex: none; }
-  .cbox { border-radius: 6px; }
+  .cbox { border-radius: 6px; display: inline-flex; align-items: center; justify-content: center; }
   .rdo { border-radius: 50%; }
   .rgrp { display: inline-flex; gap: 8px; }
+  /* A checked box and a switch that is on, measured on a deployed form: the outline turns blue
+     (--fp-check) and the mark or the thumb takes the same color; neither state has a fill. The
+     switch is a 42x24 pill whose 12px thumb sits at the start while off and at the end while on.
+     The third state of a tri-state box is a dash. */
+  .cbox.on, .cbox.mixed { border-color: var(--fp-check); color: var(--fp-check); }
+  .cmark { width: 10px; height: 8px; fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; }
+  .cdash { width: 10px; height: 2px; border-radius: 1px; background: currentColor; }
+  .swt { width: 42px; height: 24px; border: 1.6px solid var(--fp-input-border); border-radius: 12px;
+    box-sizing: border-box; flex: none; display: inline-flex; align-items: center; padding: 0 4px; }
+  .swt .knob { width: 12px; height: 12px; border-radius: 50%; background: var(--fp-input-border); }
+  .swt.on { border-color: var(--fp-check); justify-content: flex-end; }
+  .swt.on .knob { background: var(--fp-check); }
+  /* An inaccessible checkbox or switch keeps its state in the gray of a closed field. */
+  .dis .swt, .dis .cbox.on, .dis .cbox.mixed { border-color: var(--fp-dis-border); color: var(--fp-dis-border); }
+  .dis .swt .knob { background: var(--fp-dis-border); }
   /* Кнопки: скругление 8, 16px medium; primary - жёлтая с оливковым текстом, обычная серая,
      дополнительная - синий текст, пилюли шапки - мягкая заливка и полное скругление. */
   .btn { border: none; background: var(--fp-btn2-bg); color: var(--fp-btn2-fg); border-radius: 8px;

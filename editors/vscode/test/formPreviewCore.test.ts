@@ -616,11 +616,103 @@ check(
 );
 setFormKeyAliases({});
 
-if (failures > 0) {
-  console.error(`итого: ${failures} FAIL`);
-  process.exit(1);
+// --- checkbox kinds: the box, the switch, the tri-state box ---------------------------------
+// `Kind` of a checkbox takes the values of `CheckboxKind`, and the platform draws each kind apart:
+// the switch is a pill with a thumb, the tri-state box shows a dash while the value is `Undefined`.
+// A literal value places the mark or the thumb; a binding is computed at run time and drawn off.
+
+const CHECKBOX_FORM = [
+  "ВидЭлемента: КомпонентИнтерфейса",
+  "Наследует:",
+  "    Содержимое:",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: Напоминания",
+  "            Вид: Переключатель",
+  "            Заголовок: Напоминать о задачах",
+  "            Значение: Истина",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: Выключен",
+  "            Вид: Переключатель",
+  "            Заголовок: Архив",
+  "            Значение: Ложь",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: ПоДанным",
+  "            Вид: Переключатель",
+  "            Значение: =Данные.Разрешено",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: Английский",
+  "            Вид: Переключатель",
+  "            Значение: True",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: Отмечен",
+  "            Заголовок: Срочная",
+  "            Значение: Истина",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: ДваСостояния",
+  "            Вид: Флажок",
+  "            Значение: Неопределено",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: ТриСостояния",
+  "            Вид: ФлажокТриСостояния",
+  "            Значение: Неопределено",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: ТриСостоянияАнгл",
+  "            Вид: ФлажокТриСостояния",
+  "            Значение: Undefined",
+  "        -",
+  "            Тип: Флажок",
+  "            Имя: ТриСостоянияСнят",
+  "            Вид: ФлажокТриСостояния",
+  "            Значение: Ложь",
+  "        -",
+  "            Тип: Группа",
+  "            Доступность: Ложь",
+  "            Содержимое:",
+  "                -",
+  "                    Тип: Флажок",
+  "                    Имя: Закрыт",
+  "                    Вид: Переключатель",
+  "                    Значение: Истина",
+  "        -",
+  "            Тип: ПолеВвода<Строка>",
+  "            Заголовок: Код",
+  "            Обязательное: True",
+  "",
+].join("\n");
+
+// The whole label of the checkbox with this name: its own tooltip names it (`Тип · Имя`).
+function checkboxOf(html: string, name: string): string {
+  const at = html.indexOf(`· ${name}"`);
+  const end = html.indexOf("</label>", at);
+  return at < 0 || end < 0 ? "" : html.slice(html.lastIndexOf("<label", at), end + "</label>".length);
 }
-console.log("итого: все проверки ok");
+
+const boxes = renderFormPreview(CHECKBOX_FORM);
+const boxesHtml = boxes.ok ? boxes.html : "";
+check("checkbox kinds: the form renders", boxes.ok);
+const onSwitch = checkboxOf(boxesHtml, "Напоминания");
+check("switch: a pill with a thumb, not a box", onSwitch.includes('class="swt on"><span class="knob"></span>') && !onSwitch.includes("cbox"));
+check("switch: the caption follows the pill", onSwitch.includes("</span></span>Напоминать о задачах</label>"));
+check("switch: a literal false keeps the thumb at the start", checkboxOf(boxesHtml, "Выключен").includes('class="swt"'));
+check("switch: a binding is drawn off", checkboxOf(boxesHtml, "ПоДанным").includes('class="swt"'));
+check("switch: the English True turns it on", checkboxOf(boxesHtml, "Английский").includes('class="swt on"'));
+check("switch: no caption - the switch placeholder", checkboxOf(boxesHtml, "ПоДанным").includes('<span class="ph">Переключатель</span>'));
+check("checkbox: a literal true checks the box", checkboxOf(boxesHtml, "Отмечен").includes('class="cbox on"><svg class="cmark"'));
+check("checkbox: a two-state box ignores the undefined literal", checkboxOf(boxesHtml, "ДваСостояния").includes('<span class="cbox"></span>'));
+check("tri-state box: the undefined literal shows the dash", checkboxOf(boxesHtml, "ТриСостояния").includes('class="cbox mixed"><span class="cdash"></span>'));
+check("tri-state box: the English Undefined as well", checkboxOf(boxesHtml, "ТриСостоянияАнгл").includes('class="cbox mixed"'));
+check("tri-state box: a literal false leaves it unchecked", checkboxOf(boxesHtml, "ТриСостоянияСнят").includes('<span class="cbox"></span>'));
+check("switch: an inaccessible one is marked for the gray", checkboxOf(boxesHtml, "Закрыт").includes('class="chk dis"'));
+check("required: the English True draws the asterisk", boxesHtml.includes('class="req"'));
+check("checkbox: no value and no kind - the plain box as before", result.ok && result.html.includes('<span class="cbox"></span>Включено</label>'));
 
 // Availability: the platform draws an inaccessible field as a gray fill with no border, and the
 // state travels DOWN the tree until a node overrides it - so a group switched off carries its
@@ -683,3 +775,10 @@ const chip = renderFormPreview([
   "",
 ].join("\n"));
 check("эллипсис: полный текст в подсказке", chip.ok && chip.html.includes('title="=Объект.Размещение=='));
+
+// The summary closes the file: a check written after it would print FAIL and still exit with 0.
+if (failures > 0) {
+  console.error(`итого: ${failures} FAIL`);
+  process.exit(1);
+}
+console.log("итого: все проверки ok");
