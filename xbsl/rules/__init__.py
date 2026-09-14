@@ -33,6 +33,7 @@ from . import (  # noqa: F401
     call_arity,
     code_structure,
     code_syntax,
+    control_flow,
     duplicate_imports,
     interpolation,
     lambda_capture,
