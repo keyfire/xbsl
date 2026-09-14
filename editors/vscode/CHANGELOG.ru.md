@@ -2,6 +2,13 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
+## Не выпущено
+
+### Исправлено
+
+- **Новое свойство метаданных вставляется после `Type` в английском YAML.** Это работает и в
+  свежем сеансе редактора до открытия конструктора форм. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
 ## 0.73.0
 
 ### Изменено

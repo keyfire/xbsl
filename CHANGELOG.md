@@ -18,6 +18,23 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Changed
+
+- **Compact lint answers omit the per-file map.** Counts, full error records, baseline and
+  CI-job details remain available; `compact=false` returns the complete report. ([#99](https://github.com/keyfire/xbsl/pull/99))
+- **Pruning unused translations returns counts by default.** `removed` counts occurrences and
+  `pruned` groups them by kind and file, including repeated declarations beyond the selected
+  page. `compact=false` includes the full list; preview keeps its previous format. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
+### Fixed
+
+- **Older language data translates the enumeration kind as `Enumeration`.** The serializer
+  spelling takes precedence over the stdlib type alias `Enum`. ([#99](https://github.com/keyfire/xbsl/pull/99))
+- **Text output from `translate --set` names each rewritten location.** Repeated keys in one
+  dictionary file or across files are distinguished by path and line number. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
 ## 2026-09-14 – 0.107.0, 0.108.0, 0.109.0
 
 ### Added
