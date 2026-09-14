@@ -2232,7 +2232,8 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
              written. An empty value REMOVES the entry - a half-filled stub is not a
              translation.
     target – the file NEW entries go to (default 090-manual.yaml). An entry that already
-             exists is corrected where it lives, whatever the target says.
+             exists is corrected where it lives, whatever the target says - in every place
+             the dictionary declares it, so a copy of the key keeps the value it shares.
     comment – the head line a NEWLY created file gets: say what the batch is for ("Names of
              the feature icons"), since only the caller knows. Without it the file gets a
              neutral line naming no author.
