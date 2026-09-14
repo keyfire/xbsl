@@ -60,7 +60,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 205 rules of the base set** - severity, default state, scope, links to
+**The full list of all 210 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -127,6 +127,48 @@ identifier and that none of them knows - a method that was renamed while its men
 form of a known name and a line of commented-out code are not reported. The name of another product
 mentioned in prose has the same shape, which is why the rule is off by default and a project turns
 it on with `--enable comment/unknown-name`.
+
+Several rules repeat warnings of the platform IDE, so those places show up before anyone opens the
+code there, and each rule follows the condition the compiler applies. `code/unused-local` and
+`code/unused-loop-var` resolve names through block scopes the way the compiler binds them. They
+report a `val`, `var` or `use` the method never reads and the variable of a `for X in` loop; a local
+that is only ever assigned gets a message of its own. Reads inside a closure and inside the
+interpolation of a string or a query literal count. A named argument `Name = value`, a member
+`.Name` and a same-named variable of a sibling block are not reads. The counter of `for X = A to B`
+is not reported, as in the IDE, and neither are a `catch` variable or a parameter. An unused `use`
+name is fixed by dropping it, since `use Expression` holds the resource until the end of the same
+scope.
+
+`code/unused-import` asks whether the compiler ever looked up a type in the imported namespace. A
+word of the module keeps nothing by itself: the import line, a member after a dot and a local named
+like an element are not uses. A value can be one. A property of the paired yaml or the result of a
+method of another subsystem brings its type along, and so does a query column; reading a member of
+such a value uses the namespace of that type. Where the rule cannot follow the compiler, because a
+module or a paired yaml does not parse or the declarations of an element cannot be read, it stays
+silent. The fix removes the import line.
+
+`style/constructor-literal` reports a call like `new Date("9999-12-31")` or
+`new Duration(1, 30, 0, 0)`: a constructor of a type that has a literal, with constant arguments
+only. `FindType` with a constant name is reported too. The compiler's condition does not look at the
+value, so a string no literal can hold is a finding as well. `--fix` writes the literal where it
+holds the same value, as in `Date{9999-12-31}`, `1h30m` or `True`, and leaves the call alone
+otherwise. `FindType` is never rewritten: the call returns `Type?` while the literal names the type
+itself, so a variable declared from the call would change its type.
+
+Four rules of tier D judge the type of an expression, where the rules above judge a written type.
+`code/redundant-cast` reports a cast to a type the value already has, and `code/cast-to-non-null` a
+cast that only drops `Undefined` and could be `!`. `code/redundant-undefined-guard` reports `??`,
+`!` or `?.` over a value whose type has no `Undefined`, and `code/redundant-type-check` reports
+`X is Type` whose result the types decide. A type comes from what the sources write. A declaration,
+a cast or a constructor names it. A component of the paired markup has the type its declaration
+gives, so `Components.Field.Value` of an `Edit<Number>` is a number. A generic member takes the
+arguments of its receiver: `OnChangeEvent<String>.NewValue` is a string. A structure or a method
+gets its type from the module that declares it. A row of `Query{...}` is typed by its select list
+and the yaml of the tables it reads; a field through a reference and the joined side of a left join
+carry `Null`, which `ReplaceNull` removes. The comparison is the compiler's, and a condition checked
+earlier narrows nothing. What the inference cannot name is not judged: a lambda parameter, a union
+with an unknown part, a method whose overloads disagree, a column of a query the compiler would
+refuse. The rules therefore miss some of the IDE's warnings and add none of their own.
 
 Detailed group descriptions live in [RULES.md](/RULES): `query/` (a composite type in `IN` with
 a subquery), `project/` (project properties), `naming/` (the naming standard, the `[morph]`

@@ -18,6 +18,47 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+- **`code/redundant-cast` and `code/cast-to-non-null` report the casts the platform IDE warns
+  about.** A cast to the type a value already has, or one that only drops `Undefined`, passed the
+  linter, and one project had 65 of them. The fix removes the cast or puts `!` in its place.
+  ([#74](https://github.com/keyfire/xbsl/pull/74))
+- **`code/redundant-undefined-guard` reports `??`, `!` or `?.` over a value that is never
+  `Undefined`.** The platform IDE warns about such a guard, but the engine typed neither a
+  component by its markup nor a generic member by its argument. The fix removes `?? ...` and `!`.
+  ([#73](https://github.com/keyfire/xbsl/pull/73))
+- **`code/redundant-type-check` reports an `is` check whose result is known in advance.** Such a
+  check always passes, or never does for `is not`, and the platform IDE warns about it. A query
+  column gets its type from the selected field. ([#73](https://github.com/keyfire/xbsl/pull/73))
+- **`style/constructor-literal` reports a constructor call that a literal of the type replaces.**
+  The platform IDE warns about `new Date("9999-12-31")` and `FindType("Std::String")`, and the
+  linter let such calls through. The fix writes `Date{9999-12-31}` where the literal holds the same
+  value. ([#71](https://github.com/keyfire/xbsl/pull/71))
+
+### Changed
+- **`xbsl.typeinfer` answers with a set of types and knows the project's own names.** It used to
+  name a single type from the platform catalog, so a query column, a union parameter or a structure
+  from another module stayed unknown. ([#74](https://github.com/keyfire/xbsl/pull/74))
+- **`code/unused-local` reports an unused `use` variable and a local that is only assigned.** The
+  platform IDE warns about both, while the rule skipped `use` and took a write for a read. The fix
+  drops the name of an unused `use`, and the resource still closes at the end of the scope.
+  ([#69](https://github.com/keyfire/xbsl/pull/69))
+
+### Fixed
+- **`style/shadow-own-property` finds a variable named like an inherited property.** The rule read
+  only the element's own yaml and missed the properties a component inherits from its platform
+  type, which were all seven IDE warnings on one project. As in the IDE, static methods and loop
+  variables are no longer reported. ([#72](https://github.com/keyfire/xbsl/pull/72))
+- **`code/unused-import` repeats the type lookups the compiler makes.** The rule took any word that
+  spelled an element for a use, the import line itself included, and on a project with packages it
+  missed every import the platform IDE reports. On every project checked the findings now match the
+  IDE, and the fix removes the line. ([#70](https://github.com/keyfire/xbsl/pull/70))
+- **`code/unused-local` and `code/unused-loop-var` no longer report a variable read below a batch
+  query or the counter of `for X = A to B`.** A `;` inside the query ended the method early, and the
+  IDE does not track the counter of a numeric loop. ([#69](https://github.com/keyfire/xbsl/pull/69))
+
 ## 2026-09-14 – 0.107.0
 
 ### Added

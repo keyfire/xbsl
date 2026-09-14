@@ -92,6 +92,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "неявное-преобразование-к-типу-строка",
   },
   { match: (r) => r === "style/collection-literal", page: "topics/collection-literals-usage" },
+  { match: (r) => r === "style/constructor-literal", page: "topics/literals" },
 
   // --- recommendations: operations and statements ---
   { match: (r) => r === "style/optional-params-last", page: "topics/method-declarations" },
@@ -132,6 +133,13 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     page: "topics/variable-declaration-statement",
   },
   { match: (r) => r === "code/unknown-enum-value", page: ENUM, anchor: "элементы" },
+
+  // --- operations the types already decide: casts, guards against Undefined, `is` checks ---
+  { match: (r) => r === "code/redundant-cast", page: "topics/as" },
+  { match: (r) => r === "code/cast-to-non-null", page: "topics/exclamation-mark-operation" },
+  { match: (r) => r === "code/redundant-undefined-guard", page: "topics/undefined-type" },
+  // The page of the operation itself; `topics/is-operator` is the style advice style/negated-is uses.
+  { match: (r) => r === "code/redundant-type-check", page: "topics/is" },
 
   // --- execution model and modularity ---
   {
