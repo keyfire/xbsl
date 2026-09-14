@@ -94,6 +94,7 @@ _DATA_DEPENDENT = {
     "test_translate_interpolation_locals",  # the same translator, the same data
     "test_translate_platform_type_gate",  # the same translator, the type pairs and the catalog
     "test_translate_project_name_one_plane",  # the same translator, the ui vocabulary
+    "test_translate_local_shadows_type",  # the same translator, the type pairs
     "test_rule_yo_in_text",  # the rule reads the ui schema and the metamodel section names
     "test_rule_handler_signature",  # the rule reads the ui schema and parses the module
     "test_rule_translation_gaps",  # the translator reads the term pairs and the metamodel
