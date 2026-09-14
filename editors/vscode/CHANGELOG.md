@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+- **The form frame draws a switch as a switch.** A `Checkbox` with `Kind: Switch` looked like a
+  plain box. It is now a pill whose thumb sits where a literal `Value` puts it, and a
+  `CheckboxThreeState` box shows a dash for `Undefined`. ([#77](https://github.com/keyfire/xbsl/pull/77))
+- **A package renamed from the tree stays in the tree filter.** The filter kept the old name, and the
+  engine's next answer dropped the package. Now the keys of the package and of its nested packages
+  follow the new name. ([#77](https://github.com/keyfire/xbsl/pull/77))
+
 ## 0.71.0
 
 ### Added

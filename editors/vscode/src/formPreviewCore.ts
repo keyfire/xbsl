@@ -643,7 +643,7 @@ const CHECK_MARK = `<svg class="cmark" viewBox="0 0 10 8" aria-hidden="true"><pa
 //   `CheckboxThreeState` - the same box, which shows a dash while the value holds `Undefined`.
 // The kind is compared in the Russian spelling, the one the ui schema names. A literal value places
 // the mark or the thumb where the platform would; a binding is computed at run time, so the frame
-// draws it unchecked. The colors are MEASURED on a deployed form: an outline with no fill, gray
+// draws it unchecked. The colors are measured on a deployed form: an outline with no fill, gray
 // while off and blue while on, and the mark or the thumb takes the same color.
 function renderCheckbox(node: unknown, layout: string): string {
   const kind = prop(node, "Вид");

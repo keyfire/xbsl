@@ -54,6 +54,15 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
 
 ### Fixed
+- **`translate` keeps the spelling of a name's declaration.** A local, a parameter, a lambda
+  parameter, a `catch` variable or a property of the module's own element named like a platform
+  type took the type's spelling in `Name.Member` and inside `%{...}`. The English build then met a
+  variable nothing reads and a member the type lacks. ([#76](https://github.com/keyfire/xbsl/pull/76))
+- **A short lambda may assign in its body.** The platform compiles
+  `List.ForEach(Item -> Item.Value = 1)`, but the parser reported syntax errors there, as it did
+  for a lone parameter named `Type`, `Query` or `Method`. Rules that need the parse skipped such a
+  module, and `code/client-available-unused` reported a method called only from it.
+  ([#75](https://github.com/keyfire/xbsl/pull/75))
 - **`style/shadow-own-property` finds a variable named like an inherited property.** The rule read
   only the element's own yaml and missed the properties a component inherits from its platform
   type, which were all seven IDE warnings on one project. As in the IDE, static methods and loop

@@ -478,12 +478,12 @@ or a drag of a record onto a structure node creates an input component with its 
 place (`Boolean` -> a checkbox, otherwise an input with `Value: =...`).
 
 **The form frame** renders from the yaml: nested vertical and horizontal groups, labels, input
-fields with captions and `=bindings`, buttons (the primary one filled), checkboxes, tables with
-their real columns, switchable tabs (`Pages`), cards, image and HTML-container placeholders, and
-the form's command bar. Unknown and custom component types render as labeled boxes with their
-content inside, so nothing disappears. The area header has a zoom (−/+, the wheel over the
-control and `Ctrl+wheel` over the frame) and a theme picker: light (the platform web client look,
-the default), dark, or the editor theme. The choice is remembered.
+fields with captions and `=bindings`, buttons (the primary one filled), checkboxes and switches the
+way the platform draws them, tables with their real columns, switchable tabs (`Pages`), cards, image
+and HTML-container placeholders, and the form's command bar. Unknown and custom component types
+render as labeled boxes with their content inside, so nothing disappears. The area header has a zoom
+(−/+, the wheel over the control and `Ctrl+wheel` over the frame) and a theme picker: light (the
+platform web client look, the default), dark, or the editor theme. The choice is remembered.
 
 **The selection is shared by the three areas.** A click on a frame block and a cursor move in the
 yaml expand whatever collapsed groups stand in the way, land on the node in the structure and fill
@@ -624,13 +624,13 @@ its numbers counting the objects that pass. Where a subsystem or a package has o
 well as packages, an **Objects outside packages** item stands for those objects. Nothing ticked
 means no filter. While a filter is on, the title button is filled, the project label lists the
 filter in grey, and **Clear the subsystem and package filter** sits next to the project name. The
-filter is kept per project across window reloads, and a package that was renamed or deleted drops
-out of it; a subsystem added while a filter is on stays hidden until it is ticked. The packages come
-from the engine (`xbsl/metaProjectInfo`); until it answers, the form lists subsystems only. A
-subsystem or a package also filters in one click. **Filter by the subsystem** or **Filter by the
-package** in its row narrows the tree to exactly that place, a package with its nested packages, and
-the filled button of that node clears the filter. The button is in the **Subsystems** branch and in
-the **By subsystems** grouping.
+filter is kept per project across window reloads. A package renamed with **Rename package** stays in
+it under the new name, and a deleted one drops out. A subsystem added while a filter is on stays
+hidden until it is ticked. The packages come from the engine (`xbsl/metaProjectInfo`); until it
+answers, the form lists subsystems only. A subsystem or a package also filters in one click.
+**Filter by the subsystem** or **Filter by the package** in its row narrows the tree to exactly that
+place, a package with its nested packages, and the filled button of that node clears the filter. The
+button is in the **Subsystems** branch and in the **By subsystems** grouping.
 
 **Resources and their folders.** The **Resources** section lists the files of a `Resources` folder
 as folders with their nesting, a folder icon and the number of files in grey; a file shows its name
