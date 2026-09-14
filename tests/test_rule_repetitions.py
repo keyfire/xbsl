@@ -292,3 +292,20 @@ def test_english_spelling():
         ";\n"
     )
     assert _places(code, DECLARATION) == [(3, 5), (8, 9)]
+
+
+def test_distinct_large_numeric_when_values_do_not_round_together():
+    code = (
+        "method Probe(Value: Number): Number\n"
+        "    case Value\n"
+        "        when 12345678901234567890123456781\n"
+        "            return 1\n"
+        "        when 12345678901234567890123456782\n"
+        "            return 2\n"
+        "        when 12345678901234567890123456781.0\n"
+        "            return 3\n"
+        "    ;\n"
+        "    return 0\n"
+        ";\n"
+    )
+    assert _places(code, WHEN) == [(7, 14)]

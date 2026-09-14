@@ -142,3 +142,10 @@ def test_declaration_needs_init_english_spelling():
         ";\n"
     )
     assert _places(code, NEEDS) == [(1, 1), (4, 5), (5, 5)]
+
+
+def test_required_field_default_fix_keeps_inferred_type():
+    code = "structure Record\n    req var Value = 5\n;\n"
+    diags = _diags(code, DEFAULT)
+    assert len(diags) == 1
+    assert diags[0].fix is None

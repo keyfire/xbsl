@@ -7,8 +7,8 @@ their controls were probed against the IDE language server.
 `code/required-field-default` - a structure or exception field marked `обз` that also carries a
 default value (`обз пер Номер: Число = 5`). A required field is always passed to the constructor,
 the default could never be used, and the compiler refuses the declaration rather than ignore it.
-The keyword order does not matter (`пер обз ...` is the same field). The fix removes `= ...` - the
-constructor supplies the value either way.
+The keyword order does not matter (`пер обз ...` is the same field). The fix removes `= ...` only when the field declares its type explicitly - the
+constructor supplies the value either way and the field retains its type.
 
 `code/declaration-needs-init` - a declaration that has to be initialized and is not:
 
@@ -92,7 +92,6 @@ MESSAGES = {
 i18n.register(MESSAGES)
 
 _EQUALS_BEFORE = re.compile(r"\s*=\s*\Z")
-_WORD = re.compile(r"[^\W\d]\w*")
 _TYPE_WORD = re.compile(r"[^\W\d]\w*(?:\.[^\W\d]\w*)*")
 
 
@@ -108,19 +107,12 @@ def _fields(module: P.Module) -> Iterator[P.ObjectField]:
 def _default_removal(text: str, field: P.ObjectField) -> TextEdit | None:
     """` = <value>` after the type or the name, when nothing but that stands between them."""
     init = field.init
-    if init is None:
-        return None
-    head_end = field.type.end if field.type is not None else _name_end(text, field)
-    if head_end is None or not _EQUALS_BEFORE.fullmatch(text[head_end:init.start]):
+    if init is None or field.type is None:
+        return None  # removing an inferred field's value would also erase its type
+    head_end = field.type.end
+    if not _EQUALS_BEFORE.fullmatch(text[head_end:init.start]):
         return None
     return TextEdit(head_end, init.end, "")
-
-
-def _name_end(text: str, field: P.ObjectField) -> int | None:
-    for word in _WORD.finditer(text, field.start, field.end):
-        if word.group(0) == field.name:
-            return word.end()
-    return None
 
 
 @rule("code/required-field-default", "code/required-field-default.title", "C",

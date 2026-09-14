@@ -204,15 +204,15 @@ dataset.register_reset(_empty_forms.cache_clear)
 # --- code/duplicate-when --------------------------------------------------------------------
 
 
-def _number(text: str, negative: bool) -> tuple[str, str] | None:
+def _number(text: str, negative: bool) -> tuple[str, str | Decimal] | None:
     """A number literal by its value: `1` and `1.0` are one value to the compiler."""
     if not _DECIMAL.fullmatch(text):
         return None
-    value = Decimal(text).normalize()
-    return ("NUMBER", str(-value if negative else value))
+    value = Decimal(text)
+    return ("NUMBER", value.copy_negate() if negative else value)
 
 
-def _value_key(expr: P.Expr, enums: dict[str, set[str]]) -> tuple[str, str] | None:
+def _value_key(expr: P.Expr, enums: dict[str, set[str]]) -> tuple[str, str | Decimal] | None:
     """What a `когда` value compares by, when the file alone knows it; None otherwise."""
     if isinstance(expr, P.Unary) and expr.op == "-" and isinstance(expr.operand, P.Literal) \
             and expr.operand.kind == "NUMBER":
@@ -275,7 +275,7 @@ def duplicate_when(source: SourceFile) -> Iterable[Diagnostic]:
              for m in module.members if isinstance(m, P.Enum)}
     lm = linemap(source)
     for case in _cases(module):
-        values: set[tuple[str, str]] = set()
+        values: set[tuple[str, str | Decimal]] = set()
         types: set[str] = set()
         for when in case.whens:
             for condition in when.conditions:
