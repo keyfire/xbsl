@@ -402,7 +402,7 @@ _I_AS_NAME_AFTER = frozenset("""
 """.split())
 
 #: The box-drawing characters of a separator line: a heading drawn with them names a section
-#: rather than opening a sentence ("── My details ──" repeats the caption of a panel).
+#: rather than opening a sentence ("── My tasks ──" repeats the caption of a panel).
 _RULE_CHARS = frozenset("─━═")
 
 _LATIN_LETTER = re.compile(r"[A-Za-z]")
@@ -413,7 +413,7 @@ def _opens_english_sentence(text: str, at: int, key: str) -> bool:
     """Whether a capitalized word at `at` of an English comment line opens a sentence.
 
     A capital that does not open one marks a name - a caption of the interface cited without
-    quotes ("on the right - My data"), a page title ("Contact Us"). At the start of the value
+    quotes ("on the right - My tasks"), a page title ("Contact Us"). At the start of the value
     the Russian key decides: a line that goes on from the line above starts with a small
     letter there, and so does its translation.
     """

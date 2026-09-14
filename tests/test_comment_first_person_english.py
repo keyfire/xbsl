@@ -32,10 +32,10 @@ def _words(diags):
 def test_english_first_person_in_a_phrase_value_is_reported(tmp_path):
     _dictionary(tmp_path, (
         "phrases:\n"
-        '    "Остаток пересчитывается при записи партии.": "we recount the stock when a batch is written."\n'
+        '    "Остаток пересчитывается при записи.": "we recount the stock on writing."\n'
         '    "Склад берётся из своей настройки.": "The warehouse comes from our own setting."\n'
         '    "Курс задаётся явно.": "Let\'s set the rate by hand, it is up to us."\n'
-        '    "Строки задаются сами.": "We set both sides ourselves; my test showed it, I checked."\n'
+        '    "Колонки задаются.": "We fill both columns ourselves; my test showed it, I checked."\n'
     ))
     diags = _lint(tmp_path)
 
@@ -44,7 +44,7 @@ def test_english_first_person_in_a_phrase_value_is_reported(tmp_path):
 
 
 def test_english_first_person_message_names_the_translation(tmp_path):
-    _dictionary(tmp_path, 'phrases:\n    "Задачи читаются пачкой.": "we read the tasks in a batch."\n')
+    _dictionary(tmp_path, 'phrases:\n    "Задачи читаются пачкой.": "we read the tasks."\n')
     i18n.set_lang("en")
     try:
         (diag,) = _lint(tmp_path)
@@ -55,13 +55,13 @@ def test_english_first_person_message_names_the_translation(tmp_path):
 
 
 def test_literals_tokens_and_terms_are_not_comment_lines(tmp_path):
-    """A literal is a string of the code - often a text the user reads; tokens and terms are names."""
+    """A literal is a string of the code, often a text a user reads; tokens and terms are names."""
     _dictionary(tmp_path, (
         "tokens:\n"
         "    НашиСклады: OurWarehouses\n"
-        "    Наша: Ours\n"
+        "    НашСклад: OurWarehouse\n"
         "literals:\n"
-        '    "Мы отправили код на почту": "We have sent a code to your email"\n'
+        '    "Мы пересчитали остатки": "We have recounted the stock"\n'
         '    "Я принимаю условия": "I accept the terms"\n'
         "terms:\n"
         "    мой склад: my warehouse\n"
@@ -82,12 +82,12 @@ def test_quoted_captions_and_cited_code_stay_silent(tmp_path):
 
 
 def test_a_capital_inside_a_sentence_is_a_caption_of_the_interface(tmp_path):
-    """"My data" named mid-sentence is the panel a user sees, not the author speaking."""
+    """A caption named mid-sentence ("My tasks") is the panel a user sees, not the author."""
     _dictionary(tmp_path, (
         "phrases:\n"
-        '    "справа - Мои данные (без вкладок)": "on the right - My data (no tabs)"\n'
+        '    "справа - Мои задачи (без вкладок)": "on the right - My tasks (no tabs)"\n'
         '    "Ссылка ведёт на страницу Напишите нам.": "The link leads to the Contact Us page."\n'
-        '    "── Мои данные ──": "── My details ──"\n'
+        '    "── Мои склады ──": "── My warehouses ──"\n'
     ))
 
     assert _lint(tmp_path) == []
@@ -98,8 +98,8 @@ def test_a_capital_opening_the_value_follows_the_key(tmp_path):
     in its translation is then a name. A key that opens a sentence lets the capital open one."""
     _dictionary(tmp_path, (
         "phrases:\n"
-        '    "собственное окно платформы не подходит": "Our Window of the platform does not fit"\n'
-        '    "Собственное окно, а не панель платформы.": "Our own window rather than the panel."\n'
+        '    "собственный отбор платформы не подходит": "Our Filter of the platform does not fit"\n'
+        '    "Собственный отбор, а не общий.": "Our own filter rather than the shared one."\n'
     ))
 
     assert _words(_lint(tmp_path)) == ["Our"]
@@ -108,10 +108,10 @@ def test_a_capital_opening_the_value_follows_the_key(tmp_path):
 def test_a_letter_i_and_the_country_are_not_the_first_person(tmp_path):
     _dictionary(tmp_path, (
         "phrases:\n"
-        '    "Буква I похожа на l, этап I закрыт.": "The letter I looks like l, part I is closed."\n'
+        '    "Буква I похожа на l, этап I.": "The letter I looks like l, part I is closed."\n'
         '    "Курс доллара США (I).": "The US dollar rate (I)."\n'
         '    "Индекс i цикла.": "The loop index i."\n'
-        '    "Строки НАШИ снимаются.": "OUR lines are removed."\n'
+        '    "Отметки НАШИ снимаются.": "OUR marks are removed."\n'
     ))
 
     assert _words(_lint(tmp_path)) == ["OUR"]
@@ -125,7 +125,9 @@ def test_the_finding_points_at_the_word_in_the_dictionary_file(tmp_path):
     diags = sorted(_lint(tmp_path), key=lambda d: d.col)
     text = path.read_bytes().decode("utf-8").split("\n")
 
-    assert [(d.line, text[d.line - 1][d.col - 1:d.col + 1]) for d in diags] == [(5, "we"), (5, "we")]
+    spans = [(d.line, text[d.line - 1][d.col - 1:d.col + 1]) for d in diags]
+
+    assert spans == [(5, "we"), (5, "we")]
     assert diags[0].col < diags[1].col
 
 
