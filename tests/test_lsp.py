@@ -713,11 +713,11 @@ def test_the_whole_project_pass_reports_the_dictionary_without_opening_it(tmp_pa
 
 @pytest.mark.needs_data  # the rule tokenizes the module
 def test_the_dictionary_leaves_the_unused_methods_of_the_project_audible(tmp_path, editor):
-    """The project rules of the pass read the project alone.
+    """The project rules of the pass read the project alone, and the verdict on it holds.
 
-    `code/unused-method` counts every word of every source as a mention, and a dictionary names
-    every method of the project. Handed to the project rules, the dictionary would silence the
-    rule, the way a lint run over the repository does.
+    `code/unused-method` counts the words of the sources as mentions, and a dictionary names every
+    method of the project: whichever way the dictionary reaches the pass, a dead method stays
+    reported.
     """
     root, entries = _repository(tmp_path)
     (root / "Склады.yaml").write_text(
