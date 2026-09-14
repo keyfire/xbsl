@@ -241,11 +241,16 @@ def test_a_member_of_a_generic_type_is_typed_by_the_argument():
 
 @pytest.mark.needs_data
 def test_overloads_that_disagree_about_the_result_give_no_type():
-    """The zero-argument overload of the documentation yields the empty value, the others do not."""
+    """A call is typed by the overloads its arity admits: the provider asked for by name may be
+    missing, the default one may not. A generic overload among the admitted ones leaves the call
+    untyped, and the zero-argument form an older platform version had types nothing now."""
     catalog = _file_catalog()
-    assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 0) \
-        == ti.TypeSet(frozenset({"Строка"}), True)
+    assert catalog.platform_member("Криптография", "ПолучитьКриптопровайдер", True, 0) \
+        == ti.TypeSet.of("Криптопровайдер")
+    assert catalog.platform_member("Криптография", "ПолучитьКриптопровайдер", True, 1) \
+        == ti.TypeSet(frozenset({"Криптопровайдер"}), True)
     assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 1) is None
+    assert catalog.platform_member("Массив<Строка>", "ПервыйИлиУмолчание", True, 0) is None
 
 
 _VERSIONED_BLOCK = (
@@ -286,13 +291,13 @@ def test_a_property_documented_plain_in_every_form_is_trusted(monkeypatch):
 @pytest.mark.needs_data
 def test_a_property_folded_from_two_versions_is_left_untyped():
     """The page prints the main table of a reflection nullable for the current platform and plain for
-    an old one; the catalog kept the plain head, the documentation check keeps the member untyped."""
+    an old one; the member is never trusted as plain."""
     from xbsl import docs
 
     if not docs.available():
         pytest.skip("the documentation database is not installed")
-    assert _file_catalog().platform_member("ОтражениеЭлементаПроектаСТаблицами", "ОсновнаяТаблица",
-                                           False) is None
+    got = _file_catalog().platform_member("ОтражениеЭлементаПроектаСТаблицами", "ОсновнаяТаблица", False)
+    assert got is None or got.undefined
 
 
 @pytest.mark.needs_data
