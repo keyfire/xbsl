@@ -153,6 +153,13 @@ The exceptions stay with the platform: the built-in items a collection dispatche
 are the standard code, name and owner attributes, and the facet after a dot in a type
 expression.
 
+A name in scope is not a type either. A local, a parameter, a loop or `catch` variable, a lambda
+parameter and a property of the module's own element may be spelled like a platform type, and then
+`Name.Member` keeps the spelling of the declaration. Such a word still reads as the type in a static
+method, which has no element, and in a component method compiled on the server alone, which sees
+only the contextual properties. The code inside a string interpolation belongs to its method and
+sees the same names, types and dictionary entries.
+
 ## What is left alone
 
 Data. Labels, descriptions and any other text a user reads stay as written: the platform's own

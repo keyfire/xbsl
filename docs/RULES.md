@@ -142,8 +142,8 @@ the translation dictionary.
 ### Tier C - code structure, basic syntax and code-writing conventions
 
 Block and bracket balance, loop and method headers, local variables and the `style/` group -
-conventions from the documentation section "Code-writing recommendations". Some `style/` rules
-are off by default (accumulated debt, `info`): enable them with `--select style` to measure.
+conventions from the documentation section "Code-writing recommendations". Every `style/` rule
+is on by default, at `warning`.
 
 | Rule | | | Scope | What it checks |
 |---|---|---|---|---|
@@ -404,9 +404,8 @@ replaces. `style/shadow-own-property` also reads the paired yaml and the platfor
 variable named like a property the component inherits, such as `Title` of a `Group`, is found as
 surely as one named like a declared property.
 
-Rules that clean code already satisfies are enabled by default, at `warning`, and they guard
-against regressions. Rules that typically fire on accumulated debt are `info` and disabled. Enable
-them to measure the debt and pay it down:
+All twenty-nine rules are on by default, at `warning`: clean code already satisfies them, and
+they guard against regressions. The flags that choose rules take the group as a whole:
 
 ```sh
 xbsl path/to/sources --select style     # ONLY these rules (replaces the default set)
@@ -437,7 +436,7 @@ the paired yaml and the names of the objects.
 
 ### Element descriptions (the `yaml/` rules)
 
-Fifty-seven rules over the descriptions (`.yaml`): required and unique ids, known keys and types,
+Sixty-one rules over the descriptions (`.yaml`): required and unique ids, known keys and types,
 references to components, handlers and localized strings, what the platform requires of field
 types (a reference and an enumeration admit an empty value), the settings of dynamic lists and
 forms, and the layout traps that apply without an error yet draw differently from the intent. Six
