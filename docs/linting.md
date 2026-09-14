@@ -60,7 +60,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 211 rules of the base set** - severity, default state, scope, links to
+**The full list of all 221 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -148,6 +148,14 @@ element of the captured value may change, and so may a variable or a parameter o
 A `val`, `use`, loop or catch variable is read-only everywhere and gets a compiler error of its own,
 so the rule does not report it.
 
+Five tier C rules repeat compile errors the server answers with a rolled-back build: an assignment to
+itself (`code/self-assignment`), a left side that cannot hold a value (`code/assign-target`), an assignment
+to a read-only name (`code/assign-readonly`), code after a statement that always ends its block
+(`code/unreachable-statement`) and a `break`/`continue`/`return` with nowhere to go (`code/misplaced-jump`).
+They read one file and run on every keystroke; where the verdict needs a type the file does not tell - the
+receiver of `Obj.Field = ...`, the type of a value switched by `case` - they stay silent and leave the case
+to the compiler.
+
 `code/unused-import` asks whether the compiler ever looked up a type in the imported namespace. A
 word of the module keeps nothing by itself: the import line, a member after a dot and a local named
 like an element are not uses. A value can be one. A property of the paired yaml or the result of a
@@ -163,6 +171,18 @@ value, so a string no literal can hold is a finding as well. `--fix` writes the 
 holds the same value, as in `Date{9999-12-31}`, `1h30m` or `True`, and leaves the call alone
 otherwise. `FindType` is never rewritten: the call returns `Type?` while the literal names the type
 itself, so a variable declared from the call would change its type.
+
+Four more warnings of the platform IDE need no type of an expression. `style/boolean-ternary`
+reports a ternary with `True` and `False` branches, in a module, a string interpolation or a yaml
+binding; the fix writes the condition or its negation, and the negation follows the platform:
+`not` covers a comparison but not `is`, `and` or `or`, so `X is T` becomes `X is not T`.
+`style/redundant-scope` reports a `scope` that is the only statement of its block and removes it.
+`style/redundant-union-member` drops a union member that repeats another, a second `Undefined` and a
+member that `Object` or a base type of the catalog covers; a generic base covers only with the same
+arguments, because the catalog does not say which type parameters accept a wider one.
+`code/duplicate-import` reports a repeated `import`, the short and the full name of a namespace
+counted as one, and `yaml/duplicate-import` reads the `Import` section of an element the same way,
+although the IDE does not check it.
 
 Four rules of tier D judge the type of an expression, where the rules above judge a written type.
 `code/redundant-cast` reports a cast to a type the value already has, and `code/cast-to-non-null` a

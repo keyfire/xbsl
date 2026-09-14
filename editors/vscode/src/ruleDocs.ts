@@ -97,6 +97,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   // --- recommendations: operations and statements ---
   { match: (r) => r === "style/optional-params-last", page: "topics/method-declarations" },
   { match: (r) => r === "style/boolean-compare", page: "topics/check-logical-values" },
+  { match: (r) => r === "style/boolean-ternary", page: "topics/question-mark-operation" },
+  { match: (r) => r === "style/redundant-scope", page: "topics/name-scope" },
+  { match: (r) => r === "style/redundant-union-member", page: TYPES, anchor: "составной-тип" },
+  { match: (r) => r === "code/duplicate-import", page: "topics/import-statement" },
+  { match: (r) => r === "yaml/duplicate-import", page: MODULAR, anchor: "импорт-пространств-имен" },
   { match: (r) => r === "style/undefined-is", page: "topics/check-if-undefined" },
   { match: (r) => r === "style/negated-is", page: "topics/is-operator" },
 
@@ -130,6 +135,9 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
     anchor: "способы-объявления-переменных",
   },
   { match: (r) => r === "code/return-mismatch", page: METHODS, anchor: "определение-метода" },
+  { match: (r) => r === "code/assign-target", page: "topics/assignment-statement" },
+  { match: (r) => r === "code/assign-readonly", page: "topics/variable-declaration-statement", anchor: "способы-объявления-переменных" },
+  { match: (r) => r === "code/misplaced-jump", page: "topics/exceptions", anchor: "обработка-исключений" },
   { match: (r) => r === "code/call-arity", page: METHODS, anchor: "определение-метода" },
   { match: (r) => r === "code/call-arity-cross", page: METHODS, anchor: "определение-метода" },
   { match: (r) => r === "code/catch-non-exception", page: "topics/exceptions" },

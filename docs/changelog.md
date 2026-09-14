@@ -28,6 +28,16 @@ entry either - say what the behaviour was, not which class name was compared.
 ## Unreleased
 
 ### Added
+- **Five rules report assignments and jumps that roll the build back.** `code/self-assignment` and
+  `code/assign-target` catch `X = X` and a left side such as `Obj?.Value`, `code/assign-readonly` a new
+  value for a `val`, `use`, loop or `catch` variable, `code/unreachable-statement` code after `return`,
+  and `code/misplaced-jump` a `break` outside a loop. ([#89](https://github.com/keyfire/xbsl/pull/89)) ([#90](https://github.com/keyfire/xbsl/pull/90)) ([#91](https://github.com/keyfire/xbsl/pull/91))
+- **`style/boolean-ternary` and `style/redundant-scope` report what the platform IDE warns about.** A
+  ternary with `True` and `False` branches is its own condition, and a `scope` that is the only
+  statement of its block limits nothing. Both come with a fix. ([#86](https://github.com/keyfire/xbsl/pull/86))
+- **`style/redundant-union-member` and `code/duplicate-import` report repeats the IDE warns about.** A
+  union member another one covers and a namespace imported twice are removed by the fix;
+  `yaml/duplicate-import` does the same for the `Import` section of an element. ([#87](https://github.com/keyfire/xbsl/pull/87))
 - **`code/lambda-changes-outer-local` reports a lambda that assigns a local declared outside it.**
   The platform does not compile such code, and the linter let it through. Changing a member or an
   element of the captured value stays allowed. ([#84](https://github.com/keyfire/xbsl/pull/84))
