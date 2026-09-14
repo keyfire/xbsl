@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-14 – 0.107.0, 0.108.0
 
 ### Added
 - **Five rules report assignments and jumps that roll the build back.** `code/self-assignment` and
@@ -49,6 +49,14 @@ entry either - say what the behaviour was, not which class name was compared.
   The platform IDE warns about `new Date("9999-12-31")` and `FindType("Std::String")`, and the
   linter let such calls through. The fix writes `Date{9999-12-31}` where the literal holds the same
   value. ([#71](https://github.com/keyfire/xbsl/pull/71))
+- **`resource-references` finds the places that name a resource file or folder.** It reads the
+  sources the way `move-resource` does. Every place comes with its file, range and line, and string
+  lookups and a key that two folders hold are marked. MCP calls it `meta_resource_references`, LSP
+  `xbsl/metaResourceReferences`. ([#67](https://github.com/keyfire/xbsl/pull/67))
+- **`move-resource`, `rename-resource-folder` and `delete-resource-folder` work with resource
+  folders.** A file moved by hand left its `Resource{...}` keys on the old path until a build
+  failed. The commands move the files and rewrite the keys; lookups by a computed string are listed,
+  not edited. ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Changed
 - **`comment/emphasis-caps` reads more than its list of function words.** It now catches a capital
@@ -72,6 +80,12 @@ entry either - say what the behaviour was, not which class name was compared.
   platform IDE warns about both, while the rule skipped `use` and took a write for a read. The fix
   drops the name of an unused `use`, and the resource still closes at the end of the scope.
   ([#69](https://github.com/keyfire/xbsl/pull/69))
+- **With `--project-root`, the LSP server skips yaml outside the root, except the dictionary.** Such
+  a file got findings when opened and lost them at the next save. Modules are still checked wherever
+  they are opened. ([#59](https://github.com/keyfire/xbsl/pull/59))
+- **`delete-object` and `delete-resource-folder` remove the folders their deletions empty.** A
+  package whose last object was deleted used to stay behind as an empty folder, which git does not
+  keep anyway. ([#62](https://github.com/keyfire/xbsl/pull/62))
 
 ### Fixed
 - **`code/ternary-and-or` no longer calls every `A and B ? X : Y` a compile error.** That ternary takes the whole
@@ -137,28 +151,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **`code/unused-local` and `code/unused-loop-var` no longer report a variable read below a batch
   query or the counter of `for X = A to B`.** A `;` inside the query ended the method early, and the
   IDE does not track the counter of a numeric loop. ([#69](https://github.com/keyfire/xbsl/pull/69))
-
-## 2026-09-14 – 0.107.0
-
-### Added
-- **`resource-references` finds the places that name a resource file or folder.** It reads the
-  sources the way `move-resource` does. Every place comes with its file, range and line, and string
-  lookups and a key that two folders hold are marked. MCP calls it `meta_resource_references`, LSP
-  `xbsl/metaResourceReferences`. ([#67](https://github.com/keyfire/xbsl/pull/67))
-- **`move-resource`, `rename-resource-folder` and `delete-resource-folder` work with resource
-  folders.** A file moved by hand left its `Resource{...}` keys on the old path until a build
-  failed. The commands move the files and rewrite the keys; lookups by a computed string are listed,
-  not edited. ([#62](https://github.com/keyfire/xbsl/pull/62))
-
-### Changed
-- **With `--project-root`, the LSP server skips yaml outside the root, except the dictionary.** Such
-  a file got findings when opened and lost them at the next save. Modules are still checked wherever
-  they are opened. ([#59](https://github.com/keyfire/xbsl/pull/59))
-- **`delete-object` and `delete-resource-folder` remove the folders their deletions empty.** A
-  package whose last object was deleted used to stay behind as an empty folder, which git does not
-  keep anyway. ([#62](https://github.com/keyfire/xbsl/pull/62))
-
-### Fixed
 - **`yaml/missing-import` reads the tables of a dynamic list.** A list whose main or joined table
   lay in a package of another subsystem passed the linter, and the server build refused it. Such a
   table now asks for the import like any other reference.
