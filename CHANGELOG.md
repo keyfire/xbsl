@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-15 – 0.110.0
 
 ### Changed
 
@@ -30,7 +30,7 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
-- **Compile-time checks cover missing returns, writes after lambda capture and discarded checked results.** Complete enumeration cases, mutable method namesakes and compiler-specific lambda/never behavior are respected. Checked-return metadata is extracted from the platform annotation; older catalogs remain supported. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **New checks report missing returns, writes after lambda capture and discarded method results.** They follow the platform compiler and distinguish methods that change a value from methods that return a new one. Older language catalogs remain supported. ([#103](https://github.com/keyfire/xbsl/pull/103))
 - **Ambiguous short type names are reported in code and YAML.** Root and package namespaces have equal priority; mixed qualified expressions and project namesakes of platform types are handled without interpreting YAML bindings as types. ([#103](https://github.com/keyfire/xbsl/pull/103))
 - **A parse error no longer hides initializer and duplicate-declaration/branch findings in healthy sibling methods.** Damaged methods remain excluded, and fix offsets stay tied to the original source. ([#103](https://github.com/keyfire/xbsl/pull/103))
 - **Rule reference pages format language keywords and code identifiers as inline code again,** including the recently added entries. ([#103](https://github.com/keyfire/xbsl/pull/103))
@@ -40,7 +40,7 @@ entry either - say what the behaviour was, not which class name was compared.
 - **Dynamic-list expressions translate an explicit table alias reference as `Reference`.** Main and joined table aliases share the source scope, including filters; UI links and unrelated receivers retain their own meaning. English expression keys are handled too. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Redundant `SkipUndefined()` calls are reported for known non-nullable collection elements.** The iterable fix uses `ToArray()` to preserve array materialization. Sequence calls receive a warning without an automatic rewrite. ([#101](https://github.com/keyfire/xbsl/pull/101))
 
-- **Automatic fixes respect accepted findings.** CLI `--fix` and MCP `lint_paths(fix=true)` apply available code fixes outside the baseline, preserve its file, and report the remaining findings. Accepted occurrences stay protected across passes and line shifts; fixes that overlap them are skipped. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Automatic fixes preserve accepted findings.** CLI `--fix` and MCP `lint_paths(fix=true)` fix new findings while keeping the baseline unchanged. Accepted occurrences stay protected when earlier edits shift the lines. ([#100](https://github.com/keyfire/xbsl/pull/100))
 - **Removing a redundant cast also removes unnecessary parentheses at the start of a statement.** ([#100](https://github.com/keyfire/xbsl/pull/100))
 - **Unknown query tables are checked throughout comma-separated source lists,** including sources following join conditions. ([#100](https://github.com/keyfire/xbsl/pull/100))
 - **A loop declaration reusing an existing name no longer counts as an assignment to the original local.** Reads in its body follow the original binding; counted loops and letter case are handled consistently. ([#100](https://github.com/keyfire/xbsl/pull/100))
