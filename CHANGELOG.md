@@ -30,6 +30,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **Compile-time checks cover missing returns, writes after lambda capture and discarded checked results.** Complete enumeration cases, mutable method namesakes and compiler-specific lambda/never behavior are respected. Checked-return metadata is extracted from the platform annotation; older catalogs remain supported. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **Ambiguous short type names are reported in code and YAML.** Root and package namespaces have equal priority; mixed qualified expressions and project namesakes of platform types are handled without interpreting YAML bindings as types. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **A parse error no longer hides initializer and duplicate-declaration/branch findings in healthy sibling methods.** Damaged methods remain excluded, and fix offsets stay tied to the original source. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **Rule reference pages format language keywords and code identifiers as inline code again,** including the recently added entries. ([#103](https://github.com/keyfire/xbsl/pull/103))
+
 - **Named arguments are checked against resolved local and module signatures.** Unknown and repeated names, positional arguments after named ones and missing required parameters are reported. Structure methods take precedence over module methods; shadowed receivers and ambiguous overloads are left alone. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Structure fields with non-generic platform types are checked for a missing default value.** Types such as `TextPosition` need `req`, a nullable marker or an initializer; scalar default values and locally shadowed type names are respected. ([#101](https://github.com/keyfire/xbsl/pull/101))
 - **Dynamic-list expressions translate an explicit table alias reference as `Reference`.** Main and joined table aliases share the source scope, including filters; UI links and unrelated receivers retain their own meaning. English expression keys are handled too. ([#101](https://github.com/keyfire/xbsl/pull/101))
