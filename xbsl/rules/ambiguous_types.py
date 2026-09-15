@@ -6,7 +6,7 @@ guessed. Root and package declarations in the same subsystem have equal priority
 """
 from pathlib import Path
 import re
-from xbsl import i18n, parser as P
+from xbsl import dataset, i18n, parser as P
 from xbsl.lexer import linemap, tokenize
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import rule
@@ -29,8 +29,11 @@ i18n.register(MESSAGES)
 _QUALIFIER = re.compile(r"(?<![\w.])(?:[^\W\d]\w*\s*::\s*)+")
 
 def _type_roots(written):
-    significant = [token for token in tokenize(written)
-                   if token.kind not in ("COMMENT", "NEWLINE", "EOF")]
+    try:
+        significant = [token for token in tokenize(written)
+                       if token.kind not in ("COMMENT", "NEWLINE", "EOF")]
+    except dataset.DatasetError:
+        return  # YAML-only installations need not have language data.
     for index, token in enumerate(significant):
         if token.kind not in ("IDENT", "KEYWORD"):
             continue
