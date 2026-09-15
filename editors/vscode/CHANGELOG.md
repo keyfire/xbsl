@@ -13,6 +13,8 @@
 
 ### Fixed
 
+- **New missing-return, captured-local-write, unused-return-value and ambiguous-type diagnostics link to the relevant platform documentation** from the Problems panel. ([#103](https://github.com/keyfire/xbsl/pull/103))
+
 - **The redundant SkipUndefined diagnostic links to the platform documentation** from the Problems panel. ([#101](https://github.com/keyfire/xbsl/pull/101))
 
 - **CLI mode checks project YAML while typing and offers its quick fixes.** Late results from an older buffer no longer replace newer diagnostics or the report produced on save. ([#100](https://github.com/keyfire/xbsl/pull/100))

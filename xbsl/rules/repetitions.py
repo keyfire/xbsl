@@ -48,7 +48,7 @@ from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
-from xbsl.parser import parse
+from xbsl.rules._recovery import healthy_module
 from xbsl.typeinfer import canonical_name
 
 MESSAGES = {
@@ -268,9 +268,7 @@ def duplicate_when(source: SourceFile) -> Iterable[Diagnostic]:
     """A `когда` that repeats a value or a type of an earlier one - the compiler rejects it."""
     if source.kind != "xbsl":
         return
-    module, errors = parse(source)
-    if errors:
-        return  # a broken file is code/parse-error territory
+    module = healthy_module(source)
     enums = {m.name: {item.name for item in m.items}
              for m in module.members if isinstance(m, P.Enum)}
     lm = linemap(source)
@@ -307,9 +305,7 @@ def duplicate_catch(source: SourceFile) -> Iterable[Diagnostic]:
     """A `поймать` that repeats an exception type already caught - the compiler rejects it."""
     if source.kind != "xbsl":
         return
-    module, errors = parse(source)
-    if errors:
-        return
+    module = healthy_module(source)
     lm = linemap(source)
     for attempt in (node for node in _nodes(module) if isinstance(node, P.Try)):
         caught: set[str] = set()
@@ -604,9 +600,7 @@ def duplicate_declaration(source: SourceFile) -> Iterable[Diagnostic]:
     """One name declared twice where the compiler wants it once - it rejects the declaration."""
     if source.kind != "xbsl":
         return
-    module, errors = parse(source)
-    if errors:
-        return  # a broken file is code/parse-error territory
+    module = healthy_module(source)
     declarations = _Declarations(source)
     declarations.module(module)
     for at, key, fields in sorted(declarations.found, key=lambda item: item[0]):

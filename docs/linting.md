@@ -71,7 +71,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 230 rules of the base set** - severity, default state, scope, links to
+**The full list of all 235 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -451,3 +451,20 @@ local type declarations; it does not resolve bare project types across files.
 `code/redundant-skip-undefined` warns only when file-level inference knows that the
 collection element excludes `Undefined`. Its iterable fix calls `ToArray()` so that the
 result is still a materialized array. Sequence calls have no automatic rewrite.
+
+### Incomplete syntax and missing compile-time checks
+
+The initializer and duplicate-declaration/branch checks preserve findings in healthy
+methods when another method in the file has a parse error. A damaged method is skipped
+in full; a structure with a damaged header is skipped too. Filtering does not alter the
+cached syntax tree or the source offsets used by fixes.
+
+`code/missing-return` needs project signatures and enumeration values, so it runs with
+project checks. `code/captured-local-write` and `code/unused-return-value` use file facts.
+The latter requires `checked_return_methods` in the extracted standard-library catalog;
+old catalogs remain supported and leave that check silent. Re-extract the standard
+library from the matching platform distribution to enable it.
+
+`code/ambiguous-type` and `yaml/ambiguous-type` judge written type positions against the
+project placement model. They do not infer a type from arbitrary strings or value names,
+and they do not combine declarations from separate project roots.

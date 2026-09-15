@@ -320,15 +320,28 @@ def _member_chunks(section: str):
 def _form_rank(struck: bool, signature: str) -> int:
     if struck:
         return RANK_OLDER_VERSION
-    return RANK_DEPRECATED if signature.lstrip().startswith(DEPRECATED_MARK) else RANK_CURRENT
+    return RANK_DEPRECATED if DEPRECATED_MARK in _signature_marks(signature)[0] else RANK_CURRENT
+
+
+CHECK_VALUE_USAGE_MARK = "@ПроверятьИспользованиеЗначения"
+
+
+def _signature_marks(signature: str) -> tuple[set[str], str]:
+    """Leading documentation annotations and the bare signature they describe."""
+    marks: set[str] = set()
+    text = signature.strip()
+    while True:
+        mark = next((mark for mark in (DEPRECATED_MARK, CHECK_VALUE_USAGE_MARK)
+                     if text.startswith(mark)), None)
+        if mark is None:
+            return marks, text
+        marks.add(mark)
+        text = text[len(mark):].strip()
 
 
 def _without_mark(signature: str) -> str:
-    """A signature with the compatibility mark taken off its head."""
-    stripped = signature.strip()
-    if stripped.startswith(DEPRECATED_MARK):
-        stripped = stripped[len(DEPRECATED_MARK):].strip()
-    return stripped
+    """The signature without documentation annotations at its head."""
+    return _signature_marks(signature)[1]
 
 
 #: A generic METHOD declares its own parameters right after the name:
@@ -669,6 +682,51 @@ def page_member_signatures(raw: str) -> dict[str, list[str]]:
     return out
 
 
+def page_checked_return_methods(raw: str) -> dict[str, bool]:
+    """Declared method -> whether ALL current overloads require consuming their result.
+
+    False entries are retained while extracting: an unmarked override must cancel a
+    marked inherited method. Example blocks never supply annotations for a declaration.
+    """
+    article = _ARTICLE_RE.search(raw)
+    if not article:
+        return {}
+    methods: dict[str, list[tuple[int, bool]]] = {}
+    for section in _H2_OPEN_RE.split(article.group(1)):
+        if not _plain_text(section[:200]).startswith("Методы"):
+            continue
+        for name, struck, body in _member_chunks(section):
+            for match in _SIG_CODE_RE.finditer(body):
+                printed = html.unescape(_plain_text(match.group(1))).strip()
+                marks, signature = _signature_marks(printed)
+                if method_type_params(signature)[0] != name:
+                    continue
+                methods.setdefault(name, []).append(
+                    (_form_rank(struck, printed), CHECK_VALUE_USAGE_MARK in marks))
+                break
+    return {name: all(marked for rank, marked in forms if rank == max(r for r, _ in forms))
+            for name, forms in methods.items()}
+
+
+def expand_checked_return_methods(own: dict[str, dict[str, bool]],
+                                  bases: dict[str, list[str]]) -> dict[str, list[str]]:
+    """Expand annotation flags once, nearest declarations overriding ancestors.
+
+    The output is complete per receiver type and contains only checked methods. Unlike
+    ordinary member sets, absence of an annotation on an override is significant.
+    """
+    result: dict[str, list[str]] = {}
+    for owner in own:
+        methods: dict[str, bool] = {}
+        for base in nearest_last(bases.get(owner, ()), bases):
+            methods.update(own.get(base, {}))
+        methods.update(own[owner])
+        checked = sorted(name for name, marked in methods.items() if marked)
+        if checked:
+            result[owner] = checked
+    return result
+
+
 #: What the description of a form says it gave way to: a method or a property replaced by a
 #: member (`заменен на`, `заменено на`), renamed into one (`переименован в`), or - for a method
 #: the platform keeps as a shorthand - calling one (`Вызывает метод`). The text of the link that
@@ -720,7 +778,7 @@ def page_member_forms(raw: str) -> dict[str, list[dict[str, str | bool]]]:
                     if not colon or written.strip() != name:
                         continue
                 form: dict[str, str | bool] = {"signature": text}
-                deprecated = printed.startswith(DEPRECATED_MARK)
+                deprecated = DEPRECATED_MARK in _signature_marks(printed)[0]
                 if deprecated:
                     form["deprecated"] = True
                 for version in _VERSION_LINE_RE.finditer(_plain_text(body[:m.start()])):
@@ -856,6 +914,7 @@ def extract(dist: Path) -> tuple:
     ctors: dict[str, str] = {}
     deprecated: dict[str, dict[str, list[dict]]] = {}
     folds: list[tuple[str, str, list[str]]] = []
+    checked_methods: dict[str, dict[str, bool]] = {}
     english_keys: dict[str, str] = {}
     with zipfile.ZipFile(car) as z:
         entries = z.namelist()
@@ -877,7 +936,11 @@ def extract(dist: Path) -> tuple:
             # Russian name). The English spelling is not stored: the loader adds it by terms.json,
             # which pairs the two forms. So members, bases and facets are kept once, not twice.
             key = (title if _PROP_NAME_RE.match(title) else "") or eng or ""
-            # Иерархия: страница печатает ВСЮ цепочку предков, разворачивать нечего.
+            if key:
+                flags = checked_methods.setdefault(key, {})
+                for method, marked in page_checked_return_methods(raw).items():
+                    flags[method] = flags.get(method, True) and marked
+            # The hierarchy section prints the complete chain of ancestors.
             page_base_list = page_bases(raw)
             if page_base_list and key:
                 bases.setdefault(key, page_base_list)
@@ -1006,7 +1069,7 @@ def extract(dist: Path) -> tuple:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
             facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-            folds)
+            folds, expand_checked_return_methods(checked_methods, bases))
 
 
 # --- Types the reference pages never describe ------------------------------------------
@@ -1323,7 +1386,7 @@ def main(argv=None) -> int:
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
      facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-     folds) = extract(dist)
+     folds, checked_methods) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1382,6 +1445,9 @@ def main(argv=None) -> int:
         "member_types": {k: dict(sorted(v.items())) for k, v in sorted(own_returns.items())},
         # Method signatures as the page prints them, one string per overload: what the result
         # type alone cannot answer - which parameters to pass. Only methods have them.
+        # Fully expanded checked-result annotations, including unmarked override guards.
+        # Missing in older datasets: consumers stay silent until extraction is refreshed.
+        "checked_return_methods": dict(sorted(checked_methods.items())),
         "member_signatures": {
             k: dict(sorted(v.items())) for k, v in sorted(own_signatures.items()) if v
         },
