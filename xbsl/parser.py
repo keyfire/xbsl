@@ -466,6 +466,7 @@ class Name(Expr):  # rulestaticVariableAccess: A::B::Name
 class Literal(Expr):
     kind: str  # NUMBER | STRING | TRUE | FALSE | UNDEFINED | PATTERN | TYPE | QUERY | RESOLVABLE
     text: str
+    type: TypeRef | None = None
 
 
 @dataclass
@@ -1876,11 +1877,16 @@ class _Parser:
             name = Name(start_tok.start, start_tok.end, start_tok.value)
             return self.maybe_call(name)
         self.advance()
-        self.type_name()
+        type_start = self.peek()
+        parsed = self.type_name()
+        type_ref = None
+        if parsed is not None:
+            type_ref = TypeRef(type_start.start, self.toks[self.pos - 1].end,
+                               parsed[1], [parsed[0]])
         if not self.eat_op(">"):
             self.error(i18n.t("parser.expected-gt-in-type-literal"))
         end = self.toks[self.pos - 1].end
-        return Literal(start_tok.start, end, "TYPE", "")
+        return Literal(start_tok.start, end, "TYPE", "", type_ref)
 
     def query_literal(self) -> Expr:
         # rulequeryLiteral: Запрос{ ... } - the body is a DSL, skipped by brace depth
@@ -1930,4 +1936,3 @@ class _Parser:
             expr = Member(expr.start, name_tok.end, expr, name_tok.value, dot.value == "?.")
             expr = self.maybe_call(expr)
         return expr
-

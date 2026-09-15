@@ -86,6 +86,7 @@ class Resolver:
         project_types: frozenset[str] = frozenset(),
         component_methods: dict[str, frozenset[str]] | None = None,
         resource_keys: frozenset[str] = frozenset(),
+        project_component_types: frozenset[str] = frozenset(),
     ) -> None:
         self.dictionary = dictionary
         self.project_names = project_names
@@ -97,6 +98,10 @@ class Resolver:
         #: The files and folders below the resources of the project, as a reference addresses
         #: them (see names.resource_keys): a reference to anything else is not the project's file.
         self.resource_keys = resource_keys
+        #: The top-level names of interface components declared by the project. Unlike
+        #: component_names, this contains no nested node or property names and can therefore
+        #: prove that a typed yaml node belongs to a project component.
+        self.project_component_types = project_component_types
         #: Cyrillic string VALUES of the project's json resources. A code literal spelled
         #: exactly like one of them is usually COMPARED against that data, and translating
         #: the literal parts the comparison from values no translation ever touches.
@@ -279,11 +284,36 @@ class Resolver:
         After a dot there stands a facet, not a member: `Задачи.Ссылка` is
         `Tasks.Reference`, while the very same word as a property is `Link`.
         """
+        if after_dot:
+            facet = platform_map.facet_suffix_english(name)
+            if facet:
+                self.note_platform_win(name, facet)
+                return facet, "platform"
+        else:
+            platform_type = self.platform_type(name)
+            if platform_type:
+                self.note_platform_win(name, platform_type)
+                return platform_type, PLATFORM_TYPE
         hit = self.dictionary.token(name)
         if hit is not None:
             self._judge_entry(name, hit, self._platform_type_reading(name, after_dot)[0])
             return hit, "user"
         return self._platform_type_reading(name, after_dot)
+
+    def annotation_name(self, name: str) -> tuple[str | None, str]:
+        """Resolve the name after `@` in the annotation namespace.
+
+        A platform annotation is a type derived from `Annotation` in the catalog. Its
+        spelling therefore stays the platform's even when the project declares an ordinary
+        method or field under the same name. Any other annotation name remains a project name
+        and follows the dictionary like its declaration and references do.
+        """
+        if name in _platform_annotation_names():
+            spelling = platform_map.type_english(name)
+            if spelling:
+                self.note_platform_win(name, spelling)
+                return spelling, PLATFORM_TYPE
+        return self.identifier(name)
 
     def platform_type(self, name: str) -> str | None:
         """The English spelling of the platform TYPE `name` stands for where a type stands.
@@ -530,7 +560,12 @@ def collect_token_edits(
                 line, col = at if at is not None else (tok.line, tok.col)
                 report.note_name(f"structure:{field_of}", tok.value, translated or tok.value,
                                  line, col)
-            if not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
+            annotation_name = (
+                index > 0 and toks[index - 1].kind == "OP" and toks[index - 1].value == "@"
+            )
+            if not tok.value.isascii() and annotation_name:
+                _annotation_identifier_edit(tok, base, resolver, report, edits, at)
+            elif not tok.value.isascii() and not in_query and type_ranges and _inside(type_ranges, base + tok.start):
                 _type_identifier_edit(tok, base, prev_dot, resolver, report, edits, at)
             elif not tok.value.isascii():
                 query_receiver = _query_reference_receiver(toks, index, query_aliases)
@@ -1028,6 +1063,27 @@ def _annotation_forms() -> tuple[frozenset[str], frozenset[str]]:
 dataset.register_reset(_annotation_forms.cache_clear)
 
 
+@lru_cache(maxsize=1)
+def _platform_annotation_names() -> frozenset[str]:
+    """Both spellings of every catalog type derived from the platform Annotation type."""
+    try:
+        bases = (dataset.load_json("stdlib.json") or {}).get("bases") or {}
+    except Exception:  # noqa: BLE001 - no data, no proven platform annotation
+        return frozenset()
+    annotation_bases = frozenset(terms.forms("Аннотация", "types"))
+    out: set[str] = set()
+    for name, ancestors in bases.items():
+        if not isinstance(name, str) or not isinstance(ancestors, list):
+            continue
+        if annotation_bases.intersection(ancestors):
+            out.add(name)
+            out.update(terms.forms(name, "types"))
+    return frozenset(out)
+
+
+dataset.register_reset(_platform_annotation_names.cache_clear)
+
+
 def owner_scopes(source: SourceFile, owner: ModuleOwner | None,
                  ) -> list[tuple[int, int, frozenset[str]]]:
     """[(start, end, names)] of the module's methods that see names of the module's element.
@@ -1385,6 +1441,21 @@ def _type_identifier_edit(tok, base, after_dot, resolver, report, edits, at=None
         report.user_done += 1
     elif plane == "platform":
         report.note_platform_answer(tok.value, tok.line, tok.col)
+    elif plane == PLATFORM_TYPE:
+        report.note_platform_type_answer(tok.value, tok.line, tok.col)
+    if replacement:
+        if replacement != tok.value:
+            edits.append((base + tok.start, base + tok.end, replacement))
+        return
+    line, col = at if at is not None else (tok.line, tok.col)
+    report.note_missing(tok.value, line, col, plane)
+
+
+def _annotation_identifier_edit(tok, base, resolver, report, edits, at=None) -> None:
+    """Resolve a name after `@` through the platform annotation namespace first."""
+    replacement, plane = resolver.annotation_name(tok.value)
+    if plane == "user":
+        report.user_done += 1
     elif plane == PLATFORM_TYPE:
         report.note_platform_type_answer(tok.value, tok.line, tok.col)
     if replacement:

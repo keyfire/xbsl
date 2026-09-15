@@ -420,6 +420,7 @@ def translate_project(
         project_names_module.collect_types(root, engine.load),
         component_methods=project_names_module.component_methods(root, engine.load),
         resource_keys=project_names_module.resource_keys(root),
+        project_component_types=project_names_module.component_types(root, engine.load),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
     report = ProjectReport(root=root)

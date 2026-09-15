@@ -16,6 +16,7 @@ from pathlib import Path
 from xbsl import engine
 from xbsl.translation import dictionary as dict_module
 from xbsl.translation import names
+from xbsl.translation.code import type_ranges
 from xbsl.translation.project import translate_project
 
 
@@ -70,6 +71,38 @@ def test_the_declared_types_are_elements_structures_enumerations_and_exceptions(
     ))
     # The element is a type; its attribute is a name of the project, not a type.
     assert names.declared_types(element) == {"Склады"}
+
+
+# --- an annotation name --------------------------------------------------------------------
+
+
+def test_a_platform_annotation_keeps_its_platform_context_next_to_a_project_homonym(
+        tmp_path: Path):
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Module.xbsl", (
+        "@Обработчик\n"
+        "метод Выполнить()\n"
+        ";\n"
+        "\n"
+        "метод Обработчик()\n"
+        ";\n"
+        "\n"
+        "@МеткаПроверки\n"
+        "структура МеткаПроверки\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Выполнить": "Execute",
+        "Обработчик": "ProjectHandler",
+        "МеткаПроверки": "AuditMark",
+    }), out, swap_localization=False)
+
+    module = _read(out / "Module.xbsl")
+    assert "@Handler\nmethod Execute()" in module
+    assert "method ProjectHandler()" in module
+    # A name that the platform does not declare as an annotation stays on the project plane.
+    assert "@AuditMark\nstructure AuditMark" in module
 
 
 # --- a type expression ----------------------------------------------------------------------
@@ -139,6 +172,134 @@ def test_a_type_the_project_declares_under_a_platform_name_keeps_the_gate(tmp_pa
     assert "structure Occurrence" in module
     assert "(Исходное: Occurrence): Occurrence" in module
     assert "new Occurrence(" in module
+
+
+def test_a_type_literal_marks_its_argument_as_a_type_and_leaves_an_expression_alone(
+        tmp_path: Path):
+    source = engine.load_text("Проверка.xbsl", (
+        "метод Проверить()\n"
+        "    знч ТипПроекта = Тип<ПроектныйТип.Объект>\n"
+        "    знч Обычное = ПроектныйТип.Объект\n"
+        ";\n"
+    ))
+    spans = [source.text[start:end] for start, end in type_ranges(source)]
+    assert "ПроектныйТип.Объект" in spans
+
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "ПроектныйТип.yaml", (
+        "ВидЭлемента: Справочник\n"
+        "Имя: ПроектныйТип\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Имя: Объект\n"
+        "        Тип: Строка\n"
+    ))
+    _write(root / "TypeCheck.xbsl", source.text)
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "ПроектныйТип": "ProjectType",
+        "Объект": "ProjectObjectField",
+        "Проверить": "Check",
+        "ТипПроекта": "ProjectTypeValue",
+        "Обычное": "Ordinary",
+    }), out, swap_localization=False)
+
+    module = _read(out / "TypeCheck.xbsl")
+    assert "Type<ProjectType.Object>" in module
+    assert "ProjectType.ProjectObjectField" in module
+
+
+# --- a typed yaml node ----------------------------------------------------------------------
+
+
+def test_platform_keys_of_a_typed_command_ignore_project_homonyms(tmp_path: Path):
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Project.yaml", "Vendor: Acme\nName: Demo\nVersion: 1.0.0\n")
+    _write(root / "Панель.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Панель\n"
+        "Свойства:\n"
+        "    -\n"
+        "        Имя: Обработчик\n"
+        "        Тип: Строка\n"
+        "    -\n"
+        "        Имя: Представление\n"
+        "        Тип: Строка\n"
+        "    -\n"
+        "        Имя: Изображение\n"
+        "        Тип: Строка\n"
+        "    -\n"
+        "        Имя: Элементы\n"
+        "        Тип: Строка\n"
+        "    -\n"
+        "        Имя: КомандаСПараметром\n"
+        "        Тип: Строка\n"
+        "Наследует:\n"
+        "    Тип: ПроизвольныйКомпонент\n"
+    ))
+    _write(root / "Команды.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Команды\n"
+        "Наследует:\n"
+        "    Тип: ПроизвольныйШаблонФормы\n"
+        "    Содержимое:\n"
+        "        Тип: КомандаСПараметром<Строка>\n"
+        "        Обработчик: Запустить\n"
+        "        Представление: Команда\n"
+        "        Изображение: Значок\n"
+        "        Элементы: []\n"
+    ))
+    _write(root / "Использование.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: Использование\n"
+        "Наследует:\n"
+        "    Тип: ПроизвольныйШаблонФормы\n"
+        "    Содержимое:\n"
+        "        Тип: Acme::Demo::Панель\n"
+        "        Обработчик: Run\n"
+    ))
+    _write(root / "External.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Имя: External\n"
+        "Наследует:\n"
+        "    Тип: ПроизвольныйШаблонФормы\n"
+        "    Содержимое:\n"
+        "        Тип: Std::Interface::Панель\n"
+        "        Обработчик: Run\n"
+    ))
+    component_types = names.component_types(root, engine.load)
+    assert {"Панель", "Acme::Demo::Панель"} <= component_types
+    assert "Std::Interface::Панель" not in component_types
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Панель": "Panel",
+        "Команды": "Commands",
+        "Обработчик": "ProjectHandler",
+        "Представление": "ProjectPresentation",
+        "Изображение": "ProjectImage",
+        "Элементы": "ProjectItems",
+        "КомандаСПараметром": "ProjectCommandName",
+        "Использование": "Usage",
+        "Запустить": "Run",
+    }), out, swap_localization=False)
+
+    command = _read(out / "Commands.yaml")
+    assert "Type: CommandWithParameter<String>" in command
+    assert "Handler: Run" in command
+    assert "Presentation: Команда" in command
+    assert "Image: Значок" in command
+    assert "Items: []" in command
+    assert "ProjectHandler:" not in command
+    usage = _read(out / "Usage.yaml")
+    assert "ProjectHandler: Run" in usage
+    external = _read(out / "External.yaml")
+    assert "Handler: Run" in external
+    panel = _read(out / "Panel.yaml")
+    assert "Name: ProjectHandler" in panel
+    assert "Name: ProjectPresentation" in panel
+    assert "Name: ProjectImage" in panel
+    assert "Name: ProjectItems" in panel
+    assert "Name: ProjectCommandName" in panel
 
 
 def test_an_element_named_like_a_platform_type_keeps_the_gate_at_a_static_root(tmp_path: Path):

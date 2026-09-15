@@ -841,7 +841,7 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
         project_component = (
             not structural
             and bool(comp_type)
-            and comp_type not in _ui_components()
+            and comp_type in resolver.project_component_types
             and key in resolver.project_names
         )
         english = (

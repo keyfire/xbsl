@@ -24,7 +24,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import metamodel
+from xbsl import libs, metamodel
 from xbsl.lexer import tokens
 from xbsl.engine import RESOURCE_DIRS, SourceFile
 from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
@@ -297,6 +297,59 @@ def component_names(root: Path, loader) -> frozenset[str]:
             continue
         out |= declared_in_yaml(source)
     return frozenset(out)
+
+
+def component_types(root: Path, loader) -> frozenset[str]:
+    """Names and exact local qualifications of interface components the project declares.
+
+    Unlike `component_names`, this set contains no node, property or method names from inside
+    the component. A qualification is added only under this project's coordinates and the
+    component's relative namespace. An external platform or library type with the same final
+    segment therefore remains external.
+    """
+    out: set[str] = set()
+    coordinates = _project_coordinates(root, loader)
+    for path in sorted(root.rglob("*.yaml")):
+        if any(part.startswith(".") for part in path.relative_to(root).parts):
+            continue
+        try:
+            source = loader(path)
+        except OSError:
+            continue
+        data, error = _parsed(source)
+        kind = object_kind(data) if error is None else None
+        if kind != "КомпонентИнтерфейса":
+            continue
+        name = value_of(data, "Имя", kind)
+        if isinstance(name, str) and name:
+            out.add(name)
+            namespace = path.parent.relative_to(root).parts
+            if namespace:
+                out.add("::".join((*namespace, name)))
+            if coordinates:
+                out.add("::".join((*coordinates, *namespace, name)))
+    return frozenset(out)
+
+
+def _project_coordinates(root: Path, loader) -> tuple[str, str] | None:
+    """Coordinates that prefix a fully qualified local type.
+
+    The descriptor is authoritative. A fragment translated without one still follows the
+    repository layout accepted elsewhere: its project directory sits below the vendor.
+    """
+    for filename in ("Проект.yaml", "Project.yaml"):
+        descriptor = root / filename
+        if not descriptor.is_file():
+            continue
+        try:
+            found = libs.project_coordinates(loader(descriptor).text)
+        except OSError:
+            continue
+        if found is not None:
+            return found
+    if root.name and root.parent.name:
+        return root.parent.name, root.name
+    return None
 
 
 def resource_keys(root: Path) -> frozenset[str]:
