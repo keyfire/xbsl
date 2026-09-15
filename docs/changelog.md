@@ -25,6 +25,49 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **The extractor takes the fullest element-kind table from the distribution.** A
+  server-with-IDE archive can carry several copies of that table; the first one often names
+  only `HttpService` and `SoapService`, and kinds such as `Catalog`, `CommonModule` and
+  `InterfaceComponent` then drop out of the metamodel. Form properties were reported as
+  unknown. Seen at least on 9.2.9+12 and 9.3.1+4; the scan does not depend on the platform
+  version. ([#102](https://github.com/keyfire/xbsl/pull/102))
+
+## 2026-09-15 – 0.110.0
+
+### Changed
+
+- **Compact lint answers omit the per-file map.** Counts, full error records, baseline and
+  CI-job details remain available; `compact=false` returns the complete report. ([#99](https://github.com/keyfire/xbsl/pull/99))
+- **Pruning unused translations returns counts by default.** `removed` counts occurrences and
+  `pruned` groups them by kind and file, including repeated declarations beyond the selected
+  page. `compact=false` includes the full list; preview keeps its previous format. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
+### Fixed
+
+- **New checks report missing returns, writes after lambda capture and discarded method results.** They follow the platform compiler and distinguish methods that change a value from methods that return a new one. Older language catalogs remain supported. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **Ambiguous short type names are reported in code and YAML.** Root and package namespaces have equal priority; mixed qualified expressions and project namesakes of platform types are handled without interpreting YAML bindings as types. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **A parse error no longer hides initializer and duplicate-declaration/branch findings in healthy sibling methods.** Damaged methods remain excluded, and fix offsets stay tied to the original source. ([#103](https://github.com/keyfire/xbsl/pull/103))
+- **Rule reference pages format language keywords and code identifiers as inline code again,** including the recently added entries. ([#103](https://github.com/keyfire/xbsl/pull/103))
+
+- **Named arguments are checked against resolved local and module signatures.** Unknown and repeated names, positional arguments after named ones and missing required parameters are reported. Structure methods take precedence over module methods; shadowed receivers and ambiguous overloads are left alone. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Structure fields with non-generic platform types are checked for a missing default value.** Types such as `TextPosition` need `req`, a nullable marker or an initializer; scalar default values and locally shadowed type names are respected. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Dynamic-list expressions translate an explicit table alias reference as `Reference`.** Main and joined table aliases share the source scope, including filters; UI links and unrelated receivers retain their own meaning. English expression keys are handled too. ([#101](https://github.com/keyfire/xbsl/pull/101))
+- **Redundant `SkipUndefined()` calls are reported for known non-nullable collection elements.** The iterable fix uses `ToArray()` to preserve array materialization. Sequence calls receive a warning without an automatic rewrite. ([#101](https://github.com/keyfire/xbsl/pull/101))
+
+- **Automatic fixes preserve accepted findings.** CLI `--fix` and MCP `lint_paths(fix=true)` fix new findings while keeping the baseline unchanged. Accepted occurrences stay protected when earlier edits shift the lines. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Removing a redundant cast also removes unnecessary parentheses at the start of a statement.** ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **Unknown query tables are checked throughout comma-separated source lists,** including sources following join conditions. ([#100](https://github.com/keyfire/xbsl/pull/100))
+- **A loop declaration reusing an existing name no longer counts as an assignment to the original local.** Reads in its body follow the original binding; counted loops and letter case are handled consistently. ([#100](https://github.com/keyfire/xbsl/pull/100))
+
+- **Older language data translates the enumeration kind as `Enumeration`.** The serializer
+  spelling takes precedence over the stdlib type alias `Enum`. ([#99](https://github.com/keyfire/xbsl/pull/99))
+- **Text output from `translate --set` names each rewritten location.** Repeated keys in one
+  dictionary file or across files are distinguished by path and line number. ([#99](https://github.com/keyfire/xbsl/pull/99))
+
 ## 2026-09-14 – 0.107.0, 0.108.0, 0.109.0
 
 ### Added

@@ -334,6 +334,14 @@ _KIND_EN_RE = re.compile(r"^[A-Z][0-9A-Za-z]*$")
 _CYRILLIC_RE = re.compile(r"[А-Яа-яЁё]")
 
 
+def _kind_pairs(strings: list[str]) -> dict[str, str]:
+    """{Russian element kind: English spelling} from adjacent constant-pool strings."""
+    return {
+        ru: en for en, ru in zip(strings, strings[1:])
+        if _KIND_EN_RE.match(en) and _KIND_RU_RE.match(ru) and _CYRILLIC_RE.search(ru)
+    }
+
+
 def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
     """{Russian element kind: English spelling} from the serializer's kind enum, or empty.
 
@@ -342,7 +350,14 @@ def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
     mapping kinds through the dictionary lost such objects from every by-kind view. The
     enum class pairs the spellings the same way the type classes do: the English constant
     right before the Russian one.
+
+    A distribution may carry several copies of the enum. The first one in archive order is
+    often a rearranged constant pool whose pair walk yields only `HttpСервис` and
+    `SoapСервис`; among the copies the fullest table is the one the rest of the extractor
+    needs. The walk does not depend on the platform version: it was seen at least on
+    9.2.9+12 and 9.3.1+4, and a later build is handled the same way.
     """
+    best: dict[str, str] = {}
     for entry in car.namelist():
         if not entry.endswith(".jar") or not _PLATFORM_JAR_RE.search(entry):
             continue
@@ -353,12 +368,10 @@ def scan_kind_table(car: zipfile.ZipFile) -> dict[str, str]:
         for inner in jar.namelist():
             if not inner.endswith("/" + _KIND_ENUM_CLASS):
                 continue
-            strings = _constant_pool(jar.read(inner))
-            return {
-                ru: en for en, ru in zip(strings, strings[1:])
-                if _KIND_EN_RE.match(en) and _KIND_RU_RE.match(ru) and _CYRILLIC_RE.search(ru)
-            }
-    return {}
+            table = _kind_pairs(_constant_pool(jar.read(inner)))
+            if len(table) > len(best):
+                best = table
+    return best
 
 
 #: The query language is a separate grammar (TreeSQL); its keyword pairs live in one class.

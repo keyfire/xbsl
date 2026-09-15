@@ -18,6 +18,17 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **The extractor takes the fullest element-kind table from the distribution.** A
+  server-with-IDE archive can carry several copies of that table; the first one often names
+  only `HttpService` and `SoapService`, and kinds such as `Catalog`, `CommonModule` and
+  `InterfaceComponent` then drop out of the metamodel. Form properties were reported as
+  unknown. Seen at least on 9.2.9+12 and 9.3.1+4; the scan does not depend on the platform
+  version. ([#102](https://github.com/keyfire/xbsl/pull/102))
+
 ## 2026-09-15 – 0.110.0
 
 ### Changed
