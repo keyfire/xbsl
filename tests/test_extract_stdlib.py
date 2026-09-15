@@ -605,3 +605,59 @@ def test_a_member_no_class_spells_in_russian_is_left_out():
         supplemented = _MODULE.undocumented_types(None, set())
 
     assert supplemented[0][2]["methods"] == {"ЗагрузитьВсе"}
+
+
+def _checked_page(*forms):
+    return '<article><h2>Методы</h2>' + ''.join(
+        f'<h3>{heading}</h3><pre class="highlight"><code>{signature}</code></pre>'
+        for heading, signature in forms
+    ) + '</article>'
+
+
+def test_checked_return_marker_is_extracted_without_losing_signature():
+    raw = _checked_page(('Изменить', '@ПроверятьИспользованиеЗначения\nИзменить(Число: Число): Строка'))
+    assert _MODULE.page_checked_return_methods(raw) == {'Изменить': True}
+    assert _MODULE.page_member_signatures(raw) == {'Изменить': ['Изменить(Число: Число): Строка']}
+
+
+def test_checked_return_requires_every_current_overload_to_be_marked():
+    raw = _checked_page(
+        ('Изменить', '@ПроверятьИспользованиеЗначения Изменить(): Строка'),
+        ('Изменить', 'Изменить(Число: Число): Строка'),
+        ('Обычный', 'Обычный(): Строка'),
+        ('<s>Старый</s>', '@ПроверятьИспользованиеЗначения Старый(): Строка'),
+        ('Старый', 'Старый(Число: Число): Строка'),
+    )
+    assert _MODULE.page_checked_return_methods(raw) == {'Изменить': False, 'Обычный': False, 'Старый': False}
+
+
+def test_checked_return_mark_and_deprecation_keep_current_forms():
+    raw = _checked_page(
+        ('Изменить', '@ПроверятьИспользованиеЗначения @Устарело Изменить(): Строка'),
+        ('Изменить', 'Изменить(Число: Число): Строка'),
+    )
+    assert _MODULE.page_checked_return_methods(raw) == {'Изменить': False}
+    assert _MODULE.page_member_signatures(raw) == {'Изменить': ['Изменить(Число: Число): Строка']}
+
+
+def test_checked_return_inheritance_respects_an_unmarked_override():
+    own = {'Base': {'Transform': True, 'Inspect': False}, 'Child': {},
+           'Mutable': {'Transform': False}, 'Leaf': {}}
+    bases = {'Child': ['Base'], 'Mutable': ['Base'], 'Leaf': ['Base', 'Mutable']}
+    assert _MODULE.expand_checked_return_methods(own, bases) == {
+        'Base': ['Transform'], 'Child': ['Transform']}
+
+
+def test_checked_return_metadata_survives_extraction_and_serialization(tmp_path):
+    import json
+    import zipfile
+    page = '<title>Sample | Element</title>' + _checked_page(
+        ('Transform', '@ПроверятьИспользованиеЗначения Transform(): String'))
+    car = tmp_path / 'element-server-with-ide-9.9.9-test.car'
+    with zipfile.ZipFile(car, 'w') as archive:
+        archive.writestr(_MODULE.STD_BASE + 'Sample_ru/index.html', page)
+    output = tmp_path / 'stdlib.json'
+    _MODULE.main(['--dist', str(tmp_path), '--element-version', '9.9.9', '--out', str(output)])
+    data = json.loads(output.read_text(encoding='utf-8'))
+    assert data['checked_return_methods'] == {'Sample': ['Transform']}
+    assert data['member_signatures']['Sample']['Transform'] == ['Transform(): String']
