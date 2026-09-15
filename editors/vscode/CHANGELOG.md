@@ -9,9 +9,11 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.74.0
 
 ### Fixed
+
+- **New missing-return, captured-local-write, unused-return-value and ambiguous-type diagnostics link to the relevant platform documentation** from the Problems panel. ([#103](https://github.com/keyfire/xbsl/pull/103))
 
 - **The redundant SkipUndefined diagnostic links to the platform documentation** from the Problems panel. ([#101](https://github.com/keyfire/xbsl/pull/101))
 

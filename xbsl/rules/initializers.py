@@ -38,7 +38,7 @@ from xbsl import parser as P
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
-from xbsl.parser import parse
+from xbsl.rules._recovery import healthy_module
 from xbsl.typeinfer import canonical_name
 
 MESSAGES = {
@@ -121,9 +121,7 @@ def required_field_default(source: SourceFile) -> Iterable[Diagnostic]:
     """A required field with a default value - the compiler rejects the declaration."""
     if source.kind != "xbsl":
         return
-    module, errors = parse(source)
-    if errors:
-        return  # a broken file is code/parse-error territory
+    module = healthy_module(source)
     lm = linemap(source)
     for field in _fields(module):
         if not field.required or field.init is None:
@@ -212,9 +210,7 @@ def declaration_needs_init(source: SourceFile) -> Iterable[Diagnostic]:
     """A declaration the compiler cannot give a value to - an initializer is required."""
     if source.kind != "xbsl":
         return
-    module, errors = parse(source)
-    if errors:
-        return  # a broken file is code/parse-error territory
+    module = healthy_module(source)
     found: list[tuple[int, str, dict[str, str]]] = []
     for member in module.members:
         if isinstance(member, P.ObjectField) and member.kind == "CONST" and member.init is None:

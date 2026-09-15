@@ -150,6 +150,11 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   { match: (r) => r === "code/unknown-enum-value", page: ENUM, anchor: "элементы" },
 
   // --- operations the types already decide: casts, guards against Undefined, `is` checks ---
+  { match: (r) => r === "code/missing-return", page: "topics/methods-in-built-in-script-language" },
+  { match: (r) => r === "code/captured-local-write", page: "topics/lambda-expression" },
+  { match: (r) => r === "code/unused-return-value", page: "stdlib/element/xbsl/Std/Annotations/Checks/CheckValueUsage_ru" },
+  { match: (r) => r === "code/ambiguous-type", page: "topics/modular-development" },
+  { match: (r) => r === "yaml/ambiguous-type", page: "topics/modular-development" },
   { match: (r) => r === "code/redundant-skip-undefined", page: "stdlib/element/xbsl/Std/Iterable_ru" },
   { match: (r) => r === "code/redundant-cast", page: "topics/as" },
   { match: (r) => r === "code/cast-to-non-null", page: "topics/exclamation-mark-operation" },
