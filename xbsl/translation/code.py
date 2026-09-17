@@ -102,14 +102,41 @@ class ProjectIndex:
         self.returns = returns
 
     @classmethod
+    def forget(cls) -> None:
+        """Drop the kept index - the next `build` reads the project again."""
+        global _KEPT
+        _KEPT = None
+
+    @classmethod
     def build(cls, root: Path) -> ProjectIndex | None:
-        """The index of the project under `root`; None when it cannot be built."""
+        """The index of the project under `root`; None when it cannot be built.
+
+        Kept for the sources it was built from and handed back while they stand still. The
+        pass needs the index once, but the interactive tools run the pass again and again -
+        `translate_status`, `translate_gaps`, the dictionary echo of the MCP server - and each
+        of them used to pay for the same parse of the same unchanged files.
+
+        The stamp is taken BEFORE the build on purpose. A file written while the index is
+        being built lands in it half-read; taken afterwards, the stamp would call that state
+        current and the next call would trust it.
+        """
         from xbsl import indexer
 
+        global _KEPT
+        key = str(Path(root).resolve())
+        stamp = indexer.sources_stamp(root)
+        kept = _KEPT
+        if kept is not None and kept[0] == key and kept[1] == stamp:
+            return kept[2]
         try:
-            return cls(indexer.build_index(root))
+            built = cls(indexer.build_index(root))
         except Exception:  # noqa: BLE001 - no index: every chain stays read as before
             return None
+        # One root at a time. A pass translates one project, the parse of a whole project is
+        # megabytes, and holding the previous one would carry that weight for a second root
+        # nobody asks about twice; a project switched to drops the one before it right here.
+        _KEPT = (key, stamp, built)
+        return built
 
     def element_kind(self, name: str) -> str:
         """The kind of the project element named `name` (`ПравоНаДействие`), or ""."""
@@ -156,6 +183,15 @@ class ProjectIndex:
             str(method["name"]): str(method.get("returns_written") or method["returns"])
             for method in self.lookup.methods_by_module(module) if method.get("returns")
         }
+
+
+#: The index of ONE project root: (the root, the stamp of the sources it was built from, the
+#: index itself). See `ProjectIndex.build` for why one root and why the stamp reads the bytes.
+_KEPT: tuple[str, tuple, ProjectIndex] | None = None
+
+# The index is parsed with the language data, and the type catalogue is read into it, so it
+# must not outlive the pinned data root any more than the tables the rules build do.
+dataset.register_reset(ProjectIndex.forget)
 
 
 @dataclasses.dataclass(frozen=True)
