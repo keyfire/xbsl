@@ -131,7 +131,7 @@ never means reading the files.
 | `meta_add_method(module_path, name, params, returns, ...)` | insert a method into an `.xbsl` module without tearing annotation blocks apart |
 | `meta_add_form(root, ..., forms, card_min_width, card_placeholder)` | generate forms for an object and register them in its `Interface` |
 | `meta_add_localization(yaml_path, language)` | add a translation file to a localized-strings element |
-| `meta_set_localization(yaml_path, name, values, section)` | write ONE localized string into every language at once - the default-language text into the element, each other language into its own translation file; a language the call says nothing about still gets the row, with the default text and a note |
+| `meta_set_localization(yaml_path, name, values, entries, section, dry_run, full_text)` | write one or many localized strings into every language at once - the default-language text into the element, each other language into its own translation file; a language a key says nothing about still gets the row, with the default text and a note. `entries` writes many keys (`{key: values}`) in one pass, one read and one write per file however many keys touch it, and either fails as a whole before anything is planned or not at all. `dry_run` answers with `summary` (key, language, file, the text before and after) instead of the whole files; `full_text` adds the files back next to it |
 | `meta_localization_info(yaml_path)` | the localization picture: declared languages and what is still untranslated |
 
 **Form components – the designer, scripted**

@@ -538,8 +538,9 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 записать строку локализации во все языки сразу: в элемент и в его переводы; см. также add- localization – добавить язык, add-field – завести саму строку
 
 ```bash
-usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--dry-run]
-                             yaml_path name
+usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--entries-file ФАЙЛ]
+                             [--entry КЛЮЧ=JSON] [--full-text] [--dry-run]
+                             yaml_path [name]
 ```
 
 **Аргументы**
@@ -556,7 +557,10 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 | `-h, --help` | показать эту справку и выйти |
 | `--value ЯЗЫК=ТЕКСТ` | текст на языке: `--value` Русский=Текст `--value` En=Text (можно несколько раз) |
 | `--section SECTION` | секция: Строки или Шаблоны (по умолчанию – та, где ключ уже есть, иначе Строки) |
-| `--dry-run` | показать изменения (с текстами файлов), ничего не записывая |
+| `--entries-file ФАЙЛ` | пакет ключей из файла JSON или YAML: {Ключ: {Язык: Текст}}; сочетается с name и с `--entry` |
+| `--entry КЛЮЧ=JSON` | ещё один ключ пакета: `--entry` Заголовок={"Русский":"Текст"} (можно несколько раз, сочетается с name и с `--entries-file`) |
+| `--full-text` | с `--dry-run`: добавить полный текст изменённых файлов к сводке по ключам |
+| `--dry-run` | показать сводку по ключам (язык, файл, прежнее и новое значение), ничего не записывая; `--full-text` добавляет и полный текст файлов |
 
 ### `xbsl set-field-property`
 

@@ -263,3 +263,80 @@ def test_a_key_that_would_not_survive_being_written_bare_is_refused(element: Pat
     """The row is written unquoted, like the hand-written ones - so the key has to hold."""
     with pytest.raises(scaffold.ScaffoldError):
         scaffold.op_set_localization(element, name, {"Русский": "Текст"})
+
+
+# --- many keys, one pass ----------------------------------------------------------------
+
+
+def test_op_set_localization_returns_a_plain_scaffold_result(element: Path):
+    """The single-key call stays a ScaffoldResult - existing callers read .changes/.notes."""
+    result = scaffold.op_set_localization(element, "Привет", {"Русский": "Привет!"})
+
+    assert isinstance(result, scaffold.ScaffoldResult)
+    assert not isinstance(result, scaffold.LocalizationOutcome)
+
+
+def test_batch_writes_two_keys_with_one_file_change_each(element: Path):
+    """Ten keys touching the same pair of files used to mean ten reads and ten writes of
+    each - ten FileChanges silently overwriting one another when only the last stuck."""
+    _write(scaffold.op_add_localization(element, "En"))
+
+    outcome = scaffold.op_set_localization_batch(element, {
+        "Заголовок": {"Русский": "Личный кабинет", "En": "Personal account"},
+        "Кнопка": {"Русский": "Сохранить", "En": "Save"},
+    })
+    _write(outcome.result)
+
+    assert [c.path for c in outcome.result.changes] == [element, _translation(element)]
+    assert _loaded(element)["Строки"] == {"Заголовок": "Личный кабинет", "Кнопка": "Сохранить"}
+    assert _loaded(_translation(element))["Строки"] == {
+        "Заголовок": "Personal account", "Кнопка": "Save",
+    }
+
+
+def test_batch_entries_report_key_language_file_old_and_new(element: Path):
+    _add(element, "строка", "Заголовок", "Старый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    outcome = scaffold.op_set_localization_batch(element, {
+        "Заголовок": {"Русский": "Новый текст", "En": "The new text"},
+        "Подвал": {"Русский": "Низ страницы"},
+    })
+
+    by_file_and_key = {(e.file, e.key): e for e in outcome.entries}
+    changed = by_file_and_key[(element, "Заголовок")]
+    assert (changed.language, changed.old, changed.new) == ("Русский", "Старый текст", "Новый текст")
+    added = by_file_and_key[(element, "Подвал")]
+    assert (added.language, added.old, added.new) == ("Русский", "", "Низ страницы")
+    # add-localization seeded the translation with the default-language text at the time it
+    # ran, so its "old" is that copy ("Старый текст"), not "" - the row already existed.
+    translated = by_file_and_key[(_translation(element), "Заголовок")]
+    assert (translated.language, translated.old, translated.new) == (
+        "Английский", "Старый текст", "The new text",
+    )
+
+
+def test_batch_stops_at_the_first_bad_key_and_plans_nothing(element: Path):
+    """A batch is one plan, not a loop of independent calls: the second key is invalid, and
+    the first must not reach disk just because it was read before the failure."""
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization_batch(element, {
+            "Заголовок": {"Русский": "Личный кабинет"},
+            "Два слова": {"Русский": "Текст"},
+        })
+
+    assert "Заголовок" not in _loaded(element).get("Строки", {})
+
+
+def test_batch_of_one_writes_nothing_on_disk_until_applied(element: Path):
+    """op_set_localization_batch only plans - apply_result is what touches the filesystem."""
+    before = element.read_text(encoding="utf-8-sig")
+
+    scaffold.op_set_localization_batch(element, {"Заголовок": {"Русский": "Личный кабинет"}})
+
+    assert element.read_text(encoding="utf-8-sig") == before
+
+
+def test_batch_requires_at_least_one_entry(element: Path):
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization_batch(element, {})

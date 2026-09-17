@@ -1011,33 +1011,85 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
 
 @mcp.tool()
 @_documents_root
-def meta_set_localization(yaml_path: str, name: str, values: dict[str, str],
-                          section: str = "", root: str | None = None) -> dict:
-    """Write ONE localized string into every language at once - the element and its translations.
+def meta_set_localization(
+    yaml_path: str,
+    name: str = "",
+    values: dict[str, str] | None = None,
+    entries: dict[str, dict[str, str]] | None = None,
+    section: str = "",
+    dry_run: bool = False,
+    full_text: bool = False,
+    root: str | None = None,
+) -> dict:
+    """Write localized strings into every language at once - the element and its translations.
 
     meta_add_localization adds a LANGUAGE; a row had nothing, so a caption was typed into the
     element and again into its English twin, and the two files drifted apart with nothing but
     a pair of eyes to compare them.
 
     yaml_path – the LocalizedStrings element (the translations sit under Localization/<Code>);
-    name      – the key of the string, one word;
-    values    – {language: text}. A language is named any way it reasonably holds it -
-                Russian/English in either project spelling, or the folder code Ru/En. The
-                default language's text goes into the ELEMENT (that is where the platform
-                keeps it), every other one into its own translation file. A language named
-                here without a translation file is refused, naming meta_add_localization;
-                an existing language the call says nothing about still gets the row, with
-                the default text and a note, so no translation is left a key short.
-    section   – Rows or Templates, in either spelling; left out, the key keeps the section
-                it already lives in and a new one goes to Rows.
+    name, values – ONE key: the key (one word) and {language: text}. A language is named any
+                way it reasonably holds it - Russian/English in either project spelling, or
+                the folder code Ru/En.
+    entries   – MANY keys in one call instead: {key: values}, values shaped like the ones
+                above. Composes with name/values (one extra key on top of the batch); a key
+                named by both is refused rather than letting one silently win. Every file
+                touched by more than one key is still read once and written once - a batch
+                of sixty keys used to mean sixty independent reads and writes of the SAME
+                pair of files, each discarding the row the one before it had just added.
+    For either form: the default language's text goes into the ELEMENT (that is where the
+    platform keeps it), every other one into its own translation file. A language named here
+    without a translation file is refused, naming meta_add_localization; an existing language
+    a key says nothing about still gets the row, with the default text and a note, so no
+    translation is left a key short.
+    section   – Rows or Templates, in either spelling; left out, a key keeps the section it
+                already lives in and a new one goes to Rows.
+    dry_run   – report without writing: `summary`, one entry per file per key - key,
+                language, file, the text before and after. A single key used to mean
+                printing the WHOLE of every touched file to show a one-line change (over
+                100 KB for one key on a two-language project); the summary is what changed,
+                nothing else. full_text=True asks for the files back too, the way a plain
+                dry-run answers elsewhere in this toolkit - `files`, next to `summary`.
+    A batch is either fully planned or not applied at all: the first invalid key (an unknown
+    language, a name that would not survive being written bare, a key without a translation
+    file) is refused before anything is computed for the files after it, so a caller who
+    only ever applies what this tool returns cannot end up with half a batch on disk.
 
     See also: meta_add_field adds the KEY itself (with the default-language text),
     meta_add_localization adds a language, meta_localization_info says which languages
     and translations the element already has.
     """
     base = _base(root)
-    return _meta(base, scaffold.op_set_localization, _under(base, yaml_path), name,
-                 dict(values or {}), section=section)
+    merged = dict(entries or {})
+    if name:
+        if name in merged:
+            return _failed(scaffold.ScaffoldError(
+                f"Ключ {name} назван и в name, и в entries"), base)
+        merged[name] = dict(values or {})
+    if not merged:
+        return _failed(scaffold.ScaffoldError(
+            "Нужен ключ: name+values для одной строки или entries для нескольких"), base)
+    try:
+        outcome = scaffold.op_set_localization_batch(
+            _under(base, yaml_path), merged, section=section,
+        )
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    summary = [
+        {"key": e.key, "language": e.language, "file": str(e.file), "old": e.old, "new": e.new}
+        for e in outcome.entries
+    ]
+    if dry_run:
+        payload = {
+            "root": str(base), "file": str(_under(base, yaml_path)),
+            "summary": summary, "notes": outcome.result.notes, "dry-run": True,
+        }
+        if full_text:
+            payload["files"] = outcome.result.as_dict()["files"]
+        return payload
+    out = _apply_and_lint(outcome.result, base)
+    out["summary"] = summary
+    return out
 
 
 @mcp.tool()

@@ -538,8 +538,9 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 write one localized string into every language at once: the element and its translations; see also add-localization for a language and add-field for the string itself
 
 ```bash
-usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--dry-run]
-                             yaml_path name
+usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--entries-file FILE]
+                             [--entry КЛЮЧ=JSON] [--full-text] [--dry-run]
+                             yaml_path [name]
 ```
 
 **Arguments**
@@ -556,7 +557,10 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 | `-h, --help` | show this help message and exit |
 | `--value ЯЗЫК=ТЕКСТ` | the text in one language: `--value` Russian=Text `--value` En=Text (repeatable) |
 | `--section SECTION` | the section: Strings or Templates (default - the one the key already lives in, else Strings) |
-| `--dry-run` | show the changes (with file texts) without writing anything |
+| `--entries-file FILE` | many keys from a JSON or YAML file: {Key: {Language: Text}}; combines with name and with `--entry` |
+| `--entry КЛЮЧ=JSON` | one more key of the batch: `--entry` Title={"English":"Text"} (repeatable, combines with name and with `--entries-file`) |
+| `--full-text` | with `--dry-run`: add the full text of the changed files next to the per-key summary |
+| `--dry-run` | show the per-key summary (language, file, the value before and after) without writing anything; `--full-text` adds the full text of the files too |
 
 ### `xbsl set-field-property`
 

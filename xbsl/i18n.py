@@ -1043,6 +1043,29 @@ _CORE_MESSAGES = {
         "en": "the section: Strings or Templates (default - the one the key already lives in,"
               " else Strings)",
     },
+    "cli.help.scaf.sl-entries-file": {
+        "ru": "пакет ключей из файла JSON или YAML: {{Ключ: {{Язык: Текст}}}}; сочетается с "
+              "name и с --entry",
+        "en": "many keys from a JSON or YAML file: {{Key: {{Language: Text}}}}; combines with"
+              " name and with --entry",
+    },
+    "cli.help.scaf.sl-entry": {
+        "ru": 'ещё один ключ пакета: --entry Заголовок={{"Русский":"Текст"}} (можно несколько '
+              "раз, сочетается с name и с --entries-file)",
+        "en": 'one more key of the batch: --entry Title={{"English":"Text"}} (repeatable,'
+              " combines with name and with --entries-file)",
+    },
+    "cli.help.scaf.sl-full-text": {
+        "ru": "с --dry-run: добавить полный текст изменённых файлов к сводке по ключам",
+        "en": "with --dry-run: add the full text of the changed files next to the per-key"
+              " summary",
+    },
+    "cli.help.scaf.sl-dry-run": {
+        "ru": "показать сводку по ключам (язык, файл, прежнее и новое значение), ничего не "
+              "записывая; --full-text добавляет и полный текст файлов",
+        "en": "show the per-key summary (language, file, the value before and after) without"
+              " writing anything; --full-text adds the full text of the files too",
+    },
     "cli.help.scaf.localization-info": {
         "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization; "
               "тексты пишет set-localization)",
