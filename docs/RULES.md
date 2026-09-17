@@ -64,6 +64,8 @@ and removes common mistakes early.
 - **Default** – ✓ the rule is in the default set, – it is enabled explicitly.
 - **Scope** – `file` (the rule sees one file) or `project` (needs the whole-project index:
   duplicate Ids, unknown types, cross-module calls).
+- **What it checks** – a sentence or two about the finding. A "details" link leads below the
+  tier table, where the exceptions, the examples and the answer of the platform live.
 - **The link at the end of a description** – the platform documentation section behind the rule.
   In VS Code the code of such a rule in the Problems panel opens that section right in the editor.
 
@@ -82,26 +84,74 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | Rule | | | Scope | What it checks |
 |---|---|---|---|---|
 | `yaml/valid` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | YAML does not parse |
-| `yaml/duplicate-key` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A scalar key set twice in one YAML mapping: the loader silently keeps the last value, every schema check reads the already-merged document, and the compiler rejects the file on deploy. The second and later occurrences are flagged, naming the line of the first; the `<<` merge key and non-scalar keys are not judged, and keys compare the way the loader tells them apart (tag and text) |
-| `yaml/duplicate-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A namespace listed again in the `Import` section of an element; the short and the full name of the own project are one namespace. The platform IDE does not check the section, the entry adds nothing all the same. The fix removes the repeated entry [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/duplicate-key` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A scalar key set twice in one YAML mapping: the loader silently keeps the last value, and the compiler rejects the file on deploy [details](#a-yaml-duplicate-key) |
+| `yaml/duplicate-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A namespace repeated in the `Import` section of an element: the second entry adds nothing [details](#a-yaml-duplicate-import) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/id-uuid` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | Id is not a UUID |
 | `yaml/id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | The object has no Id |
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Name does not match the file name |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | Duplicate Id in the project |
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A standard field longer than the platform limit (`Name` over 400 characters, `Code` over 50) - apply rejects the field and it drops out of the object [docs](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?` (`Goods.Reference`, `Edit<Goods.Reference>`) - a reference has no default value, the compilation fails with `Default value initialization is not supported` [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A reference type in a type position without `?`: a reference has no default value, so the compilation fails [details](#a-yaml-ref-needs-nullable) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `=...` expression inside a literal-typed node (`Font: {Type: AbsoluteFont, Size: =...}`) - the platform accepts only a literal there, compute the whole object instead [docs](https://1cmycloud.com/docs/help/topics/label-component/) |
-| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key a `LocalizedStrings` dictionary declares twice - `Strings` and `Templates` share one namespace, and a translation file is judged too; the apply answers "Name is not unique" and rolls the project back [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `yaml/unused-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An interface component placed nowhere and created nowhere: neither as a `Type` value in markup nor by `new` in code (`code/unused-method` cannot see it - the component's methods are called by its own yaml). A use is a yaml value (a name as a key of a localization dictionary does not count) or any word of a module. A yaml file that does not parse counts with all its words, and the translation dictionary does not count at all. Never judged: an entry point and `VisibilityScope: Global` - the public surface of a library. Without a project descriptor among the linted files the rule stays silent: on a subset a component placed outside would look dead |
-| `yaml/duplicate-subtree` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A markup subtree repeating the shape of a subtree in another file (names, ids and texts are left out of the shape): a new form is started by copying the neighbouring one. The 40-node threshold is measured - below it the rule catches layout, not copies. Never judged: a repeat inside one file, the data source of a list and a localized-strings dictionary; only maximal groups are named. Off by default: how much sameness is too much is a decision of the project |
+| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key declared twice in a `LocalizedStrings` dictionary: the apply rejects the whole project [details](#a-yaml-localization-key-unique) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
+| `yaml/unused-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | An interface component placed nowhere and created nowhere: neither as a `Type` value in markup nor by `new` in code. Dead markup ships with the build and the translation [details](#a-yaml-unused-component) |
+| `yaml/duplicate-subtree` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A markup subtree repeats the shape of a subtree in another file: a new form was started by copying the neighbouring one, and a change now goes into both [details](#a-yaml-duplicate-subtree) |
 | `project/identifier` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project name or vendor is not an identifier [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/presentation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project presentation is empty [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/version` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Project version is not A.B.C [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `structure/xbsl-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Module .xbsl without a paired .yaml |
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The `{{vendor}}/{{name}}` path diverged from the descriptor – a build refuses the project before compiling [docs](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does (`Checkbox` + `PlaceholderText`, a property of `Edit`) - apply rejects the markup node as an unknown property; a name no component declares is left alone, the documentation does not list the yaml keys in full [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
-| `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup (an inline command-interface fragment or a single-command property) - the apply refuses the node ("a command name is allowed only in command-interface-fragment project elements") and rolls back; reach the command through the handler parameter, or move the fragment into a project element of its own [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
-| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A vertically scrolled list with `Navigation: None`: the rows come in a single `PageSize` portion, the scrolling moves through that portion alone and the tail of the data is unreachable - the list search still finds a row the scrolling never shows; the cure is `Navigation: LoadingOnScroll`. A list that promises no scroll (`False` or the property absent) and an expression in `Navigation` are left alone [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
+| `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A vertically scrolled list with `Navigation: None`: the rows come in a single portion, and the tail of the data is out of reach of the scrolling [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+
+#### Tier A rules in detail
+
+<a id="a-yaml-duplicate-key"></a>**`yaml/duplicate-key`.** The schema checks read the already
+merged document, so the lost value surfaces nowhere else. The second occurrence is flagged and
+every one after it, with the line of the first. The `<<` merge key and non-scalar keys are left
+alone, and keys are told apart the way the loader tells them apart: by tag and by text.
+
+<a id="a-yaml-duplicate-import"></a>**`yaml/duplicate-import`.** The short and the full name of
+the own project are one namespace, so a pair of them counts as a repeat too. The platform IDE does
+not check the `Import` section. The fix removes the extra entry.
+
+<a id="a-yaml-ref-needs-nullable"></a>**`yaml/ref-needs-nullable`.** Both a field of its own and a
+type argument of a component are written this way: `Goods.Reference`, `Edit<Goods.Reference>`. The
+compilation answers `Default value initialization is not supported`.
+
+<a id="a-yaml-localization-key-unique"></a>**`yaml/localization-key-unique`.** `Strings` and
+`Templates` share one namespace, and a translation file is judged alongside the dictionary. The
+apply answers "Name is not unique" and rolls the project back.
+
+<a id="a-yaml-unused-component"></a>**`yaml/unused-component`.** `code/unused-method` cannot see
+such a component: its methods are called by its own yaml. A use is a yaml value or any word of a
+module, and a name standing as a key of a localization dictionary does not count. A yaml file that
+does not parse counts with all its words, and the translation dictionary does not count at all. An
+entry point and `VisibilityScope: Global` are never judged: that is the public surface of a
+library. Without a project descriptor among the linted files the rule stays silent, or a component
+placed outside the linted subset would look dead.
+
+<a id="a-yaml-duplicate-subtree"></a>**`yaml/duplicate-subtree`.** Names, ids and texts are left
+out of the shape of a subtree. The 40-node threshold is measured: below it the rule catches
+layout, not copies. A repeat inside one file, the data source of a list and a localized-strings
+dictionary are never judged, and only maximal groups are named. Off by default: how much sameness
+is too much is a decision of the project.
+
+<a id="a-yaml-unknown-component-property"></a>**`yaml/unknown-component-property`.** An example:
+`PlaceholderText` on a `Checkbox`, which is a property of `Edit`. A name no component declares is
+left alone: the documentation does not list the yaml keys in full.
+
+<a id="a-yaml-inline-command-name"></a>**`yaml/inline-command-name`.** Both an inline
+command-interface fragment and a single-command property look like this. The apply answers: "a
+command name is allowed only in command-interface-fragment project elements". Reach the command
+through the handler parameter, and give it a name only by moving the fragment into a project
+element of its own.
+
+<a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** `PageSize`
+sets the portion and the scrolling moves through that portion alone: the list search still finds a
+row the scrolling never shows. `Navigation: LoadingOnScroll` cures it. A list that promises no
+scroll and an expression in `Navigation` are left alone.
 
 ### Tier B - text and conventions
 

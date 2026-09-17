@@ -61,6 +61,8 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 - **Умолч.** – ✓ правило входит в набор по умолчанию, – включается явно.
 - **Область** – `файл` (правило видит один файл) или `проект` (нужен индекс всего проекта:
   дубли Ид, неизвестные типы, кросс-модульные вызовы).
+- **Что проверяет** – одно-два предложения о находке. Ссылка "подробнее" ведёт под таблицу
+  тира: там у правила лежат оговорки, примеры и ответ платформы.
 - **Ссылка в конце описания** – раздел документации платформы, стоящий за правилом. В VS Code
   код такого правила в панели "Проблемы" открывает этот раздел прямо в редакторе.
 
@@ -79,26 +81,73 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | Правило | | | Область | Что проверяет |
 |---|---|---|---|---|
 | `yaml/valid` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | YAML не парсится |
-| `yaml/duplicate-key` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Скалярный ключ задан в одном узле YAML дважды: загрузчик молча оставляет последнее значение, все проверки схемы читают уже слитый документ, а компилятор отклоняет файл при деплое. Помечаются второе и последующие вхождения с указанием строки первого; ключ слияния `<<` и нескалярные ключи не судятся, ключи сравниваются как их различает загрузчик (тег и текст) |
-| `yaml/duplicate-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Пространство имён ещё раз в секции `Импорт` элемента; короткое и полное имя своего проекта – одно пространство. IDE платформы эту секцию не проверяет, но лишний элемент ничего не добавляет. Исправление снимает повтор [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/duplicate-key` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Скалярный ключ задан в одном узле YAML дважды: загрузчик молча оставляет последнее значение, а компилятор отклоняет файл при деплое [подробнее](#a-yaml-duplicate-key) |
+| `yaml/duplicate-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Пространство имён повторяется в секции `Импорт` элемента: вторая строка ничего не добавляет [подробнее](#a-yaml-duplicate-import) [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
 | `yaml/id-uuid` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ид не является UUID |
 | `yaml/id-required` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | У объекта нет Ид |
 | `yaml/name-matches-file` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя не совпадает с именем файла |
 | `yaml/id-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Дубли Ид в проекте |
 | `yaml/standard-field-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Длина стандартного реквизита сверх лимита платформы (`Наименование` > 400, `Код` > 50) – применение отвергает реквизит, и он выпадает из объекта [доки](https://1cmycloud.com/docs/help/topics/catalog-properties/) |
-| `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ссылочный тип в позиции `Тип` без `?` (`Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`) – у ссылки нет значения по умолчанию, компиляция падает `Default value initialization is not supported` [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `yaml/ref-needs-nullable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ссылочный тип в позиции `Тип` без `?`: у ссылки нет значения по умолчанию, и компиляция падает [подробнее](#a-yaml-ref-needs-nullable) [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
 | `yaml/no-expression-in-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Выражение `=...` внутри узла литерального типа (`Шрифт: {Тип: АбсолютныйШрифт, Размер: =...}`) – платформа принимает здесь только литерал, вычислять нужно весь объект [доки](https://1cmycloud.com/docs/help/topics/label-component/) |
-| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ, объявленный в словаре `ЛокализованныеСтроки` дважды – у секций `Строки` и `Шаблоны` одно пространство имён, файл перевода судится тоже; применение отвечает "Имя не уникально" и откатывает проект [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `yaml/unused-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Компонент интерфейса, который нигде не размещён и не создан: ни значением `Тип` в разметке, ни `новый` в коде (`code/unused-method` его не видит – методы компонента зовёт его же yaml). Употребление – значение в yaml (имя-ключ словаря локализации не считается) либо любое слово модуля. Yaml, который не разобрался, считается всеми словами, а словарь перевода не считается вовсе. Не судятся точка входа и `ОбластьВидимости: Глобально` – публичная поверхность библиотеки. Без файла-дескриптора проекта среди проверяемых правило молчит: на подмножестве компонент, размещённый снаружи, выглядел бы мёртвым |
-| `yaml/duplicate-subtree` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Поддерево разметки, повторяющее устройство поддерева другого файла (имена, идентификаторы и тексты в слепок не входят): новую форму заводят копированием соседней. Порог 40 узлов выведен замером – ниже он ловит раскладку, а не копии. Не судятся повтор внутри одного файла, источник данных списка и словарь локализованных строк; называются только максимальные группы. Выключено по умолчанию: мера одинаковости – решение проекта |
+| `yaml/localization-key-unique` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ объявлен в словаре `ЛокализованныеСтроки` дважды: применение отвергает проект целиком [подробнее](#a-yaml-localization-key-unique) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
+| `yaml/unused-component` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Компонент интерфейса нигде не размещён и не создан: ни значением `Тип` в разметке, ни `новый` в коде. Мёртвая разметка едет в сборку и в перевод [подробнее](#a-yaml-unused-component) |
+| `yaml/duplicate-subtree` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Поддерево разметки повторяет устройство поддерева в другом файле: новую форму завели копированием соседней, и правку теперь вносить в оба [подробнее](#a-yaml-duplicate-subtree) |
 | `project/identifier` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Имя или поставщик проекта не идентификатор [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/presentation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Представление проекта не заполнено [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `project/version` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Версия проекта не A.B.C [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
 | `structure/xbsl-pair` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Модуль .xbsl без парного .yaml |
 | `project/path-matches-descriptor` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Путь `{{поставщик}}/{{имя}}` разошёлся с дескриптором – сборка отвергнет проект до компиляции [доки](https://1cmycloud.com/docs/help/topics/project-properties-standard/) |
-| `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть (`Флажок` + `ЗамещающийТекст` – свойство `ПолеВвода`): применение отвечает `Неизвестное свойство`; имя, которого нет ни у одного компонента, не трогается – документация перечисляет ключи yaml не полностью [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
-| `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке (инлайновый фрагмент командного интерфейса или команда-свойство): применение отвергает узел ("Имя команды разрешено задавать только в элементах проекта типа фрагмент командного интерфейса") и стенд откатывается; к команде обращаются через параметр обработчика, а имя даёт только фрагмент отдельным элементом проекта [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
-| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией `РазмерСтраницы`, прокрутка крутит только её, и хвост данных недостижим – запись находится поиском списка, но не прокруткой; лечение – `Навигация: ПодгрузкаПриПрокрутке`. Список, который прокрутку не обещает (`Ложь` или свойства нет), и выражение в `Навигации` не судятся [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть: применение отвечает `Неизвестное свойство` [подробнее](#a-yaml-unknown-component-property) [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
+| `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке: применение отвергает узел и откатывает проект [подробнее](#a-yaml-inline-command-name) [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
+| `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией, и хвост данных прокруткой недостижим [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+
+#### Подробнее о правилах тира A
+
+<a id="a-yaml-duplicate-key"></a>**`yaml/duplicate-key`.** Проверки схемы читают уже слитый
+документ, поэтому потерянное значение больше нигде не всплывает. Помечается второе вхождение и
+каждое следующее, со строкой первого. Ключ слияния `<<` и нескалярные ключи правило не судит, а
+ключи различает так же, как загрузчик: по тегу и по тексту.
+
+<a id="a-yaml-duplicate-import"></a>**`yaml/duplicate-import`.** Короткое и полное имя своего
+проекта – это одно пространство имён, поэтому пара из них тоже считается повтором. IDE платформы
+секцию `Импорт` не проверяет. Исправление снимает лишнюю строку.
+
+<a id="a-yaml-ref-needs-nullable"></a>**`yaml/ref-needs-nullable`.** Так пишут и отдельный
+реквизит, и параметр типа компонента: `Товары.Ссылка`, `ПолеВвода<Товары.Ссылка>`. Компиляция
+отвечает `Default value initialization is not supported`.
+
+<a id="a-yaml-localization-key-unique"></a>**`yaml/localization-key-unique`.** У секций `Строки` и
+`Шаблоны` одно пространство имён, и файл перевода судится наравне со словарём. Применение отвечает
+"Имя не уникально" и откатывает проект.
+
+<a id="a-yaml-unused-component"></a>**`yaml/unused-component`.** `code/unused-method` такой
+компонент не видит: его методы зовёт его же yaml. Употреблением считается значение в yaml или
+любое слово модуля, а имя, стоящее ключом словаря локализации, не в счёт. Yaml, который не
+разобрался, засчитывается всеми своими словами, словарь перевода не засчитывается вовсе. Точку
+входа и `ОбластьВидимости: Глобально` правило не судит: это публичная поверхность библиотеки. Без
+файла-дескриптора проекта среди проверяемых правило молчит, иначе компонент, размещённый снаружи
+проверяемого подмножества, выглядел бы мёртвым.
+
+<a id="a-yaml-duplicate-subtree"></a>**`yaml/duplicate-subtree`.** В слепок поддерева не входят
+имена, идентификаторы и тексты. Порог в 40 узлов выведен замером: ниже правило ловит раскладку, а
+не копии. Повтор внутри одного файла, источник данных списка и словарь локализованных строк
+правило не судит, а называет только максимальные группы. По умолчанию выключено: меру одинаковости
+выбирает проект.
+
+<a id="a-yaml-unknown-component-property"></a>**`yaml/unknown-component-property`.** Пример:
+`ЗамещающийТекст` у `Флажка`, это свойство `ПолеВвода`. Имя, которого нет ни у одного компонента,
+правило не трогает: документация перечисляет ключи yaml не полностью.
+
+<a id="a-yaml-inline-command-name"></a>**`yaml/inline-command-name`.** Так выглядит и инлайновый
+фрагмент командного интерфейса, и команда-свойство. Применение отвечает: "Имя команды разрешено
+задавать только в элементах проекта типа фрагмент командного интерфейса". К команде обращаются
+через параметр обработчика, а имя ей даёт только фрагмент, вынесенный отдельным элементом проекта.
+
+<a id="a-yaml-list-scroll-without-loading"></a>**`yaml/list-scroll-without-loading`.** Порцию
+задаёт `РазмерСтраницы`, и прокрутка крутит только её: запись находится поиском списка, но не
+прокруткой. Лечит `Навигация: ПодгрузкаПриПрокрутке`. Список, который прокрутку не обещает, и
+выражение в `Навигации` правило не судит.
 
 ### Тир B – текст и соглашения
 
