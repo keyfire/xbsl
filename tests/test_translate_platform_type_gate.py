@@ -13,7 +13,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from xbsl import engine
+import pytest
+from test_translate_facets import privilege_roots, stated_privileges  # noqa: F401 - fixtures
+
+from xbsl import dataset, engine
 from xbsl.translation import dictionary as dict_module
 from xbsl.translation import names
 from xbsl.translation.code import type_ranges
@@ -326,7 +329,7 @@ def test_an_element_named_like_a_platform_type_keeps_the_gate_at_a_static_root(t
 # --- the owner of a facet -------------------------------------------------------------------
 
 
-def test_the_facet_of_the_generic_entity_is_the_platform_s_word(tmp_path: Path):
+def test_the_facet_of_the_generic_entity_is_the_platform_s_word(tmp_path: Path, stated_privileges):
     root = tmp_path / "Acme" / "Demo"
     _write(root / "Склады.yaml", (
         "ВидЭлемента: Справочник\n"
@@ -353,7 +356,8 @@ def test_the_facet_of_the_generic_entity_is_the_platform_s_word(tmp_path: Path):
     translate_project(root, _dictionary(), out, swap_localization=False)
     module = _read(out / "Доступ.xbsl")
     assert "(): Array<Entity.Privilege>" in module
-    assert "return [Entity.Privilege.Чтение, Entity.Privilege.Изменение]" in module
+    # A value of the facet is the facet's own word: the table is read by the whole facet.
+    assert "return [Entity.Privilege.Read, Entity.Privilege.Update]" in module
     # The attribute read off a record is the project's word. So is the member of a parameter
     # spelled like the entity: the parameter takes the flat spelling of its own name, and what
     # follows it is its member, not the facet.
@@ -361,6 +365,111 @@ def test_the_facet_of_the_generic_entity_is_the_platform_s_word(tmp_path: Path):
     assert "return Entity.Право" in module
     assert module.count("Entity.Privilege") == 3
     assert "Name: Право" in _read(out / "Склады.yaml")
+
+
+def test_every_value_of_the_privilege_facet_is_spelled_by_the_facet(tmp_path: Path,
+                                                                   stated_privileges):
+    """A parameter named like the facet is the parameter - declared and read under one spelling
+    - and the values after the entity are the facet's all the same."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Доступ.xbsl", (
+        "метод Проба(Право: Сущность.Право): Булево\n"
+        "    возврат Право == Сущность.Право.Создание или Право == Сущность.Право.Удаление\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    report = translate_project(root, _dictionary({"Проба": "Probe", "Доступ": "Access"}), out,
+                               swap_localization=False)
+
+    module = _read(out / "Access.xbsl")
+    assert "method Probe(Privilege: Entity.Privilege): Boolean" in module
+    assert ("return Privilege == Entity.Privilege.Create or Privilege == Entity.Privilege.Delete"
+            in module)
+    assert not report.files["Доступ.xbsl"].missing_platform
+
+
+def test_data_without_the_values_of_the_facet_keeps_them_as_written(tmp_path: Path,
+                                                                   privilege_roots):
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Доступ.xbsl",
+           "метод Проба(): Сущность.Право\n    возврат Сущность.Право.Чтение\n;\n")
+    out = tmp_path / "en"
+    dataset.set_data_root(privilege_roots["before"])
+    try:
+        report = translate_project(root, _dictionary({"Проба": "Probe", "Доступ": "Access"}),
+                                   out, swap_localization=False)
+    finally:
+        dataset.set_data_root(None)
+
+    assert "return Entity.Privilege.Чтение" in _read(out / "Access.xbsl")
+    assert "Чтение" in report.files["Доступ.xbsl"].missing_platform
+
+
+def test_a_parameter_spelled_like_the_entity_keeps_the_values_of_its_own_chain(
+        tmp_path: Path, stated_privileges):
+    """The whole chain is the parameter's: its field, then the field of that field."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Доступ.xbsl", (
+        "структура Разрешения\n"
+        "    пер Чтение: Булево\n"
+        ";\n"
+        "\n"
+        "структура Запись\n"
+        "    пер Право: Разрешения\n"
+        ";\n"
+        "\n"
+        "метод Проба(Сущность: Запись): Булево\n"
+        "    возврат Сущность.Право.Чтение\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Проба": "Probe", "Доступ": "Access", "Разрешения": "Permissions", "Чтение": "CanRead",
+        "Запись": "Record", "Право": "Right", "Сущность": "Essence",
+    }), out, swap_localization=False)
+
+    module = _read(out / "Access.xbsl")
+    assert "return Essence.Right.CanRead" in module
+    assert "Read" not in module.replace("CanRead", "")
+
+
+@pytest.mark.parametrize("declaration", ["yaml", "module"])
+def test_a_type_the_project_names_like_the_entity_is_not_the_platform_s(
+        tmp_path: Path, stated_privileges, declaration: str):
+    """A project enumeration or structure spelled like the entity owns the chain after it, so
+    the words there are the project's - the text of the chain proves nothing about the owner."""
+    root = tmp_path / "Acme" / "Demo"
+    if declaration == "yaml":
+        _write(root / "Сущность.yaml", (
+            "ВидЭлемента: Перечисление\n"
+            "Имя: Сущность\n"
+            "Элементы:\n"
+            "    -\n"
+            "        Имя: Право\n"
+        ))
+    else:
+        _write(root / "Типы.xbsl", "структура Сущность\n    пер Право: Строка\n;\n")
+    _write(root / "Доступ.xbsl", "метод Проба()\n    возврат Сущность.Право.Чтение\n;\n")
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "Проба": "Probe", "Доступ": "Access", "Типы": "Types", "Сущность": "Essence",
+        "Право": "Right", "Чтение": "Reading",
+    }), out, swap_localization=False)
+
+    assert "return Essence.Right.Reading" in _read(out / "Access.xbsl")
+
+
+def test_an_entry_that_repeats_a_value_of_the_facet_is_an_echo(tmp_path: Path, stated_privileges):
+    """The entry `Чтение: Read` used to be the only thing spelling the value; the platform now
+    does, and the entry is named as the workaround it was."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Доступ.xbsl",
+           "метод Проба(): Сущность.Право\n    возврат Сущность.Право.Чтение\n;\n")
+    report = translate_project(root, _dictionary({
+        "Проба": "Probe", "Доступ": "Access", "Чтение": "Read",
+    }), tmp_path / "en", swap_localization=False)
+
+    assert report.echoed.get("Чтение") == "Read"
 
 
 # --- the editor's twin: conventions/missing-translation -------------------------------------

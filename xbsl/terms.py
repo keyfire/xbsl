@@ -175,6 +175,52 @@ def member_spellings(member: str) -> dict[str, list[str]]:
 _ENUM_CLASS_MARK = "G5Enum"
 
 
+_manager_owners: dict[str, str] | None = None
+
+
+def _manager_owner_table() -> dict[str, str]:
+    """{Russian element kind: the owner of the members table that spells its manager}.
+
+    The `manager_owners` section of terms_full.json. The extractor states a row only where the
+    distribution proves the join (see extract/terms.manager_owners): the members of a manager
+    are filed under the class of the compiler that builds it, and no name of the kind leads to
+    that class. Empty for data extracted before the section existed.
+    """
+    global _manager_owners
+    if _manager_owners is None:
+        try:
+            data = dataset.load_json("terms_full.json")
+        except Exception:  # noqa: BLE001 - no data, no managers
+            data = {}
+        table = data.get("manager_owners")
+        _manager_owners = {
+            kind: owner for kind, owner in (table.items() if isinstance(table, dict) else ())
+            if isinstance(kind, str) and isinstance(owner, str)
+        }
+    return _manager_owners
+
+
+def manager_member_english(kind: str, member: str) -> str | None:
+    """The English spelling of `member` as a member of the manager of an element `kind`, or None.
+
+    `ПравоНаОтчеты.Проверить()` calls the manager of a privilege on action, and `Проверить`
+    is Check there while other owners spell the word Verify or Validate. Only the owner the data
+    joins to the kind answers, and only from its own row: the manager has no ancestors in the
+    type catalog to inherit from. `kind` is the Russian name the metamodel gives the kind; the
+    serializer's English spelling of it is accepted as well.
+    """
+    if not kind or not member:
+        return None
+    table = _manager_owner_table()
+    owner = table.get(kind)
+    if owner is None:
+        russian = next((ru for ru, en in kinds_table().items() if en == kind), None)
+        owner = table.get(russian) if russian else None
+    if not owner:
+        return None
+    return (_members_by_owner().get(owner) or {}).get(member)
+
+
 _kinds: dict[str, str] | None = None
 
 
@@ -203,6 +249,8 @@ def _reset() -> None:
     pinned root with no terms.json still handed out the English spellings of the old one.
     """
     global _cache, _reverse, _common, _common_reverse, _kinds, _facets, _owners, _bases
+    global _manager_owners
+    _manager_owners = None
     _facets = None
     _cache = None
     _reverse = None

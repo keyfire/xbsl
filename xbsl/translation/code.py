@@ -41,6 +41,7 @@ import dataclasses
 import re
 from collections import Counter
 from functools import lru_cache
+from pathlib import Path
 
 from xbsl import dataset, lexer, terms, typeinfer
 from xbsl import parser as P
@@ -67,6 +68,184 @@ def has_cyrillic(text: str) -> bool:
     return _CYRILLIC_RE.search(text) is not None
 
 
+class ProjectIndex:
+    """What the project index of the editor knows that a member of a chain needs.
+
+    A word after a dot is often spelled by its owner alone - `Граница` is Bound on an array and
+    Border on a spreadsheet area - and the owner of `Объект.Товары.Граница()` is neither of
+    the names written there: it is the type of the tabular section of the object the form
+    edits. The index the editor completes with already reads that (xbsl/indexer.py): the object
+    a form edits, the types of the attributes and tabular sections of a project object, the
+    fields of the structures, the kinds of the elements. The translator reads the same facts
+    and walks a chain with the same code the completion does (rules/_syntax.chain_type), so the
+    two cannot type one chain differently.
+    """
+
+    def __init__(self, index: dict) -> None:
+        from xbsl.lsp_nav import IndexLookup
+
+        self.lookup = IndexLookup(index)
+        try:
+            catalog = dataset.load_json("stdlib.json") or {}
+        except Exception:  # noqa: BLE001 - no data, the project half alone
+            catalog = {}
+        returns: dict[str, dict[str, str]] = {
+            owner: dict(members) for owner, members in (catalog.get("member_types") or {}).items()
+            if isinstance(members, dict)
+        }
+        for owner, members in self.lookup.method_returns().items():
+            returns[owner] = {**returns.get(owner, {}), **members}
+        #: {type: {member: its result type}} - the platform catalog joined with the project.
+        self.returns = returns
+
+    @classmethod
+    def build(cls, root: Path) -> ProjectIndex | None:
+        """The index of the project under `root`; None when it cannot be built."""
+        from xbsl import indexer
+
+        try:
+            return cls(indexer.build_index(root))
+        except Exception:  # noqa: BLE001 - no index: every chain stays read as before
+            return None
+
+    def element_kind(self, name: str) -> str:
+        """The kind of the project element named `name` (`ПравоНаДействие`), or ""."""
+        found = self.lookup.object_by_name(name)
+        kind = found.get("kind") if found else None
+        return kind if isinstance(kind, str) else ""
+
+    def declares_method(self, module: str, name: str) -> bool:
+        """Whether the module `module` of the project declares a method `name`."""
+        return self.lookup.method(module, name) is not None
+
+    def module_names(self, path: Path) -> dict[str, str]:
+        """{bare name: its written type} a module reads without declaring it.
+
+        The attributes and tabular sections of the object an object module belongs to, the
+        properties of a component, and the object a form edits - named by the base type of the
+        form (`ФормаОбъекта<Заказы.Объект>` makes `Объект` a `Заказы.Объект`). Only types the
+        project describes in its metadata count: a structure some module declares under the name
+        of this module is no owner of it.
+        """
+        stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
+        record = self.lookup.struct_by_name(stem) or {}
+        described = (record.get("property_types") or {}) if record.get("kind") else {}
+        types = {str(name): str(written) for name, written in described.items() if written}
+        pair = self.lookup.form_data_object(stem)
+        if pair:
+            types.setdefault(pair[0], pair[1])
+        return types
+
+    def module_returns(self, path: Path) -> dict[str, str]:
+        """{method: its written result} of the module at `path` - a bare call of its own code."""
+        module = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
+        return {
+            str(method["name"]): str(method.get("returns_written") or method["returns"])
+            for method in self.lookup.methods_by_module(module) if method.get("returns")
+        }
+
+
+@dataclasses.dataclass(frozen=True)
+class ChainTypes:
+    """The types the chains of one module are walked with (see ProjectIndex)."""
+
+    project: ProjectIndex
+    #: The bare names the module reads without declaring them, with their written types.
+    names: dict[str, str]
+    #: The results of the module's own methods.
+    returns: dict[str, str]
+
+    @classmethod
+    def of(cls, project: ProjectIndex, path: Path) -> ChainTypes:
+        return cls(project, project.module_names(path), project.module_returns(path))
+
+    def receiver(self, toks: list, index: int, local_names: dict[str, str],
+                 method_types: MethodTypes | None, place: int) -> str:
+        """The type of the receiver of the member at `index` - the chain before its dot - or "".
+
+        The chain is read only when every link is one the walk consumes whole: a name, a member,
+        a call of a member, a non-null assertion. Anything else before the dot - an index, a
+        null-safe access, a literal - answers "" rather than the type of a part of the chain.
+        A local of the method is the local, typed by what its declaration writes or holds; a
+        name the module reads without declaring it is typed by the index; any other root names
+        nothing here.
+        """
+        start = _chain_start(toks, index - 1)
+        if start is None:
+            return ""
+        root = toks[start]
+        following = _next_code_token(toks, start)
+        if following is not None and following.kind == "OP" and following.value == "(" \
+                and root.value not in self.returns:
+            return ""
+
+        def resolve(name: str) -> str | None:
+            if name in local_names:
+                typed = local_names.get(name) or (
+                    method_types.type_at(name, place) if method_types is not None else "")
+                return typed or None
+            written = self.names.get(name)
+            return dataset.member_type_head(written) if written else None
+
+        def written(name: str) -> str | None:
+            return None if name in local_names else self.names.get(name)
+
+        found = _syntax.chain_type(toks, start, resolve, self.project.returns,
+                                   stop_offset=toks[index - 1].start,
+                                   own_returns=self.returns, resolve_written=written)
+        return found or ""
+
+
+def _next_code_token(toks: list, index: int):
+    """The token after `index`, comments skipped, or None."""
+    position = index + 1
+    while position < len(toks) and toks[position].kind == "COMMENT":
+        position += 1
+    return toks[position] if position < len(toks) else None
+
+
+def _chain_start(toks: list, dot: int) -> int | None:
+    """The index of the root of the chain that ends right before the dot at `dot`, or None.
+
+    Walked back over names, member dots, the parentheses of calls and non-null assertions. A
+    shape the chain walk does not read link by link ends the search with None.
+    """
+    if dot < 1 or toks[dot].kind != "OP" or toks[dot].value != ".":
+        return None
+    position = dot - 1
+    while position >= 0:
+        tok = toks[position]
+        if tok.kind == "COMMENT" or (tok.kind == "OP" and tok.value == "!"):
+            position -= 1
+            continue
+        if tok.kind == "OP" and tok.value == ")":
+            depth = 0
+            while position >= 0:
+                if toks[position].kind == "OP" and toks[position].value == ")":
+                    depth += 1
+                elif toks[position].kind == "OP" and toks[position].value == "(":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                position -= 1
+            position -= 1
+            if position < 0 or toks[position].kind != "IDENT":
+                return None
+            continue
+        if tok.kind != "IDENT":
+            return None
+        before = position - 1
+        while before >= 0 and toks[before].kind == "COMMENT":
+            before -= 1
+        if before >= 0 and toks[before].kind == "OP" and toks[before].value == ".":
+            position = before - 1
+            continue
+        if before >= 0 and toks[before].kind == "OP" and toks[before].value in ("?.", "?", "::"):
+            return None
+        return position
+    return None
+
+
 class Resolver:
     """Identifier resolution shared by the code and yaml translators.
 
@@ -87,9 +266,14 @@ class Resolver:
         component_methods: dict[str, frozenset[str]] | None = None,
         resource_keys: frozenset[str] = frozenset(),
         project_component_types: frozenset[str] = frozenset(),
+        project_index: ProjectIndex | None = None,
     ) -> None:
         self.dictionary = dictionary
         self.project_names = project_names
+        #: The editor's index of the whole project (see ProjectIndex): the types a chain of
+        #: members walks through and the kinds of the elements. None for a lone file - the
+        #: chains are then read as before, name by name.
+        self.project_index = project_index
         self.dictionary_scopes = dictionary_scopes
         self.component_names = component_names
         #: {interface component of the project: the methods its module declares} - what a form
@@ -374,11 +558,15 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
     edits: list[Edit] = []
     toks = lexer.tokens(source)
     ranges = _syntax.query_ranges(source)
+    chains = (
+        ChainTypes.of(resolver.project_index, Path(source.path))
+        if resolver.project_index is not None else None
+    )
     collect_token_edits(source.text, toks, 0, ranges, resolver, report, edits,
                         inferred_locals=inferred_locals(source, resolver.project_names),
                         type_ranges=type_ranges(source),
                         owner_scopes=owner_scopes(source, owner),
-                        form_nodes=form_nodes)
+                        form_nodes=form_nodes, chains=chains)
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -402,6 +590,7 @@ def collect_token_edits(
     owner_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
     form_nodes: dict[str, str] | None = None,
     query_aliases: frozenset[str] = frozenset(),
+    chains: ChainTypes | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -418,6 +607,8 @@ def collect_token_edits(
     `owner_scopes` are the methods of the module with the names its element puts in scope of
     each (see owner_scopes). `form_nodes` are the nodes of the component tree the module pairs
     with (see names.form_nodes): a member reached through one of them is judged by its component.
+    `chains` types the chain before a member whose receiver no declaration types (see
+    ChainTypes); a fragment has none and reads such a member by its name alone.
     """
     # The paths inside `Ресурс{...}` are spelled first, off the text: the tokens of such a path
     # are file names, and the walk below must not read them as code.
@@ -595,6 +786,27 @@ def collect_token_edits(
                     _platform_facet(toks, index, local_names, owner_names, resolver)
                     if prev_dot and not in_query else None
                 )
+                member_of_code = prev_dot and not in_query and not field_of
+                facet_value = (
+                    _platform_facet_value(toks, index, local_names, owner_names, resolver)
+                    if member_of_code else None
+                )
+                # The owner a chain holds, where no declaration names the receiver's type:
+                # `Объект.Товары.Граница()` asks the array of rows, not the flat dictionary.
+                # Only a word some platform type declares as a member can be answered by an
+                # owner, so the walk is spared for the project's own words.
+                chain_owner = ""
+                if (chains is not None and member_of_code and not type_scope
+                        and chain_root not in _COMPONENT_ROOTS
+                        and platform_map.is_member_name(tok.value)):
+                    typed = chains.receiver(toks, index, local_names, method_types,
+                                            base + tok.start if place is None else place)
+                    if typed and resolver.platform_type(typed):
+                        chain_owner = typed
+                manager_kind = (
+                    _manager_kind(toks, index, local_names, owner_names, resolver)
+                    if member_of_code else ""
+                )
                 _identifier_edit(tok, base, in_query, prev_dot or bool(query_receiver),
                                  resolver, report, edits, at,
                                  scope=scope, type_scope=type_scope, static_root=static_root,
@@ -604,7 +816,8 @@ def collect_token_edits(
                                  reference="query" if query_receiver else _reference_reading(
                                      toks, index, prev_dot, type_scope, chain_root,
                                      resolver.project_names),
-                                 platform_facet=platform_facet)
+                                 platform_facet=platform_facet, facet_value=facet_value,
+                                 chain_owner=chain_owner, manager_kind=manager_kind)
         elif kind == "NUMBER":
             _duration_edit(tok, base, edits)
         elif kind == "PATTERN":
@@ -1261,7 +1474,9 @@ def _member_by_owner(scope: str, type_scope: str, name: str) -> str | None:
 def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at=None,
                      scope: str = "", type_scope: str = "", static_root: bool = False,
                      chain_root: str = "", receiver_is_local: bool = False,
-                     reference: str = "", platform_facet: str | None = None) -> None:
+                     reference: str = "", platform_facet: str | None = None,
+                     facet_value: str | None = None, chain_owner: str = "",
+                     manager_kind: str = "") -> None:
     if reference == "query":
         # A table alias may itself match a UI root or a platform type name.
         receiver_is_local = True
@@ -1301,11 +1516,23 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
     )
     platform_member = None
     if after_dot and not project_typed:
+        # The owner a chain holds is proven by the walk and answers before the receiver read as
+        # a type by its name: after a dot a name is a member, never a static type. The manager
+        # of a project element answers last - its receiver names no type at all.
         platform_member = (
             platform_map.verified_member(tok.value)
+            or platform_map.member_of(chain_owner, tok.value)
             or _member_by_owner(owner, type_scope, tok.value)
+            or platform_map.manager_member_of(manager_kind, tok.value)
         )
-    if after_dot and scope in resolver.dictionary_scopes:
+    replacement: str | None
+    if after_dot and facet_value:
+        # `Сущность.Право.Чтение`: a value of a facet of a platform type, spelled by the table of
+        # the whole facet (see _platform_facet_value). Like the facet, it is the platform's word
+        # whatever the project calls its own things.
+        replacement, plane = facet_value, "platform"
+        resolver.note_platform_win(tok.value, facet_value)
+    elif after_dot and scope in resolver.dictionary_scopes:
         replacement, plane = resolver.dictionary_key(tok.value, scope)
     elif platform_member:
         # The receiver is a platform TYPE - named right before the dot, or the type a local
@@ -1398,6 +1625,53 @@ def _platform_facet(toks: list, index: int, local_names: dict[str, str],
     if not resolver.platform_type(owner.value):
         return None
     return platform_map.facet_of(owner.value, toks[index].value)
+
+
+def _platform_facet_value(toks: list, index: int, local_names: dict[str, str],
+                          owner_names: frozenset[str], resolver: Resolver) -> str | None:
+    """The English spelling of the facet value at `index` - `Сущность.Право.Чтение` - or None.
+
+    The two names before it pass the test of a facet (see _platform_facet): the root opens the
+    chain and is the platform type, not a local, a property of the module's element or a type
+    the project declares under that name. The value is then read by the table of the whole
+    facet; a value the table does not list, or data extracted before the table existed, answers
+    None, and the word is read the way it was.
+    """
+    if index < 4 or toks[index - 1].kind != "OP" or toks[index - 1].value != ".":
+        return None
+    if toks[index - 2].kind != "IDENT":
+        return None
+    if _platform_facet(toks, index - 2, local_names, owner_names, resolver) is None:
+        return None
+    return platform_map.facet_value_of(toks[index - 4].value, toks[index - 2].value,
+                                       toks[index].value)
+
+
+def _manager_kind(toks: list, index: int, local_names: dict[str, str],
+                  owner_names: frozenset[str], resolver: Resolver) -> str:
+    """The kind of the project element whose manager the member at `index` is called on, or "".
+
+    `ПравоНаОтчеты.Проверить()`: the receiver opens the chain, the project index knows an
+    element of that name, and nothing of the method shadows it - a local or a parameter, a
+    property of the module's element. A method the element's own module declares under the same
+    name is the project's, not the manager's. A name qualified by a namespace may name an
+    element of another project, and is left alone.
+    """
+    project = resolver.project_index
+    if project is None or index < 2:
+        return ""
+    dot, receiver = toks[index - 1], toks[index - 2]
+    if dot.kind != "OP" or dot.value != "." or receiver.kind != "IDENT":
+        return ""
+    before = toks[index - 3] if index >= 3 else None
+    if before is not None and before.kind == "OP" and before.value in (".", "?.", "::", "!"):
+        return ""
+    if receiver.value in local_names or receiver.value in owner_names:
+        return ""
+    kind = project.element_kind(receiver.value)
+    if not kind or project.declares_method(receiver.value, toks[index].value):
+        return ""
+    return kind
 
 
 def _member_chain_root(toks: list, index: int, chain_root: str,

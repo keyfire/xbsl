@@ -123,3 +123,78 @@ def test_type_facet_and_plain_member_keep_separate_contexts(monkeypatch):
     )
     assert resolver.identifier("КомандаСПараметром") == ("ProjectCommandName", "user")
     assert resolver.type_name("Событие") == ("Occurrence", "user")
+
+
+# --- the values of a platform facet ------------------------------------------------------------
+
+
+def _facet_root(tmp_path, name: str, *, with_facet_values: bool = True):
+    """A data root that knows the privilege facet of the generic entity and one enumeration of its
+    own - the table of the facet is present only when asked."""
+    import json
+
+    root = tmp_path / name
+    version = root / "1.0.0"
+    version.mkdir(parents=True)
+    tables = {"ВидДоступаАкме": {"Изменение": "Change"}}
+    if with_facet_values:
+        tables["Сущность.Право"] = {
+            "Изменение": "Update", "Создание": "Create", "Удаление": "Delete", "Чтение": "Read",
+        }
+    files = {
+        "terms.json": {"facets": {"Сущность.Право": "Entity.Privilege"}},
+        "stdlib.json": {"facet_members": {"Сущность.Право": {
+            "properties": ["Изменение", "Создание", "Удаление", "Чтение"]}}},
+        "uiterms.json": {"enum_values": tables},
+    }
+    for file, content in files.items():
+        (version / file).write_text(json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    (root / "index.json").write_text(
+        json.dumps({"available": ["1.0.0"], "default": "1.0.0"}), encoding="utf-8")
+    return root
+
+
+def test_a_facet_value_is_spelled_by_the_table_of_the_whole_facet(tmp_path):
+    """The owner is the facet as a whole, in either spelling of either part."""
+    platform_map.dataset.set_data_root(_facet_root(tmp_path, "data"))
+    try:
+        assert platform_map.facet_value_of("Сущность", "Право", "Чтение") == "Read"
+        assert platform_map.facet_value_of("Entity", "Privilege", "Удаление") == "Delete"
+        assert platform_map.facet_value_of("Сущность", "Privilege", "Изменение") == "Update"
+        assert platform_map.facet_value_of("Entity", "Право", "Создание") == "Create"
+    finally:
+        platform_map.dataset.set_data_root(None)
+
+
+def test_a_value_after_what_is_no_facet_of_the_platform_answers_nothing(tmp_path):
+    platform_map.dataset.set_data_root(_facet_root(tmp_path, "data"))
+    try:
+        assert platform_map.facet_value_of("Склады", "Право", "Чтение") is None
+        assert platform_map.facet_value_of("Сущность", "Ссылка", "Чтение") is None
+        assert platform_map.facet_value_of("Сущность", "Право", "Архив") is None
+        assert platform_map.facet_value_of("", "Право", "Чтение") is None
+    finally:
+        platform_map.dataset.set_data_root(None)
+
+
+def test_the_values_of_a_facet_stay_out_of_the_tables_read_without_an_owner(tmp_path):
+    """A value whose enumeration is not pinned is answered only when every table agrees. The
+    table of a facet is read through the facet alone: counted there, it would take the
+    answer away from a word only one enumeration spells."""
+    platform_map.dataset.set_data_root(_facet_root(tmp_path, "data"))
+    try:
+        assert platform_map._unanimous_enum_value("Изменение") == "Change"
+    finally:
+        platform_map.dataset.set_data_root(None)
+
+
+def test_data_without_the_facet_table_keeps_the_value_and_is_read_afresh(tmp_path):
+    with_table = _facet_root(tmp_path, "with")
+    without = _facet_root(tmp_path, "without", with_facet_values=False)
+    try:
+        platform_map.dataset.set_data_root(with_table)
+        assert platform_map.facet_value_of("Сущность", "Право", "Чтение") == "Read"
+        platform_map.dataset.set_data_root(without)
+        assert platform_map.facet_value_of("Сущность", "Право", "Чтение") is None
+    finally:
+        platform_map.dataset.set_data_root(None)
