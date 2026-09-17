@@ -1837,6 +1837,19 @@ _COMPUTED_EN = {
     "Data.xbsl": "@OnServer @AvailableFromClient\nmethod Read(): String\n    return \"text\"\n;\n",
 }
 
+_RESOURCE_READ_RU = {
+    "Files.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Files\nОкружение: Сервер\n",
+    "Files.xbsl": "@НаСервере @ДоступноСКлиента\nметод Text(FileName: Строка): Строка\n"
+                  "    возврат ПакетРесурсов.Текущий().Получить(FileName).ОткрытьПотокЧтения()"
+                  ".ПрочитатьКакСтроку()\n;\n",
+}
+_RESOURCE_READ_EN = {
+    "Files.yaml": "ElementKind: CommonModule\nName: Files\nEnvironment: Server\n",
+    "Files.xbsl": "@OnServer @AvailableFromClient\nmethod Text(FileName: String): String\n"
+                  "    return ResourcesPackage.Current().Get(FileName).OpenReadableStream()"
+                  ".ReadAsString()\n;\n",
+}
+
 
 SEEDS: list[Seed] = [
     Seed(
@@ -1865,6 +1878,41 @@ SEEDS: list[Seed] = [
         note="a method available in both environments executes its client variant",
         files={**_COMPUTED_RU, "Data.xbsl": "@НаКлиенте " + _COMPUTED_RU["Data.xbsl"]},
         english={**_COMPUTED_EN, "Data.xbsl": "@OnClient " + _COMPUTED_EN["Data.xbsl"]},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=FINDING,
+        note="a client-available server method returns only the text of a package resource",
+        files=_RESOURCE_READ_RU, english=_RESOURCE_READ_EN,
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=FINDING,
+        note="an explicit false cache argument leaves the resource text uncached",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Ложь)")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = False)")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="the standard result cache already keeps the text on the client",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Истина)")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = True)")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="a path computed by another call may depend on data the read does not show",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "Получить(FileName)", "Получить(Settings.Location(FileName))")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "Get(FileName)", "Get(Settings.Location(FileName))")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="a method available in both environments reads through its client variant",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": "@НаКлиенте " + _RESOURCE_READ_RU["Files.xbsl"]},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": "@OnClient " + _RESOURCE_READ_EN["Files.xbsl"]},
     ),
     Seed(
         rule="code/statement-no-effect",

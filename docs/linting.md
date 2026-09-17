@@ -71,7 +71,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 236 rules of the base set** - severity, default state, scope, links to
+**The full list of all 237 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -253,6 +253,26 @@ rules read `WriteAndClose.Execute()` as a call of that property, even when a com
 has the same name. If the base type is unknown, the rules skip every `Name.Method()` call in
 that form and still follow calls of the form's own methods. Both rules also skip an element
 whose metadata has a field of the wrong type, such as a date in `Name`.
+
+### Resource text read without the result cache
+
+`code/resource-read-without-cache` looks for a method available from the client whose body is a
+single `return` of `ResourcesPackage.Current().Get(...).OpenReadableStream().ReadAsString()`.
+Such a method runs on the server, and without the cache each call from the client is a server
+call. The text of a resource changes only with a new build. The rule suggests
+`CacheResult = True` in the `@AvailableFromClient` annotation, or passing the text to the client
+through a `ClientWorkParameters` element. Which one fits depends on how long the result may
+live, so there is no automatic fix.
+
+Only this shape is reported. The arguments of `Get` and `ReadAsString` must be string literals
+without interpolation or parameters of the method. A member access, a call, an operator or a
+computed default value can depend on the user, the settings or other data, and the rule skips
+such a method. The root must be the platform type: a parameter, declaration or import of the
+module with that name skips the method, and so does a `Name` in the paired description. A
+project element with that name turns the check off for the whole project. Environment,
+availability and caching are the facts `code/computed-property-server-call` uses. The rule also
+skips client variants, handlers, an enabled or unknown `CacheResult`, duplicated methods and
+modules without valid metadata.
 
 ## Baseline: adopt a rule on a legacy codebase
 
