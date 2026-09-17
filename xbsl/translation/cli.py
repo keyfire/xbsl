@@ -9,8 +9,8 @@ Modes compose from flags around one pass over the project:
   lands in the `{Vendor}/{Name}` its descriptor names, which is what deploys as it is;
 - `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
   name the sources use, every yaml text the metamodel types `Localizable` has its literal
-  entry, and no problems were found - what a CI gate wants ("publish only a fully translated,
-  lint-clean configuration");
+  entry (`Description` aside - it is developer documentation), and no problems were found -
+  what a CI gate wants ("publish only a fully translated, lint-clean configuration");
 - `--check-duplicates [--against REF]`: the keys the dictionary translates in more than one
   place - two files, or twice in one - the conflicts the load would refuse and the redundant
   copies, each place with its file and line, read from the dictionary files alone; with a git
@@ -195,8 +195,18 @@ MESSAGES = {
         "en": "print the coverage of every metadata object",
     },
     "translate.help.strict": {
-        "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные пропуски",
-        "en": "non-zero exit when the coverage is incomplete, problems or platform gaps were found",
+        "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные "
+              "пропуски, а также если у локализуемого текста метамодели нет пары в плане "
+              "literals: любое Представление, заголовки приложения, сообщения запроса "
+              "разрешений, представления групп справочника, представления переключаемой "
+              "команды, шаблоны представления события – всё, кроме Описания. Текст, который "
+              "должен остаться как есть, называют парой со значением, равным ключу",
+        "en": "non-zero exit when the coverage is incomplete, problems or platform gaps were "
+              "found, or a localizable metamodel text has no pair in the literals plane: any "
+              "Presentation, the application titles, the permission-request messages, the "
+              "presentations of a catalog's groups and of a switchable command, the event "
+              "presentation templates - everything but Description. A text that has to stay "
+              "as it is gets a pair whose value equals its key",
     },
     "translate.help.no-swap": {
         "ru": "не переворачивать словари локализации (база останется на исходном языке)",

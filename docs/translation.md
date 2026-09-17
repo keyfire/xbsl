@@ -88,19 +88,36 @@ The suffixes of a duration literal in code move to their English spellings by th
 the type's documentation, and the English one is confirmed by the platform compiler. A number
 glued to any other letters is left alone.
 
-The same plane serves every yaml value the metamodel declares a localizable text
-(`Localizable`). The presentations of commands, access privileges and enumerations are read by a
-person on the page, so each is either named whole by an entry or reported as a gap. The one
-exception is the `Description` property: it is developer documentation, so it stays data. Only a
-description that carries a `%{...}` substitution goes through the plane the way a template does,
-and then its gap is listed.
+The same plane serves every yaml value the metamodel types a localizable text (`Localizable`) -
+every one of them, not the presentations of commands alone. `Presentation` is such a property on
+some fifty classes: a catalog, a document, an attribute, a dimension, a resource, a command, an
+access privilege, a value of an enumeration. Beside it stand the titles of the application
+(`AppTitles`), the messages that ask the user for a permission (`PermissionRequestMessages`), the
+presentations of a catalog's groups (`CatalogGroupPresentation`), the `ActivePresentation` and
+`InactivePresentation` of a switchable command, and the presentation templates of an event-log
+event - `PresentationTemplate` and the `BeginPresentationTemplate`, `EndPresentationTemplate` and
+`ErrorPresentationTemplate` beside it. A person reads each of those on the page, so each is either
+named whole by an entry or reported as a gap. The one exception is the `Description` property: it
+is developer documentation, so it stays data. Only a description that carries a `%{...}`
+substitution goes through the plane the way a template does, and then its gap is listed.
 
-A gap in a localizable text fails `--strict`, because the English build would show that text in
-Russian. The texts in question are the presentations above and the presentation template of an
-event kind. Any other gap of the plane is listed and fails nothing: a string literal of a module or
+A gap in any of those texts fails `--strict`, because the English build would show that text in
+Russian. Any other gap of the plane is listed and fails nothing: a string literal of a module or
 of an `=` expression, a text with a `%{...}` inside a component tree, a description. Only the
 project can tell its data from its messages there. An `=` value is code, so its string is keyed
 between its own quotes, as in a module.
+
+A text meant to read the same in both languages - a product name, a code, a word English borrowed
+whole - is named by an entry whose value repeats its key:
+
+```yaml
+literals:
+    "Цена товара": "Цена товара"
+```
+
+The pass writes the text back as it was, the plane counts it as named, and `--strict` has nothing
+to report. Neither `--unused` nor `--redundant` touches such a pair: the pass uses it, and the
+platform does not answer for it.
 
 Names are translated whole rather than word by word. The word order of an English name is the
 reverse of the Russian one, and the parts of a Russian name are declined, so gluing per-word
@@ -371,11 +388,14 @@ whose substitutions differ from its key's after translation, such as `%{AccountC
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
 
-A localizable yaml text without its literal entry fails `--strict` as well: the presentation of a
-command, an access privilege or an enumeration, or the presentation template of an event kind. The
-build accepts such a tree, but its pages would show the text in Russian. The report lists these
-texts with their places, and the verdict line counts them. No other gap of the literals plane
-fails the check.
+A localizable yaml text without its literal entry fails `--strict` as well - any value the
+metamodel types `Localizable`, `Description` aside: a `Presentation` wherever it stands, the titles
+of the application, a permission-request message, the presentation of a catalog's group, the two
+presentations of a switchable command, the presentation templates of an event-log event. The build
+accepts such a tree, but its pages would show the text in Russian. The report lists these texts
+with their places, and the verdict line counts them. A text that has to stay in Russian is named
+by an entry that repeats it as its own value (see above). No other gap of the literals plane fails
+the check.
 
 ## The English of the dictionary
 

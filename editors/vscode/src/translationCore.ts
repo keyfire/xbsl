@@ -278,7 +278,9 @@ export function unknownFlag(stderr: string, flag: string): boolean {
 }
 
 // The coverage line of the panel's header: the report `xbsl translate <root>` gives without
-// any flag. It is the same number CI gates on, so the panel and the pipeline cannot disagree.
+// any flag. Coverage is one of the things the CI gate reads, not the whole of it - `--strict`
+// also fails on a platform gap and on a localizable yaml text with no pair in the literals
+// plane, so a panel showing 100% is a project whose names are translated, not a green gate.
 export interface TranslationTotals {
   surfaces: number;
   translated: number;
