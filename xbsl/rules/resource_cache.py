@@ -85,9 +85,13 @@ def _chain() -> _Chain | None:
     """Spellings of the root and of every link, checked by the type catalog; None if unproven.
 
     Every link must return the type the next one is declared on, and the last one a string. A
-    catalog that says otherwise, or no catalog at all, leaves the shape unproven. Only the answer
-    of a catalog that was read is kept: data installed while an editor or an MCP server keeps
-    running must not meet a remembered None.
+    catalog that says otherwise, or no catalog at all, leaves the shape unproven. Only an answer
+    read from the catalog is kept, so a catalog installed while an editor or an MCP server keeps
+    running is read on the next call, and the shared server call facts keep their catalogs the
+    same way. That covers the catalogs and nothing more. The English spellings of a project are
+    read through other tables of the data, such as the terms and the ui vocabulary, and those
+    keep what they read until the data root or the version is set again. A process that read
+    them before the data was installed may still miss a project written in English until then.
     """
     if "chain" not in _PROOF:
         try:

@@ -1,6 +1,7 @@
 """Computed property calls use proven endpoints and retain every property site."""
 
 import json
+import shutil
 
 import pytest
 
@@ -382,3 +383,103 @@ def test_invalid_used_metadata_fields_are_json_safe_and_not_analyzed(field):
     assert len(found) == 1
     assert found[0].path == "Healthy.yaml"
     assert found[0].severity.value == "info"
+
+
+# --- platform data installed while a server keeps running -------------------------------------
+
+READ_RULE = "code/resource-read-without-cache"
+
+
+def _installed_version():
+    """The folder and the name of the data version the tests run on."""
+    from xbsl import dataset
+
+    version = dataset.resolve_version()
+    return dataset.data_root() / version, version
+
+
+def _install_data(source, version, root, skip=()):
+    """Put one data version under root the way an installation does: the files, then the index."""
+    (root / version).mkdir(parents=True, exist_ok=True)
+    for path in source.glob("*.json"):
+        if path.name not in skip:
+            shutil.copyfile(path, root / version / path.name)
+    (root / "index.json").write_text(
+        json.dumps({"available": [version], "default": version}), encoding="utf-8")
+
+
+def _three_rules_project():
+    """A computed title, a computed image and a resource reader: one finding for each rule."""
+    files = project()
+    files["Panel.yaml"] += "  - Тип: Надпись\n    Изображение: =Data.Read()\n"
+    files["Files.yaml"] = "ВидЭлемента: ОбщийМодуль\nИмя: Files\nОкружение: Сервер\n"
+    files["Files.xbsl"] = ("@НаСервере @ДоступноСКлиента\nметод Text(FileName: Строка): Строка\n"
+                           "    возврат ПакетРесурсов.Текущий().Получить(FileName)"
+                           ".ОткрытьПотокЧтения().ПрочитатьКакСтроку()\n;\n")
+    return files
+
+
+@pytest.mark.needs_data
+def test_data_installed_after_a_run_without_it_is_read(tmp_path):
+    """A process that ran the rules before the data was installed finds everything after it.
+
+    The first run happens on an empty data root, the way an editor or an MCP server lints the
+    descriptions of a project before the platform data is installed (a module cannot be read
+    without the grammar yet). The data then appears in the same root without a reset, and the
+    whole project is linted again: none of the three rules may keep the failed read.
+    """
+    from xbsl import dataset
+
+    source, version = _installed_version()
+    files = _three_rules_project()
+    root = tmp_path / "data"
+    root.mkdir()
+    dataset.set_data_root(root)
+    try:
+        descriptions = {path: text for path, text in files.items() if path.endswith(".yaml")}
+        assert lint(descriptions, RULE, IMAGE_RULE, READ_RULE) == []
+        _install_data(source, version, root)
+        found = lint(files, RULE, IMAGE_RULE, READ_RULE)
+    finally:
+        dataset.set_data_root(None)
+    assert sorted((d.rule_id, d.path, d.line) for d in found) == [
+        (RULE, "Panel.yaml", 5), (IMAGE_RULE, "Panel.yaml", 7), (READ_RULE, "Files.xbsl", 2)]
+
+
+@pytest.mark.needs_data
+def test_platform_scope_is_read_once_the_catalog_appears(tmp_path):
+    """The inherited names of a platform base type are not kept as unknown for want of data."""
+    from xbsl import dataset
+    from xbsl.rules import _server_calls
+
+    source, version = _installed_version()
+    root = tmp_path / "data"
+    root.mkdir()
+    dataset.set_data_root(root)
+    try:
+        assert _server_calls._platform_scope("ФормаОбъекта") is None
+        _install_data(source, version, root)
+        scope = _server_calls._platform_scope("ФормаОбъекта")
+    finally:
+        dataset.set_data_root(None)
+    assert scope is not None and "ЗаписатьИЗакрыть" in scope
+
+
+@pytest.mark.needs_data
+def test_catalogs_without_the_ui_schema_are_read_again(tmp_path):
+    """A read that found the stdlib but not the ui schema is not kept either."""
+    from xbsl import dataset
+    from xbsl.rules import _server_calls
+
+    source, version = _installed_version()
+    root = tmp_path / "data"
+    _install_data(source, version, root, skip=("uischema.json",))
+    dataset.set_data_root(root)
+    try:
+        schema, names = _server_calls._catalogs()
+        assert schema == {} and names
+        shutil.copyfile(source / "uischema.json", root / version / "uischema.json")
+        schema, _names = _server_calls._catalogs()
+    finally:
+        dataset.set_data_root(None)
+    assert schema.get("components")

@@ -36,36 +36,56 @@ def annotation_forms(name: str) -> frozenset[str]:
     return frozenset((*terms.key_forms(name), terms.common_english(name) or name))
 
 
-@lru_cache(maxsize=1)
+#: The catalogs once they were read, and the scope of every base type looked up in them. A
+#: failed read is not kept, so the next call reads the files again: an editor or an MCP server
+#: started before the platform data was installed used to keep every rule over these facts
+#: silent until a reset.
+_CATALOGS: list[tuple[dict, frozenset[str]]] = []
+_SCOPES: dict[str, frozenset[str] | None] = {}
+
+
 def _catalogs() -> tuple[dict, frozenset[str]] | None:
-    """The ui schema and the stdlib names; None where the platform data is not installed."""
+    """The ui schema and the stdlib names; None where the platform data is not installed.
+
+    Only a complete read is kept. Without the stdlib the answer is None, without the ui schema
+    the schema is empty, and in both cases the next call reads the files again.
+    """
+    if _CATALOGS:
+        return _CATALOGS[0]
     try:
         stdlib = dataset.load_json("stdlib.json") or {}
     except dataset.DatasetError:
         return None
-    return dataset.load_ui_schema() or {}, frozenset(stdlib.get("names", ()))
+    schema = dataset.load_ui_schema()
+    catalogs = (schema or {}, frozenset(stdlib.get("names", ())))
+    if schema is not None:
+        _CATALOGS.append(catalogs)
+    return catalogs
 
 
-@lru_cache(maxsize=None)
 def _platform_scope(head: str) -> frozenset[str] | None:
     """Properties and events a platform base type gives a component; None if unknown.
 
     A form's command is one of them: `WriteAndClose.Execute()` runs the inherited
-    property and never reaches a common module that happens to share the name.
+    property and never reaches a common module that happens to share the name. The answer
+    is kept once the type catalog was read, and without the catalog the next call reads it
+    again.
     """
-    canonical = uischema.canonical_component(head)
+    if head in _SCOPES:
+        return _SCOPES[head]
     try:
         members = (dataset.load_json("stdlib.json") or {}).get("type_members") or {}
     except dataset.DatasetError:
         return None
-    if canonical not in members:
-        return None
-    return _inherited_properties(canonical)
+    canonical = uischema.canonical_component(head)
+    scope = _inherited_properties(canonical) if canonical in members else None
+    _SCOPES[head] = scope
+    return scope
 
 
 dataset.register_reset(annotation_forms.cache_clear)
-dataset.register_reset(_catalogs.cache_clear)
-dataset.register_reset(_platform_scope.cache_clear)
+dataset.register_reset(_CATALOGS.clear)
+dataset.register_reset(_SCOPES.clear)
 
 
 def _type_head(written: str) -> str:
