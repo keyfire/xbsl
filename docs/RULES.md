@@ -322,10 +322,6 @@ build the string by concatenation.
 the platform IDE. The fix drops the name of an unused `use` variable, and the resource is still
 closed at the end of the scope.
 
-<a id="c-code-captured-local-write"></a>**`code/captured-local-write`.** A write before the
-capture in a loop reusing the same binding is judged too. Earlier writes, a fresh local on each
-iteration and mutation of members or elements stay allowed. There is no automatic rewrite.
-
 <a id="c-style-boolean-ternary"></a>**`style/boolean-ternary`.** The rule judges a module, a
 string interpolation and a yaml binding. The fix writes the condition or its negation the way the
 platform binds `not`.
@@ -346,6 +342,10 @@ are left alone: a structure field is a serialization contract.
 `HasErrors` are the names to write. Judged only where the boolean type is proven: a type
 annotation or a boolean literal initializer.
 
+
+<a id="c-code-captured-local-write"></a>**`code/captured-local-write`.** A write before the
+capture in a loop reusing the same binding is judged too. Earlier writes, a fresh local on each
+iteration and mutation of members or elements stay allowed. There is no automatic rewrite.
 ### Tier D - semantics over stdlib, forms and the metamodel
 
 Needs the project index and platform data: unknown types and objects, enumeration values,
@@ -810,8 +810,7 @@ event. Declaring the variable with `use` closes the resource on every exit path.
 arrived as a parameter, one the method closes by hand and one it returns to its caller are left to
 the author.
 
-<a
-id="d-conventions-untranslated-visible-literal"></a>**`conventions/untranslated-visible-literal`.**
+<a id="d-conventions-untranslated-visible-literal"></a>**`conventions/untranslated-visible-literal`.**
 The intent is counted per element kind, so a same-named property of another kind is not judged. On
 a project whose descriptor lists fewer than two localization languages the rule stays silent.
 
