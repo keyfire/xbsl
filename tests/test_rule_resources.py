@@ -1,12 +1,15 @@
 """Checks of the resource rules: code/resource-bare-name and code/unknown-resource.
 
-The platform image library is stubbed, so the tests need no documentation data; one test
-marked needs_data checks that the real library is read and holds the documented names.
+The platform image library is stubbed, so the tests need no documentation data: either the
+whole library or its two sources, the documentation page and the table of pairs. The tests
+marked needs_data check that the real library is read and holds the documented names.
 """
+
+import types
 
 import pytest
 
-from xbsl import engine
+from xbsl import dataset, docs, engine
 from xbsl.cli import discover
 from xbsl.rules import resources
 
@@ -207,6 +210,123 @@ def test_real_image_library_is_read():
     library = resources._platform_images()
     assert len(library) > 100
     assert {"Настройки.svg", "ГалочкаВКруге.svg", "Грузовик.svg"} <= library
+
+
+@pytest.mark.needs_data
+def test_real_table_of_pairs_adds_the_english_names():
+    if not (dataset.load_json("uiterms.json") or {}).get("resource_paths"):
+        pytest.skip("the data was extracted before the table of pictures")
+    resources._platform_images.cache_clear()
+    library = resources._platform_images()
+    assert {"Settings.svg", "CheckInCircle.svg", "Truck.svg"} <= library
+    assert {"Настройки.svg", "Грузовик.svg"} <= library
+
+
+# --- the library in both spellings --------------------------------------------------------
+
+#: The documentation page names the pictures of the library in Russian only.
+_LIBRARY_PAGE = "<ul> <li> Грузовик.svg</li> <li> Настройки.svg</li> </ul>"
+#: The table of pairs as the extractor files it (uiterms.resource_paths): a picture by its
+#: place in the jar, the Russian library against the English one.
+_PICTURE_PAIRS = {
+    "Icons/Стд/Ресурсы/Грузовик.svg": "Icons/Std/Resources/Truck.svg",
+    "Icons/Стд/Ресурсы/Настройки.svg": "Icons/Std/Resources/Settings.svg",
+}
+
+
+@pytest.fixture
+def library_sources(monkeypatch):
+    """Both sources of the library stubbed: `page` is the html of the documentation page (None -
+    no documentation data), `table` the table of pairs (None - data extracted before it)."""
+    sources = types.SimpleNamespace(page=_LIBRARY_PAGE, table=dict(_PICTURE_PAIRS))
+    original = dataset.load_json
+
+    def page(doc_id, version=None):
+        if doc_id != "topics/image-library" or sources.page is None:
+            return None
+        return {"id": doc_id, "html": sources.page}
+
+    def load_json(name, *args, **kwargs):
+        if name != "uiterms.json":
+            return original(name, *args, **kwargs)
+        return {} if sources.table is None else {"resource_paths": dict(sources.table)}
+
+    monkeypatch.setattr(docs, "page", page)
+    monkeypatch.setattr(dataset, "load_json", load_json)
+    resources._platform_images.cache_clear()
+    yield sources
+    monkeypatch.undo()
+    dataset.set_data_root(None)  # the reset hooks drop every table read from the stubs
+    resources._platform_images.cache_clear()
+
+
+def _library_with(sources, **changes):
+    """The library after the sources change, read afresh."""
+    for name, value in changes.items():
+        setattr(sources, name, value)
+    resources._platform_images.cache_clear()
+    return resources._platform_images()
+
+
+def _english_method(body):
+    return f"// M\n\nmethod M(): BinaryObject.Reference\n    return {body}\n;\n"
+
+
+@pytest.mark.parametrize("key", ["Truck.svg", "Std::Truck.svg", "Стд::Truck.svg"],
+                         ids=["bare", "std", "russian-namespace"])
+def test_english_name_of_a_library_picture_is_known(tmp_path, library_sources, key):
+    # the translator writes the English name of a picture of the library, and the platform's
+    # own sources use both forms of it: `Resource{Std::...}` and the bare English name
+    assert not _run(tmp_path, _english_method(f"Resource{{{key}}}.Link"), _UNKNOWN)
+
+
+@pytest.mark.parametrize("key", ["Грузовик.svg", "Стд::Грузовик.svg"], ids=["bare", "std"])
+def test_russian_name_stays_known_next_to_the_table(tmp_path, library_sources, key):
+    assert not _run(tmp_path, _method(f"Ресурс{{{key}}}.Ссылка"), _UNKNOWN)
+
+
+@pytest.mark.parametrize("key", ["Truck3.svg", "Std::Truck3.svg"])
+def test_unknown_english_name_is_still_flagged(tmp_path, library_sources, key):
+    d = _run(tmp_path, _english_method(f"Resource{{{key}}}.Link"), _UNKNOWN)
+    assert len(d) == 1 and d[0].rule_id == _UNKNOWN
+    assert f"'{key}'" in d[0].message
+
+
+def test_without_the_table_an_english_name_is_unknown(tmp_path, library_sources):
+    # data extracted before the table: only the documentation names the library, in Russian
+    _library_with(library_sources, table=None)
+    assert len(_run(tmp_path, _english_method("Resource{Std::Truck.svg}.Link"), _UNKNOWN)) == 1
+    assert not _run(tmp_path / "ru", _method("Ресурс{Стд::Грузовик.svg}.Ссылка"), _UNKNOWN)
+
+
+def test_the_table_alone_does_not_make_the_library(tmp_path, library_sources):
+    # without the documentation page the rule stays silent, whatever the table holds
+    assert _library_with(library_sources, page=None) == frozenset()
+    assert not _run(tmp_path, _english_method("Resource{Std::Truck3.svg}.Link"), _UNKNOWN)
+
+
+@pytest.mark.parametrize("russian,english,key", [
+    # a folder of the library below the resources folder stays part of the key
+    ("Icons/Стд/Ресурсы/Папка/Грузовик.svg", "Icons/Std/Resources/Folder/Truck.svg",
+     "Folder/Truck.svg"),
+    # either spelling of the resources folder is the resources folder
+    ("Icons/Стд/Ресурсы/Грузовик.svg", "Icons/Std/Ресурсы/Truck.svg", "Truck.svg"),
+    # a row that does not lie below a resources folder names no key
+    ("Icons/Стд/Картинки/Грузовик.svg", "Icons/Std/Pictures/Truck.svg", None),
+    ("Грузовик.svg", "Truck.svg", None),
+], ids=["subfolder", "either-folder-spelling", "other-folder", "no-place"])
+def test_a_row_of_the_table_gives_the_key_below_the_resources_folder(
+        library_sources, russian, english, key):
+    library = _library_with(library_sources, table={russian: english})
+    assert library - {"Грузовик.svg", "Настройки.svg"} == ({key} if key else set())
+
+
+def test_library_is_read_again_when_the_data_changes(library_sources):
+    """Pinning another root or version drops the library the rule read before."""
+    assert "Truck.svg" not in _library_with(library_sources, table=None)
+    library_sources.table = dict(_PICTURE_PAIRS)
+    dataset.set_data_root(None)
+    assert "Truck.svg" in resources._platform_images()
 
 
 # --- both spellings of the resources folder ----------------------------------------------

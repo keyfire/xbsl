@@ -215,13 +215,13 @@ def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
     return (title, props) if is_component else None
 
 
-def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
+def page_members(raw: str, *, inherited: bool = True) -> tuple[set[str], set[str], set[str]]:
     """Type members for dot completion: (properties, methods, events).
 
     Own members are the H3 headings of the "Свойства" / "Методы" / "События" sections,
     inherited ones are the link texts of the matching "Список унаследованных ..." sections
     (H3s there are base type names, not members). Constructors, literals and the hierarchy do
-    not count.
+    not count. `inherited=False` leaves the inherited ones out - what the type itself declares.
 
     Most stdlib types have no properties at all (in Element even Длина() is a method); the
     "Свойства" section mostly belongs to interface components and record types.
@@ -239,14 +239,16 @@ def page_members(raw: str) -> tuple[set[str], set[str], set[str]]:
     events: set[str] = set()
     # The longest heading first: the inherited-events heading starts with the same words as
     # the inherited-properties one, and the events heading must not be read as a property section.
-    inherited = (("Список унаследованных методов", methods),
-                 ("Список унаследованных событий", events),
-                 ("Список унаследованных свойств", props))
+    inherited_sections = (("Список унаследованных методов", methods),
+                          ("Список унаследованных событий", events),
+                          ("Список унаследованных свойств", props))
     own = (("Методы", methods), ("События", events), ("Свойства", props))
     for section in _H2_OPEN_RE.split(ma.group(1)):
         head = _plain_text(section[:200])
-        target = next((t for prefix, t in inherited if head.startswith(prefix)), None)
+        target = next((t for prefix, t in inherited_sections if head.startswith(prefix)), None)
         if target is not None:
+            if not inherited:
+                continue
             found = (_plain_text(m.group(1)) for m in _LINK_RE.finditer(section))
         else:
             target = next((t for prefix, t in own if head.startswith(prefix)), None)

@@ -16,13 +16,14 @@ import re
 from functools import lru_cache
 
 from xbsl import dataset, metamodel, terms, typeinfer, uischema
+from xbsl.engine import RESOURCE_DIRS
 
 
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
                    ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
                    _unanimous_enum_value, _member_names, reference_only_members,
-                   _platform_facets, _facet_owners):
+                   _platform_facets, _facet_owners, _facet_keys, _library_pictures):
         cached.cache_clear()
 
 
@@ -200,9 +201,132 @@ def facet_of(owner: str, name: str) -> str | None:
     the platform type the word is the facet, spelled by the facet table (`Privilege`), however
     the project spells a word of its own that looks the same.
     """
-    if not owner or not name or f"{owner}.{name}" not in _platform_facets():
+    if not owner or not name:
         return None
-    return facet_suffix_english(name)
+    facet = _facet_keys().get((owner, name))
+    return facet_suffix_english(facet.rpartition(".")[2]) if facet else None
+
+
+@lru_cache(maxsize=1)
+def _facet_keys() -> dict[tuple[str, str], str]:
+    """{(owner, facet) in any spelling of either part: the facet as the catalog keys it}.
+
+    A module may write the entity in one language and the facet in the other
+    (`Entity.Право`, `Сущность.Privilege`), and each part is paired by the facet table. A pair
+    of spellings two facets would share is dropped rather than guessed.
+    """
+    out: dict[tuple[str, str], str] = {}
+    dropped: set[tuple[str, str]] = set()
+    for facet in sorted(_platform_facets()):
+        owner, _dot, suffix = facet.rpartition(".")
+        english = terms.english(facet, "facets") or ""
+        owner_en, dot_en, suffix_en = english.rpartition(".")
+        owners = {owner, owner_en} if dot_en else {owner}
+        suffixes = {suffix, suffix_en} if dot_en else {suffix}
+        for key in ((o, s) for o in owners for s in suffixes):
+            if key in dropped:
+                continue
+            if out.get(key, facet) != facet:
+                del out[key]
+                dropped.add(key)
+                continue
+            out[key] = facet
+    return out
+
+
+def facet_value_of(root: str, facet: str, value: str) -> str | None:
+    """The English spelling of `value` read off the platform facet `root.facet`, or None.
+
+    `Сущность.Право.Чтение` names a value of the privilege facet of the generic entity, and the
+    facet lists its values as an enumeration of its own - under the whole name of the facet,
+    since `Право` alone is the last part of many a name. Anything that is not a facet the type
+    catalog declares answers None, and the caller keeps reading the word the way it did: a
+    project object spelled like the entity, or an attribute spelled like the facet, is no facet
+    of the platform. The caller decides whether the root is the platform's type at all.
+    """
+    if not root or not facet or not value:
+        return None
+    owner = _facet_keys().get((root, facet))
+    return enum_value_of(owner, value) if owner else None
+
+
+@lru_cache(maxsize=1)
+def _library_pictures() -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """The pictures of the platform's library the way a reference names them.
+
+    ({subsystem of the library in either spelling: its English spelling},
+     {that subsystem in either spelling, or "" for a bare name: {key in either spelling: the
+     English key}}), where a key is the path below the folder of resources.
+
+    The data files each pair by the place in the jar (`Icons/Стд/Ресурсы/Аккаунт.svg` ->
+    `Icons/Std/Resources/Account.svg`), and a reference names the same picture relative to the
+    folder of resources of its subsystem - qualified (`Стд::Аккаунт.svg`) or bare, as the
+    documentation of the library shows. A row that is not a picture below the folder of
+    resources of a subsystem on both sides is skipped, and a spelling two pictures would share is
+    dropped rather than guessed. The English keys answer themselves, so a reference already
+    written in English keeps its name while the subsystem before it moves.
+    """
+    try:
+        table = (dataset.load_json("uiterms.json") or {}).get("resource_paths") or {}
+    except Exception:  # noqa: BLE001 - no data, no pictures
+        return {}, {}
+    namespaces: dict[str, str] = {}
+    keys: dict[str, dict[str, str]] = {}
+    dropped: set[tuple[str, str]] = set()
+
+    def put(table_of: dict[str, str], scope: str, spelling: str, english: str) -> None:
+        if (scope, spelling) in dropped:
+            return
+        if table_of.get(spelling, english) != english:
+            del table_of[spelling]
+            dropped.add((scope, spelling))
+            return
+        table_of[spelling] = english
+
+    for russian, english in table.items() if isinstance(table, dict) else ():
+        if not isinstance(russian, str) or not isinstance(english, str):
+            continue
+        ru, en = russian.split("/"), english.split("/")
+        if (len(ru) < 4 or len(ru) != len(en) or ru[0] != en[0]
+                or ru[2] not in RESOURCE_DIRS or en[2] not in RESOURCE_DIRS):
+            continue
+        ru_key, en_key = "/".join(ru[3:]), "/".join(en[3:])
+        for spelling in (ru[1], en[1]):
+            put(namespaces, "::", spelling, en[1])
+        for scope in (ru[1], en[1], ""):
+            for spelling in (ru_key, en_key):
+                put(keys.setdefault(scope, {}), scope, spelling, en_key)
+    return namespaces, keys
+
+
+def resource_path_english(reference: str) -> str | None:
+    """The English spelling of a reference to a picture of the platform's library, or None.
+
+    `reference` is what a yaml value, the body of `Ресурс{...}` or a string literal writes:
+    `Стд::Аккаунт.svg` or `Аккаунт.svg`, a folder below the resources separated either way. The
+    answer keeps the form - the subsystem when it is written, each separator as written. Only a
+    key the library holds answers: a folder the library does not have, another subsystem or the
+    last name of a path alone never do, so a file of the project is not renamed after a picture
+    it happens to share a name with. Whether the project keeps such a file itself is the
+    caller's question (Resolver.library_picture), and without the table in the data every
+    reference answers None, as before it.
+    """
+    if not reference:
+        return None
+    namespace, qualified, key = reference.rpartition("::")
+    namespaces, keys = _library_pictures()
+    if qualified and namespace not in namespaces:
+        return None
+    parts = re.split(r"([/\\])", key)
+    english = (keys.get(namespace if qualified else "") or {}).get("/".join(parts[::2]))
+    if english is None:
+        return None
+    names = english.split("/")
+    if len(names) != len(parts[::2]):
+        return None
+    written = "".join(name + (parts[2 * index + 1] if 2 * index + 1 < len(parts) else "")
+                      for index, name in enumerate(names))
+    return f"{namespaces[namespace]}::{written}" if qualified else written
 
 
 @lru_cache(maxsize=1)
@@ -350,6 +474,19 @@ def member_of(owner: str, name: str) -> str | None:
     return terms.member_english_of(owner, name)
 
 
+def manager_member_of(kind: str, name: str) -> str | None:
+    """The English spelling of `name` as a member of the manager of an element `kind`, or None.
+
+    `ПравоНаОтчеты.Проверить()` calls the manager of the element, and the element's kind names
+    the manager: the data joins the two where the distribution proves it (see
+    terms.manager_member_english). Whether the receiver really is the element - not a variable
+    spelled the same - is the caller's to decide.
+    """
+    if not kind or not name:
+        return None
+    return terms.manager_member_english(kind, name)
+
+
 @lru_cache(maxsize=None)
 def member_spellings(name: str) -> frozenset[str]:
     """Every English spelling the platform gives the member `name`, whatever the owner.
@@ -483,6 +620,13 @@ def _metamodel_enum_value(enum_class: str, value: str) -> str | None:
 
 @lru_cache(maxsize=1)
 def _ui_enum_tables() -> dict[str, dict[str, str]]:
+    """{enumeration: {Russian value: English}} the answers without a pinned owner are read from.
+
+    The table of a facet (`Сущность.Право`) is left out: its values belong to the facet and are
+    read through it (see facet_value_of). Counted here, its `Изменение` would disagree with an
+    enumeration that spells the word otherwise, and a value of that enumeration would lose the
+    only answer it had.
+    """
     try:
         data = dataset.load_json("uiterms.json") or {}
     except Exception:  # noqa: BLE001 - no data, no pairs
@@ -490,7 +634,7 @@ def _ui_enum_tables() -> dict[str, dict[str, str]]:
     return {
         name: dict(pairs)
         for name, pairs in (data.get("enum_values") or {}).items()
-        if isinstance(pairs, dict)
+        if isinstance(pairs, dict) and "." not in name
     }
 
 

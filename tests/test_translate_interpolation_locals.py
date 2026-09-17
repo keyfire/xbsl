@@ -319,6 +319,50 @@ def test_a_component_property_is_the_property_where_the_method_sees_it(tmp_path:
     assert 'return "%{DateTime.Now()} %{Inscription.Length()}"' in module
 
 
+def test_a_member_of_a_component_property_follows_the_property_only_where_the_method_sees_it(
+        tmp_path: Path):
+    """The type of a property spells the members read off it only in a method that sees the
+    property. A client method removes an item of the array the property holds - `Remove`; a
+    static method and a method compiled on the server alone see no property, the same name there
+    is the platform's manager of scheduled jobs, and its removal method is `Delete`."""
+    root = tmp_path / "ru"
+    _write(root / "ПанельЗаданий.yaml", (
+        "ВидЭлемента: КомпонентИнтерфейса\n"
+        "Ид: 1d1f5c60-0000-4000-8000-000000000e06\n"
+        "Имя: ПанельЗаданий\n"
+        "ОбластьВидимости: ВПроекте\n"
+        "Наследует:\n"
+        "    Тип: Группа\n"
+        "Свойства:\n"
+        "    -\n"
+        "        Имя: ЗапланированныеЗадания\n"
+        "        Тип: Массив<ЗапланированноеЗадание>\n"
+    ))
+    _write(root / "ПанельЗаданий.xbsl", (
+        "метод Клиентский()\n"
+        "    ЗапланированныеЗадания.Удалить(0)\n"
+        ";\n"
+        "\n"
+        "статический метод Общий(Задание: ЗапланированноеЗадание)\n"
+        "    ЗапланированныеЗадания.Удалить(Задание)\n"
+        ";\n"
+        "\n"
+        "@НаСервере\n"
+        "метод Серверный(Задание: ЗапланированноеЗадание)\n"
+        "    ЗапланированныеЗадания.Удалить(Задание)\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    translate_project(root, _dictionary({
+        "ПанельЗаданий": "JobPanel", "ЗапланированныеЗадания": "JobList", "Задание": "Job",
+        "Клиентский": "OnClientSide", "Общий": "Shared", "Серверный": "OnServerSide",
+    }), out)
+    module = (out / "JobPanel.xbsl").read_text(encoding="utf-8")
+    assert "method OnClientSide()\n    JobList.Remove(0)" in module
+    assert "static method Shared(Job: ScheduledJob)\n    ScheduledJobs.Delete(Job)" in module
+    assert "method OnServerSide(Job: ScheduledJob)\n    ScheduledJobs.Delete(Job)" in module
+
+
 # --- the owner of a module ------------------------------------------------------------------
 
 

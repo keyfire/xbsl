@@ -42,6 +42,8 @@ for _code, _size in {
 
 _LDC, _LDC_W = 0x12, 0x13
 _INVOKE = (0xB6, 0xB7, 0xB8, 0xB9)  # virtual, special, static, interface
+_INVOKESPECIAL = 0xB7
+_NEW = 0xBB
 _GETSTATIC, _PUTSTATIC = 0xB2, 0xB3
 _ACONST_NULL = 0x01
 _ALOAD, _ASTORE = 0x19, 0x3A
@@ -136,6 +138,42 @@ def called_method(pool: dict[int, tuple[int, object]], index: int) -> str | None
     return f"{text(pool, class_index)}.{text(pool, described[1][0])}"  # type: ignore[index]
 
 
+def method_descriptor(pool: dict[int, tuple[int, object]], index: int) -> str | None:
+    """The descriptor of a method reference (`(Lpkg/Type;)V`), or None when the entry is not one."""
+    entry = pool.get(index)
+    if not entry or entry[0] not in (10, 11):
+        return None
+    described = pool.get(entry[1][1])  # type: ignore[index]
+    if not described or described[0] != 12:
+        return None
+    return text(pool, described[1][1])  # type: ignore[index]
+
+
+def own_class(blob: bytes) -> str | None:
+    """The internal name of the class itself (`pkg/Type`), or None for what is not a class file."""
+    if blob[:4] != b"\xca\xfe\xba\xbe" or len(blob) < 10:
+        return None
+    try:
+        pool, position = constant_pool(blob)
+    except (IndexError, UnicodeDecodeError):
+        return None
+    return text(pool, int.from_bytes(blob[position + 2:position + 4], "big"))
+
+
+def referenced_classes(blob: bytes) -> set[str]:
+    """The internal names of every class the constant pool refers to, the class itself included.
+
+    A class names another one this way when its code touches it - calls it, constructs it,
+    reads its fields. A name met only inside a descriptor or a signature is not in the set:
+    that is a type the class mentions, not one it uses.
+    """
+    pool, _position = constant_pool(blob)
+    return {
+        name for tag, value in pool.values()
+        if tag == 7 and (name := text(pool, value)) is not None  # type: ignore[arg-type]
+    }
+
+
 def field_name(pool: dict[int, tuple[int, object]], index: int) -> str | None:
     """The name of a field reference, or None when the entry is not one."""
     entry = pool.get(index)
@@ -180,17 +218,17 @@ def _method_code(blob: bytes, pool: dict[int, tuple[int, object]], position: int
 def _walk(code: bytes) -> Iterator[tuple[int, int]]:
     """(opcode, operand) of every instruction of one method, in order.
 
-    The operand is the constant pool index of `ldc`, `ldc_w`, a call and a static field access,
-    the local variable of `aload`/`astore` (the short forms included, the widened ones too), and
-    -1 for anything else. The walk has to know the length of every instruction, a switch among
-    them, or it reads operand bytes as code from there on.
+    The operand is the constant pool index of `ldc`, `ldc_w`, a call, a static field access and
+    `new`, the local variable of `aload`/`astore` (the short forms included, the widened ones
+    too), and -1 for anything else. The walk has to know the length of every instruction, a
+    switch among them, or it reads operand bytes as code from there on.
     """
     at = 0
     while at < len(code):
         opcode = code[at]
         if opcode == _LDC or opcode in (_ALOAD, _ASTORE):
             yield opcode, code[at + 1]
-        elif opcode in (_LDC_W, _GETSTATIC, _PUTSTATIC) or opcode in _INVOKE:
+        elif opcode in (_LDC_W, _GETSTATIC, _PUTSTATIC, _NEW) or opcode in _INVOKE:
             yield opcode, int.from_bytes(code[at + 1:at + 3], "big")
         elif opcode in _ALOAD_N:
             yield _ALOAD, opcode - _ALOAD_N.start
@@ -253,6 +291,33 @@ def builder_calls(blob: bytes) -> list[tuple[str, list[str]]]:
         for code in _method_code(blob, pool, position)
         for kind, name, pushed in _events(code, pool) if kind == "call"
     ]
+
+
+def constructions(blob: bytes) -> list[tuple[str, str]]:
+    """[(the class the code constructs, the descriptor of the constructor it calls)].
+
+    `new` reserves the object and the call of `<init>` builds it, with the arguments pushed in
+    between - so the call is paired with the `new` of the same class, the innermost first. A
+    constructor called with no `new` of its class before it is the call a subclass makes to its
+    base on itself, and constructs nothing. The descriptor says what the object is built from:
+    `(Lpkg/AcmeG5ProjectType;...)V` is an object made for one element of a project.
+    """
+    pool, position = constant_pool(blob)
+    found: list[tuple[str, str]] = []
+    for code in _method_code(blob, pool, position):
+        pending: list[str] = []
+        for opcode, operand in _walk(code):
+            if opcode == _NEW:
+                name = text(pool, operand)
+                if name is not None:
+                    pending.append(name)
+            elif opcode == _INVOKESPECIAL:
+                owner, _dot, method = (called_method(pool, operand) or "").rpartition(".")
+                if method != "<init>" or owner not in pending:
+                    continue
+                del pending[len(pending) - 1 - pending[::-1].index(owner)]
+                found.append((owner, method_descriptor(pool, operand) or ""))
+    return found
 
 
 def declared_terms(blob: bytes) -> list[tuple[str, str, str]]:

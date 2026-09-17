@@ -167,10 +167,17 @@ sees the same names, types and dictionary entries.
 
 A resource file is the project's name at every place it stands. The file of the tree, a yaml
 property, a path in a string and the body of `Resource{...}` take the dictionary's word together, or
-keep the file's own name together. A picture of the platform's library is not the project's and
-keeps the reading it always had. A method a component of the project declares, called through a node
-of a form, is the project's word too, while a built-in command of a platform component keeps the
-spelling of the ui vocabulary.
+keep the file's own name together.
+
+Pictures of the platform's library are not files of the project. Each picture exists under a
+Russian and an English name, and a yaml property, a string or `Resource{...}` that names one takes
+the English name, bare or with the library namespace: `Стд::Аккаунт.svg` becomes
+`Std::Account.svg`. If the project keeps its own file under the same name, the reference goes to
+that file. The translator takes the English names from `resource_paths` in the platform's
+`uiterms.json`, and on data without that section a reference does not get them.
+
+A method a component of the project declares, called through a node of a form, is the project's
+word too, while a built-in command of a platform component keeps the spelling of the ui vocabulary.
 
 ## What is left alone
 

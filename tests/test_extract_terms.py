@@ -288,3 +288,114 @@ def test_no_kind_enum_copy_answers_with_nothing():
     with zipfile.ZipFile(car, "w") as z:
         z.writestr("readme.txt", "no jars")
     assert scan_kind_table(zipfile.ZipFile(car)) == {}
+
+
+# --- the members table that spells the manager of an element kind ------------------------------
+
+_MANAGER_CLASS = "demo/acme/AcmeRightManagerCtMetaObject"
+_PROJECT_TYPE_INIT = "(Ldemo/acme/AcmeRightG5ProjectType;)V"
+_TEMPLATE_PAGE = ("data/docs/help/ru/stdlib/element/xbsl/DeveloperName/ProjectName/SubsystemName/"
+                  "AcmeRightName_ru/index.html")
+_LSP_JAR = ("data/ide/theia/plugins/@1c-appengine-plugin/bin/appengine-lsp/repo/"
+            "com.e1c.g5rt.lsp.server.appengine-1.0.jar")
+_LSP_PAGE = "docs/element/xbsl/ru/DeveloperName_ProjectName_SubsystemName_AcmeRightName.md"
+
+
+def _template_html(methods: list[str]) -> str:
+    own = "".join(f"<h3>{name}</h3><p>Доступность: Сервер</p>" for name in methods)
+    return (
+        "<html><head><title>{ИмяПраваАкме} | 1С:Предприятие.Элемент</title></head><body>"
+        f"<article><h2>Методы</h2>{own}"
+        "<h2>Список унаследованных методов</h2><h3>Объект</h3><a href=\"#\">ВСтроку</a>"
+        "</article></body></html>"
+    )
+
+
+def _template_markdown(methods: list[str]) -> str:
+    rows = [f"# DeveloperName::ProjectName::SubsystemName::AcmeRightName#{name}()\n\n"
+            "**Определен:** **ИмяПраваАкме**\n" for name in methods]
+    rows.append("# DeveloperName::ProjectName::SubsystemName::AcmeRightName#ToString()\n\n"
+                "**Определен:** **Объект**\n")
+    return "Содержит методы права.\n\n" + "\n".join(rows)
+
+
+def _manager_car(*, constructed_from: str | None = _PROJECT_TYPE_INIT,
+                 russian: tuple[str, ...] = ("ЕстьПраво", "Проверить"),
+                 english: tuple[str, ...] = ("Check", "HasRight"),
+                 twin: bool = False, foreign_pair: bool = False,
+                 view_from_project_type: bool = False):
+    """A distribution with one element kind, its template pages and the compiler classes."""
+    import io
+    import zipfile
+
+    from test_extract_classcode import TERM, _class_constructing, _class_of
+
+    stated = [(TERM, ["Check", "Проверить"]), (TERM, ["HasRight", "ЕстьПраво"])]
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        z.writestr("demo/kinds/ProjectElementKindCmptEnum.class",
+                   _kind_enum_blob([("AcmeRight", "АкмеПраво")]))
+        z.writestr(_MANAGER_CLASS + ".class", _class_of(stated))
+        steps: list[tuple[str, ...]] = []
+        if constructed_from is not None:
+            steps += [("new", _MANAGER_CLASS), ("init", _MANAGER_CLASS, constructed_from)]
+        if view_from_project_type:
+            # the same environment builds something else from the project type: not a metaobject
+            steps += [("new", "demo/acme/AcmeRightView"),
+                      ("init", "demo/acme/AcmeRightView", _PROJECT_TYPE_INIT)]
+        if twin:
+            twin_class = "demo/acme/AcmeRightManagerClientCtMetaObject"
+            z.writestr(twin_class + ".class", _class_of(stated))
+            steps += [("new", twin_class), ("init", twin_class, _PROJECT_TYPE_INIT)]
+        z.writestr("demo/acme/AcmeCtEnvironment.class", _class_constructing(steps))
+        if foreign_pair:
+            z.writestr("demo/acme/AcmeRightManagerBslImpl.class",
+                       _class_of([(TERM, ["Lock", "Заблокировать"])]))
+    lsp = io.BytesIO()
+    with zipfile.ZipFile(lsp, "w") as z:
+        z.writestr(_LSP_PAGE, _template_markdown(list(english)))
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
+        z.writestr(_LSP_JAR, lsp.getvalue())
+        z.writestr(_TEMPLATE_PAGE, _template_html(list(russian)))
+    return zipfile.ZipFile(car)
+
+
+def _owners(car) -> dict[str, str]:
+    from xbsl.extract.terms import ManagerEvidence, _scan_meta_objects, manager_owners
+
+    evidence = ManagerEvidence()
+    members, _common, _types = _scan_meta_objects(car, evidence)
+    return manager_owners(car, members, evidence)
+
+
+def test_a_manager_is_filed_under_the_kind_its_template_documents():
+    """The compiler builds the metaobject from the project type of an element, the class
+    states the member pairs, and the template of the kind documents exactly those members in
+    both languages - the Russian help page and the language-server page of the compiled
+    template. The owner is the key the members table files the class under."""
+    assert _owners(_manager_car()) == {"АкмеПраво": "AcmeRightManager"}
+
+
+def test_a_metaobject_no_environment_builds_from_a_project_type_names_no_kind():
+    assert _owners(_manager_car(constructed_from=None)) == {}
+    assert _owners(_manager_car(constructed_from="(Ldemo/acme/Layout;)V",
+                                view_from_project_type=True)) == {}
+
+
+def test_a_template_documented_otherwise_names_no_kind():
+    """The same metaobject with one more method on the help page, or another English member on
+    the language-server page, is not proven to be this kind's manager."""
+    assert _owners(_manager_car(russian=("ЕстьПраво", "Заблокировать", "Проверить"))) == {}
+    assert _owners(_manager_car(english=("HasRight", "Verify"))) == {}
+
+
+def test_two_metaobjects_that_fit_one_kind_name_none_of_them():
+    assert _owners(_manager_car(twin=True)) == {}
+
+
+def test_a_members_table_with_a_word_the_template_lacks_names_no_kind():
+    """The runtime reads the whole row of the owner: a foreign pair under the same key would
+    answer for a word the manager of the kind does not have."""
+    assert _owners(_manager_car(foreign_pair=True)) == {}

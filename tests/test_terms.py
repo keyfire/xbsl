@@ -65,3 +65,57 @@ def test_without_data_only_russian(monkeypatch):
 
 def test_unknown_section_is_not_an_error():
     assert terms.english("Запрос", "нет-такой-секции") is None
+
+
+# --- the manager of an element kind, spelled by the owner the data names ----------------------
+
+
+def _data_root(tmp_path, name: str, full: dict):
+    """A data root of one version whose compiler dictionary is `full`."""
+    import json
+
+    root = tmp_path / name
+    version = root / "1.0.0"
+    version.mkdir(parents=True)
+    (version / "terms_full.json").write_text(json.dumps(full, ensure_ascii=False), encoding="utf-8")
+    (root / "index.json").write_text(
+        json.dumps({"available": ["1.0.0"], "default": "1.0.0"}), encoding="utf-8")
+    return root
+
+
+_MEMBERS = {
+    "AcmeRightManager": {"Проверить": "Check"},
+    "AcmeVerifier": {"Проверить": "Verify"},
+}
+
+
+def test_a_manager_member_is_spelled_by_the_owner_the_data_names(tmp_path):
+    """`Проверить` is Check on the manager of one kind and Verify elsewhere: only the owner the
+    data joins to the kind answers, and a kind the data joins to nothing answers nothing."""
+    root = _data_root(tmp_path, "with", {
+        "members": _MEMBERS, "manager_owners": {"АкмеПраво": "AcmeRightManager"},
+    })
+    terms.dataset.set_data_root(root)
+    try:
+        assert terms.manager_member_english("АкмеПраво", "Проверить") == "Check"
+        assert terms.manager_member_english("АкмеПраво", "Записать") is None
+        assert terms.manager_member_english("Справочник", "Проверить") is None
+        assert terms.manager_member_english("", "Проверить") is None
+    finally:
+        terms.dataset.set_data_root(None)
+
+
+def test_data_without_the_manager_section_answers_nothing_and_is_read_afresh(tmp_path):
+    """Data extracted before the section existed keeps the call a gap; switching the root drops
+    the table read from the previous one."""
+    with_section = _data_root(tmp_path, "with", {
+        "members": _MEMBERS, "manager_owners": {"АкмеПраво": "AcmeRightManager"},
+    })
+    without = _data_root(tmp_path, "without", {"members": _MEMBERS})
+    try:
+        terms.dataset.set_data_root(with_section)
+        assert terms.manager_member_english("АкмеПраво", "Проверить") == "Check"
+        terms.dataset.set_data_root(without)
+        assert terms.manager_member_english("АкмеПраво", "Проверить") is None
+    finally:
+        terms.dataset.set_data_root(None)

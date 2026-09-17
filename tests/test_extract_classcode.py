@@ -170,15 +170,19 @@ def _field(pool: _Pool, owner: str, name: str) -> int:
     return pool._add(bytes([9]) + struct.pack(">HH", owner_index, nat))
 
 
-def _class_of_terms(entries: list[tuple[str, str, list[str]]]) -> bytes:
+def _class_of_terms(entries: list[tuple[str, str, list[str]]], this: str = "Demo",
+                    classes: tuple[str, ...] = ()) -> bytes:
     """A class whose initializer builds each term and stores it into its named field.
 
     This is the shape of a `<Type>Constants` class of the distribution: the two spellings are
     pushed, a term is built from them, and the term goes into a static field whose name says
-    what the pair stands for.
+    what the pair stands for. `this` names the class itself, `classes` are the classes its
+    code refers to - the way a type class refers to the enumeration it lists.
     """
     pool = _Pool()
     code_name = pool.text("Code")
+    for name in classes:
+        pool.klass(name)
     body = bytearray()
     for field, owner_and_name, pushed in entries:
         owner, name = owner_and_name.rsplit(".", 1)
@@ -188,7 +192,7 @@ def _class_of_terms(entries: list[tuple[str, str, list[str]]]) -> bytes:
         body += bytes([0xB3]) + struct.pack(">H", _field(pool, "Demo", field))  # putstatic
     body += bytes([0xB1])  # return
     code = struct.pack(">HHI", 8, 1, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
-    this_class = pool.klass("Demo")
+    this_class = pool.klass(this)
     super_class = pool.klass("java/lang/Object")
     method = struct.pack(">HHHH", 0, pool.text("<clinit>"), pool.text("()V"), 1)
     method += struct.pack(">HI", code_name, len(code)) + code
@@ -237,3 +241,72 @@ def test_reading_terms_leaves_the_member_pairs_alone():
 
     assert classcode.declared_members(blob) == {"Записать": "Write"}
     assert classcode.declared_terms(blob) == []
+
+
+# --- what a class constructs and which classes it names --------------------------------------
+
+
+def _class_constructing(steps: list[tuple[str, ...]], this: str = "Demo") -> bytes:
+    """A class whose single method runs `steps` in order: ("new", class) reserves an object of
+    the class, ("init", class, descriptor) calls its constructor on what is on the stack. An
+    "init" with no "new" of its class before it is the call a subclass makes to its base."""
+    pool = _Pool()
+    code_name = pool.text("Code")
+    body = bytearray()
+    for step in steps:
+        if step[0] == "new":
+            body += bytes([0xBB]) + struct.pack(">H", pool.klass(step[1]))  # new
+            body += bytes([0x59])                                            # dup
+        else:
+            body += bytes([0x2A, 0x01])                                      # aload_0, aconst_null
+            body += bytes([0xB7]) + struct.pack(">H", pool.method(step[1], "<init>", step[2]))
+    body += bytes([0xB1])  # return
+    code = struct.pack(">HHI", 8, 2, len(body)) + bytes(body) + struct.pack(">HH", 0, 0)
+    this_class = pool.klass(this)
+    super_class = pool.klass("java/lang/Object")
+    method = struct.pack(">HHHH", 0, pool.text("build"), pool.text("()V"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61)
+        + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0)
+        + struct.pack(">H", 1) + method
+        + struct.pack(">H", 0)
+    )
+
+
+_MANAGER = "demo/acme/AcmeRightManagerCtMetaObject"
+_PROJECT_TYPE = "(Ldemo/acme/AcmeRightG5ProjectType;)V"
+
+
+def test_a_construction_pairs_the_new_with_the_constructor_it_calls():
+    blob = _class_constructing([("new", _MANAGER), ("init", _MANAGER, _PROJECT_TYPE)])
+
+    assert classcode.constructions(blob) == [(_MANAGER, _PROJECT_TYPE)]
+
+
+def test_a_constructor_called_without_new_constructs_nothing():
+    """A subclass runs the constructor of its base on itself: nothing new comes out of it."""
+    blob = _class_constructing([("init", _MANAGER, _PROJECT_TYPE)])
+
+    assert classcode.constructions(blob) == []
+
+
+def test_nested_constructions_are_paired_by_the_class_they_name():
+    inner = "demo/acme/Layout"
+    blob = _class_constructing([
+        ("new", _MANAGER), ("new", inner), ("init", inner, "()V"),
+        ("init", _MANAGER, _PROJECT_TYPE),
+    ])
+
+    assert classcode.constructions(blob) == [(inner, "()V"), (_MANAGER, _PROJECT_TYPE)]
+
+
+def test_the_class_names_itself_and_the_classes_it_refers_to():
+    blob = _class_of_terms([], this="demo/acme/AcmeRightG5Type",
+                           classes=("demo/acme/AcmeRightG5Enum",))
+
+    assert classcode.own_class(blob) == "demo/acme/AcmeRightG5Type"
+    assert "demo/acme/AcmeRightG5Enum" in classcode.referenced_classes(blob)
+    assert classcode.own_class(b"\xca\xfe") is None

@@ -31,6 +31,8 @@ const IMAGES = "topics/image-library";
 // Specific rules go before group ones. Anchors are heading ids in docs.sqlite
 // (see extract_docs); every pair is verified to exist.
 const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string; anchor?: string }> = [
+  { match: (r) => r === "code/computed-property-server-call", page: "topics/calculated-property-values-for-ui-components" },
+  { match: (r) => r === "code/resource-read-without-cache", page: "stdlib/element/xbsl/Std/Annotations/Environments/AvailableFromClient_ru" },
   { match: (r) => r === "code/deprecated-api", page: "topics/update-app-data" },
   // --- project element names (standard) ---
   { match: (r) => r === "naming/presentation", page: NAMES, anchor: "2-представления-элементов-проекта" },

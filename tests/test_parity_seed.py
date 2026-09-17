@@ -10,11 +10,14 @@ The tool is a script rather than part of the package, so it is loaded by path - 
 tests/test_claims_registry.py loads the claims tool.
 """
 
+import dataclasses
 import importlib.util
 import sys
 from pathlib import Path
 
 import pytest
+
+from xbsl import dataset
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -135,3 +138,62 @@ def test_the_translator_leaves_no_problem_behind_on_a_seed():
         for seed in _TOOL.SEEDS
     }
     assert {rule: found for rule, found in problems.items() if found} == {}
+
+
+#: One pair of the platform's picture library, as the extractor files it (uiterms.resource_paths).
+_TRUCK = {"Icons/Стд/Ресурсы/Грузовик.svg": "Icons/Std/Resources/Truck.svg"}
+#: The module of the picture seeds, written by hand in English.
+_PICTURES_XBSL_EN = ("method Picture(): BinaryObject.Reference\n"
+                     "    return Resource{{{key}}}.Link\n;\n")
+
+
+def _serve_picture_table(monkeypatch, table):
+    """Serve the installed data with the given table of pictures, or without one (None)."""
+    original = dataset.load_json
+
+    def load_json(name, *args, **kwargs):
+        data = original(name, *args, **kwargs)
+        if name != "uiterms.json":
+            return data
+        data = {key: value for key, value in data.items() if key != "resource_paths"}
+        if table is not None:
+            data["resource_paths"] = dict(table)
+        return data
+
+    monkeypatch.setattr(dataset, "load_json", load_json)
+    dataset.set_data_root(None)  # the reset hooks drop every table read before
+
+
+def test_a_picture_of_the_library_reads_the_same_on_data_with_the_picture_table_and_without(
+        monkeypatch):
+    """The library seed on data with the table of pictures and without it.
+
+    With the table the translator writes `Std::Truck.svg`, exactly as the hand-written twin
+    spells it, and all three trees pass. Without the table the translator keeps the Russian
+    name, and the seed still agrees. The control is the hand-written twin on that data: only
+    the table carries the English name, so without it the name is reported.
+    """
+    seed = next(s for s in _TOOL.SEEDS if s.rule == "code/unknown-resource"
+                and "Стд::Грузовик.svg" in "".join(s.files.values()))
+    twin = dataclasses.replace(seed, english={
+        "Project.yaml": _TOOL._PROJECT_EN.format(mode="9.0"),
+        "Main/Resources/Own.svg": "<svg/>",
+        "Main/Pictures.xbsl": _PICTURES_XBSL_EN.format(key="Std::Truck.svg"),
+    })
+    try:
+        _serve_picture_table(monkeypatch, _TRUCK)
+        with_table = _TOOL.run_seed(twin)
+        monkeypatch.undo()
+        _serve_picture_table(monkeypatch, None)
+        plain = _TOOL.run_seed(seed)
+        control = _TOOL.run_seed(twin)
+    finally:
+        monkeypatch.undo()
+        dataset.set_data_root(None)
+
+    assert with_table["status"] == "ok", with_table
+    assert with_table["translator_differs"] == []
+    assert plain["status"] == "ok", plain
+    assert control["status"] == "en-invents", control
+    assert (control["russian"], control["english"], control["translated"]) == (0, 1, 0)
+    assert control["translator_differs"] == ["Main/Pictures.xbsl"]

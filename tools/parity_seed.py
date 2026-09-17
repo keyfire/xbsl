@@ -1822,7 +1822,98 @@ _UPLOADS_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c
 _UPLOADS_XBSL_RU = "метод Сохранить(Данные: Байты): ДвоичныйОбъект.Ссылка\n    знч Загруженный = {call}\n    возврат Загруженный.Ссылка\n;\n"
 _UPLOADS_TOKENS = {"Выгрузки": "Uploads", "Сохранить": "Save", "Данные": "Data", "Загруженный": "Uploaded"}
 
+_COMPUTED_RU = {
+    "Panel.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: Panel\nСодержимое:\n"
+                  "  - Тип: Надпись\n    Заголовок: =Caption()\n",
+    "Panel.xbsl": "метод Caption(): Строка\n    возврат Data.Read()\n;\n",
+    "Data.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Data\nОкружение: Сервер\n",
+    "Data.xbsl": "@НаСервере @ДоступноСКлиента\nметод Read(): Строка\n    возврат \"text\"\n;\n",
+}
+_COMPUTED_EN = {
+    "Panel.yaml": "ElementKind: InterfaceComponent\nName: Panel\nContent:\n"
+                  "  - Type: Label\n    Title: =Caption()\n",
+    "Panel.xbsl": "method Caption(): String\n    return Data.Read()\n;\n",
+    "Data.yaml": "ElementKind: CommonModule\nName: Data\nEnvironment: Server\n",
+    "Data.xbsl": "@OnServer @AvailableFromClient\nmethod Read(): String\n    return \"text\"\n;\n",
+}
+
+_RESOURCE_READ_RU = {
+    "Files.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Files\nОкружение: Сервер\n",
+    "Files.xbsl": "@НаСервере @ДоступноСКлиента\nметод Text(FileName: Строка): Строка\n"
+                  "    возврат ПакетРесурсов.Текущий().Получить(FileName).ОткрытьПотокЧтения()"
+                  ".ПрочитатьКакСтроку()\n;\n",
+}
+_RESOURCE_READ_EN = {
+    "Files.yaml": "ElementKind: CommonModule\nName: Files\nEnvironment: Server\n",
+    "Files.xbsl": "@OnServer @AvailableFromClient\nmethod Text(FileName: String): String\n"
+                  "    return ResourcesPackage.Current().Get(FileName).OpenReadableStream()"
+                  ".ReadAsString()\n;\n",
+}
+
+
 SEEDS: list[Seed] = [
+    Seed(
+        rule="code/computed-property-server-call", expect=FINDING,
+        note="a computed title reaches a declared server endpoint through a client wrapper",
+        files=_COMPUTED_RU, english=_COMPUTED_EN,
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=FINDING,
+        note="an explicit false cache argument still proves the lack of standard caching",
+        files={**_COMPUTED_RU, "Data.xbsl": _COMPUTED_RU["Data.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Ложь)")},
+        english={**_COMPUTED_EN, "Data.xbsl": _COMPUTED_EN["Data.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = False)")},
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=CLEAN,
+        note="a cached endpoint does not imply repeated network requests",
+        files={**_COMPUTED_RU, "Data.xbsl": _COMPUTED_RU["Data.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Истина)")},
+        english={**_COMPUTED_EN, "Data.xbsl": _COMPUTED_EN["Data.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = True)")},
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=CLEAN,
+        note="a method available in both environments executes its client variant",
+        files={**_COMPUTED_RU, "Data.xbsl": "@НаКлиенте " + _COMPUTED_RU["Data.xbsl"]},
+        english={**_COMPUTED_EN, "Data.xbsl": "@OnClient " + _COMPUTED_EN["Data.xbsl"]},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=FINDING,
+        note="a client-available server method returns only the text of a package resource",
+        files=_RESOURCE_READ_RU, english=_RESOURCE_READ_EN,
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=FINDING,
+        note="an explicit false cache argument leaves the resource text uncached",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Ложь)")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = False)")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="the standard result cache already keeps the text on the client",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Истина)")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = True)")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="a path computed by another call may depend on data the read does not show",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": _RESOURCE_READ_RU["Files.xbsl"].replace(
+            "Получить(FileName)", "Получить(Settings.Location(FileName))")},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": _RESOURCE_READ_EN["Files.xbsl"].replace(
+            "Get(FileName)", "Get(Settings.Location(FileName))")},
+    ),
+    Seed(
+        rule="code/resource-read-without-cache", expect=CLEAN,
+        note="a method available in both environments reads through its client variant",
+        files={**_RESOURCE_READ_RU, "Files.xbsl": "@НаКлиенте " + _RESOURCE_READ_RU["Files.xbsl"]},
+        english={**_RESOURCE_READ_EN, "Files.xbsl": "@OnClient " + _RESOURCE_READ_EN["Files.xbsl"]},
+    ),
     Seed(
         rule="code/statement-no-effect",
         expect=FINDING,
@@ -4774,6 +4865,26 @@ SEEDS: list[Seed] = [
         note="a key naming a file of the project's resources folder",
         files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
                "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Своя.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
+    # A picture of the platform's library: on data with the table of pairs the translator
+    # writes the name the English library gives it (`Std::Truck.svg`), without the table it
+    # keeps the Russian one. The English twin is the translated tree, so the seed holds on data
+    # of either kind; tests/test_parity_seed.py runs it on both.
+    Seed(
+        rule="code/unknown-resource",
+        expect=CLEAN,
+        note="a picture of the platform's library under its namespace, as the docs show it",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Стд::Грузовик.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-resource",
+        expect=CLEAN,
+        note="a picture of the platform's library by its bare name",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Грузовик.svg")},
         tokens=_PICTURES_TOKENS,
     ),
     Seed(

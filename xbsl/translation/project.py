@@ -27,7 +27,7 @@ from xbsl import engine, i18n, libs, scaffold, terms
 from xbsl.engine import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
-from xbsl.translation.code import Resolver, has_cyrillic, translate_code
+from xbsl.translation.code import ProjectIndex, Resolver, has_cyrillic, translate_code
 from xbsl.translation.dictionary import (
     DICTIONARY_DIR, DICTIONARY_FILE, Dictionary,
 )
@@ -420,6 +420,8 @@ def translate_project(
         project_names_module.collect_types(root, engine.load),
         component_methods=project_names_module.component_methods(root, engine.load),
         resource_keys=project_names_module.resource_keys(root),
+        project_component_types=project_names_module.component_types(root, engine.load),
+        project_index=ProjectIndex.build(root),
     )
     fields = project_names_module.collect_structure_fields(root, engine.load)
     report = ProjectReport(root=root)

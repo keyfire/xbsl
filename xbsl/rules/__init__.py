@@ -89,6 +89,7 @@ from . import (  # noqa: F401
     full_names,
     handlers,
     image_binding,
+    resource_cache,
     load_object,
     local_visibility,
     name_shadowing,

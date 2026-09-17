@@ -32,6 +32,9 @@ Where the pairs live in the distribution:
   the designtime jars). Their elements are written bilingually - `Name: {En: ..., Ru: ...}` -
   and that is where the properties of the components composed as projects are named
   (`UrlПослеРегистрации` is `AfterRegistrationUrl`).
+- the library of pictures: two folders of resources, `Icons/Стд/Ресурсы` and
+  `Icons/Std/Resources`, the same drawings under a Russian and an English name. Nothing states
+  which name answers which, so the drawings themselves pair them (see pair_pictures).
 
 The result is uiterms.json in the same versioned data folder:
 
@@ -40,7 +43,8 @@ The result is uiterms.json in the same versioned data folder:
                                                             "Баннер": "Banner"}},
       "packages": {"Стд::Интерфейс::ОбщиеКомпоненты": "Std::Interface::CommonComponents"},
       "types": {"Checkbox": "Флажок"},
-      "properties": {"PlaceholderText": "ЗамещающийТекст"} }
+      "properties": {"PlaceholderText": "ЗамещающийТекст"},
+      "resource_paths": {"Icons/Стд/Ресурсы/Аккаунт.svg": "Icons/Std/Resources/Account.svg"} }
 
 `types` and `properties` are keyed by the ENGLISH spelling: that is the direction the
 consumers need (a source written in English is read against the Russian names of the schema),
@@ -54,12 +58,14 @@ back to one Russian name each. An English spelling that leads to two different R
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import re
 import struct
 import zipfile
 from collections import Counter
+from collections.abc import Iterable
 from pathlib import Path
 
 import yaml
@@ -231,8 +237,11 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
     """The Russian name of an enumeration: from the manifest, else from its own type class.
 
     The manifest lists well under half of the enumerations, and the rest would lose their
-    values entirely. The type class carries the pair of the type itself in its pool, so the
-    name is read from there rather than invented.
+    values entirely. The type class carries the pair of the type itself, so the name is read
+    from there rather than invented: first the name the class states (see _stated_enum_name),
+    then the pair of the type in its pool. The statement is what names a facet of the generic
+    entity - its English side is qualified (`Entity.Privilege`), and no identifier stands next
+    to the Russian one for the adjacency reading to take.
     """
     if record is not None:
         russian = record.get("nameRu")
@@ -240,8 +249,39 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
             return _short(russian)
     if type_blob is None:
         return None
+    stated = _stated_enum_name(type_blob, name)
+    if stated:
+        return stated
     for russian, english in enum_pairs(type_blob).items():
         if english == name:
+            return russian
+    return None
+
+
+#: The static field a type class stores its own name into.
+_TYPE_NAME_FIELD = "TYPE_NAME"
+
+
+def _stated_enum_name(type_blob: bytes, name: str) -> str | None:
+    """The Russian name a type class states in TYPE_NAME for the enumeration beside it, or None.
+
+    The name is kept whole, qualification included: `Сущность.Право` is the table of the
+    privilege facet, and its last part alone would pass for any enumeration called `Право`.
+    It counts only when the class is `<name>G5Type` and refers to `<name>G5Enum` of its own
+    package - the enumeration whose values it lists. A name stored into another field, or a
+    class that never touches the enumeration, says nothing about these values. Over the
+    distribution the statement agrees with every name the other readings give, and names
+    one enumeration more: the privilege facet.
+    """
+    own = classcode.own_class(type_blob)
+    if not own or own.rpartition("/")[2] != f"{name}G5Type":
+        return None
+    package = own.rpartition("/")[0]
+    sibling = f"{package}/{name}G5Enum" if package else f"{name}G5Enum"
+    if sibling not in classcode.referenced_classes(type_blob):
+        return None
+    for field, english, russian in classcode.declared_terms(type_blob):
+        if field == _TYPE_NAME_FIELD and english.isascii() and _CYRILLIC_RE.search(russian):
             return russian
     return None
 
@@ -292,8 +332,72 @@ def _load_yaml(blob: bytes):
         return None
 
 
-def collect(dist: Path) -> dict:
-    """Walk the jars of the distribution and collect the maps (see the module docstring)."""
+#: The folders of the library of pictures inside a jar, with the language of the names there.
+#: The library is a set of resources like any other - a subsystem and its folder of resources -
+#: and the documentation names a picture by that subsystem (`Стд::Аккаунт.svg`) or bare.
+_PICTURE_FOLDERS = {"Icons/Стд/Ресурсы/": "ru", "Icons/Std/Resources/": "en"}
+
+
+def picture_language(member: str) -> str | None:
+    """'ru' or 'en' for a drawing of the library of pictures, None for any other jar member."""
+    if not member.endswith(".svg"):
+        return None
+    for folder, language in _PICTURE_FOLDERS.items():
+        if member.startswith(folder) and len(member) > len(folder) + len(".svg"):
+            return language
+    return None
+
+
+def pair_pictures(instances: Iterable[tuple[str, bytes]]) -> dict:
+    """The Russian and English names of the library pictures, paired by the drawing itself.
+
+    `instances` are (jar member, its bytes) for every copy of every picture: the server, the
+    designer and the language server each ship the library. Nothing in the distribution says
+    which English name belongs to which Russian one, but each pair is one drawing saved twice,
+    byte for byte. So the pairing goes by the SHA-256 of the bytes as shipped, with no
+    normalization:
+
+    - copies of one path with one digest are one picture;
+    - a path whose copies differ is left out whole, and no copy is preferred;
+    - the remaining paths are grouped by digest, and only a group of exactly one Russian and
+      one English path is a pair. A drawing shared by several names says nothing about which
+      name answers which, and a drawing with one name has no twin. Neither is guessed.
+
+    The answer: {"pairs": {Russian path: English path}, "conflicts": {path: [digests]},
+    "ambiguous" and "unmatched": [{"sha256", "ru", "en"}], "instances": the copies read}.
+    """
+    digests: dict[str, set[str]] = {}
+    count = 0
+    for member, blob in instances:
+        count += 1
+        digests.setdefault(member, set()).add(hashlib.sha256(blob).hexdigest())
+    conflicts = {path: sorted(found) for path, found in sorted(digests.items()) if len(found) > 1}
+    groups: dict[str, dict[str, list[str]]] = {}
+    for path, found in sorted(digests.items()):
+        language = picture_language(path)
+        if path in conflicts or language is None:
+            continue
+        groups.setdefault(next(iter(found)), {"ru": [], "en": []})[language].append(path)
+    pairs: dict[str, str] = {}
+    ambiguous: list[dict] = []
+    unmatched: list[dict] = []
+    for digest, names in sorted(groups.items()):
+        russian, english = names["ru"], names["en"]
+        if len(russian) == 1 and len(english) == 1:
+            pairs[russian[0]] = english[0]
+        else:
+            (ambiguous if russian and english else unmatched).append(
+                {"sha256": digest, "ru": russian, "en": english})
+    return {"pairs": dict(sorted(pairs.items())), "conflicts": conflicts,
+            "ambiguous": ambiguous, "unmatched": unmatched, "instances": count}
+
+
+def collect(dist: Path, diagnostics: dict | None = None) -> dict:
+    """Walk the jars of the distribution and collect the maps (see the module docstring).
+
+    `diagnostics`, when given, receives what the pairing of the pictures left out (see
+    pair_pictures) under "pictures" - the data file keeps the pairs alone.
+    """
     car = _distro.find_car(dist)
     manifests: list[dict] = []
     classes: dict[str, bytes] = {}
@@ -302,6 +406,8 @@ def collect(dist: Path) -> dict:
     # The same descriptions ship inside several jars - keyed by path so each is read once.
     components: dict[str, object] = {}
     projects: dict[str, object] = {}
+    # The pictures are read copy by copy instead: a copy that differs is what the pairing checks.
+    pictures: list[tuple[str, bytes]] = []
     with zipfile.ZipFile(car) as z:
         for entry in z.namelist():
             if not entry.endswith(".jar"):
@@ -312,7 +418,9 @@ def collect(dist: Path) -> dict:
                 continue
             for member in jar.namelist():
                 name = Path(member).name
-                if member.endswith("types-manifest.yaml"):
+                if picture_language(member):
+                    pictures.append((member, jar.read(member)))
+                elif member.endswith("types-manifest.yaml"):
                     data = _load_yaml(jar.read(member))
                     if isinstance(data, list):
                         manifests.extend(r for r in data if isinstance(r, dict))
@@ -368,17 +476,21 @@ def collect(dist: Path) -> dict:
         ranked = votes.most_common(2)
         if len(ranked) == 1 or ranked[0][1] > ranked[1][1]:
             single[russian] = ranked[0][0]
+    paired = pair_pictures(pictures)
+    if diagnostics is not None:
+        diagnostics["pictures"] = paired
     return {
         "packages": dict(sorted(single.items())),
         "enum_values": dict(sorted(enum_values.items())),
         "types": _unambiguous(type_votes),
         "properties": _unambiguous(name_votes),
         "member_names": _member_names(meta_classes),
+        "resource_paths": paired["pairs"],
     }
 
 
-def build(dist: Path, version: str) -> dict:
-    data = collect(dist)
+def build(dist: Path, version: str, diagnostics: dict | None = None) -> dict:
+    data = collect(dist, diagnostics)
     return {
         "meta": {
             "source": "distribution",
@@ -389,9 +501,23 @@ def build(dist: Path, version: str) -> dict:
             "types": len(data["types"]),
             "properties": len(data["properties"]),
             "member_types": len(data["member_names"]),
+            "resource_paths": len(data["resource_paths"]),
         },
         **data,
     }
+
+
+def _print_pictures(paired: dict) -> None:
+    """What the pairing of the pictures found and what it left without a pair, path by path."""
+    print(f"  картинок библиотеки в паре: {len(paired['pairs'])}"
+          f" (копий прочитано: {paired['instances']})")
+    for path, digests in paired["conflicts"].items():
+        print(f"    копии различаются: {path} ({len(digests)} разных)")
+    for group in paired["ambiguous"]:
+        print(f"    один рисунок у нескольких имён: {', '.join(group['ru'] + group['en'])}")
+    for group in paired["unmatched"]:
+        for path in group["ru"] + group["en"]:
+            print(f"    без пары: {path}")
 
 
 def main(argv=None) -> int:
@@ -408,7 +534,8 @@ def main(argv=None) -> int:
 
     dist = Path(args.dist)
     version = _distro.detect_version(dist, args.element_version)
-    schema = build(dist, version)
+    diagnostics: dict = {}
+    schema = build(dist, version, diagnostics)
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uiterms.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(
@@ -419,6 +546,7 @@ def main(argv=None) -> int:
     print(f"  пакетов: {schema['meta']['packages']}")
     print(f"  имён типов: {schema['meta']['types']}")
     print(f"  имён свойств, событий и методов: {schema['meta']['properties']}")
+    _print_pictures(diagnostics["pictures"])
     return 0
 
 
