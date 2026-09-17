@@ -231,8 +231,11 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
     """The Russian name of an enumeration: from the manifest, else from its own type class.
 
     The manifest lists well under half of the enumerations, and the rest would lose their
-    values entirely. The type class carries the pair of the type itself in its pool, so the
-    name is read from there rather than invented.
+    values entirely. The type class carries the pair of the type itself, so the name is read
+    from there rather than invented: first the name the class states (see _stated_enum_name),
+    then the pair of the type in its pool. The statement is what names a facet of the generic
+    entity - its English side is qualified (`Entity.Privilege`), and no identifier stands next
+    to the Russian one for the adjacency reading to take.
     """
     if record is not None:
         russian = record.get("nameRu")
@@ -240,8 +243,39 @@ def _enum_name(record: dict | None, type_blob: bytes | None, name: str) -> str |
             return _short(russian)
     if type_blob is None:
         return None
+    stated = _stated_enum_name(type_blob, name)
+    if stated:
+        return stated
     for russian, english in enum_pairs(type_blob).items():
         if english == name:
+            return russian
+    return None
+
+
+#: The static field a type class stores its own name into.
+_TYPE_NAME_FIELD = "TYPE_NAME"
+
+
+def _stated_enum_name(type_blob: bytes, name: str) -> str | None:
+    """The Russian name a type class states in TYPE_NAME for the enumeration beside it, or None.
+
+    The name is kept whole, qualification included: `Сущность.Право` is the table of the
+    privilege facet, and its last part alone would pass for any enumeration called `Право`.
+    It counts only when the class is `<name>G5Type` and refers to `<name>G5Enum` of its own
+    package - the enumeration whose values it lists. A name stored into another field, or a
+    class that never touches the enumeration, says nothing about these values. Over the
+    distribution the statement agrees with every name the other readings give, and names
+    one enumeration more: the privilege facet.
+    """
+    own = classcode.own_class(type_blob)
+    if not own or own.rpartition("/")[2] != f"{name}G5Type":
+        return None
+    package = own.rpartition("/")[0]
+    sibling = f"{package}/{name}G5Enum" if package else f"{name}G5Enum"
+    if sibling not in classcode.referenced_classes(type_blob):
+        return None
+    for field, english, russian in classcode.declared_terms(type_blob):
+        if field == _TYPE_NAME_FIELD and english.isascii() and _CYRILLIC_RE.search(russian):
             return russian
     return None
 
