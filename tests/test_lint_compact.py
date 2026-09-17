@@ -152,13 +152,45 @@ def test_compact_as_ci_names_the_job_when_the_file_runs_several(server, tmp_path
     full = server.lint_paths([str(project)], as_ci=True)
     compact = server.lint_paths([str(project)], as_ci=True, compact=True)
 
-    # The full record keeps everything, compact only the sentence plus the job it names.
+    # The full record keeps everything; compact keeps the sentence, the job it names and
+    # the line about the jobs it did not take - the raw lists and the baseline path go.
     assert set(full["summary"]["as_ci"]) >= {
         "file", "job", "select", "ignore", "enable", "baseline", "flags", "jobs", "hint",
     }
     assert full["summary"]["as_ci"]["jobs"] == ["lint-en"]
-    assert set(compact["summary"]["as_ci"]) == {"enabled", "adopted", "flags", "job"}
+    assert set(compact["summary"]["as_ci"]) == {"enabled", "adopted", "flags", "job", "hint"}
     assert compact["summary"]["as_ci"]["job"] == "lint-ru"
+    assert "lint-en" in compact["summary"]["as_ci"]["hint"]
+
+
+@pytest.mark.needs_data
+def test_compact_as_ci_keeps_what_the_reader_was_never_shown(server, tmp_path):
+    """`flags` names the rules taken, not the blind spots around them.
+
+    An include nobody fetched and the jobs left unchosen are exactly what a reader cannot
+    infer from the sentence, and dropping them made the compact answer read as if the whole
+    pipeline had been taken. They stay whenever they say something - `cijob.note()` exists
+    for that - and a pipeline without them keeps the short record.
+    """
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "Первый.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / "ci").mkdir()
+    (tmp_path / "ci" / "lint.yml").write_text(
+        "lint-ru:\n  script:\n    - xbsl project --ignore structure/xbsl-pair\n"
+        "lint-en:\n  script:\n    - xbsl project --ignore structure/xbsl-pair --lang en\n",
+        encoding="utf-8",
+    )
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "include:\n  - local: /ci/lint.yml\n  - template: Jobs/SAST.gitlab-ci.yml\n",
+        encoding="utf-8",
+    )
+
+    taken = server.lint_paths([str(project)], as_ci=True, compact=True)["summary"]["as_ci"]
+
+    assert taken["unread_includes"] == ["template: Jobs/SAST.gitlab-ci.yml"]
+    assert "SAST" in taken["note"]
+    assert "lint-en" in taken["hint"]
 
 
 @pytest.mark.needs_data
@@ -226,6 +258,23 @@ def test_compact_falls_back_to_counts_one_past_the_limit():
     assert isinstance(answer["findings_hint"], str) and answer["findings_hint"]
     # The count is still readable from the summary, as before.
     assert answer["summary"]["diagnostics"] == report.COMPACT_FINDINGS_LIMIT + 1
+
+
+def test_compact_findings_hint_speaks_the_language_the_caller_chose():
+    """Every other line of an answer is bilingual; this one was English for everybody."""
+    from xbsl import i18n
+
+    try:
+        i18n.set_lang("ru")
+        ru = report.compact(report.report(_diags(report.COMPACT_FINDINGS_LIMIT + 1), 11))
+        i18n.set_lang("en")
+        en = report.compact(report.report(_diags(report.COMPACT_FINDINGS_LIMIT + 1), 11))
+    finally:
+        i18n.set_lang(None)
+
+    assert str(report.COMPACT_FINDINGS_LIMIT + 1) in ru["findings_hint"]
+    assert any("а" <= c <= "я" for c in ru["findings_hint"].casefold())
+    assert not any("а" <= c <= "я" for c in en["findings_hint"].casefold())
 
 
 def test_full_report_is_unaffected_by_the_compact_changes():

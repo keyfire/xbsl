@@ -76,6 +76,12 @@ _CORE_MESSAGES = {
         "en": "--rules-filter narrows a rule listing: add --list-rules. A run's rule set is "
               "chosen by --select/--ignore/--enable",
     },
+    "report.findings-hint": {
+        "ru": "находок: {count}, это больше {limit} строк краткого ответа – позовите ещё раз "
+              "без compact за полным списком или сузьте paths/select",
+        "en": "{count} findings, over the {limit} compact lists - call again without compact "
+              "for the full list, or narrow paths/select",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",

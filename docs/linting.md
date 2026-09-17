@@ -55,8 +55,9 @@ the MCP server returns.
 The summary of that payload counts the findings by rule, by file and by severity - `by_rule`,
 `by_file` and `by_severity`, the last naming all three levels even at zero - so a run can be weighed
 without reading its list: which rules fire, in which files, and whether an error is among them. The
-MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary and the
-error-level findings alone.
+MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary, the
+error-level findings whole and - while there are no more than ten findings in all - the list itself,
+one line each. Past that the list gives way to the count and a word on how to read the rest.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting. The index
 holds the objects, with their `TabularParts`, module-declared local types and the member families

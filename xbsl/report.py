@@ -2,8 +2,10 @@
 
 One contract for structured output – a list of diagnostics plus a summary – so that the CLI and the
 MCP adapter cannot drift apart. Editors (the VS Code extension) consume the same JSON. The summary
-carries the counts by rule, by file and by severity (breakdown()), and compact() omits the
-per-file map and the list of findings – what a reader wants when the list is too long to carry.
+carries the counts by rule, by file and by severity (breakdown()). compact() omits the per-file map
+and keeps the error-level findings whole; up to COMPACT_FINDINGS_LIMIT it also lists the findings
+themselves, one line each, and past that limit only says how many there are – what a reader wants
+when the list is too long to carry.
 
 CI integration lives here too: codeclimate() renders the diagnostics as a GitLab Code Quality
 report (a subset of the Code Climate issue format), which GitLab shows as a widget on merge
@@ -16,6 +18,7 @@ import hashlib
 from collections import Counter
 from pathlib import Path
 
+from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
 
 
@@ -116,9 +119,8 @@ def compact(payload: dict) -> dict:
     if len(findings) <= COMPACT_FINDINGS_LIMIT:
         out["findings"] = [_compact_finding(d) for d in findings]
     else:
-        out["findings_hint"] = (
-            f"{len(findings)} findings, over the {COMPACT_FINDINGS_LIMIT} compact lists - "
-            "call again without compact for the full list, or narrow paths/select"
+        out["findings_hint"] = i18n.t(
+            "report.findings-hint", count=len(findings), limit=COMPACT_FINDINGS_LIMIT,
         )
     as_ci = out["summary"].get("as_ci")
     if as_ci is not None:
@@ -141,6 +143,13 @@ def _compact_as_ci(job: dict) -> dict:
     file runs the linter in more than one job (`jobs` non-empty) - with a single job the
     sentence is unambiguous about which one it describes.
 
+    What `flags` cannot say survives: the includes nobody fetched (`unread_includes` and
+    the `note` line built from them) and the `hint` naming the jobs left unchosen. Those
+    are the reader's blind spots, not a longer spelling of the sentence, and an answer that
+    dropped them read as if the whole pipeline had been taken - the very thing `cijob.note()`
+    exists to prevent. Each is carried only when it says something: a pipeline with one job
+    and no unread include keeps the short record it had.
+
     A refused adoption (`cijob.refused()`, `adopted: False`) has no `flags` to fall back on
     and is small already - it is returned unchanged.
     """
@@ -149,6 +158,9 @@ def _compact_as_ci(job: dict) -> dict:
     out = {"enabled": job.get("enabled", True), "adopted": True, "flags": job["flags"]}
     if job.get("jobs"):
         out["job"] = job.get("job")
+    for key in ("hint", "note", "unread_includes"):
+        if job.get(key):
+            out[key] = job[key]
     return out
 
 
