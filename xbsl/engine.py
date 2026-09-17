@@ -649,6 +649,11 @@ def run_sources(
     enable: set[str] | None = None,
     scopes: tuple[str, ...] = ("file", "project"),
 ) -> list[Diagnostic]:
+    from xbsl import dataset
+
+    # Data installed while an editor or an MCP server keeps running is picked up here: a read
+    # that found nothing is repeated once per pass rather than once per rule and file.
+    dataset.recheck_data()
     diags: list[Diagnostic] = []
     active = active_rules(select, ignore, enable)
     # A project rule has no single file to blame, so its crash is anchored to the first source.

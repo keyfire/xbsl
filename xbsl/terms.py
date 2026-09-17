@@ -23,10 +23,7 @@ _reverse: dict[str, dict[str, str]] | None = None
 def _terms() -> dict[str, dict[str, str]]:
     global _cache
     if _cache is None:
-        try:
-            data = dataset.load_json("terms.json")
-        except Exception:  # noqa: BLE001 - no data, Russian spelling only
-            data = {}
+        data = dataset.load_optional("terms.json") or {}
         _cache = {section: dict(data.get(section) or {}) for section in SECTIONS}
     return _cache
 
@@ -45,10 +42,7 @@ def _common_pairs() -> dict[str, str]:
     """
     global _common
     if _common is None:
-        try:
-            data = dataset.load_json("terms_full.json")
-        except Exception:  # noqa: BLE001 - no data, Russian spelling only
-            data = {}
+        data = dataset.load_optional("terms_full.json") or {}
         _common = dict(data.get("common") or {})
     return _common
 
@@ -78,10 +72,7 @@ def _members_by_owner() -> dict[str, dict[str, str]]:
     """
     global _owners
     if _owners is None:
-        try:
-            data = dataset.load_json("terms_full.json")
-        except Exception:  # noqa: BLE001 - no data, no owner tables
-            data = {}
+        data = dataset.load_optional("terms_full.json") or {}
         _owners = {
             owner: dict(pairs) for owner, pairs in (data.get("members") or {}).items()
             if isinstance(pairs, dict)
@@ -99,10 +90,7 @@ def _type_bases() -> dict[str, list[str]]:
     """
     global _bases
     if _bases is None:
-        try:
-            kin = (dataset.load_json("stdlib.json") or {}).get("bases") or {}
-        except Exception:  # noqa: BLE001 - no data, no ancestors
-            kin = {}
+        kin = (dataset.load_optional("stdlib.json") or {}).get("bases") or {}
         _bases = {name: list(bases) for name, bases in kin.items() if isinstance(bases, list)}
     return _bases
 
@@ -188,10 +176,7 @@ def _manager_owner_table() -> dict[str, str]:
     """
     global _manager_owners
     if _manager_owners is None:
-        try:
-            data = dataset.load_json("terms_full.json")
-        except Exception:  # noqa: BLE001 - no data, no managers
-            data = {}
+        data = dataset.load_optional("terms_full.json") or {}
         table = data.get("manager_owners")
         _manager_owners = {
             kind: owner for kind, owner in (table.items() if isinstance(table, dict) else ())
@@ -234,19 +219,19 @@ def kinds_table() -> dict[str, str]:
     """
     global _kinds
     if _kinds is None:
-        try:
-            data = dataset.load_json("terms.json")
-        except Exception:  # noqa: BLE001 - no data, Russian spelling only
-            data = {}
+        data = dataset.load_optional("terms.json") or {}
         _kinds = dict(data.get("kinds") or {})
     return _kinds
 
 
 def _reset() -> None:
-    """Drop the pairs when the data root or version changes (dataset hook).
+    """Drop the pairs when the data root or version changes, and when the data was missing.
 
-    Without this the process would keep answering from the previously pinned dataset - a
+    Without the first the process would keep answering from the previously pinned dataset - a
     pinned root with no terms.json still handed out the English spellings of the old one.
+    Without the second a process that looked for the dictionaries before they were installed
+    would keep the Russian spelling as the only one it knows, and every rule that matches a
+    platform name would pass over a project written in English (dataset.register_recheck).
     """
     global _cache, _reverse, _common, _common_reverse, _kinds, _facets, _owners, _bases
     global _manager_owners
@@ -262,6 +247,7 @@ def _reset() -> None:
 
 
 dataset.register_reset(_reset)
+dataset.register_recheck(_reset)
 
 
 def english(name: str, section: str) -> str | None:

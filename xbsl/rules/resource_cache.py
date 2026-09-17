@@ -14,11 +14,18 @@ One shape is proven, and anything else is left alone:
 
 - the body of a module method is a single `return` of exactly that chain;
 - `Get` takes one argument and `ReadAsString` at most one. Each is a string literal without
-  interpolation or a parameter of the method, and a parameter default is a literal. A member,
-  a call, an operator or an interpolation may bring in the user, the settings or other data;
+  interpolation or a parameter of the method, and a parameter default is a literal. A member or
+  a call brings in the user, the settings or other data, and the cache would keep an answer
+  that was true once. An operator and an interpolation are refused for a narrower reason: they
+  look like they read the arguments and nothing else, and for two strings they do, but a value
+  of another type joins a string through `ToString()` and the `$` form of an interpolation
+  through `Presentation()`, which the platform allows to depend on the locale. Both are members
+  of the root type that a project type may define, so proving the path would mean proving the
+  operand is the platform string first. The narrowing is deliberate;
 - the root is the platform type. It is spelled the way the dictionary spells the type, and no
-  parameter, member or import of the module, no `Name` of the paired description and no project
-  element carries the name in either spelling. Names are compared ignoring case;
+  parameter, member or import of the module, no `Name` of the paired description, no project
+  element and no global element of an attached library carries the name in either spelling.
+  Names are compared ignoring case;
 - every link is checked against the type catalog: `Current` returns the package, `Get` a
   resource, `OpenReadableStream` a readable stream and `ReadAsString` a string. Without the
   platform data the rule is silent.
@@ -34,7 +41,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from xbsl import dataset, i18n, parser as P, terms
+from xbsl import dataset, i18n, libs, parser as P, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.rules._server_calls import ServerCallGraph, server_call_mapper
@@ -85,18 +92,14 @@ def _chain() -> _Chain | None:
     """Spellings of the root and of every link, checked by the type catalog; None if unproven.
 
     Every link must return the type the next one is declared on, and the last one a string. A
-    catalog that says otherwise, or no catalog at all, leaves the shape unproven. Only an answer
-    read from the catalog is kept, so a catalog installed while an editor or an MCP server keeps
-    running is read on the next call, and the shared server call facts keep their catalogs the
-    same way. That covers the catalogs and nothing more. The English spellings of a project are
-    read through other tables of the data, such as the terms and the ui vocabulary, and those
-    keep what they read until the data root or the version is set again. A process that read
-    them before the data was installed may still miss a project written in English until then.
+    catalog that says otherwise, or no catalog at all, leaves the shape unproven. An answer
+    reached without the data is dropped before the next pass of the engine, so a catalog
+    installed while an editor or an MCP server keeps running is read then; the shared server
+    call facts and the dictionaries that spell the English names behave the same way.
     """
     if "chain" not in _PROOF:
-        try:
-            stdlib = dataset.load_json("stdlib.json") or {}
-        except dataset.DatasetError:
+        stdlib = dataset.load_optional("stdlib.json")
+        if stdlib is None:
             return None
         _PROOF["chain"] = _prove(stdlib)
     return _PROOF["chain"]
@@ -121,6 +124,7 @@ def _prove(stdlib: dict) -> _Chain | None:
 
 
 dataset.register_reset(_PROOF.clear)
+dataset.register_recheck(_PROOF.clear)
 
 
 def _plain(value: P.Expr | None, params: frozenset[str]) -> bool:
@@ -199,6 +203,17 @@ def _names_root(source: SourceFile, roots: frozenset[str]) -> bool:
     return False
 
 
+def _library_names_root(source: SourceFile, roots: frozenset[str]) -> bool:
+    """Whether an attached library gives the project a global name that spells the root.
+
+    Only the project descriptor declares libraries, and every other yaml is turned away by a
+    regular expression over its text, so the archives are opened once per run.
+    """
+    folded = {root.casefold() for root in roots}
+    return any(name.casefold() in folded
+               for name in libs.project_library_types(source.path, source.text))
+
+
 def _resource_read_mapper(source: SourceFile) -> dict | None:
     """The shared server call facts, narrowed to what this rule reads.
 
@@ -210,10 +225,17 @@ def _resource_read_mapper(source: SourceFile) -> dict | None:
     if chain is None:
         return None
     if source.kind == "yaml":
+        library_root = _library_names_root(source, chain[0])
         fact = server_call_mapper(source)
-        if fact is None or not fact.get("valid"):
-            return fact
-        return {**fact, "bindings": [], "names_root": _names_root(source, chain[0])}
+        if fact is None:
+            # The project descriptor is not an element and has no shared fact, and it is the
+            # one yaml that declares libraries: it joins the facts when a library spells the
+            # root and stays out of them otherwise.
+            return {"k": "lib", "library_root": True} if library_root else None
+        if not fact.get("valid"):
+            return {**fact, "library_root": library_root}
+        return {**fact, "bindings": [], "names_root": _names_root(source, chain[0]),
+                "library_root": library_root}
     if source.kind != "xbsl" or is_query_file(source.path):
         return None
     if not any(root in source.text for root in chain[0]):
@@ -239,8 +261,11 @@ def resource_read_without_cache(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         return
     graph = ServerCallGraph(facts)
     folded = {root.casefold() for root in chain[0]}
-    # A project element named like the root hides the platform type from every module.
+    # A project element named like the root hides the platform type from every module, and so
+    # does a global element of an attached library: the project sees it by the bare name.
     if not graph.has_data or any(name.casefold() in folded for name in graph.names):
+        return
+    if any(fact.get("library_root") for fact in facts.values()):
         return
     for rel, fact in sorted(facts.items()):
         if fact["k"] != "x" or not fact.get("reads"):
