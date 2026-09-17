@@ -365,7 +365,11 @@ def _scan_meta_objects(
             common[ru] = best
     return (
         {owner: dict(sorted(names.items())) for owner, names in sorted(members.items())},
-        common,
+        # Sorted like its neighbours above and below: `common` is filed in SCAN order (as a
+        # class of the distribution happens to be read), and terms_full.json wrote it that way
+        # verbatim - a re-extraction that changed no spelling still moved hundreds of unrelated
+        # lines, because the scan order of the same distribution is not the alphabet.
+        dict(sorted(common.items())),
         dict(sorted(declared_types.items())),
     )
 
@@ -478,7 +482,12 @@ def _template_markdown_members(text: str, template: str) -> set[str]:
     owners = [owner for _member, owner in found if owner]
     if not owners:
         return set()
-    own = max(set(owners), key=owners.count)
+    # A genuine tie (two owners naming the same number of methods) has to be broken the same
+    # way every run: `set(owners)` iterates in a per-process hash order, so the same page used
+    # to hand different runs of `xbsl extract` a different owner - and with it a different
+    # member set - for no reason the distribution gives. Sorting the candidates first makes
+    # `max` fall back to the alphabetically earliest one, deterministically.
+    own = max(sorted(set(owners)), key=owners.count)
     return {
         member.split("(", 1)[0] for member, owner in found
         if owner == own and not member.startswith(qualified)

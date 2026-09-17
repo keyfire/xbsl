@@ -187,6 +187,35 @@ def test_a_stated_term_does_not_unsettle_a_word_the_neighbourhood_knows():
     assert "Строки" not in common  # two against one is not dominance, as it never was
 
 
+def test_the_common_table_comes_back_sorted_by_the_russian_key():
+    """A pair is filed as its class is read, so an unsorted table put a word wherever its
+    class happens to sit in the distribution - a re-extraction that changed no spelling still
+    moved hundreds of unrelated lines in terms_full.json. Sorting by the Russian key means the
+    file changes only where a word actually did."""
+    import io
+    import zipfile
+
+    from test_extract_classcode import TERM, _class_of_terms
+
+    from xbsl.extract.terms import _scan_meta_objects
+
+    # Filed in the reverse of alphabetical order - a passthrough of scan order would fail this.
+    pairs = [("BOX_TERM", ["Box", "Ящик"]), ("TITLE_TERM", ["Title", "Название"]),
+             ("ADDRESS_TERM", ["Address", "Адрес"])]
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as z:
+        for index, (field, pair) in enumerate(pairs):
+            z.writestr(f"demo/scan/Class{index}.class", _class_of_terms([(field, TERM, pair)]))
+    car = io.BytesIO()
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
+
+    _members, common, _types = _scan_meta_objects(zipfile.ZipFile(car))
+
+    assert common == {"Ящик": "Box", "Название": "Title", "Адрес": "Address"}
+    assert list(common.keys()) == sorted(common.keys())
+
+
 # --- the kind table: the fullest copy of the serializer enum, not the first ---------------
 
 
@@ -399,3 +428,56 @@ def test_a_members_table_with_a_word_the_template_lacks_names_no_kind():
     """The runtime reads the whole row of the owner: a foreign pair under the same key would
     answer for a word the manager of the kind does not have."""
     assert _owners(_manager_car(foreign_pair=True)) == {}
+
+
+# --- the tied owner of a template page is picked by name, not by set iteration order ------
+
+
+def _heading(owner: str, method: str) -> str:
+    return (f"# DeveloperName::ProjectName::SubsystemName::AcmeRightName#{method}()\n\n"
+            f"**Определен:** **{owner}**\n")
+
+
+def test_a_tied_owner_count_is_broken_alphabetically():
+    """Two owners naming the same number of methods on a template page is a genuine tie, and
+    `set(owners)` used to answer it: string hashing is randomized per process, so the same
+    distribution picked a different owner - and with it a different set of members - from one
+    run of `xbsl extract` to the next. Written with the alphabetically LATER owner first, so a
+    plain "first one found" reading would get it wrong too."""
+    from xbsl.extract.terms import _template_markdown_members
+
+    text = "\n".join([
+        _heading("Проверить", "MethodOne"), _heading("Проверить", "MethodTwo"),
+        _heading("Активность", "MethodThree"), _heading("Активность", "MethodFour"),
+    ])
+
+    assert _template_markdown_members(text, "AcmeRightName") == {"MethodThree", "MethodFour"}
+
+
+def test_the_alphabetical_tie_break_does_not_depend_on_source_order():
+    """Same tie, owners written in the opposite order - the winner must not move, or the
+    choice would be reading TEXT order rather than the alphabet."""
+    from xbsl.extract.terms import _template_markdown_members
+
+    text = "\n".join([
+        _heading("Активность", "MethodThree"), _heading("Активность", "MethodFour"),
+        _heading("Проверить", "MethodOne"), _heading("Проверить", "MethodTwo"),
+    ])
+
+    assert _template_markdown_members(text, "AcmeRightName") == {"MethodThree", "MethodFour"}
+
+
+def test_an_outright_majority_owner_still_wins_over_the_alphabet():
+    """The tie-break only applies to an actual tie - three against one still picks the three,
+    even though the runner-up sorts first."""
+    from xbsl.extract.terms import _template_markdown_members
+
+    text = "\n".join([
+        _heading("Активность", "MethodOne"),
+        _heading("Проверить", "MethodTwo"), _heading("Проверить", "MethodThree"),
+        _heading("Проверить", "MethodFour"),
+    ])
+
+    assert _template_markdown_members(text, "AcmeRightName") == {
+        "MethodTwo", "MethodThree", "MethodFour",
+    }
