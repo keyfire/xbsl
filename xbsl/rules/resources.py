@@ -47,11 +47,17 @@ file, while `Ресурс{Настройки3.svg}` right next to it fails.
 
 So the known set is the union of two sources: the RELATIVE POSIX PATH of every file under
 the project's `Ресурсы` folders (the project root is the folder holding `Проект.yaml`;
-a top-level file's path is its bare name) and the 152 names of the platform's image
-library, taken from the documentation page `topics/image-library` - the first source of
-truth, not a hand-written list. A qualified key (`Стд::Грузовик.svg`, the form the docs
-show) is stripped of its namespace before the lookup. Without the documentation data the
-rule stays silent: guessing without the library is exactly what produces false positives.
+a top-level file's path is its bare name) and the names of the platform's image library.
+The documentation page `topics/image-library` lists the library in Russian - the first
+source of truth, not a hand-written list. The same pictures also have English names: the
+platform's own sources write `Resource{Std::...}` and bare English names, and the translator
+writes them too. Those names come from the pairs the extractor matched by their bytes
+(`uiterms.resource_paths`). With the Russian names alone the rule reported such references
+in a translated project as errors, though the build accepts them. Data extracted before that
+table has no English names, and there the rule still reports them. A qualified key
+(`Стд::Грузовик.svg`, the form the docs show) is stripped of its namespace before the lookup.
+Without the documentation data the rule stays silent: guessing without the library is exactly
+what produces false positives.
 A Ресурсы-prefixed key is left to code/resource-bare-name, so one mistake is not reported
 twice; a backslash spelling is unproven and skipped rather than judged.
 
@@ -217,11 +223,39 @@ _IMAGE_NAME_RE = re.compile(r"[A-Za-zА-Яа-яЁё0-9_]+\.svg")
 
 @lru_cache(maxsize=1)
 def _platform_images() -> frozenset[str]:
-    """Names of the platform's image library, or an empty set without the docs data."""
+    """Keys of the image library in both spellings, or an empty set without the docs data.
+
+    The documentation page gives the Russian names and the table of pairs adds the English
+    ones. The table alone does not make a library: without the page nothing is known.
+    """
     page = docs.page(_IMAGE_LIBRARY_PAGE)
     if not page:
         return frozenset()
-    return frozenset(_IMAGE_NAME_RE.findall(page.get("html") or ""))
+    return frozenset(_IMAGE_NAME_RE.findall(page.get("html") or "")) | _english_library_keys()
+
+
+dataset.register_reset(_platform_images.cache_clear)
+
+
+def _english_library_keys() -> frozenset[str]:
+    """English keys of the library's pictures from `uiterms.resource_paths`, or an empty set.
+
+    A row pairs a picture by its place in the jar (`Icons/Стд/Ресурсы/Аккаунт.svg` ->
+    `Icons/Std/Resources/Account.svg`), while a reference names the picture relative to the
+    resources folder. So the key is what follows `Icons/<namespace>/<resources folder>/`,
+    including a folder of the library below it. A row that does not lie below a resources
+    folder gives no key.
+    """
+    try:
+        table = (dataset.load_json("uiterms.json") or {}).get("resource_paths") or {}
+    except DatasetError:
+        return frozenset()
+    keys: set[str] = set()
+    for english in table.values() if isinstance(table, dict) else ():
+        parts = english.split("/") if isinstance(english, str) else []
+        if len(parts) >= 4 and all(parts) and parts[2] in _RESOURCE_DIRS:
+            keys.add("/".join(parts[3:]))
+    return frozenset(keys)
 
 
 def _unknown_resource_mapper(source: SourceFile) -> dict | None:

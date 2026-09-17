@@ -4867,6 +4867,26 @@ SEEDS: list[Seed] = [
                "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Своя.svg")},
         tokens=_PICTURES_TOKENS,
     ),
+    # A picture of the platform's library: on data with the table of pairs the translator
+    # writes the name the English library gives it (`Std::Truck.svg`), without the table it
+    # keeps the Russian one. The English twin is the translated tree, so the seed holds on data
+    # of either kind; tests/test_parity_seed.py runs it on both.
+    Seed(
+        rule="code/unknown-resource",
+        expect=CLEAN,
+        note="a picture of the platform's library under its namespace, as the docs show it",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Стд::Грузовик.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
+    Seed(
+        rule="code/unknown-resource",
+        expect=CLEAN,
+        note="a picture of the platform's library by its bare name",
+        files={"Проект.yaml": _PROJECT_RU.format(mode="9.0"), "Основное/Ресурсы/Своя.svg": "<svg/>",
+               "Основное/Картинки.xbsl": _PICTURES_XBSL_RU.format(key="Грузовик.svg")},
+        tokens=_PICTURES_TOKENS,
+    ),
     Seed(
         rule="code/collection-field-needs-req",
         expect=FINDING,
