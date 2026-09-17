@@ -9,6 +9,16 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
+## Unreleased
+
+### Fixed
+
+- **Client breakpoints stop on newer 1C:Element servers.** Their browser client takes the debug
+  server address only from `debug-server-url`, so the application opened without joining the
+  debug session and only server breakpoints stopped. The address now carries that parameter next
+  to `debug-server-host` and `debug-server-port`, which older servers still read. The sign-in mode
+  goes in `force_auth`, the name the platform reads. ([#104](https://github.com/keyfire/xbsl/pull/104))
+
 ## 0.74.0
 
 ### Fixed

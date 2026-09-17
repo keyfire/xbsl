@@ -111,7 +111,7 @@
   <rect x="32" y="456" width="486" height="66" rx="8" class="box"/>
   <rect x="32" y="464" width="3" height="50" rx="1.5" fill="var(--accent-browser)"/>
   <text x="46" y="482" class="box-title">Browser – the application under debug</text>
-  <text x="46" y="506" class="mono code">&lt;app-uri&gt;?debug-server-host=...&amp;debug-session-id=&lt;sessionId&gt;</text>
+  <text x="46" y="506" class="mono code">&lt;app-uri&gt;?debug-server-url=...&amp;debug-session-id=&lt;sessionId&gt;</text>
 
   <!-- Platform debug server -->
   <rect x="566" y="176" width="210" height="56" rx="8" class="box"/>
