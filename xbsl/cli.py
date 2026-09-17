@@ -829,23 +829,51 @@ def _props(pairs: list[str] | None) -> dict[str, str] | None:
     return props
 
 
+def _localization_entries_shape(entries: dict, source: str) -> dict:
+    """Every key a word, every value a mapping of language to TEXT - or a plain refusal.
+
+    One shape for both batch sources. A value that was not a string travelled on and got
+    written through `str()`, so JSON `true` reached the row as the word "True"; a key that
+    was not a string crashed the write inside `.strip()` instead of naming itself.
+    """
+    for key, values in entries.items():
+        if not isinstance(key, str):
+            raise ValueError(f"{source}: ключ {key!r} – не текст")
+        if not isinstance(values, dict):
+            raise ValueError(f"{source}: ключ {key}: ожидается объект вида "
+                             '{"Язык": "Текст"}')
+        for code, value in values.items():
+            if not isinstance(code, str) or not isinstance(value, str):
+                raise ValueError(
+                    f"{source}: ключ {key}: значение языка {code} – не текст: {value!r}"
+                )
+    return entries
+
+
 def _localization_entries_file(path: str) -> dict:
     """entries from a JSON or YAML file: a mapping of key -> values by language.
 
     YAML accepts valid JSON too (a JSON document IS a YAML document), so one loader reads
-    either format without sniffing the extension - the same freedom the neighbouring
-    --entries-file offers.
+    either format without sniffing the extension.
+
+    That loader leaves every scalar a string. The typed one judged the captions instead:
+    `Yes` and `No` came back as booleans and went into the rows as "True" and "False",
+    `12:30` as the sexagesimal number 750, and a key spelled `On` as the boolean True,
+    which crashed the write. A file of localized captions carries text and nothing else.
     """
     import yaml as _yaml
 
-    text = Path(path).read_text(encoding="utf-8-sig")
     try:
-        data = _yaml.safe_load(text)
+        text = Path(path).read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise ValueError(f"{path}: файл не прочитан: {exc}") from exc
+    try:
+        data = _yaml.load(text, Loader=_yaml.BaseLoader)
     except _yaml.YAMLError as exc:
         raise ValueError(f"{path}: JSON/YAML не разобран: {exc}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"{path}: ожидается отображение ключ -> значения по языкам")
-    return data
+    return _localization_entries_shape(data, path)
 
 
 def _localization_entry_flags(items: list[str] | None) -> dict:
@@ -865,7 +893,7 @@ def _localization_entry_flags(items: list[str] | None) -> dict:
         if key in out:
             raise ValueError(f"Ключ {key} назван в --entry более одного раза")
         out[key] = values
-    return out
+    return _localization_entries_shape(out, "--entry")
 
 
 def _merged_localization_entries(args) -> dict:
@@ -877,6 +905,13 @@ def _merged_localization_entries(args) -> dict:
     than one source is refused instead of letting the last one silently win.
     """
     sources: list[tuple[str, dict]] = []
+    if args.name is None and args.value:
+        # --value describes the key named on the command line. Beside a batch and without
+        # that key it was simply dropped, and the caller read a successful answer about the
+        # keys of the batch as if their values had been taken too.
+        raise ValueError(
+            "--value относится к ключу (name): назовите ключ или пишите --entry КЛЮЧ=JSON"
+        )
     if args.name is not None:
         sources.append(("name", {args.name: _props(args.value) or {}}))
     if args.entries_file:
@@ -928,6 +963,11 @@ def _set_localization_main(args) -> int:
     written = scaffold.apply_result(outcome.result)
     print(json.dumps({
         "summary": summary,
+        # The same keys every other scaffold write answers with: a client reading `renames`
+        # from one subcommand and not from this one has to special-case exactly this call.
+        "renames": [
+            {"from": str(r.old_path), "to": str(r.new_path)} for r in outcome.result.renames
+        ],
         "files": [{"path": str(c.path), "created": c.created} for c in outcome.result.changes],
         "notes": outcome.result.notes,
         "lint": _scaffold_lint(written),

@@ -340,3 +340,48 @@ def test_batch_of_one_writes_nothing_on_disk_until_applied(element: Path):
 def test_batch_requires_at_least_one_entry(element: Path):
     with pytest.raises(scaffold.ScaffoldError):
         scaffold.op_set_localization_batch(element, {})
+
+
+def test_batch_refuses_a_value_that_is_not_a_text(element: Path):
+    """A caption is a string. str() on whatever came in wrote the word "True" into the row,
+    and an MCP client passing typed JSON reaches this function directly."""
+    with pytest.raises(scaffold.ScaffoldError) as exc:
+        scaffold.op_set_localization_batch(element, {"Заголовок": {"Русский": True}})
+
+    assert "Заголовок" in str(exc.value)
+
+
+def test_batch_refuses_a_key_that_is_not_a_text(element: Path):
+    """A key loaded as a yaml boolean used to crash the write on `.strip()`."""
+    with pytest.raises(scaffold.ScaffoldError):
+        scaffold.op_set_localization_batch(element, {True: {"Русский": "Включено"}})
+
+
+def test_batch_does_not_rewrite_a_translation_it_only_read(element: Path):
+    """A translation the pass only consulted used to come back as a FileChange: the same
+    bytes, a new mtime, and a row in the list of files the caller was told about."""
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+    translation = _translation(element)
+    before = translation.read_text(encoding="utf-8-sig")
+
+    outcome = scaffold.op_set_localization_batch(element, {"Первая": {"Русский": "Иной текст"}})
+    _write(outcome.result)
+
+    assert [c.path for c in outcome.result.changes] == [element]
+    assert translation.read_text(encoding="utf-8-sig") == before
+
+
+def test_batch_does_not_rewrite_a_translation_given_the_text_it_already_has(element: Path):
+    """The same row written again is not a change either - the file is left alone."""
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+    _write(scaffold.op_set_localization_batch(
+        element, {"Первая": {"Русский": "Первый текст", "En": "The first text"}},
+    ).result)
+
+    outcome = scaffold.op_set_localization_batch(
+        element, {"Первая": {"Русский": "Иной текст", "En": "The first text"}},
+    )
+
+    assert [c.path for c in outcome.result.changes] == [element]

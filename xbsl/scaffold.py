@@ -4293,6 +4293,10 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
     batch half done. Compare a loop of single-key calls, each applying its own result as it
     goes - key 45 of 60 failing there leaves the first 44 already on disk.
 
+    A translation the pass only read - every key it holds already carried that very text -
+    comes back out of `.result` entirely, so applying the plan leaves its bytes and its
+    mtime alone and the caller is not told it was written.
+
     Returns a LocalizationOutcome: `.result` for scaffold.apply_result, `.entries` - the
     per-file report a caller prints instead of the whole files (key, language, file, the
     text before and the text now).
@@ -4311,16 +4315,24 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
 
     other_texts: dict[str, str] = {}  # folder code -> text, threaded across every key
     other_nls: dict[str, str] = {}
+    as_read: dict[str, str] = {}  # the same text as it came off disk, to tell a change from a read
     unreadable: set[str] = set()  # a translation file that failed to load once - not retried
     notes: list[str] = []
     entry_changes: list[LocalizationChange] = []
     main_cursor: tuple[int, int] | None = None
 
     for name, values in entries.items():
+        # A key and a caption are both text. A caller reaching here with something else -
+        # a yaml `On:` read as the boolean True, a JSON `true` where a caption belongs -
+        # used to crash inside .strip() or get written through str() as the word "True".
+        if not isinstance(name, str):
+            raise ScaffoldError(
+                f"Имя строки локализации {name!r} не годится в ключ: нужен текст"
+            )
         # The key is written bare, the way the files of a live project write theirs, so it
         # has to survive being written that way: whitespace, a colon or a leading hash would
         # make the next load read something else - or nothing - where the row was.
-        clean_name = (name or "").strip()
+        clean_name = name.strip()
         if not re.fullmatch(r"[^\s:#]+", clean_name):
             raise ScaffoldError(
                 f"Имя строки локализации '{clean_name}' не годится в ключ: одно слово без "
@@ -4331,7 +4343,12 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
                 f"Ключ {clean_name}: нужны значения по языкам: "
                 "{\"Русский\": \"Текст\", \"En\": \"Text\"}"
             )
-        texts = {_language_folder(code): str(value) for code, value in values.items()}
+        for code, value in values.items():
+            if not isinstance(code, str) or not isinstance(value, str):
+                raise ScaffoldError(
+                    f"Ключ {clean_name}: значение языка {code} – не текст: {value!r}"
+                )
+        texts = {_language_folder(code): value for code, value in values.items()}
         key_section = (_localization_section(section) if section
                        else _section_of_key(main_text, clean_name) or _LOCALIZATION_SECTIONS[0])
         unknown = sorted(set(texts) - {default} - set(translations))
@@ -4345,7 +4362,7 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
         if not base:
             raise ScaffoldError(
                 f"Ключ {clean_name}: нет значения на языке по умолчанию "
-                f"({_LANGUAGE_BY_FOLDER.get(default, default)}) - элемент несёт сам текст, "
+                f"({_LANGUAGE_BY_FOLDER.get(default, default)}) – элемент несёт сам текст, "
                 "переводы – только замену"
             )
 
@@ -4367,6 +4384,7 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
                 except ScaffoldError:
                     unreadable.add(code)
                     continue
+                as_read[code] = other_texts[code]
             written = texts.get(code)
             current = other_texts[code]
             if written is None:
@@ -4394,6 +4412,11 @@ def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
     result.changes.append(FileChange(yaml_path, main_text, created=False, cursor=main_cursor))
     for code, target in sorted(translations.items()):
         if code == default or code not in other_texts:
+            continue
+        if other_texts[code] == as_read[code]:
+            # A translation the pass only consulted - the key was already there with that
+            # very text. Writing the same bytes back moves the mtime and puts the file in
+            # the list of what this call changed, and neither is true.
             continue
         result.changes.append(FileChange(target, other_texts[code], created=False))
     return LocalizationOutcome(result=result, entries=entry_changes)

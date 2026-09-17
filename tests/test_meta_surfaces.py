@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import pytest
+import yaml as _yaml
 
 from xbsl import cli, i18n, scaffold
 
@@ -429,6 +430,159 @@ def test_cli_set_localization_name_and_entry_clash_is_refused(capsys, tmp_path):
     )
 
     assert code == 2 and "error" in err
+
+
+# --- set-localization: a batch file is read as text, not as typed yaml -------------------
+
+
+def test_cli_set_localization_keeps_yes_no_and_on_as_the_words_they_are(capsys, tmp_path):
+    """Yes, No and On are ordinary English captions.
+
+    The typed yaml loader turned them into booleans, and the rows were written as "True"
+    and "False"; a key spelled `On:` became the boolean True and crashed the write on
+    `.strip()`. The file carries captions, so it is read with every scalar left a string.
+    """
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+    entries_file = tmp_path / "entries.yaml"
+    entries_file.write_text(
+        "Согласие:\n    Русский: Да\n    En: Yes\n"
+        "Отказ:\n    Русский: Нет\n    En: No\n"
+        "On:\n    Русский: Включено\n    En: On\n",
+        encoding="utf-8",
+    )
+
+    code, out = _run_cli(
+        capsys, "set-localization", str(yaml_path), "--entries-file", str(entries_file),
+    )
+
+    assert code == 0
+    written = {(e["key"], e["language"]): e["new"] for e in out["summary"]}
+    assert written[("Согласие", "Английский")] == "Yes"
+    assert written[("Отказ", "Английский")] == "No"
+    assert written[("On", "Английский")] == "On"
+    assert written[("On", "Русский")] == "Включено"
+
+
+def test_cli_set_localization_keeps_a_clock_time_as_written(capsys, tmp_path):
+    """`12:30` read as typed yaml is the sexagesimal number 750, and 750 was written."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+    entries_file = tmp_path / "entries.yaml"
+    entries_file.write_text("Начало:\n    Русский: 12:30\n    En: 12:30\n", encoding="utf-8")
+
+    code, out = _run_cli(
+        capsys, "set-localization", str(yaml_path), "--entries-file", str(entries_file),
+    )
+
+    assert code == 0
+    assert [e["new"] for e in out["summary"]] == ["12:30", "12:30"]
+    reloaded = _yaml.safe_load(yaml_path.read_text(encoding="utf-8-sig"))
+    assert reloaded["Строки"]["Начало"] == "12:30"
+
+
+def test_cli_set_localization_reads_a_json_batch_the_same_way(capsys, tmp_path):
+    """JSON is a yaml document, and one loader still reads either format."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+    entries_file = tmp_path / "entries.json"
+    entries_file.write_text(json.dumps({
+        "Согласие": {"Русский": "Да", "En": "Yes"},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    code, out = _run_cli(
+        capsys, "set-localization", str(yaml_path), "--entries-file", str(entries_file),
+    )
+
+    assert code == 0
+    written = {(e["key"], e["language"]): e["new"] for e in out["summary"]}
+    assert written[("Согласие", "Русский")] == "Да"
+    assert written[("Согласие", "Английский")] == "Yes"
+
+
+def test_cli_set_localization_entries_file_that_is_not_there_is_an_ordinary_error(
+        capsys, tmp_path):
+    """A path that does not exist used to come out as a bare FileNotFoundError traceback."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+
+    code, err = _run_cli(
+        capsys, "set-localization", str(yaml_path),
+        "--entries-file", str(tmp_path / "нет-такого.yaml"),
+    )
+
+    assert code == 2 and "нет-такого.yaml" in err["error"]
+
+
+def test_cli_set_localization_refuses_a_value_that_is_not_a_text(capsys, tmp_path):
+    """A mapping where a language's caption belongs names the key instead of being str()-ed."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+    entries_file = tmp_path / "entries.json"
+    entries_file.write_text(json.dumps({
+        "Заголовок": {"Русский": {"Текст": "Личный кабинет"}},
+    }, ensure_ascii=False), encoding="utf-8")
+
+    code, err = _run_cli(
+        capsys, "set-localization", str(yaml_path), "--entries-file", str(entries_file),
+    )
+
+    assert code == 2 and "Заголовок" in err["error"]
+
+
+def test_cli_set_localization_entry_flag_refuses_a_value_that_is_not_a_text(capsys, tmp_path):
+    """The same rule for the JSON of `--entry`: `true` is not a caption.
+
+    The Russian value is there on purpose - without it the key would be refused for the
+    missing default language, and the test would pass without judging the English value.
+    """
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+
+    code, err = _run_cli(
+        capsys, "set-localization", str(yaml_path),
+        "--entry", 'Заголовок={"Русский": "Личный кабинет", "En": true}',
+    )
+
+    assert code == 2 and "Заголовок" in err["error"]
+    assert "Заголовок" not in yaml_path.read_text(encoding="utf-8")
+
+
+def test_cli_set_localization_value_without_a_key_is_refused(capsys, tmp_path):
+    """`--value` belongs to the `name` argument: alone beside a batch it was dropped."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+
+    code, err = _run_cli(
+        capsys, "set-localization", str(yaml_path), "--value", "Русский=Личный кабинет",
+        "--entry", 'Заголовок={"Русский": "Текст"}',
+    )
+
+    assert code == 2 and "--value" in err["error"]
+    assert "Заголовок" not in yaml_path.read_text(encoding="utf-8")
+
+
+def test_cli_set_localization_answers_with_renames_like_every_other_write(capsys, tmp_path):
+    """Every scaffold write answers with `renames`; this one had dropped the key."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+
+    code, out = _run_cli(
+        capsys, "set-localization", str(yaml_path), "Заголовок",
+        "--value", "Русский=Личный кабинет",
+    )
+
+    assert code == 0
+    assert {"renames", "summary", "files", "notes", "lint"} <= set(out)
+    assert out["renames"] == []
+
+
+def test_cli_set_localization_leaves_out_a_translation_it_only_read(capsys, tmp_path):
+    """A translation nothing changed keeps its mtime and stays out of `files`."""
+    yaml_path = _localized_strings_element_cli(capsys, tmp_path)
+    translation = yaml_path.parent / "Локализация" / "En" / "Тексты.yaml"
+    _run_cli(capsys, "set-localization", str(yaml_path), "Заголовок",
+             "--value", "Русский=Личный кабинет", "--value", "En=Personal account")
+    before = translation.read_text(encoding="utf-8")
+
+    code, out = _run_cli(capsys, "set-localization", str(yaml_path), "Заголовок",
+                         "--value", "Русский=Иной заголовок")
+
+    assert code == 0
+    assert [f["path"] for f in out["files"]] == [str(yaml_path)]
+    assert translation.read_text(encoding="utf-8") == before
 
 
 def test_mcp_meta_add_form_cards(mcp_module, tmp_path):
