@@ -173,7 +173,8 @@ Pictures of the platform's library are not files of the project. Each picture ex
 Russian and an English name, and a yaml property, a string or `Resource{...}` that names one takes
 the English name, bare or with the library namespace: `Стд::Аккаунт.svg` becomes
 `Std::Account.svg`. If the project keeps its own file under the same name, the reference goes to
-that file.
+that file. The translator takes the English names from `resource_paths` in the platform's
+`uiterms.json`, and on data without that section a reference does not get them.
 
 A method a component of the project declares, called through a node of a form, is the project's
 word too, while a built-in command of a platform component keeps the spelling of the ui vocabulary.
