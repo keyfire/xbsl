@@ -661,3 +661,128 @@ def test_checked_return_metadata_survives_extraction_and_serialization(tmp_path)
     data = json.loads(output.read_text(encoding='utf-8'))
     assert data['checked_return_methods'] == {'Sample': ['Transform']}
     assert data['member_signatures']['Sample']['Transform'] == ['Transform(): String']
+
+
+# --- components the help has retired ----------------------------------------------------------
+
+_RETIRED_PAGE = (
+    "<html><head><title>REPLACE_RU | 1C:Enterprise.Element</title></head><body>"
+    "<article><h1><del>REPLACE_RU</del></h1>"
+    "<p><code>REPLACE_QUALIFIED</code></p>"
+    "<p>REPLACED_BY</p>"
+    "</article></body></html>"
+)
+
+_BASE_PAGE = (
+    "<html><head><title>REPLACE_RU | 1C:Enterprise.Element</title></head><body>"
+    "<article><h1>REPLACE_RU</h1>"
+    '<h2 class="anchor" id="иерархия-типа">Иерархия типа</h2>'
+    '<p>Базовые типы: <a href="/Object_ru/">Объект</a></p>'
+    "<h2>Свойства​</h2><h3>Видимость​</h3><p>Тип: <a href='/Boolean_ru/'>Булево</a></p>"
+    "</article></body></html>"
+)
+
+_SHIPPED_DESCRIPTION = """---
+type: "ui"
+stableId: "Std::Interface::REPLACE_EN"
+namespace:
+  en: "Std::Interface::Groups"
+  ru: "Стд::Интерфейс::Группы"
+term:
+  en: "REPLACE_EN"
+  ru: "REPLACE_RU"
+to: 8.0
+properties:
+- term:
+    en: "Title"
+    ru: "Заголовок"
+  type: "Std::String"
+- term:
+    en: "Orientation"
+    ru: "Ориентация"
+  type: "Std::Interface::Groups::ContentOrientation | Std::Auto"
+events:
+- term:
+    en: "OnClick"
+    ru: "ПриНажатии"
+baseType: "Std::Interface::Groups::REPLACE_BASE"
+"""
+
+
+def _spell(template: str, **names: str) -> str:
+    for key, value in names.items():
+        template = template.replace(key, value)
+    return template
+
+
+def _retired_car(root, extra: dict[str, str] | None = None):
+    """A distribution with a retired component: a page that states nothing, a base that does,
+    and the machine description the runtime ships next to them."""
+    import io
+    import zipfile
+
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as inner:
+        inner.writestr(
+            "com/e1c/g5rt/appengine/ui/stdcomponents/common/components/ui/FixedGroup.yaml",
+            _spell(_SHIPPED_DESCRIPTION, REPLACE_EN="FixedGroup",
+                   REPLACE_RU="ФиксированнаяГруппа", REPLACE_BASE="Group"),
+        )
+        for name, text in (extra or {}).items():
+            inner.writestr(
+                f"com/e1c/g5rt/appengine/ui/stdcomponents/common/components/ui/{name}.yaml", text)
+    car = root / "element-server-with-ide-9.9.9-test.car"
+    with zipfile.ZipFile(car, "w") as archive:
+        archive.writestr(
+            _MODULE.STD_BASE + "Interface/Groups/FixedGroup_ru/index.html",
+            _spell(_RETIRED_PAGE, REPLACE_RU="ФиксированнаяГруппа",
+                   REPLACE_QUALIFIED="Стд::Интерфейс::Группы::ФиксированнаяГруппа",
+                   REPLACED_BY="Заменена на Группа"),
+        )
+        archive.writestr(_MODULE.STD_BASE + "Interface/Groups/Group_ru/index.html",
+                         _spell(_BASE_PAGE, REPLACE_RU="Группа"))
+        archive.writestr("data/lib/chassis/modules/stdcomponents.common.jar", jar.getvalue())
+    return car
+
+
+def test_a_component_the_help_retired_takes_its_members_from_the_shipped_description(tmp_path):
+    """The help drops a retired component and leaves a page that says nothing about it.
+
+    The runtime goes on shipping the component and its machine description, so a project
+    built on that base is not built on a type nobody can describe.
+    """
+    import json
+
+    _retired_car(tmp_path)
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["type_members"]["ФиксированнаяГруппа"] == {
+        "properties": ["Заголовок", "Ориентация"], "events": ["ПриНажатии"]}
+    # The base chain of the page is carried over whole - the loader expands members over it.
+    assert data["bases"]["ФиксированнаяГруппа"] == ["Группа", "Объект"]
+
+
+def test_the_shipped_description_never_overrules_the_help_and_names_no_new_type(tmp_path):
+    """Two narrowings, both of them the reason the help stays the primary source.
+
+    A component the help DESCRIBES is read from the help as before, and a component the help
+    never NAMES is none of this fallback's business: what the reference pages leave out on
+    purpose (the internal-functionality components) would otherwise arrive as a public type.
+    """
+    import json
+
+    extra = {
+        "Group": _spell(_SHIPPED_DESCRIPTION, REPLACE_EN="Group", REPLACE_RU="Группа",
+                        REPLACE_BASE="Component").replace("Заголовок", "ПридуманноеСвойство"),
+        "BlockSchema": _spell(_SHIPPED_DESCRIPTION, REPLACE_EN="BlockSchema",
+                              REPLACE_RU="БлокСхема", REPLACE_BASE="Group"),
+    }
+    _retired_car(tmp_path, extra)
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["type_members"]["Группа"] == {"properties": ["Видимость"]}
+    assert "БлокСхема" not in data["type_members"] and "БлокСхема" not in data["names"]
