@@ -8,7 +8,8 @@
 // The token and the address of the debug session come from the platform through
 // `elemctl apps debug` (Console API /actions/debug). The session id is generated on the client
 // side and goes BOTH into the attach config and into the debuggee's URL - the debug server
-// stitches the two together by it.
+// stitches the two together by it. The URL parameters differ between server versions, see
+// debugUrlCore.ts.
 //
 // Breakpoint binding: a module id is the file path RELATIVE to the workspace with forward
 // slashes, shaped `<Vendor>/<Name>/<path in project>.xbsl`. The workspace must therefore point at
@@ -21,6 +22,7 @@ import { randomUUID } from "crypto";
 import * as fs from "fs";
 import * as path from "path";
 import { askAppId } from "./deploy";
+import { debuggeeUrl } from "./debugUrlCore";
 
 const DEBUG_TYPE = "xbsl";
 
@@ -122,12 +124,6 @@ function runElemctl(args: string[], cwd: string | undefined): Promise<any> {
       }
     });
   });
-}
-
-// Host and port out of client-debug-address (wss://host:port) for the debuggee's parameters.
-function hostPort(wssUrl: string): { host: string; port: string } {
-  const u = new URL(wssUrl);
-  return { host: u.hostname, port: u.port || (u.protocol === "wss:" ? "443" : "80") };
 }
 
 function listSubdirs(dir: string, limit = 64): string[] {
@@ -553,13 +549,10 @@ class XbslConfigurationProvider implements vscode.DebugConfigurationProvider {
         : textSetting("debug.applicationUrl", "applicationUrl");
       const appUrl: string | undefined = configured || application.uri;
       if (appUrl && debugInfo["client-debug-address"]) {
-        const { host, port } = hostPort(debugInfo["client-debug-address"]);
-        const authModeParam = config.authMode ? `&auth-mode=${config.authMode}` : "";
-        const sep = appUrl.includes("?") ? "&" : "?";
-        const debuggeeUrl = `${appUrl}${sep}debug-server-host=${host}&debug-server-port=${port}&debug-session-id=${sessionId}${authModeParam}`;
-        log(vscode.l10n.t("Debuggee application URL: {0}", debuggeeUrl));
+        const url = debuggeeUrl(appUrl, debugInfo["client-debug-address"], sessionId, config.authMode);
+        log(vscode.l10n.t("Debuggee application URL: {0}", url));
         if (flagSetting("debug.openApplicationOnStart", "openApplicationOnStart", true)) {
-          pendingApp.set(sessionId, debuggeeUrl);
+          pendingApp.set(sessionId, url);
         }
       }
       return config;
