@@ -83,21 +83,72 @@ def report(diags: list[Diagnostic], n_files: int) -> dict:
     }
 
 
+#: compact() lists findings one line each up to this many; more, and only the count remains.
+#: Ten is a screenful either way - fewer and a reader still has to ask again to see anything,
+#: more and the "compact" answer is not compact any more. A named constant instead of a bare
+#: number in the code below: the docstring here is the one place explaining the choice.
+COMPACT_FINDINGS_LIMIT = 10
+
+
 def compact(payload: dict) -> dict:
-    """The payload of report() without its list of findings or per-file map.
+    """The payload of report() without its per-file map, and its findings held short.
 
     The summary keeps counts by rule and severity; the unbounded per-file map is available
-    in the full report. A reader asking "is the tree clean, and which rules fire" does not
-    need the text of every finding - which is what the list costs: several hundred characters each, tens of thousands
-    over one project run. The errors alone keep their full records, under `errors`, because an
-    error is what a build fails on and the reader has to see which one. Every other key of the
-    payload (the environment, the baseline record, the CI job) stays as it was.
+    in the full report. Up to COMPACT_FINDINGS_LIMIT findings, `findings` lists them one line
+    each ("path:line rule - message") - a handful of findings is exactly what "is the tree
+    clean" wants to see, and a second call for the plain list buys nothing when the count is
+    this low. Past the limit `findings` is left out and `findings_hint` says how many there
+    are and how to read them (call again without `compact`, or narrow `paths`/`select`) - the
+    text of every finding is what the list costs: several hundred characters each, tens of
+    thousands over one project run. The errors alone always keep their full records, under
+    `errors`, because an error is what a build fails on and the reader has to see which one.
+
+    `as_ci`, under `summary` when the caller asked for it, narrows the same way: the `flags`
+    sentence alone (it already names the file, the job and the adopted rules) plus the job
+    name when the file runs the linter more than once - see _compact_as_ci. Every other key
+    of the payload (the environment, the baseline record) stays as it was.
     """
     out = dict(payload)
     out["summary"] = {key: value for key, value in payload["summary"].items()
                       if key != "by_file"}
     findings = out.pop("diagnostics", [])
     out["errors"] = [d for d in findings if d["severity"] == "error"]
+    if len(findings) <= COMPACT_FINDINGS_LIMIT:
+        out["findings"] = [_compact_finding(d) for d in findings]
+    else:
+        out["findings_hint"] = (
+            f"{len(findings)} findings, over the {COMPACT_FINDINGS_LIMIT} compact lists - "
+            "call again without compact for the full list, or narrow paths/select"
+        )
+    as_ci = out["summary"].get("as_ci")
+    if as_ci is not None:
+        out["summary"]["as_ci"] = _compact_as_ci(as_ci)
+    return out
+
+
+def _compact_finding(d: dict) -> str:
+    """One line of a compact finding list: "path:line rule - message" (en dash - a message
+    a reader sees, not a code comment)."""
+    return f"{d['path']}:{d['line']} {d['rule']} – {d['message']}"
+
+
+def _compact_as_ci(job: dict) -> dict:
+    """`as_ci` (cijob.CiLint.as_dict()) narrowed to what `flags` does not already say.
+
+    `flags` is the full sentence ("Rule set as in CI: <file>, job <job> - <select/ignore/
+    enable/baseline>"), so the raw lists, the baseline path and the include chain add
+    nothing a reader could not already read there. `job` alone survives, and only when the
+    file runs the linter in more than one job (`jobs` non-empty) - with a single job the
+    sentence is unambiguous about which one it describes.
+
+    A refused adoption (`cijob.refused()`, `adopted: False`) has no `flags` to fall back on
+    and is small already - it is returned unchanged.
+    """
+    if not job.get("adopted"):
+        return job
+    out = {"enabled": job.get("enabled", True), "adopted": True, "flags": job["flags"]}
+    if job.get("jobs"):
+        out["job"] = job.get("job")
     return out
 
 

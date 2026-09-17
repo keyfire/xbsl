@@ -249,18 +249,24 @@ def lint_paths(
                   one job, what `translate` wrote in another - and those judge different
                   sets. Without a name the first command wins and `as_ci.jobs` names the
                   others; a part of the name is enough when only one job fits;
-    compact     – omit the findings list and `summary.by_file`; keep counts and `errors` - the
-                  full records of the error-level findings, and nothing else. A full answer
-                  costs several hundred characters per finding, tens of thousands over one
-                  project run, when the question was only whether the tree is clean and
-                  whether the pipeline would go red: the counts of the summary answer that,
-                  and the errors are what a build fails on. Everything the summary carries
-                  about the baseline and the CI job stays.
+    compact     – drop `summary.by_file`; keep counts, `errors` - the full records of the
+                  error-level findings - and, findings permitting, the findings themselves.
+                  Up to report.COMPACT_FINDINGS_LIMIT (10) findings, `findings` lists them
+                  one line each ("path:line rule - message"); past it `findings` is left out
+                  and `findings_hint` says how many there are and how to read them (call
+                  again without `compact`, or narrow `paths`/`select`) - the text of every
+                  finding is what a full answer costs: several hundred characters each, tens
+                  of thousands over one project run, when the question was only whether the
+                  tree is clean. `summary.as_ci`, when present, narrows to `flags` (the
+                  sentence already names the file, the job and the adopted rules) plus `job`
+                  when the file runs the linter in more than one job - everything else about
+                  the baseline and the CI job stays in the full answer;
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
-    Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors}). The
-    summary counts the findings by rule (`by_rule`), by file (`by_file`, the same absolute
-    paths the diagnostics carry) and by severity (`by_severity`, all three levels named).
+    Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
+    or {summary, errors, findings_hint} past the limit). The summary counts the findings by
+    rule (`by_rule`), by file (`by_file`, the same absolute paths the diagnostics carry) and
+    by severity (`by_severity`, all three levels named).
     When a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
