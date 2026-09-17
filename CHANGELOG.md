@@ -45,7 +45,22 @@ entry either - say what the behaviour was, not which class name was compared.
   and a `Picture` on its bottom edge, so on a live row the button sank 19 px.
   `yaml/insert-row-needs-align` reports the pair when both stand in the row directly, and the
   new project rule `yaml/component-row-needs-align` reports it when project components draw the
-  button and the picture.
+  button and the picture. ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **`set-localization` and `meta_set_localization` take a batch of keys in one call.** The
+  batch comes from a JSON or YAML file (`--entries-file`), from a repeated `--entry
+  KEY=JSON` flag, or from an `entries` mapping on the MCP tool, and combines with the plain
+  single-key form; naming the same key twice is refused. Each file the batch touches is
+  read once and written once, only when a value in it actually changes, and a bad key
+  anywhere in the batch stops the write before any file is touched.
+  ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **`list_rules` and `--list-rules` accept a `filter`.** It matches a substring of a rule's
+  id, a group name (the id segment before `/`), or a word from the rule's title, its
+  message text in either language, or its English docstring. A word that exactly names a
+  group narrows the answer to just that group - a plain substring search would answer
+  `form` with 70 rules though `form/` holds only 2, and `code` with 120 though `code/`
+  holds only 98; any other word still searches broadly and combines with `select`/`ignore`
+  as before. A filter that matches nothing suggests the nearest group names.
+  ([#106](https://github.com/keyfire/xbsl/pull/106))
 
 ### Changed
 
@@ -57,6 +72,25 @@ entry either - say what the behaviour was, not which class name was compared.
   ([#105](https://github.com/keyfire/xbsl/pull/105))
 - **Translation builds the project index and takes longer** – 5 to 7 seconds more on a project of
   1,300–1,500 files. ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **`set-localization --dry-run` prints a summary instead of the whole file.** A run used to
+  dump the full text of every changed file - one key came back as 103 KB, both localizations
+  in full. It now lists, per key, the language and the old and new value, plus the file; the
+  full text is still there, one flag away, behind the new `--full-text` (`full_text` on the
+  MCP tool). ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **`lint_paths` with `compact` shows the findings, not just their count.** Up to ten
+  findings, the answer now lists them under a new `findings` key as `file:line rule –
+  message`; past that, `findings_hint` gives the count and how to see the list. The `as_ci`
+  block shrinks to `enabled`, `adopted` and a one-line `flags` (plus `job` when the pipeline
+  runs more than one lint job), but keeps `hint`, `note` and `unread_includes` when a config
+  has any - a caller that compares the answer's key set for equality will see it change.
+  ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **The rule tables on the documentation site fit the page, and the longest descriptions
+  moved out of them.** The text column widened from Blume's 42rem default to 60rem, and a
+  long code identifier in a table cell now wraps instead of forcing the table to scroll
+  sideways. 101 rule descriptions over 200 characters, in both languages, were cut to about
+  a third of their length; the detail they lost - exceptions, examples, platform history -
+  moved to a note below each tier's table, linked from the row.
+  ([#106](https://github.com/keyfire/xbsl/pull/106))
 
 ### Fixed
 
@@ -85,6 +119,20 @@ entry either - say what the behaviour was, not which class name was compared.
   MCP server started before the data was installed finds them in a Russian-spelled project
   without a restart; an English-spelled project still needs one.
   ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **`translate --unused` no longer offers live literal entries for removal.** A yaml
+  presentation or presentation template, a string nested inside another string's
+  interpolation, and a group name of a pattern were read only by a regular expression over
+  raw double-quoted text, so all three were missed and `--prune` took their entries out of
+  the English build. The orphan search now asks the translating pass itself which texts it
+  looks up, instead of keeping a separate copy of the same rules.
+  ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **`translate --strict` fails when a localizable yaml text has no literal entry.** Until now
+  a missing pair for a presentation, an application title, a permission message, an
+  event-log template, or any other yaml value the metamodel marks `Localizable` was only
+  listed, never failed - `Description` stays exempt as developer documentation, and other
+  literal gaps (a string in code, an untyped `%{...}` value) still fail nothing. An `=`
+  value holding a substitution is now translated as an expression, so the entry written for
+  its string is found instead of missed. ([#106](https://github.com/keyfire/xbsl/pull/106))
 
 ## 2026-09-15 – 0.110.0
 
