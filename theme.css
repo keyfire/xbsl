@@ -70,3 +70,33 @@
   --blume-font-mono: "Geist Mono Cyrillic",
     var(--blume-ff-geist-mono, ui-monospace, "Cascadia Code", Consolas, monospace);
 }
+
+/*
+ * The width of the text column and line breaks inside tables.
+ *
+ * Blume sets the column at 42rem, a measure made for prose. Many pages of this site carry
+ * tables of rules, settings and commands, and at 42rem the widest of them, the tier D rules
+ * table, did not fit: its last column scrolled sideways on every screen. At 60rem that table
+ * fits on a 1920-pixel screen with both side panels open. A narrower screen caps the column
+ * anyway, because the grid between the panels leaves about 49rem at 1440 pixels, so the
+ * value only decides how far a wide screen goes.
+ *
+ * A table overflows when a code chip has no space in it: a call chain or a qualified name of
+ * eighty characters. Blume gives code in a cell `overflow-wrap: break-word`, which allows a
+ * break inside the chip but still sizes the column to the whole chip. `anywhere` allows the
+ * same break and also lets the column shrink to the room there is.
+ *
+ * Only the last column gets it. The tables here keep their descriptions there, in the widest
+ * column, and that column takes the space it frees. A narrow column would lose instead: an
+ * auto table gives each column its least width plus a share of the rest in proportion to its
+ * text, so a short value such as `onType` would drop to the width of one letter and break
+ * apart. For the same reason a rule id in the first column keeps wrapping only at its hyphens.
+ */
+:root {
+  --blume-content-width: 60rem;
+}
+
+.prose td:last-child > code,
+.prose td:last-child :not(pre) > code {
+  overflow-wrap: anywhere;
+}
