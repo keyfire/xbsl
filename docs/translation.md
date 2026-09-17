@@ -205,11 +205,20 @@ property, a path in a string and the body of `Resource{...}` take the dictionary
 keep the file's own name together.
 
 Pictures of the platform's library are not files of the project. Each picture exists under a
-Russian and an English name, and a yaml property, a string or `Resource{...}` that names one takes
-the English name, bare or with the library namespace: `Стд::Аккаунт.svg` becomes
-`Std::Account.svg`. If the project keeps its own file under the same name, the reference goes to
-that file. The translator takes the English names from `resource_paths` in the platform's
-`uiterms.json`, and on data without that section a reference does not get them.
+Russian and an English name, and the English one goes to a reference the compiler resolves: the
+value of a picture property and the body of `Resource{...}`. The library namespace may be written
+or left out: `Стд::Аккаунт.svg` becomes `Std::Account.svg`.
+
+A name written without the namespace is looked for among the project's files first, and a file of
+the project wins. A name written with the library's namespace always means the library, which is
+what writing it says.
+
+A string does not reach the library. A path in a string is read by `ПакетРесурсов.Текущий()`, the
+resource package of the current namespace. So a string literal and a yaml value the schema types
+as text stay as they were written, even when they spell a name of the library letter for letter.
+
+The translator takes the English names from `resource_paths` in the platform's `uiterms.json`, and
+on data without that section a reference does not get them.
 
 A method a component of the project declares, called through a node of a form, is the project's
 word too, while a built-in command of a platform component keeps the spelling of the ui vocabulary.

@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from xbsl import engine, i18n, libs, scaffold, terms
-from xbsl.engine import RESOURCE_DIRS
+from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
 from xbsl.translation import platform_map

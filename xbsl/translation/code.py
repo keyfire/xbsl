@@ -45,7 +45,8 @@ from pathlib import Path
 
 from xbsl import dataset, lexer, terms, typeinfer
 from xbsl import parser as P
-from xbsl.engine import RESOURCE_DIRS, SourceFile
+from xbsl.engine import SourceFile
+from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules import _syntax
 from xbsl.translation import platform_map
 from xbsl.translation.dictionary import Dictionary
@@ -486,17 +487,21 @@ class Resolver:
     def library_picture(self, reference: str) -> str | None:
         """The English spelling of a reference to a picture of the platform's library, or None.
 
-        Every place that names a picture - a yaml value, the body of `Ресурс{...}`, a string
-        literal - asks this one question. A file of the project answers first: a project may
-        keep a file under the name of a picture of the library, the reference is then to that
-        file, and its name is the project's (resource_name). Otherwise the library names its
-        own picture (platform_map.resource_path_english), and the dictionary is not asked: an
-        entry written for a word of the project must not rename a picture the English library
-        calls otherwise. An entry that spells a part of the reference the way the library does
-        is judged an echo.
+        Every place that names a picture - the value of a picture property, the body of
+        `Ресурс{...}` - asks this one question. A BARE name is the project's first: a project
+        may keep a file under the name of a picture of the library, the reference is then to
+        that file, and its name is the project's (resource_name). A name QUALIFIED by the
+        library says which of the two is meant and always means the library - the namespace is
+        the whole difference between the two references, and reading it off before the project
+        is asked left `Стд::Сохранить.svg` meaning the project's `Сохранить.svg`.
+
+        The library names its own picture (platform_map.resource_path_english), and the
+        dictionary is not asked: an entry written for a word of the project must not rename a
+        picture the English library calls otherwise. An entry that spells a part of the
+        reference the way the library does is judged an echo.
         """
         key = reference.rpartition("::")[2]
-        if key.replace("\\", "/") in self.resource_keys:
+        if "::" not in reference and key.replace("\\", "/") in self.resource_keys:
             return None
         english = platform_map.resource_path_english(reference)
         if english is None:
@@ -2083,10 +2088,7 @@ def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = T
         _short_name_edit(name, base + tok.start + start, resolver, report, edits,
                          at if at is not None else (tok.line, tok.col), method)
     _named_group_edits(tok, base, resolver, report, edits, at)
-    if _resource_path_edits(tok, base, resolver, report, edits, at):
-        # A picture of the platform's library, named whole by the library: nothing in the
-        # literal is left for a person to name.
-        return
+    _resource_path_edits(tok, base, resolver, report, edits, at)
     if has_cyrillic(value):
         bare = value.strip('"')
         if "{" not in bare and resolver.dictionary.token(bare) is not None:
@@ -2287,7 +2289,7 @@ def _looks_like_resource_path(bare: str) -> bool:
     return all(_PATH_SEGMENT_RE.match(segment) for segment in re.split(r"[/\\]", bare))
 
 
-def _resource_path_edits(tok, base, resolver, report, edits, at=None) -> bool:
+def _resource_path_edits(tok, base, resolver, report, edits, at=None) -> None:
     """Translate the name segments of a literal that spells a path inside the resources.
 
     A resource is addressed by its path, and the pass renames the files and directories of the
@@ -2301,26 +2303,20 @@ def _resource_path_edits(tok, base, resolver, report, edits, at=None) -> bool:
     expression out: `"<a[^>]*>(?<Заголовок>.*?)</a>"` has slashes too, and its named groups are
     code the module reads by name, not files.
 
-    A literal that names a picture of the platform's library whole - bare or by the subsystem
-    of the library - takes the English name of the picture instead (Resolver.library_picture),
-    the one the yaml and `Ресурс{...}` take; word by word the compiler dictionary spelled
-    `Вход.svg` as `Enter.svg`, a picture the library does not have. True when it did.
+    The path is the PROJECT's own: what reads one at run time is `ПакетРесурсов.Текущий()`,
+    the resource package of the current namespace, and the library of pictures lies outside
+    it. So the library is not asked here, however exactly a literal happens to spell a name it
+    holds - only a reference the compiler resolves reaches the library (Resolver.library_picture),
+    and a string is not one.
     """
     value = tok.value
     if len(value) < 2 or not has_cyrillic(value):
-        return False
-    body = _body_of(tok)
-    english = resolver.library_picture(body) if body is not None else None
-    if english is not None:
-        if english != body:
-            edits.append((base + tok.start + 1, base + tok.end - 1, english))
-        return True
+        return
     bare = value[1:-1]
     if not _looks_like_resource_path(bare):
-        return False
+        return
     _resource_segment_edits(bare, base + tok.start + 1, resolver, report, edits,
                             at if at is not None else (tok.line, tok.col))
-    return False
 
 
 def _resource_segment_edits(path: str, start: int, resolver, report, edits,
@@ -2407,15 +2403,21 @@ def _resource_literal_edits(text: str, toks: list, base: int, resolver, report, 
         reference = body.strip()
         if not path or not has_cyrillic(reference):
             continue
+        # The library is asked about the WHOLE reference, its subsystem included, and it is
+        # asked first: the priority of a file of the project belongs to the bare name alone,
+        # and it is applied where the reference is read (Resolver.library_picture). Asked
+        # about the path with the namespace already cut off, the library never answered for
+        # `Ресурс{Стд::Сохранить.svg}` in a project that keeps a `Сохранить.svg` of its own.
+        english = resolver.library_picture(reference)
+        if english is not None:
+            start = opener.end + len(body) - len(body.lstrip())
+            if english != reference:
+                edits.append((base + start, base + start + len(reference), english))
+            done.update(range(index + 2, closer_index))
+            continue
         if path.replace("\\", "/") not in resolver.resource_keys:
-            english = resolver.library_picture(reference)
-            if english is not None:
-                start = opener.end + len(body) - len(body.lstrip())
-                if english != reference:
-                    edits.append((base + start, base + start + len(reference), english))
-                done.update(range(index + 2, closer_index))
-            # Otherwise no file of the project and no picture of the library answers to the
-            # path - a file the project does not have: the walk reads it the way it always did.
+            # No file of the project and no picture of the library answers to the path - a
+            # file the project does not have: the walk reads it the way it always did.
             continue
         if not has_cyrillic(path):
             continue

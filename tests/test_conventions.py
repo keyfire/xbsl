@@ -1,6 +1,6 @@
 """Conventions of the sources that no single test of a feature would ever notice.
 
-A convention nobody wrote down is a convention every new file gets to rediscover, and all four
+A convention nobody wrote down is a convention every new file gets to rediscover, and all five
 conventions here hide their failures.
 
 The first is the encoding of a started PROCESS: read as text without a named encoding, it is
@@ -35,6 +35,13 @@ name since July, and the check here is the narrower half of that rule brought in
 package: it reads the inside of a class as well, where a `test_` method is collected too and the
 older rule stops at the top level of the module.
 
+The fifth is what an import COSTS. `xbsl/engine.py` finishes by importing the rules package, so
+naming the engine anywhere loads a hundred and twenty modules - the whole rule set, the parser,
+the scaffolding. A module that needed one constant from it paid all of that and said nothing:
+`xbsl/translation/platform_map.py` took the tuple of resource folder names that way, and
+importing the platform map alone pulled in 130 modules instead of 10. The constant lives in the
+leaf that owns the subject now (`xbsl/restext.py`), and the check below keeps the map a leaf.
+
 The MECHANICS are not this repository's business: the engine, the bridge and the console all
 start processes and write their files the same way and have the same silent failures waiting,
 so reading the sources with `ast` and judging a call lives in the shared `docsguard` package
@@ -56,6 +63,9 @@ from __future__ import annotations
 
 import ast
 import codecs
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 from docsguard import (
@@ -362,3 +372,35 @@ def test_a_test_method_inside_a_class_is_judged_too():
               "    def test_one(self):\n        pass\n")
 
     assert len(shadowed_problems(source, "tests/test_thing.py")) == 1
+
+
+# --- the cost of an import --------------------------------------------------------------------
+
+#: Modules that must stay LEAVES: what they answer is tables and spellings, and a caller that
+#: asks them one question must not pay for the rule registry. `xbsl.engine` is the hub - it
+#: registers the rules as it is imported - so it is the name to watch for.
+LEAF_MODULES = ("xbsl.translation.platform_map",)
+
+
+def test_a_leaf_module_does_not_drag_the_rule_registry_in():
+    """Importing the platform map must not import the engine, and with it every rule.
+
+    Nothing says when it starts to: the import works, the answers are the same, and only the
+    time a cold start takes moves. A fresh interpreter per module is the only way to ask - the
+    test run itself has the engine loaded long before this file.
+    """
+    for name in LEAF_MODULES:
+        out = subprocess.run(
+            [sys.executable, "-c",
+             f"import sys, {name}; print('xbsl.engine' in sys.modules, "
+             "len([m for m in sys.modules if m.startswith('xbsl')]))"],
+            capture_output=True, text=True, encoding="utf-8", timeout=120, cwd=ROOT,
+            stdin=subprocess.DEVNULL,
+            # PYTHONIOENCODING: a Python child writes its stdout in the console code page
+            # otherwise, and this one is read back as text.
+            env=dict(os.environ, PYTHONIOENCODING="utf-8", XBSL_NO_PLUGINS="1"),
+        )
+
+        assert out.returncode == 0, out.stderr
+        loaded, count = out.stdout.split()
+        assert loaded == "False", f"{name} imports xbsl.engine ({count} xbsl modules loaded)"

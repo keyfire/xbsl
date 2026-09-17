@@ -16,7 +16,7 @@ import re
 from functools import lru_cache
 
 from xbsl import dataset, metamodel, terms, typeinfer, uischema
-from xbsl.engine import RESOURCE_DIRS
+from xbsl.restext import RESOURCE_DIRS
 
 
 def _reset() -> None:

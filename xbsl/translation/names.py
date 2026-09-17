@@ -26,7 +26,8 @@ from pathlib import Path
 
 from xbsl import libs, metamodel
 from xbsl.lexer import tokens
-from xbsl.engine import RESOURCE_DIRS, SourceFile
+from xbsl.engine import SourceFile
+from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
 
 #: `Имя:` / `Name:` of a yaml node, any nesting (a list item dash counts as indent).

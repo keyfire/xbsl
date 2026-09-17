@@ -79,9 +79,10 @@ from pathlib import Path
 from xbsl import dataset, i18n, parser as P, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity, TextEdit
-from xbsl.engine import RESOURCE_DIRS, SourceFile, is_query_file, rule
+from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.layout import Layout, subsystem_of_key
 from xbsl.lexer import Token, tokens
+from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules._syntax import (
     WORD_KINDS,
     _query_vocabulary,

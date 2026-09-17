@@ -202,6 +202,9 @@ def _library_picture(node, resolver, edits) -> bool:
     (`Изображение: Аккаунт.svg`, `Изображение: Стд::Аккаунт.svg`), and the library answers
     either way (Resolver.library_picture). Before, a bare name was read as a file of the project
     and waited for an entry, and a qualified one stayed as written with no gap reported.
+
+    Only a slot that HOLDS a picture asks: a slot the schema types as text is not one, and the
+    callers keep it away from here (the `text` argument of _generic_scalar).
     """
     value = node.value
     if not isinstance(value, str) or not has_cyrillic(value):
@@ -213,17 +216,21 @@ def _library_picture(node, resolver, edits) -> bool:
     return True
 
 
-def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
+def _identifier_value(node, resolver, report, edits, scope: str = "", *,
+                      text: bool = False) -> None:
     """A value that names things: a bare identifier, a dotted chain, a resource file.
 
     `scope` is the element this name is declared in: a name lives in the namespace of its
     owner, so a project may need a spelling here that the same word cannot carry globally
     (a property of a component named after a word the base type already uses).
+
+    `text` says the schema types the slot as text a person reads - see _generic_scalar, the
+    only caller that passes it on.
     """
     value = node.value
     if not isinstance(value, str) or not has_cyrillic(value):
         return
-    if _library_picture(node, resolver, edits):
+    if not text and _library_picture(node, resolver, edits):
         return
     m = _RESOURCE_VALUE_RE.match(value)
     if m:
@@ -340,7 +347,8 @@ def _template_scalar(node, resolver, report, edits, *, visible: bool = False) ->
         report.note_literal(body, line, col, visible=visible)
 
 
-def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False) -> None:
+def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False,
+                    text: bool = False) -> None:
     """A value nothing typed: expressions, references and resource files translate, data stays.
 
     A value the metamodel types `Localizable` (a command's or a privilege's presentation) is
@@ -352,6 +360,12 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
     its strings are keyed between their quotes the way a module keys them. Taken for a
     template, the value was keyed with its `=` and its quotes - a key the dictionary refuses to
     load - so the entry an author wrote for the string never applied.
+
+    `text` says the schema types the slot as a STRING a person reads ("Строка", "Локализуемое").
+    A picture of the platform's library cannot stand there - the property that holds one is
+    typed by the picture, not by a string - so the library is not asked, and a caption spelled
+    exactly like a name of the library stays the caption it is. A path into the project's OWN
+    resources is still read as a path: the file it names moves with the rewrite.
     """
     value = node.value
     if not isinstance(value, str) or not value:
@@ -362,12 +376,12 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
     if "%{" in value or "${" in value:
         _template_scalar(node, resolver, report, edits, visible=localizable)
         return
-    if _library_picture(node, resolver, edits):
+    if not text and _library_picture(node, resolver, edits):
         return
     if _RESOURCE_VALUE_RE.match(value) and has_cyrillic(value):
         # A resource file is named by the same map that renames the file itself; a reference
         # left behind points at a file that no longer exists, and the build refuses it.
-        _identifier_value(node, resolver, report, edits)
+        _identifier_value(node, resolver, report, edits, text=text)
         return
     if _dollar_ref(node, resolver, report, edits):
         return
@@ -680,9 +694,10 @@ def _meta_value(key, vnode, record, cls, kind, resolver, report, edits, owner: s
     if declared == "Localizable":
         # A presentation a person reads on the page - through the literals plane; the
         # documentation properties stay data (see _DOC_TEXT_KEYS).
-        _generic_scalar(vnode, resolver, report, edits, localizable=key not in _DOC_TEXT_KEYS)
+        _generic_scalar(vnode, resolver, report, edits, localizable=key not in _DOC_TEXT_KEYS,
+                        text=True)
         return
-    _generic_scalar(vnode, resolver, report, edits)
+    _generic_scalar(vnode, resolver, report, edits, text=declared == "String")
 
 
 def _mapping_value(node, key: str) -> str | None:
@@ -972,7 +987,7 @@ def _component_key_value(knode, vnode, comp_type, resolver, report, edits, owner
         if "Булево" in types and _boolean_scalar(vnode, edits):
             return
         if any(t in ("Строка", "Локализуемое", "ЛокализуемоеЗначение") for t in types):
-            _generic_scalar(vnode, resolver, report, edits)
+            _generic_scalar(vnode, resolver, report, edits, text=True)
             return
         if any(t.startswith("Событие") for t in types):
             _identifier_value(vnode, resolver, report, edits)

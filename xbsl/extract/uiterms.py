@@ -358,10 +358,16 @@ def pair_pictures(instances: Iterable[tuple[str, bytes]]) -> dict:
     normalization:
 
     - copies of one path with one digest are one picture;
-    - a path whose copies differ is left out whole, and no copy is preferred;
-    - the remaining paths are grouped by digest, and only a group of exactly one Russian and
-      one English path is a pair. A drawing shared by several names says nothing about which
-      name answers which, and a drawing with one name has no twin. Neither is guessed.
+    - every path is grouped by digest - a path whose copies differ by all of them, since any
+      one of its drawings may be the one a reference resolves to;
+    - only a group of exactly one Russian and one English path is a pair, and neither of them
+      may be a path whose copies differ: no copy of such a path is preferred, so it is never
+      paired, and it still says that its drawing has one name more than the group shows. A
+      drawing shared by several names says nothing about which name answers which, and a
+      drawing with one name has no twin. Neither is guessed.
+
+    Dropping a conflicting path before the grouping was the quiet half of this: the group its
+    drawing belonged to was then left with one name on each side and filed as a clean pair.
 
     The answer: {"pairs": {Russian path: English path}, "conflicts": {path: [digests]},
     "ambiguous" and "unmatched": [{"sha256", "ru", "en"}], "instances": the copies read}.
@@ -375,15 +381,17 @@ def pair_pictures(instances: Iterable[tuple[str, bytes]]) -> dict:
     groups: dict[str, dict[str, list[str]]] = {}
     for path, found in sorted(digests.items()):
         language = picture_language(path)
-        if path in conflicts or language is None:
+        if language is None:
             continue
-        groups.setdefault(next(iter(found)), {"ru": [], "en": []})[language].append(path)
+        for digest in sorted(found):
+            groups.setdefault(digest, {"ru": [], "en": []})[language].append(path)
     pairs: dict[str, str] = {}
     ambiguous: list[dict] = []
     unmatched: list[dict] = []
     for digest, names in sorted(groups.items()):
         russian, english = names["ru"], names["en"]
-        if len(russian) == 1 and len(english) == 1:
+        if (len(russian) == 1 and len(english) == 1
+                and not ({*russian, *english} & set(conflicts))):
             pairs[russian[0]] = english[0]
         else:
             (ambiguous if russian and english else unmatched).append(

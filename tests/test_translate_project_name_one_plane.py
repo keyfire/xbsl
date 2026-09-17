@@ -161,10 +161,12 @@ def test_a_picture_of_the_platform_library_is_not_a_resource_of_the_project(tmp_
     finally:
         dataset.set_data_root(None)
     assert "Resource{СоздатьКопию.svg}" in module
-    # The project has no such files: the names belong to the platform's library of pictures,
-    # which carries its own English names, and every place that names the picture takes them.
+    # The project has no such file: the name belongs to the platform's library of pictures,
+    # which carries its own English names, and the reference to the picture takes them.
     assert "Resource{Time.svg}" in module
-    assert '"Time.svg"' in module
+    # A string is no reference to the library: it is a path into the project's own resources,
+    # and there the word is the name the project declares - it waits for its entry.
+    assert '"Время.svg"' in module
     assert '"Folder.svg"' in module
     # The field is the project's gap; the picture is never listed as a file of the project.
     missing = report.merged_missing_tokens()
