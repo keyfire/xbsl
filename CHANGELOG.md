@@ -40,6 +40,12 @@ entry either - say what the behaviour was, not which class name was compared.
   are matched by file contents; pictures without a pair are listed in the report). Extract the
   data again to get them; data without these sections keeps working as before.
   ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **A button next to a picture in a row without an explicit vertical alignment is now reported.**
+  Such a row lines its children up on the baseline. A `Button` keeps that line on its caption
+  and a `Picture` on its bottom edge, so on a live row the button sank 19 px.
+  `yaml/insert-row-needs-align` reports the pair when both stand in the row directly, and the
+  new project rule `yaml/component-row-needs-align` reports it when project components draw the
+  button and the picture.
 
 ### Changed
 
