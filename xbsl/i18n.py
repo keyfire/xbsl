@@ -62,6 +62,14 @@ _CORE_MESSAGES = {
         "en": "No rule matched the selection: {keys}. A selection takes a rule id, a group "
               "(the part of the id before '/') or a tier letter; rules in all: {total}.",
     },
+    "cli.no-rules-filter": {
+        "ru": "Фильтр '{filter}' ничего не нашёл среди правил; ближайшие группы: {groups}",
+        "en": "The filter '{filter}' matched no rule; groups closest to it: {groups}",
+    },
+    "cli.no-rules-filter-none": {
+        "ru": "Фильтр '{filter}' ничего не нашёл среди правил, и ни одна группа не похожа",
+        "en": "The filter '{filter}' matched no rule, and no group looks close to it",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",
@@ -351,11 +359,23 @@ _CORE_MESSAGES = {
     },
     "cli.help.list-rules": {
         "ru": "вывести список правил (с их параметрами и величинами) и выйти; вместе с "
-              "--select/--ignore список сужается так же, как набор проверки; с --format json "
-              "те же записи выводятся для машинной обработки",
+              "--select/--ignore список сужается так же, как набор проверки, а --rules-filter "
+              "сужает его ещё; с --format json те же записи выводятся для машинной обработки",
         "en": "print the list of rules (with their parameters and values) and exit; together "
-              "with --select/--ignore the list narrows the way a run's rule set does; with "
-              "--format json the same records are printed as data",
+              "with --select/--ignore the list narrows the way a run's rule set does, and "
+              "--rules-filter narrows it further; with --format json the same records are "
+              "printed as data",
+    },
+    "cli.help.rules-filter": {
+        "ru": "сузить --list-rules: подстрока id, группа (часть id до '/', целиком) или слово "
+              "названия либо описания – весь текст i18n под id правила (название и шаблоны "
+              "сообщений) на любом из языков, плюс докстринг по-английски; docs/RULES.md не "
+              "читается. Без учёта регистра; сочетается с --select/--ignore",
+        "en": "narrow --list-rules: an id substring, a group (the part of the id before '/', "
+              "matched whole) or a word of the title or description - every i18n text "
+              "registered under the rule's id (the title and its message templates), in "
+              "either language, plus the English docstring; docs/RULES.md is not read. "
+              "Case-insensitive; combines with --select/--ignore",
     },
     "cli.help.where": {
         "ru": "показать установку движка, интерпретатор и данные Элемента (путь, источник, версии) и выйти",
@@ -426,6 +446,10 @@ _CORE_MESSAGES = {
     "cli.help.meta.name": {
         "ru": "ИМЯ",
         "en": "NAME",
+    },
+    "cli.help.meta.word": {
+        "ru": "СЛОВО",
+        "en": "WORD",
     },
     "cli.help.server.lsp": {
         "ru": "сервер LSP для редактора",

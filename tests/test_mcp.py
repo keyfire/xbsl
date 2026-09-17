@@ -134,6 +134,210 @@ def test_list_rules_answers_about_one_rule_with_its_parameters(monkeypatch):
         sys.modules.pop("xbsl.mcp_server", None)
 
 
+# --- list_rules: filter by id, group, title or description ------------------------------
+
+
+def test_list_rules_filter_by_id_substring(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="duplicate-method-body")
+        assert [r["id"] for r in listed] == ["code/duplicate-method-body"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_by_group_includes_the_whole_group(monkeypatch):
+    """A group name reaches every rule of that group, not a lucky few of them."""
+    from xbsl import engine
+
+    m = _with_stub(monkeypatch)
+    try:
+        listed = {r["id"] for r in m.list_rules(filter="style")}
+        style_rules = {r.id for r in engine.RULES if r.id.startswith("style/")}
+        assert len(style_rules) > 1
+        assert style_rules <= listed
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_matching_rules_group_check_is_exact_not_a_substring():
+    """The group half of the filter is an EQUALITY check against the id's own group - not a
+    text search that would also catch "code" inside a hypothetical "yaml/error-code".
+
+    Built from two bare RuleInfo records rather than the real registry: real rule text is
+    prose, and prose about one group legitimately mentions another group's name in passing
+    (whitespace/mixed-newline's message says "bring them to a single style") - a fact about
+    the description search, not about whether group matching itself stays an equality check.
+    """
+    from xbsl.diagnostics import Severity
+    from xbsl.engine import RuleInfo, matching_rules
+
+    def _dummy():
+        """Used only to give RuleInfo a callable; never invoked here."""
+
+    in_group = RuleInfo("style/abbreviation-case", "style/abbreviation-case.title", "C",
+                        "file", Severity.WARNING, _dummy)
+    outside_group = RuleInfo("yaml/error-code", "yaml/error-code.title", "A",
+                             "file", Severity.WARNING, _dummy)
+
+    matched = matching_rules([in_group, outside_group], "style")
+
+    assert [r.id for r in matched] == ["style/abbreviation-case"]
+
+
+def test_list_rules_filter_by_a_title_word_in_either_language(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        en = m.list_rules(filter="abbreviation")
+        ru = m.list_rules(filter="аббревиатур")
+        ids = {"naming/abbreviation", "style/abbreviation-case"}
+        assert {r["id"] for r in en} == ids
+        assert {r["id"] for r in ru} == ids
+        assert m.list_rules(filter="ABBREVIATION") == en  # case-insensitive
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_by_a_word_of_the_description(monkeypatch):
+    """"description" reaches past the short title into the rule's own explanation.
+
+    code/self-assignment's title is "Assignment to itself" / "Присваивание самому себе" -
+    neither spelling carries "compiler"; its docstring and its diagnostic messages do.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="compiler")
+        assert any(r["id"] == "code/self-assignment" for r in listed)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_by_a_russian_word_only_in_a_message_template(monkeypatch):
+    """The description half of the filter is bilingual too - not just the English docstring.
+
+    The Russian word this test filters by names the compiler ("the compiler rejects...") and
+    sits only in the RU text of code/self-assignment's diagnostic messages
+    (code/self-assignment.plain/.compound); neither its RU title nor its (English) docstring
+    carries it.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="компилятор")
+        assert any(r["id"] == "code/self-assignment" for r in listed)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_by_an_english_word_only_in_the_docstring(monkeypatch):
+    """The docstring stays part of the search even once message templates are too.
+
+    "assigned" sits in code/self-assignment's docstring ("A value assigned back to the
+    place...") but in none of its registered i18n text: the title says "Assignment", the
+    messages say "assignment" - neither is the word "assigned" itself.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="assigned")
+        assert any(r["id"] == "code/self-assignment" for r in listed)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+# --- a title_key SHARED by two rules, without either rule's id in it --------------------
+#
+# code/ambiguous-type and yaml/ambiguous-type both pass title_key="ambiguous-type.title" -
+# a key registered without EITHER rule's id as a prefix, alongside a sibling
+# "ambiguous-type.found" that carries the finding's own message. Neither key satisfies the
+# "<rule id> + '.'" sweep, so both rules used to be reachable only through the single
+# language `info.title` happened to answer with, and never through "ambiguous-type.found"
+# at all - the one pair in the registry the id-prefix sweep alone cannot see.
+
+
+def _ambiguous_type_ids(listed) -> set[str]:
+    return {r["id"] for r in listed} & {"code/ambiguous-type", "yaml/ambiguous-type"}
+
+
+def test_list_rules_filter_finds_a_shared_title_key_pair_by_an_english_title_word(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="short")  # "Ambiguous short type name"
+        assert _ambiguous_type_ids(listed) == {"code/ambiguous-type", "yaml/ambiguous-type"}
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_finds_a_shared_title_key_pair_by_a_russian_title_word(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="короткое")  # "Неоднозначное короткое имя типа"
+        assert _ambiguous_type_ids(listed) == {"code/ambiguous-type", "yaml/ambiguous-type"}
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_finds_a_shared_title_key_pair_by_an_english_message_word(monkeypatch):
+    """"namespaces" sits only in ambiguous-type.found, a sibling key of the shared title_key -
+    not in the title of either rule, so only the stem sweep (not the title alone) reaches it.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="namespaces")
+        assert _ambiguous_type_ids(listed) == {"code/ambiguous-type", "yaml/ambiguous-type"}
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_finds_a_shared_title_key_pair_by_a_russian_message_word(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(filter="пространств")
+        assert _ambiguous_type_ids(listed) == {"code/ambiguous-type", "yaml/ambiguous-type"}
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_combines_with_select(monkeypatch):
+    """select/ignore work as before, and the filter narrows further inside what they leave."""
+    m = _with_stub(monkeypatch)
+    try:
+        listed = m.list_rules(select=["style"], filter="abbreviation")
+        assert [r["id"] for r in listed] == ["style/abbreviation-case"]
+
+        empty = m.list_rules(select=["code"], filter="abbreviation")
+        assert "error" in empty and "near_groups" in empty
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_empty_filter_lists_everything(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        assert m.list_rules(filter="") == m.list_rules()
+        assert m.list_rules(filter="   ") == m.list_rules()
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_matching_nothing_explains_and_suggests_groups(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        answer = m.list_rules(filter="zzzznotarule")
+        assert isinstance(answer, dict) and "error" in answer
+        assert "zzzznotarule" in answer["error"]
+        assert "near_groups" in answer
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_suggests_a_near_group_for_a_typo(monkeypatch):
+    m = _with_stub(monkeypatch)
+    try:
+        answer = m.list_rules(filter="stlye")  # a typo of "style"
+        assert "style" in answer["near_groups"]
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
 def _project_with_stale_entry(tmp_path, reason="так и задумано, правило здесь не применяем"):
     """A project whose baseline holds one live entry and one stale entry with a reason."""
     project = tmp_path / "acme" / "Проба"

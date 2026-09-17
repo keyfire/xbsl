@@ -29,7 +29,10 @@ from xbsl import (
     cijob, formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
-from xbsl.engine import RULES, active_rules, is_source_file, load, load_text, run, run_sources
+from xbsl.engine import (
+    RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
+    run, run_sources,
+)
 
 # mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
 # became MCPServer in mcp.server.mcpserver, and the old module is gone rather than aliased -
@@ -91,11 +94,25 @@ def _forbid_unknown_arguments() -> None:
 
 
 @mcp.tool()
-def list_rules(select: list[str] | None = None, ignore: list[str] | None = None) -> list[dict]:
+def list_rules(
+    select: list[str] | None = None,
+    ignore: list[str] | None = None,
+    filter: str = "",
+) -> list[dict] | dict:
     """List the available linter rules (id, title, tier, scope, severity).
 
     select – answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
     ignore – leave these out. Without either one the whole registry is listed.
+    filter – narrow by a word, case-insensitive: a rule id substring, a group (the part of
+             the id before '/', matched whole - "code" does not also catch "yaml/error-code"
+             the way a substring would) or a word of the title or of the rule's own
+             description - every i18n text registered under the rule's id (the title and the
+             message templates its diagnostics are built from), in either language, plus its
+             English docstring. docs/RULES.md is not read - it ships with neither the sdist
+             nor the wheel. Combines with select/ignore (narrows further, not instead of
+             them). Blank (the default) lists everything select/ignore leave. A filter that
+             matches nothing answers {"error", "near_groups"} instead of an empty list - the
+             groups closest to it by spelling, e.g. a typo of "style".
 
     A rule that judges by a NUMBER also carries `params`: for each one the `name`, the
     `value` in force here, the `default` it ships with, the `env` variable that overrides it
@@ -104,7 +121,13 @@ def list_rules(select: list[str] | None = None, ignore: list[str] | None = None)
     """
     chosen, excluded = _as_set(select), _as_set(ignore)
     listed = active_rules(chosen, excluded) if chosen or excluded else list(RULES)
-    return [r.as_dict() for r in sorted(listed, key=lambda x: (x.tier, x.id))]
+    narrowed = matching_rules(listed, filter)
+    if filter.strip() and not narrowed:
+        return {
+            "error": f"фильтр '{filter}' ничего не нашёл среди правил",
+            "near_groups": near_rule_groups(listed, filter),
+        }
+    return [r.as_dict() for r in sorted(narrowed, key=lambda x: (x.tier, x.id))]
 
 
 @mcp.tool()

@@ -9,6 +9,7 @@ Tiers: 'A' structure/YAML, 'B' text/conventions, 'C' parser/code structure, 'D' 
 
 from __future__ import annotations
 
+import difflib
 import os
 import re
 import sys
@@ -466,6 +467,110 @@ def active_rules(
 ) -> list[RuleInfo]:
     _ensure_overrides()
     return [r for r in RULES if _is_selected(r, select, ignore, enable)]
+
+
+# --- finding a rule by id, group, title or description ------------------------------------
+#
+# `--list-rules`/`list_rules` used to answer only the whole registry or select/ignore's exact
+# id-or-group-or-tier match - so checking whether a rule about abbreviations existed meant
+# reading every one of ~200 entries. `matching_rules` adds a looser, case-insensitive pass: an
+# id substring, a group matched WHOLE (so "code" does not also catch "yaml/error-code" the way
+# a substring would), or a WORD of the title or of the rule's DESCRIPTION, in either language.
+#
+# "Description" is everything i18n carries under the rule's own id: the title (`<id>.title`)
+# AND the message templates its diagnostics are built from (`<id>.plain`, `<id>.off`, and
+# whatever else a rule module registers under that prefix) - each already bilingual, because
+# every i18n message here is. A Russian reader who knows a rule complains about "компилятор"
+# (a word that sits only in the RU text of code/self-assignment's diagnostic messages, not in
+# its title) has to find it too, not just the English side. On top of that bilingual sweep,
+# the rule's own English docstring is searched as well: a fuller explanation next to the
+# code, in English like every docstring in this repository (LANGUAGE.md), for a word an
+# author wrote about the rule but never put in front of a caller.
+#
+# The id prefix alone misses a message a rule SHARES with a sibling: code/ambiguous-type and
+# yaml/ambiguous-type both pass title_key="ambiguous-type.title", registered without either
+# rule's own id, next to a sibling "ambiguous-type.found" carrying the finding's own message -
+# neither key starts with "code/ambiguous-type." or "yaml/ambiguous-type.". The stem of
+# title_key ("ambiguous-type.", the key without its last segment) reaches both; the trailing
+# "." on the stem is the same guard the id prefix uses, so "code/call-arity."'s stem does not
+# also sweep up "code/call-arity-cross.title".
+#
+# What is NOT read: docs/RULES.md/.ru.md. Those pages are the toolkit's documentation
+# website, built and published separately - they ship with neither the sdist nor the wheel,
+# so a filter depending on them would answer one way from a checkout of this repository and
+# another from a plain `pip install xbsl`, the same silent divergence the data layer
+# (dataset.py) exists to avoid for the platform's own data.
+
+
+def rule_groups(rules: Iterable[RuleInfo]) -> list[str]:
+    """The distinct groups (the part of the id before '/') of `rules`, sorted."""
+    return sorted({r.id.split("/", 1)[0] for r in rules})
+
+
+def near_rule_groups(rules: Iterable[RuleInfo], needle: str, *, n: int = 5) -> list[str]:
+    """Groups of `rules` closest to `needle` by spelling - offered when a filter finds nothing."""
+    return difflib.get_close_matches(needle.strip().casefold(), rule_groups(rules), n=n, cutoff=0.4)
+
+
+def _rule_search_texts(info: RuleInfo, catalog_keys: set[str]) -> list[str]:
+    """Every i18n text registered under the rule's id or under its title_key's stem - both
+    languages - plus its docstring.
+
+    `catalog_keys` is `i18n.registered_keys()` as a set, read once by the caller for every
+    rule in the batch rather than re-read per rule (module note above; ~1000 keys across
+    ~235 rules, so the difference is one pass over the catalog instead of hundreds).
+
+    Two sweeps: the `<id>.` prefix reaches what most rules register under their own id, and
+    the stem of `title_key` (its text up to the last ".") reaches a message a rule SHARES
+    with a sibling under neither rule's id (ambiguous_types.py - see the module note above).
+    A key equal to `title_key` itself always starts with its own stem, so an ordinary rule
+    whose title already lives under its id prefix is unaffected: both sweeps agree on it.
+    """
+    prefix = info.id + "."
+    stem = info.title_key.rsplit(".", 1)[0] + "." if "." in info.title_key else ""
+    texts = [
+        text
+        for key in catalog_keys
+        if key == info.id or key.startswith(prefix) or (stem and key.startswith(stem))
+        for text in (i18n.translations(key) or {}).values()
+    ]
+    if info.title_key not in catalog_keys:
+        # A plugin's literal, unregistered title_key (rule()'s own docstring: "a literal
+        # string still works... verbatim") - neither sweep above can ever reach it, since
+        # both walk registered keys and this one was never registered.
+        texts.append(info.title)
+    doc = (info.func.__doc__ or "").strip()
+    if doc:
+        texts.append(doc)
+    return texts
+
+
+def _rule_matches(info: RuleInfo, needle: str, catalog_keys: set[str]) -> bool:
+    """Whether `needle` (already stripped and casefolded) names this rule.
+
+    The title/description check is a plain substring, not an exact-word match: Russian
+    spells a word differently by grammatical case ("Аббревиатура" in a title, "аббревиатур"
+    typed as the bare stem), and a search that answers nothing over a case ending would look
+    broken rather than picky. A substring accepts both; the rare over-match (a short needle
+    inside an unrelated longer word) costs far less than a caller who cannot find a rule
+    they typed the right word for.
+    """
+    if needle in info.id.casefold():
+        return True
+    if needle == info.id.split("/", 1)[0].casefold():
+        return True
+    return any(needle in text.casefold() for text in _rule_search_texts(info, catalog_keys))
+
+
+def matching_rules(rules: Iterable[RuleInfo], needle: str) -> list[RuleInfo]:
+    """`rules` narrowed to the ones `needle` names - an id substring, a group (matched whole)
+    or a word of the title or the description, in either language. A blank `needle` (nothing
+    to filter by) returns `rules` unchanged, as a list."""
+    needle = needle.strip().casefold()
+    if not needle:
+        return list(rules)
+    catalog_keys = set(i18n.registered_keys())
+    return [r for r in rules if _rule_matches(r, needle, catalog_keys)]
 
 
 # --- a rule that crashes ------------------------------------------------------------------

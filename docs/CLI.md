@@ -46,7 +46,8 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--prune-baseline` | list the stale baseline entries with their reasons and remove them from the file (together with `--baseline`; the file's order and the counts of live entries are left alone) |
 | `--fix` | apply unambiguous formatting and code fixes outside the baseline and report the remaining findings |
 | `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
-| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are printed as data |
+| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does, and `--rules-filter` narrows it further; with `--format` json the same records are printed as data |
+| `--rules-filter WORD` | narrow `--list-rules`: an id substring, a group (the part of the id before '/', matched whole) or a word of the title or description - every i18n text registered under the rule's id (the title and its message templates), in either language, plus the English docstring; docs/RULES.md is not read. Case-insensitive; combines with `--select`/`--ignore` |
 | `--where` | show the engine location, interpreter and Element data (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |

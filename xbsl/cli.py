@@ -215,6 +215,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-rules", action="store_true", help=i18n.t("cli.help.list-rules")
     )
     parser.add_argument(
+        "--rules-filter", default="", metavar=i18n.t("cli.help.meta.word"),
+        help=i18n.t("cli.help.rules-filter"),
+    )
+    parser.add_argument(
         "--where",
         action="store_true",
         help=i18n.t("cli.help.where"),
@@ -1278,7 +1282,9 @@ def _check_main(argv: list[str]) -> int:
         print(json.dumps(build_index(root), ensure_ascii=False))
         return 0
 
-    from xbsl.engine import RULES, active_rules, load, make_source, run_sources
+    from xbsl.engine import (
+        RULES, active_rules, load, make_source, matching_rules, near_rule_groups, run_sources,
+    )
 
     adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
@@ -1328,6 +1334,21 @@ def _check_main(argv: list[str]) -> int:
         # answers about one rule (an id, a group or a tier letter) instead of making the
         # reader carry the whole registry to find one line.
         listed = active_rules(select, ignore, enable) if select or ignore else list(RULES)
+        narrowed = matching_rules(listed, args.rules_filter)
+        if args.rules_filter.strip() and not narrowed:
+            # A filter that names nothing is likely a typo, not an empty registry - the
+            # groups closest to it by spelling are the fastest way back to a real one.
+            groups = near_rule_groups(listed, args.rules_filter)
+            key = "cli.no-rules-filter" if groups else "cli.no-rules-filter-none"
+            message = i18n.t(key, filter=args.rules_filter, groups=", ".join(groups))
+            if args.format == "json":
+                _emit_report(json.dumps(
+                    {"error": message, "near_groups": groups}, ensure_ascii=False,
+                ), args.out)
+            else:
+                print(message)
+            return 0
+        listed = narrowed
         if args.format == "json":
             # The same records the MCP `list_rules` answers with: a client that needs the
             # parameters of a rule reads them instead of parsing the prose below, whose

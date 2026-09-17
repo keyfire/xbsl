@@ -181,6 +181,47 @@ def test_list_rules_answers_as_data_when_json_is_asked_for(capsys):
 
 
 @pytest.mark.needs_data
+def test_list_rules_filter_narrows_by_group_in_the_cli(capsys):
+    """The group reaches every one of its own rules; matching some outside it too (a real
+    rule's message can legitimately use another group's name as an ordinary word) is not
+    checked here - engine.matching_rules covers that the group check stays an equality,
+    not a text search."""
+    code = cli.main(["--list-rules", "--format", "json", "--rules-filter", "style"])
+    listed = {r["id"] for r in json.loads(capsys.readouterr().out)}
+
+    style_rules = {r.id for r in engine.RULES if r.id.startswith("style/")}
+    assert code == 0 and len(style_rules) > 1
+    assert style_rules <= listed
+
+
+@pytest.mark.needs_data
+def test_list_rules_filter_combines_with_select_in_the_cli(capsys):
+    code = cli.main(["--list-rules", "--format", "json",
+                     "--select", "style", "--rules-filter", "abbreviation"])
+    listed = json.loads(capsys.readouterr().out)
+
+    assert code == 0 and [r["id"] for r in listed] == ["style/abbreviation-case"]
+
+
+@pytest.mark.needs_data
+def test_list_rules_filter_matching_nothing_in_the_cli_json(capsys):
+    code = cli.main(["--list-rules", "--format", "json", "--rules-filter", "zzzznotarule"])
+    answer = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert "error" in answer and "near_groups" in answer
+
+
+@pytest.mark.needs_data
+def test_list_rules_filter_matching_nothing_in_the_cli_text(capsys):
+    code = cli.main(["--list-rules", "--rules-filter", "zzzznotarule"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "zzzznotarule" in out
+
+
+@pytest.mark.needs_data
 def test_the_json_listing_carries_the_off_reason(capsys):
     """A rule ships off for a reason; the json client shows it where the rule is."""
     cli.main(["--list-rules", "--format", "json", "--select", "yaml/duplicate-subtree"])
