@@ -71,7 +71,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 235 rules of the base set** - severity, default state, scope, links to
+**The full list of all 236 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.
@@ -229,6 +229,30 @@ checked.
 Detailed group descriptions live in [RULES.md](/RULES): `query/` (a composite type in `IN` with
 a subquery), `project/` (project properties), `naming/` (the naming standard, the `[morph]`
 extra) and `style/` (code-writing conventions and the policy on turning them on and off).
+
+### Server calls in computed properties
+
+Enable `code/computed-property-server-call` to inspect properties whose expressions reach
+a server method. The rule groups findings by form and endpoint and includes the property
+lines and complete call paths. It is informational and disabled by default: a statically
+reachable server call may be intentional.
+
+Only declared methods available from the client are reported. A client variant takes
+priority over a server variant. Event handlers, deferred lambdas, ambiguous targets and
+methods with enabled or unknown `CacheResult` are skipped. The rule does not predict how
+often the platform evaluates a property. Consider loading the required data in advance;
+caching arbitrary mutable data is not an automatic fix.
+
+The existing `code/image-binding-server-call` still covers platform `Image` properties.
+Those sites are excluded from the general rule. A project's own property named `Image`
+is eligible for the general check. The image rule also accepts a server module described
+only by metadata for compatibility; the general rule requires a resolved method body.
+
+A form inherits properties from its base type, such as the `WriteAndClose` command. Both
+rules read `WriteAndClose.Execute()` as a call of that property, even when a common module
+has the same name. If the base type is unknown, the rules skip every `Name.Method()` call in
+that form and still follow calls of the form's own methods. Both rules also skip an element
+whose metadata has a field of the wrong type, such as a date in `Name`.
 
 ## Baseline: adopt a rule on a legacy codebase
 

@@ -1822,7 +1822,50 @@ _UPLOADS_YAML_RU = "ВидЭлемента: ОбщийМодуль\nИд: 1d1f5c
 _UPLOADS_XBSL_RU = "метод Сохранить(Данные: Байты): ДвоичныйОбъект.Ссылка\n    знч Загруженный = {call}\n    возврат Загруженный.Ссылка\n;\n"
 _UPLOADS_TOKENS = {"Выгрузки": "Uploads", "Сохранить": "Save", "Данные": "Data", "Загруженный": "Uploaded"}
 
+_COMPUTED_RU = {
+    "Panel.yaml": "ВидЭлемента: КомпонентИнтерфейса\nИмя: Panel\nСодержимое:\n"
+                  "  - Тип: Надпись\n    Заголовок: =Caption()\n",
+    "Panel.xbsl": "метод Caption(): Строка\n    возврат Data.Read()\n;\n",
+    "Data.yaml": "ВидЭлемента: ОбщийМодуль\nИмя: Data\nОкружение: Сервер\n",
+    "Data.xbsl": "@НаСервере @ДоступноСКлиента\nметод Read(): Строка\n    возврат \"text\"\n;\n",
+}
+_COMPUTED_EN = {
+    "Panel.yaml": "ElementKind: InterfaceComponent\nName: Panel\nContent:\n"
+                  "  - Type: Label\n    Title: =Caption()\n",
+    "Panel.xbsl": "method Caption(): String\n    return Data.Read()\n;\n",
+    "Data.yaml": "ElementKind: CommonModule\nName: Data\nEnvironment: Server\n",
+    "Data.xbsl": "@OnServer @AvailableFromClient\nmethod Read(): String\n    return \"text\"\n;\n",
+}
+
+
 SEEDS: list[Seed] = [
+    Seed(
+        rule="code/computed-property-server-call", expect=FINDING,
+        note="a computed title reaches a declared server endpoint through a client wrapper",
+        files=_COMPUTED_RU, english=_COMPUTED_EN,
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=FINDING,
+        note="an explicit false cache argument still proves the lack of standard caching",
+        files={**_COMPUTED_RU, "Data.xbsl": _COMPUTED_RU["Data.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Ложь)")},
+        english={**_COMPUTED_EN, "Data.xbsl": _COMPUTED_EN["Data.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = False)")},
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=CLEAN,
+        note="a cached endpoint does not imply repeated network requests",
+        files={**_COMPUTED_RU, "Data.xbsl": _COMPUTED_RU["Data.xbsl"].replace(
+            "@ДоступноСКлиента", "@ДоступноСКлиента(КешироватьРезультат = Истина)")},
+        english={**_COMPUTED_EN, "Data.xbsl": _COMPUTED_EN["Data.xbsl"].replace(
+            "@AvailableFromClient", "@AvailableFromClient(CacheResult = True)")},
+    ),
+    Seed(
+        rule="code/computed-property-server-call", expect=CLEAN,
+        note="a method available in both environments executes its client variant",
+        files={**_COMPUTED_RU, "Data.xbsl": "@НаКлиенте " + _COMPUTED_RU["Data.xbsl"]},
+        english={**_COMPUTED_EN, "Data.xbsl": "@OnClient " + _COMPUTED_EN["Data.xbsl"]},
+    ),
     Seed(
         rule="code/statement-no-effect",
         expect=FINDING,
