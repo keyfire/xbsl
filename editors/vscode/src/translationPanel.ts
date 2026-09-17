@@ -46,6 +46,7 @@ import {
   parseGaps,
   EntriesAnswer,
   parseSetResult,
+  normalizationText,
   parseSuggest,
   parseSummary,
   parseTable,
@@ -374,6 +375,14 @@ export async function writeEdits(
     if (answer.refused.length > 0) {
       void vscode.window.showErrorMessage(
         vscode.l10n.t("The engine refused the translation: {0}", refusalText(answer.refused))
+      );
+    }
+    // A correction is the other half of the same honesty: the entry landed, but under the
+    // spelling the translating pass reads, not the one that was typed. Silence here would leave
+    // the author looking for their own key in the dictionary.
+    if (answer.normalized.length > 0) {
+      void vscode.window.showInformationMessage(
+        vscode.l10n.t("The engine corrected the entry: {0}", normalizationText(answer.normalized))
       );
     }
     return answer;

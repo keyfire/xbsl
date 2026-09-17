@@ -68,12 +68,13 @@ MESSAGES = {
               " tokens/phrases/literals, пустое значение снимает запись), либо JSON"
               " [{{key, value, kind}}]; у литерала ключ и перевод – текст между кавычками"
               " ровно так, как он написан в исходнике (кавычка внутри – \\\", обратный"
-              " слеш – \\\\)",
+              " слеш – \\\\); у фразы – строка комментария как есть, без экранирования",
         "en": "apply dictionary edits from a file: either the dictionary's own yaml format"
               " (tokens/phrases/literals sections, an empty value removes the entry) or the"
               " JSON list [{{key, value, kind}}]; for a literal the key and the value are the"
               " text between the quotes exactly as the source writes it (an inner quote is"
-              " \\\", a backslash is \\\\)",
+              " \\\", a backslash is \\\\); for a phrase it is the comment line as it"
+              " stands, with no escaping at all",
     },
     "translate.help.target": {
         "ru": "файл словаря для НОВЫХ записей (по умолчанию 090-manual.yaml)",
@@ -183,8 +184,12 @@ MESSAGES = {
         "en": "rewritten [{kind}] {key}: \"{was}\" -> \"{now}\"",
     },
     "translate.refused": {
-        "ru": "не записано записей: {count} – значение не годится телом строкового литерала:",
-        "en": "entries not written: {count} - the value is not a valid string-literal body:",
+        "ru": "не записано записей: {count}; ниже сказано, почему:",
+        "en": "entries not written: {count}; the reason for each is below:",
+    },
+    "translate.normalized": {
+        "ru": "поправлено записей: {count}; ниже сказано, что именно и почему:",
+        "en": "entries corrected: {count}; what exactly, and why, is below:",
     },
     "translate.set-unreadable": {
         "ru": "правки не прочитаны: {error}",
@@ -1257,6 +1262,7 @@ def _apply_edits(args, root: Path, loaded) -> int:
         comment=getattr(args, "comment", "") or "",
     )
     refused = result.get("refused") or []
+    corrected = result.get("normalized") or []
     if args.format == "json":
         print(json.dumps(result, ensure_ascii=False))
     else:
@@ -1264,11 +1270,27 @@ def _apply_edits(args, root: Path, loaded) -> int:
         for row in result.get("rewritten") or []:
             print(f"  {row['file']}:{row['line']}: " + i18n.t("translate.rewritten", kind=row["kind"], key=row["key"],
                                 was=row["was"], now=row["now"]))
+        # A correction goes to stdout beside what was written: the entry IS in the dictionary,
+        # and the run is not a failure - it only landed under a different spelling.
+        if corrected:
+            print(i18n.t("translate.normalized", count=len(corrected)))
+            for row in corrected:
+                print(f"  [{row['kind']}] \"{_one_line(row['was'])}\""
+                      f" -> \"{_one_line(row['now'])}\": {row['reason']}")
         if refused:
             print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)
             for item in refused:
-                print(f"  {item['key']}: {item['reason']}", file=sys.stderr)
+                print(f"  {_one_line(item['key'])}: {item['reason']}", file=sys.stderr)
     return 1 if refused else 0
+
+
+def _one_line(text: str) -> str:
+    """The text on one line, its breaks shown rather than typed out.
+
+    A refused entry is listed one per line, and a key on two lines used to split its own row
+    in half - the reason ended up under a fragment of the key, reading as a line of its own.
+    """
+    return text.replace("\r\n", "\\n").replace("\r", "\\n").replace("\n", "\\n")
 
 
 #: The modes that answer with a TABLE, in the order the dispatch below tries them: the flag and

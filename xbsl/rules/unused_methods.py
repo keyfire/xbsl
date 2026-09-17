@@ -4,9 +4,23 @@ The check is deliberately built from exceptions – any doubt silences the findi
 is reported only when its name, apart from the declaration itself, occurs nowhere in the
 project: neither in xbsl code (a call, a reference, a callback), nor in yaml descriptions
 (handler keys, bindings), nor in string literals (HTML-container bridges call methods by
-name inside strings), nor in comments. The mention search counts raw word tokens over the
-FULL text of every project file, so a name inside a string or a comment also counts as a
-use – deliberately conservative: better silence than a false positive.
+name inside strings). The mention search counts raw word tokens over the text of every
+project file, so a name inside a string counts as a use – deliberately conservative: better
+silence than a false positive.
+
+A COMMENT is never a mention, wherever it lies – in the module that declares the method, in
+the yaml paired with it, in any other element. A name written in prose is not a call. While
+every comment counted, a header listing the methods of its own module kept them all alive:
+on one 1300-file project three methods without a single caller went unreported until the
+calls were counted by hand. When the only place the search finds the name is a comment, the
+finding says exactly that, so the reader is not sent looking for a call that never existed.
+
+A method that really is called from somewhere the search cannot see has two answers, and
+both are older than this rule. An annotation naming a caller outside the project code (the
+list below: @Handler, @Subscription, @Implementation and the rest) silences the method
+outright. Everything else – a name assembled at run time, a client entry point kept on
+purpose – belongs in the baseline, where an entry carries its reason next to the count
+(`--write-baseline` to freeze, `--baseline` to check against).
 
 The translation dictionary is not a project file in that sense, wherever it lies. It names
 every method it translates - in its keys, in its comments, in the phrases that keep a name as
@@ -48,13 +62,15 @@ meant for full-project runs via `--select code/unused-method`.
 from __future__ import annotations
 
 import re
+from bisect import bisect_right
 from collections import Counter
 from collections.abc import Iterable
 from functools import lru_cache
 
-from xbsl import dataset, i18n, terms
+from xbsl import dataset, i18n, restext, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.rules import _comments
 from xbsl.rules._syntax import annotations_before, code_tokens
 from xbsl.rules.yaml_schema import is_translation_dictionary
 
@@ -68,6 +84,12 @@ MESSAGES = {
               "ни в коде, ни в yaml, ни в строках.",
         "en": "Method '{name}' is declared but referenced nowhere else in the project – "
               "neither in code, nor in yaml, nor in strings.",
+    },
+    "code/unused-method.comment-only": {
+        "ru": "Метод '{name}' назван только в комментарии – ни вызова в коде, ни привязки "
+              "в yaml, ни имени в строке в проекте нет.",
+        "en": "Method '{name}' is named only in a comment – the project holds no call in "
+              "code, no yaml binding and no name inside a string.",
     },
 }
 i18n.register(MESSAGES)
@@ -128,16 +150,55 @@ def _pair_stem(rel: str) -> str:
     return slash[: slash.rfind(".")] if "." in slash.rsplit("/", 1)[-1] else slash
 
 
+def _comment_spans(source: SourceFile) -> list[tuple[int, int]]:
+    """Character ranges the comments of the file occupy, in file order.
+
+    The walk itself lives in `_comments` and is cached on the source, so a full run pays for
+    it once however many rules ask. The marker check in front of it is what keeps a file
+    without comments from paying at all: for a yaml that walk composes the node graph, and
+    the graph is needed only to tell a `#` of a comment from a `#` inside a value.
+    """
+    text = source.text
+    if source.kind == "xbsl":
+        if "//" not in text and "/*" not in text:
+            return []
+    elif source.kind == "yaml":
+        if "#" not in text:
+            return []
+    elif source.kind not in restext.KINDS:
+        return []
+    return [(line.offset, line.offset + len(line.text)) for line in _comments.lines(source)]
+
+
+def _mentions(source: SourceFile) -> tuple[dict, dict]:
+    """The words of the file, split in two: the ones a comment carries, and all the rest."""
+    text = source.text
+    spans = _comment_spans(source)
+    if not spans:
+        return dict(Counter(_WORD_RE.findall(text))), {}
+    starts = [start for start, _ in spans]
+    code: Counter = Counter()
+    commented: Counter = Counter()
+    for match in _WORD_RE.finditer(text):
+        at = match.start()
+        index = bisect_right(starts, at) - 1
+        inside = index >= 0 and at < spans[index][1]
+        (commented if inside else code)[match.group()] += 1
+    return dict(code), dict(commented)
+
+
 def _unused_mapper(source: SourceFile) -> dict | None:
-    """The map phase. Every file contributes its word-mention counter slice; a yaml also
-    flags an HTTP service pair, a module also lists its unannotated method declarations
-    (positions included). The mention counting joins in the reduce. A translation dictionary
-    contributes nothing: it names every method without using any."""
+    """The map phase. Every file contributes two word-mention counter slices, one for what
+    its comments say and one for everything else; a yaml also flags an HTTP service pair, a
+    module also lists its unannotated method declarations (positions included). The mention
+    counting joins in the reduce. A translation dictionary contributes nothing: it names
+    every method without using any."""
     if source.kind == "yaml" and is_translation_dictionary(source):
         return None
     fact: dict = {"k": source.kind, "stem": _pair_stem(source.rel)}
-    # Every word-like token of every file (code, yaml, strings, comments) is a mention.
-    fact["mentions"] = dict(Counter(_WORD_RE.findall(source.text)))
+    # A word-like token of code, of yaml or of a string is a mention; one of a comment is
+    # kept apart, because it keeps nothing alive and only shapes the wording of the finding.
+    fact["mentions"], fact["comments"] = _mentions(source)
     if source.kind == "yaml":
         if _HTTP_SERVICE_RE.search(source.text) is not None:
             fact["http"] = True
@@ -171,9 +232,11 @@ def _unused_mapper(source: SourceFile) -> dict | None:
 )
 def unused_method(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     mentions: Counter = Counter()
+    commented: Counter = Counter()
     http_stems: set[str] = set()
     for fact in facts.values():
         mentions.update(fact["mentions"])
+        commented.update(fact["comments"])
         if fact.get("http"):
             http_stems.add(fact["stem"])
     for rel, fact in facts.items():
@@ -182,8 +245,10 @@ def unused_method(facts: dict[str, dict]) -> Iterable[Diagnostic]:
         if fact["stem"] in http_stems:
             continue  # HTTP service module – methods are wired to endpoints
         for name, line, col in fact["decls"]:
-            if mentions[name] <= 1:  # the declaration itself and nothing else
-                yield Diagnostic(
-                    rel, line, col, "code/unused-method", Severity.WARNING,
-                    i18n.t("code/unused-method.unreferenced", name=name),
-                )
+            if mentions[name] > 1:  # more than the declaration itself
+                continue
+            # The comment counter decides the wording alone: it never keeps a method alive,
+            # but it tells the reader whether the name turned up anywhere at all.
+            message = (i18n.t("code/unused-method.comment-only", name=name) if commented[name]
+                       else i18n.t("code/unused-method.unreferenced", name=name))
+            yield Diagnostic(rel, line, col, "code/unused-method", Severity.WARNING, message)

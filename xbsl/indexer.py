@@ -37,6 +37,7 @@ found degrades to line 1 - index building never fails because of this.
 
 from __future__ import annotations
 
+import hashlib
 import re
 from collections import defaultdict, deque
 from pathlib import Path
@@ -734,6 +735,30 @@ def _discover(root: Path) -> list[Path]:
         return [root] if root.suffix in (".xbsl", ".yaml", QUERY_SUFFIX) else []
     return (find_sources(root, "*.yaml") + find_sources(root, "*.xbsl")
             + find_sources(root, f"*{QUERY_SUFFIX}"))
+
+
+def sources_stamp(root: Path) -> tuple[tuple[str, bytes], ...]:
+    """(file, a digest of its bytes) for every source `build_index` would read.
+
+    The question behind it is "do the sources still stand where the index left them", and a
+    timestamp cannot answer it. The filesystem stamps whole ticks - measured on Windows, two
+    writes in a row share one - so a rewrite of the same length inside one tick reads as no
+    change at all, and a cache built on modification times would hand back the index of the
+    previous text. The bytes cannot be fooled, and the price is small next to what the answer
+    saves: reading a project of ten megabytes takes about 0.15 s, while parsing it into an
+    index takes seconds.
+
+    Built from `_discover`, so the list is exactly the one the index is built from: a file
+    added, removed or renamed changes the stamp by its own presence.
+    """
+    stamp: list[tuple[str, bytes]] = []
+    for path in _discover(root):
+        try:
+            data = path.read_bytes()
+        except OSError:      # vanished between the walk and the read - and so it is not in
+            continue         # the stamp, which is what the next walk will say as well
+        stamp.append((str(path), hashlib.blake2b(data, digest_size=16).digest()))
+    return tuple(stamp)
 
 
 def build_index(root: Path) -> dict:

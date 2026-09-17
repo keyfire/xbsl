@@ -98,6 +98,28 @@ entry either - say what the behaviour was, not which class name was compared.
   a third of their length; the detail they lost - exceptions, examples, platform history -
   moved to a note below each tier's table, linked from the row.
   ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **The project index behind translation is now kept for the life of the process, instead
+  of being rebuilt on every call.** `ProjectIndex.build` itself falls from 8.4 s to 0.11 s,
+  but that number is not what anyone feels: a bare `xbsl translate` from the command line is
+  one process, builds the index once, and sees no speedup at all. Its first call is even
+  about 0.19 s slower, because the cache now trusts a digest of every file's bytes rather
+  than a timestamp. The win belongs to the long-lived MCP server and to anything that
+  translates more than once without restarting: a second call in the same process falls from
+  55.4 s to 47.1 s on a copy of the site, and from 35.4 s to 28.0 s on a second corpus. It is
+  the same cost the changelog named when #105 added it ("Translation builds the project
+  index and takes longer"): it has not gone away, only moved to once per process.
+  ([#107](https://github.com/keyfire/xbsl/pull/107))
+- **`code/unused-method` stops counting a comment as a use.** Until now, a name that appears
+  only in a comment counted as a use and hid the method from the rule – in the module that
+  declares it, in the paired yaml, or in another element entirely. None of those places
+  count any more, and a finding that rests on a comment alone says so. Corpus findings rose
+  from 216 to 237. A project running the rule in CI will see new findings the first time the
+  pipeline checks its code after the upgrade: real dead methods, not false positives. The
+  rule documents two remedies: an annotation naming a caller outside the project code, or
+  the baseline with a reason for whatever stays invisible. Its table row is now the short
+  form with a `[details]` link, the shape the sixth batch gave the documentation; the
+  annotation list and the baseline route live behind that link, not in the row.
+  ([#107](https://github.com/keyfire/xbsl/pull/107))
 
 ### Fixed
 
@@ -140,6 +162,31 @@ entry either - say what the behaviour was, not which class name was compared.
   literal gaps (a string in code, an untyped `%{...}` value) still fail nothing. An `=`
   value holding a substitution is now translated as an expression, so the entry written for
   its string is found instead of missed. ([#106](https://github.com/keyfire/xbsl/pull/106))
+- **`translate --set` and `translate_set` write a phrase entry by the spelling the
+  translating pass will actually read.** A phrase key is one comment line with no escaping
+  at all, but a key typed the way a string literal escapes its quotes used to be written
+  verbatim and then matched nothing when translation ran: a working-looking entry that
+  silently never fired. The quote and any leading or trailing padding are now stripped
+  before the entry is written, and the correction is reported as `normalized`. The CLI and
+  the MCP tool already printed it, and now the VS Code translation panel does too – it used
+  to stay silent, leaving the author to search the dictionary for a key they would never
+  find. A key or a translation that spans two lines cannot be repaired this way and is
+  refused with an explanation, because the translating pass matches one comment line at a
+  time. ([#107](https://github.com/keyfire/xbsl/pull/107))
+- **`translate --set` and `translate_set` refuse an edit whose key is empty or blank, and
+  the command exits 1.** Such an edit used to vanish with no word at all, and the command
+  still exited 0. A script that checks the exit code after a batch of edits can newly fail
+  on input it used to pass. ([#107](https://github.com/keyfire/xbsl/pull/107))
+- **`terms_full.json` is written in a stable order.** Its `common` section used to keep the
+  scan order of the distribution's classes rather than the alphabet, so a re-extraction that
+  corrected no spelling still moved 5,708 of its 5,709 entries – noise that could hide a
+  real content change inside it. The owner picked for a template at an exact tie used to
+  come from `set(owners)`, whose iteration order follows Python's per-process hash
+  randomization: the same distribution could name a different owner, and so a different
+  member list, from one run to the next. Both are deterministic now: the section sorts by
+  key, and a tie breaks alphabetically. Running the extractor twice on the same distribution
+  now produces a byte-identical file. This is a fix to how the data is built, not to what it
+  says: every entry keeps its previous meaning. ([#107](https://github.com/keyfire/xbsl/pull/107))
 
 ## 2026-09-15 – 0.110.0
 
