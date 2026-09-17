@@ -1286,6 +1286,12 @@ def _check_main(argv: list[str]) -> int:
     if args.element_version:
         dataset.set_version(args.element_version)
 
+    if args.rules_filter.strip() and not args.list_rules:
+        # The flag narrows a listing and nothing else. On a checking run it did nothing at
+        # all, while the run read as if its rule set had been narrowed by it.
+        print(i18n.t("cli.rules-filter-needs-list"), file=sys.stderr)
+        return 2
+
     if args.where:
         # The engine first, then the data it reads: a data root says little until it is
         # known which copy of the engine - and under which interpreter - resolved it.

@@ -103,14 +103,15 @@ def list_rules(
 
     select – answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
     ignore – leave these out. Without either one the whole registry is listed.
-    filter – narrow by a word, case-insensitive: a rule id substring, a group (the part of
-             the id before '/', matched whole - "code" does not also catch "yaml/error-code"
-             the way a substring would) or a word of the title or of the rule's own
-             description - every i18n text registered under the rule's id (the title and the
-             message templates its diagnostics are built from), in either language, plus its
-             English docstring. docs/RULES.md is not read - it ships with neither the sdist
-             nor the wheel. Combines with select/ignore (narrows further, not instead of
-             them). Blank (the default) lists everything select/ignore leave. A filter that
+    filter – narrow by a word, case-insensitive. A word that IS a group (the part of an id
+             before '/') asks for that group and answers with it alone: "code" gives the
+             rules of `code/` and nothing else. Any other word is looked for as a rule id
+             substring or as a word of the title or of the rule's own description - every
+             i18n text registered under the rule's id (the title and the message templates
+             its diagnostics are built from), in either language, plus its English
+             docstring. docs/RULES.md is not read - it ships with neither the sdist nor the
+             wheel. Combines with select/ignore (narrows further, not instead of them).
+             Blank (the default) lists everything select/ignore leave. A filter that
              matches nothing answers {"error", "near_groups"} instead of an empty list - the
              groups closest to it by spelling, e.g. a typo of "style".
 
@@ -123,9 +124,14 @@ def list_rules(
     listed = active_rules(chosen, excluded) if chosen or excluded else list(RULES)
     narrowed = matching_rules(listed, filter)
     if filter.strip() and not narrowed:
+        # The same refusal the CLI prints, from the same catalog: an English-speaking
+        # client used to get this one line in Russian while every other answer honoured
+        # the language it had chosen.
+        groups = near_rule_groups(listed, filter)
+        key = "cli.no-rules-filter" if groups else "cli.no-rules-filter-none"
         return {
-            "error": f"фильтр '{filter}' ничего не нашёл среди правил",
-            "near_groups": near_rule_groups(listed, filter),
+            "error": i18n.t(key, filter=filter, groups=", ".join(groups)),
+            "near_groups": groups,
         }
     return [r.as_dict() for r in sorted(narrowed, key=lambda x: (x.tier, x.id))]
 

@@ -160,6 +160,41 @@ def test_list_rules_filter_by_group_includes_the_whole_group(monkeypatch):
         sys.modules.pop("xbsl.mcp_server", None)
 
 
+@pytest.mark.parametrize("group", ["form", "project", "code"])
+def test_list_rules_filter_by_a_group_answers_with_that_group_alone(monkeypatch, group):
+    """A word that IS a group asks for the group, and gets nothing else.
+
+    The id substring and the text search used to run on top of the group match, so "form"
+    answered seventy rules where `form/` holds two, and "project" fifty-six where `project/`
+    holds four. A filter that costs as much as the whole catalog does not save the reader
+    anything.
+    """
+    from xbsl import engine
+
+    m = _with_stub(monkeypatch)
+    try:
+        listed = {r["id"] for r in m.list_rules(filter=group)}
+        own = {r.id for r in engine.RULES if r.id.split("/", 1)[0] == group}
+        assert own, group
+        assert listed == own
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_by_a_word_that_is_no_group_still_searches_wide(monkeypatch):
+    """Only a group name narrows to a group; anything else keeps the id and text search.
+
+    "method" names no group, so it reaches rules across several of them by their ids.
+    """
+    m = _with_stub(monkeypatch)
+    try:
+        listed = {r["id"] for r in m.list_rules(filter="method")}
+        assert len({r.split("/", 1)[0] for r in listed}) > 1
+        assert any(r.startswith("code/") for r in listed)
+    finally:
+        sys.modules.pop("xbsl.mcp_server", None)
+
+
 def test_matching_rules_group_check_is_exact_not_a_substring():
     """The group half of the filter is an EQUALITY check against the id's own group - not a
     text search that would also catch "code" inside a hypothetical "yaml/error-code".
@@ -327,6 +362,25 @@ def test_list_rules_filter_matching_nothing_explains_and_suggests_groups(monkeyp
         assert "near_groups" in answer
     finally:
         sys.modules.pop("xbsl.mcp_server", None)
+
+
+def test_list_rules_filter_matching_nothing_speaks_the_chosen_language(monkeypatch):
+    """The refusal was Russian for everybody, while the catalog already carried both."""
+    from xbsl import i18n
+
+    m = _with_stub(monkeypatch)
+    try:
+        i18n.set_lang("en")
+        english = m.list_rules(filter="zzzznotarule")["error"]
+        i18n.set_lang("ru")
+        russian = m.list_rules(filter="zzzznotarule")["error"]
+    finally:
+        i18n.set_lang(None)
+        sys.modules.pop("xbsl.mcp_server", None)
+
+    assert "zzzznotarule" in english and "zzzznotarule" in russian
+    assert not any("а" <= c <= "я" for c in english.casefold())
+    assert any("а" <= c <= "я" for c in russian.casefold())
 
 
 def test_list_rules_filter_suggests_a_near_group_for_a_typo(monkeypatch):

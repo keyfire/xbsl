@@ -474,8 +474,12 @@ def active_rules(
 # `--list-rules`/`list_rules` used to answer only the whole registry or select/ignore's exact
 # id-or-group-or-tier match - so checking whether a rule about abbreviations existed meant
 # reading every one of ~200 entries. `matching_rules` adds a looser, case-insensitive pass: an
-# id substring, a group matched WHOLE (so "code" does not also catch "yaml/error-code" the way
-# a substring would), or a WORD of the title or of the rule's DESCRIPTION, in either language.
+# id substring or a WORD of the title or of the rule's DESCRIPTION, in either language.
+#
+# A word that names a GROUP is answered before any of that, with the group alone. Both halves
+# used to run together and the reader lost the narrow answer: "form" came back with seventy
+# rules where `form/` holds two, because the word sits inside other ids and inside the prose of
+# rules all over the registry.
 #
 # "Description" is everything i18n carries under the rule's own id: the title (`<id>.title`)
 # AND the message templates its diagnostics are built from (`<id>.plain`, `<id>.off`, and
@@ -546,7 +550,10 @@ def _rule_search_texts(info: RuleInfo, catalog_keys: set[str]) -> list[str]:
 
 
 def _rule_matches(info: RuleInfo, needle: str, catalog_keys: set[str]) -> bool:
-    """Whether `needle` (already stripped and casefolded) names this rule.
+    """Whether `needle` (already stripped and casefolded) names this rule by id or by text.
+
+    The group is judged by matching_rules, not here: a word that names a group is a request
+    for the group, and this function is what runs when it named none.
 
     The title/description check is a plain substring, not an exact-word match: Russian
     spells a word differently by grammatical case ("Аббревиатура" in a title, "аббревиатур"
@@ -557,18 +564,29 @@ def _rule_matches(info: RuleInfo, needle: str, catalog_keys: set[str]) -> bool:
     """
     if needle in info.id.casefold():
         return True
-    if needle == info.id.split("/", 1)[0].casefold():
-        return True
     return any(needle in text.casefold() for text in _rule_search_texts(info, catalog_keys))
 
 
 def matching_rules(rules: Iterable[RuleInfo], needle: str) -> list[RuleInfo]:
-    """`rules` narrowed to the ones `needle` names - an id substring, a group (matched whole)
-    or a word of the title or the description, in either language. A blank `needle` (nothing
-    to filter by) returns `rules` unchanged, as a list."""
+    """`rules` narrowed to the ones `needle` names.
+
+    A word that IS one of their groups (the part of an id before "/") asks for that group,
+    and the answer is that group alone. Anything else is looked for as an id substring or as
+    a word of the title or the description, in either language. A blank `needle` (nothing to
+    filter by) returns `rules` unchanged, as a list.
+
+    The two used to run together, and the group was the half that lost: "form" answered
+    seventy rules where `form/` holds two, and "project" fifty-six where `project/` holds
+    four, because the id substring and the prose of every rule caught the word elsewhere. A
+    filter that costs as much as the whole catalog saves the reader nothing.
+    """
     needle = needle.strip().casefold()
+    rules = list(rules)
     if not needle:
-        return list(rules)
+        return rules
+    group = [r for r in rules if r.id.split("/", 1)[0].casefold() == needle]
+    if group:
+        return group
     catalog_keys = set(i18n.registered_keys())
     return [r for r in rules if _rule_matches(r, needle, catalog_keys)]
 

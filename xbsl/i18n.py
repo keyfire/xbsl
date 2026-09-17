@@ -70,6 +70,12 @@ _CORE_MESSAGES = {
         "ru": "Фильтр '{filter}' ничего не нашёл среди правил, и ни одна группа не похожа",
         "en": "The filter '{filter}' matched no rule, and no group looks close to it",
     },
+    "cli.rules-filter-needs-list": {
+        "ru": "--rules-filter сужает список правил: добавьте --list-rules. Набор проверки "
+              "отбирают --select/--ignore/--enable",
+        "en": "--rules-filter narrows a rule listing: add --list-rules. A run's rule set is "
+              "chosen by --select/--ignore/--enable",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",
@@ -367,15 +373,17 @@ _CORE_MESSAGES = {
               "printed as data",
     },
     "cli.help.rules-filter": {
-        "ru": "сузить --list-rules: подстрока id, группа (часть id до '/', целиком) или слово "
+        "ru": "сузить --list-rules. Слово, совпадающее с именем группы (часть id до '/'), "
+              "выводит только эту группу; любое другое ищется как подстрока id или слово "
               "названия либо описания – весь текст i18n под id правила (название и шаблоны "
               "сообщений) на любом из языков, плюс докстринг по-английски; docs/RULES.md не "
               "читается. Без учёта регистра; сочетается с --select/--ignore",
-        "en": "narrow --list-rules: an id substring, a group (the part of the id before '/', "
-              "matched whole) or a word of the title or description - every i18n text "
-              "registered under the rule's id (the title and its message templates), in "
-              "either language, plus the English docstring; docs/RULES.md is not read. "
-              "Case-insensitive; combines with --select/--ignore",
+        "en": "narrow --list-rules. A word that IS a group (the part of an id before '/') "
+              "lists that group alone; any other word is looked for as an id substring or a "
+              "word of the title or description - every i18n text registered under the "
+              "rule's id (the title and its message templates), in either language, plus "
+              "the English docstring; docs/RULES.md is not read. Case-insensitive; combines "
+              "with --select/--ignore",
     },
     "cli.help.where": {
         "ru": "показать установку движка, интерпретатор и данные Элемента (путь, источник, версии) и выйти",

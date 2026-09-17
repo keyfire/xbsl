@@ -221,6 +221,15 @@ def test_list_rules_filter_matching_nothing_in_the_cli_text(capsys):
     assert "zzzznotarule" in out
 
 
+def test_rules_filter_without_list_rules_is_refused(capsys, tmp_path):
+    """The flag narrows a listing and nothing else: on a checking run it did nothing, and
+    the run looked as if it had been narrowed."""
+    code = cli.main([str(tmp_path), "--rules-filter", "style"])
+
+    assert code == 2
+    assert "--list-rules" in capsys.readouterr().err
+
+
 @pytest.mark.needs_data
 def test_the_json_listing_carries_the_off_reason(capsys):
     """A rule ships off for a reason; the json client shows it where the rule is."""
