@@ -423,17 +423,17 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `MaxWidth` on a group that lays out as a matrix: a phone draws the page at desktop width and the content runs off the right edge [details](#d-yaml-matrix-group-max-width) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A literal `StretchWeight` on a card or on a group inside one: in the mobile layout Safari collapses the card and Chrome shows nothing [details](#d-yaml-card-literal-stretch-weight) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Method is never referenced |
-| `code/unused-constant` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A module constant referenced nowhere else in the project. Words in code, yaml, strings and comments count as uses; translation dictionaries do not. Global constants and constants with unknown annotations are skipped. Enable for a whole-project check |
-| `code/duplicate-method-body` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A method body repeated word for word in another file: the normalized body (comments, blank lines and indentation dropped) of at least five lines is compared. A platform hook is told apart by its `@Handler` annotation rather than by a list of names - the same hook body in every object is normal; copies inside one file are not judged. Off by default: whether two copies should become one method is a design decision |
-| `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A yaml reference (a type position, a `FormType` navigation target or the root of a binding chain `=ForeignModule.Method()`) to a public element of another subsystem whose namespace the `Import` section does not list - `Subsystem` for an element at the subsystem root, `Subsystem::Package` for one in a package (importing the subsystem does not bring its packages); an import in the paired module does not cover the markup; a binding root is judged after subtracting everything that explains the name on its own: the declarations of this yaml, of the paired module and the implicit platform names. The tables of the paired query of a virtual table (`.xbql`, every item of its `FROM` lists, the one after a join condition included) resolve against the same section and are reported on it, qualified and temporary tables aside. So do the tables of a dynamic list - the `Table` of its `MainTable` and of each of its `JoinedTables` - and the `JoinedTables` of the reference input settings of a field, reported at the value of the table; a qualified table needs no import [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `code/unused-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module imports a subsystem or one of its packages, and the compiler never looks up a type in that namespace; the platform IDE reports such imports. What counts is what the compiler resolves: a written type; a name that is neither a local nor declared by the module or the paired yaml; the root of a chain `Root.member`, even when the root is a property of the paired yaml; a qualified name; a table of a query; an enumeration value in a `when` branch; a bare `Resource{...}` key whose file only that namespace holds. The types that values bring along count as well: the properties of the paired yaml the code names, the results and fields of other elements reached through a chain, the fields of those structures, and a query column that passes a field on. The import line itself, a member after a dot and a local named like an element are not uses, so `import Subsystem` next to `import Subsystem::Package` is reported when the module reaches only the package. A reference from the paired yaml is not a use either, since the yaml has an import section of its own. An import of the module's own namespace is judged the same way. The fix removes the line [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `code/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module names a public element of another subsystem without an import line for its namespace - `import Subsystem` for an element at the subsystem root, `import Subsystem::Package` for one in a package (importing the subsystem does not bring its packages) - and the project fails to compile at that line. Judged are the written type positions (a parameter, a variable, a return, `new`, `as`, `is`, a `Type<...>` literal, generic arguments), the root of a chain (`Module.Method()`) and the tables of the `Query{...}` blocks, every item of a `FROM` list included; for a root everything that explains the name on its own is subtracted first: the declarations of the method and the module, the implicit names of the platform and the sections of the paired yaml. The project module belongs to no subsystem and needs the import for every element it names, at the root of a subsystem as in a package [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `yaml/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A qualified name of this project in a yaml value - the full `Vendor::Project::Subsystem[::Package]::Name` or the partial `Subsystem[::Package]::Name` - leads to a namespace where no element of that name lies, while the project declares the element elsewhere - the compiler answers "Unknown type". The usual cause is a move of the element between the root of a subsystem and a package: a generated list form keeps its row type spelled by the old place. Every string value of an element and of a descriptor is read, the namespace lists (`Import`, `Using`) and resource references aside; a name of another project, a type declared in a module and a chain that spells a namespace whole are not judged. A partial name is judged when its first segment is a subsystem of the project that no declared library names as well. When the element lies in one place, the finding carries the fix: the namespace is replaced by the placement of the element; an element in several places is reported with its places and no fix [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `code/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The same in a module or a query: a full or partial name of this project - in a type position, a call or a table of a query - leads to a namespace where its element does not lie, and the compiler answers "Unknown type" (for a table, that the table is not found). The import line and the key of a `Resource{...}` literal are not read; the fix replaces the namespace when the element lies in one place [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `code/package-resources-missing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | `ResourcesPackage.Current()` in a module of a package or at the root of a subsystem that has no `Resources` folder of its own: the method returns the resources of that namespace alone, so no file is found (`ResourceNotFoundException`, `GetAll()` included) - for a package not even the files of its subsystem, for the root not the files of its packages - and a lookup by a computed name fails only at run time. In a package a `Resource{...}` literal does find the files of the subsystem. The folder is looked up on disk; the project module is not judged [docs](https://1cmycloud.com/docs/help/topics/resource-in-project/) |
-| `yaml/missing-subsystem-usage` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Elements and modules of a subsystem import another subsystem or one of its packages (`Subsystem::Package` counts as an import of that subsystem) while the description of their own (`Подсистема.yaml`) does not list the subsystem under `Using` - the project fails to apply, and that is learnt at deploy time. An import gives the short names, but it is `Using` that permits the subsystem, its packages included; a subsystem without a description has nowhere to declare the usage and is not judged. The diagnostic sits on the subsystem description, where the fix goes [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
-| `yaml/computed-binding-assigned` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Every instance of a component binds a property with a computed expression while the component assigns that property in its own module - the platform crashes on the assignment (IllegalStateException). A named argument is not an assignment, and a code-built instance, a bare-path binding, a literal or an unbound instance make the assignment legal - the rule fires only when every instance is bound computed |
-| `yaml/localization-missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An unqualified `$Dictionary.Key` whose dictionary lies in a namespace this yaml does not import - `Subsystem` for a dictionary at the subsystem root, `Subsystem::Package` for one in a package (importing the subsystem does not bring its packages) - the apply refuses the node as a not-imported namespace; a dictionary of the yaml's own subsystem, at its root or in a package, needs no import, an import in the paired module does not cover the markup, and the qualified `$Subsystem::Dictionary.Key` form needs no import [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
+| `code/unused-constant` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A module constant referenced nowhere else in the project: the declaration is left with no work [details](#d-code-unused-constant) |
+| `code/duplicate-method-body` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A method body of at least five lines repeated word for word in another file: the normalized body is compared, and a change goes into both copies [details](#d-code-duplicate-method-body) |
+| `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A yaml reference to a public element of another subsystem whose namespace the `Import` section does not list: the short name does not resolve [details](#d-yaml-missing-import) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/unused-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module imports a subsystem or one of its packages, and the compiler never looks up a type in that namespace [details](#d-code-unused-import) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module names a public element of another subsystem without an import line for its namespace: the project fails to compile at that line [details](#d-code-missing-import) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A qualified name of this project in a yaml value leads to a namespace where no element of that name lies: the compiler answers "Unknown type" [details](#d-yaml-wrong-namespace) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/wrong-namespace` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | The same in a module or a query: a name of this project leads to a namespace where its element does not lie, and the compiler answers "Unknown type" [details](#d-code-wrong-namespace) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `code/package-resources-missing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | `ResourcesPackage.Current()` in a module of a package or at the root of a subsystem that has no `Resources` folder of its own: no file is found, and that breaks only at run time [details](#d-code-package-resources-missing) [docs](https://1cmycloud.com/docs/help/topics/resource-in-project/) |
+| `yaml/missing-subsystem-usage` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Elements and modules of a subsystem import another subsystem while the description of their own does not list it under `Using`: the project fails to apply [details](#d-yaml-missing-subsystem-usage) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
+| `yaml/computed-binding-assigned` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Every instance of a component binds a property with a computed expression while the component assigns that property in its own module: the platform crashes on the assignment [details](#d-yaml-computed-binding-assigned) |
+| `yaml/localization-missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An unqualified `$Dictionary.Key` whose dictionary lies in a namespace this yaml does not import: the apply refuses the node [details](#d-yaml-localization-missing-import) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `yaml/presentation-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The presentation field of an object [docs](https://1cmycloud.com/docs/help/topics/element-view/) |
 | `yaml/unexpected-type-argument` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A type argument on a property the ui schema declares without one - another type, rejected when the build is applied (a form's `AdditionalCommands` takes `CommandInterfaceFragment`, not `CommandInterfaceFragment<UsualCommand>`); an English tree is judged the same - the key, the component, the property and the type head are canonized, and the argument is compared with the default name by name in either spelling [docs](https://1cmycloud.com/docs/help/topics/command-interface/) |
 | `yaml/property-since-compat` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property newer than the project's `CompatibilityMode` (the ui schema records the version it appeared in) - apply rejects it as an unknown property [docs](https://1cmycloud.com/docs/help/topics/update-server/) |
@@ -591,6 +591,92 @@ answer is `Auto`. Off by default: a desktop-only page lives with a maximum fine.
 is a flex with a zero basis, and in a vertical column, that is in the mobile layout, the basis
 applies to the height. Safari clips the card with the rounding. On a phone drop the weight through
 a binding. Off by default: a card living only in a wide row keeps it legitimately.
+
+<a id="d-code-unused-constant"></a>**`code/unused-constant`.** Words in code, yaml, strings and
+comments count as uses, and the translation dictionary does not. Global constants and constants
+with unknown annotations are skipped. Enable the rule for a whole-project check.
+
+<a id="d-code-duplicate-method-body"></a>**`code/duplicate-method-body`.** Normalization drops
+comments, blank lines and indentation. A platform hook is told apart by its `@Handler` annotation
+rather than by a list of names: the same hook body in every object is normal. Copies inside one
+file are not judged. Off by default: whether two copies should become one method is a design
+decision.
+
+<a id="d-yaml-missing-import"></a>**`yaml/missing-import`.** A reference is a type position, a
+`FormType` navigation target and the root of a binding chain `=ForeignModule.Method()`. What is
+needed is `Subsystem` for an element at the subsystem root and `Subsystem::Package` for one in a
+package: importing the subsystem does not bring its packages. An import in the paired module does
+not cover the markup. A binding root is judged after subtracting everything that explains the name
+on its own: the declarations of this yaml, of the paired module and the implicit platform names.
+The tables of the paired query of a virtual table resolve against the same section and are
+reported on it: the `.xbql` and every item of its `FROM` lists, the one after a join condition
+included. Qualified and temporary tables are not judged. So do the tables of a dynamic list, that
+is the `Table` of its `MainTable` and of each of its `JoinedTables`, and the `JoinedTables` of the
+reference input settings of a field; the finding sits at the value of the table, and a qualified
+table needs no import.
+
+<a id="d-code-unused-import"></a>**`code/unused-import`.** The platform IDE reports such imports.
+What counts is what the compiler resolves: a written type; a name that is neither a local nor
+declared by the module or the paired yaml; the root of a chain `Root.member`, even when the root
+is a property of the paired yaml; a qualified name; a table of a query; an enumeration value in a
+`when` branch; a bare `Resource{...}` key whose file only that namespace holds. The types that
+values bring along count as well: the properties of the paired yaml the code names, the results
+and fields of other elements reached through a chain, the fields of those structures, and a query
+column that passes a field on. The import line itself, a member after a dot and a local named like
+an element are not uses, so `import Subsystem` next to `import Subsystem::Package` is reported
+when the module reaches only the package. A reference from the paired yaml is not a use either,
+since the yaml has an import section of its own. An import of the module's own namespace is judged
+the same way. The fix removes the line.
+
+<a id="d-code-missing-import"></a>**`code/missing-import`.** What is needed is `import Subsystem`
+for an element at the subsystem root and `import Subsystem::Package` for one in a package:
+importing the subsystem does not bring its packages. Judged are the written type positions (a
+parameter, a variable, a return, `new`, `as`, `is`, a `Type<...>` literal, generic arguments), the
+root of a `Module.Method()` chain and the tables of the `Query{...}` blocks, every item of a
+`FROM` list included. For a root everything that explains the name on its own is subtracted first:
+the declarations of the method and the module, the implicit names of the platform and the sections
+of the paired yaml. The project module belongs to no subsystem and needs the import for every
+element it names, at the root of a subsystem as in a package.
+
+<a id="d-yaml-wrong-namespace"></a>**`yaml/wrong-namespace`.** Judged are the full
+`Vendor::Project::Subsystem[::Package]::Name` and the partial `Subsystem[::Package]::Name`, while
+the project declares the element elsewhere. The usual cause is a move of the element between the
+root of a subsystem and a package: a generated list form keeps its row type spelled by the old
+place. Every string value of an element and of a descriptor is read, the namespace lists
+(`Import`, `Using`) and resource references aside. A name of another project, a type declared in a
+module and a chain that spells a namespace whole are not judged. A partial name is judged when its
+first segment is a subsystem of the project that no declared library names as well. When the
+element lies in one place, the finding carries the fix: the namespace is replaced by the placement
+of the element. An element in several places is reported with its places and no fix.
+
+<a id="d-code-wrong-namespace"></a>**`code/wrong-namespace`.** The name comes full or partial, and
+it may stand in a type position, in a call or as a table of a query. For a table the compiler
+answers that the table is not found. The import line and the key of a `Resource{...}` literal are
+not read. The fix replaces the namespace when the element lies in one place.
+
+<a id="d-code-package-resources-missing"></a>**`code/package-resources-missing`.** The method
+returns the resources of its own namespace alone, so for a package not even the files of its
+subsystem are found, and for the root not the files of its packages. The answer is one:
+`ResourceNotFoundException`, `GetAll()` included. In a package a `Resource{...}` literal does find
+the files of the subsystem. The folder is looked up on disk, and the project module is not judged.
+
+<a id="d-yaml-missing-subsystem-usage"></a>**`yaml/missing-subsystem-usage`.**
+`Subsystem::Package` counts as an import of that subsystem, and all of it is learnt at deploy
+time. An import gives the short names, but it is `Using` that permits the subsystem, its packages
+included. A subsystem without a description has nowhere to declare the usage and is not judged.
+The diagnostic sits on the subsystem description, where the fix goes.
+
+<a id="d-yaml-computed-binding-assigned"></a>**`yaml/computed-binding-assigned`.** The platform
+answers with an IllegalStateException. A named argument is not an assignment, and a code-built
+instance, a bare-path binding, a literal or an unbound instance make the assignment legal: the
+rule fires only when every instance is bound computed.
+
+<a id="d-yaml-localization-missing-import"></a>**`yaml/localization-missing-import`.** What is
+needed is `Subsystem` for a dictionary at the subsystem root and `Subsystem::Package` for one in a
+package: importing the subsystem does not bring its packages. The apply refuses the node as a
+not-imported namespace. A dictionary of the yaml's own subsystem, at its root or in a package,
+needs no import, an import in the paired module does not cover the markup, and the qualified
+`$Subsystem::Dictionary.Key` form needs no import.
 
 ## Group details
 
