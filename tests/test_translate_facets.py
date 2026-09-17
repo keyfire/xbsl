@@ -230,6 +230,10 @@ def privilege_data_root(root: Path, *, stated: bool) -> Path:
     The values of the privilege facet are the pairs of the enumeration class the extractor names
     after the facet (the compiler dictionary keeps the class under its own name); the manager is
     the row the compiler files the privilege manager under.
+
+    The class is stated only by data extracted since the extractor learned to state it. Data
+    without it cannot build the "stated" root at all, and the tests that need it are skipped -
+    the fixture used to end in a KeyError naming a dictionary key instead.
     """
     version = dataset.resolve_version()
     target = root / version
@@ -240,7 +244,11 @@ def privilege_data_root(root: Path, *, stated: bool) -> Path:
     full = json.loads((target / "terms_full.json").read_text(encoding="utf-8"))
     tables = uiterms.setdefault("enum_values", {})
     if stated:
-        tables["Сущность.Право"] = dict(full["members"]["EntityPrivilegeG5Enum"])
+        values = (full.get("members") or {}).get("EntityPrivilegeG5Enum")
+        if not values:
+            pytest.skip("данные не называют пары перечисления фасета прав "
+                        "(EntityPrivilegeG5Enum) – сгенерируйте их заново")
+        tables["Сущность.Право"] = dict(values)
         full.setdefault("manager_owners", {})["ПравоНаДействие"] = "PrivilegeOnActionManager"
     else:
         tables.pop("Сущность.Право", None)
@@ -407,6 +415,91 @@ def test_a_chain_of_no_known_type_keeps_the_word_and_reports_the_gap(tmp_path: P
     assert "Нечто." in written and ".Граница()" in written
     assert "Bound" not in written and "Border" not in written
     assert "Граница" in report.files["Проба.xbsl"].missing_platform
+
+
+def test_a_link_typed_by_a_union_gives_the_chain_no_owner(tmp_path: Path):
+    """A member whose declared type is `A|B` names no type: the value is one of the two, and the
+    walk used to take the FIRST alternative. The word after such a link would then be spelled by
+    half of the type - `Граница` as Bound where the value may be a spreadsheet area and Border.
+    A chain that reaches a union has no owner and reads the word as it did before an owner was
+    ever asked for. A union inside generic brackets leaves the outer type whole and answers."""
+    root = tmp_path / "Acme" / "Demo"
+    _write(root / "Смесь.xbsl", (
+        "структура УзелСмеси\n"
+        "    пер Область: Массив<Строка>|ВыводимаяОбластьТабличногоДокумента\n"
+        "    пер Строки: Массив<Строка|Число>\n"
+        ";\n"
+        "\n"
+        "метод НайтиСмесь(): УзелСмеси?\n"
+        "    возврат Неопределено\n"
+        ";\n"
+        "\n"
+        "метод Край(): Число\n"
+        "    знч Узел = НайтиСмесь()\n"
+        "    возврат Узел!.Область.Граница()\n"
+        ";\n"
+        "\n"
+        "метод Предел(): Число\n"
+        "    знч Узел = НайтиСмесь()\n"
+        "    возврат Узел!.Строки.Граница()\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    report = translate_project(root, _dictionary({
+        "УзелСмеси": "MixedNode", "Область": "Region", "Строки": "Rows",
+        "НайтиСмесь": "FindMixed", "Край": "Edge", "Предел": "Limit", "Узел": "Node",
+    }), out, swap_localization=False)
+
+    module = (out / "Смесь.xbsl").read_text(encoding="utf-8")
+    assert "return Node!.Region.Граница()" in module
+    assert "return Node!.Rows.Bound()" in module
+    assert "Граница" in report.files["Смесь.xbsl"].missing_platform
+
+
+def test_an_interpolation_reads_its_chain_the_way_the_code_around_it_does(tmp_path: Path):
+    """An interpolation is code of the method the string stands in, and the owner a chain holds
+    is part of that reading. The fragment used to be walked without the chain types: the very
+    same expression came out Bound outside the quotes and stayed Russian inside them, in one
+    method - and the gap was reported for a word the pass had already spelled."""
+    root = tmp_path / "Acme" / "Demo"
+    _order_project(root)
+    _write(root / "ЗаказыФормаОбъекта.xbsl", (
+        "метод Подпись(): Строка\n"
+        "    знч Всего = Объект.Товары.Граница()\n"
+        "    возврат \"Строк: %{Объект.Товары.Граница()}, всего %{Всего}\"\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    report = translate_project(root, _dictionary({
+        **_ORDER_TOKENS, "Подпись": "Caption", "Всего": "Total",
+    }), out, swap_localization=False)
+
+    form = (out / "OrdersObjectForm.xbsl").read_text(encoding="utf-8")
+    assert "val Total = Object.Goods.Bound()" in form
+    assert 'return "Строк: %{Object.Goods.Bound()}, всего %{Total}"' in form
+    assert "Граница" not in report.files["ЗаказыФормаОбъекта.xbsl"].missing_platform
+
+
+def test_the_privilege_fixture_skips_where_the_data_does_not_state_the_enumeration(
+        tmp_path: Path):
+    """The two roots below are built out of the CURRENT data, and the values of the privilege
+    facet are the pairs of an enumeration class the extractor has only stated since a certain
+    version. Data without it ended the fixture with a KeyError - a red test naming a dictionary
+    key, where the honest answer is that this data cannot tell."""
+    source = tmp_path / "data"
+    version = "1.0.0"
+    (source / version).mkdir(parents=True)
+    for name, content in (("terms_full.json", {"members": {}}), ("uiterms.json", {})):
+        (source / version / name).write_text(json.dumps(content), encoding="utf-8")
+    (source / "index.json").write_text(
+        json.dumps({"available": [version], "default": version}), encoding="utf-8")
+
+    dataset.set_data_root(source)
+    try:
+        with pytest.raises(pytest.skip.Exception):
+            privilege_data_root(tmp_path / "built", stated=True)
+    finally:
+        dataset.set_data_root(None)
 
 
 # --- a method of the manager of a project element ------------------------------------------------

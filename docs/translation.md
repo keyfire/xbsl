@@ -33,7 +33,11 @@ record, the reference member is the facet word too, `Reference`; the link proper
 picture is `Link`. A value of a union-typed property that spells a member of the union, such as
 `Auto` of `Auto|Number`, becomes that member, spelled by the platform's type pairs. Inside
 `Query{ ... }` blocks the query vocabulary answers instead of the general one. A name the data
-cannot spell stays as written and is reported as a data gap: the translator never guesses.
+cannot spell stays as written and is reported as a data gap: the translator never guesses. Nor
+does it guess an owner: a link of a chain declared `A|B` holds one of the two and the code does
+not say which, so the chain ends there and the word after it is read without an owner. A string
+interpolation is code of the method around it, chains and all - `"%{Объект.Товары.Граница()}"`
+reads exactly what the same expression reads outside the quotes.
 
 **The project half comes from the dictionary.** People translate everything the project named
 itself: objects, methods, attributes, form components, dictionary keys, resource files, and an

@@ -71,6 +71,36 @@ def has_cyrillic(text: str) -> bool:
     return _CYRILLIC_RE.search(text) is not None
 
 
+def _one_type(written: str) -> str:
+    """`written` when it names ONE type, "" when it is a UNION of several.
+
+    `Авто|Булево`, `Байты|Строка|?`: such a link names no type at all - the value is one of the
+    alternatives and the code does not say which. `dataset.member_type_head` answers it with the
+    FIRST one, and a chain typed by that guess spells the word after it by half of the type:
+    `Граница` came out Bound on a link that may just as well hold a spreadsheet area, where the
+    same word is Border. A chain that reaches a union is given no owner, and the member is read
+    the way it was before an owner was ever asked for. Only a bar OUTSIDE the generic brackets
+    makes a union: `Массив<Строка|Число>` is one type - an array - and passes.
+    """
+    depth = 0
+    for char in written:
+        if char == "<":
+            depth += 1
+        elif char == ">":
+            depth -= 1
+        elif char == "|" and depth <= 0:
+            return ""
+    return written
+
+
+def _typed_members(table: dict) -> dict[str, str]:
+    """{name: its written type} with the links that name no single type left out (see _one_type)."""
+    return {
+        str(name): str(written) for name, written in table.items()
+        if isinstance(written, str) and _one_type(written)
+    }
+
+
 class ProjectIndex:
     """What the project index of the editor knows that a member of a chain needs.
 
@@ -93,11 +123,12 @@ class ProjectIndex:
         except Exception:  # noqa: BLE001 - no data, the project half alone
             catalog = {}
         returns: dict[str, dict[str, str]] = {
-            owner: dict(members) for owner, members in (catalog.get("member_types") or {}).items()
+            owner: _typed_members(members)
+            for owner, members in (catalog.get("member_types") or {}).items()
             if isinstance(members, dict)
         }
         for owner, members in self.lookup.method_returns().items():
-            returns[owner] = {**returns.get(owner, {}), **members}
+            returns[owner] = {**returns.get(owner, {}), **_typed_members(members)}
         #: {type: {member: its result type}} - the platform catalog joined with the project.
         self.returns = returns
 
@@ -160,7 +191,7 @@ class ProjectIndex:
         stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
         record = self.lookup.struct_by_name(stem) or {}
         described = (record.get("property_types") or {}) if record.get("kind") else {}
-        types = {str(name): str(written) for name, written in described.items() if written}
+        types = _typed_members(described)
         pair = self.data_object(path)
         if pair:
             types.setdefault(pair[0], pair[1])
@@ -179,10 +210,10 @@ class ProjectIndex:
     def module_returns(self, path: Path) -> dict[str, str]:
         """{method: its written result} of the module at `path` - a bare call of its own code."""
         module = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
-        return {
+        return _typed_members({
             str(method["name"]): str(method.get("returns_written") or method["returns"])
             for method in self.lookup.methods_by_module(module) if method.get("returns")
-        }
+        })
 
 
 #: The index of ONE project root: (the root, the stamp of the sources it was built from, the
@@ -746,8 +777,13 @@ def collect_token_edits(
     #: named like a platform type is the property there, just as a local is the local.
     owner_names: frozenset[str] = method.owner_names if method is not None else frozenset()
     #: The names of the module a chain root may be typed by in the current method: the owner's
-    #: names the method sees, the object a form edits among them (see ChainTypes.owner).
-    chain_names: frozenset[str] = frozenset()
+    #: names the method sees, the object a form edits among them (see ChainTypes.owner). A
+    #: fragment has no method boundary to read them at and starts from its method's.
+    chain_names: frozenset[str] = method.chain_names if method is not None else frozenset()
+    if chains is None and method is not None:
+        # An interpolation is code of the method around it, chains and all: walked without them
+        # it read the same expression differently inside the quotes and outside.
+        chains = method.chains
     #: The structure whose fields are being declared right now, and whether the next name
     #: belongs to it. The fields of one structure share a namespace: two Russian words
     #: translated into one English word are a structure the compiler refuses.
@@ -939,7 +975,7 @@ def collect_token_edits(
                           group_argument=is_group_argument(toks, index),
                           method=MethodScope(method_name, local_names, method_types,
                                              base + tok.start if place is None else place,
-                                             owner_names))
+                                             owner_names, chains, chain_names))
         if kind in ("IDENT", "KEYWORD"):
             if not prev_dot:
                 chain_root = tok.value
@@ -1364,6 +1400,11 @@ class MethodScope:
     `place` is where the string stands in the module text. A name declared twice in one method
     is typed by the block around its place, and an offset inside a fragment says nothing about
     that when the fragment is the text of a dictionary entry rather than a piece of the module.
+
+    `chains` and `chain_names` are what types a chain whose receiver no declaration types (see
+    ChainTypes). The fragment used to be walked without them, and the same expression came out
+    two ways in one method: `Объект.Товары.Граница()` was Bound in the code and stayed Russian
+    inside the quotes right below it.
     """
 
     name: str
@@ -1371,6 +1412,8 @@ class MethodScope:
     types: MethodTypes | None
     place: int | None = None
     owner_names: frozenset[str] = frozenset()
+    chains: ChainTypes | None = None
+    chain_names: frozenset[str] = frozenset()
 
 
 @lru_cache(maxsize=1)

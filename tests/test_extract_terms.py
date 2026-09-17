@@ -340,10 +340,10 @@ def _template_html(methods: list[str]) -> str:
     )
 
 
-def _template_markdown(methods: list[str]) -> str:
-    rows = [f"# DeveloperName::ProjectName::SubsystemName::AcmeRightName#{name}()\n\n"
+def _template_markdown(methods: list[str], template: str = "AcmeRightName") -> str:
+    rows = [f"# DeveloperName::ProjectName::SubsystemName::{template}#{name}()\n\n"
             "**Определен:** **ИмяПраваАкме**\n" for name in methods]
-    rows.append("# DeveloperName::ProjectName::SubsystemName::AcmeRightName#ToString()\n\n"
+    rows.append(f"# DeveloperName::ProjectName::SubsystemName::{template}#ToString()\n\n"
                 "**Определен:** **Объект**\n")
     return "Содержит методы права.\n\n" + "\n".join(rows)
 
@@ -352,19 +352,32 @@ def _manager_car(*, constructed_from: str | None = _PROJECT_TYPE_INIT,
                  russian: tuple[str, ...] = ("ЕстьПраво", "Проверить"),
                  english: tuple[str, ...] = ("Check", "HasRight"),
                  twin: bool = False, foreign_pair: bool = False,
-                 view_from_project_type: bool = False):
-    """A distribution with one element kind, its template pages and the compiler classes."""
+                 view_from_project_type: bool = False,
+                 second_kind: bool = False, namesake: bool = False):
+    """A distribution with one element kind, its template pages and the compiler classes.
+
+    `second_kind` adds a kind whose template documents exactly the same members, so one class
+    fits both. `namesake` moves the terms into a class of the SAME simple name in another
+    package, leaving the constructed one stating nothing.
+    """
     import io
     import zipfile
 
     from test_extract_classcode import TERM, _class_constructing, _class_of
 
     stated = [(TERM, ["Check", "Проверить"]), (TERM, ["HasRight", "ЕстьПраво"])]
+    kinds = [("AcmeRight", "АкмеПраво")]
+    if second_kind:
+        kinds.append(("AcmeMark", "АкмеМетка"))
     jar = io.BytesIO()
     with zipfile.ZipFile(jar, "w") as z:
-        z.writestr("demo/kinds/ProjectElementKindCmptEnum.class",
-                   _kind_enum_blob([("AcmeRight", "АкмеПраво")]))
-        z.writestr(_MANAGER_CLASS + ".class", _class_of(stated))
+        z.writestr("demo/kinds/ProjectElementKindCmptEnum.class", _kind_enum_blob(kinds))
+        if namesake:
+            # Written FIRST, so the walk meets it before the class the environment builds.
+            z.writestr("demo/other/AcmeRightManagerCtMetaObject.class", _class_of(stated))
+            z.writestr(_MANAGER_CLASS + ".class", _class_of([]))
+        else:
+            z.writestr(_MANAGER_CLASS + ".class", _class_of(stated))
         steps: list[tuple[str, ...]] = []
         if constructed_from is not None:
             steps += [("new", _MANAGER_CLASS), ("init", _MANAGER_CLASS, constructed_from)]
@@ -383,11 +396,17 @@ def _manager_car(*, constructed_from: str | None = _PROJECT_TYPE_INIT,
     lsp = io.BytesIO()
     with zipfile.ZipFile(lsp, "w") as z:
         z.writestr(_LSP_PAGE, _template_markdown(list(english)))
+        if second_kind:
+            z.writestr(_LSP_PAGE.replace("AcmeRightName", "AcmeMarkName"),
+                       _template_markdown(list(english), "AcmeMarkName"))
     car = io.BytesIO()
     with zipfile.ZipFile(car, "w") as z:
         z.writestr("data/lib/com.e1c.g5rt.demo-1.0.jar", jar.getvalue())
         z.writestr(_LSP_JAR, lsp.getvalue())
         z.writestr(_TEMPLATE_PAGE, _template_html(list(russian)))
+        if second_kind:
+            z.writestr(_TEMPLATE_PAGE.replace("AcmeRightName", "AcmeMarkName"),
+                       _template_html(list(russian)))
     return zipfile.ZipFile(car)
 
 
@@ -422,6 +441,20 @@ def test_a_template_documented_otherwise_names_no_kind():
 
 def test_two_metaobjects_that_fit_one_kind_name_none_of_them():
     assert _owners(_manager_car(twin=True)) == {}
+
+
+def test_one_metaobject_that_fits_two_kinds_names_neither():
+    """The mirror of the case above: two templates documenting exactly the same members leave
+    the class fitting both, and a manager that could belong to either is proven for neither."""
+    assert _owners(_manager_car(second_kind=True)) == {}
+
+
+def test_evidence_of_two_classes_of_one_simple_name_is_not_merged():
+    """The class the environment builds and the class that states the terms are told apart by
+    their full name. Kept by the SIMPLE name, the two were one: a namesake in another package
+    lent its pairs to a class that states nothing, and the join was stated on evidence no single
+    class gives. Here the namesake is met first, which is what used to decide it."""
+    assert _owners(_manager_car(namesake=True)) == {}
 
 
 def test_a_members_table_with_a_word_the_template_lacks_names_no_kind():
