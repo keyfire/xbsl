@@ -227,3 +227,176 @@ def test_collect_files_the_values_under_the_qualified_public_owner(tmp_path):
 
     assert found["Акме.Право"] == {"Чтение": "Read", "Создание": "Create"}
     assert "Право" not in found
+
+
+# --- the pictures of the platform's library ---------------------------------------------------
+
+_RU = "Icons/Стд/Ресурсы/"
+_EN = "Icons/Std/Resources/"
+
+
+def test_a_picture_pairs_with_its_twin_of_the_same_bytes():
+    found = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg id='acme'/>"),
+        (_EN + "Acme.svg", b"<svg id='acme'/>"),
+        (_RU + "Глобекс.svg", b"<svg id='globex'/>"),
+        (_EN + "Globex.svg", b"<svg id='globex'/>"),
+    ])
+
+    assert found["pairs"] == {_RU + "Акме.svg": _EN + "Acme.svg",
+                              _RU + "Глобекс.svg": _EN + "Globex.svg"}
+    assert found["conflicts"] == {} and found["ambiguous"] == [] and found["unmatched"] == []
+
+
+def test_copies_of_one_picture_in_several_jars_collapse_into_one_pair():
+    """The server, the designer and the language server each ship the library: the same path
+    with the same bytes is one picture, not three."""
+    copies = [(_RU + "Акме.svg", b"<svg/>"), (_EN + "Acme.svg", b"<svg/>")] * 3
+
+    found = ut.pair_pictures(copies)
+
+    assert found["pairs"] == {_RU + "Акме.svg": _EN + "Acme.svg"}
+    assert found["instances"] == 6
+    assert found["conflicts"] == {} and found["ambiguous"] == []
+
+
+def test_one_content_under_several_names_pairs_none_of_them():
+    """Two Russian names drawn the same, or two English ones: which name answers which is
+    not written anywhere, so none is paired - neither by order nor by resemblance."""
+    two_to_one = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg a/>"), (_RU + "АкмеКопия.svg", b"<svg a/>"),
+        (_EN + "Acme.svg", b"<svg a/>"),
+    ])
+    one_to_two = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg b/>"),
+        (_EN + "Acme.svg", b"<svg b/>"), (_EN + "AcmeCopy.svg", b"<svg b/>"),
+    ])
+    two_to_two = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg c/>"), (_RU + "Глобекс.svg", b"<svg c/>"),
+        (_EN + "Acme.svg", b"<svg c/>"), (_EN + "Globex.svg", b"<svg c/>"),
+    ])
+
+    for found in (two_to_one, one_to_two, two_to_two):
+        assert found["pairs"] == {}
+        assert len(found["ambiguous"]) == 1 and found["unmatched"] == []
+    assert two_to_one["ambiguous"][0]["ru"] == [_RU + "Акме.svg", _RU + "АкмеКопия.svg"]
+    assert two_to_one["ambiguous"][0]["en"] == [_EN + "Acme.svg"]
+
+
+def test_a_picture_without_a_twin_stays_unpaired():
+    found = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg ru/>"),
+        (_EN + "Globex.svg", b"<svg en/>"),
+    ])
+
+    assert found["pairs"] == {}
+    assert sorted((group["ru"], group["en"]) for group in found["unmatched"]) == [
+        ([], [_EN + "Globex.svg"]), ([_RU + "Акме.svg"], []),
+    ]
+
+
+def test_a_path_whose_copies_differ_is_left_out_whole():
+    """One jar ships another drawing under the same name: no copy is preferred, the path is
+    reported and its would-be twin stays without a pair."""
+    found = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg old/>"),
+        (_RU + "Акме.svg", b"<svg new/>"),
+        (_EN + "Acme.svg", b"<svg new/>"),
+    ])
+
+    assert found["pairs"] == {}
+    assert list(found["conflicts"]) == [_RU + "Акме.svg"]
+    assert len(found["conflicts"][_RU + "Акме.svg"]) == 2
+    assert found["unmatched"] == [
+        {"sha256": found["unmatched"][0]["sha256"], "ru": [], "en": [_EN + "Acme.svg"]},
+    ]
+
+
+def test_the_bytes_are_compared_as_shipped():
+    """No normalization: a drawing that differs by a line break is another drawing."""
+    found = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg/>"),
+        (_EN + "Acme.svg", b"<svg/>\n"),
+    ])
+
+    assert found["pairs"] == {}
+    assert len(found["unmatched"]) == 2
+
+
+def test_no_pictures_give_an_empty_table():
+    found = ut.pair_pictures([])
+
+    assert found == {"pairs": {}, "conflicts": {}, "ambiguous": [], "unmatched": [],
+                     "instances": 0}
+
+
+def _car_with_jars(root, *jars: dict[str, bytes]) -> None:
+    import io
+    import zipfile
+
+    with zipfile.ZipFile(root / "acme-element-server-with-ide-1.0.0.car", "w") as car:
+        for number, members in enumerate(jars):
+            jar = io.BytesIO()
+            with zipfile.ZipFile(jar, "w") as z:
+                for member, blob in members.items():
+                    z.writestr(member, blob)
+            car.writestr(f"data/lib/com.e1c.g5rt.demo{number}-1.0.jar", jar.getvalue())
+
+
+def test_collect_pairs_only_the_pictures_of_the_two_library_folders(tmp_path):
+    """Only a picture below `Icons/Стд/Ресурсы` or `Icons/Std/Resources` is the library's: a
+    drawing of the same bytes anywhere else is not its twin, and the descriptors of the folders
+    are not pictures."""
+    library = {
+        _RU + "Акме.svg": b"<svg acme/>",
+        _EN + "Acme.svg": b"<svg acme/>",
+        _RU + "Ресурсы.yaml": "ОбластьВидимости: Глобально\n".encode(),
+        _EN + "Resources.yaml": b"VisibilityScope: Global\n",
+        _RU + "Глобекс.svg": b"<svg globex/>",
+        "Icons/Прочее/Ресурсы/Globex.svg": b"<svg globex/>",
+        "Other/Std/Resources/Globex.svg": b"<svg globex/>",
+    }
+    _car_with_jars(tmp_path, library, dict(library))
+
+    diagnostics: dict = {}
+    found = ut.collect(tmp_path, diagnostics)
+
+    assert found["resource_paths"] == {_RU + "Акме.svg": _EN + "Acme.svg"}
+    pictures = diagnostics["pictures"]
+    assert pictures["instances"] == 6
+    assert pictures["unmatched"][0]["ru"] == [_RU + "Глобекс.svg"]
+
+
+def test_collect_leaves_out_a_picture_two_jars_ship_differently(tmp_path):
+    _car_with_jars(
+        tmp_path,
+        {_RU + "Акме.svg": b"<svg one/>", _EN + "Acme.svg": b"<svg one/>"},
+        {_RU + "Акме.svg": b"<svg two/>", _EN + "Acme.svg": b"<svg one/>"},
+    )
+
+    assert ut.collect(tmp_path)["resource_paths"] == {}
+
+
+def test_the_table_is_counted_in_the_meta(tmp_path):
+    _car_with_jars(tmp_path, {_RU + "Акме.svg": b"<svg/>", _EN + "Acme.svg": b"<svg/>"})
+
+    built = ut.build(tmp_path, "1.0.0")
+
+    assert built["meta"]["resource_paths"] == 1
+    assert built["resource_paths"] == {_RU + "Акме.svg": _EN + "Acme.svg"}
+
+
+def test_the_extractor_names_what_it_left_without_a_pair(tmp_path, capsys):
+    _car_with_jars(tmp_path, {
+        _RU + "Акме.svg": b"<svg/>", _EN + "Acme.svg": b"<svg/>",
+        _RU + "Глобекс.svg": b"<svg ru/>",
+    })
+    out = tmp_path / "uiterms.json"
+
+    assert ut.main(["--dist", str(tmp_path), "--element-version", "1.0.0",
+                    "--out", str(out)]) == 0
+
+    printed = capsys.readouterr().out
+    assert "картинок библиотеки в паре: 1" in printed
+    assert f"без пары: {_RU}Глобекс.svg" in printed
+    assert '"resource_paths"' in out.read_text(encoding="utf-8")
