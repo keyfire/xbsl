@@ -2361,7 +2361,11 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
              is \\\\, a line break is \\n. Escape once, the way the code already does, never
              twice; the code inside an interpolation is translated by the ordinary pass, and a
              value that is not a literal body comes back in `refused` instead of being
-             written. An empty value REMOVES the entry - a half-filled stub is not a
+             written. A phrase goes by the OPPOSITE convention: its key is one comment line
+             as it stands, with no escaping and no padding, because that is the text the pass
+             compares against. A key escaped the literal way is written by the spelling that
+             will actually fire and listed in `normalized`; one that spans lines comes back in
+             `refused`. An empty value REMOVES the entry - a half-filled stub is not a
              translation.
     target – the file NEW entries go to (default 090-manual.yaml). An entry that already
              exists is corrected where it lives, whatever the target says - in every place

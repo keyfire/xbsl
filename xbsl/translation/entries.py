@@ -44,6 +44,45 @@ MESSAGES = {
         "en": "no entries found in the edits file: it needs tokens/phrases/literals"
               " sections in the dictionary format, or a JSON list",
     },
+    "translate.entries.no-key": {
+        "ru": "запись без ключа не записывается. Ключ – это имя, строка комментария или"
+              " тело литерала, смотря по виду записи.",
+        "en": "an entry without a key is not written. The key is a name, a comment line or"
+              " a literal body, depending on the kind.",
+    },
+    "translate.phrase.escaped-quote-key": {
+        "ru": "кавычка в ключе экранирована по правилам литерала. Фразу переводчик ищет по"
+              " строке комментария как есть, поэтому обратный слэш снят.",
+        "en": "the quote in the key was escaped the way a literal escapes it. The translator"
+              " looks a phrase up by the comment line as it stands, so the backslash was"
+              " taken off.",
+    },
+    "translate.phrase.escaped-quote-value": {
+        "ru": "кавычка в переводе экранирована по правилам литерала. Перевод подставляется"
+              " в комментарий как есть, поэтому обратный слэш снят.",
+        "en": "the quote in the translation was escaped the way a literal escapes it. The"
+              " translation goes into the comment as it stands, so the backslash was taken"
+              " off.",
+    },
+    "translate.phrase.trimmed-key": {
+        "ru": "ключ окружён пробелами. Переводчик читает строку комментария без отступа и"
+              " без хвостовых пробелов, поэтому они сняты.",
+        "en": "the key was padded with whitespace. The translator reads a comment line"
+              " without the indent and without the trailing spaces, so the padding was"
+              " taken off.",
+    },
+    "translate.phrase.newline-key": {
+        "ru": "фраза не занимает несколько строк: каждую строку комментария переводчик ищет"
+              " отдельно. Запишите строки отдельными записями.",
+        "en": "a phrase does not span several lines: the translator looks up each line of a"
+              " comment on its own. Write the lines as separate entries.",
+    },
+    "translate.phrase.newline-value": {
+        "ru": "перевод не занимает несколько строк: он подставляется внутрь одной строки"
+              " комментария. Уместите перевод в одну строку.",
+        "en": "a translation does not span several lines: it goes inside one comment line."
+              " Fit the translation on one line.",
+    },
     "translate.page.truncated": {
         "ru": "показаны не все строки, осталось ещё {remaining}:"
               " следующая страница – offset={next_offset}, limit=0 отдаёт список целиком.",
@@ -1042,7 +1081,8 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(text, encoding="utf-8", newline="")
     return {key: plan[key]
-            for key in ("changed", "added", "removed", "rewritten", "refused", "collisions")}
+            for key in ("changed", "added", "removed", "rewritten", "refused", "normalized",
+                        "collisions")}
 
 
 def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
@@ -1063,6 +1103,10 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     for, the writer does not: a file written from the MCP tool used to arrive announcing that
     it came from the editor panel, and the line was corrected by hand afterwards.
 
+    Each plane is held to the shape its pass reads (`_literal_edit_refusal`, `_phrase_edit`):
+    an entry that could not fire is refused with the reason, and one that has a single
+    obvious reading is written by that reading and listed in `normalized`.
+
     The result is `{files: {path: the full new text}, changed, added, removed}`. Texts rather
     than writes are what an editor needs: the language server never writes to disk, so the
     client applies the result as a workspace edit and the user keeps undo.
@@ -1080,25 +1124,46 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     by_file: dict[Path, list[tuple[Entry, dict]]] = {}
     fresh: list[dict] = []
     refused: list[dict] = []
+    # What the writer read differently from the caller, and why. A correction that nobody is
+    # told about is the same silence as the entry that never fires.
+    normalized: list[dict] = []
     for edit in edits:
         key = str(edit.get("key") or "")
         kind = str(edit.get("kind") or "token")
-        if not key:
+        value = str(edit.get("value") or "")
+        if not key.strip():
+            # Dropped without a word until now, so a batch with a keyless row reported one
+            # entry fewer than it carried and nothing said which row went missing.
+            refused.append({"key": key, "kind": kind,
+                            "reason": i18n.t("translate.entries.no-key")})
             continue
         # A misspelled kind used to be written: the entry landed in a section named after it,
         # or the plan crashed on the unknown section. Refused here, where the value is in hand.
         reason = kind_refusal(kind, allow_any=False)
         if not reason and kind == "literal":
-            reason = _literal_edit_refusal(key, str(edit.get("value") or ""))
+            reason = _literal_edit_refusal(key, value)
+        if not reason and kind == "phrase":
+            reason = _phrase_edit_refusal(key, value)
         if reason:
             # Written now, refused at the next load - and the author would be a day away from
             # the entry by then. The same check answers here, while the value is still in hand.
             refused.append({"key": key, "kind": kind, "reason": reason})
             continue
+        # A key the dictionary already declares is addressed exactly as typed: that is how a
+        # pair written before this correction is repaired or taken out. A key that is new
+        # comes from the caller's keyboard, and the shape it must have is known here.
+        if kind == "phrase" and (kind, key) not in places:
+            key, value, notes = _phrase_edit(key, value)
+            if notes:
+                if (kind, key) in places:
+                    # The corrected key turns out to name an entry that is already there, so
+                    # this edit corrects THAT one rather than adding a second spelling of it.
+                    edit = {**edit, "key": key, "value": value}
+                normalized.extend({**note, "key": key, "kind": kind} for note in notes)
         if (kind, key) in places:
             decided[(kind, key)] = edit
         else:
-            fresh.append({"key": key, "kind": kind, "value": str(edit.get("value") or "")})
+            fresh.append({"key": key, "kind": kind, "value": value})
     for pair, edit in decided.items():
         for entry in places[pair]:
             by_file.setdefault(Path(entry.file), []).append((entry, edit))
@@ -1146,7 +1211,8 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     # the way collisions do.
     return {"files": files, "changed": changed, "added": added, "removed": removed,
             "rewritten": sorted(rewritten, key=lambda row: (row["file"], row["line"])),
-            "refused": refused, "collisions": _value_collisions(known, edits)}
+            "refused": refused, "normalized": normalized,
+            "collisions": _value_collisions(known, edits)}
 
 
 def _value_collisions(known: dict, edits: list[dict]) -> list[dict]:
@@ -1175,6 +1241,60 @@ def _value_collisions(known: dict, edits: list[dict]) -> list[dict]:
         if taken:
             out.append({"key": key, "value": value, "taken": sorted(taken)})
     return out
+
+
+#: A quote with a backslash in front of it - the way a STRING LITERAL spells an inner quote.
+#: A phrase carries no escaping at all, so the backslash in such a key is borrowed from the
+#: neighbouring plane and belongs to nothing here.
+_ESCAPED_QUOTE_RE = re.compile(r'\\(?=")')
+
+
+def _phrase_edit(key: str, value: str) -> tuple[str, str, list[dict]]:
+    """The phrase edit as the translating pass will read it, and what had to be corrected.
+
+    The two planes spell their entries by opposite conventions, and the neighbouring one is
+    the loud one: a literal is written with the escaping the source carries, and the
+    documentation shows `\\"` in every literals example. A phrase is the text of ONE comment
+    line with the marker and the decoration off - no escaping, no padding, no line break -
+    because that is the string the pass compares against. So a key spelled the literal way
+    matched no comment anywhere: the line stayed in the gaps, and the entry sat in the
+    dictionary looking like coverage.
+
+    Both sides are corrected, because both are read as that same text: the key decides
+    whether the pair fires, and the value is pasted into the comment as it stands.
+    """
+    notes: list[dict] = []
+    fixed_key = _phrase_side(key, "translate.phrase.escaped-quote-key", notes)
+    trimmed = fixed_key.strip()
+    if trimmed != fixed_key:
+        notes.append({"was": fixed_key, "now": trimmed,
+                      "reason": i18n.t("translate.phrase.trimmed-key")})
+        fixed_key = trimmed
+    fixed_value = _phrase_side(value, "translate.phrase.escaped-quote-value", notes)
+    return fixed_key, fixed_value, notes
+
+
+def _phrase_side(text: str, message: str, notes: list[str]) -> str:
+    """One side of a phrase entry with the literal escaping of a quote taken off."""
+    fixed = _ESCAPED_QUOTE_RE.sub("", text)
+    if fixed != text:
+        notes.append({"was": text, "now": fixed, "reason": i18n.t(message)})
+    return fixed
+
+
+def _phrase_edit_refusal(key: str, value: str) -> str:
+    """Why this phrase edit cannot be written; "" when it can.
+
+    A line break is the one shape no correction repairs. The pass keys every line of a
+    comment on its own, so a key on two lines names nothing whatever it is trimmed to; and a
+    value is written INSIDE one comment line, where a break would push the rest of the line
+    out of the comment and into the code.
+    """
+    if "\n" in key or "\r" in key:
+        return i18n.t("translate.phrase.newline-key")
+    if value and ("\n" in value or "\r" in value):
+        return i18n.t("translate.phrase.newline-value")
+    return ""
 
 
 def _literal_edit_refusal(key: str, value: str) -> str:
