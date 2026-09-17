@@ -516,6 +516,7 @@
   "Failed to read the translation dictionary: {0}": "Не удалось прочитать словарь перевода: {0}",
   "Failed to write the translation: {0}": "Не удалось записать перевод: {0}",
   "The engine refused the translation: {0}": "Движок отказал в записи перевода: {0}",
+  "The engine corrected the entry: {0}": "Движок поправил запись: {0}",
   "Failed to open {0}: {1}": "Не удалось открыть {0}: {1}",
   "XBSL: no open folder - there is no project to show the dictionary of.": "XBSL: нет открытой папки – не у какого проекта показывать словарь.",
   "XBSL: translation dictionary": "XBSL: словарь перевода",

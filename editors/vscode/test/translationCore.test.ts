@@ -19,6 +19,7 @@ import {
   parseEntries,
   parseGaps,
   parseSetResult,
+  normalizationText,
   parseSuggest,
   parseSummary,
   parseTable,
@@ -162,8 +163,20 @@ test("entries, gaps and the write result are parsed", () => {
   assert.strictEqual(entries.dictionary, "D:\\словарь");
   assert.strictEqual(parseGaps(JSON.stringify({ total: 2, gaps: [gap()] })).gaps[0].count, 3);
   assert.deepStrictEqual(parseSetResult(JSON.stringify({ changed: 1, added: 2, removed: 0 })), {
-    changed: 1, added: 2, removed: 0, refused: [],
+    changed: 1, added: 2, removed: 0, refused: [], normalized: [],
   });
+});
+
+test("a corrected phrase key comes back named, not silently rewritten", () => {
+  // The entry IS written - under the spelling the translating pass reads. An answer that kept
+  // quiet would send the author looking for their own key in the dictionary.
+  const answer = parseSetResult(JSON.stringify({
+    changed: 0, added: 1, removed: 0, refused: [],
+    normalized: [{ kind: "phrase", key: "Материал", was: "\\\"Материал\\\"", now: "\"Материал\"",
+                   reason: "кавычка не экранируется" }],
+  }));
+  assert.strictEqual(answer.normalized.length, 1);
+  assert.match(normalizationText(answer.normalized), /кавычка не экранируется/);
 });
 
 test("an engine error is raised, not swallowed as an empty table", () => {

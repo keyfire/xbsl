@@ -193,13 +193,27 @@ export interface GapsAnswer {
   gaps: DictionaryGap[];
 }
 
-// An edit the engine would not write. Only a literal is ever refused: its value is pasted back
-// between two quotes, so a bare quote, a dangling backslash or a newline would end the literal
-// early and stop the module from compiling. The engine checks that WHILE the value is in hand
-// rather than at the next load, and names the reason in the reader's language.
+// An edit the engine would not write. A literal is refused when its value is pasted back between
+// two quotes and a bare quote, a dangling backslash or a newline would end the literal early and
+// stop the module from compiling. A phrase is refused when its key or its translation runs over
+// two lines, or when the key is empty - the translating pass reads a comment line by line and
+// would never match such a pair. The engine checks WHILE the value is in hand rather than at the
+// next load, and names the reason in the reader's language.
 export interface RefusedEdit {
   key: string;
   kind: EntryKind;
+  reason: string;
+}
+
+// An edit the engine wrote under a different spelling. A phrase key is read the way the
+// translating pass will read it - a backslash before a quote taken off, padding stripped - and a
+// key typed the way a string literal is typed would otherwise land in the dictionary as a pair
+// that never fires. The entry IS written; the author only needs to know under which spelling.
+export interface NormalizedEdit {
+  key: string;
+  kind: EntryKind;
+  was: string;
+  now: string;
   reason: string;
 }
 
@@ -208,6 +222,7 @@ export interface SetAnswer {
   added: number;
   removed: number;
   refused: RefusedEdit[];
+  normalized: NormalizedEdit[];
 }
 
 function decode(stdout: string): Record<string, unknown> {
@@ -347,6 +362,7 @@ function clamp(value: number, top: number): number {
 export function parseSetResult(stdout: string): SetAnswer {
   const data = decode(stdout);
   const refused = Array.isArray(data.refused) ? (data.refused as RefusedEdit[]) : [];
+  const corrected = Array.isArray(data.normalized) ? (data.normalized as NormalizedEdit[]) : [];
   return {
     changed: Number(data.changed ?? 0),
     added: Number(data.added ?? 0),
@@ -355,6 +371,9 @@ export function parseSetResult(stdout: string): SetAnswer {
     // file and still turned one away. Read as a plain success it would be swallowed - the
     // status line would report "the dictionary is updated" over an entry that never landed.
     refused: refused.filter((item) => item && typeof item.key === "string"),
+    // A correction is not a refusal and not an error: the entry landed, under another spelling.
+    // Left out of the answer, the author would look for the key they typed and not find it.
+    normalized: corrected.filter((item) => item && typeof item.key === "string"),
   };
 }
 
@@ -363,6 +382,14 @@ export function parseSetResult(stdout: string): SetAnswer {
 // the only actionable half, off the screen.
 export function refusalText(refused: RefusedEdit[]): string {
   return refused.map((item) => `"${shortKey(item.key, 60)}": ${item.reason}`).join("; ");
+}
+
+// The corrections as one line: what was typed, what was written, and why. Both spellings are
+// trimmed for the same reason the refusal trims its key - the reason is the actionable half.
+export function normalizationText(normalized: NormalizedEdit[]): string {
+  return normalized
+    .map((item) => `"${shortKey(item.was, 40)}" -> "${shortKey(item.now, 40)}": ${item.reason}`)
+    .join("; ");
 }
 
 // --- machine-translation suggestions --------------------------------------------------------
