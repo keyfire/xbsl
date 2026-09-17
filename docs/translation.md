@@ -91,8 +91,16 @@ glued to any other letters is left alone.
 The same plane serves every yaml value the metamodel declares a localizable text
 (`Localizable`). The presentations of commands, access privileges and enumerations are read by a
 person on the page, so each is either named whole by an entry or reported as a gap. The one
-exception is the `Description` property: it is developer documentation, so it stays data and never
-enters the gaps.
+exception is the `Description` property: it is developer documentation, so it stays data. Only a
+description that carries a `%{...}` substitution goes through the plane the way a template does,
+and then its gap is listed.
+
+A gap in a localizable text fails `--strict`, because the English build would show that text in
+Russian. The texts in question are the presentations above and the presentation template of an
+event kind. Any other gap of the plane is listed and fails nothing: a string literal of a module or
+of an `=` expression, a text with a `%{...}` inside a component tree, a description. Only the
+project can tell its data from its messages there. An `=` value is code, so its string is keyed
+between its own quotes, as in a module.
 
 Names are translated whole rather than word by word. The word order of an English name is the
 reverse of the Russian one, and the parts of a Russian name are declined, so gluing per-word
@@ -363,6 +371,12 @@ whose substitutions differ from its key's after translation, such as `%{AccountC
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
 
+A localizable yaml text without its literal entry fails `--strict` as well: the presentation of a
+command, an access privilege or an enumeration, or the presentation template of an event kind. The
+build accepts such a tree, but its pages would show the text in Russian. The report lists these
+texts with their places, and the verdict line counts them. No other gap of the literals plane
+fails the check.
+
 ## The English of the dictionary
 
 Coverage tells whether every name and every comment line has a translation. It does not tell whether
@@ -499,7 +513,10 @@ dictionary, which makes it something to read through rather than to prune wholes
 The reading is textual, and the direction of its error matters. A name that also occurs in prose
 may be counted as used, which merely leaves an entry in place; a live entry is never called an
 orphan. A comment line is keyed by the translator's own payload reading, with markers and
-decoration taken off exactly as the writing pass takes them. A name is looked for in the file
+decoration taken off exactly as the writing pass takes them. A literal is keyed the way the pass
+keys it too. A yaml file goes through the pass's own walk, which tells a presentation or a
+template from a name. A module goes through the lexer, which reads a string inside an
+interpolation of another string whole. A name is looked for in the file
 names as well, since a folder and a file go through the same token plane. A qualified key
 (`<Owner>.<Name>`) is judged by both halves: the sources spell them apart, and reading the dotted
 text as one name would call every such entry an orphan.

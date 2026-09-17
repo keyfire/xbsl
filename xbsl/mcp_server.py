@@ -1980,7 +1980,12 @@ def translate_status(root: str, against: str = "") -> dict:
     pass touched. `literals_translated` and `missing_literals` are the two halves of one number:
     how many different literal texts the plane names and how many it does not.
     `literal_occurrences` is the odd one out and says so: it counts rewritten SPANS, the size
-    of the change rather than the size of the dictionary. `duplicates` counts the keys
+    of the change rather than the size of the dictionary. `missing_visible_literals` is the
+    part of `missing_literals` that fails `xbsl translate --strict`: a yaml text the metamodel
+    types `Localizable` with no entry - a presentation, the presentation template of an event
+    kind - `Description` aside, since the English page would show the text in Russian. Every
+    other literal gap fails nothing: a literal of the code or of an `=` expression, a
+    description, a text inside a component tree. `duplicates` counts the keys
     translated the same way in two places, two files or twice in one - harmless to the
     lookups, listed by the CLI's `--check-duplicates` for the copy to take out.
     """
@@ -2006,6 +2011,7 @@ def translate_status(root: str, against: str = "") -> dict:
         "missing_phrases": totals["missing_phrases"],
         "literals_translated": totals["literals_translated"],
         "missing_literals": totals["missing_literals"],
+        "missing_visible_literals": totals["missing_visible_literals"],
         "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
         "duplicates": len(dictionary.duplicates),
@@ -2190,8 +2196,11 @@ def translate_unused(
     The reading is textual, and the direction of its error is the point: a name that also
     occurs in prose may be counted as used, which merely leaves an entry in place, but a LIVE
     entry is never called an orphan. Comment lines are read through the translator's own
-    payload reading, so the two sides spell a phrase alike; a qualified key (`<Owner>.<Name>`)
-    is judged by both halves, since the sources spell them apart.
+    payload reading, so the two sides spell a phrase alike. Literals are keyed the way the
+    pass keys them too: a yaml file through the walk of the pass itself, which asks about a
+    presentation and a presentation template whole, and a module through the lexer, which
+    reads a string inside an interpolation of another string whole. A qualified key
+    (`<Owner>.<Name>`) is judged by both halves, since the sources spell them apart.
     """
     import time
 

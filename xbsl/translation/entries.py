@@ -353,11 +353,12 @@ _WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё_][A-Za-zА-Яа-яЁё_0-9]*")
 _LITERAL_RE = re.compile(r'"((?:[^"\\]|\\.)*)"')
 
 
-def _comment_bodies(path: Path, text: str) -> set[str]:
-    """Every comment payload of one file, spelled the way the TRANSLATOR keys a phrase.
+def _readings(path: Path, text: str) -> tuple[set[str], set[str]]:
+    """(comment payloads, literal keys) of one file, spelled the way the TRANSLATOR keys them.
 
     The suffix decides the reading; the text is what the file holds. `_comment_bodies_of`
-    does the work, so the same reading serves a file on disk and the lines a diff took out.
+    does the work for the comments, so the same reading serves a file on disk and the lines
+    a diff took out.
 
     The two readings have to agree character for character or a LIVE pair reads as an orphan -
     the one mistake `--prune` would act on. So this is not an imitation: a module is taken
@@ -365,6 +366,13 @@ def _comment_bodies(path: Path, text: str) -> set[str]:
     function the translating pass calls, block comments and `///` decoration included. A
     private regex of this module did neither, and answered a doc comment with a slash glued
     to the text.
+
+    Literals are read the same way. The string tokens of a module go through
+    `code.literal_keys`, which reads a string nested inside an interpolation whole, and a yaml
+    file goes through `yamlfile.literal_keys`, which runs the walk of the pass itself and keeps
+    what it asks the literals plane about - a presentation and a presentation template among
+    them. A double-quote pattern over the raw text missed both: on a live project `--unused`
+    offered four entries the English tree still needed.
 
     A resource - a stylesheet, a script, a page, a drawing - is read by `resourcefile`, the
     module the translating pass itself reads it with, for the same reason.
@@ -375,14 +383,46 @@ def _comment_bodies(path: Path, text: str) -> set[str]:
     the lexer cannot take - such a file translates to nothing anyway, so anything it yields
     is a bonus in the safe direction.
     """
-    if path.suffix in (".xbsl", ".xbql"):
-        from xbsl import engine
+    from xbsl import engine, lexer
+    from xbsl.translation import code as code_module
+    from xbsl.translation import yamlfile as yaml_module
 
-        try:
-            text = engine.load(path).text
-        except Exception:  # unreadable through the loader - the raw text still reads
-            pass
-    return _comment_bodies_of(path.suffix, text)
+    if path.suffix not in (".xbsl", ".xbql", ".yaml"):
+        return _comment_bodies_of(path.suffix, text), set()
+    try:
+        source = engine.load(path)
+        if path.suffix == ".yaml":
+            return _comment_bodies_of(path.suffix, text), yaml_module.literal_keys(source)
+        tokens = lexer.tokens(source)
+    except Exception:  # unreadable through the loader - the raw text still reads
+        return _comment_bodies_of(path.suffix, text), _fragment_literal_keys(path.suffix, text)
+    lines = {
+        payload
+        for token in tokens if token.kind == "COMMENT"
+        for _offset, _index, payload in code_module.comment_payloads(token)
+    }
+    return lines, code_module.literal_keys(tokens)
+
+
+def _fragment_literal_keys(suffix: str, text: str) -> set[str]:
+    """The literal keys of TEXT alone, read the way `_readings` reads a whole file.
+
+    What a diff hands over is not a file: a module fragment may open a string it never closes,
+    and removed yaml lines need not form a document (see `yamlfile.fragment_literal_keys`).
+    The caller only ever intersects the answer with the orphans of the whole project.
+    """
+    from xbsl import lexer
+    from xbsl.translation import code as code_module
+    from xbsl.translation import yamlfile as yaml_module
+
+    try:
+        if suffix in (".xbsl", ".xbql"):
+            return code_module.literal_keys(lexer.tokenize(text))
+        if suffix == ".yaml":
+            return yaml_module.fragment_literal_keys(text)
+    except Exception:  # a fragment the readers cannot take - the double-quote reading stays
+        pass
+    return set()
 
 
 def _comment_bodies_of(suffix: str, text: str) -> set[str]:
@@ -463,7 +503,9 @@ def _surfaces(root: Path, dictionary, *, deadline: float | None = None,
     forgets. The direction of the error matters more than its size here - a textual reading
     can call an orphan "used" (a name that also occurs in prose), and that only leaves an
     entry in place; it cannot call a LIVE entry an orphan, which is the mistake that would
-    delete a translation the project still needs.
+    delete a translation the project still needs. A comment line and a literal are the two
+    places where the text alone does not say what the key is, so both are keyed by the
+    translator's own readings as well (see `_readings`).
 
     `deadline` is a `time.monotonic()` value: the walk looks at the clock between files and
     stops once it is past, with `partial` set - an answer with a caveat in place of a call
@@ -506,7 +548,9 @@ def _read_surfaces(root: Path, path: Path, out: Surfaces) -> None:
         # code, and feeding them in would answer for a name no source declares any more.
         out.names.update(_WORD_RE.findall(text))
         out.literals.update(_LITERAL_RE.findall(text))
-    out.lines.update(_comment_bodies(path, text))
+    lines, literals = _readings(path, text)
+    out.lines.update(lines)
+    out.literals.update(literals)
 
 
 @dataclass
@@ -788,6 +832,7 @@ def _removal_of_diff(toplevel: Path, base: str, diff: str) -> Removal:
         if not resource:
             out.names.update(_WORD_RE.findall(text))
             out.literals.update(_LITERAL_RE.findall(text))
+            out.literals.update(_fragment_literal_keys(suffix, text))
         out.lines.update(_comment_bodies_of(suffix, text))
     for rel in seen:
         # A file that is gone took its PATH with it, and a path is a place a name may live -
@@ -841,9 +886,19 @@ def orphans_of(root: Path, dictionary_path: Path, dictionary=None,
     that has to answer within its client's patience passes the one, a command that wants to
     be seen moving passes the other.
     """
+    from xbsl.translation import code as code_module
+
     surfaces = _surfaces(root, dictionary, deadline=deadline, progress=progress)
     out = Orphans(read=surfaces.read, total=surfaces.total, partial=surfaces.partial)
-    for entry in read_entries(dictionary_path):
+    rows = read_entries(dictionary_path)
+    # A literal the plane names is replaced by its translation, and the pass then reads the
+    # interpolations of THAT text: a pattern standing there declares group names the plane is
+    # asked about, and no source spells them. The translation of an entry that is itself dead
+    # counts too - an extra key only keeps an entry in place.
+    for entry in rows:
+        if entry.kind == "literal":
+            surfaces.literals |= code_module.interpolated_literal_keys(entry.value)
+    for entry in rows:
         gone: list[str] = []
         if entry.kind == "phrase":
             gone = [] if entry.key in surfaces.lines else [entry.key]

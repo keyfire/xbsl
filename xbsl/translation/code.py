@@ -1953,6 +1953,15 @@ def _name_edit(text: str, start: int, resolver, report, edits, at) -> None:
     report.note_token(text, line, col)
 
 
+def group_names(text: str) -> list[tuple[int, str]]:
+    """(offset inside `text`, name) of every named group a pattern written in `text` declares.
+
+    Shared by the pass, which renames the groups in place, and by the orphan reading, which
+    needs the very same names: the pass asks the literals plane about each of them.
+    """
+    return [(match.start(1), match.group(1)) for match in _NAMED_GROUP_RE.finditer(text)]
+
+
 def _named_group_edits(tok, base, resolver, report, edits, at=None) -> None:
     """Translate the names of the named groups declared inside a pattern literal.
 
@@ -1963,11 +1972,10 @@ def _named_group_edits(tok, base, resolver, report, edits, at=None) -> None:
     Both sides are resolved by the SAME map now, so one entry moves them together.
     """
     position = at if at is not None else (tok.line, tok.col)
-    for match in _NAMED_GROUP_RE.finditer(tok.value):
-        name = match.group(1)
+    for offset, name in group_names(tok.value):
         if name.isascii():
             continue
-        _name_edit(name, base + tok.start + match.start(1), resolver, report, edits, position)
+        _name_edit(name, base + tok.start + offset, resolver, report, edits, position)
 
 
 def _string_edits(tok, base, resolver, report, edits, at=None, *, data: bool = True,
@@ -2017,6 +2025,46 @@ def _body_of(tok) -> str | None:
     if len(value) < 2 or not value.startswith('"') or not value.endswith('"'):
         return None
     return value[1:-1]
+
+
+def literal_keys(toks: list) -> set[str]:
+    """Every text the literals plane may be asked about by a token list, nested strings included.
+
+    The orphan pass counts a literal entry as live when its key is here, so the set has to
+    cover every question the translating pass asks: the body of a string (`_body_of`), the
+    names of the groups a string or a pattern declares (`group_names`), and the same for every
+    string that stands inside an interpolation of another one, at any depth
+    (`interpolated_literal_keys`). A regular expression over the raw text cannot find the inner
+    strings: in `"%{Match.Group("Name")}"` the first inner quote closes the outer string for it.
+
+    Every string is read, including those the pass leaves alone: a string of a query or of a
+    resolvable literal, a name already in Latin, the inner strings of a literal the plane names
+    whole. An extra key only keeps an entry in place, while a missed one offers a live entry for
+    removal. The translations of named literals are questions too, and they live in the
+    dictionary rather than in the sources, so the orphan pass reads their interpolations with
+    `interpolated_literal_keys` on its own.
+    """
+    out: set[str] = set()
+    for tok in toks:
+        if tok.kind == "STRING":
+            body = _body_of(tok)
+            if body is not None:
+                out.add(body)
+            out |= interpolated_literal_keys(tok.value)
+        elif tok.kind != "PATTERN":
+            continue
+        out.update(name for _offset, name in group_names(tok.value))
+    return out
+
+
+def interpolated_literal_keys(text: str) -> set[str]:
+    """The texts the literals plane may be asked about by the strings inside the interpolations
+    of `text` - a string token as written, or a yaml template. They are read the way the pass
+    reads them: `_interpolations` finds the expressions, and the lexer reads each of them."""
+    out: set[str] = set()
+    for start, end in _interpolations(text)[0]:
+        out |= literal_keys(lexer.tokenize(text[start:end]))
+    return out
 
 
 def _literal_edit(tok, base, resolver, report, edits, at=None, *,
