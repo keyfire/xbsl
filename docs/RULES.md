@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 237 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 238 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -312,7 +312,8 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/row-field-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A dynamic list field taken through a reference (`Owner.Number`) is `<type>|Null` and cannot fill a typed structure field - the compiler answers `Null cannot be assigned` [docs](https://1cmycloud.com/docs/help/topics/dynamic-list/) |
 | `yaml/unknown-attribute-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key an attribute's own metamodel class does not declare (`Length` on a regular attribute - the built-in `Code` declares it, a Number attribute has `IntegerPartLength`) - apply rejects the object |
 | `yaml/empty-group-sized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An empty `Group` with `Height`/`Width` (a literal – always; an `=...` binding – only without a `Name`) – the renderer drops the node and there is no gap |
-| `yaml/insert-row-needs-align` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A horizontal group holding an `HtmlContainer` insert and no `VerticalContentAlignment`: children are laid out on the baseline, and the insert carries one of its own, so the element holding it slides down against its neighbours (50 px on a live row). The nearest horizontal ancestor answers, so a row whose inner strip is already aligned stays silent [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/insert-row-needs-align` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A horizontal group with no `ContentVerticalAlign` lines its children up on the baseline, and two kinds of neighbour break that line. An `HtmlContainer` insert carries a baseline of its own, so the element holding it slides down (50 px on a live row); the nearest horizontal ancestor answers, so a row whose inner strip is already aligned stays silent. A `Button` keeps the baseline on its caption and a `Picture` on its bottom edge, so a captioned button standing in the row next to a picture sinks against it (19 px on a live row) – set `ContentVerticalAlign: Center`. A layout binding counts in its statically horizontal branches. The pair is judged when one of the two is shown unconditionally or both are shown under the same conditions; two neighbours with different conditions of their own, and a child that sets its own vertical alignment, are left alone [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
+| `yaml/component-row-needs-align` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | The same button and picture when a project component draws a neighbour. The component shows a native `Button` or `Picture` unconditionally, or picks between them by its own property: the instance sets the property to a literal, and the condition compares it directly or through a method that only returns that comparison. The two stand at different heights (the button sank 19 px on a live row) – set `ContentVerticalAlign: Center` on the row. Visibility is read as in `yaml/insert-row-needs-align`. A component the rule cannot read statically takes no part, and a row the file rule judges alone is left to `yaml/insert-row-needs-align` [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/hint-too-long` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `Tooltip` longer than the render limit – the tail is not shown at all |
 | `yaml/popup-in-markup` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A `PopupComponent` (or a project component transitively inheriting it) placed in the yaml markup: the content is drawn right in the form flow before the window ever opens – the platform has no property restricting the drawing to the window, and hiding it via `Visible` breaks the window itself; build the window in code on every opening – a new `PopupComponent(...)` followed by `OpenInPopupWindow()` [docs](https://1cmycloud.com/docs/help/topics/popup-component/) |
 | `yaml/date-input-needs-plain-date` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `Edit<Date?>` – the renderer silently drops a date input that allows the empty value; make the type plain and express "not set" with the empty date [docs](https://1cmycloud.com/docs/help/topics/edit-component/) |
@@ -453,7 +454,7 @@ indentation being a multiple of four, collection idioms, `Rows.Join()` for bulk 
 
 ### Code semantics (the `code/` rules)
 
-The largest group: eighty-three rules, forty-nine of them errors. These cover what the compiler
+The largest group: ninety-eight rules, sixty of them errors. These cover what the compiler
 rejects, and what the platform does differently from how the code reads. An unknown name or
 member. The arity of a call. The environment, meaning client code in a server method and the other
 way round. An instance reached through its type. A caught non-exception. An unclosed resource. A
@@ -465,7 +466,7 @@ the paired yaml and the names of the objects.
 
 ### Element descriptions (the `yaml/` rules)
 
-Sixty-two rules over the descriptions (`.yaml`): required and unique ids, known keys and types,
+Sixty-four rules over the descriptions (`.yaml`): required and unique ids, known keys and types,
 references to components, handlers and localized strings, what the platform requires of field
 types (a reference and an enumeration admit an empty value), the settings of dynamic lists and
 forms, and the layout traps that apply without an error yet draw differently from the intent. Six

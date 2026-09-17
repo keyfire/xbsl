@@ -336,6 +336,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   {
     match: (r) => r === "yaml/insert-row-needs-align"
+      || r === "yaml/component-row-needs-align"
       || r === "yaml/matrix-group-max-width"
       || r === "yaml/card-literal-stretch-weight"
       || r === "yaml/col-width-needs-no-stretch",
