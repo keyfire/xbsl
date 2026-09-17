@@ -175,14 +175,29 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Среднее тире в комментарии – для проекта, который пишет в комментариях кода дефис; исправление ставит дефис |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Частица "бы" в комментарии; замечание просит слово условия, потому что без частицы предположение читается утверждением. Уступительные обороты не судятся |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Первое лицо в комментарии: местоимение "мы", "наш" или глагол вроде "проверяем", а в английской строке комментария из словаря перевода – "we", "our", "I"; комментарий безличен |
-| `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Слово прописными ради ударения: служебное ("НЕ", "ТОЛЬКО"), любое другое, которое файл пишет и строчными, однобуквенное посреди фразы ("В котором"), приставка ("НЕзаполненным") и прописные английской строки комментария в словаре перевода; аббревиатуры, маски дат и цитата запроса не судятся, исправление возвращает регистр |
-| `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Условие через тире в комментарии ("склад не задан - берется основной"); замечание предлагает формулировку со словом условия. Пояснение к значению не судится: перед состоянием ничего не названо или после тире нет глагола |
-| `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | След механической замены в английском значении словаря перевода: окончание, приклеенное к слову, которое его не принимает (`onlies`), страдательный залог с именной группой сразу за ним ("is shadowed the parameter"), прописные, которых нет в русском ключе; судятся только файлы `xbsl-translation` |
+| `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Слово прописными ради ударения в комментарии: "НЕ", "ТОЛЬКО", приставка "НЕзаполненным". Ударение набирают словами, а не регистром [подробнее](#b-comment-emphasis-caps) |
+| `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Условие в комментарии написано через тире ("склад не задан - берется основной") вместо слова "если" [подробнее](#b-comment-dash-condition) |
+| `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | След механической замены в английском значении словаря перевода: окончание, приклеенное к слову, которое его не принимает (`onlies`) [подробнее](#b-translation-english-shape) |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Хвостовые пробелы |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Смешанные переводы строк |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Файл не в UTF-8 |
 | `style/tab-indent` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Табуляция в отступе [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
 | `style/line-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Строка длиннее 120 символов [доки](https://1cmycloud.com/docs/help/topics/general-design/) |
+
+#### Подробнее о правилах тира B
+
+<a id="b-comment-emphasis-caps"></a>**`comment/emphasis-caps`.** Правило судит служебное слово,
+любое другое слово, которое тот же файл пишет и строчными, однобуквенное слово посреди фразы ("В
+котором"), приклеенную приставку и прописные английской строки комментария в словаре перевода.
+Аббревиатуры, маски дат и цитату запроса правило не судит. Исправление возвращает регистр.
+
+<a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** Замечание предлагает
+формулировку со словом условия. Пояснение к значению правило не судит: там перед состоянием ничего
+не названо либо после тире нет глагола.
+
+<a id="b-translation-english-shape"></a>**`translation/english-shape`.** Правило ловит ещё
+страдательный залог с именной группой сразу за ним ("is shadowed the parameter") и прописные,
+которых нет в русском ключе. Судятся только файлы `xbsl-translation`.
 
 ### Тир C – структура кода, базовый синтаксис и соглашения по написанию
 

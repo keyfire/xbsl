@@ -181,14 +181,29 @@ tier keep to the module and the element description; `translation/english-shape`
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The en dash in a comment, for a project that writes a hyphen in its code comments; the fix writes the hyphen |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The subjunctive particle (would) in a comment; the finding asks for a word of condition, because dropping the particle turns a hypothesis into a statement. Concessive turns are left alone |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The author speaking as "we" in a comment: a pronoun or a first-person plural verb, and "we", "our" or "I" in the English line of a comment kept by the translation dictionary; a comment is impersonal |
-| `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A word in capitals for emphasis in a comment: a function word (not, only), any word the file also writes in small letters, a one-letter word inside a sentence, a negation glued on, and the capitals of the English line of a comment in the translation dictionary; abbreviations, masks and cited queries are left alone, the fix restores the case |
-| `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A condition written with a dash in a comment ("the store is not set - the main one is taken"); the finding suggests the wording with a word of condition. The legend of a value is left alone: nothing is named before the state, or no verb follows the dash |
-| `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A trace of a mechanical replacement in an English value of the translation dictionary: an ending glued onto a word that takes none (`onlies`), a passive followed straight by a noun phrase ("is shadowed the parameter"), capitals the Russian key does not have; only the `xbsl-translation` files are judged |
+| `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A word in capitals for emphasis in a comment: "not", "only", a negation glued on. Emphasis is a matter of wording, not of case [details](#b-comment-emphasis-caps) |
+| `comment/dash-condition` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A condition in a comment written with a dash ("the store is not set - the main one is taken") instead of a word of condition [details](#b-comment-dash-condition) |
+| `translation/english-shape` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A trace of a mechanical replacement in an English value of the translation dictionary: an ending glued onto a word that takes none (`onlies`) [details](#b-translation-english-shape) |
 | `whitespace/trailing` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Trailing whitespace |
 | `whitespace/mixed-newline` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Mixed newlines |
 | `encoding/utf8` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | File is not UTF-8 |
 | `style/tab-indent` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Tab in the indentation [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
 | `style/line-length` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Line longer than 120 characters [docs](https://1cmycloud.com/docs/help/topics/general-design/) |
+
+#### Tier B rules in detail
+
+<a id="b-comment-emphasis-caps"></a>**`comment/emphasis-caps`.** The rule judges a function word,
+any other word the same file also writes in small letters, a one-letter word inside a sentence, a
+negation glued on, and the capitals of the English line of a comment in the translation
+dictionary. Abbreviations, date masks and a cited query are left alone. The fix restores the case.
+
+<a id="b-comment-dash-condition"></a>**`comment/dash-condition`.** The finding suggests the
+wording with a word of condition. The legend of a value is left alone: nothing is named there
+before the state, or no verb follows the dash.
+
+<a id="b-translation-english-shape"></a>**`translation/english-shape`.** The rule also catches a
+passive followed straight by a noun phrase ("is shadowed the parameter") and capitals the Russian
+key does not have. Only the `xbsl-translation` files are judged.
 
 ### Tier C - code structure, basic syntax and code-writing conventions
 
