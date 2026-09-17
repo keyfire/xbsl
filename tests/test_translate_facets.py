@@ -347,6 +347,41 @@ def test_the_bound_of_a_tabular_section_read_off_the_object_of_a_form(tmp_path: 
     assert all("Граница" not in file.missing_platform for file in report.files.values())
 
 
+def test_the_object_of_a_form_types_a_chain_only_where_the_method_sees_its_properties(
+        tmp_path: Path):
+    """The object a form edits is a property of its base type, and nothing in the data marks it
+    contextual: it counts like any property that is not. A static method has no instance, a
+    method compiled on the server alone sees the contextual properties only - neither sees the
+    object, so neither gets the owner a chain through it would give, and the word stays a gap."""
+    root = tmp_path / "Acme" / "Demo"
+    _order_project(root)
+    _write(root / "ЗаказыФормаОбъекта.xbsl", (
+        "метод Последний(): Число\n"
+        "    возврат Объект.Товары.Граница()\n"
+        ";\n"
+        "\n"
+        "статический метод ПоследнийОбщий(): Число\n"
+        "    возврат Объект.Товары.Граница()\n"
+        ";\n"
+        "\n"
+        "@НаСервере\n"
+        "метод ПоследнийСерверный(): Число\n"
+        "    возврат Объект.Товары.Граница()\n"
+        ";\n"
+    ))
+    out = tmp_path / "en"
+    report = translate_project(root, _dictionary({
+        **_ORDER_TOKENS, "Последний": "LastRow", "ПоследнийОбщий": "LastRowShared",
+        "ПоследнийСерверный": "LastRowOnServer",
+    }), out, swap_localization=False)
+
+    form = (out / "OrdersObjectForm.xbsl").read_text(encoding="utf-8")
+    assert "method LastRow(): Number\n    return Object.Goods.Bound()" in form
+    assert "static method LastRowShared(): Number\n    return Object.Goods.Граница()" in form
+    assert "method LastRowOnServer(): Number\n    return Object.Goods.Граница()" in form
+    assert len(report.files["ЗаказыФормаОбъекта.xbsl"].missing_platform["Граница"]) == 2
+
+
 def test_the_owner_of_a_member_after_a_structure_field_is_the_type_of_the_field(tmp_path: Path):
     """An unwrapped local holding a structure, then its field: the member belongs to the type the
     field declares. The same word is Bound on an array and Border on a spreadsheet area, so the

@@ -122,19 +122,29 @@ class ProjectIndex:
         """{bare name: its written type} a module reads without declaring it.
 
         The attributes and tabular sections of the object an object module belongs to, the
-        properties of a component, and the object a form edits - named by the base type of the
-        form (`ФормаОбъекта<Заказы.Объект>` makes `Объект` a `Заказы.Объект`). Only types the
+        properties of a component, and the object a form edits (see data_object). Only types the
         project describes in its metadata count: a structure some module declares under the name
-        of this module is no owner of it.
+        of this module is no owner of it. Which of these names a METHOD sees is not decided here
+        (see ChainTypes.owner).
         """
         stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
         record = self.lookup.struct_by_name(stem) or {}
         described = (record.get("property_types") or {}) if record.get("kind") else {}
         types = {str(name): str(written) for name, written in described.items() if written}
-        pair = self.lookup.form_data_object(stem)
+        pair = self.data_object(path)
         if pair:
             types.setdefault(pair[0], pair[1])
         return types
+
+    def data_object(self, path: Path) -> tuple[str, str] | None:
+        """(name, written type) of the object the form at `path` edits, or None.
+
+        The base type of the form names it by its argument: `ФормаОбъекта<Заказы.Объект>` makes
+        `Объект` a `Заказы.Объект`.
+        """
+        stem = path.name[: -len(".xbsl")] if path.name.endswith(".xbsl") else path.stem
+        pair = self.lookup.form_data_object(stem)
+        return (str(pair[0]), str(pair[1])) if pair else None
 
     def module_returns(self, path: Path) -> dict[str, str]:
         """{method: its written result} of the module at `path` - a bare call of its own code."""
@@ -154,21 +164,42 @@ class ChainTypes:
     names: dict[str, str]
     #: The results of the module's own methods.
     returns: dict[str, str]
+    #: The name of the object a form edits (`Объект`), "" for any other module.
+    data_object: str = ""
 
     @classmethod
     def of(cls, project: ProjectIndex, path: Path) -> ChainTypes:
-        return cls(project, project.module_names(path), project.module_returns(path))
+        pair = project.data_object(path)
+        return cls(project, project.module_names(path), project.module_returns(path),
+                   pair[0] if pair else "")
+
+    def owner(self, module_owner: ModuleOwner | None) -> ModuleOwner:
+        """The names of the module's element as a chain root reads them, method by method.
+
+        The same owner the rest of the walk goes by (see owner_scopes), with the object a form
+        edits added: that object is a property of the base type of the form, and nothing in the
+        data marks it contextual, so it counts as any property that is not - an instance method
+        sees it, a static method and a method compiled on the server alone do not.
+        """
+        base = module_owner if module_owner is not None else ModuleOwner()
+        if not self.data_object or self.data_object in base.names:
+            return base
+        contextual = base.contextual if base.contextual is not None else frozenset()
+        return ModuleOwner(base.names | {self.data_object}, contextual)
 
     def receiver(self, toks: list, index: int, local_names: dict[str, str],
-                 method_types: MethodTypes | None, place: int) -> str:
+                 method_types: MethodTypes | None, place: int,
+                 visible: frozenset[str] = frozenset()) -> str:
         """The type of the receiver of the member at `index` - the chain before its dot - or "".
 
         The chain is read only when every link is one the walk consumes whole: a name, a member,
         a call of a member, a non-null assertion. Anything else before the dot - an index, a
         null-safe access, a literal - answers "" rather than the type of a part of the chain.
-        A local of the method is the local, typed by what its declaration writes or holds; a
-        name the module reads without declaring it is typed by the index; any other root names
-        nothing here.
+        A local of the method is the local, typed by what its declaration writes or holds. A
+        name the module reads without declaring it is typed by the index only where the method
+        sees it (`visible`, see ChainTypes.owner): in a static method, or in a method compiled on
+        the server alone, the same word is not the property and may be a platform type, whose
+        member the property's type must not spell. Any other root names nothing here.
         """
         start = _chain_start(toks, index - 1)
         if start is None:
@@ -184,11 +215,13 @@ class ChainTypes:
                 typed = local_names.get(name) or (
                     method_types.type_at(name, place) if method_types is not None else "")
                 return typed or None
-            written = self.names.get(name)
+            written = self.names.get(name) if name in visible else None
             return dataset.member_type_head(written) if written else None
 
         def written(name: str) -> str | None:
-            return None if name in local_names else self.names.get(name)
+            if name in local_names or name not in visible:
+                return None
+            return self.names.get(name)
 
         found = _syntax.chain_type(toks, start, resolve, self.project.returns,
                                    stop_offset=toks[index - 1].start,
@@ -566,7 +599,9 @@ def translate_code(source: SourceFile, resolver: Resolver, report: FileReport,
                         inferred_locals=inferred_locals(source, resolver.project_names),
                         type_ranges=type_ranges(source),
                         owner_scopes=owner_scopes(source, owner),
-                        form_nodes=form_nodes, chains=chains)
+                        form_nodes=form_nodes, chains=chains,
+                        chain_scopes=(owner_scopes(source, chains.owner(owner))
+                                      if chains is not None else None))
     text = apply_edits(source.text, edits)
     # Span edits keep the author's line breaks, and an English sentence is the longer one:
     # a comment that fitted the width limit in Russian stops fitting it here. The blocks
@@ -591,6 +626,7 @@ def collect_token_edits(
     form_nodes: dict[str, str] | None = None,
     query_aliases: frozenset[str] = frozenset(),
     chains: ChainTypes | None = None,
+    chain_scopes: list[tuple[int, int, frozenset[str]]] | None = None,
 ) -> None:
     """Walk a token list and append the edits; `base` shifts spans into the outer text.
 
@@ -608,7 +644,8 @@ def collect_token_edits(
     each (see owner_scopes). `form_nodes` are the nodes of the component tree the module pairs
     with (see names.form_nodes): a member reached through one of them is judged by its component.
     `chains` types the chain before a member whose receiver no declaration types (see
-    ChainTypes); a fragment has none and reads such a member by its name alone.
+    ChainTypes); a fragment has none and reads such a member by its name alone. `chain_scopes`
+    are the methods with the names a chain root may be typed by there (see ChainTypes.owner).
     """
     # The paths inside `Ресурс{...}` are spelled first, off the text: the tokens of such a path
     # are file names, and the walk below must not read them as code.
@@ -643,6 +680,9 @@ def collect_token_edits(
     #: The names the element of the module puts in scope of the current method: a property
     #: named like a platform type is the property there, just as a local is the local.
     owner_names: frozenset[str] = method.owner_names if method is not None else frozenset()
+    #: The names of the module a chain root may be typed by in the current method: the owner's
+    #: names the method sees, the object a form edits among them (see ChainTypes.owner).
+    chain_names: frozenset[str] = frozenset()
     #: The structure whose fields are being declared right now, and whether the next name
     #: belongs to it. The fields of one structure share a namespace: two Russian words
     #: translated into one English word are a structure the compiler refuses.
@@ -660,6 +700,7 @@ def collect_token_edits(
             local_places: dict[str, tuple[int, int]] = {}
             local_names = _method_locals(toks, index, resolver.project_names, local_places)
             owner_names = _owner_names_at(owner_scopes, base + tok.start)
+            chain_names = _owner_names_at(chain_scopes, base + tok.start)
             method_token = _next_ident_token(toks, index)
             method_name = method_token.value if method_token is not None else ""
             method_types = (inferred_locals or {}).get(method_name)
@@ -800,7 +841,8 @@ def collect_token_edits(
                         and chain_root not in _COMPONENT_ROOTS
                         and platform_map.is_member_name(tok.value)):
                     typed = chains.receiver(toks, index, local_names, method_types,
-                                            base + tok.start if place is None else place)
+                                            base + tok.start if place is None else place,
+                                            chain_names)
                     if typed and resolver.platform_type(typed):
                         chain_owner = typed
                 manager_kind = (
@@ -1516,9 +1558,10 @@ def _identifier_edit(tok, base, in_query, after_dot, resolver, report, edits, at
     )
     platform_member = None
     if after_dot and not project_typed:
-        # The owner a chain holds is proven by the walk and answers before the receiver read as
-        # a type by its name: after a dot a name is a member, never a static type. The manager
-        # of a project element answers last - its receiver names no type at all.
+        # The owner a chain holds answers before the receiver read as a type by its name. The
+        # walk types the chain as a VALUE - from a local, or a name of the module the method
+        # sees - so a root that is a static type gets no chain owner and keeps the reading by
+        # name. The manager of a project element answers last: its receiver names no type.
         platform_member = (
             platform_map.verified_member(tok.value)
             or platform_map.member_of(chain_owner, tok.value)
