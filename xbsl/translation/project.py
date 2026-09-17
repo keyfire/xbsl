@@ -27,6 +27,7 @@ from xbsl import engine, i18n, libs, scaffold, terms
 from xbsl.engine import RESOURCE_DIRS
 from xbsl.rules.yaml_schema import _parsed, object_kind
 from xbsl.translation import names as project_names_module
+from xbsl.translation import platform_map
 from xbsl.translation.code import ProjectIndex, Resolver, has_cyrillic, translate_code
 from xbsl.translation.dictionary import (
     DICTIONARY_DIR, DICTIONARY_FILE, Dictionary,
@@ -95,6 +96,18 @@ MESSAGES = {
     "translate.problem.shadow-more": {
         "ru": " (ещё мест: {count})",
         "en": " (+{count} places)",
+    },
+    "translate.problem.platform-type": {
+        "ru": "проект объявляет тип \"{name}\", и платформа объявляет тип с таким же именем"
+              " ({platform}); запись словаря \"{name}: {entry}\" переименовывает оба."
+              " Английское дерево получает либо два типа под одним словом, либо платформенный"
+              " тип под словом проекта – и сборка падает в файле, который про этот тип ничего"
+              " не знает. Переименуйте тип проекта",
+        "en": "the project declares a type \"{name}\" and the platform declares a type of the"
+              " same name ({platform}); the dictionary entry \"{name}: {entry}\" renames both."
+              " The English tree gets either two types under one word or the platform's type"
+              " under the project's word - and the build fails in a file that knows nothing of"
+              " the type. Rename the project's type",
     },
     "translate.problem.placeholders": {
         "ru": "{place}: литерал '{text}': подстановки перевода [{found}] не совпадают с"
@@ -315,6 +328,36 @@ class ProjectReport:
                     expected=", ".join(expected), found=", ".join(found),
                 ))
 
+    def collect_platform_type_clashes(self, project_types, dictionary: Dictionary) -> None:
+        """A TYPE the project declares under the spelling of a platform type, with an entry.
+
+        The one shape the writer of a pair cannot judge: whether a key that spells a platform
+        type is fatal depends on what the project declares, and the writer has the dictionary
+        alone. Here both are in hand, and the verdict is proven rather than guessed.
+
+        A type expression normally takes the platform's word over any name of the project - but
+        a type the project DECLARES is the exception (see `Resolver.platform_type`), because its
+        declaration and its uses have to move together. So the entry answers every type
+        expression of that spelling, the platform's own among them: `new Образец(...)` of a file
+        that never heard of the project's type came out `new Swatch(...)`, and the English build
+        refused it. The cure is not a value - the project's type has to be renamed.
+
+        An entry that repeats the platform's own spelling is left alone: it moves no platform
+        word anywhere, and a project that names a component after a platform one and translates
+        it the same way builds. Without an entry the name stays Cyrillic, which the gaps of the
+        strict pass already report, so nothing is said twice.
+        """
+        for name in sorted(project_types):
+            entry = dictionary.tokens.get(name)
+            if entry is None:
+                continue
+            platform = platform_map.type_english(name)
+            if not platform or platform == entry:
+                continue
+            self.problems.append(i18n.t(
+                "translate.problem.platform-type", name=name, entry=entry, platform=platform,
+            ))
+
 
 def _iter_files(root: Path, dictionary: Dictionary | None = None) -> list[Path]:
     """The files of the project under `root` - the dictionary that translates it excluded.
@@ -485,6 +528,7 @@ def translate_project(
     _apply_language_flip(root, outputs, swaps, dictionary, report)
     report.collect_collisions()
     report.collect_dictionary_defects()
+    report.collect_platform_type_clashes(resolver.project_types, dictionary)
     # The last word on the entries the pass USED: an entry the platform answers itself at
     # every place it answered. A key the project declares is left out whatever the tables
     # say - there the platform is gated off and the entry is the only answer - which also

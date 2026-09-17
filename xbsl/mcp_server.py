@@ -2377,6 +2377,12 @@ def translate_set(root: str, edits: list[dict] | None = None, edits_file: str = 
     another name of the same scope: two names under one word is what the platform refuses on
     apply, and the entry is written rather than blocked - a qualified key (`<Owner>.<Name>`)
     is exactly how one word is deliberately given to two owners.
+    It carries `platform_names` when a KEY is a word the platform itself carries, which a pair
+    renames along with the project's own: `clash` is 'type' - where nothing but renaming the
+    project's node repairs it - or 'member', where `spellings` holds the value to use, the one
+    the platform gives that member. Written rather than blocked too: what makes a key spelled
+    like a platform type fatal is a TYPE the project declares under that spelling, and only a
+    pass over the project sees one - `translate --strict` judges it there.
     A key may be qualified (`<Owner>.<Name>`) to hold inside one namespace only - that is how
     a word gets one spelling as a dictionary key or a component property and another globally.
     """

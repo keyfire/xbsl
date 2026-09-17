@@ -543,6 +543,45 @@ def is_platform_type(name: str) -> bool:
     )
 
 
+#: What `name_clash` answers about: the platform carries the word as a TYPE, or as a MEMBER of
+#: one. The two shapes have different cures, so the answer says which is which.
+TYPE_CLASH = "type"
+MEMBER_CLASH = "member"
+
+
+def name_clash(name: str, value: str) -> tuple[str, tuple[str, ...]] | None:
+    """What the PLATFORM already calls `name`, when a pair spelling it `value` would rename the
+    platform's own word along with the project's: (the shape, the spellings), or None.
+
+    A pair renames its key everywhere in the project, so a key the platform also carries reaches
+    the platform's vocabulary as well. The two shapes part at the cure, and that is why the
+    answer names the shape:
+
+    * a TYPE. A type expression takes the platform's word over any name of the project, so the
+      pair changes nothing there - until the project declares a TYPE of that spelling. Then the
+      gate steps aside for the project (see `Resolver.platform_type`) and every use of the
+      platform type takes the pair's word: the English build fails in a file that never heard of
+      the project's node. No value repairs that, so the answer is not a spelling to use but the
+      word the platform already owns.
+    * a MEMBER. A member reached through a receiver of no inferred type is spelled by the
+      dictionary, so the pair renames the access to the platform's member too - and here there
+      IS a right value: the spelling the platform itself gives the member.
+
+    A value the platform already gives the word is not a rename at all and answers None; so does
+    a qualified key, which holds inside one namespace and never answers a type expression.
+    """
+    if not name or not value or "." in name:
+        return None
+    spellings = member_spellings(name)
+    if is_platform_type(name):
+        english = type_english(name)
+        if english and value != english and value not in spellings:
+            return TYPE_CLASH, (english,)
+    if is_member_name(name) and spellings and value not in spellings:
+        return MEMBER_CLASH, tuple(sorted(spellings))
+    return None
+
+
 def component_english(name: str) -> str | None:
     """The English spelling of a form component type, or None."""
     return _component_english().get(name)

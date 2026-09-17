@@ -187,6 +187,18 @@ MESSAGES = {
         "ru": "не записано записей: {count}; ниже сказано, почему:",
         "en": "entries not written: {count}; the reason for each is below:",
     },
+    "translate.platform-names": {
+        "ru": "записей с ключом из словаря платформы: {count}; они записаны, но переименуют и"
+              " слово платформы:",
+        "en": "entries whose key is a word of the platform: {count}; they are written, but they"
+              " rename the platform's word too:",
+    },
+    "translate.value-taken": {
+        "ru": "значений, уже занятых другим ключом: {count}; платформа откажет в применении"
+              " дерева с двумя именами под одним словом:",
+        "en": "values another key already takes: {count}; the platform refuses to apply a tree"
+              " with two names under one word:",
+    },
     "translate.normalized": {
         "ru": "поправлено записей: {count}; ниже сказано, что именно и почему:",
         "en": "entries corrected: {count}; what exactly, and why, is below:",
@@ -1277,6 +1289,22 @@ def _apply_edits(args, root: Path, loaded) -> int:
             for row in corrected:
                 print(f"  [{row['kind']}] \"{_one_line(row['was'])}\""
                       f" -> \"{_one_line(row['now'])}\": {row['reason']}")
+        # Both warnings are about a pair that WAS written and may still break the build, so
+        # they go to stderr, where a log keeps them apart from the count of what was done.
+        # The machine answer has carried them all along; the text one used to drop them, and a
+        # person at the terminal saw a clean "dictionary updated" line over either.
+        taken = result.get("collisions") or []
+        if taken:
+            print(i18n.t("translate.value-taken", count=len(taken)), file=sys.stderr)
+            for row in taken:
+                print(f"  {row['key']}: {row['value']} <- {', '.join(row['taken'])}",
+                      file=sys.stderr)
+        platform_names = result.get("platform_names") or []
+        if platform_names:
+            print(i18n.t("translate.platform-names", count=len(platform_names)),
+                  file=sys.stderr)
+            for row in platform_names:
+                print(f"  {row['reason']}", file=sys.stderr)
         if refused:
             print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)
             for item in refused:

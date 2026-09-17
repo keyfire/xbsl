@@ -23,6 +23,7 @@ from pathlib import Path
 
 from xbsl import i18n
 from xbsl.translation import dictionary as dictionary_module
+from xbsl.translation import platform_map
 
 try:
     import yaml
@@ -49,6 +50,28 @@ MESSAGES = {
               " тело литерала, смотря по виду записи.",
         "en": "an entry without a key is not written. The key is a name, a comment line or"
               " a literal body, depending on the kind.",
+    },
+    "translate.entries.platform-type": {
+        "ru": "ключ \"{key}\" – имя типа платформы ({platform}). Пара переименует и этот тип,"
+              " как только проект объявит тип с таким именем: перевод возьмёт слово пары в"
+              " каждом выражении типа, и английская сборка упадёт в файле, который про этот"
+              " узел ничего не знает. Переименуйте узел проекта либо уточните ключ владельцем"
+              " (<Владелец>.{key}).",
+        "en": "the key \"{key}\" names a platform type ({platform}). The pair renames that type"
+              " too as soon as the project declares a type of this name: the translation takes"
+              " the pair's word in every type expression, and the English build fails in a file"
+              " that knows nothing of the node. Rename the project's node, or qualify the key"
+              " with its owner (<Owner>.{key}).",
+    },
+    "translate.entries.platform-member": {
+        "ru": "ключ \"{key}\" – имя члена типа платформы, платформа пишет его {platform}."
+              " Обращение к члену у приёмника без выведенного типа берёт значение пары, и"
+              " компилятор его отвергает: возьмите написание платформы либо уточните ключ"
+              " владельцем (<Владелец>.{key}).",
+        "en": "the key \"{key}\" names a member of a platform type, and the platform spells it"
+              " {platform}. A member reached through a receiver of no inferred type takes the"
+              " pair's value, which the compiler refuses: use the platform's spelling, or"
+              " qualify the key with its owner (<Owner>.{key}).",
     },
     "translate.phrase.escaped-quote-key": {
         "ru": "кавычка в ключе экранирована по правилам литерала. Фразу переводчик ищет по"
@@ -1082,7 +1105,7 @@ def write_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAUL
         file.write_text(text, encoding="utf-8", newline="")
     return {key: plan[key]
             for key in ("changed", "added", "removed", "rewritten", "refused", "normalized",
-                        "collisions")}
+                        "collisions", "platform_names")}
 
 
 def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT_TARGET,
@@ -1212,7 +1235,44 @@ def plan_entries(dictionary_path: Path, edits: list[dict], target: str = DEFAULT
     return {"files": files, "changed": changed, "added": added, "removed": removed,
             "rewritten": sorted(rewritten, key=lambda row: (row["file"], row["line"])),
             "refused": refused, "normalized": normalized,
-            "collisions": _value_collisions(known, edits)}
+            "collisions": _value_collisions(known, edits),
+            "platform_names": _platform_name_notes(edits)}
+
+
+def _platform_name_notes(edits: list[dict]) -> list[dict]:
+    """Edits whose KEY is a word the platform already carries - as a type, or as a member.
+
+    A pair renames its key everywhere in the project, the platform's own vocabulary included,
+    and the two surfaces that write pairs are where a person can still be told so. It is a
+    WARNING and not a refusal, and the reason is that the same shape is right more often than
+    it is wrong: a key that merely spells a platform type changes nothing in a type expression,
+    because the platform's word wins there, and dictionaries of live projects carry dozens of
+    such pairs that build. What turns the shape fatal is a TYPE the project declares under that
+    spelling - and the writer has one dictionary, not the project. The pass that does have the
+    project judges it there (see ProjectReport.collect_platform_type_clashes), where the verdict
+    can be proven rather than guessed.
+
+    Only a value that really renames the word is worth a line: a pair repeating the platform's
+    own spelling is no rename, an emptied value takes the pair OUT - which is one of the cures -
+    and a qualified key holds inside one namespace and never answers a type expression.
+    """
+    out: list[dict] = []
+    for edit in edits:
+        key = str(edit.get("key") or "")
+        value = str(edit.get("value") or "")
+        if str(edit.get("kind") or "token") != "token":
+            continue
+        clash = platform_map.name_clash(key, value)
+        if clash is None:
+            continue
+        shape, spellings = clash
+        message = ("translate.entries.platform-type" if shape == platform_map.TYPE_CLASH
+                   else "translate.entries.platform-member")
+        out.append({
+            "key": key, "value": value, "clash": shape, "spellings": list(spellings),
+            "reason": i18n.t(message, key=key, platform=", ".join(spellings)),
+        })
+    return out
 
 
 def _value_collisions(known: dict, edits: list[dict]) -> list[dict]:
