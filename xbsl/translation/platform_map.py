@@ -16,13 +16,14 @@ import re
 from functools import lru_cache
 
 from xbsl import dataset, metamodel, terms, typeinfer, uischema
+from xbsl.engine import RESOURCE_DIRS
 
 
 def _reset() -> None:
     for cached in (keyword_english, _query_english, query_phrases, _component_english,
                    ident_english, member_english, _metamodel_enum_value, _ui_enum_tables,
                    _unanimous_enum_value, _member_names, reference_only_members,
-                   _platform_facets, _facet_owners, _facet_keys):
+                   _platform_facets, _facet_owners, _facet_keys, _library_pictures):
         cached.cache_clear()
 
 
@@ -247,6 +248,85 @@ def facet_value_of(root: str, facet: str, value: str) -> str | None:
         return None
     owner = _facet_keys().get((root, facet))
     return enum_value_of(owner, value) if owner else None
+
+
+@lru_cache(maxsize=1)
+def _library_pictures() -> tuple[dict[str, str], dict[str, dict[str, str]]]:
+    """The pictures of the platform's library the way a reference names them.
+
+    ({subsystem of the library in either spelling: its English spelling},
+     {that subsystem in either spelling, or "" for a bare name: {key in either spelling: the
+     English key}}), where a key is the path below the folder of resources.
+
+    The data files each pair by the place in the jar (`Icons/Стд/Ресурсы/Аккаунт.svg` ->
+    `Icons/Std/Resources/Account.svg`), and a reference names the same picture relative to the
+    folder of resources of its subsystem - qualified (`Стд::Аккаунт.svg`) or bare, as the
+    documentation of the library shows. A row that is not a picture below the folder of
+    resources of a subsystem on both sides is skipped, and a spelling two pictures would share is
+    dropped rather than guessed. The English keys answer themselves, so a reference already
+    written in English keeps its name while the subsystem before it moves.
+    """
+    try:
+        table = (dataset.load_json("uiterms.json") or {}).get("resource_paths") or {}
+    except Exception:  # noqa: BLE001 - no data, no pictures
+        return {}, {}
+    namespaces: dict[str, str] = {}
+    keys: dict[str, dict[str, str]] = {}
+    dropped: set[tuple[str, str]] = set()
+
+    def put(table_of: dict[str, str], scope: str, spelling: str, english: str) -> None:
+        if (scope, spelling) in dropped:
+            return
+        if table_of.get(spelling, english) != english:
+            del table_of[spelling]
+            dropped.add((scope, spelling))
+            return
+        table_of[spelling] = english
+
+    for russian, english in table.items() if isinstance(table, dict) else ():
+        if not isinstance(russian, str) or not isinstance(english, str):
+            continue
+        ru, en = russian.split("/"), english.split("/")
+        if (len(ru) < 4 or len(ru) != len(en) or ru[0] != en[0]
+                or ru[2] not in RESOURCE_DIRS or en[2] not in RESOURCE_DIRS):
+            continue
+        ru_key, en_key = "/".join(ru[3:]), "/".join(en[3:])
+        for spelling in (ru[1], en[1]):
+            put(namespaces, "::", spelling, en[1])
+        for scope in (ru[1], en[1], ""):
+            for spelling in (ru_key, en_key):
+                put(keys.setdefault(scope, {}), scope, spelling, en_key)
+    return namespaces, keys
+
+
+def resource_path_english(reference: str) -> str | None:
+    """The English spelling of a reference to a picture of the platform's library, or None.
+
+    `reference` is what a yaml value, the body of `Ресурс{...}` or a string literal writes:
+    `Стд::Аккаунт.svg` or `Аккаунт.svg`, a folder below the resources separated either way. The
+    answer keeps the form - the subsystem when it is written, each separator as written. Only a
+    key the library holds answers: a folder the library does not have, another subsystem or the
+    last name of a path alone never do, so a file of the project is not renamed after a picture
+    it happens to share a name with. Whether the project keeps such a file itself is the
+    caller's question (Resolver.library_picture), and without the table in the data every
+    reference answers None, as before it.
+    """
+    if not reference:
+        return None
+    namespace, qualified, key = reference.rpartition("::")
+    namespaces, keys = _library_pictures()
+    if qualified and namespace not in namespaces:
+        return None
+    parts = re.split(r"([/\\])", key)
+    english = (keys.get(namespace if qualified else "") or {}).get("/".join(parts[::2]))
+    if english is None:
+        return None
+    names = english.split("/")
+    if len(names) != len(parts[::2]):
+        return None
+    written = "".join(name + (parts[2 * index + 1] if 2 * index + 1 < len(parts) else "")
+                      for index, name in enumerate(names))
+    return f"{namespaces[namespace]}::{written}" if qualified else written
 
 
 @lru_cache(maxsize=1)

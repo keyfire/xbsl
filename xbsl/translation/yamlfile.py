@@ -192,6 +192,24 @@ def _route_template(node, resolver, report, edits) -> None:
             edits.append((at, at + len(name), replacement))
 
 
+def _library_picture(node, resolver, edits) -> bool:
+    """A value naming a picture of the platform's library, given its English name; True if so.
+
+    The documentation writes such a value bare or by the subsystem of the library
+    (`Изображение: Аккаунт.svg`, `Изображение: Стд::Аккаунт.svg`), and the library answers
+    either way (Resolver.library_picture). Before, a bare name was read as a file of the project
+    and waited for an entry, and a qualified one stayed as written with no gap reported.
+    """
+    value = node.value
+    if not isinstance(value, str) or not has_cyrillic(value):
+        return False
+    english = resolver.library_picture(value)
+    if english is None:
+        return False
+    _set_scalar(node, english, edits)
+    return True
+
+
 def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
     """A value that names things: a bare identifier, a dotted chain, a resource file.
 
@@ -201,6 +219,8 @@ def _identifier_value(node, resolver, report, edits, scope: str = "") -> None:
     """
     value = node.value
     if not isinstance(value, str) or not has_cyrillic(value):
+        return
+    if _library_picture(node, resolver, edits):
         return
     m = _RESOURCE_VALUE_RE.match(value)
     if m:
@@ -325,6 +345,8 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
         return
     if "%{" in value or "${" in value:
         _template_scalar(node, resolver, report, edits)
+        return
+    if _library_picture(node, resolver, edits):
         return
     if _RESOURCE_VALUE_RE.match(value) and has_cyrillic(value):
         # A resource file is named by the same map that renames the file itself; a reference

@@ -16,7 +16,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from xbsl import engine
+import pytest
+
+from xbsl import dataset, engine
 from xbsl.translation import dictionary as dict_module
 from xbsl.translation import names
 from xbsl.translation.project import translate_project
@@ -120,7 +122,7 @@ def test_a_path_through_the_folder_of_resources_renames_only_what_lies_below_it(
     assert 'return "Tasks/Resources/СоздатьКопию.svg"' in module
 
 
-def test_a_picture_of_the_platform_library_is_not_a_resource_of_the_project(tmp_path: Path):
+def _library_pictures_project(tmp_path: Path):
     root = tmp_path / "Acme" / "Demo"
     _write(root / "Задачи" / "Ресурсы" / "СоздатьКопию.svg", "<svg/>\n")
     _write(root / "Задачи" / "Картинки.xbsl", (
@@ -139,18 +141,51 @@ def test_a_picture_of_the_platform_library_is_not_a_resource_of_the_project(tmp_
     ))
     out = tmp_path / "en"
     report = translate_project(root, _dictionary({"Задачи": "Tasks"}), out, swap_localization=False)
-    module = (out / "Tasks" / "Картинки.xbsl").read_text(encoding="utf-8")
+    return (out / "Tasks" / "Картинки.xbsl").read_text(encoding="utf-8"), report
+
+
+@pytest.fixture(scope="module")
+def picture_roots(tmp_path_factory) -> dict[str, Path]:
+    from test_translate_platform_pictures import LIBRARY, picture_data_root
+
+    base = tmp_path_factory.mktemp("pictures")
+    return {"library": picture_data_root(base / "library", LIBRARY),
+            "before": picture_data_root(base / "before", None)}
+
+
+def test_a_picture_of_the_platform_library_is_not_a_resource_of_the_project(tmp_path: Path,
+                                                                            picture_roots):
+    dataset.set_data_root(picture_roots["library"])
+    try:
+        module, report = _library_pictures_project(tmp_path)
+    finally:
+        dataset.set_data_root(None)
     assert "Resource{СоздатьКопию.svg}" in module
     # The project has no such files: the names belong to the platform's library of pictures,
-    # which carries its own English names, and every place keeps the reading it always had -
-    # the root of the literal reads the type, a path in a string reads a name.
+    # which carries its own English names, and every place that names the picture takes them.
     assert "Resource{Time.svg}" in module
-    assert '"Время.svg"' in module
+    assert '"Time.svg"' in module
     assert '"Folder.svg"' in module
     # The field is the project's gap; the picture is never listed as a file of the project.
     missing = report.merged_missing_tokens()
     assert not (missing.get("Время") or {}).get("resource"), missing.get("Время")
     assert missing["СоздатьКопию"].get("resource")
+
+
+def test_data_without_the_library_keeps_the_reading_each_place_had(tmp_path: Path, picture_roots):
+    dataset.set_data_root(picture_roots["before"])
+    try:
+        module, report = _library_pictures_project(tmp_path)
+    finally:
+        dataset.set_data_root(None)
+    assert "Resource{СоздатьКопию.svg}" in module
+    # The root of the literal reads the type, a path in a string reads a name - and the name
+    # the project declares waits for its entry.
+    assert "Resource{Time.svg}" in module
+    assert '"Время.svg"' in module
+    assert '"Folder.svg"' in module
+    missing = report.merged_missing_tokens()
+    assert not (missing.get("Время") or {}).get("resource"), missing.get("Время")
 
 
 # --- a method of a component of the project -------------------------------------------------
