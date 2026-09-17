@@ -20,6 +20,38 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **`code/computed-property-server-call` – a server call inside a computed property.** The rule
+  finds a form whose component property is recomputed through a server method without the
+  platform's result cache, and shows the property lines and the proven call chain. One finding
+  per form and server method. Events, deferred lambdas, client variants of a method and an
+  enabled or unknown `CacheResult` are not reported; a platform component's `Image` stays with
+  `code/image-binding-server-call`. Info level, off by default – turn it on with `--enable`.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **`code/resource-read-without-cache` – a resource read without the cache.** A client-available
+  server method that only returns the text of a file from the resource package
+  (`ResourcesPackage.Current().Get(...).OpenReadableStream().ReadAsString()`) goes to the server
+  for the same bytes on every call. The rule suggests `CacheResult = True` or passing the file
+  through client work parameters; there is no autofix. Info level, on by default.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **The extractor writes three optional data sections:** the values of the `Entity.Privilege`
+  facet, the managers of element kinds, and English names of the platform image library (pairs
+  are matched by file contents; pictures without a pair are listed in the report). Extract the
+  data again to get them; data without these sections keeps working as before.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+
+### Changed
+
+- **`code/image-binding-server-call` uses the shared server-call facts.** Cached methods and
+  client variants are no longer reported; a name a form inherits (`WriteAndClose`) is not
+  mistaken for a common module; `Name.Method()` calls with an unknown base type and elements with
+  a malformed metadata field are skipped. A few new findings through intermediate methods are
+  possible. The message no longer claims a request on every redraw.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **Translation builds the project index and takes longer** – 5 to 7 seconds more on a project of
+  1,300–1,500 files. ([#105](https://github.com/keyfire/xbsl/pull/105))
+
 ### Fixed
 
 - **The extractor takes the fullest element-kind table from the distribution.** A
@@ -28,6 +60,25 @@ entry either - say what the behaviour was, not which class name was compared.
   `InterfaceComponent` then drop out of the metamodel. Form properties were reported as
   unknown. Seen at least on 9.2.9+12 and 9.3.1+4; the scan does not depend on the platform
   version. ([#102](https://github.com/keyfire/xbsl/pull/102))
+- **Platform names next to project namesakes.** A platform annotation, the keys of a typed
+  command node (`Handler`, `Presentation`, `Image`, `Items`) and a `Type<...>` argument are
+  translated as platform names even when the project declares the same words.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **A chain member is translated by the type that declares it:** `Bound`, `Remove` on arrays,
+  maps and strings, `IsEmpty`, `Check` on an action privilege, `Entity.Privilege.Read` for the
+  facet value. The type of a chain root is taken only where the method sees that name.
+  Translating again can change the English tree, old data included.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **Image-library pictures get English names** in yaml, in `Resource{...}` and in strings,
+  written bare or with `Std::`, when the data carries the picture table; a project file with
+  the same name wins. ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **`code/unknown-resource` knows the English image-library names** and no longer reports
+  `Resource{Std::Account.svg}` in a translated or English-written project as an error.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
+- **The server-call rules do not remember that platform data was missing.** A language server or
+  MCP server started before the data was installed finds them in a Russian-spelled project
+  without a restart; an English-spelled project still needs one.
+  ([#105](https://github.com/keyfire/xbsl/pull/105))
 
 ## 2026-09-15 – 0.110.0
 
