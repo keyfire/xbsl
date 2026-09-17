@@ -5246,6 +5246,21 @@ SEEDS: list[Seed] = [
         tokens={"Работа": "Work", "Лишний": "Spare"},
     ),
     Seed(
+        rule="code/unused-method",
+        expect=FINDING,
+        note="the same method named in a comment of its own module",
+        files={"Работа.xbsl": "// Лишний зовёт вставка по имени\nметод Лишний()\n;\n"},
+        tokens={"Работа": "Work", "Лишний": "Spare"},
+    ),
+    Seed(
+        rule="code/unused-method",
+        expect=FINDING,
+        note="the same method named in a comment of another element",
+        files={"Работа.xbsl": "метод Лишний()\n;\n",
+               "Склад.yaml": "# Лишний зовёт вставка по имени\nИмя: Склад\n"},
+        tokens={"Работа": "Work", "Лишний": "Spare", "Склад": "Store"},
+    ),
+    Seed(
         rule="code/unused-local",
         expect=FINDING,
         note="a use-resource variable the method never reads",

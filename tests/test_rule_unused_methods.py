@@ -6,7 +6,7 @@ the whole module is skipped (conftest does not know this file, so we guard ourse
 
 import pytest
 
-from xbsl import dataset, engine
+from xbsl import dataset, engine, i18n
 from xbsl.cli import discover
 
 pytestmark = pytest.mark.skipif(
@@ -87,13 +87,108 @@ def test_mention_in_string_literal_not_flagged(tmp_path):
     assert not _hits(d)
 
 
-def test_mention_in_comment_not_flagged(tmp_path):
-    # a mention in a comment silences too: silence is better than a false positive
+# --- What a comment is worth: nothing ------------------------------------------------------
+
+def _comment_only(name: str) -> str:
+    return i18n.t("code/unused-method.comment-only", name=name)
+
+
+def test_comment_of_the_same_module_does_not_count(tmp_path):
+    # the note claiming an invisible caller is prose; the annotation and the baseline are
+    # what silences such a method
     d = _lint_dir(
         tmp_path,
         М__xbsl="// Колбэк: платформа вызывает ПоТаймеру\nметод ПоТаймеру()\n;\n",
     )
+    hits = _hits(d)
+    assert len(hits) == 1 and hits[0].message == _comment_only("ПоТаймеру")
+
+
+def test_comment_of_another_module_does_not_count(tmp_path):
+    # prose about a method is not a call, and a module keeps its notes about itself at home
+    d = _lint_dir(
+        tmp_path,
+        А__xbsl="@ВПроекте\nметод СобратьРазметку()\n;\n",
+        Б__xbsl="// разметку раньше собирал СобратьРазметку\nметод Главный()\n;\n",
+        Б__yaml="Обработчик: Главный\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1
+    assert hits[0].message == _comment_only("СобратьРазметку")
+
+
+def test_comment_of_the_paired_yaml_does_not_count(tmp_path):
+    # a `#` note of the paired yaml is prose as much as a `//` one of the module
+    d = _lint_dir(
+        tmp_path,
+        Ф__xbsl="метод Клик()\n;\n",
+        Ф__yaml="# Клик зовёт вставка по имени\nИмя: Ф\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1 and hits[0].message == _comment_only("Клик")
+
+
+def test_comment_of_another_yaml_does_not_count(tmp_path):
+    d = _lint_dir(
+        tmp_path,
+        А__xbsl="@ВПроекте\nметод Клик()\n;\n",
+        Б__yaml="# Клик зовёт вставка по имени\nИмя: Б\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1 and hits[0].message == _comment_only("Клик")
+
+
+def test_doc_comment_of_a_neighbour_method_does_not_count(tmp_path):
+    # a doc comment describes the neighbour, it does not call the method it names
+    d = _lint_dir(
+        tmp_path,
+        М__xbsl=(
+            "метод Подпись()\n;\n\n"
+            "/** Готовит данные.\n * Подпись берётся отдельно.\n */\n"
+            "метод Данные()\n;\n\n"
+            "метод Главный()\n    Данные()\n;\n"
+        ),
+        М__yaml="Обработчик: Главный\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1 and hits[0].message == _comment_only("Подпись")
+
+
+def test_doc_comment_of_another_module_does_not_count(tmp_path):
+    d = _lint_dir(
+        tmp_path,
+        А__xbsl="@ВПроекте\nметод Подпись()\n;\n",
+        Б__xbsl=(
+            "/** Готовит данные.\n * Подпись берётся отдельно.\n */\n"
+            "метод Данные()\n;\n"
+        ),
+        Б__yaml="Обработчик: Данные\n",
+    )
+    hits = _hits(d)
+    assert len(hits) == 1 and hits[0].message == _comment_only("Подпись")
+
+
+def test_string_literal_of_another_module_still_counts(tmp_path):
+    # a string is a call the reader cannot see, wherever the module holding it lies
+    d = _lint_dir(
+        tmp_path,
+        А__xbsl="@ВПроекте\nметод ОбновитьСчётчик()\n;\n",
+        Б__xbsl=(
+            "метод Разметка(): Строка\n"
+            "    возврат \"<script>bridge.call('ОбновитьСчётчик')</script>\"\n"
+            ";\n"
+        ),
+        Б__yaml="Обработчик: Разметка\n",
+    )
     assert not _hits(d)
+
+
+def test_dead_method_named_nowhere_keeps_the_plain_message(tmp_path):
+    # the negative control: with no comment anywhere the wording does not change
+    d = _lint_dir(tmp_path, М__xbsl="@ВПроекте\nметод Мёртвый()\n;\n")
+    hits = _hits(d)
+    assert len(hits) == 1
+    assert hits[0].message == i18n.t("code/unused-method.unreferenced", name="Мёртвый")
 
 
 # --- Guard: annotations -----------------------------------------------------------------

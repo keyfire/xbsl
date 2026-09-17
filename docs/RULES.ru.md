@@ -417,7 +417,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/col-width-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Числовая `Ширина` колонки таблицы без `РастягиватьПоГоризонтали`: при растягивании число работает как доля свободного места, а не как пиксели [подробнее](#d-yaml-col-width-needs-no-stretch) [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Числовая `МаксимальнаяШирина` у группы с матричной компоновкой: телефон рисует страницу десктопной шириной, и контент уходит за правый край [подробнее](#d-yaml-matrix-group-max-width) [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Литеральный `ВесПриРастягивании` у карточки или у группы внутри неё: в мобильной раскладке Safari схлопывает карточку, а Chrome не показывает ничего [подробнее](#d-yaml-card-literal-stretch-weight) [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
-| `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Метод нигде не используется |
+| `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Метод объявлен в проекте и больше нигде не используется: ни вызовом в коде, ни привязкой в yaml, ни именем в строке. Комментарий использованием не считается [подробнее](#d-code-unused-method) |
 | `code/unused-constant` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Константа модуля нигде больше в проекте не упоминается: объявление осталось без дела [подробнее](#d-code-unused-constant) |
 | `code/duplicate-method-body` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Тело метода от пяти строк дословно повторяется в другом файле: сравнивается нормализованное тело, и правку придётся вносить в обе копии [подробнее](#d-code-duplicate-method-body) |
 | `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Ссылка из yaml на публичный элемент чужой подсистемы, пространства имён которого нет в секции `Импорт`: по короткому имени элемент не находится [подробнее](#d-yaml-missing-import) [доки](https://1cmycloud.com/docs/help/topics/modular-development/) |
@@ -587,6 +587,17 @@ HTML-страницы. Код не трогаем – селекторы, иде
 flex с нулевой базой, а в вертикальной колонке, то есть в мобильной раскладке, база относится к
 высоте. Safari обрезает карточку скруглением. На телефоне вес снимают биндингом. По умолчанию
 выключено: карточка, живущая только в широком ряду, носит вес законно.
+
+<a id="d-code-unused-method"></a>**`code/unused-method`.** Имя в строковом литерале считается
+употреблением: вставка HTML зовёт метод по имени, и такого вызова статически не видно. Комментарий не
+считается нигде – ни в модуле, который объявляет метод, ни в парном yaml, ни в чужом элементе; когда имя
+нашлось только в комментарии, находка так и говорит. Не судятся события платформы, модуль объекта, модуль
+в паре с `HttpСервис` и метод, аннотация которого называет вызывающего вне кода проекта (`@Обработчик`,
+`@Подписка`, `@Реализация` и прочие) – такая аннотация и есть ответ для метода, который зовёт сама
+платформа или контракт. Если вызов всё равно не виден – имя собирается во время работы, клиентская точка
+входа оставлена намеренно, – заморозьте находку в списке принятых вместе с причиной (`--write-baseline`,
+затем `--baseline`). Выключено по умолчанию: на части файлов метод, который зовут снаружи, выглядел бы
+мёртвым.
 
 <a id="d-code-unused-constant"></a>**`code/unused-constant`.** Употреблением считаются слова кода,
 yaml, строк и комментариев, а словарь перевода не считается. Глобальные константы и константы с

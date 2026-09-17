@@ -422,7 +422,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/col-width-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `Width` on a table column without `HorizontalStretch`: while the column stretches the number acts as a share of the free space rather than pixels [details](#d-yaml-col-width-needs-no-stretch) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `MaxWidth` on a group that lays out as a matrix: a phone draws the page at desktop width and the content runs off the right edge [details](#d-yaml-matrix-group-max-width) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/card-literal-stretch-weight` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A literal `StretchWeight` on a card or on a group inside one: in the mobile layout Safari collapses the card and Chrome shows nothing [details](#d-yaml-card-literal-stretch-weight) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
-| `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Method is never referenced |
+| `code/unused-method` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A method declared in the project and used nowhere else – not by a call in code, a yaml binding or a name in a string. A comment is not a use [details](#d-code-unused-method) |
 | `code/unused-constant` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A module constant referenced nowhere else in the project: the declaration is left with no work [details](#d-code-unused-constant) |
 | `code/duplicate-method-body` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A method body of at least five lines repeated word for word in another file: the normalized body is compared, and a change goes into both copies [details](#d-code-duplicate-method-body) |
 | `yaml/missing-import` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A yaml reference to a public element of another subsystem whose namespace the `Import` section does not list: the short name does not resolve [details](#d-yaml-missing-import) [docs](https://1cmycloud.com/docs/help/topics/modular-development/) |
@@ -591,6 +591,17 @@ answer is `Auto`. Off by default: a desktop-only page lives with a maximum fine.
 is a flex with a zero basis, and in a vertical column, that is in the mobile layout, the basis
 applies to the height. Safari clips the card with the rounding. On a phone drop the weight through
 a binding. Off by default: a card living only in a wide row keeps it legitimately.
+
+<a id="d-code-unused-method"></a>**`code/unused-method`.** A name inside a string literal counts as a
+use: an HTML insert calls the method by name, and such a call is invisible to static reading. A comment
+counts nowhere – not in the module that declares the method, not in the yaml paired with it, not in any
+other element; when a comment is the only place the name turns up, the finding says so. Never judged: the
+platform's own events, an object module, a module paired with an HTTP service, and a method whose
+annotation names a caller outside the project code (`@Handler`, `@Subscription`, `@Implementation` and the
+rest) – that annotation is the answer for a method the platform or a contract calls itself. For a call that
+stays invisible anyway – a name assembled at run time, a client entry point kept on purpose – freeze the
+finding in the baseline with its reason (`--write-baseline`, then `--baseline`). Off by default: over a
+subset of the files a method used outside it would look dead.
 
 <a id="d-code-unused-constant"></a>**`code/unused-constant`.** Words in code, yaml, strings and
 comments count as uses, and the translation dictionary does not. Global constants and constants
