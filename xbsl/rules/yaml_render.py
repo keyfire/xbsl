@@ -24,7 +24,7 @@ that before a human notices it in a browser.
   its children out on the BASELINE, and an insert frame (`HtmlContainer`) carries a baseline
   of its own: the card holding it slides down against its neighbours (50 px on a live bento
   row, 2026-08). Nothing but an eye catches it - the file, the compile and the apply are all
-  fine. The cure is one property on the ROW: `VerticalContentAlignment: Top`.
+  fine. The cure is one property on the ROW: `ContentVerticalAlign: Top`.
 
   The judged group is the NEAREST horizontal ancestor of the insert - the one whose baseline
   the insert actually breaks; a horizontal group deeper on the path takes the blame instead of
@@ -32,6 +32,22 @@ that before a human notices it in a browser.
   project's media group reads exactly that way). Vertical groups on the path are transparent:
   the cards of a row are usually vertical. A group with a single child is skipped - there is
   nothing to slide against.
+
+  The same rule judges a native `Button` next to a native `Picture` standing in the row
+  directly. A button keeps its baseline on the caption and a picture on its bottom edge, so
+  the button sank 19 px below a picture of the same height on a live row; the cure there is
+  `ContentVerticalAlign: Center`. Only this pair is judged, because only this pair was
+  measured: a button without a visible caption, a label, a pair inside a card, a child that sets
+  its own vertical alignment - none of them is guessed at. A layout binding counts in its
+  statically horizontal branches. The pair is judged when one of the two is shown
+  unconditionally or both are shown under the same conditions; two different conditions may
+  exclude each other in the program, so such a pair is left alone (xbsl/rules/_rows.py).
+- `yaml/component-row-needs-align` – the same pair when a neighbour is DRAWN by a project
+  component: a wrapper that shows a native button or picture, or picks between the two by
+  its own property. The component description lies in another file, so this half is a
+  project rule; the file rule keeps the rows it can judge alone, and the project rule leaves
+  them to it. A component is expanded only as far as xbsl/rules/_rows.py can read it, and a
+  child it cannot resolve takes no part in a pair.
 
 - `yaml/date-input-needs-plain-date` – `Edit<Date?>` is silently not rendered: no field,
   no apply-time error, and a group that held only such fields disappears entirely (found on a
@@ -52,11 +68,13 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from functools import lru_cache
 
-from xbsl import dataset, i18n, uischema
+from xbsl import i18n, terms, uischema
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import SourceFile, rule, rule_param
+from xbsl.engine import SourceFile, is_query_file, rule, rule_param
+from xbsl.parser import parse
+from xbsl.rules import _rows
+from xbsl.rules.environment import _pair_stem
 from xbsl.rules.yaml_schema import (
     _composed,
     _HAVE_YAML,
@@ -64,6 +82,7 @@ from xbsl.rules.yaml_schema import (
     _mapping_nodes,
     _parsed,
     _scalar_entries,
+    object_kind,
 )
 
 if _HAVE_YAML:
@@ -71,8 +90,36 @@ if _HAVE_YAML:
 
 MESSAGES = {
     "yaml/insert-row-needs-align.title": {
-        "ru": "Ряд со вставкой без явного выравнивания",
-        "en": "A row holding an insert without an explicit alignment",
+        "ru": "Ряд без явного выравнивания, у соседей разная базовая линия",
+        "en": "A row without an explicit alignment holds neighbours with different baselines",
+    },
+    "yaml/insert-row-needs-align.button-picture": {
+        "ru": "Горизонтальная группа без ВыравниваниеСодержимогоПоВертикали равняет детей по "
+              "базовой линии. У Кнопка она проходит по надписи, у Картинка – по нижнему краю, "
+              "поэтому '{button}' и '{picture}' встают на разную высоту (на живом ряду кнопка "
+              "опустилась на 19 px). Задайте ряду ВыравниваниеСодержимогоПоВертикали: Центр.",
+        "en": "A horizontal group with no {n[ВыравниваниеСодержимогоПоВертикали]} lines its "
+              "children up on the baseline. A {n[Кнопка]} keeps it on the caption and a "
+              "{n[Картинка]} on its bottom edge, so '{button}' and '{picture}' stand at "
+              "different heights (the button sank 19 px on a live row). Set "
+              "{n[ВыравниваниеСодержимогоПоВертикали]}: {n[Центр]} on the row.",
+    },
+    "yaml/component-row-needs-align.title": {
+        "ru": "Ряд из компонентов ставит кнопку рядом с картинкой без явного выравнивания",
+        "en": "A row of components puts a button next to a picture without an explicit alignment",
+    },
+    "yaml/component-row-needs-align.pair": {
+        "ru": "Горизонтальная группа без ВыравниваниеСодержимогоПоВертикали равняет детей по "
+              "базовой линии, а её соседи рисуют разное: '{button}' – Кнопка с базовой линией по "
+              "надписи, '{picture}' – Картинка с базовой линией по нижнему краю. Они встают на "
+              "разную высоту (на живом ряду кнопка опустилась на 19 px). Задайте ряду "
+              "ВыравниваниеСодержимогоПоВертикали: Центр.",
+        "en": "A horizontal group with no {n[ВыравниваниеСодержимогоПоВертикали]} lines its "
+              "children up on the baseline, and its neighbours draw different things: "
+              "'{button}' is a {n[Кнопка]} with the baseline on the caption, '{picture}' is a "
+              "{n[Картинка]} with the baseline on its bottom edge. They stand at different "
+              "heights (the button sank 19 px on a live row). Set "
+              "{n[ВыравниваниеСодержимогоПоВертикали]}: {n[Центр]} on the row.",
     },
     "yaml/insert-row-needs-align.baseline": {
         "ru": "Горизонтальная группа со вставкой КонтейнерHtml и без "
@@ -199,62 +246,52 @@ def _object_mappings(source: SourceFile):
     return _mapping_nodes(root)
 
 
-#: The layout value that lays children out in a row, and the property that overrides the
-#: baseline alignment of such a row.
-_HORIZONTAL = "Горизонтальная"
-_LAYOUT_ENUM = "КомпоновкаСодержимого"
-_LAYOUT_KEY = "Компоновка"
-_ALIGN_KEY = "ВыравниваниеСодержимогоПоВертикали"
+#: The insert frame, whose own baseline breaks an unaligned row.
 _INSERT = "КонтейнерHtml"
-_CONTENT_KEY = "Содержимое"
-
-
-def _component_children(mapping):
-    """Direct child components of a node: the mappings of its content key."""
-    entries = {
-        key.value: value for key, value in mapping.value
-        if isinstance(key, yaml.ScalarNode)
-    }
-    content = entries.get(_CONTENT_KEY) or entries.get("Content")
-    if isinstance(content, yaml.SequenceNode):
-        return [item for item in content.value if isinstance(item, yaml.MappingNode)]
-    if isinstance(content, yaml.MappingNode):
-        return [content]
-    return []
-
-
-def _component_kind(mapping) -> str | None:
-    """The canonical component name of a node, or None when it declares no type."""
-    entry = _scalar_entries(mapping).get("Тип")
-    if entry is None or not isinstance(entry[1], yaml.ScalarNode):
-        return None
-    return uischema.canonical_component(entry[1].value.split("<", 1)[0].strip())
-
-
-@lru_cache(maxsize=1)
-def _horizontal_names() -> frozenset[str]:
-    """Both spellings of the horizontal layout value, from the platform's own dictionary."""
-    aliases = uischema.enum_value_aliases(_LAYOUT_ENUM)
-    return frozenset({_HORIZONTAL, aliases.get(_HORIZONTAL)} - {None})
-
-
-dataset.register_reset(_horizontal_names.cache_clear)
 
 
 def _is_horizontal(mapping) -> bool:
-    entries = _scalar_entries(mapping)
-    entry = entries.get(_LAYOUT_KEY) or entries.get("Layout")
-    if entry is None or not isinstance(entry[1], yaml.ScalarNode):
-        return False
-    return entry[1].value.strip() in _horizontal_names()
+    return _rows.is_horizontal(_scalar_entries(mapping))
 
 
 def _row_findings(mapping, nearest, out: list) -> None:
     """Walk the subtree, pairing every insert with the nearest horizontal ancestor."""
-    for child in _component_children(mapping):
-        if _component_kind(child) == _INSERT and nearest is not None:
+    for child in _rows.component_children(mapping):
+        if _rows.component_kind(child) == _INSERT and nearest is not None:
             out.append(nearest)
         _row_findings(child, child if _is_horizontal(child) else nearest, out)
+
+
+def _row_verdict(mapping):
+    """(layout key node, message) when the file rule reports the group, else None.
+
+    The project rule asks the same question first and leaves such a row alone.
+    """
+    entries = _scalar_entries(mapping)
+    if _rows.ALIGN_KEY in entries:
+        return None
+    horizontal = _rows.row_formula(entries)
+    if horizontal is None:
+        return None
+    children = _rows.component_children(mapping)
+    if len(children) < 2:
+        return None  # a single child has nothing to slide against
+    key_node = entries[_rows.LAYOUT_KEY][0]
+    rows: list = []
+    _row_findings(mapping, mapping, rows)
+    if any(row is mapping for row in rows):
+        return key_node, i18n.t("yaml/insert-row-needs-align.baseline")
+    taking_part = []
+    for child in children:
+        drawn = _rows.participant(child)
+        if drawn is not None:
+            taking_part.append((*drawn, _rows.label(child)))
+    pair = _rows.conflict(horizontal, taking_part)
+    if pair is None:
+        return None  # no insert of its own, and no button shown together with a picture
+    return key_node, i18n.t(
+        "yaml/insert-row-needs-align.button-picture", button=pair[0], picture=pair[1],
+    )
 
 
 @rule(
@@ -262,30 +299,112 @@ def _row_findings(mapping, nearest, out: list) -> None:
     severity=Severity.WARNING,
 )
 def insert_row_needs_align(source: SourceFile) -> Iterable[Diagnostic]:
-    """A row holding an insert without an explicit vertical alignment."""
-    seen: set[int] = set()
+    """A row without an explicit vertical alignment whose children stand on different baselines."""
+    seen: set[tuple[int, int]] = set()
     for mapping in _object_mappings(source):
-        entries = _scalar_entries(mapping)
-        if _ALIGN_KEY in entries or "VerticalContentAlignment" in entries:
+        verdict = _row_verdict(mapping)
+        if verdict is None:
             continue
-        if not _is_horizontal(mapping):
-            continue
-        if len(_component_children(mapping)) < 2:
-            continue  # a single child has nothing to slide against
-        rows: list = []
-        _row_findings(mapping, mapping, rows)
-        if not any(row is mapping for row in rows):
-            continue  # the insert belongs to a deeper row - that one answers for it
-        key_node = entries[_LAYOUT_KEY][0]
+        key_node, message = verdict
         position = (key_node.start_mark.line + 1, key_node.start_mark.column + 1)
         if position in seen:
             continue
         seen.add(position)
         yield Diagnostic(
             source.rel, position[0], position[1],
-            "yaml/insert-row-needs-align", Severity.WARNING,
-            i18n.t("yaml/insert-row-needs-align.baseline"),
+            "yaml/insert-row-needs-align", Severity.WARNING, message,
         )
+
+
+def _component_row(mapping) -> dict | None:
+    """The fact of a row the file rule cannot judge alone: a child is a project component."""
+    entries = _scalar_entries(mapping)
+    if _rows.ALIGN_KEY in entries:
+        return None
+    children = _rows.component_children(mapping)
+    if len(children) < 2:
+        return None
+    if not any(_rows.child_is_component(child) for child in children):
+        return None
+    horizontal = _rows.row_formula(entries)
+    if horizontal is None or _row_verdict(mapping) is not None:
+        return None
+    key_node = entries[_rows.LAYOUT_KEY][0]
+    return {
+        "line": key_node.start_mark.line + 1,
+        "col": key_node.start_mark.column + 1,
+        "horizontal": horizontal,
+        "children": [_rows.child_fact(child) for child in children],
+    }
+
+
+def _component_row_mapper(source: SourceFile) -> dict | None:
+    """The map phase: what a component draws, the conditions of its module, the rows of a page."""
+    if source.kind == "xbsl":
+        if is_query_file(source.path):
+            return None
+        module, errors = parse(source)
+        if errors:
+            return None
+        methods = _rows.module_conditions(module, source.text)
+        return {"stem": _pair_stem(source.rel), "methods": methods} if methods else None
+    if source.kind != "yaml" or not _HAVE_YAML:
+        return None
+    data, error = _parsed(source)
+    root = _composed(source) if error is None and _is_object(data) else None
+    if root is None:
+        return None
+    fact: dict = {}
+    if object_kind(data) == "КомпонентИнтерфейса":
+        name = next(
+            (data[key] for key in terms.key_forms("Имя") if isinstance(data.get(key), str)), None,
+        )
+        if name:
+            fact["comp"] = {**_rows.component_fact(root, name), "stem": _pair_stem(source.rel)}
+    rows = [row for row in map(_component_row, _mapping_nodes(root)) if row is not None]
+    if rows:
+        fact["rows"] = rows
+    return fact or None
+
+
+@rule(
+    "yaml/component-row-needs-align", "yaml/component-row-needs-align.title", "D",
+    scope="project", severity=Severity.WARNING, mapper=_component_row_mapper,
+)
+def component_row_needs_align(facts: dict[str, dict]) -> Iterable[Diagnostic]:
+    """A row where a project component draws a button or a picture next to the other one."""
+    definitions: dict[str, list[dict]] = {}
+    conditions: dict[str, dict] = {}
+    for fact in facts.values():
+        if "comp" in fact:
+            definitions.setdefault(fact["comp"]["name"], []).append(fact["comp"])
+        if "methods" in fact:
+            conditions[fact["stem"]] = fact["methods"]
+    for rel in sorted(facts):
+        for row in facts[rel].get("rows", ()):
+            taking_part = []
+            for child in row["children"]:
+                if child["native"] is not None:
+                    taking_part.append((*child["native"], child["label"]))
+                    continue
+                found = definitions.get(child["type"]) if child["component"] else None
+                if not found or len(found) != 1:
+                    continue  # no description, or two components of one name
+                definition = found[0]
+                drawn = _rows.instance_draw(
+                    child, definition, conditions.get(definition["stem"], {}),
+                )
+                if drawn is not None:
+                    named = child["label"] != child["type"]
+                    shown_as = f"{child['label']} ({child['type']})" if named else child["type"]
+                    taking_part.append((*drawn, shown_as))
+            pair = _rows.conflict(row["horizontal"], taking_part)
+            if pair is None:
+                continue
+            yield Diagnostic(
+                rel, row["line"], row["col"], "yaml/component-row-needs-align", Severity.WARNING,
+                i18n.t("yaml/component-row-needs-align.pair", button=pair[0], picture=pair[1]),
+            )
 
 
 @rule("yaml/empty-group-sized", "yaml/empty-group-sized.title", "D", severity=Severity.WARNING)

@@ -46,7 +46,8 @@ usage: xbsl [paths] [options]       (no command: check the sources)
 | `--prune-baseline` | list the stale baseline entries with their reasons and remove them from the file (together with `--baseline`; the file's order and the counts of live entries are left alone) |
 | `--fix` | apply unambiguous formatting and code fixes outside the baseline and report the remaining findings |
 | `--jobs N` | processes for file-scope rules: 0 – auto (turns on for large runs), 1 – sequential, N – an explicit number of worker processes |
-| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does; with `--format` json the same records are printed as data |
+| `--list-rules` | print the list of rules (with their parameters and values) and exit; together with `--select`/`--ignore` the list narrows the way a run's rule set does, and `--rules-filter` narrows it further; with `--format` json the same records are printed as data |
+| `--rules-filter WORD` | narrow `--list-rules`. A word that IS a group (the part of an id before '/') lists that group alone; any other word is looked for as an id substring or a word of the title or description - every i18n text registered under the rule's id (the title and its message templates), in either language, plus the English docstring; docs/RULES.md is not read. Case-insensitive; combines with `--select`/`--ignore` |
 | `--where` | show the engine location, interpreter and Element data (path, source, versions) and exit |
 | `--element-version VERSION` | Element data version (default: the latest in the bundle) |
 | `--data-dir DIR` | Element data root (a directory with index.json); also env XBSL_DATA_DIR |
@@ -538,8 +539,9 @@ usage: xbsl add-localization [-h] [--dry-run] yaml_path language
 write one localized string into every language at once: the element and its translations; see also add-localization for a language and add-field for the string itself
 
 ```bash
-usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--dry-run]
-                             yaml_path name
+usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTION] [--entries-file FILE]
+                             [--entry КЛЮЧ=JSON] [--full-text] [--dry-run]
+                             yaml_path [name]
 ```
 
 **Arguments**
@@ -556,7 +558,10 @@ usage: xbsl set-localization [-h] [--value ЯЗЫК=ТЕКСТ] [--section SECTI
 | `-h, --help` | show this help message and exit |
 | `--value ЯЗЫК=ТЕКСТ` | the text in one language: `--value` Russian=Text `--value` En=Text (repeatable) |
 | `--section SECTION` | the section: Strings or Templates (default - the one the key already lives in, else Strings) |
-| `--dry-run` | show the changes (with file texts) without writing anything |
+| `--entries-file FILE` | many keys from a JSON or YAML file: {Key: {Language: Text}}; combines with name and with `--entry` |
+| `--entry КЛЮЧ=JSON` | one more key of the batch: `--entry` Title={"English":"Text"} (repeatable, combines with name and with `--entries-file`) |
+| `--full-text` | with `--dry-run`: add the full text of the changed files next to the per-key summary |
+| `--dry-run` | show the per-key summary (language, file, the value before and after) without writing anything; `--full-text` adds the full text of the files too |
 
 ### `xbsl set-field-property`
 

@@ -62,6 +62,26 @@ _CORE_MESSAGES = {
         "en": "No rule matched the selection: {keys}. A selection takes a rule id, a group "
               "(the part of the id before '/') or a tier letter; rules in all: {total}.",
     },
+    "cli.no-rules-filter": {
+        "ru": "Фильтр '{filter}' ничего не нашёл среди правил; ближайшие группы: {groups}",
+        "en": "The filter '{filter}' matched no rule; groups closest to it: {groups}",
+    },
+    "cli.no-rules-filter-none": {
+        "ru": "Фильтр '{filter}' ничего не нашёл среди правил, и ни одна группа не похожа",
+        "en": "The filter '{filter}' matched no rule, and no group looks close to it",
+    },
+    "cli.rules-filter-needs-list": {
+        "ru": "--rules-filter сужает список правил: добавьте --list-rules. Набор проверки "
+              "отбирают --select/--ignore/--enable",
+        "en": "--rules-filter narrows a rule listing: add --list-rules. A run's rule set is "
+              "chosen by --select/--ignore/--enable",
+    },
+    "report.findings-hint": {
+        "ru": "находок: {count}, это больше {limit} строк краткого ответа – позовите ещё раз "
+              "без compact за полным списком или сузьте paths/select",
+        "en": "{count} findings, over the {limit} compact lists - call again without compact "
+              "for the full list, or narrow paths/select",
+    },
     "code/unused-method.off": {
         "ru": "признак мёртвого кода неотличим от вызова по имени: метод могут звать строкой из HTML-вставки или ключом yaml. Проверка нарочно консервативна, но остаток ложных возможен – включайте, когда ищете мёртвый код целенаправленно",
         "en": "a dead method is indistinguishable from one called by name: a string inside an HTML insert or a yaml key. The check is deliberately conservative, yet false positives remain - enable it when you are hunting dead code on purpose",
@@ -351,11 +371,25 @@ _CORE_MESSAGES = {
     },
     "cli.help.list-rules": {
         "ru": "вывести список правил (с их параметрами и величинами) и выйти; вместе с "
-              "--select/--ignore список сужается так же, как набор проверки; с --format json "
-              "те же записи выводятся для машинной обработки",
+              "--select/--ignore список сужается так же, как набор проверки, а --rules-filter "
+              "сужает его ещё; с --format json те же записи выводятся для машинной обработки",
         "en": "print the list of rules (with their parameters and values) and exit; together "
-              "with --select/--ignore the list narrows the way a run's rule set does; with "
-              "--format json the same records are printed as data",
+              "with --select/--ignore the list narrows the way a run's rule set does, and "
+              "--rules-filter narrows it further; with --format json the same records are "
+              "printed as data",
+    },
+    "cli.help.rules-filter": {
+        "ru": "сузить --list-rules. Слово, совпадающее с именем группы (часть id до '/'), "
+              "выводит только эту группу; любое другое ищется как подстрока id или слово "
+              "названия либо описания – весь текст i18n под id правила (название и шаблоны "
+              "сообщений) на любом из языков, плюс докстринг по-английски; docs/RULES.md не "
+              "читается. Без учёта регистра; сочетается с --select/--ignore",
+        "en": "narrow --list-rules. A word that IS a group (the part of an id before '/') "
+              "lists that group alone; any other word is looked for as an id substring or a "
+              "word of the title or description - every i18n text registered under the "
+              "rule's id (the title and its message templates), in either language, plus "
+              "the English docstring; docs/RULES.md is not read. Case-insensitive; combines "
+              "with --select/--ignore",
     },
     "cli.help.where": {
         "ru": "показать установку движка, интерпретатор и данные Элемента (путь, источник, версии) и выйти",
@@ -426,6 +460,10 @@ _CORE_MESSAGES = {
     "cli.help.meta.name": {
         "ru": "ИМЯ",
         "en": "NAME",
+    },
+    "cli.help.meta.word": {
+        "ru": "СЛОВО",
+        "en": "WORD",
     },
     "cli.help.server.lsp": {
         "ru": "сервер LSP для редактора",
@@ -1042,6 +1080,29 @@ _CORE_MESSAGES = {
         "ru": "секция: Строки или Шаблоны (по умолчанию – та, где ключ уже есть, иначе Строки)",
         "en": "the section: Strings or Templates (default - the one the key already lives in,"
               " else Strings)",
+    },
+    "cli.help.scaf.sl-entries-file": {
+        "ru": "пакет ключей из файла JSON или YAML: {{Ключ: {{Язык: Текст}}}}; сочетается с "
+              "name и с --entry",
+        "en": "many keys from a JSON or YAML file: {{Key: {{Language: Text}}}}; combines with"
+              " name and with --entry",
+    },
+    "cli.help.scaf.sl-entry": {
+        "ru": 'ещё один ключ пакета: --entry Заголовок={{"Русский":"Текст"}} (можно несколько '
+              "раз, сочетается с name и с --entries-file)",
+        "en": 'one more key of the batch: --entry Title={{"English":"Text"}} (repeatable,'
+              " combines with name and with --entries-file)",
+    },
+    "cli.help.scaf.sl-full-text": {
+        "ru": "с --dry-run: добавить полный текст изменённых файлов к сводке по ключам",
+        "en": "with --dry-run: add the full text of the changed files next to the per-key"
+              " summary",
+    },
+    "cli.help.scaf.sl-dry-run": {
+        "ru": "показать сводку по ключам (язык, файл, прежнее и новое значение), ничего не "
+              "записывая; --full-text добавляет и полный текст файлов",
+        "en": "show the per-key summary (language, file, the value before and after) without"
+              " writing anything; --full-text adds the full text of the files too",
     },
     "cli.help.scaf.localization-info": {
         "ru": "языки и переводы элемента ЛокализованныеСтроки (кандидаты для add-localization; "

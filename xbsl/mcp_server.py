@@ -29,7 +29,10 @@ from xbsl import (
     cijob, formmodel, i18n, metamodel, report, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
-from xbsl.engine import RULES, active_rules, is_source_file, load, load_text, run, run_sources
+from xbsl.engine import (
+    RULES, active_rules, is_source_file, load, load_text, matching_rules, near_rule_groups,
+    run, run_sources,
+)
 
 # mcp 2.0 renamed the ergonomic server class and moved it: FastMCP from mcp.server.fastmcp
 # became MCPServer in mcp.server.mcpserver, and the old module is gone rather than aliased -
@@ -91,11 +94,26 @@ def _forbid_unknown_arguments() -> None:
 
 
 @mcp.tool()
-def list_rules(select: list[str] | None = None, ignore: list[str] | None = None) -> list[dict]:
+def list_rules(
+    select: list[str] | None = None,
+    ignore: list[str] | None = None,
+    filter: str = "",
+) -> list[dict] | dict:
     """List the available linter rules (id, title, tier, scope, severity).
 
     select – answer about these rules alone (a rule id, a group, or a tier letter A/B/C/D);
     ignore – leave these out. Without either one the whole registry is listed.
+    filter – narrow by a word, case-insensitive. A word that IS a group (the part of an id
+             before '/') asks for that group and answers with it alone: "code" gives the
+             rules of `code/` and nothing else. Any other word is looked for as a rule id
+             substring or as a word of the title or of the rule's own description - every
+             i18n text registered under the rule's id (the title and the message templates
+             its diagnostics are built from), in either language, plus its English
+             docstring. docs/RULES.md is not read - it ships with neither the sdist nor the
+             wheel. Combines with select/ignore (narrows further, not instead of them).
+             Blank (the default) lists everything select/ignore leave. A filter that
+             matches nothing answers {"error", "near_groups"} instead of an empty list - the
+             groups closest to it by spelling, e.g. a typo of "style".
 
     A rule that judges by a NUMBER also carries `params`: for each one the `name`, the
     `value` in force here, the `default` it ships with, the `env` variable that overrides it
@@ -104,7 +122,18 @@ def list_rules(select: list[str] | None = None, ignore: list[str] | None = None)
     """
     chosen, excluded = _as_set(select), _as_set(ignore)
     listed = active_rules(chosen, excluded) if chosen or excluded else list(RULES)
-    return [r.as_dict() for r in sorted(listed, key=lambda x: (x.tier, x.id))]
+    narrowed = matching_rules(listed, filter)
+    if filter.strip() and not narrowed:
+        # The same refusal the CLI prints, from the same catalog: an English-speaking
+        # client used to get this one line in Russian while every other answer honoured
+        # the language it had chosen.
+        groups = near_rule_groups(listed, filter)
+        key = "cli.no-rules-filter" if groups else "cli.no-rules-filter-none"
+        return {
+            "error": i18n.t(key, filter=filter, groups=", ".join(groups)),
+            "near_groups": groups,
+        }
+    return [r.as_dict() for r in sorted(narrowed, key=lambda x: (x.tier, x.id))]
 
 
 @mcp.tool()
@@ -249,18 +278,24 @@ def lint_paths(
                   one job, what `translate` wrote in another - and those judge different
                   sets. Without a name the first command wins and `as_ci.jobs` names the
                   others; a part of the name is enough when only one job fits;
-    compact     – omit the findings list and `summary.by_file`; keep counts and `errors` - the
-                  full records of the error-level findings, and nothing else. A full answer
-                  costs several hundred characters per finding, tens of thousands over one
-                  project run, when the question was only whether the tree is clean and
-                  whether the pipeline would go red: the counts of the summary answer that,
-                  and the errors are what a build fails on. Everything the summary carries
-                  about the baseline and the CI job stays.
+    compact     – drop `summary.by_file`; keep counts, `errors` - the full records of the
+                  error-level findings - and, findings permitting, the findings themselves.
+                  Up to report.COMPACT_FINDINGS_LIMIT (10) findings, `findings` lists them
+                  one line each ("path:line rule - message"); past it `findings` is left out
+                  and `findings_hint` says how many there are and how to read them (call
+                  again without `compact`, or narrow `paths`/`select`) - the text of every
+                  finding is what a full answer costs: several hundred characters each, tens
+                  of thousands over one project run, when the question was only whether the
+                  tree is clean. `summary.as_ci`, when present, narrows to `flags` (the
+                  sentence already names the file, the job and the adopted rules) plus `job`
+                  when the file runs the linter in more than one job - everything else about
+                  the baseline and the CI job stays in the full answer;
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
-    Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors}). The
-    summary counts the findings by rule (`by_rule`), by file (`by_file`, the same absolute
-    paths the diagnostics carry) and by severity (`by_severity`, all three levels named).
+    Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
+    or {summary, errors, findings_hint} past the limit). The summary counts the findings by
+    rule (`by_rule`), by file (`by_file`, the same absolute paths the diagnostics carry) and
+    by severity (`by_severity`, all three levels named).
     When a baseline applied, the summary also
     carries `baseline` (the file), `baselined` (findings it suppressed), `baseline_unused`
     and `baseline_stale`, so "clean" here means the same as it does in a terminal and in CI.
@@ -1011,33 +1046,85 @@ def meta_add_localization(yaml_path: str, language: str, root: str | None = None
 
 @mcp.tool()
 @_documents_root
-def meta_set_localization(yaml_path: str, name: str, values: dict[str, str],
-                          section: str = "", root: str | None = None) -> dict:
-    """Write ONE localized string into every language at once - the element and its translations.
+def meta_set_localization(
+    yaml_path: str,
+    name: str = "",
+    values: dict[str, str] | None = None,
+    entries: dict[str, dict[str, str]] | None = None,
+    section: str = "",
+    dry_run: bool = False,
+    full_text: bool = False,
+    root: str | None = None,
+) -> dict:
+    """Write localized strings into every language at once - the element and its translations.
 
     meta_add_localization adds a LANGUAGE; a row had nothing, so a caption was typed into the
     element and again into its English twin, and the two files drifted apart with nothing but
     a pair of eyes to compare them.
 
     yaml_path – the LocalizedStrings element (the translations sit under Localization/<Code>);
-    name      – the key of the string, one word;
-    values    – {language: text}. A language is named any way it reasonably holds it -
-                Russian/English in either project spelling, or the folder code Ru/En. The
-                default language's text goes into the ELEMENT (that is where the platform
-                keeps it), every other one into its own translation file. A language named
-                here without a translation file is refused, naming meta_add_localization;
-                an existing language the call says nothing about still gets the row, with
-                the default text and a note, so no translation is left a key short.
-    section   – Rows or Templates, in either spelling; left out, the key keeps the section
-                it already lives in and a new one goes to Rows.
+    name, values – ONE key: the key (one word) and {language: text}. A language is named any
+                way it reasonably holds it - Russian/English in either project spelling, or
+                the folder code Ru/En.
+    entries   – MANY keys in one call instead: {key: values}, values shaped like the ones
+                above. Composes with name/values (one extra key on top of the batch); a key
+                named by both is refused rather than letting one silently win. Every file
+                touched by more than one key is still read once and written once - a batch
+                of sixty keys used to mean sixty independent reads and writes of the SAME
+                pair of files, each discarding the row the one before it had just added.
+    For either form: the default language's text goes into the ELEMENT (that is where the
+    platform keeps it), every other one into its own translation file. A language named here
+    without a translation file is refused, naming meta_add_localization; an existing language
+    a key says nothing about still gets the row, with the default text and a note, so no
+    translation is left a key short.
+    section   – Rows or Templates, in either spelling; left out, a key keeps the section it
+                already lives in and a new one goes to Rows.
+    dry_run   – report without writing: `summary`, one entry per file per key - key,
+                language, file, the text before and after. A single key used to mean
+                printing the WHOLE of every touched file to show a one-line change (over
+                100 KB for one key on a two-language project); the summary is what changed,
+                nothing else. full_text=True asks for the files back too, the way a plain
+                dry-run answers elsewhere in this toolkit - `files`, next to `summary`.
+    A batch is either fully planned or not applied at all: the first invalid key (an unknown
+    language, a name that would not survive being written bare, a key without a translation
+    file) is refused before anything is computed for the files after it, so a caller who
+    only ever applies what this tool returns cannot end up with half a batch on disk.
 
     See also: meta_add_field adds the KEY itself (with the default-language text),
     meta_add_localization adds a language, meta_localization_info says which languages
     and translations the element already has.
     """
     base = _base(root)
-    return _meta(base, scaffold.op_set_localization, _under(base, yaml_path), name,
-                 dict(values or {}), section=section)
+    merged = dict(entries or {})
+    if name:
+        if name in merged:
+            return _failed(scaffold.ScaffoldError(
+                f"Ключ {name} назван и в name, и в entries"), base)
+        merged[name] = dict(values or {})
+    if not merged:
+        return _failed(scaffold.ScaffoldError(
+            "Нужен ключ: name+values для одной строки или entries для нескольких"), base)
+    try:
+        outcome = scaffold.op_set_localization_batch(
+            _under(base, yaml_path), merged, section=section,
+        )
+    except scaffold.ScaffoldError as exc:
+        return _failed(exc, base)
+    summary = [
+        {"key": e.key, "language": e.language, "file": str(e.file), "old": e.old, "new": e.new}
+        for e in outcome.entries
+    ]
+    if dry_run:
+        payload = {
+            "root": str(base), "file": str(_under(base, yaml_path)),
+            "summary": summary, "notes": outcome.result.notes, "dry-run": True,
+        }
+        if full_text:
+            payload["files"] = outcome.result.as_dict()["files"]
+        return payload
+    out = _apply_and_lint(outcome.result, base)
+    out["summary"] = summary
+    return out
 
 
 @mcp.tool()
@@ -1899,7 +1986,12 @@ def translate_status(root: str, against: str = "") -> dict:
     pass touched. `literals_translated` and `missing_literals` are the two halves of one number:
     how many different literal texts the plane names and how many it does not.
     `literal_occurrences` is the odd one out and says so: it counts rewritten SPANS, the size
-    of the change rather than the size of the dictionary. `duplicates` counts the keys
+    of the change rather than the size of the dictionary. `missing_visible_literals` is the
+    part of `missing_literals` that fails `xbsl translate --strict`: a yaml text the metamodel
+    types `Localizable` with no entry - a presentation, the presentation template of an event
+    kind - `Description` aside, since the English page would show the text in Russian. Every
+    other literal gap fails nothing: a literal of the code or of an `=` expression, a
+    description, a text inside a component tree. `duplicates` counts the keys
     translated the same way in two places, two files or twice in one - harmless to the
     lookups, listed by the CLI's `--check-duplicates` for the copy to take out.
     """
@@ -1925,6 +2017,7 @@ def translate_status(root: str, against: str = "") -> dict:
         "missing_phrases": totals["missing_phrases"],
         "literals_translated": totals["literals_translated"],
         "missing_literals": totals["missing_literals"],
+        "missing_visible_literals": totals["missing_visible_literals"],
         "literal_occurrences": totals["literal_occurrences"],
         "platform_gaps": totals["platform_gaps"],
         "duplicates": len(dictionary.duplicates),
@@ -2109,8 +2202,11 @@ def translate_unused(
     The reading is textual, and the direction of its error is the point: a name that also
     occurs in prose may be counted as used, which merely leaves an entry in place, but a LIVE
     entry is never called an orphan. Comment lines are read through the translator's own
-    payload reading, so the two sides spell a phrase alike; a qualified key (`<Owner>.<Name>`)
-    is judged by both halves, since the sources spell them apart.
+    payload reading, so the two sides spell a phrase alike. Literals are keyed the way the
+    pass keys them too: a yaml file through the walk of the pass itself, which asks about a
+    presentation and a presentation template whole, and a module through the lexer, which
+    reads a string inside an interpolation of another string whole. A qualified key
+    (`<Owner>.<Name>`) is judged by both halves, since the sources spell them apart.
     """
     import time
 

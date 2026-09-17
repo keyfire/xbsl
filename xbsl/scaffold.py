@@ -4230,6 +4230,28 @@ def op_add_localization(yaml_path: Path, language: str, *, reader=None) -> Scaff
 _LOCALIZATION_SECTIONS = ("Строки", "Шаблоны")
 
 
+@dataclass(frozen=True)
+class LocalizationChange:
+    """One row set-localization writes: a key's text in ONE file, before and after.
+
+    `language` is the Russian name of the language (the spelling _LANGUAGE_BY_FOLDER and
+    every message here already use), not the folder code - a summary reads next to those
+    messages. `old` is "" when the key had no row in this file yet.
+    """
+
+    key: str
+    language: str
+    file: Path
+    old: str
+    new: str
+
+
+@dataclass
+class LocalizationOutcome:
+    result: ScaffoldResult  # the file changes; the caller applies (MCP/CLI) or serializes
+    entries: list[LocalizationChange] = field(default_factory=list)
+
+
 def op_set_localization(yaml_path: Path, name: str, values: dict, *,
                         section: str = "", reader=None) -> ScaffoldResult:
     """Write one localized STRING - the key and its text in every language at once.
@@ -4245,70 +4267,159 @@ def op_set_localization(yaml_path: Path, name: str, values: dict, *,
     spelling in either project language, or the folder code) and maps it to the text.
     `section` picks Rows or Templates in either spelling; left out, the key keeps the
     section it already lives in, and a new one goes to Rows.
+
+    A single-key convenience over op_set_localization_batch, which takes many keys in one
+    pass and reports the before/after text of every row it writes.
+    """
+    return op_set_localization_batch(
+        yaml_path, {name: values}, section=section, reader=reader,
+    ).result
+
+
+def op_set_localization_batch(yaml_path: Path, entries: dict[str, dict], *,
+                              section: str = "", reader=None) -> LocalizationOutcome:
+    """Write MANY localized strings in one pass - every key's row in every language.
+
+    `entries` maps each key to its `values` (see op_set_localization); every key follows
+    the exact same rules, checked in the order given. A file ten keys touch used to mean
+    ten reads and ten independent FileChanges of it, the later ones silently discarding the
+    rows the earlier ones had just written - only the LAST key calling set-localization on
+    that file actually stuck. Here every file is read once and carries every key's row by
+    the time the single FileChange for it is built.
+
+    Nothing is written by this call - like every operation here, it only plans - but the
+    PLANNING is what stays atomic: the first invalid key raises before a FileChange exists
+    for ANY file, so a caller who only ever applies what this returns cannot end up with a
+    batch half done. Compare a loop of single-key calls, each applying its own result as it
+    goes - key 45 of 60 failing there leaves the first 44 already on disk.
+
+    A translation the pass only read - every key it holds already carried that very text -
+    comes back out of `.result` entirely, so applying the plan leaves its bytes and its
+    mtime alone and the caller is not told it was written.
+
+    Returns a LocalizationOutcome: `.result` for scaffold.apply_result, `.entries` - the
+    per-file report a caller prints instead of the whole files (key, language, file, the
+    text before and the text now).
     """
     yaml_path = Path(yaml_path)
-    text, nl = _localized_strings_source(yaml_path, reader)
-    # The key is written bare, the way the files of a live project write theirs, so it has to
-    # survive being written that way: whitespace, a colon or a leading hash would make the
-    # next load read something else - or nothing - where the row was.
-    name = (name or "").strip()
-    if not re.fullmatch(r"[^\s:#]+", name):
+    if not entries:
         raise ScaffoldError(
-            f"Имя строки локализации '{name}' не годится в ключ: одно слово без двоеточия"
+            "Нужен хотя бы один ключ: entries={\"Ключ\": {\"Русский\": \"Текст\"}}"
         )
-    if not isinstance(values, dict) or not values:
-        raise ScaffoldError(
-            "Нужны значения по языкам: values={\"Русский\": \"Текст\", \"En\": \"Text\"}"
-        )
-    texts = {_language_folder(code): str(value) for code, value in values.items()}
-    lang = yaml_language(text, yaml_path.parent)
-    element_name_ = element_name(text, yaml_path.stem)
+    main_text, nl = _localized_strings_source(yaml_path, reader)
+    lang = yaml_language(main_text, yaml_path.parent)
+    element_name_ = element_name(main_text, yaml_path.stem)
     _languages, declared = _descriptor_languages(yaml_path)
     default = declared or _language_folder(lang)
-    section = (_localization_section(section) if section
-               else _section_of_key(text, name) or _LOCALIZATION_SECTIONS[0])
-
     translations = _translation_files(yaml_path, element_name_)
-    unknown = sorted(set(texts) - {default} - set(translations))
-    if unknown:
-        raise ScaffoldError(
-            "Нет файла перевода для языка "
-            + ", ".join(_LANGUAGE_BY_FOLDER.get(code, code) for code in unknown)
-            + " – сначала добавьте язык (add-localization / meta_add_localization)"
-        )
 
-    base = texts.get(default, _section_entries(text).get(name, ""))
-    if not base:
-        raise ScaffoldError(
-            f"Нет значения на языке по умолчанию ({_LANGUAGE_BY_FOLDER.get(default, default)}): "
-            f"элемент несёт сам текст, переводы – только замену"
-        )
-    result = ScaffoldResult()
-    new_text, cursor = _set_localized_row(text, section, name, base, nl, lang)
-    result.changes.append(FileChange(yaml_path, new_text, created=False, cursor=cursor))
-    for code, target in sorted(translations.items()):
-        if code == default:
-            continue  # the default language IS the element; a file of it would be a copy
-        try:
-            other, other_nl = _load_for_edit(target, reader)
-        except ScaffoldError:
-            continue
-        written = texts.get(code)
-        if written is None:
-            # Not named by the caller: the row still has to appear, or the translation is a
-            # key short and the gap surfaces only when somebody reads both files side by side.
-            if name in _section_entries(other):
-                continue
-            written = base
-            result.notes.append(
-                f"Ключ {name} дописан в перевод {target.parent.name}/{target.name} значением "
-                f"языка по умолчанию – укажите его в values, чтобы записать перевод сразу"
+    other_texts: dict[str, str] = {}  # folder code -> text, threaded across every key
+    other_nls: dict[str, str] = {}
+    as_read: dict[str, str] = {}  # the same text as it came off disk, to tell a change from a read
+    unreadable: set[str] = set()  # a translation file that failed to load once - not retried
+    notes: list[str] = []
+    entry_changes: list[LocalizationChange] = []
+    main_cursor: tuple[int, int] | None = None
+
+    for name, values in entries.items():
+        # A key and a caption are both text. A caller reaching here with something else -
+        # a yaml `On:` read as the boolean True, a JSON `true` where a caption belongs -
+        # used to crash inside .strip() or get written through str() as the word "True".
+        if not isinstance(name, str):
+            raise ScaffoldError(
+                f"Имя строки локализации {name!r} не годится в ключ: нужен текст"
             )
-        result.changes.append(FileChange(
-            target, _set_localized_row(other, section, name, written, other_nl, lang)[0],
-            created=False,
+        # The key is written bare, the way the files of a live project write theirs, so it
+        # has to survive being written that way: whitespace, a colon or a leading hash would
+        # make the next load read something else - or nothing - where the row was.
+        clean_name = name.strip()
+        if not re.fullmatch(r"[^\s:#]+", clean_name):
+            raise ScaffoldError(
+                f"Имя строки локализации '{clean_name}' не годится в ключ: одно слово без "
+                "двоеточия"
+            )
+        if not isinstance(values, dict) or not values:
+            raise ScaffoldError(
+                f"Ключ {clean_name}: нужны значения по языкам: "
+                "{\"Русский\": \"Текст\", \"En\": \"Text\"}"
+            )
+        for code, value in values.items():
+            if not isinstance(code, str) or not isinstance(value, str):
+                raise ScaffoldError(
+                    f"Ключ {clean_name}: значение языка {code} – не текст: {value!r}"
+                )
+        texts = {_language_folder(code): value for code, value in values.items()}
+        key_section = (_localization_section(section) if section
+                       else _section_of_key(main_text, clean_name) or _LOCALIZATION_SECTIONS[0])
+        unknown = sorted(set(texts) - {default} - set(translations))
+        if unknown:
+            raise ScaffoldError(
+                f"Ключ {clean_name}: нет файла перевода для языка "
+                + ", ".join(_LANGUAGE_BY_FOLDER.get(code, code) for code in unknown)
+                + " – сначала добавьте язык (add-localization / meta_add_localization)"
+            )
+        base = texts.get(default, _section_entries(main_text).get(clean_name, ""))
+        if not base:
+            raise ScaffoldError(
+                f"Ключ {clean_name}: нет значения на языке по умолчанию "
+                f"({_LANGUAGE_BY_FOLDER.get(default, default)}) – элемент несёт сам текст, "
+                "переводы – только замену"
+            )
+
+        old_main = _section_entries(main_text).get(clean_name, "")
+        main_text, main_cursor = _set_localized_row(
+            main_text, key_section, clean_name, base, nl, lang,
+        )
+        entry_changes.append(LocalizationChange(
+            key=clean_name, language=_LANGUAGE_BY_FOLDER.get(default, default),
+            file=yaml_path, old=old_main, new=base,
         ))
-    return result
+
+        for code, target in sorted(translations.items()):
+            if code == default or code in unreadable:
+                continue  # the default language IS the element; a file of it would be a copy
+            if code not in other_texts:
+                try:
+                    other_texts[code], other_nls[code] = _load_for_edit(target, reader)
+                except ScaffoldError:
+                    unreadable.add(code)
+                    continue
+                as_read[code] = other_texts[code]
+            written = texts.get(code)
+            current = other_texts[code]
+            if written is None:
+                # Not named by the caller: the row still has to appear, or the translation
+                # is a key short and the gap surfaces only when somebody reads both files
+                # side by side.
+                if clean_name in _section_entries(current):
+                    continue
+                written = base
+                notes.append(
+                    f"Ключ {clean_name} дописан в перевод {target.parent.name}/{target.name} "
+                    "значением языка по умолчанию – укажите его в values, чтобы записать "
+                    "перевод сразу"
+                )
+            old_other = _section_entries(current).get(clean_name, "")
+            other_texts[code], _cursor = _set_localized_row(
+                current, key_section, clean_name, written, other_nls[code], lang,
+            )
+            entry_changes.append(LocalizationChange(
+                key=clean_name, language=_LANGUAGE_BY_FOLDER.get(code, code),
+                file=target, old=old_other, new=written,
+            ))
+
+    result = ScaffoldResult(notes=notes)
+    result.changes.append(FileChange(yaml_path, main_text, created=False, cursor=main_cursor))
+    for code, target in sorted(translations.items()):
+        if code == default or code not in other_texts:
+            continue
+        if other_texts[code] == as_read[code]:
+            # A translation the pass only consulted - the key was already there with that
+            # very text. Writing the same bytes back moves the mtime and puts the file in
+            # the list of what this call changed, and neither is true.
+            continue
+        result.changes.append(FileChange(target, other_texts[code], created=False))
+    return LocalizationOutcome(result=result, entries=entry_changes)
 
 
 def _localization_section(section: str) -> str:

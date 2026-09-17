@@ -119,6 +119,22 @@ first. An existing language the call says nothing about still gets the row, with
 and a note, so no translation is left a key short. A key keeps the section it already lives in,
 and a new one goes to `Rows` unless `--section` says `Templates`.
 
+`--dry-run` here is unlike the rest of the family: a summary by row (key, language, file, the
+text before and after) rather than the whole files, because one key on a two-language project
+used to print over 100 KB to report a one-line change. `--full-text` asks for the files back
+next to the summary. `--entries-file <json-or-yaml>` writes many keys in one call - `{Key:
+{Language: Text}}` - and `--entry Key={"Language":"Text"}` adds one more on the command line;
+either combines with a single `name` argument (`--value` belongs to that argument and is
+refused without it). The batch file is read with every scalar left as text, so `Yes`, `No`, `On`
+and `12:30` stay the captions they look like instead of becoming booleans and a number, and a
+value that is not text is refused by the key that holds it. A file that several keys touch is read once and
+written once regardless of how many of them land in it, and the whole batch is planned before
+any of it is applied: an invalid key refuses the call before a single file is written, rather
+than leaving the ones before it already on disk. A translation the call only read - every key it
+holds already carrying that very text - keeps its bytes and its mtime and stays out of the `files`
+it reports. MCP `meta_set_localization` takes the same
+`entries`, `dry_run` and `full_text`.
+
 `add-field --kind строка` (`meta_add_field`) adds the key. It lands in the element and is echoed
 into the translations that already exist, with the default-language text, so none of them is left
 a key short. The note names `set-localization`, which is what writes the text of a translation. A

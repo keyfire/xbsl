@@ -1850,6 +1850,90 @@ _RESOURCE_READ_EN = {
                   ".ReadAsString()\n;\n",
 }
 
+#: A horizontal row with a captioned native button next to a native picture; `{align}` is the
+#: alignment line or nothing.
+_BASELINE_PAIR_RU = ("    Содержимое:\n        Тип: Группа\n        Имя: Ряд\n"
+                     "        Компоновка: Горизонтальная\n{align}        Содержимое:\n"
+                     "            -\n                Тип: Кнопка\n                Имя: Толкнуть\n"
+                     "                Заголовок: Готово\n"
+                     "            -\n                Тип: Картинка\n                Имя: Эмблема\n")
+_BASELINE_PAIR_EN = ("    Content:\n        Type: Group\n        Name: Row\n"
+                     "        Layout: Horizontal\n{align}        Content:\n"
+                     "            -\n                Type: Button\n                Name: Nudge\n"
+                     "                Title: Готово\n"
+                     "            -\n                Type: Picture\n                Name: Emblem\n")
+_BASELINE_PAIR_TOKENS = {**_FORM_TOKENS, "Ряд": "Row", "Толкнуть": "Nudge", "Эмблема": "Emblem"}
+#: A wrapper component that draws a picture, or a native button when its own property says so.
+_BASELINE_TILE_RU = """\
+ВидЭлемента: КомпонентИнтерфейса
+Ид: 1d1f5c60-0000-4000-8000-000000000fd2
+Имя: ПлиткаВыбора
+ОбластьВидимости: ВПроекте
+Наследует:
+    Тип: ПроизвольныйКомпонент
+    Содержимое:
+        Тип: Группа
+        Имя: Остов
+        Компоновка: Вертикальная
+        Содержимое:
+            -
+                Тип: Картинка
+                Имя: Эскиз
+                Видимость: =не ЭтоКнопка()
+            -
+                Тип: Кнопка
+                Имя: Толкач
+                Видимость: =ЭтоКнопка()
+                Заголовок: Готово
+Свойства:
+    -
+        Имя: Облик
+        Тип: ОбликПлитки?
+"""
+_BASELINE_TILE_EN = """\
+ElementKind: InterfaceComponent
+Id: 1d1f5c60-0000-4000-8000-000000000fd2
+Name: TileChoice
+VisibilityScope: InProject
+Inherits:
+    Type: CustomComponent
+    Content:
+        Type: Group
+        Name: Framework
+        Layout: Vertical
+        Content:
+            -
+                Type: Picture
+                Name: Sketch
+                Visible: =not IsButton()
+            -
+                Type: Button
+                Name: Pusher
+                Visible: =IsButton()
+                Title: Готово
+Properties:
+    -
+        Name: Look
+        Type: TileLook?
+"""
+_BASELINE_TILE_MODULE_RU = "метод ЭтоКнопка(): Булево\n    возврат Облик == ОбликПлитки.Клавишей\n;\n"
+_BASELINE_TILE_MODULE_EN = "method IsButton(): Boolean\n    return Look == TileLook.AsKey\n;\n"
+#: A row of two wrappers; `{beta}` sets the property of the second one, or nothing.
+_BASELINE_TILES_RU = ("    Содержимое:\n        Тип: Группа\n        Имя: Шеренга\n"
+                      "        Компоновка: Горизонтальная\n        Содержимое:\n"
+                      "            -\n                Тип: ПлиткаВыбора\n                Имя: Альфа\n"
+                      "            -\n                Тип: ПлиткаВыбора\n                Имя: Бета\n"
+                      "{beta}")
+_BASELINE_TILES_EN = ("    Content:\n        Type: Group\n        Name: Rank\n"
+                      "        Layout: Horizontal\n        Content:\n"
+                      "            -\n                Type: TileChoice\n                Name: Alpha\n"
+                      "            -\n                Type: TileChoice\n                Name: Beta\n"
+                      "{beta}")
+_BASELINE_TILE_TOKENS = {**_FORM_TOKENS, "ПлиткаВыбора": "TileChoice", "Остов": "Framework",
+                         "Эскиз": "Sketch", "Толкач": "Pusher", "ЭтоКнопка": "IsButton",
+                         "Облик": "Look", "ОбликПлитки": "TileLook", "Клавишей": "AsKey",
+                         "Шеренга": "Rank", "Альфа": "Alpha", "Бета": "Beta"}
+
 
 SEEDS: list[Seed] = [
     Seed(
@@ -2848,6 +2932,60 @@ SEEDS: list[Seed] = [
         files={"ФормаЗаявки.yaml": _FORM_RU + _ROW_RU.format(align="")},
         english={"ApplicationForm.yaml": _FORM_EN + _ROW_EN.format(align="")},
         tokens=_ROW_TOKENS,
+    ),
+    Seed(
+        rule="yaml/insert-row-needs-align",
+        expect=CLEAN,
+        note="a captioned button next to a picture, aligned explicitly – the button and picture "
+             "types and the alignment key are schema names",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _BASELINE_PAIR_RU.format(
+            align="        ВыравниваниеСодержимогоПоВертикали: Центр\n")},
+        english={"ApplicationForm.yaml": _FORM_EN + _BASELINE_PAIR_EN.format(
+            align="        ContentVerticalAlign: Center\n")},
+        tokens=_BASELINE_PAIR_TOKENS,
+    ),
+    Seed(
+        rule="yaml/insert-row-needs-align",
+        expect=FINDING,
+        note="the same button and picture left to the baseline alignment are reported",
+        files={"ФормаЗаявки.yaml": _FORM_RU + _BASELINE_PAIR_RU.format(align="")},
+        english={"ApplicationForm.yaml": _FORM_EN + _BASELINE_PAIR_EN.format(align="")},
+        tokens=_BASELINE_PAIR_TOKENS,
+    ),
+    Seed(
+        rule="yaml/component-row-needs-align",
+        expect=CLEAN,
+        note="two wrappers left to the same variant draw two pictures – one baseline",
+        files={
+            "ПлиткаВыбора.yaml": _BASELINE_TILE_RU,
+            "ПлиткаВыбора.xbsl": _BASELINE_TILE_MODULE_RU,
+            "ФормаЗаявки.yaml": _FORM_RU + _BASELINE_TILES_RU.format(beta=""),
+        },
+        english={
+            "TileChoice.yaml": _BASELINE_TILE_EN,
+            "TileChoice.xbsl": _BASELINE_TILE_MODULE_EN,
+            "ApplicationForm.yaml": _FORM_EN + _BASELINE_TILES_EN.format(beta=""),
+        },
+        tokens=_BASELINE_TILE_TOKENS,
+    ),
+    Seed(
+        rule="yaml/component-row-needs-align",
+        expect=FINDING,
+        note="a wrapper switched to the button next to one drawing the picture is reported – "
+             "the visibility keywords, the method and the property are read in both spellings",
+        files={
+            "ПлиткаВыбора.yaml": _BASELINE_TILE_RU,
+            "ПлиткаВыбора.xbsl": _BASELINE_TILE_MODULE_RU,
+            "ФормаЗаявки.yaml": _FORM_RU + _BASELINE_TILES_RU.format(
+                beta="                Облик: =ОбликПлитки.Клавишей\n"),
+        },
+        english={
+            "TileChoice.yaml": _BASELINE_TILE_EN,
+            "TileChoice.xbsl": _BASELINE_TILE_MODULE_EN,
+            "ApplicationForm.yaml": _FORM_EN + _BASELINE_TILES_EN.format(
+                beta="                Look: =TileLook.AsKey\n"),
+        },
+        tokens=_BASELINE_TILE_TOKENS,
     ),
     Seed(
         rule="yaml/size-needs-no-stretch",

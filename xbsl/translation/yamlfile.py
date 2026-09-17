@@ -29,12 +29,14 @@ from __future__ import annotations
 
 import json
 import re
+from dataclasses import dataclass, field
 from functools import lru_cache
 
-from xbsl import dataset, metamodel, terms, uischema
+from xbsl import dataset, engine, lexer, metamodel, terms, uischema
 from xbsl.engine import SourceFile
 from xbsl.rules.enum_defaults import bare_type_name
 from xbsl.rules.yaml_schema import _composed, _parsed, object_kind
+from xbsl.translation import code as code_module
 from xbsl.translation import platform_map
 from xbsl.translation.code import (
     Edit,
@@ -47,6 +49,7 @@ from xbsl.translation.code import (
     translate_interpolations,
     translate_type_expression,
 )
+from xbsl.translation.dictionary import Dictionary
 from xbsl.translation.reporting import FileReport
 
 try:
@@ -304,7 +307,7 @@ def _set_body(node, body: str, edits: list[Edit]) -> None:
     edits.append((node.start_mark.index, node.end_mark.index, text))
 
 
-def _template_scalar(node, resolver, report, edits) -> None:
+def _template_scalar(node, resolver, report, edits, *, visible: bool = False) -> None:
     """A text with expressions inside it: the presentation template of an event kind.
 
     Two halves, and until 0.79.2 only one of them moved. The expressions name properties that
@@ -313,6 +316,10 @@ def _template_scalar(node, resolver, report, edits) -> None:
     not reported, invisible to the strict coverage gate. It is now taken from the literals
     plane by the whole body, exactly like a string literal of the code, and what the plane
     does not name is reported as a gap.
+
+    `visible` is the caller's to say: the gap of a text the metamodel types `Localizable`
+    fails the strict gate, while any other text this reads - a description, a text inside a
+    component tree - is listed and fails nothing (see FileReport.missing_visible_literals).
     """
     value = node.value
     body = _scalar_body(node)
@@ -330,7 +337,7 @@ def _template_scalar(node, resolver, report, edits) -> None:
     # already been translated whole, and there is nothing in it left for a person to name.
     if body is not None and has_cyrillic(prose_of(value)):
         line, col = _at(node)
-        report.note_literal(body, line, col)
+        report.note_literal(body, line, col, visible=visible)
 
 
 def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False) -> None:
@@ -338,13 +345,22 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
 
     A value the metamodel types `Localizable` (a command's or a privilege's presentation) is
     the one exception to "data stays": a person reads it on the page, so it goes through the
-    literals plane the way a presentation template does - named whole or reported as a gap.
+    literals plane the way a presentation template does - named whole or reported as a gap,
+    and such a gap fails the strict gate.
+
+    An `=` expression is code before anything else, a substitution inside its string included:
+    its strings are keyed between their quotes the way a module keys them. Taken for a
+    template, the value was keyed with its `=` and its quotes - a key the dictionary refuses to
+    load - so the entry an author wrote for the string never applied.
     """
     value = node.value
     if not isinstance(value, str) or not value:
         return
+    if value.startswith("="):
+        _set_scalar(node, "=" + translate_expression(value[1:], resolver, report, at=_at(node)), edits)
+        return
     if "%{" in value or "${" in value:
-        _template_scalar(node, resolver, report, edits)
+        _template_scalar(node, resolver, report, edits, visible=localizable)
         return
     if _library_picture(node, resolver, edits):
         return
@@ -353,13 +369,10 @@ def _generic_scalar(node, resolver, report, edits, *, localizable: bool = False)
         # left behind points at a file that no longer exists, and the build refuses it.
         _identifier_value(node, resolver, report, edits)
         return
-    if value.startswith("="):
-        _set_scalar(node, "=" + translate_expression(value[1:], resolver, report, at=_at(node)), edits)
-        return
     if _dollar_ref(node, resolver, report, edits):
         return
     if localizable and has_cyrillic(value):
-        _template_scalar(node, resolver, report, edits)
+        _template_scalar(node, resolver, report, edits, visible=True)
         return
     if has_cyrillic(value):
         line, col = _at(node)
@@ -1079,8 +1092,9 @@ _DESCRIPTOR_NAME_KEYS = frozenset({"Имя", "Name"})
 _COMMENT_TEXT_RE = re.compile(r"^(#+\s*)(.*?)(\s*)$")
 
 
-def _scalar_spans(root) -> list[tuple[int, int]]:
-    spans: list[tuple[int, int]] = []
+def _scalar_nodes(root) -> list:
+    """Every scalar node of a composed graph, keys included, each node once."""
+    nodes: list = []
     stack = [root] if root is not None else []
     seen: set[int] = set()
     while stack:
@@ -1089,14 +1103,83 @@ def _scalar_spans(root) -> list[tuple[int, int]]:
             continue
         seen.add(id(node))
         if isinstance(node, yaml.ScalarNode):
-            spans.append((node.start_mark.index, node.end_mark.index))
+            nodes.append(node)
         elif isinstance(node, yaml.MappingNode):
             for k, v in node.value:
                 stack.append(k)
                 stack.append(v)
         elif isinstance(node, yaml.SequenceNode):
             stack.extend(node.value)
-    return spans
+    return nodes
+
+
+def _scalar_spans(root) -> list[tuple[int, int]]:
+    return [(node.start_mark.index, node.end_mark.index) for node in _scalar_nodes(root)]
+
+
+# --- what the literals plane is asked about ----------------------------------------------------
+
+
+@dataclass
+class _LiteralQuestions(Dictionary):
+    """An empty dictionary that remembers every text the literals plane was asked about."""
+
+    asked: set[str] = field(default_factory=set)
+
+    def literal(self, text: str) -> str | None:
+        self.asked.add(text)
+        return None
+
+
+def literal_keys(source: SourceFile) -> set[str]:
+    """Every text the literals plane is asked about while this yaml file is translated.
+
+    The orphan pass counts a literal entry as live when its key is here, and only the walk
+    knows which scalar is a text: a presentation or a template is asked about whole, a name in
+    the same file is not, whatever it looks like. So the walk itself answers. It runs over an
+    empty dictionary that records the questions, and that asks at least what a full dictionary
+    asks: nothing is named, so no branch is skipped because an entry already answered it.
+
+    Reading every scalar instead would keep dead entries alive: a literal pair whose key
+    happens to equal the name of a table or of an enumeration item would count as used. On a
+    live dictionary that hid thirty dead pairs.
+    """
+    questions = _LiteralQuestions()
+    translate_yaml(source, Resolver(questions), FileReport(path=str(source.path)))
+    return questions.asked
+
+
+def fragment_literal_keys(text: str) -> set[str]:
+    """What yaml lines a diff took out may have been asked about, read generously.
+
+    Removed lines need not form a document, and they carry no element kind for the walk to
+    judge them by. So every scalar is read: its body as `_scalar_body` spells it, and the
+    strings the lexer finds in its value. The fragment is composed whole when it composes, and
+    each line on its own as well, because removed lines from two places of one file rarely nest.
+    The caller intersects the answer with the orphans of the whole project, so an extra key
+    costs nothing.
+    """
+    out = _scalar_literal_keys(engine.load_text("fragment.yaml", text))
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#"):
+            out |= _scalar_literal_keys(engine.load_text("line.yaml", stripped))
+    return out
+
+
+def _scalar_literal_keys(source: SourceFile) -> set[str]:
+    """Every scalar body of a yaml text, plus the strings and group names inside its values."""
+    out: set[str] = set()
+    for node in _scalar_nodes(_composed(source)):
+        body = _scalar_body(node)
+        if body is not None:
+            out.add(body)
+        value = node.value
+        # Neither a string nor a pattern can open without a quote or an apostrophe.
+        if isinstance(value, str) and ('"' in value or "'" in value):
+            out |= code_module.literal_keys(lexer.tokenize(value))
+            out |= code_module.interpolated_literal_keys(value)
+    return out
 
 
 def _comment_edits(source: SourceFile, root, resolver, report, edits: list[Edit]) -> None:

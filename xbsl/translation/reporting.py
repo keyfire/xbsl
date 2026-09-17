@@ -39,6 +39,13 @@ class FileReport:
     missing_platform: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: {literal text without the quotes: [(line, col), ...]} the literals plane does not name.
     missing_literals: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
+    #: The part of `missing_literals` that fails the strict gate: a yaml value the metamodel
+    #: types `Localizable` - a presentation, the presentation template of an event kind - with
+    #: `Description` aside. A person reads such a text on the page, so a gap there stays Russian
+    #: in the English build. Every other gap of the plane is not in here: a literal of the code
+    #: or of an `=` expression, a description, a text inside a component tree that holds a
+    #: substitution. Only the project can tell data from a message in those.
+    missing_visible_literals: dict[str, list[tuple[int, int]]] = field(default_factory=dict)
     #: Cyrillic scalars left untouched as data - for a reviewer's eye, not for the coverage.
     texts_kept: list[tuple[str, int, int]] = field(default_factory=list)
     #: Suspicions worth a human look: (kind, line, col, what) - e.g. a string literal that
@@ -133,10 +140,15 @@ class FileReport:
         self.literals_done += 1
         self.named_literals[text] = self.named_literals.get(text, 0) + 1
 
-    def note_literal(self, text: str, line: int, col: int) -> None:
-        """A Cyrillic string literal the literals plane leaves as written."""
+    def note_literal(self, text: str, line: int, col: int, *, visible: bool = False) -> None:
+        """A Cyrillic string literal the literals plane leaves as written.
+
+        `visible` marks a text a person reads (see `missing_visible_literals`).
+        """
         self.literals_missing += 1
         self.missing_literals.setdefault(text, []).append((line, col))
+        if visible:
+            self.missing_visible_literals.setdefault(text, []).append((line, col))
 
     def note_text_kept(self, text: str, line: int, col: int) -> None:
         """A Cyrillic scalar left untouched as data - listed for a reviewer, counted nowhere.

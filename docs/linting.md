@@ -55,8 +55,9 @@ the MCP server returns.
 The summary of that payload counts the findings by rule, by file and by severity - `by_rule`,
 `by_file` and `by_severity`, the last naming all three levels even at zero - so a run can be weighed
 without reading its list: which rules fire, in which files, and whether an error is among them. The
-MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary and the
-error-level findings alone.
+MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary, the
+error-level findings whole and - while there are no more than ten findings in all - the list itself,
+one line each. Past that the list gives way to the count and a word on how to read the rest.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting. The index
 holds the objects, with their `TabularParts`, module-declared local types and the member families
@@ -71,7 +72,7 @@ relative to the current directory. Run it from the repository root and save the 
 
 ## Rules in depth
 
-**The full list of all 237 rules of the base set** - severity, default state, scope, links to
+**The full list of all 238 rules of the base set** - severity, default state, scope, links to
 platform documentation sections - is in [RULES.md](/RULES). On the spot it is printed by
 `xbsl --list-rules`, which also counts in the rules and severity overrides of the installed
 plugins. The tier overview is in the README; below is what the deeper tiers actually verify.

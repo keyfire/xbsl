@@ -215,6 +215,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--list-rules", action="store_true", help=i18n.t("cli.help.list-rules")
     )
     parser.add_argument(
+        "--rules-filter", default="", metavar=i18n.t("cli.help.meta.word"),
+        help=i18n.t("cli.help.rules-filter"),
+    )
+    parser.add_argument(
         "--where",
         action="store_true",
         help=i18n.t("cli.help.where"),
@@ -617,10 +621,17 @@ def _scaffold_parser() -> argparse.ArgumentParser:
 
     p = command("set-localization")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
-    p.add_argument("name", help=i18n.t("cli.help.scaf.sl-name"))
+    p.add_argument("name", nargs="?", help=i18n.t("cli.help.scaf.sl-name"))
     p.add_argument("--value", action="append", metavar="ЯЗЫК=ТЕКСТ",
                    help=i18n.t("cli.help.scaf.sl-value"))
     p.add_argument("--section", default="", help=i18n.t("cli.help.scaf.sl-section"))
+    p.add_argument("--entries-file", metavar=i18n.t("cli.help.meta.file"),
+                   help=i18n.t("cli.help.scaf.sl-entries-file"))
+    p.add_argument("--entry", action="append", metavar="КЛЮЧ=JSON",
+                   help=i18n.t("cli.help.scaf.sl-entry"))
+    p.add_argument("--full-text", action="store_true",
+                   help=i18n.t("cli.help.scaf.sl-full-text"))
+    p.add_argument("--dry-run", action="store_true", help=i18n.t("cli.help.scaf.sl-dry-run"))
 
     p = command("localization-info")
     p.add_argument("yaml_path", help=i18n.t("cli.help.scaf.al-yaml"))
@@ -782,7 +793,11 @@ def _scaffold_parser() -> argparse.ArgumentParser:
     p.add_argument("--signature", help=i18n.t("cli.help.scaf.fh-signature"))
 
     for name, sp in sub.choices.items():
-        if name.endswith("-info") or name in ("form-tree", "resource-references"):
+        # set-localization carries its own --dry-run above: a summary by key, not whole
+        # files - the blanket help text below would misdescribe it.
+        if name.endswith("-info") or name in (
+            "form-tree", "resource-references", "set-localization",
+        ):
             continue
         sp.add_argument("--dry-run", action="store_true", help=i18n.t("cli.help.scaf.dry-run"))
     return parser
@@ -812,6 +827,152 @@ def _props(pairs: list[str] | None) -> dict[str, str] | None:
             raise ValueError(f"Ожидается КЛЮЧ=ЗНАЧЕНИЕ, получено: '{item}'")
         props[key.strip()] = value
     return props
+
+
+def _localization_entries_shape(entries: dict, source: str) -> dict:
+    """Every key a word, every value a mapping of language to TEXT - or a plain refusal.
+
+    One shape for both batch sources. A value that was not a string travelled on and got
+    written through `str()`, so JSON `true` reached the row as the word "True"; a key that
+    was not a string crashed the write inside `.strip()` instead of naming itself.
+    """
+    for key, values in entries.items():
+        if not isinstance(key, str):
+            raise ValueError(f"{source}: ключ {key!r} – не текст")
+        if not isinstance(values, dict):
+            raise ValueError(f"{source}: ключ {key}: ожидается объект вида "
+                             '{"Язык": "Текст"}')
+        for code, value in values.items():
+            if not isinstance(code, str) or not isinstance(value, str):
+                raise ValueError(
+                    f"{source}: ключ {key}: значение языка {code} – не текст: {value!r}"
+                )
+    return entries
+
+
+def _localization_entries_file(path: str) -> dict:
+    """entries from a JSON or YAML file: a mapping of key -> values by language.
+
+    YAML accepts valid JSON too (a JSON document IS a YAML document), so one loader reads
+    either format without sniffing the extension.
+
+    That loader leaves every scalar a string. The typed one judged the captions instead:
+    `Yes` and `No` came back as booleans and went into the rows as "True" and "False",
+    `12:30` as the sexagesimal number 750, and a key spelled `On` as the boolean True,
+    which crashed the write. A file of localized captions carries text and nothing else.
+    """
+    import yaml as _yaml
+
+    try:
+        text = Path(path).read_text(encoding="utf-8-sig")
+    except OSError as exc:
+        raise ValueError(f"{path}: файл не прочитан: {exc}") from exc
+    try:
+        data = _yaml.load(text, Loader=_yaml.BaseLoader)
+    except _yaml.YAMLError as exc:
+        raise ValueError(f"{path}: JSON/YAML не разобран: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: ожидается отображение ключ -> значения по языкам")
+    return _localization_entries_shape(data, path)
+
+
+def _localization_entry_flags(items: list[str] | None) -> dict:
+    """entries from repeated --entry КЛЮЧ=JSON flags - a batch without a file for a few keys."""
+    out: dict = {}
+    for item in items or []:
+        key, sep, payload = item.partition("=")
+        key = key.strip()
+        if not sep or not key:
+            raise ValueError(f"Ожидается КЛЮЧ=JSON, получено: '{item}'")
+        try:
+            values = json.loads(payload)
+        except ValueError as exc:
+            raise ValueError(f"--entry {key}: JSON не разобран: {exc}") from exc
+        if not isinstance(values, dict):
+            raise ValueError(f"--entry {key}: ожидается объект вида " '{"Язык": "Текст"}')
+        if key in out:
+            raise ValueError(f"Ключ {key} назван в --entry более одного раза")
+        out[key] = values
+    return _localization_entries_shape(out, "--entry")
+
+
+def _merged_localization_entries(args) -> dict:
+    """entries from every source set-localization accepts, refusing a key named twice.
+
+    One key on the command line (`name` + `--value`) composes with a batch (`--entries-file`
+    and/or repeated `--entry`) rather than excluding it - a caller adding one more string to
+    an otherwise file-driven batch does not need a second run for it. A key named by more
+    than one source is refused instead of letting the last one silently win.
+    """
+    sources: list[tuple[str, dict]] = []
+    if args.name is None and args.value:
+        # --value describes the key named on the command line. Beside a batch and without
+        # that key it was simply dropped, and the caller read a successful answer about the
+        # keys of the batch as if their values had been taken too.
+        raise ValueError(
+            "--value относится к ключу (name): назовите ключ или пишите --entry КЛЮЧ=JSON"
+        )
+    if args.name is not None:
+        sources.append(("name", {args.name: _props(args.value) or {}}))
+    if args.entries_file:
+        sources.append(("--entries-file", _localization_entries_file(args.entries_file)))
+    if args.entry:
+        sources.append(("--entry", _localization_entry_flags(args.entry)))
+    if not sources:
+        raise ValueError("Укажите ключ (name) или пакет: --entries-file/--entry")
+    merged: dict = {}
+    for label, entries in sources:
+        for key, values in entries.items():
+            if key in merged:
+                raise ValueError(f"Ключ {key} назван более одного раза (в {label})")
+            merged[key] = values
+    return merged
+
+
+def _set_localization_summary(entries) -> list[dict]:
+    return [
+        {"key": e.key, "language": e.language, "file": str(e.file), "old": e.old, "new": e.new}
+        for e in entries
+    ]
+
+
+def _set_localization_main(args) -> int:
+    """`set-localization`: one key or a batch, a --dry-run summary instead of whole files.
+
+    A single set-localization call used to print BOTH translated files whole to report a
+    one-line change - 103 KB for one key on a project with two languages. The summary here
+    carries exactly what changed (key, language, file, before, after); --full-text asks for
+    the files back, the way it used to answer, for the rare caller that needs the whole text
+    rather than the row.
+    """
+    from xbsl import scaffold
+
+    if args.full_text and not args.dry_run:
+        raise ValueError("--full-text нужен вместе с --dry-run")
+    entries = _merged_localization_entries(args)
+    outcome = scaffold.op_set_localization_batch(
+        Path(args.yaml_path), entries, section=args.section,
+    )
+    summary = _set_localization_summary(outcome.entries)
+    if args.dry_run:
+        payload = {"summary": summary, "notes": outcome.result.notes, "dry-run": True}
+        if args.full_text:
+            payload["files"] = outcome.result.as_dict()["files"]
+        print(json.dumps(payload, ensure_ascii=False))
+        return 0
+    written = scaffold.apply_result(outcome.result)
+    print(json.dumps({
+        "summary": summary,
+        # The same keys every other scaffold write answers with: a client reading `renames`
+        # from one subcommand and not from this one has to special-case exactly this call.
+        "renames": [
+            {"from": str(r.old_path), "to": str(r.new_path)} for r in outcome.result.renames
+        ],
+        "files": [{"path": str(c.path), "created": c.created} for c in outcome.result.changes],
+        "notes": outcome.result.notes,
+        "lint": _scaffold_lint(written),
+    }, ensure_ascii=False))
+    return 0
 
 
 def _scaffold_main(argv: list[str]) -> int:
@@ -848,10 +1009,7 @@ def _scaffold_main(argv: list[str]) -> int:
         elif args.command == "add-localization":
             result = scaffold.op_add_localization(Path(args.yaml_path), args.language)
         elif args.command == "set-localization":
-            result = scaffold.op_set_localization(
-                Path(args.yaml_path), args.name, _props(args.value) or {},
-                section=args.section,
-            )
+            return _set_localization_main(args)
         elif args.command == "localization-info":
             print(json.dumps(
                 scaffold.localization_info(Path(args.yaml_path)), ensure_ascii=False,
@@ -1128,6 +1286,12 @@ def _check_main(argv: list[str]) -> int:
     if args.element_version:
         dataset.set_version(args.element_version)
 
+    if args.rules_filter.strip() and not args.list_rules:
+        # The flag narrows a listing and nothing else. On a checking run it did nothing at
+        # all, while the run read as if its rule set had been narrowed by it.
+        print(i18n.t("cli.rules-filter-needs-list"), file=sys.stderr)
+        return 2
+
     if args.where:
         # The engine first, then the data it reads: a data root says little until it is
         # known which copy of the engine - and under which interpreter - resolved it.
@@ -1164,7 +1328,9 @@ def _check_main(argv: list[str]) -> int:
         print(json.dumps(build_index(root), ensure_ascii=False))
         return 0
 
-    from xbsl.engine import RULES, active_rules, load, make_source, run_sources
+    from xbsl.engine import (
+        RULES, active_rules, load, make_source, matching_rules, near_rule_groups, run_sources,
+    )
 
     adopted: cijob.CiLint | None = None
     if args.as_ci is not None or args.as_ci_job:
@@ -1214,6 +1380,21 @@ def _check_main(argv: list[str]) -> int:
         # answers about one rule (an id, a group or a tier letter) instead of making the
         # reader carry the whole registry to find one line.
         listed = active_rules(select, ignore, enable) if select or ignore else list(RULES)
+        narrowed = matching_rules(listed, args.rules_filter)
+        if args.rules_filter.strip() and not narrowed:
+            # A filter that names nothing is likely a typo, not an empty registry - the
+            # groups closest to it by spelling are the fastest way back to a real one.
+            groups = near_rule_groups(listed, args.rules_filter)
+            key = "cli.no-rules-filter" if groups else "cli.no-rules-filter-none"
+            message = i18n.t(key, filter=args.rules_filter, groups=", ".join(groups))
+            if args.format == "json":
+                _emit_report(json.dumps(
+                    {"error": message, "near_groups": groups}, ensure_ascii=False,
+                ), args.out)
+            else:
+                print(message)
+            return 0
+        listed = narrowed
         if args.format == "json":
             # The same records the MCP `list_rules` answers with: a client that needs the
             # parameters of a rule reads them instead of parsing the prose below, whose

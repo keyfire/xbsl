@@ -8,8 +8,9 @@ Modes compose from flags around one pass over the project:
 - `--out DIR`: write the translated tree - DIR is the repository ROOT, and the project
   lands in the `{Vendor}/{Name}` its descriptor names, which is what deploys as it is;
 - `--strict`: exit non-zero unless the coverage is complete, the platform data spells every
-  name the sources use, and no problems were found - what a CI gate wants ("publish only a
-  fully translated, lint-clean configuration");
+  name the sources use, every yaml text the metamodel types `Localizable` has its literal
+  entry (`Description` aside - it is developer documentation), and no problems were found -
+  what a CI gate wants ("publish only a fully translated, lint-clean configuration");
 - `--check-duplicates [--against REF]`: the keys the dictionary translates in more than one
   place - two files, or twice in one - the conflicts the load would refuse and the redundant
   copies, each place with its file and line, read from the dictionary files alone; with a git
@@ -194,8 +195,18 @@ MESSAGES = {
         "en": "print the coverage of every metadata object",
     },
     "translate.help.strict": {
-        "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные пропуски",
-        "en": "non-zero exit when the coverage is incomplete, problems or platform gaps were found",
+        "ru": "ненулевой выход, если покрытие неполное, есть проблемы или платформенные "
+              "пропуски, а также если у локализуемого текста метамодели нет пары в плане "
+              "literals: любое Представление, заголовки приложения, сообщения запроса "
+              "разрешений, представления групп справочника, представления переключаемой "
+              "команды, шаблоны представления события – всё, кроме Описания. Текст, который "
+              "должен остаться как есть, называют парой со значением, равным ключу",
+        "en": "non-zero exit when the coverage is incomplete, problems or platform gaps were "
+              "found, or a localizable metamodel text has no pair in the literals plane: any "
+              "Presentation, the application titles, the permission-request messages, the "
+              "presentations of a catalog's groups and of a switchable command, the event "
+              "presentation templates - everything but Description. A text that has to stay "
+              "as it is gets a pair whose value equals its key",
     },
     "translate.help.no-swap": {
         "ru": "не переворачивать словари локализации (база останется на исходном языке)",
@@ -315,6 +326,16 @@ MESSAGES = {
     "translate.verdict-problems": {
         "ru": "; проблем {problems}",
         "en": "; problems {problems}",
+    },
+    "translate.verdict-visible-literals": {
+        "ru": "; видимых литералов без пары {literals}",
+        "en": "; visible literals without an entry {literals}",
+    },
+    "translate.visible-literals-header": {
+        "ru": "локализуемые тексты yaml без пары в плане literals (представления, шаблоны"
+              " представлений):",
+        "en": "localizable yaml texts with no entry in the literals plane (presentations,"
+              " presentation templates):",
     },
     "translate.entries-header": {
         "ru": "записей словаря: {shown} из {total}",
@@ -637,9 +658,17 @@ def _ready(report) -> bool:
     the same reason: the name stays Cyrillic in the translated tree, so the build refuses it.
     It is named apart in the report because the CURE is different - not a dictionary entry,
     which the compiler would refuse, but the platform data.
+
+    A visible literal fails it too: a yaml text the metamodel types `Localizable`, such as a
+    presentation or the presentation template of an event kind, with no entry. The build
+    accepts such a text, but the English page shows it in Russian, and the gate passed three
+    of them once: their entries had been pruned as orphans. Every other gap of the literals
+    plane stays out of the verdict - a literal of the code or of an `=` expression, a
+    description - because the pass cannot tell data from a message there.
     """
     totals = report.totals()
-    return not (totals["missing"] or totals["platform_gaps"] or report.problems)
+    return not (totals["missing"] or totals["platform_gaps"]
+                or totals["missing_visible_literals"] or report.problems)
 
 
 def _verdict(report) -> str:
@@ -656,6 +685,9 @@ def _verdict(report) -> str:
     tail = ""
     if totals["platform_gaps"]:
         tail += i18n.t("translate.verdict-platform", platform=totals["platform_gaps"])
+    if totals["missing_visible_literals"]:
+        tail += i18n.t("translate.verdict-visible-literals",
+                       literals=totals["missing_visible_literals"])
     if report.problems:
         tail += i18n.t("translate.verdict-problems", problems=len(report.problems))
     return i18n.t(
@@ -711,6 +743,7 @@ def _as_json(report, args, dictionary: Path | None, lag: dict | None = None,
         "missing_tokens": report.merged_missing_tokens(),
         "missing_phrases": report.merged_missing_phrases(),
         "missing_literals": report.merged_missing_literals(),
+        "missing_visible_literals": report.merged_missing_visible_literals(),
         "platform_gaps": report.merged_platform_gaps(),
         "redundant_entries": report.echoed,
         "renames": report.renames,
@@ -846,6 +879,13 @@ def _print_text(report, args, missing_tokens, missing_phrases, missing_literals,
         print(i18n.t("translate.platform-gaps-header"))
         for name, info in sorted(gaps.items(), key=lambda kv: -kv[1]["count"])[:20]:
             print(f"  {name}  ({info['count']}x, {info['sample']})")
+    # Named, not only counted: the verdict fails on them, and a log that says "three" without
+    # saying which sends the reader to a second run.
+    visible = report.merged_missing_visible_literals()
+    if visible:
+        print(i18n.t("translate.visible-literals-header"))
+        for text, info in sorted(visible.items(), key=lambda kv: (-kv[1]["count"], kv[0]))[:20]:
+            print(f"  {text}  ({info['count']}x, {info['sample']})")
     if args.coverage:
         print(i18n.t("translate.coverage-header"))
         for key, done, total in report.coverage_by_object():

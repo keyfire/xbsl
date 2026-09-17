@@ -194,6 +194,17 @@ class ProjectReport:
                     entry["sample"] = f"{rel}:{places[0][0]}"
         return out
 
+    def merged_missing_visible_literals(self) -> dict[str, dict]:
+        """The part of the literal gaps a person reads (see FileReport.missing_visible_literals)."""
+        out: dict[str, dict] = {}
+        for rel, report in sorted(self.files.items()):
+            for text, places in report.missing_visible_literals.items():
+                entry = out.setdefault(text, {"count": 0, "sample": ""})
+                entry["count"] += len(places)
+                if not entry["sample"] and places:
+                    entry["sample"] = f"{rel}:{places[0][0]}"
+        return out
+
     def merged_platform_gaps(self) -> dict[str, dict]:
         out: dict[str, dict] = {}
         for rel, report in sorted(self.files.items()):
@@ -240,6 +251,10 @@ class ProjectReport:
             # sentence can be added, compared and turned into a percentage.
             "literals_translated": len(self.merged_named_literals()),
             "missing_literals": len(self.merged_missing_literals()),
+            # The exception to "apart": a yaml text the metamodel types `Localizable`, left in the
+            # source language, is a page of the English build shown in Russian. The strict gate
+            # counts these (see FileReport.missing_visible_literals).
+            "missing_visible_literals": len(self.merged_missing_visible_literals()),
             #: How many literal SPANS the pass rewrote - the size of the change, not of the
             #: dictionary; kept apart so no summary line mixes it with the counts above.
             "literal_occurrences": sum(r.literals_done for r in self.files.values()),
