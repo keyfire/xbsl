@@ -417,7 +417,7 @@ the execution model (client/server), form handlers, properties and queries.
 | `yaml/unknown-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Unknown object property |
 | `code/reserved-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A reserved name: the type keyword in either language as a structure field or a parameter. The server apply refuses all three spellings [details](#d-code-reserved-name) |
 | `yaml/builtin-property-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | Built-in property name clash |
-| `yaml/property-shadows-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | An own property of a component is named after a common module: the name hides the module across the component, `Module.Method()` reads as a member of the property value, and the apply fails [details](#d-yaml-property-shadows-module) [docs](https://1cmycloud.com/docs/help/topics/addressing-module/) |
+| `yaml/property-shadows-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A component property named after a common module: the name hides the module across the component, `Module.Method()` reads as a member of the property value, and the apply fails [details](#d-yaml-property-shadows-module) [docs](https://1cmycloud.com/docs/help/topics/addressing-module/) |
 | `yaml/size-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A size without disabling the stretch [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/col-width-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `Width` on a table column without `HorizontalStretch`: while the column stretches the number acts as a share of the free space rather than pixels [details](#d-yaml-col-width-needs-no-stretch) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A numeric `MaxWidth` on a group that lays out as a matrix: a phone draws the page at desktop width and the content runs off the right edge [details](#d-yaml-matrix-group-max-width) [docs](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
@@ -461,32 +461,32 @@ the execution model (client/server), form handlers, properties and queries.
 | `code/permission-handlers-need-recalc` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A module declares a permission handler while nothing calls `RecomputeAccessPermissions` for that entity: the platform never calls the handler, so a permission edit silently does nothing [details](#d-code-permission-handlers-need-recalc) [docs](https://1cmycloud.com/docs/help/topics/recalculate-access-permissions-and-keys/) |
 | `code/permission-right-not-computable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `ComputeAccessPermissions` handler grants a permission the entity's yaml does not declare computable: the build applies, and the permission recomputation fails at runtime [details](#d-code-permission-right-not-computable) [docs](https://1cmycloud.com/docs/help/topics/manage-access-control/) |
 | `yaml/placeholder-key-in-strings` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A key carrying the placeholder `$0` in the `Strings` section of a `LocalizedStrings` dictionary: the section compiles to a method without parameters [details](#d-yaml-placeholder-key-in-strings) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `$Dictionary.Key` reference pointing at a key of the `Templates` section: a reference resolves against `Strings` alone, and the apply fails with "localized string not found" (the stand rolls back). A template key nobody references is left alone - code calls it legitimately [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
+| `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A `$Dictionary.Key` reference pointing at a key of the `Templates` section: a reference resolves against `Strings` alone, and the apply fails [details](#d-yaml-localization-ref-to-template) [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/compare-with-localized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A localized value (`Dictionary.Key()`, `Presentation()`) compared against a literal or against a second localized value – in another language the branch simply never runs [docs](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A call of the Url method `WithRequestParameters`: it encodes a parameter value only partially – "&" and "=" inside the value stay separators, and a value that is itself an address arrives cut at its first "&"; build the string with the parameters object and glue it to the base address. Off by default: whether a value can carry "&" is not statically visible [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
-| `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A property computed by an expression in the paired markup (`Height: =Common.IsNarrowScreen()?820:528`) is assigned from code - the platform refuses such an assignment, and inside a try/catch the refusal is invisible; a data binding (a bare path) is left alone, it is two-way by design |
-| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `EventLogEvent` description that does not set `Importance`: its default is `FromConstructor`, so the platform then demands the value in every constructor, and one write that omits it fails the apply on the constructor line; an explicit `Importance: FromConstructor` states the choice and silences the rule [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
-| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `EventLogEvent` property type outside the platform's closed list: a project enumeration cannot go there – the refusal comes only from the server-side compilation and costs the deploy; the list is read from the metamodel (`EventLogEventProperty.Type`), `?` and a `Std::` qualification are tolerated, variant values are written as string codes with the allowed codes listed in the property's `Description` [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
-| `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A structure field has a known platform type without a default value, such as `TextPosition` or `ReadableArray<String>`, and no `req`, nullable marker or initializer. Scalar default values, unknown types and locally shadowed platform names are left alone [docs](https://1cmycloud.com/docs/help/topics/structure/) |
-| `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) - the compilation answers "has neither a constructor nor a default value"; an enumeration, an annotation, a singleton and a name shadowed by a project type are skipped [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
-| `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A member access on a tabular section's row collection that the array type does not have (`Object.Section.Member` in an object form module, the bare section name or `this.Section` in the entity's modules) - the collection is `Array<Entity.Section>`, and the other platform's habitual `Count()` is called `Size()` here; a module named after the section shadows it, attributes are not judged |
-| `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A call of a global name outside its environment: `Message` (client-only) in a server module - the apply answers "the method is unavailable in the current environment", the dynamic evaluation globals (server-only) in a client method without `@OnServer`; `@OnClient`/`@OnServer` override the module's environment, the availability comes from the per-member availability lines of the global context packages [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable, parameter or method named like a project element (a `Warehouses` variable next to the `Warehouses` catalog) - the declaration shadows the element for that scope; platform handler parameter names never collide with project names [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
-| `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A `val`, `var` or `use` variable named like a property of the object its method works on; the platform IDE warns about such a variable. Inside the method the name resolves to the variable, so neither a read nor an assignment reaches the property. The properties are those of the method's owner: for a component, its declared properties and events, those of the platform type it inherits, and `Components`; in the object module of a catalog, a document or a processing element, the attributes, tabular sections, reference, version stamp and deletion mark; the filter of a record set; the parameters and properties of a scheduled job; the fields of a structure. Static methods, parameters, loop and catch variables are not judged, and a server method of a component sees only the properties marked `Contextual` [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
-| `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A member of a union type that another member already covers: a repeat (`String\|String`), a second empty value (`String\|Undefined\|?`), a member under `Object` or under a base type of the catalog with the same arguments (`Array<String>\|ReadableArray<String>`). The platform IDE warns about it; a function type is not judged. The fix writes the union without those members [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| `code/unclosed-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A closeable resource (`val Selection = Query{...}.Execute()`) abandoned by an early exit from the loop over it: the platform closes a full pass by itself, while a `return` or a `break` in the middle leaves the resource open and the platform logs an unclosed-resource event; declaring the variable with `use` closes it on every exit path. A resource that arrived as a parameter, one the method closes by hand and one it returns to its caller are left to the author [docs](https://1cmycloud.com/docs/help/topics/closeable-type/) |
+| `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | A call of the Url method `WithRequestParameters`: it encodes a parameter value only partially, and a value that is itself an address arrives cut at its first "&" [details](#d-code-url-params-partial-encoding) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
+| `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A property computed by an expression in the paired markup is assigned from code: the platform refuses such an assignment [details](#d-code-bound-property-assign) |
+| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | An `EventLogEvent` description that does not set `Importance`: its default demands the value in every constructor, and one omission fails the apply [details](#d-yaml-event-needs-importance) [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | An `EventLogEvent` property type outside the platform's closed list: the refusal comes only from the server-side compilation and costs the deploy [details](#d-yaml-event-property-type) [docs](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A structure field has a known platform type without a default value and no `req`, nullable marker or initializer [details](#d-code-collection-field-needs-req) [docs](https://1cmycloud.com/docs/help/topics/structure/) |
+| `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable declared by type alone where the type has no constructor and no default value (`var Response: HttpResponse`) [details](#d-code-var-needs-init) [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A member access on a tabular section's row collection that the array type does not have: the collection is `Array<Entity.Section>` [details](#d-code-unknown-tabular-member) |
+| `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A call of a global name outside its environment: `Message` in a server module, the dynamic evaluation globals in a client method without `@OnServer` [details](#d-code-global-unavailable) [docs](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A variable, parameter or method named like a project element: the declaration shadows the element for that scope [details](#d-style-shadow-project-name) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
+| `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A `val`, `var` or `use` variable named like a property of the object its method works on: the name resolves to the variable, so neither a read nor an assignment reaches the property [details](#d-style-shadow-own-property) [docs](https://1cmycloud.com/docs/help/topics/name-scope/) |
+| `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A member of a union type that another member already covers: a repeat, a second empty value, or a member under a wider neighbour [details](#d-style-redundant-union-member) [docs](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `code/unclosed-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A closeable resource abandoned by an early exit from the loop over it: a `return` or a `break` in the middle leaves it open [details](#d-code-unclosed-resource) [docs](https://1cmycloud.com/docs/help/topics/closeable-type/) |
 | `code/use-needs-closeable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | The `use` modifier over a type the catalog describes and that does not inherit `Closeable` - the modifier exists for the automatic `Close()`, and the compiler refuses the declaration [docs](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
-| `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Visible text left as a Cyrillic literal where the project already references the same property into a localization dictionary - the intent is counted per element kind, so a same-named property of another kind is not judged; silent on a project whose descriptor lists fewer than two localization languages |
-| `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Visible text left as a Cyrillic literal in a module - judged by the sink it reaches (an argument of the platform message call, a property of an event-log event, or either of them one step away through a method that forwards its parameter); markup, pure interpolation and single words are skipped, and the rule is silent on a project whose descriptor lists fewer than two localization languages |
-| `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A project token or a Cyrillic comment line the project's translation dictionary does not cover yet - one finding at its first occurrence in the file; silent unless an `xbsl-translation` dictionary lives next to (or above) the project (see `xbsl translate`) |
-| `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field access on a structure declared in the project is checked against its declaration: rename a field and its reader in another module turns red here rather than on the server apply. The type comes from the variable's declaration (`Module.Structure`, a bare name for the declaring module), from a `new` constructor and from the element type of a `for X in List` loop; a name declared with anything else in the method, a namesake of a stdlib type, the second hop of a chain and Latin member spellings are not judged |
-| `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `SkipUndefined()` on a collection whose known element type is not nullable. For an iterable, the fix uses `ToArray()` to preserve array materialization; a sequence receives a warning without a fix [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
-| `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A cast to a type the operand already has: `Found!.Reference as Goods.Reference` over a query that reads the reference of that very catalog, or a union of references cast to the entity contract both of them implement; the platform IDE warns about such a cast. When the two types are the same, the fix removes the cast together with the parentheses around a single operand. A cast to a wider type is reported without a fix, since a declaration or an overload may need that type [docs](https://1cmycloud.com/docs/help/topics/as/) |
-| `code/cast-to-non-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A cast that only drops `Undefined`, where the platform IDE advises the non-null operator: the operand is `T?` and the cast names `T`. Typically the operand is a nullable attribute a query reads, the result of `Map.GetOrUndefined(...)` or the result of a method declared `T?`. The fix puts `!` in place of the cast. The operand is typed by its declarations, and a query column by the select list and the yaml of its table; a condition checked before the cast narrows nothing, and an operand the inference cannot name is not judged [docs](https://1cmycloud.com/docs/help/topics/exclamation-mark-operation/) |
-| `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `??`, `!` or `?.` over a value whose type has no `Undefined`, so the default is never used and the guard checks nothing; the platform IDE warns about it. The type comes from a declaration, from a component of the paired markup such as `Edit<Number>`, or from the argument of a generic type, as in `OnChangeEvent<String>.NewValue`. The fix removes `!`, and removes `?? ...` when the default does not widen the type [docs](https://1cmycloud.com/docs/help/topics/undefined-type/) |
-| `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A check `X is Type` whose result the type of `X` decides: every type of the expression is one of the checked types or assignable to one - a base the catalog states (`Array<String>` fits `ReadableArray<String>`), an entity contract a project element implements - so the check always passes and `is not` never does; the platform IDE warns about it. A column of a query row is typed by the SELECT list the way the cast rules read it: a field, a choice, arithmetic, a count. A field through a reference or of a left-joined table may be `Null`, and `.ReplaceNull(...)` takes the `Null` out [docs](https://1cmycloud.com/docs/help/topics/is/) |
-| `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A name in a comment that neither the project nor the platform has: a renamed method, a replaced object, a typo. A case form of a known name, commented-out code and a chain naming another system are left alone |
-| `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A call that binds only to a deprecated form of a platform method, as the platform IDE warns: `ObjectStorage.UploadFromBytes(...)`, or `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Bytes)`. The overloads are picked by the compatibility mode of the project, the arguments and their known types; the message names the replacement when the documentation does [docs](https://1cmycloud.com/docs/help/topics/update-app-data/) |
+| `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | Visible text left as a Cyrillic literal where the project already references the same property into a localization dictionary [details](#d-conventions-untranslated-visible-literal) |
+| `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | Visible text left as a Cyrillic literal in a module: judged by the sink it reaches [details](#d-conventions-untranslated-code-literal) |
+| `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | project | A project token or a Cyrillic comment line the project's translation dictionary does not cover yet [details](#d-conventions-missing-translation) |
+| `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | project | A field access on a structure declared in the project is checked against its declaration: a renamed field turns red at its reader rather than on the server apply [details](#d-code-unknown-structure-field) |
+| `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | `SkipUndefined()` on a collection whose known element type is not nullable [details](#d-code-redundant-skip-undefined) [docs](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
+| `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A cast to a type the operand already has: the platform IDE warns about such a cast [details](#d-code-redundant-cast) [docs](https://1cmycloud.com/docs/help/topics/as/) |
+| `code/cast-to-non-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A cast that only drops `Undefined`: the operand is `T?` and the cast names `T`, where the platform IDE advises the non-null operator [details](#d-code-cast-to-non-null) [docs](https://1cmycloud.com/docs/help/topics/exclamation-mark-operation/) |
+| `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A `??`, `!` or `?.` over a value whose type has no `Undefined`: the guard checks nothing and the default is never used [details](#d-code-redundant-undefined-guard) [docs](https://1cmycloud.com/docs/help/topics/undefined-type/) |
+| `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A check `X is Type` whose result the type of `X` decides: the check always passes and `is not` never does [details](#d-code-redundant-type-check) [docs](https://1cmycloud.com/docs/help/topics/is/) |
+| `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | project | A name in a comment that neither the project nor the platform has: a renamed method, a replaced object, a typo [details](#d-comment-unknown-name) |
+| `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | project | A call that binds only to a deprecated form of a platform method, as the platform IDE warns [details](#d-code-deprecated-api) [docs](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 
 #### Tier D rules in detail
 
@@ -746,6 +746,127 @@ under-granting is legal, and kinds without access control are not judged.
 
 <a id="d-yaml-placeholder-key-in-strings"></a>**`yaml/placeholder-key-in-strings`.** A call with
 an argument fails the apply with an "unknown method" answer.
+
+<a id="d-yaml-localization-ref-to-template"></a>**`yaml/localization-ref-to-template`.** The apply
+answers that the localized string was not found, and the stand rolls back. A template key nobody
+references is left alone: code calls it legitimately.
+
+<a id="d-code-url-params-partial-encoding"></a>**`code/url-params-partial-encoding`.** The "&" and
+"=" inside the value stay separators. Build the string with the parameters object and glue it to
+the base address. Off by default: whether a value can carry "&" is not statically visible.
+
+<a id="d-code-bound-property-assign"></a>**`code/bound-property-assign`.** It looks like `Height:
+=Common.IsNarrowScreen()?820:528`. Inside a try/catch the refusal is invisible. A data binding,
+that is a bare path, is left alone: it is two-way by design.
+
+<a id="d-yaml-event-needs-importance"></a>**`yaml/event-needs-importance`.** The default is
+`FromConstructor`. One write that omits the value fails the apply on the constructor line. An
+explicit `Importance: FromConstructor` states the choice and silences the rule.
+
+<a id="d-yaml-event-property-type"></a>**`yaml/event-property-type`.** A project enumeration
+cannot go there. The list is read from the metamodel (`EventLogEventProperty.Type`), and `?` and a
+`Std::` qualification are tolerated. Variant values are written as string codes, with the allowed
+codes listed in the property's `Description`.
+
+<a id="d-code-collection-field-needs-req"></a>**`code/collection-field-needs-req`.**
+`TextPosition` and `ReadableArray<String>` look like that. Scalar default values, unknown types
+and locally shadowed platform names are left alone.
+
+<a id="d-code-var-needs-init"></a>**`code/var-needs-init`.** The compilation answers that the type
+has neither a constructor nor a default value. An enumeration, an annotation, a singleton and a
+name shadowed by a project type are skipped.
+
+<a id="d-code-unknown-tabular-member"></a>**`code/unknown-tabular-member`.** Judged are
+`Object.Section.Member` in an object form module, the bare section name and `this.Section` in the
+entity's modules. The other platform's habitual `Count()` is called `Size()` here. A module named
+after the section shadows it, and attributes are not judged.
+
+<a id="d-code-global-unavailable"></a>**`code/global-unavailable`.** The apply answers that the
+method is unavailable in the current environment. `Message` is client-only and the dynamic
+evaluation is server-only. `@OnClient` and `@OnServer` override the module's environment, and the
+availability comes from the per-member availability lines of the global context packages.
+
+<a id="d-style-shadow-project-name"></a>**`style/shadow-project-name`.** An example: a
+`Warehouses` variable next to the `Warehouses` catalog. Platform handler parameter names never
+collide with project names.
+
+<a id="d-style-shadow-own-property"></a>**`style/shadow-own-property`.** The platform IDE warns
+about such a variable. The properties are those of the method's owner. For a component they are
+its declared properties and events, those of the platform type it inherits, and `Components`. In
+the object module of a catalog, a document or a processing element they are the attributes,
+tabular sections, reference, version stamp and deletion mark. For a record set it is the filter,
+for a scheduled job the parameters and properties of the job, for a structure its fields. Static
+methods, parameters, loop and catch variables are not judged, and a server method of a component
+sees only the properties marked `Contextual`.
+
+<a id="d-style-redundant-union-member"></a>**`style/redundant-union-member`.** `String|String`,
+`String|Undefined|?` and `Array<String>|ReadableArray<String>` look like that, a member under
+`Object` or under a base type of the catalog with the same arguments. The platform IDE warns about
+it, and a function type is not judged. The fix writes the union without those members.
+
+<a id="d-code-unclosed-resource"></a>**`code/unclosed-resource`.** It looks like `val Selection =
+Query{...}.Execute()`. The platform closes a full pass by itself, and it logs an unclosed-resource
+event. Declaring the variable with `use` closes the resource on every exit path. A resource that
+arrived as a parameter, one the method closes by hand and one it returns to its caller are left to
+the author.
+
+<a
+id="d-conventions-untranslated-visible-literal"></a>**`conventions/untranslated-visible-literal`.**
+The intent is counted per element kind, so a same-named property of another kind is not judged. On
+a project whose descriptor lists fewer than two localization languages the rule stays silent.
+
+<a id="d-conventions-untranslated-code-literal"></a>**`conventions/untranslated-code-literal`.** A
+sink is an argument of the platform message call, a property of an event-log event, or either of
+them one step away through a method that forwards its parameter. Markup, pure interpolation and
+single words are skipped. On a project whose descriptor lists fewer than two localization
+languages the rule stays silent.
+
+<a id="d-conventions-missing-translation"></a>**`conventions/missing-translation`.** One finding
+is reported, at the first occurrence in the file. The rule stays silent unless an
+`xbsl-translation` dictionary lives next to the project or above it (see `xbsl translate`).
+
+<a id="d-code-unknown-structure-field"></a>**`code/unknown-structure-field`.** The type comes from
+the variable's declaration (`Module.Structure`, a bare name for the declaring module), from a
+`new` constructor and from the element type of a `for X in List` loop. A name declared with
+anything else in the method, a namesake of a stdlib type, the second hop of a chain and Latin
+member spellings are not judged.
+
+<a id="d-code-redundant-skip-undefined"></a>**`code/redundant-skip-undefined`.** For an iterable
+the fix uses `ToArray()`, preserving the array materialization. A sequence receives a warning
+without a fix.
+
+<a id="d-code-redundant-cast"></a>**`code/redundant-cast`.** `Found!.Reference as Goods.Reference`
+over a query that reads the reference of that very catalog looks like that, and so does a union of
+references cast to the entity contract both of them implement. When the two types are the same,
+the fix removes the cast together with the parentheses around a single operand. A cast to a wider
+type is reported without a fix, since a declaration or an overload may need that type.
+
+<a id="d-code-cast-to-non-null"></a>**`code/cast-to-non-null`.** Typically the operand is a
+nullable attribute a query reads, the result of `Map.GetOrUndefined(...)` or the result of a
+method declared `T?`. The fix puts `!` in place of the cast. The operand is typed by its
+declarations, and a query column by the select list and the yaml of its table. A condition checked
+before the cast narrows nothing, and an operand the inference cannot name is not judged.
+
+<a id="d-code-redundant-undefined-guard"></a>**`code/redundant-undefined-guard`.** The platform
+IDE warns about it. The type comes from a declaration, from a component of the paired markup such
+as `Edit<Number>`, or from the argument of a generic type, as in `OnChangeEvent<String>.NewValue`.
+The fix removes `!`, and removes `?? ...` when the default does not widen the type.
+
+<a id="d-code-redundant-type-check"></a>**`code/redundant-type-check`.** Every type of the
+expression is one of the checked types or assignable to one: a base the catalog states
+(`Array<String>` fits `ReadableArray<String>`) and an entity contract a project element
+implements. The platform IDE warns about such a check. A column of a query row is typed by the
+SELECT list the way the cast rules read it: a field, a choice, arithmetic, a count. A field
+through a reference or of a left-joined table may be `Null`, and `.ReplaceNull(...)` takes the
+`Null` out.
+
+<a id="d-comment-unknown-name"></a>**`comment/unknown-name`.** A case form of a known name,
+commented-out code and a chain naming another system are left alone.
+
+<a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** `ObjectStorage.UploadFromBytes(...)`
+and `ObjectStorage.Upload(Stream, Size)` next to the current `Upload("file", Bytes)` look like
+that. The overloads are picked by the compatibility mode of the project, the arguments and their
+known types. The message names the replacement when the documentation does.
 
 ## Group details
 

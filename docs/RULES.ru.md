@@ -412,7 +412,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `yaml/unknown-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Неизвестное свойство объекта |
 | `code/reserved-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Зарезервированное имя: `Тип`, `type` или `Type` полем структуры или параметром. Применение на сервере отвергает все три [подробнее](#d-code-reserved-name) |
 | `yaml/builtin-property-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Совпадение со встроенным свойством |
-| `yaml/property-shadows-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Собственное свойство компонента названо как общий модуль проекта: имя перекрывает модуль во всём компоненте, обращения `Модуль.Метод()` читаются как члены значения свойства, и применение падает [подробнее](#d-yaml-property-shadows-module) [доки](https://1cmycloud.com/docs/help/topics/addressing-module/) |
+| `yaml/property-shadows-module` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Свойство компонента названо как общий модуль: имя перекрывает модуль во всём компоненте, `Модуль.Метод()` читается как член значения свойства, и применение падает [подробнее](#d-yaml-property-shadows-module) [доки](https://1cmycloud.com/docs/help/topics/addressing-module/) |
 | `yaml/size-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Размер без отключения растягивания [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/col-width-needs-no-stretch` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Числовая `Ширина` колонки таблицы без `РастягиватьПоГоризонтали`: при растягивании число работает как доля свободного места, а не как пиксели [подробнее](#d-yaml-col-width-needs-no-stretch) [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
 | `yaml/matrix-group-max-width` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Числовая `МаксимальнаяШирина` у группы с матричной компоновкой: телефон рисует страницу десктопной шириной, и контент уходит за правый край [подробнее](#d-yaml-matrix-group-max-width) [доки](https://1cmycloud.com/docs/help/topics/arrange-components-on-screen/) |
@@ -456,32 +456,32 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `code/permission-handlers-need-recalc` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Модуль объявляет обработчик разрешений, а `ПересчитатьРазрешенияДоступа` этой сущности нигде не вызван: платформа обработчик сама не вызывает, и правка прав молча не действует [подробнее](#d-code-permission-handlers-need-recalc) [доки](https://1cmycloud.com/docs/help/topics/recalculate-access-permissions-and-keys/) |
 | `code/permission-right-not-computable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обработчик `ВычислитьРазрешенияДоступа` выдаёт право, не объявленное вычислимым в yaml сущности: сборка применяется, а пересчёт разрешений падает уже при работе [подробнее](#d-code-permission-right-not-computable) [доки](https://1cmycloud.com/docs/help/topics/manage-access-control/) |
 | `yaml/placeholder-key-in-strings` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ с подстановкой `$0` в секции `Строки` словаря `ЛокализованныеСтроки`: секция компилируется в метод без параметров [подробнее](#d-yaml-placeholder-key-in-strings) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ссылка `$Словарь.Ключ` указывает на ключ секции `Шаблоны`: ссылка ищет ключ только в `Строки`, и применение падает с "Не удалось найти локализованную строку" (стенд откатывается). Ключ шаблонов, на который никто не ссылается, не судится – из кода его зовут законно [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
+| `yaml/localization-ref-to-template` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Ссылка `$Словарь.Ключ` указывает на ключ секции `Шаблоны`: ссылка ищет ключ только в `Строки`, и применение падает [подробнее](#d-yaml-localization-ref-to-template) [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
 | `code/compare-with-localized` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Локализованное значение (`Словарь.Ключ()`, `Представление()`) сравнивается с литералом или со вторым локализованным – на другом языке ветка молча не срабатывает [доки](https://1cmycloud.com/docs/help/topics/app-localization/) |
-| `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Вызов метода Url `СПараметрамиЗапроса`: значение параметра кодируется частично – "&" и "=" внутри значения остаются разделителями, и значение-адрес приходит обрезанным по первому "&"; строку собирать самим объектом параметров и клеить к базовому адресу. Выключено по умолчанию: видны ли "&" в значениях, статически не решается [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
-| `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Свойство, вычисляемое выражением в парной разметке (`Высота: =Общее.ЭтоУзкийЭкран()?820:528`), присваивается из кода – платформа такое присваивание отвергает, а в попытка/поймать отказ не виден; связь с данными (голый путь) не трогается, она двунаправленная по устройству |
-| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание – `ИзКонструктора`, и тогда платформа требует значение в каждом конструкторе, а пропуск хотя бы в одном месте записи роняет применение на строке конструктора; явное `Важность: ИзКонструктора` объявляет выбор и снимает предупреждение [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
-| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: перечисление проекта туда положить нельзя – отказ приходит только серверной компиляцией и стоит деплоя; список берётся из метамодели (`EventLogEventProperty.Тип`), `?` и квалификация `Стд::` терпятся, вариантные значения пишутся строковыми кодами с перечнем допустимых кодов в `Описание` свойства [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
-| `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле структуры имеет известный платформенный тип без значения по умолчанию, например `ПозицияВТексте` или `ЧитаемыйМассив<Строка>`, и не имеет `обз`, допуска `Неопределено` или инициализатора. Скалярные значения по умолчанию, неизвестные типы и локальные тезки платформенных типов не вызывают замечаний [доки](https://1cmycloud.com/docs/help/topics/structure/) |
-| `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) – компиляция отвечает "не имеет конструктора и значения по умолчанию"; перечисление, аннотация, одиночка и имя, перекрытое типом проекта, пропускаются [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
-| `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к отсутствующему члену коллекции строк табличной части (`Объект.Секция.Член` в модуле формы объекта, голое имя секции или `этот.Секция` в модулях сущности) – коллекция это `Массив<Сущность.Секция>`, и привычное из другой платформы `Количество()` здесь зовётся `Размер()`; секцию затеняет одноимённый модуль, реквизиты не судятся |
-| `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Вызов глобального имени вне его окружения: `Сообщить` (только клиент) в серверном модуле – применение отвечает "Метод недоступен в текущем окружении", `Вычислить` (только сервер) в клиентском методе без `@НаСервере`; `@НаКлиенте`/`@НаСервере` переопределяют окружение модуля, доступность имён – из строк "Доступность" пакетов глобального контекста [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
-| `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная, параметр или метод с именем элемента проекта (`знч Склады` при справочнике `Склады`) – объявление закрывает обращение к элементу из этой области; платформенные имена параметров обработчиков с именами проекта не пересекаются [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
-| `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная `знч`, `пер` или `исп` с именем свойства объекта, с которым работает метод; IDE платформы о такой переменной предупреждает. Внутри метода имя разрешается в переменную, и ни чтение, ни присваивание до свойства не доходят. Свойства берутся у владельца метода: у компонента – объявленные свойства и события, свойства типа платформы, от которого он наследует, и `Компоненты`; в модуле объекта справочника, документа и обработки – реквизиты, табличные части, ссылка, метка версии и пометка удаления; у набора записей – фильтр; у запланированного задания – параметры и свойства задания; у структуры – поля. Статические методы, параметры, переменные цикла и `поймать` не судятся, а серверный метод компонента видит только свойства с признаком `Контекстное` [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
-| `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Член составного типа, который уже покрыт другим: повтор (`Строка\|Строка`), второе пустое значение (`Строка\|Неопределено\|?`), член под `Объект` или под базовым типом каталога с теми же аргументами (`Массив<Строка>\|ЧитаемыйМассив<Строка>`). IDE платформы об этом предупреждает; функциональный тип не судится. Исправление записывает объединение без таких членов [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
-| `code/unclosed-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Закрываемый ресурс (`знч Выборка = Запрос{...}.Выполнить()`), брошенный досрочным выходом из перебора: полный проход платформа закрывает сама, а `возврат` или `прервать` в середине оставляет ресурс открытым, и платформа пишет в журнал событий незакрытый ресурс; объявление через `исп` закрывает его на любом пути выхода. Ресурс, пришедший параметром, закрытый вручную и возвращённый вызывающему, оставлены автору [доки](https://1cmycloud.com/docs/help/topics/closeable-type/) |
+| `code/url-params-partial-encoding` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Вызов метода Url `СПараметрамиЗапроса`: значение параметра кодируется частично, и значение-адрес приходит обрезанным по первому "&" [подробнее](#d-code-url-params-partial-encoding) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Http/Url_ru/) |
+| `code/bound-property-assign` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Свойство, вычисляемое выражением в парной разметке, присваивается из кода: платформа такое присваивание отвергает [подробнее](#d-code-bound-property-assign) |
+| `yaml/event-needs-importance` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | В описании `СобытиеЖурналаСобытий` не задана `Важность`: её умолчание требует значение в каждом конструкторе, и пропуск роняет применение [подробнее](#d-yaml-event-needs-importance) [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| `yaml/event-property-type` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Тип свойства `СобытиеЖурналаСобытий` вне закрытого списка платформы: отказ приходит только серверной компиляцией и стоит деплоя [подробнее](#d-yaml-event-property-type) [доки](https://1cmycloud.com/docs/help/topics/event-properties/) |
+| `code/collection-field-needs-req` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Поле структуры имеет известный платформенный тип без значения по умолчанию и не имеет ни `обз`, ни допуска `Неопределено`, ни инициализатора [подробнее](#d-code-collection-field-needs-req) [доки](https://1cmycloud.com/docs/help/topics/structure/) |
+| `code/var-needs-init` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная объявлена одним типом, у которого нет ни конструктора, ни значения по умолчанию (`пер Ответ: ОтветHttp`) [подробнее](#d-code-var-needs-init) [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
+| `code/unknown-tabular-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к члену, которого у коллекции строк табличной части нет: коллекция это `Массив<Сущность.Секция>` [подробнее](#d-code-unknown-tabular-member) |
+| `code/global-unavailable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Вызов глобального имени вне его окружения: `Сообщить` в серверном модуле, вычисление выражения в клиентском методе без `@НаСервере` [подробнее](#d-code-global-unavailable) [доки](https://1cmycloud.com/docs/help/topics/module-execution/) |
+| `style/shadow-project-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная, параметр или метод с именем элемента проекта: объявление закрывает обращение к элементу из этой области [подробнее](#d-style-shadow-project-name) [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
+| `style/shadow-own-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Переменная `знч`, `пер` или `исп` с именем свойства объекта, с которым работает метод: имя разрешается в переменную, и ни чтение, ни присваивание до свойства не доходят [подробнее](#d-style-shadow-own-property) [доки](https://1cmycloud.com/docs/help/topics/name-scope/) |
+| `style/redundant-union-member` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Член составного типа, который уже покрыт другим: повтор, второе пустое значение или член под более широким соседом [подробнее](#d-style-redundant-union-member) [доки](https://1cmycloud.com/docs/help/topics/type-description-and-initialization/) |
+| `code/unclosed-resource` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Закрываемый ресурс, брошенный досрочным выходом из перебора: `возврат` или `прервать` в середине оставляет его открытым [подробнее](#d-code-unclosed-resource) [доки](https://1cmycloud.com/docs/help/topics/closeable-type/) |
 | `code/use-needs-closeable` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Модификатор `исп` у типа, который описан каталогом и не наследует `Закрываемое` – модификатор существует ради автоматического `Закрыть()`, и компилятор отвергает объявление [доки](https://1cmycloud.com/docs/help/topics/variable-declaration-statement/) |
-| `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Видимый текст, оставшийся кириллическим литералом там, где то же свойство проект уже вынес ссылкой на словарь локализации – намерение считается в разрезе вида элемента, и свойство-тёзка другого вида не судится; молчит на проекте, у которого в дескрипторе меньше двух языков локализации |
-| `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Видимый текст, оставшийся кириллическим литералом в модуле – судится по стоку, куда он попадает (аргумент платформенного вызова сообщения, свойство события журнала или то же самое через метод, пробрасывающий свой параметр); разметка, чистая интерполяция и одиночные слова пропускаются, а на проекте с менее чем двумя языками локализации правило молчит |
-| `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | проект | Токен проекта или кириллическая строка комментария, которых ещё нет в словаре перевода проекта – одна находка на первое вхождение в файле; правило молчит, пока рядом с проектом (или выше) не лежит словарь `xbsl-translation` (см. `xbsl translate`) |
-| `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к полю структуры, объявленной в проекте, сверяется с её объявлением: переименовали поле – потребитель в другом модуле краснеет здесь, а не на серверной компиляции. Тип берётся из объявления переменной (`Модуль.Структура`, голое имя структуры своего модуля), из конструктора `новый` и из элемента коллекции в `для X из Список`; имя, объявленное в методе ещё чем-нибудь, тёзка stdlib-типа, второй шаг цепочки и латинские написания члена не судятся |
-| `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Исключение `Неопределено` из коллекции с заведомо не допускающим его типом элемента. Для перебираемой коллекции исправление заменяет метод на `ВМассив()`, сохраняя создание массива; для последовательности доступно только предупреждение [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
-| `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Приведение к типу, который у операнда уже есть: `Найдена!.Ссылка как Товары.Ссылка` над запросом, читающим ссылку того же справочника, или объединение ссылок, приведённое к контракту сущности, который реализуют оба; IDE платформы о таком приведении предупреждает. Если типы совпадают, исправление убирает приведение вместе со скобками вокруг одиночного операнда. Приведение к более широкому типу называется без исправления: этот тип может быть нужен объявлению или перегрузке [доки](https://1cmycloud.com/docs/help/topics/as/) |
-| `code/cast-to-non-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Приведение, которое только отбрасывает `Неопределено`, там, где IDE платформы советует настойчивую операцию: у операнда тип `Т?`, а приведение называет `Т`. Обычно это реквизит с `?`, прочитанный запросом, результат `Соответствие.ПолучитьИлиНеопределено(...)` или метода с результатом `Т?`. Исправление ставит `!` вместо приведения. Тип операнда берётся по объявлениям, у колонки запроса – по списку выборки и yaml таблицы; условие, проверенное перед приведением, тип не сужает, а операнд, который вывод не называет, не судится [доки](https://1cmycloud.com/docs/help/topics/exclamation-mark-operation/) |
-| `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `??`, `!` или `?.` над значением, в типе которого нет `Неопределено`: значение по умолчанию не используется, и защита ничего не проверяет; IDE платформы о ней предупреждает. Тип берётся из объявления, из компонента парной разметки вроде `ПолеВвода<Число>` или из аргумента обобщённого типа, как у `СобытиеПриИзменении<Строка>.НовоеЗначение`. Исправление убирает `!`, а `?? ...` – если умолчание не расширяет тип [доки](https://1cmycloud.com/docs/help/topics/undefined-type/) |
-| `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Проверка `Х это Тип`, результат которой решает тип `Х`: каждый тип выражения совпадает с одним из проверяемых или относится к нему – база из каталога (`Массив<Строка>` подходит под `ЧитаемыйМассив<Строка>`), контракт сущности, который реализует элемент проекта, – поэтому проверка проходит всегда, а `это не` – никогда; IDE платформы о ней предупреждает. Колонка строки запроса типизируется по списку ВЫБРАТЬ так же, как у правил приведений: поле, выбор, арифметика, количество. Поле через ссылку и поле левого соединения могут быть `Null`, а `.ЗаменитьNull(...)` этот `Null` убирает [доки](https://1cmycloud.com/docs/help/topics/is/) |
-| `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Имя в комментарии, которого нет ни в проекте, ни у платформы: метод переименован, объект заменён, опечатка. Падежная форма известного имени, закомментированный код и цепочка другой системы не судятся |
-| `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Вызов, который привязывается только к устаревшей форме метода платформы, – IDE платформы о нём предупреждает: `ОбъектноеХранилище.ЗагрузитьИзБайт(...)` или `ОбъектноеХранилище.Загрузить(Поток, Размер)` рядом с текущей `Загрузить("файл", Байты)`. Перегрузки выбираются по режиму совместимости проекта, аргументам и их известным типам; сообщение называет замену, если её называет документация [доки](https://1cmycloud.com/docs/help/topics/update-app-data/) |
+| `conventions/untranslated-visible-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Видимый текст остался кириллическим литералом там, где то же свойство проект уже вынес ссылкой на словарь локализации [подробнее](#d-conventions-untranslated-visible-literal) |
+| `conventions/untranslated-code-literal` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Видимый текст остался кириллическим литералом в модуле: судится по стоку, куда он попадает [подробнее](#d-conventions-untranslated-code-literal) |
+| `conventions/missing-translation` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | проект | Токен проекта или кириллическая строка комментария, которых ещё нет в словаре перевода проекта [подробнее](#d-conventions-missing-translation) |
+| `code/unknown-structure-field` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | проект | Обращение к полю структуры, объявленной в проекте, сверяется с её объявлением: переименованное поле краснеет у потребителя, а не на серверной компиляции [подробнее](#d-code-unknown-structure-field) |
+| `code/redundant-skip-undefined` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Исключение `Неопределено` из коллекции, у которой тип элемента его и так не допускает [подробнее](#d-code-redundant-skip-undefined) [доки](https://1cmycloud.com/docs/help/stdlib/element/xbsl/Std/Iterable_ru/) |
+| `code/redundant-cast` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Приведение к типу, который у операнда уже есть: IDE платформы о таком приведении предупреждает [подробнее](#d-code-redundant-cast) [доки](https://1cmycloud.com/docs/help/topics/as/) |
+| `code/cast-to-non-null` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Приведение, которое только отбрасывает `Неопределено`: у операнда тип `Т?`, а приведение называет `Т`, и IDE платформы советует здесь настойчивую операцию [подробнее](#d-code-cast-to-non-null) [доки](https://1cmycloud.com/docs/help/topics/exclamation-mark-operation/) |
+| `code/redundant-undefined-guard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | `??`, `!` или `?.` над значением, в типе которого нет `Неопределено`: защита ничего не проверяет, а значение по умолчанию не используется [подробнее](#d-code-redundant-undefined-guard) [доки](https://1cmycloud.com/docs/help/topics/undefined-type/) |
+| `code/redundant-type-check` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Проверка `Х это Тип`, результат которой решает тип `Х`: проверка проходит всегда, а `это не` никогда [подробнее](#d-code-redundant-type-check) [доки](https://1cmycloud.com/docs/help/topics/is/) |
+| `comment/unknown-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | проект | Имя в комментарии, которого нет ни в проекте, ни у платформы: метод переименован, объект заменён, опечатка [подробнее](#d-comment-unknown-name) |
+| `code/deprecated-api` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | проект | Вызов, который привязывается только к устаревшей форме метода платформы: IDE платформы о нём предупреждает [подробнее](#d-code-deprecated-api) [доки](https://1cmycloud.com/docs/help/topics/update-app-data/) |
 
 #### Подробнее о правилах тира D
 
@@ -738,6 +738,124 @@ yaml, строк и комментариев, а словарь перевода
 
 <a id="d-yaml-placeholder-key-in-strings"></a>**`yaml/placeholder-key-in-strings`.** Вызов с
 аргументом падает на применении с ответом "Неизвестный метод".
+
+<a id="d-yaml-localization-ref-to-template"></a>**`yaml/localization-ref-to-template`.**
+Применение отвечает "Не удалось найти локализованную строку", и стенд откатывается. Ключ шаблонов,
+на который никто не ссылается, правило не судит: из кода его зовут законно.
+
+<a id="d-code-url-params-partial-encoding"></a>**`code/url-params-partial-encoding`.** Знаки "&" и
+"=" внутри значения остаются разделителями. Строку собирают самим объектом параметров и клеят к
+базовому адресу. По умолчанию выключено: видны ли "&" в значениях, статически не решается.
+
+<a id="d-code-bound-property-assign"></a>**`code/bound-property-assign`.** Выглядит это так:
+`Высота: =Общее.ЭтоУзкийЭкран()?820:528`. В попытка/поймать отказ не виден. Связь с данными, то
+есть голый путь, правило не трогает: она двунаправленная по устройству.
+
+<a id="d-yaml-event-needs-importance"></a>**`yaml/event-needs-importance`.** Умолчание это
+`ИзКонструктора`. Пропуск хотя бы в одном месте записи роняет применение на строке конструктора.
+Явное `Важность: ИзКонструктора` объявляет выбор и снимает предупреждение.
+
+<a id="d-yaml-event-property-type"></a>**`yaml/event-property-type`.** Перечисление проекта туда
+положить нельзя. Список берётся из метамодели (`EventLogEventProperty.Тип`), а `?` и квалификация
+`Стд::` терпятся. Вариантные значения пишут строковыми кодами, а перечень допустимых кодов кладут
+в `Описание` свойства.
+
+<a id="d-code-collection-field-needs-req"></a>**`code/collection-field-needs-req`.** Так выглядят
+`ПозицияВТексте` и `ЧитаемыйМассив<Строка>`. Скалярные значения по умолчанию, неизвестные типы и
+локальные тёзки платформенных типов замечаний не вызывают.
+
+<a id="d-code-var-needs-init"></a>**`code/var-needs-init`.** Компиляция отвечает "не имеет
+конструктора и значения по умолчанию". Перечисление, аннотация, одиночка и имя, перекрытое типом
+проекта, пропускаются.
+
+<a id="d-code-unknown-tabular-member"></a>**`code/unknown-tabular-member`.** Судится
+`Объект.Секция.Член` в модуле формы объекта, голое имя секции и `этот.Секция` в модулях сущности.
+Привычное из другой платформы `Количество()` здесь зовётся `Размер()`. Секцию затеняет одноимённый
+модуль, а реквизиты правило не судит.
+
+<a id="d-code-global-unavailable"></a>**`code/global-unavailable`.** Применение отвечает "Метод
+недоступен в текущем окружении". `Сообщить` живёт только на клиенте, вычисление выражения только
+на сервере. `@НаКлиенте` и `@НаСервере` переопределяют окружение модуля, а доступность имён
+берётся из строк "Доступность" пакетов глобального контекста.
+
+<a id="d-style-shadow-project-name"></a>**`style/shadow-project-name`.** Пример: `знч Склады` при
+справочнике `Склады`. Платформенные имена параметров обработчиков с именами проекта не
+пересекаются.
+
+<a id="d-style-shadow-own-property"></a>**`style/shadow-own-property`.** IDE платформы о такой
+переменной предупреждает. Свойства берутся у владельца метода. У компонента это объявленные
+свойства и события, свойства типа платформы, от которого он наследует, и `Компоненты`. В модуле
+объекта справочника, документа и обработки это реквизиты, табличные части, ссылка, метка версии и
+пометка удаления. У набора записей это фильтр, у запланированного задания параметры и свойства
+задания, у структуры поля. Статические методы, параметры, переменные цикла и `поймать` не судятся,
+а серверный метод компонента видит только свойства с признаком `Контекстное`.
+
+<a id="d-style-redundant-union-member"></a>**`style/redundant-union-member`.** Так выглядят
+`Строка|Строка`, `Строка|Неопределено|?` и `Массив<Строка>|ЧитаемыйМассив<Строка>`, то есть член
+под `Объект` или под базовым типом каталога с теми же аргументами. IDE платформы об этом
+предупреждает, а функциональный тип не судится. Исправление записывает объединение без таких
+членов.
+
+<a id="d-code-unclosed-resource"></a>**`code/unclosed-resource`.** Выглядит это как `знч Выборка =
+Запрос{...}.Выполнить()`. Полный проход платформа закрывает сама, а незакрытый ресурс пишет в
+журнал событий. Объявление через `исп` закрывает ресурс на любом пути выхода. Ресурс, пришедший
+параметром, закрытый вручную и возвращённый вызывающему, оставлены автору.
+
+<a
+id="d-conventions-untranslated-visible-literal"></a>**`conventions/untranslated-visible-literal`.**
+Намерение считается в разрезе вида элемента, поэтому свойство-тёзка другого вида не судится. На
+проекте, у которого в дескрипторе меньше двух языков локализации, правило молчит.
+
+<a id="d-conventions-untranslated-code-literal"></a>**`conventions/untranslated-code-literal`.**
+Стоком считается аргумент платформенного вызова сообщения, свойство события журнала или то же
+самое через метод, пробрасывающий свой параметр. Разметка, чистая интерполяция и одиночные слова
+пропускаются. На проекте с менее чем двумя языками локализации правило молчит.
+
+<a id="d-conventions-missing-translation"></a>**`conventions/missing-translation`.** Находка одна,
+на первое вхождение в файле. Правило молчит, пока рядом с проектом или выше не лежит словарь
+`xbsl-translation` (см. `xbsl translate`).
+
+<a id="d-code-unknown-structure-field"></a>**`code/unknown-structure-field`.** Тип берётся из
+объявления переменной (`Модуль.Структура`, голое имя структуры своего модуля), из конструктора
+`новый` и из элемента коллекции в `для X из Список`. Имя, объявленное в методе ещё чем-нибудь,
+тёзка stdlib-типа, второй шаг цепочки и латинские написания члена не судятся.
+
+<a id="d-code-redundant-skip-undefined"></a>**`code/redundant-skip-undefined`.** У перебираемой
+коллекции исправление заменяет метод на `ВМассив()`, сохраняя создание массива. Последовательности
+достаётся только предупреждение.
+
+<a id="d-code-redundant-cast"></a>**`code/redundant-cast`.** Так выглядит `Найдена!.Ссылка как
+Товары.Ссылка` над запросом, читающим ссылку того же справочника, и объединение ссылок,
+приведённое к контракту сущности, который реализуют оба. Если типы совпадают, исправление убирает
+приведение вместе со скобками вокруг одиночного операнда. Приведение к более широкому типу
+называется без исправления: этот тип может быть нужен объявлению или перегрузке.
+
+<a id="d-code-cast-to-non-null"></a>**`code/cast-to-non-null`.** Обычно это реквизит с `?`,
+прочитанный запросом, результат `Соответствие.ПолучитьИлиНеопределено(...)` или метода с
+результатом `Т?`. Исправление ставит `!` вместо приведения. Тип операнда берётся по объявлениям, у
+колонки запроса по списку выборки и yaml таблицы. Условие, проверенное перед приведением, тип не
+сужает, а операнд, который вывод не называет, не судится.
+
+<a id="d-code-redundant-undefined-guard"></a>**`code/redundant-undefined-guard`.** IDE платформы о
+ней предупреждает. Тип берётся из объявления, из компонента парной разметки вроде
+`ПолеВвода<Число>` или из аргумента обобщённого типа, как у
+`СобытиеПриИзменении<Строка>.НовоеЗначение`. Исправление убирает `!`, а `?? ...` убирает, если
+умолчание не расширяет тип.
+
+<a id="d-code-redundant-type-check"></a>**`code/redundant-type-check`.** Каждый тип выражения
+совпадает с одним из проверяемых или относится к нему: это база из каталога (`Массив<Строка>`
+подходит под `ЧитаемыйМассив<Строка>`) и контракт сущности, который реализует элемент проекта. IDE
+платформы о такой проверке предупреждает. Колонка строки запроса типизируется по списку ВЫБРАТЬ
+так же, как у правил приведений: поле, выбор, арифметика, количество. Поле через ссылку и поле
+левого соединения могут быть `Null`, а `.ЗаменитьNull(...)` этот `Null` убирает.
+
+<a id="d-comment-unknown-name"></a>**`comment/unknown-name`.** Падежная форма известного имени,
+закомментированный код и цепочка другой системы не судятся.
+
+<a id="d-code-deprecated-api"></a>**`code/deprecated-api`.** Так выглядят
+`ОбъектноеХранилище.ЗагрузитьИзБайт(...)` и `ОбъектноеХранилище.Загрузить(Поток, Размер)` рядом с
+текущей `Загрузить("файл", Байты)`. Перегрузки выбираются по режиму совместимости проекта, по
+аргументам и по их известным типам. Сообщение называет замену, если её называет документация.
 
 ## Подробнее о группах
 
