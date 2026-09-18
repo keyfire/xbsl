@@ -385,3 +385,120 @@ def test_batch_does_not_rewrite_a_translation_given_the_text_it_already_has(elem
     )
 
     assert [c.path for c in outcome.result.changes] == [element]
+
+
+# --- a key that spells a yaml 1.1 special word ------------------------------------------
+
+# The tool's own reader (_section_entries) scans the file line by line and takes a key at
+# face value; a THIRD-PARTY typed reader does not - it resolves a key that spells a bool or
+# null word to True/False/None instead of to the string. The words are the `regexp` field of
+# the bool and null type pages of the YAML 1.1 core schema - https://yaml.org/type/bool.html
+# and https://yaml.org/type/null.html - not PyYAML's own resolver, which (checked in
+# yaml/resolver.py) omits the single-letter y/Y/n/N the specification itself lists.
+_YAML11_BOOL_WORDS = (
+    "y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO",
+    "true", "True", "TRUE", "false", "False", "FALSE",
+    "on", "On", "ON", "off", "Off", "OFF",
+)
+_YAML11_NULL_WORDS = ("null", "Null", "NULL")  # "~" is not an identifier; op_add_field
+                                                # refuses it before the mapping writer is
+                                                # even reached, so it is covered only through
+                                                # op_set_localization below.
+
+
+@pytest.mark.parametrize("word", _YAML11_BOOL_WORDS + _YAML11_NULL_WORDS)
+def test_add_field_quotes_a_special_word_key(element: Path, word: str):
+    """add-field's mapping writer is the other place a key is written bare."""
+    _add(element, "строка", word, "Текст")
+
+    assert _loaded(element)["Строки"][word] == "Текст"
+
+
+@pytest.mark.parametrize("word", _YAML11_BOOL_WORDS + _YAML11_NULL_WORDS + ("~",))
+def test_set_localization_quotes_a_special_word_key(element: Path, word: str):
+    """set-localization's writer is the one the backlog item names."""
+    _set(element, word, {"Русский": "Включено"})
+
+    assert _loaded(element)["Строки"][word] == "Включено"
+
+
+def test_an_ordinary_key_is_still_written_bare(element: Path):
+    """Quoting is narrow: a key that is not a special word gets no extra noise."""
+    _add(element, "строка", "Заголовок", "Текст")
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert "Заголовок: Текст" in text
+    assert '"Заголовок"' not in text
+
+
+def test_the_tools_own_reader_still_sees_a_quoted_key(element: Path):
+    """_section_entries already strips a value's surrounding quotes; it has to do the same
+    for a key now that the writer may quote one."""
+    _add(element, "строка", "On", "Включено")
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert scaffold._section_entries(text) == {"On": "Включено"}
+
+
+def test_a_bare_special_word_key_written_before_this_fix_still_reads():
+    """A file written before this change has the key bare - the reader must not regress."""
+    text = "ВидЭлемента: ЛокализованныеСтроки\nИмя: Тексты\nСтроки:\n    On: Включено\n"
+
+    assert scaffold._section_entries(text) == {"On": "Включено"}
+
+
+def test_setting_a_special_word_key_again_updates_in_place_not_duplicated(element: Path):
+    _set(element, "On", {"Русский": "Включено"})
+
+    _set(element, "On", {"Русский": "Выключено"})
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert text.count('"On":') == 1
+    assert _loaded(element)["Строки"]["On"] == "Выключено"
+
+
+def test_add_field_refuses_a_special_word_key_already_present(element: Path):
+    """The duplicate check has to recognize the key even though it is now written quoted."""
+    _add(element, "строка", "On", "Включено")
+
+    with pytest.raises(scaffold.ScaffoldError):
+        _add(element, "строка", "On", "Опять")
+
+
+def test_a_special_word_key_reaches_the_translation_quoted_too(element: Path):
+    _add(element, "строка", "Первая", "Первый текст")
+    _write(scaffold.op_add_localization(element, "En"))
+
+    _add(element, "строка", "On", "Включено")
+
+    translation = _translation(element)
+    assert _loaded(translation)["Строки"]["On"] == "Включено"
+    assert '"On":' in io.open(translation, encoding="utf-8-sig").read()
+
+
+def test_a_special_word_key_keeps_its_section_when_quoted(element: Path):
+    _add(element, "шаблон", "On", "Вкл, %0!")
+
+    _set(element, "On", {"Русский": "Выкл, %0!"})
+
+    loaded = _loaded(element)
+    assert loaded["Шаблоны"]["On"] == "Выкл, %0!"
+    assert "On" not in (loaded.get("Строки") or {})
+
+
+def test_a_caption_named_like_a_special_word_is_written_quoted(element: Path):
+    """The dictionary a generated form leans on is written by a third path of its own.
+
+    A field named `On` is an ordinary name for a toggle, and its caption defaults to that name,
+    so the row lands in the same section every other writer here guards. Written bare, a strict
+    reader turns both halves of `On: On` into booleans, and the dictionary disagrees with the
+    translation file beside it, which quotes the same key.
+    """
+    _add(element, "строка", "Первая", "Первый текст")
+
+    _write(scaffold._dictionary_entries(element, ["On", "Обычное"]))
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert '"On":' in text
+    assert "\n    Обычное:" in text  # an ordinary caption keeps its bare spelling
+    assert _loaded(element)["Строки"]["On"] == "On"

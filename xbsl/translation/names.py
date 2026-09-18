@@ -20,11 +20,12 @@ attributes and their kin - the platform declares them, the sources only mention 
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
-from functools import lru_cache
+from functools import lru_cache, wraps
 from pathlib import Path
 
-from xbsl import libs, metamodel
+from xbsl import dataset, libs, metamodel
 from xbsl.lexer import tokens
 from xbsl.engine import SourceFile
 from xbsl.restext import RESOURCE_DIRS
@@ -34,6 +35,74 @@ from xbsl.rules.yaml_schema import _parsed, object_kind, value_of
 _NAME_LINE_RE = re.compile(
     r"(?m)^[ \t]*(?:-[ \t]+)?(?:Имя|Name):[ \t]*(['\"]?)([^\r\n#]*?)\1[ \t]*(?:#.*)?\r?$"
 )
+
+#: The project-wide passes of ONE root: (the root, the loader, the digest of the sources they
+#: were read from, {pass: its answer}). One root at a time, for the reason the project index
+#: keeps one (see translation/code.py): an answer is read off a whole project, and a project
+#: switched to drops the one before it right here.
+_KEPT: tuple[str, object, tuple, dict[str, object]] | None = None
+
+#: Guards every read and write of `_KEPT` below: a look that finds the answers stale and the
+#: walk that follows it have to run as one step, or two callers racing for the same project
+#: both find it stale, both walk the whole tree, and one answer overwrites the other. The lock
+#: is re-entrant on purpose: a walk runs under it, the walk reads the metamodel, and data that
+#: changed under it drops the derived caches - `forget` then asks for this very lock on the
+#: thread that already holds it, which a plain lock would answer with a deadlock.
+_LOCK = threading.RLock()
+
+
+def forget() -> None:
+    """Drop the kept answers - the next call reads the project again."""
+    global _KEPT
+    with _LOCK:
+        _KEPT = None
+
+
+# The passes read the sources through the metamodel (the built-in item names, the kind of an
+# element), so they must not outlive the pinned data root any more than the index does.
+dataset.register_reset(forget)
+
+
+def _kept(name: str, root: Path, loader, walk):
+    """The answer of `walk()`, read once per state of the sources under `root`.
+
+    A pass here walks the whole project and reads every file of it, and the interactive tools
+    run the pass again and again - `translate_status`, `translate_gaps`, the dictionary echo
+    of the MCP server - so each of them used to pay for the same walk over the same unchanged
+    files. Kept by a digest of the bytes, the one the index is kept by: a modification time
+    cannot answer the question, because the filesystem stamps whole ticks and a rewrite of the
+    same length inside one of them reads as no change at all.
+
+    The loader is part of the key. A caller reading the tree through a loader of its own gets
+    the answer that loader gives, not the one the previous caller's loader gave.
+
+    The digest is taken BEFORE the walk on purpose. A file written while the walk is running
+    lands in the answer half-read; taken afterwards, the digest would call that state current
+    and the next call would trust it.
+    """
+    from xbsl import indexer
+
+    global _KEPT
+    key = str(Path(root).resolve())
+    with _LOCK:
+        stamp = indexer.sources_stamp(root)
+        kept = _KEPT
+        if kept is None or kept[0] != key or kept[1] is not loader or kept[2] != stamp:
+            kept = (key, loader, stamp, {})
+            _KEPT = kept
+        if name not in kept[3]:
+            kept[3][name] = walk()
+        return kept[3][name]
+
+
+def _by_sources(walk):
+    """Read the project-wide `walk` once per state of the sources (see _kept)."""
+
+    @wraps(walk)
+    def kept(root: Path, loader):
+        return _kept(walk.__name__, root, loader, lambda: walk(root, loader))
+
+    return kept
 
 
 @lru_cache(maxsize=1)
@@ -242,6 +311,7 @@ def declared_types(source: SourceFile) -> set[str]:
     return out
 
 
+@_by_sources
 def collect_types(root: Path, loader) -> frozenset[str]:
     """Every TYPE name declared under the project root (see declared_types)."""
     out: set[str] = set()
@@ -278,6 +348,7 @@ _COMPONENT_KIND_RE = re.compile(
 )
 
 
+@_by_sources
 def component_names(root: Path, loader) -> frozenset[str]:
     """Names of the NODES of the project's forms - what `Components.<Name>` addresses.
 
@@ -300,6 +371,7 @@ def component_names(root: Path, loader) -> frozenset[str]:
     return frozenset(out)
 
 
+@_by_sources
 def component_types(root: Path, loader) -> frozenset[str]:
     """Names and exact local qualifications of interface components the project declares.
 
@@ -375,6 +447,7 @@ def resource_keys(root: Path) -> frozenset[str]:
     return frozenset(out)
 
 
+@_by_sources
 def component_methods(root: Path, loader) -> dict[str, frozenset[str]]:
     """{interface component of the project: the methods its module declares}.
 
@@ -450,6 +523,7 @@ def form_nodes(path: Path, loader) -> dict[str, str]:
     return out
 
 
+@_by_sources
 def dictionary_scopes(root: Path, loader) -> frozenset[str]:
     """Names of the localized-strings elements of a project - the namespaces of their keys.
 
@@ -592,6 +666,7 @@ def module_owner(path: Path, loader) -> ModuleOwner:
     return ModuleOwner()
 
 
+@_by_sources
 def collect(root: Path, loader) -> frozenset[str]:
     """Every name declared under the project root, using the given file loader."""
     out: set[str] = set()

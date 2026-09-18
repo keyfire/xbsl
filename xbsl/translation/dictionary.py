@@ -39,8 +39,10 @@ lives in the repository, outside the sources it describes, and never ships insid
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
+import threading
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -733,20 +735,59 @@ def _keyword_targets() -> frozenset[str]:
 dataset.register_reset(_keyword_targets.cache_clear)
 
 
-#: mtime-stamped cache for the editor path: the rule loads the dictionary on every file
-#: check, and the same directory answers from memory until one of its files changes.
+#: Cache for the editor path: the rule loads the dictionary on every file check, and the same
+#: directory answers from memory until one of its files changes. What "changes" means is a
+#: digest of the bytes (see _digest).
 _CACHE: dict[Path, tuple[tuple, Dictionary]] = {}
+
+
+def _digest(path: Path) -> bytes:
+    """A digest of the file's bytes - the stamp the project index is kept by.
+
+    A modification time cannot answer the question the cache asks. The filesystem stamps whole
+    ticks, so two writes in a row share one: out of two hundred pairs of consecutive writes
+    into one file, measured on Windows, 151 came out with the same `st_mtime_ns`. In a
+    long-lived MCP server an edit through `translate_set` and the lint that follows it then
+    read the dictionary from before the edit. The bytes cannot be fooled, and the price is one
+    read of files that are about to be read anyway when the digest says they moved.
+    """
+    try:
+        return hashlib.blake2b(path.read_bytes(), digest_size=16).digest()
+    except OSError:  # vanished between the walk and the read, and the next walk will say so
+        return b""
+
+
+#: Guards every read and write of `_CACHE`: the look that finds a dictionary stale and the
+#: read that follows it have to run as one step, or two callers racing for the same directory
+#: both find it stale and both parse it - megabytes of yaml on a real project. Re-entrant on
+#: purpose, for the reason the index lock is (see translation/code.py): the read goes through
+#: the platform data, data that changed under it drops every cache derived from it, and
+#: `forget_cached` then asks for this very lock on the thread that already holds it.
+_LOCK = threading.RLock()
+
+
+def forget_cached() -> None:
+    """Drop the kept dictionaries - the next `load_cached` reads the files again."""
+    with _LOCK:
+        _CACHE.clear()
+
+
+# The load reads the platform data - a token value is checked against the English keywords
+# (_keyword_targets), a literal is read by the lexer - so a dictionary must not outlive the
+# pinned data root any more than the tables the rules build over the same data do.
+dataset.register_reset(forget_cached)
 
 
 def load_cached(path: Path) -> Dictionary:
     files = sorted(p for p in path.rglob("*.yaml")) if path.is_dir() else [path]
-    stamp = tuple((str(p), p.stat().st_mtime_ns if p.exists() else 0) for p in files)
-    known = _CACHE.get(path)
-    if known is not None and known[0] == stamp:
-        return known[1]
-    loaded = load(path)
-    _CACHE[path] = (stamp, loaded)
-    return loaded
+    with _LOCK:
+        stamp = tuple((str(p), _digest(p)) for p in files)
+        known = _CACHE.get(path)
+        if known is not None and known[0] == stamp:
+            return known[1]
+        loaded = load(path)
+        _CACHE[path] = (stamp, loaded)
+        return loaded
 
 
 def _scalar(text: str) -> str:

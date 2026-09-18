@@ -2966,9 +2966,48 @@ def _survives_bare(value: str) -> bool:
     return isinstance(parsed, dict) and parsed.get("k") == value
 
 
+#: Words a strict YAML 1.1 reader resolves to a boolean or null rather than to the string
+#: itself - the `regexp` field of the bool and null type pages of the YAML 1.1 core schema,
+#: https://yaml.org/type/bool.html and https://yaml.org/type/null.html. This project's own
+#: reader (_section_entries) scans lines and takes a key at face value, and the platform
+#: compiler types a value by its position in the schema, not by this resolver - so neither
+#: of them is fooled. A THIRD-PARTY typed reader is: unquoted, one of these words is a key
+#: only until the parser turns it into True, False or None. PyYAML - the parser this project
+#: itself depends on - matches a narrower set (checked in yaml/resolver.py: no bare y/Y/n/N),
+#: which is exactly why the list here is taken from the specification and not from it.
+_YAML11_SPECIAL_WORDS = frozenset((
+    "y", "Y", "yes", "Yes", "YES", "n", "N", "no", "No", "NO",
+    "true", "True", "TRUE", "false", "False", "FALSE",
+    "on", "On", "ON", "off", "Off", "OFF",
+    "~", "null", "Null", "NULL",
+))
+
+
+def _quoted_dictionary_key(key: str) -> str:
+    """`key` as it goes into a Strings/Templates mapping: quoted only when bare would mislead.
+
+    Mirrors _survives_bare's rule for a value, aimed at a narrower danger: a key spelled
+    exactly like a YAML 1.1 bool/null word. An ordinary key is written bare, like the ones a
+    live project already has - quoting every key would put noise into a file nobody asked to
+    change.
+    """
+    return json.dumps(key, ensure_ascii=False) if key in _YAML11_SPECIAL_WORDS else key
+
+
+def _mapping_key_pattern(key: str) -> str:
+    """A regex fragment matching a mapping key line's key part, bare or quoted.
+
+    The writer quotes a key only when _quoted_dictionary_key says so; a check for whether a
+    key ALREADY has a row has to recognize both spellings, or a key that was written quoted
+    looks unwritten and gets a second, duplicate row next to the first.
+    """
+    escaped = re.escape(key)
+    return rf'(?:"{escaped}"|\'{escaped}\'|{escaped})'
+
+
 def _has_mapping_key(body: str, key: str) -> bool:
     """Is `key` already an entry of this mapping-section body?"""
-    return re.search(rf"^[ \t]+{re.escape(key)}:", body, re.M) is not None
+    return re.search(rf"^[ \t]+{_mapping_key_pattern(key)}:", body, re.M) is not None
 
 
 def translation_element(yaml_path: Path) -> Path | None:
@@ -3026,6 +3065,10 @@ def _add_mapping_entry(
     # beside the hand-written ones.
     entry_value = (json.dumps(raw_value, ensure_ascii=False)
                    if map_spec["quote"] or not _survives_bare(raw_value) else raw_value)
+    # The key gets the same "quote only where bare would mislead" treatment, against a
+    # narrower danger than the value's: a key spelled exactly like a YAML 1.1 bool/null word
+    # (On, Null, ...) reads back typed rather than as itself in a third-party reader.
+    written_key = _quoted_dictionary_key(key)
 
     bounds = _section_bounds(text, section, top_level=True)
     if bounds is not None:
@@ -3033,12 +3076,12 @@ def _add_mapping_entry(
         body = text[header_line_end:body_end]
         if _has_mapping_key(body, key):
             raise ScaffoldError(f"Ключ '{key}' уже есть в секции {section} файла {yaml_path.name}")
-        new_text = text[:body_end] + f"{nl}    {key}: {entry_value}" + text[body_end:]
+        new_text = text[:body_end] + f"{nl}    {written_key}: {entry_value}" + text[body_end:]
     else:
         tail = "" if (not text or text.endswith("\n")) else nl
         header = spelled_key(section, yaml_language(text, yaml_path.parent))
-        new_text = text + f"{tail}{header}:{nl}    {key}: {entry_value}{nl}"
-    cursor = _cursor_at(new_text, new_text.index(f"{key}: {entry_value}"))
+        new_text = text + f"{tail}{header}:{nl}    {written_key}: {entry_value}{nl}"
+    cursor = _cursor_at(new_text, new_text.index(f"{written_key}: {entry_value}"))
     changes = [FileChange(yaml_path, new_text, created=False, cursor=cursor)]
     notes: list[str] = []
     _echo_into_translations(yaml_path, section, [(key, entry_value)], nl, changes, notes)
@@ -3086,7 +3129,7 @@ def _echo_into_translations(
             fresh = [(key, value) for key, value in entries if not _has_mapping_key(body, key)]
             if not fresh:
                 continue
-            block = "".join(f"{nl}    {key}: {value}" for key, value in fresh)
+            block = "".join(f"{nl}    {_quoted_dictionary_key(key)}: {value}" for key, value in fresh)
             changes.append(FileChange(
                 target, text[:body_end] + block + text[body_end:], created=False,
             ))
@@ -4142,13 +4185,22 @@ _STRING_SECTIONS = ("Строки", "Strings")
 _TEMPLATE_SECTIONS = ("Шаблоны", "Templates")
 
 
+def _unquoted_scalar(text: str) -> str:
+    """A scalar read off a flat `key: value` line with its surrounding quotes, if any, off."""
+    if len(text) > 1 and text[0] == text[-1] and text[0] in "\"'":
+        return text[1:-1]
+    return text
+
+
 def _section_entries(text: str, sections: tuple[str, ...] = ()) -> dict[str, str]:
     """`Rows`/`Templates` of a localization yaml as {key: text}, comments and blanks dropped.
 
     A plain scan rather than a yaml parse: the file is flat by definition (one level of
-    `key: value`), and the scan keeps the surrounding quotes off the value the way the platform
-    reads them. Both sections by default - which is the namespace a new key has to be unique
-    in; `sections` narrows the answer to one of them.
+    `key: value`), and the scan keeps the surrounding quotes off the key and the value the
+    way the platform reads them - a key comes quoted only when it collides with a YAML 1.1
+    bool/null word (_quoted_dictionary_key); a file from before that quoting still has the
+    key bare, and a bare key has no quotes to strip. Both sections by default - which is the
+    namespace a new key has to be unique in; `sections` narrows the answer to one of them.
     """
     out: dict[str, str] = {}
     for section in sections or (_STRING_SECTIONS + _TEMPLATE_SECTIONS):
@@ -4163,10 +4215,7 @@ def _section_entries(text: str, sections: tuple[str, ...] = ()) -> dict[str, str
             key, sep, value = stripped.partition(":")
             if not sep or not key or " " in key.strip():
                 continue
-            value = value.strip()
-            if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
-                value = value[1:-1]
-            out[key.strip()] = value
+            out[_unquoted_scalar(key.strip())] = _unquoted_scalar(value.strip())
     return out
 
 
@@ -4440,7 +4489,7 @@ def _section_of_key(text: str, name: str) -> str:
         if bounds is None:
             continue
         _, header_line_end, body_end = bounds
-        if re.search(rf"^[ \t]+{re.escape(name)}:", text[header_line_end:body_end], re.M):
+        if re.search(rf"^[ \t]+{_mapping_key_pattern(name)}:", text[header_line_end:body_end], re.M):
             return section
     return ""
 
@@ -4461,24 +4510,26 @@ def _set_localized_row(text: str, section: str, key: str, value: str, nl: str,
 
     Quoting is the writer's business, as everywhere else here: a value is written bare while
     it survives being read back bare, so the generated lines look like the hand-written ones
-    around them.
+    around them. The key gets the same treatment against a narrower danger - see
+    _quoted_dictionary_key.
     """
     written = value if _survives_bare(value) else json.dumps(value, ensure_ascii=False)
+    written_key = _quoted_dictionary_key(key)
     bounds = _section_bounds(text, section, top_level=True)
     if bounds is None:
         tail = "" if (not text or text.endswith(("\n", "\r"))) else nl
         header = spelled_key(section, lang)
-        new_text = f"{text}{tail}{header}:{nl}    {key}: {written}{nl}"
-        return new_text, _cursor_at(new_text, new_text.rindex(f"{key}: {written}"))
+        new_text = f"{text}{tail}{header}:{nl}    {written_key}: {written}{nl}"
+        return new_text, _cursor_at(new_text, new_text.rindex(f"{written_key}: {written}"))
     _, header_line_end, body_end = bounds
-    existing = re.search(rf"^([ \t]+){re.escape(key)}:[ \t]*(.*?)[ \t]*\r?$",
+    existing = re.search(rf"^([ \t]+){_mapping_key_pattern(key)}:[ \t]*(.*?)[ \t]*\r?$",
                          text[header_line_end:body_end], re.M)
     if existing is None:
-        new_text = text[:body_end] + f"{nl}    {key}: {written}" + text[body_end:]
+        new_text = text[:body_end] + f"{nl}    {written_key}: {written}" + text[body_end:]
         return new_text, _cursor_at(new_text, body_end + len(nl) + 4)
     start = header_line_end + existing.start()
     end = header_line_end + existing.end()
-    new_text = text[:start] + f"{existing.group(1)}{key}: {written}" + text[end:]
+    new_text = text[:start] + f"{existing.group(1)}{written_key}: {written}" + text[end:]
     return new_text, _cursor_at(new_text, start)
 
 
@@ -5383,6 +5434,18 @@ def _captions_through_dictionary(text: str, dictionary: str, lang: str,
     return _caption_line_re(lang).sub(replace, text), keys, skipped
 
 
+
+def _written_caption(value: str) -> str:
+    """The caption as it goes into the dictionary: bare while bare still reads as itself.
+
+    The value is judged by the same two measures used everywhere else in this file.
+    `_survives_bare` catches a colon, a hash and the rest of what leads the parse astray, and
+    the YAML 1.1 list catches the words that read back as a boolean or as nothing at all.
+    """
+    if _survives_bare(value) and _quoted_dictionary_key(value) == value:
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
 def _dictionary_entries(dict_path: Path, keys: list[str], reader=None) -> ScaffoldResult:
     """The dictionary change that makes the caption references resolvable.
 
@@ -5400,7 +5463,12 @@ def _dictionary_entries(dict_path: Path, keys: list[str], reader=None) -> Scaffo
     lang = yaml_language(text, dict_path.parent)
     section = "Строки"
     bounds = _section_bounds(text, section, top_level=True)
-    block = "".join(f"{nl}    {key}: {value}" for key, value in fresh)
+    # The caption repeats the element's own name, so a name like `On` lands on BOTH halves of
+    # the row: without quotes a typed parser answers a boolean for the key and for the value.
+    block = "".join(
+        f"{nl}    {_quoted_dictionary_key(key)}: {_written_caption(value)}"
+        for key, value in fresh
+    )
     if bounds is not None:
         _, _header_line_end, body_end = bounds
         new_text = text[:body_end] + block + text[body_end:]
