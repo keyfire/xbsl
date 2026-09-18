@@ -484,3 +484,21 @@ def test_a_special_word_key_keeps_its_section_when_quoted(element: Path):
     loaded = _loaded(element)
     assert loaded["Шаблоны"]["On"] == "Выкл, %0!"
     assert "On" not in (loaded.get("Строки") or {})
+
+
+def test_a_caption_named_like_a_special_word_is_written_quoted(element: Path):
+    """The dictionary a generated form leans on is written by a third path of its own.
+
+    A field named `On` is an ordinary name for a toggle, and its caption defaults to that name,
+    so the row lands in the same section every other writer here guards. Written bare, a strict
+    reader turns both halves of `On: On` into booleans, and the dictionary disagrees with the
+    translation file beside it, which quotes the same key.
+    """
+    _add(element, "строка", "Первая", "Первый текст")
+
+    _write(scaffold._dictionary_entries(element, ["On", "Обычное"]))
+
+    text = io.open(element, encoding="utf-8-sig").read()
+    assert '"On":' in text
+    assert "\n    Обычное:" in text  # an ordinary caption keeps its bare spelling
+    assert _loaded(element)["Строки"]["On"] == "On"

@@ -5434,6 +5434,18 @@ def _captions_through_dictionary(text: str, dictionary: str, lang: str,
     return _caption_line_re(lang).sub(replace, text), keys, skipped
 
 
+
+def _written_caption(value: str) -> str:
+    """The caption as it goes into the dictionary: bare while bare still reads as itself.
+
+    The value is judged by the same two measures used everywhere else in this file.
+    `_survives_bare` catches a colon, a hash and the rest of what leads the parse astray, and
+    the YAML 1.1 list catches the words that read back as a boolean or as nothing at all.
+    """
+    if _survives_bare(value) and _quoted_dictionary_key(value) == value:
+        return value
+    return json.dumps(value, ensure_ascii=False)
+
 def _dictionary_entries(dict_path: Path, keys: list[str], reader=None) -> ScaffoldResult:
     """The dictionary change that makes the caption references resolvable.
 
@@ -5451,7 +5463,12 @@ def _dictionary_entries(dict_path: Path, keys: list[str], reader=None) -> Scaffo
     lang = yaml_language(text, dict_path.parent)
     section = "Строки"
     bounds = _section_bounds(text, section, top_level=True)
-    block = "".join(f"{nl}    {key}: {value}" for key, value in fresh)
+    # The caption repeats the element's own name, so a name like `On` lands on BOTH halves of
+    # the row: without quotes a typed parser answers a boolean for the key and for the value.
+    block = "".join(
+        f"{nl}    {_quoted_dictionary_key(key)}: {_written_caption(value)}"
+        for key, value in fresh
+    )
     if bounds is not None:
         _, _header_line_end, body_end = bounds
         new_text = text[:body_end] + block + text[body_end:]
