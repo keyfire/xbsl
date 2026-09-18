@@ -76,6 +76,9 @@ _ACTION_KEY = "ПриУдаленииОбъектаПоСсылке"
 _ACTION_VALUE = "УдалятьТекущий"
 _MODE_KEY = "РежимУдаления"
 _SAFE_MODE = "Немедленно"
+#: The mode an element of a kind that HAS the property falls into when nothing names one.
+#: Written out for the records that carry no default of their own (see _default_mode).
+_MARKING_MODE = "ПометкаУдаления"
 
 
 def _spellings(name: str, english: str | None) -> frozenset[str]:
@@ -103,15 +106,24 @@ def _forms() -> tuple[frozenset[str], frozenset[str], frozenset[str], frozenset[
 def _default_mode(kind: str) -> str | None:
     """The mode an element of this kind is in when its yaml never names one.
 
-    None means the kind has no deletion mode to judge by: four kinds out of the forty one
-    declare the property, and a register is not among them. The default is read from the
-    record of THIS kind - collapsing every record into one value and applying it to every
-    kind reported the dimensions of a register by the default written for a catalog.
+    Two different noes, and only one of them stands the rule down. `None` means the kind has
+    no deletion mode AT ALL - four kinds out of the forty one declare the property, and a
+    register is not among them, so its action contradicts nothing.
+
+    A kind that DOES declare the property is answered even when its record spells no default:
+    44 of the 63 enumeration records of the element kinds carry none, so a record without one
+    is the ordinary shape of the data rather than its edge, and reading it as "this kind has
+    no mode" would put the very miss this gate removes one border further along. The mode an
+    element falls into is `DeletionMark`, which the compiler settled on its own - it refused
+    `DeleteCurrent` in a catalog that named no mode at all.
+
+    The default is read from the record of THIS kind. Collapsing every record into one value
+    and applying it to every kind reported the dimensions of a register by a catalog's default.
     """
-    record = metamodel.properties(kind).get(_MODE_KEY)
-    if not record:
+    props = metamodel.properties(kind)
+    if _MODE_KEY not in props:
         return None
-    return record.get("default")
+    return (props[_MODE_KEY] or {}).get("default") or _MARKING_MODE
 
 
 def _reset() -> None:

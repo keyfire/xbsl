@@ -160,3 +160,60 @@ def test_message_quotes_the_compiler_word_for_word(tmp_path):
     assert d
     assert all('cannot apply to object with a "DeletionMark"' in x.message for x in d)
     assert all("Компилятор отвечает" in x.message for x in d)
+
+
+def _without_recorded_default(monkeypatch):
+    """The metamodel with the default of the deletion mode stripped from every record.
+
+    Forty four of the sixty three enumeration records of the element kinds carry no default,
+    so a record without one is the ordinary shape of the data rather than its edge.
+    """
+    from xbsl import metamodel
+    from xbsl.rules import yaml_deletion
+
+    original = metamodel.properties
+
+    def stripped(kind: str) -> dict:
+        props = dict(original(kind))
+        record = props.get("РежимУдаления")
+        if record:
+            props["РежимУдаления"] = {k: v for k, v in record.items() if k != "default"}
+        return props
+
+    monkeypatch.setattr(metamodel, "properties", stripped)
+    # The answer is cached per kind, so the patch has to start from an empty one - and the
+    # caller empties it again afterwards, or the next test would read this one's metamodel.
+    yaml_deletion._default_mode.cache_clear()
+
+
+def test_a_kind_that_has_the_property_is_judged_without_a_recorded_default(
+    tmp_path, monkeypatch
+):
+    """Two different noes, and only one of them silences the rule.
+
+    A catalog holds a deletion mode whatever the metamodel spells, and an element that never
+    names one is in the marking mode - the compiler refused exactly that shape. Reading a
+    record without a default as "this kind has no mode" would put the miss this gate removes
+    back, one border further along.
+    """
+    from xbsl.rules import yaml_deletion
+
+    _without_recorded_default(monkeypatch)
+    try:
+        assert _has(_owner(tmp_path), RULE)
+    finally:
+        yaml_deletion._default_mode.cache_clear()
+
+
+def test_a_kind_without_the_property_stays_unjudged_without_a_recorded_default(
+    tmp_path, monkeypatch
+):
+    """The other half of the same pair: a register has no such property to begin with."""
+    from xbsl.rules import yaml_deletion
+
+    _without_recorded_default(monkeypatch)
+    try:
+        (tmp_path / "ОперацииОбновления.yaml").write_text(_REGISTER, encoding="utf-8")
+        assert not _has(engine.run(discover([str(tmp_path)]), select={RULE}), RULE)
+    finally:
+        yaml_deletion._default_mode.cache_clear()
