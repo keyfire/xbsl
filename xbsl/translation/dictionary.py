@@ -766,10 +766,28 @@ def _digest(path: Path) -> bytes:
 _LOCK = threading.RLock()
 
 
+#: Directories whose freshness has already been established during the current pass of the
+#: engine. The stamp `_digest` takes reads the bytes of every dictionary file, and the rule
+#: that asks for the dictionary asks once per checked file: on a project of 1267 sources with
+#: a dictionary of 185 files that came to 234 395 reads and 83 of the 188 seconds of the run.
+#: A pass takes the stamp at its start (`dataset.begin_pass`) and trusts it until the next one.
+_FRESH: set[Path] = set()
+
+
 def forget_cached() -> None:
     """Drop the kept dictionaries - the next `load_cached` reads the files again."""
     with _LOCK:
         _CACHE.clear()
+        _FRESH.clear()
+
+
+def _forget_freshness() -> None:
+    """A new pass begins: the state of every dictionary is taken again (dataset hook)."""
+    with _LOCK:
+        _FRESH.clear()
+
+
+dataset.register_pass(_forget_freshness)
 
 
 # The load reads the platform data - a token value is checked against the English keywords
@@ -787,6 +805,27 @@ def load_cached(path: Path) -> Dictionary:
             return known[1]
         loaded = load(path)
         _CACHE[path] = (stamp, loaded)
+        return loaded
+
+
+def load_for_pass(path: Path) -> Dictionary:
+    """The same dictionary, with its state taken once per pass of the engine.
+
+    For a caller that asks per FILE while the answer can only change between passes: the rule
+    `conventions/missing-translation` loads the dictionary for every source it checks, and the
+    stamp `load_cached` takes reads the bytes of every dictionary file. An edit lands between
+    passes - `translate_set` writes and the lint that follows it reads - so the pass that has
+    already looked is allowed to trust what it saw.
+
+    The lock is taken around both steps and `load_cached` takes it again from inside: that is
+    what the re-entrant lock is for, and a plain one would deadlock here.
+    """
+    with _LOCK:
+        known = _CACHE.get(path)
+        if known is not None and path in _FRESH:
+            return known[1]
+        loaded = load_cached(path)
+        _FRESH.add(path)
         return loaded
 
 
