@@ -933,8 +933,8 @@ def test_a_generated_type_named_by_a_placeholder_is_not_keyed(tmp_path, monkeypa
 
 
 def test_two_flavours_of_one_kind_join_their_generated_members(tmp_path, monkeypatch):
-    """`КлючДоступа` is one kind with two flavours, and each flavour has a template of its
-    own (`Пересчитать` on the computable one, `Выдать` on the grantable one). The yaml spells
+    """`AccessKey` is one kind with two flavours, and each flavour has a template of its
+    own (`Recompute` on the computable one, `Grant` on the grantable one). The yaml spells
     the flavour as a property, so a consumer given the kind alone cannot tell them apart - the
     sets join, exactly as the manager members of the same three templates already do."""
     import json

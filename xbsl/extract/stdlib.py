@@ -1071,7 +1071,7 @@ def extract(dist: Path) -> tuple:
             members.setdefault(kind, set()).add(segs[1])
             # The page describes the generated type, not only its name, and what it describes is
             # what the platform GIVES an element of the kind: the members of `Имя.Объект` are the
-            # bare names of an object module (`ЭтоНовый`, `Записать`, `ПометкаУдаления`), those of
+            # bare names of an object module (`IsNew`, `Write`, `DeletionMark`), those of
             # `Имя.Данные` and `Имя.ПараметрыЗаписи` are the fields of the write handler's
             # parameters. Reading the name alone left every one of them out of the data, and the
             # rules made do with a hand-written table of four names.
@@ -1082,8 +1082,8 @@ def extract(dist: Path) -> tuple:
                 continue
             props, methods, events = page_members(raw)
             if props or methods or events:
-                # A kind with several flavours has a template per flavour (`КлючДоступа`:
-                # `Пересчитать` on the computable one, `Выдать` on the grantable one) and the yaml
+                # A kind with several flavours has a template per flavour (`AccessKey`:
+                # `Recompute` on the computable one, `Grant` on the grantable one) and the yaml
                 # spells the flavour as a property, so a consumer given the kind alone cannot tell
                 # them apart. The sets join - the manager members of the same three templates are
                 # joined just above for the same reason.

@@ -247,7 +247,7 @@ def test_object_module_still_reports_a_name_the_platform_does_not_give_it(monkey
 
 def test_an_older_dataset_without_the_section_keeps_the_scope_it_had(monkeypatch):
     """A dataset extracted before this section exists must not lose the four names the
-    compiler probe confirmed - they are the fallback, and `Записать` is one of them."""
+    compiler probe confirmed - they are the fallback, and `Write` is one of them."""
     _with_generated(monkeypatch, None)
     found = _lint({
         "Задачи.yaml": _CATALOG_RU,

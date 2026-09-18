@@ -2,12 +2,12 @@
 
 The members of `<вид>.Объект` come from a template page of the help, and that page describes
 ONE example element - everything switched on in the example reads as the contract of the whole
-kind. Five names of four kinds are not: `Родитель` reaches a hierarchical catalog only,
-`МоментПометкиУдаления` and `ПометкаУдаления` an element whose deletion mode is
-`ПометкаУдаления`, `Выдать`/`Отозвать` an access key granted by hand and `Пересчитать` a
-computed one. Taking them for the whole kind keeps the rule quiet where the compiler refuses:
-the default of `Иерархический` is `Ложь`, so most catalogs would be covered, and of the two
-access-key flavours one is always wrong.
+kind. Five names of four kinds are not: `Parent` reaches a hierarchical catalog only,
+`DeletionMarkInstant` and `DeletionMark` an element whose deletion mode is `DeletionMark`,
+`Grant`/`Revoke` an access key granted by hand and `Recompute` a computed one. Taking them for
+the whole kind keeps the rule quiet where the compiler refuses: the default of `IsHierarchical`
+is `False`, so most catalogs would be covered, and of the two access-key flavours one is always
+wrong.
 
 Each name is checked twice - the setting on and the setting off - and the module also uses a
 name the platform gives under no setting at all, so a scope that simply went blind would fail.
@@ -85,7 +85,7 @@ def _module(*reads: str) -> str:
     return "метод Проверить()\n" + body + "    знч Контроль = НетТакогоИмени\n;\n"
 
 
-# --- `Родитель`: a hierarchical catalog only -----------------------------------------------
+# --- `Parent`: a hierarchical catalog only -------------------------------------------------
 
 def test_a_hierarchical_catalog_knows_its_parent():
     files = {"Разделы.yaml": _yaml("Справочник", "Разделы", "a1000000-0000-4000-8000-000000000001",
@@ -95,18 +95,18 @@ def test_a_hierarchical_catalog_knows_its_parent():
 
 
 def test_a_plain_catalog_does_not():
-    """`Иерархический` defaults to `Ложь`, so this is the shape of most catalogs."""
+    """`IsHierarchical` defaults to `False`, so this is the shape of most catalogs."""
     files = {"Разделы.yaml": _yaml("Справочник", "Разделы", "a1000000-0000-4000-8000-000000000002"),
              "Разделы.Объект.xbsl": _module("Родитель")}
     assert _names(files) == ["НетТакогоИмени", "Родитель"]
 
 
-# --- `ПометкаУдаления` / `МоментПометкиУдаления`: the deletion mode of the element ----------
+# --- `DeletionMark` / `DeletionMarkInstant`: the deletion mode of the element ---------------
 
 @pytest.mark.parametrize("kind, name", [("Справочник", "Метки"), ("Документ", "Отгрузки"),
                                         ("ПланОбмена", "Узлы")])
 def test_an_element_that_is_only_marked_knows_the_mark(kind, name):
-    """`ПометкаУдаления` is the default of the mode, so the yaml need not mention it."""
+    """`DeletionMark` is the default of the mode, so the yaml need not mention it."""
     files = {f"{name}.yaml": _yaml(kind, name, "a1000000-0000-4000-8000-000000000003"),
              f"{name}.Объект.xbsl": _module("ПометкаУдаления", "МоментПометкиУдаления")}
     assert _names(files) == ["НетТакогоИмени"]
@@ -154,7 +154,7 @@ def test_a_key_granted_by_hand_does_not_recompute():
 
 
 def test_a_computed_key_recomputes():
-    """`РучнаяВыдача` defaults to `Ложь` - a key that says nothing is the computed flavour."""
+    """`ManualGrant` defaults to `False` - a key that says nothing is the computed flavour."""
     files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-000000000009"),
              "Ключи.Объект.xbsl": _module("Пересчитать")}
     assert _names(files) == ["НетТакогоИмени"]

@@ -121,7 +121,7 @@ _UNDOCUMENTED = frozenset({
 # covers what it does not: an older dataset, and a kind whose object type the help omits.
 #
 # The probe and the documentation disagree on one name. The probe read IsNew as absent; the
-# help lists `ЭтоНовый` among the methods of the object type, and a product in production calls
+# help lists `IsNew` among the methods of the object type, and a product in production calls
 # it by a bare name in five modules. Two sources against one, so the data wins - and if the
 # probe is right after all, the finding comes back on regeneration rather than silently.
 _ENTITY_COMMON = frozenset({
@@ -152,27 +152,27 @@ _MANAGER_SCOPE = "manager"
 #: A row is (the property that decides, the value that switches the names ON, the names of the
 #: object module, the names of the manager module). The kinds a row speaks for are the kinds
 #: whose metamodel record declares that property, so no row carries a list of its own:
-#: `Пересчитать` reaches an access key, which has `РучнаяВыдача`, and leaves a privilege alone,
+#: `Recompute` reaches an access key, which has `ManualGrant`, and leaves a privilege alone,
 #: which recomputes too but has no such property. A kind that declares nothing of the sort is
 #: not judged at all - a settings storage keeps every name it had.
 _CONDITIONAL_MEMBERS = (
     # "Появляется только у иерархических справочников" - xbql/Std/CatalogName, which spells
     # out which ones: "справочник с установленным значением Истина для свойства Иерархический".
-    # The default is `Ложь`, so without the gate the name would be waved through on most
+    # The default is `False`, so without the gate the name would be waved through on most
     # catalogs of a project.
     ("Иерархический", "Истина", ("Родитель",), ()),
     # "Поле присутствует только у справочников с режимом удаления ПометкаУдаления" - the same
     # sentence for both fields on the catalog, document and exchange-plan pages of xbql. The
-    # `ПометкаУдаления` of the fallback table above is the same fact and rides along.
+    # `DeletionMark` of the fallback table above is the same fact and rides along.
     ("РежимУдаления", "ПометкаУдаления", ("МоментПометкиУдаления", "ПометкаУдаления"), ()),
     # An access key is granted by hand or computed, and the help keeps the two apart as two
-    # types: `ВыдаваемыйКлючДоступа` revokes, `ВычисляемыйКлючДоступа` recomputes, and so do
-    # their instances. In yaml it is ONE kind, so both template pages fold into
-    # `КлючДоступа.Объект` and into the manager members of the kind, and each flavour ends up
-    # carrying the methods of the other. A probe on a stand measured all four corners: to the
-    # name of the other flavour the compiler answers `Unknown method`, in either module. Which
-    # flavour a key is, the help says nowhere - the probe settled that too, and the answer is
-    # this property and nothing else.
+    # types: `GrantableAccessKey` revokes, `ComputableAccessKey` recomputes, and so do their
+    # instances. In yaml it is ONE kind, so both template pages fold into `КлючДоступа.Объект`
+    # and into the manager members of the kind, and each flavour ends up carrying the methods
+    # of the other. A probe on a stand measured all four corners: to the name of the other
+    # flavour the compiler answers `Unknown method`, in either module. Which flavour a key is,
+    # the help says nowhere - the probe settled that too, and the answer is this property and
+    # nothing else.
     ("РучнаяВыдача", "Истина", ("Выдать", "Отозвать"), ("ОтозватьКлючи",)),
     ("РучнаяВыдача", "Ложь", ("Пересчитать",), ("ПересчитатьКлючи",)),
 )
@@ -204,7 +204,7 @@ def _withheld_members(data: dict, kind: str | None) -> dict[str, list[str]]:
     it wrongly costs an error on code that compiles - and that is the defect being repaired.
 
     The branch that falls back on the default of the property is sound but rarely walked: under
-    the current compatibility mode an access key that names no `РучнаяВыдача` does not apply at
+    the current compatibility mode an access key that names no `ManualGrant` does not apply at
     all, and that refusal is a finding of another rule. Only a project held to an older mode
     reaches the default.
     """
@@ -355,7 +355,7 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "element_kind": kind if isinstance(kind, str) else None,
             "sections": sorted(element_own_names(data)),
             # Names of the kind that this element's own settings switch off, per module
-            # scope - a catalog that is not hierarchical has no `Родитель`. Read here, where
+            # scope - a catalog that is not hierarchical has no `Parent`. Read here, where
             # the parsed yaml is at hand, and subtracted where each scope is built.
             "withheld": _withheld_members(data, kind),
             "base": _base_type_root(data),
