@@ -36,8 +36,9 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import dataset, i18n, parser as P, terms
+from xbsl import dataset, i18n, metamodel, parser as P, terms
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.rules.yaml_schema import object_kind, value_of
 from xbsl.engine import SourceFile, rule
@@ -129,6 +130,86 @@ _ENTITY_COMMON = frozenset({
 #: The tail of the generated type an object module belongs to: `<Имя>.Объект.xbsl` is the
 #: module of `<Имя>.Объект`, so its members sit under `<вид>.Объект` in generated_members.
 _OBJECT_FACET = "Объект"
+
+#: Both spellings of a boolean, as a yaml may carry it: the loader reads `True`/`true` as the
+#: python value, a Russian file writes the word, and the metamodel writes its defaults in the
+#: lower-case English form.
+_TRUE_FORMS = frozenset({"Истина", "True", "true"})
+_FALSE_FORMS = frozenset({"Ложь", "False", "false"})
+
+#: Members of `<вид>.Объект` that the platform gives to SOME elements of the kind only. The
+#: template page the data is read from describes ONE example element, and everything switched
+#: on in that example reaches the data as the contract of the whole kind - so the help has to
+#: be read for each of them and the element's own yaml asked.
+#:
+#: A row is (the property that decides, the value that switches the members ON, the names). The
+#: kinds a row speaks for are the kinds whose metamodel record declares that property, so no row
+#: carries a list of its own: `Пересчитать` reaches an access key, which has `РучнаяВыдача`, and
+#: leaves a privilege alone, which has the method but no such property. A kind that declares
+#: nothing of the sort is not judged at all - a settings storage keeps every name it had.
+_CONDITIONAL_MEMBERS = (
+    # "Появляется только у иерархических справочников" - xbql/Std/CatalogName, which spells
+    # out which ones: "справочник с установленным значением Истина для свойства Иерархический".
+    # The default is `Ложь`, so without the gate the name would be waved through on most
+    # catalogs of a project.
+    ("Иерархический", "Истина", ("Родитель",)),
+    # "Поле присутствует только у справочников с режимом удаления ПометкаУдаления" - the same
+    # sentence for both fields on the catalog, document and exchange-plan pages of xbql. The
+    # `ПометкаУдаления` of the fallback table above is the same fact and rides along.
+    ("РежимУдаления", "ПометкаУдаления", ("МоментПометкиУдаления", "ПометкаУдаления")),
+    # An access key is granted by hand or computed, and the help keeps the two apart as two
+    # types: `ВыдаваемыйКлючДоступа.Объект` grants and revokes, `ВычисляемыйКлючДоступа.Объект`
+    # recomputes. In yaml it is ONE kind, so both template pages fold into `КлючДоступа.Объект`
+    # and each flavour ends up carrying the methods of the other.
+    ("РучнаяВыдача", "Истина", ("Выдать", "Отозвать")),
+    ("РучнаяВыдача", "Ложь", ("Пересчитать",)),
+)
+
+
+@lru_cache(maxsize=None)
+def _on_forms(value: str) -> frozenset[str]:
+    """Every spelling of the value that switches a row on.
+
+    A boolean is spelled three ways at once; an enumeration value takes its English form from
+    the term dictionary, so an English project is judged by the same row.
+    """
+    if value in _TRUE_FORMS:
+        return _TRUE_FORMS
+    if value in _FALSE_FORMS:
+        return _FALSE_FORMS
+    english = terms.english(value, "enums") or terms.common_english(value)
+    return frozenset({value} | ({english} if english else set()))
+
+
+dataset.register_reset(_on_forms.cache_clear)
+
+
+def _withheld_members(data: dict, kind: str | None) -> set[str]:
+    """Members of `<вид>.Объект` that THIS element's own settings do not give it.
+
+    Silence is the answer wherever nothing is settled: a kind without the property, a value the
+    file spells in a way nothing recognises. Widening a scope costs a missed finding, narrowing
+    it wrongly costs an error on code that compiles - and that is the defect being repaired.
+    """
+    if not kind:
+        return set()
+    props = metamodel.properties(kind)
+    withheld: set[str] = set()
+    for prop, on_value, names in _CONDITIONAL_MEMBERS:
+        record = props.get(prop)
+        if not record:
+            continue  # the kind has no such setting - nothing to judge by
+        written = value_of(data, prop, kind)
+        if written is None:
+            written = record.get("default")
+        if written is True:
+            written = "Истина"
+        elif written is False:
+            written = "Ложь"
+        if isinstance(written, str) and written not in _on_forms(on_value):
+            withheld.update(names)
+    return withheld
+
 
 # The yaml sections whose items become bare names in the object modules.
 _FIELD_SECTIONS = (
@@ -288,6 +369,10 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "name": name if isinstance(name, str) else None,
             "element_kind": kind if isinstance(kind, str) else None,
             "sections": sorted(_section_names(data)),
+            # Members of the kind's object type that this element's own settings switch off -
+            # a catalog that is not hierarchical has no `Родитель`. Read here, where the
+            # parsed yaml is at hand, and subtracted where the object scope is built.
+            "withheld": sorted(_withheld_members(data, kind)),
             "base": _base_type_root(data),
             "ext": isinstance(imports, list)
                    and any(isinstance(i, str) and "::" in i for i in imports),
@@ -472,10 +557,11 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 # the object type of this kind (the template page of `<вид>.Объект`), plus the
                 # probe-confirmed table for a dataset or a kind the pages say nothing about.
                 given = generated_members.get(f"{kind}.{_OBJECT_FACET}") or {}
-                extras = set(pair["sections"]) | _both_spellings(
-                    set(_ENTITY_COMMON)
-                    | set(given.get("properties", ())) | set(given.get("methods", ()))
-                )
+                names = (set(_ENTITY_COMMON)
+                         | set(given.get("properties", ())) | set(given.get("methods", ())))
+                # Withheld BEFORE the spellings are added, or the English form of a name the
+                # element does not have would stay in scope on its own.
+                extras = set(pair["sections"]) | _both_spellings(names - set(pair["withheld"]))
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
             else:
