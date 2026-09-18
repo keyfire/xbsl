@@ -266,14 +266,21 @@ through a `ClientWorkParameters` element. Which one fits depends on how long the
 live, so there is no automatic fix.
 
 Only this shape is reported. The arguments of `Get` and `ReadAsString` must be string literals
-without interpolation or parameters of the method. A member access, a call, an operator or a
-computed default value can depend on the user, the settings or other data, and the rule skips
-such a method. The root must be the platform type: a parameter, declaration or import of the
-module with that name skips the method, and so does a `Name` in the paired description. A
-project element with that name turns the check off for the whole project. Environment,
-availability and caching are the facts `code/computed-property-server-call` uses. The rule also
-skips client variants, handlers, an enabled or unknown `CacheResult`, duplicated methods and
-modules without valid metadata.
+without interpolation or parameters of the method. A member access, a call or a computed default
+value can depend on the user, the settings or other data - the cache would keep an answer that
+was true once - and the rule skips such a method. An operator and an interpolation are skipped
+for a narrower reason. `"styles/" + FileName` and `"styles/%FileName"` look as if they read the
+arguments and nothing else, and for two strings they do, but a value of another type joins a
+string through `ToString()`, and the `$` form of an interpolation through `Presentation()`,
+which the platform allows to depend on the locale. Both are declared on the `Object` type and a
+project type may define them, so proving the path would mean proving the operand is the platform
+string first. The narrowing is deliberate. The root must be the platform type: a parameter,
+declaration or import of the module with that name skips the method, and so does a `Name` in the
+paired description. A project element with that name turns the check off for the whole project,
+and so does a global element of an attached library - the project sees it by the bare name.
+Environment, availability and caching are the facts `code/computed-property-server-call` uses.
+The rule also skips client variants, handlers, an enabled or unknown `CacheResult`, duplicated
+methods and modules without valid metadata.
 
 ## Baseline: adopt a rule on a legacy codebase
 

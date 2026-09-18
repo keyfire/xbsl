@@ -33,7 +33,11 @@ record, the reference member is the facet word too, `Reference`; the link proper
 picture is `Link`. A value of a union-typed property that spells a member of the union, such as
 `Auto` of `Auto|Number`, becomes that member, spelled by the platform's type pairs. Inside
 `Query{ ... }` blocks the query vocabulary answers instead of the general one. A name the data
-cannot spell stays as written and is reported as a data gap: the translator never guesses.
+cannot spell stays as written and is reported as a data gap: the translator never guesses. Nor
+does it guess an owner: a link of a chain declared `A|B` holds one of the two and the code does
+not say which, so the chain ends there and the word after it is read without an owner. A string
+interpolation is code of the method around it, chains and all - `"%{Объект.Товары.Граница()}"`
+reads exactly what the same expression reads outside the quotes.
 
 **The project half comes from the dictionary.** People translate everything the project named
 itself: objects, methods, attributes, form components, dictionary keys, resource files, and an
@@ -201,11 +205,20 @@ property, a path in a string and the body of `Resource{...}` take the dictionary
 keep the file's own name together.
 
 Pictures of the platform's library are not files of the project. Each picture exists under a
-Russian and an English name, and a yaml property, a string or `Resource{...}` that names one takes
-the English name, bare or with the library namespace: `Стд::Аккаунт.svg` becomes
-`Std::Account.svg`. If the project keeps its own file under the same name, the reference goes to
-that file. The translator takes the English names from `resource_paths` in the platform's
-`uiterms.json`, and on data without that section a reference does not get them.
+Russian and an English name, and the English one goes to a reference the compiler resolves: the
+value of a picture property and the body of `Resource{...}`. The library namespace may be written
+or left out: `Стд::Аккаунт.svg` becomes `Std::Account.svg`.
+
+A name written without the namespace is looked for among the project's files first, and a file of
+the project wins. A name written with the library's namespace always means the library, which is
+what writing it says.
+
+A string does not reach the library. A path in a string is read by `ПакетРесурсов.Текущий()`, the
+resource package of the current namespace. So a string literal and a yaml value the schema types
+as text stay as they were written, even when they spell a name of the library letter for letter.
+
+The translator takes the English names from `resource_paths` in the platform's `uiterms.json`, and
+on data without that section a reference does not get them.
 
 A method a component of the project declares, called through a node of a form, is the project's
 word too, while a built-in command of a platform component keeps the spelling of the ui vocabulary.
@@ -382,7 +395,7 @@ A platform type a method reads as the root of a static access stands in the same
 translated into the type's word hides the type in the English tree, so the pair is reported with
 both places, and an entry qualified by the method (`Method.Local`) separates them.
 
-Two more problems come from the dictionary itself, and both were found on a real project whose
+Three more problems come from the dictionary itself, and all three were found on a real project whose
 English build failed while the coverage stood at 100%. The first is an entry that spells a platform
 member as the platform spells it nowhere, such as `Важность: Severity` against the event's
 `Importance`. It is reported at the first place where a receiver of known type proves it. There the
@@ -393,6 +406,16 @@ storage, and an entry matching either names nothing wrong. The second problem is
 whose substitutions differ from its key's after translation, such as `%{AccountCode}` where the
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
+
+The third is a type the project itself declares under the spelling of a platform type, with an entry that
+renames it to something else. A type expression normally takes the platform's word over any name of
+the project, but a type the project declares is the exception - its declaration and its uses have to
+move together - so the entry answers every type expression of that spelling, the platform's own among
+them. A palette node called `Образец` and an entry `Образец: Swatch` turned `new Образец(...)` of a
+file that had never heard of the palette into `new Swatch(...)`, and the build answered
+`Type "Swatch" is not defined`. No value repairs it and the cure is not a value: the project's type
+has to be renamed. An entry that repeats the platform's own spelling moves no platform word anywhere
+and is left alone.
 
 A localizable yaml text without its literal entry fails `--strict` as well - any value the
 metamodel types `Localizable`, `Description` aside: a `Presentation` wherever it stands, the titles
@@ -490,6 +513,18 @@ xbsl translate e1c/app --redundant                         # entries the platfor
 empty value removes the entry. The other is the JSON list `[{key, value, kind}]` that scripts
 produce. A batch of hundreds of entries is authored the way the dictionary itself is written,
 rather than as JSON on the command line.
+
+The writer warns about two shapes it can see without walking the project, and writes the pair all
+the same. A value another key of the same scope already takes is the collision above, met at the
+moment a person types the word. A key spelled like a word the platform itself carries is the other: as a
+type, where nothing but renaming the project's node repairs it, and as a member of a platform type,
+where the right value is the spelling the platform itself gives the member (`ЦветСсылок: LinksColor`
+against `DesignTheme.LinksColor`). Warnings and not refusals: what makes a key spelled like a
+platform type fatal is a type the project declares under that spelling, and only the pass over the
+project can see one - so that verdict is the strict pass's, and it fails the tree there. A qualified
+key (`<Owner>.<Name>`) holds inside one namespace, never answers a type expression and is not warned
+about. `translate_set` carries the same rows in `collisions` and `platform_names`; `--set` prints
+them on stderr, beside the count of what was written.
 
 `--unused` answers the question opposite to `--gaps`. That one shows what the project needs and
 the dictionary lacks; this one shows what the dictionary still says and the project no longer has.

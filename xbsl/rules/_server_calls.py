@@ -36,10 +36,10 @@ def annotation_forms(name: str) -> frozenset[str]:
     return frozenset((*terms.key_forms(name), terms.common_english(name) or name))
 
 
-#: The catalogs once they were read, and the scope of every base type looked up in them. A
-#: failed read is not kept, so the next call reads the files again: an editor or an MCP server
-#: started before the platform data was installed used to keep every rule over these facts
-#: silent until a reset.
+#: The catalogs once they were read, and the scope of every base type looked up in them. An
+#: answer built while the platform data was missing is dropped before the next pass of the
+#: engine (dataset.register_recheck): an editor or an MCP server started before the data was
+#: installed used to keep every rule over these facts silent until a reset.
 _CATALOGS: list[tuple[dict, frozenset[str]]] = []
 _SCOPES: dict[str, frozenset[str] | None] = {}
 
@@ -47,20 +47,17 @@ _SCOPES: dict[str, frozenset[str] | None] = {}
 def _catalogs() -> tuple[dict, frozenset[str]] | None:
     """The ui schema and the stdlib names; None where the platform data is not installed.
 
-    Only a complete read is kept. Without the stdlib the answer is None, without the ui schema
-    the schema is empty, and in both cases the next call reads the files again.
+    Without the stdlib the answer is None and nothing is kept. Without the ui schema the
+    schema is empty, and that answer is kept only until the next look at the disk - the file
+    is generated separately from the rest and may join a root that is already in use.
     """
     if _CATALOGS:
         return _CATALOGS[0]
-    try:
-        stdlib = dataset.load_json("stdlib.json") or {}
-    except dataset.DatasetError:
+    stdlib = dataset.load_optional("stdlib.json")
+    if stdlib is None:
         return None
-    schema = dataset.load_ui_schema()
-    catalogs = (schema or {}, frozenset(stdlib.get("names", ())))
-    if schema is not None:
-        _CATALOGS.append(catalogs)
-    return catalogs
+    _CATALOGS.append((dataset.load_ui_schema() or {}, frozenset(stdlib.get("names", ()))))
+    return _CATALOGS[0]
 
 
 def _platform_scope(head: str) -> frozenset[str] | None:
@@ -68,24 +65,31 @@ def _platform_scope(head: str) -> frozenset[str] | None:
 
     A form's command is one of them: `WriteAndClose.Execute()` runs the inherited
     property and never reaches a common module that happens to share the name. The answer
-    is kept once the type catalog was read, and without the catalog the next call reads it
-    again.
+    is kept once the type catalog was read, and without the catalog nothing is kept.
     """
     if head in _SCOPES:
         return _SCOPES[head]
-    try:
-        members = (dataset.load_json("stdlib.json") or {}).get("type_members") or {}
-    except dataset.DatasetError:
+    catalog = dataset.load_optional("stdlib.json")
+    if catalog is None:
         return None
+    members = catalog.get("type_members") or {}
     canonical = uischema.canonical_component(head)
     scope = _inherited_properties(canonical) if canonical in members else None
     _SCOPES[head] = scope
     return scope
 
 
-dataset.register_reset(annotation_forms.cache_clear)
-dataset.register_reset(_CATALOGS.clear)
-dataset.register_reset(_SCOPES.clear)
+# What each registration guards differs, and only the middle one has a test that fails
+# without it. `_CATALOGS` keeps a partial answer - the type catalog read while the ui schema
+# was still missing - so a recheck must drop it. `_SCOPES` never stores anything read without
+# the type catalog (see _platform_scope), so it cannot go stale-negative on THAT file; what it
+# can keep is a scope computed from a degraded name, because `uischema.canonical_component`
+# answers the name unchanged when the ui schema and the interface vocabulary are themselves
+# missing. Installing those later is exactly what a recheck is for. Deleting either
+# registration is a behaviour change, whatever the tests say.
+for _cache_clear in (annotation_forms.cache_clear, _CATALOGS.clear, _SCOPES.clear):
+    dataset.register_reset(_cache_clear)
+    dataset.register_recheck(_cache_clear)
 
 
 def _type_head(written: str) -> str:

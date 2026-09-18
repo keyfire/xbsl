@@ -56,7 +56,10 @@ def test_key_forms_falls_back_to_type_names_and_extras():
 
 
 def test_without_data_only_russian(monkeypatch):
-    monkeypatch.setattr(terms.dataset, "load_json", lambda name: (_ for _ in ()).throw(OSError))
+    # The stub takes the version too: the readers ask through dataset.load_optional, which
+    # passes it on and treats a file it cannot read as one that is not installed.
+    monkeypatch.setattr(terms.dataset, "load_json",
+                        lambda name, version=None: (_ for _ in ()).throw(OSError))
     terms._cache = None
     assert terms.english("Запрос", "types") is None
     assert terms.forms("Запрос", "types") == ("Запрос",)

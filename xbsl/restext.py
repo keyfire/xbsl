@@ -30,6 +30,13 @@ import re
 from html.parser import HTMLParser
 from typing import NamedTuple
 
+#: The folder a subsystem keeps its resource files in - BOTH spellings, because the platform
+#: accepts either (probed on the local server; see xbsl/rules/resources.py, which reads the
+#: same pair). A project ships what lies there to the browser as it is. It lives in this leaf
+#: module so that asking for it costs nothing: taken from `xbsl/engine.py`, which registers
+#: the rules as it is imported, the name alone pulled a hundred and twenty modules in.
+RESOURCE_DIRS = ("Ресурсы", "Resources")
+
 #: Suffix -> kind of the resource files this module reads. `SourceFile.kind` carries the
 #: same words, so a rule tells a resource from a module by the kind alone.
 SUFFIX_KINDS = {".css": "css", ".js": "js", ".svg": "svg", ".html": "html"}

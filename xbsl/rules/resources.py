@@ -81,8 +81,9 @@ from pathlib import Path
 from xbsl import dataset, docs, i18n, terms
 from xbsl.dataset import DatasetError
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.engine import RESOURCE_DIRS, SourceFile, is_query_file, rule
+from xbsl.engine import SourceFile, is_query_file, rule
 from xbsl.lexer import Token
+from xbsl.restext import RESOURCE_DIRS
 from xbsl.rules._syntax import code_tokens
 from xbsl.rules.yaml_imports import _layout_fact, _layout_from
 from xbsl.rules.yaml_schema import _HAVE_YAML

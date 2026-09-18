@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
 
-from xbsl import dataset, engine, fixer, metamodel, terms, uischema
+from xbsl import dataset, engine, fixer, metamodel, restext, terms, uischema
 from xbsl.layout import Layout, Place, service_dirs
 from xbsl.lexer import _skip_interpolation
 
@@ -7424,7 +7424,7 @@ def _resources_of(path: Path) -> tuple[_ResourceFolder, tuple[str, ...]]:
     for index, part in enumerate(parts):
         if part not in service_dirs():
             continue
-        if part in engine.RESOURCE_DIRS:
+        if part in restext.RESOURCE_DIRS:
             directory = place.subsystem_dir.joinpath(*parts[: index + 1])
             return _ResourceFolder(directory, place), parts[index + 1:]
         break
@@ -7434,7 +7434,7 @@ def _resources_of(path: Path) -> tuple[_ResourceFolder, tuple[str, ...]]:
 def _resource_folder_index(root: Path, layout: Layout) -> dict[str, tuple[_ResourceFolder, frozenset[str]]]:
     """Every resources folder under the root with the keys of its files, by the folder's path key."""
     found: dict[str, tuple[_ResourceFolder, frozenset[str]]] = {}
-    for name in engine.RESOURCE_DIRS:
+    for name in restext.RESOURCE_DIRS:
         for directory in engine.find_sources(root, name):
             if not directory.is_dir():
                 continue
@@ -7465,7 +7465,7 @@ def _check_resource_folder_name(name: str, top_level: bool) -> str:
             "поэтому без пробелов по краям, без точки в начале и в конце и без символов "
             "\\ / : * ? \" < > | { }"
         )
-    if top_level and name in engine.RESOURCE_DIRS:
+    if top_level and name in restext.RESOURCE_DIRS:
         raise ScaffoldError(
             f"Папка '{name}' в корне каталога ресурсов дала бы ключи, которые начинаются с имени "
             "самого каталога, а такой ключ платформа не находит (code/resource-bare-name)"
@@ -7477,7 +7477,7 @@ def _is_resources_descriptor(path: Path, folder: _ResourceFolder) -> bool:
     """The description of the resources (`Resources/Resources.yaml`, either spelling): the
     element that sets the visibility of the whole folder, not a resource of it."""
     return (path.parent == folder.directory and path.suffix == ".yaml"
-            and path.stem in engine.RESOURCE_DIRS)
+            and path.stem in restext.RESOURCE_DIRS)
 
 
 def _files_under(directory: Path) -> list[Path]:
@@ -7599,7 +7599,7 @@ class _ResourceScan:
         # string names the folder of the file: a source without that text has nothing to say.
         probe = self.computed_folder or self.path
         for path in engine.find_sources(self.root, "*.xbsl") + engine.find_sources(self.root, "*.yaml"):
-            if any(part in engine.RESOURCE_DIRS for part in path.relative_to(self.root).parts[:-1]):
+            if any(part in restext.RESOURCE_DIRS for part in path.relative_to(self.root).parts[:-1]):
                 continue
             text = self.read(path)
             if probe not in text:
@@ -7880,7 +7880,7 @@ def op_move_resource(root: Path, resource_path: Path, target_dir: Path, *,
             _path_key(target_dir) == _path_key(resource_path)
             or _path_key(target_dir).startswith(_path_key(resource_path) + os.sep)):
         raise ScaffoldError(f"Папку '{old_key}' нельзя перенести в неё саму")
-    if resource_path.is_dir() and not target_parts and resource_path.name in engine.RESOURCE_DIRS:
+    if resource_path.is_dir() and not target_parts and resource_path.name in restext.RESOURCE_DIRS:
         _check_resource_folder_name(resource_path.name, top_level=True)
     fresh = []
     base = folder.directory

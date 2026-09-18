@@ -523,10 +523,13 @@ def _inherited_properties(base: str) -> frozenset[str]:
     properties - a local `OnHover` in a group hides the event. The English spelling is taken
     from the owner's own classes first and from the component schema after that: the compiler
     matches either spelling, and a translated tree names the same properties in English.
+
+    An empty answer reached without the data is dropped before the next pass of the engine
+    (dataset.register_recheck): otherwise a process that ran before the data was installed
+    would go on believing that a platform type gives a component no property at all.
     """
-    try:
-        catalog = dataset.load_json("stdlib.json")
-    except dataset.DatasetError:
+    catalog = dataset.load_optional("stdlib.json")
+    if catalog is None:
         return frozenset()
     record = (catalog.get("type_members") or {}).get(base) or {}
     names: set[str] = set()
@@ -546,9 +549,8 @@ def _facet_properties(facet: str) -> frozenset[str]:
     of the distribution declares - `Catalog.Object` is the `CatalogObject` class there, where the
     reference is `Reference`, while the flat dictionary calls the same word `Link`.
     """
-    try:
-        catalog = dataset.load_json("stdlib.json")
-    except dataset.DatasetError:
+    catalog = dataset.load_optional("stdlib.json")
+    if catalog is None:
         return frozenset()
     record = (catalog.get("facet_members") or {}).get(facet) or {}
     owner = (terms.english(facet, "facets") or "").replace(".", "")
@@ -596,6 +598,7 @@ for _cache in (
     _facet_properties, _job_properties,
 ):
     dataset.register_reset(_cache.cache_clear)
+    dataset.register_recheck(_cache.cache_clear)
 
 
 def _named_items(value) -> Iterator[tuple[str, dict]]:

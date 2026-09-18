@@ -459,6 +459,9 @@ def test_platform_scope_is_read_once_the_catalog_appears(tmp_path):
     try:
         assert _server_calls._platform_scope("ФормаОбъекта") is None
         _install_data(source, version, root)
+        # What a rule concluded without the data lives until the next look at the disk, and
+        # the engine looks before every pass (the run in the test above is such a pass).
+        dataset.recheck_data()
         scope = _server_calls._platform_scope("ФормаОбъекта")
     finally:
         dataset.set_data_root(None)
@@ -479,6 +482,7 @@ def test_catalogs_without_the_ui_schema_are_read_again(tmp_path):
         schema, names = _server_calls._catalogs()
         assert schema == {} and names
         shutil.copyfile(source / "uischema.json", root / version / "uischema.json")
+        dataset.recheck_data()  # what the engine does before every pass
         schema, _names = _server_calls._catalogs()
     finally:
         dataset.set_data_root(None)

@@ -290,10 +290,7 @@ def _ui_terms() -> dict:
     Absent on an older data root: every reader degrades to "no pairs", which is exactly the
     behaviour before the extractor existed.
     """
-    try:
-        return dataset.load_json("uiterms.json") or {}
-    except dataset.DatasetError:
-        return {}
+    return dataset.load_optional("uiterms.json") or {}
 
 
 def enum_value_aliases(enum: str) -> dict[str, str]:
@@ -459,6 +456,12 @@ def literal_member_aliases() -> dict[str, str]:
 
 
 def _reset() -> None:
+    """Drop the derived tables when the data root or version changes, and when it was missing.
+
+    The second reason is the one the pairs exist for: a process that read the schema before it
+    was installed would keep the English half of every name unknown, and a form written in
+    English would stay outside the analysis (dataset.register_recheck).
+    """
     _ui_terms.cache_clear()
     _property_value_aliases.cache_clear()
     _value_aliases.cache_clear()
@@ -472,6 +475,7 @@ def _reset() -> None:
 
 
 dataset.register_reset(_reset)
+dataset.register_recheck(_reset)
 
 
 def _lookup(components: dict, name: str) -> dict | None:

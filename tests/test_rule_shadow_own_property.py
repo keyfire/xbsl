@@ -97,6 +97,27 @@ def test_inherited_property_of_the_base_type_is_reported():
 
 
 @pytest.mark.needs_data
+def test_an_empty_set_of_inherited_properties_is_not_remembered(monkeypatch):
+    """A process that read the type catalog before the data was installed reads it again.
+
+    Without the catalog a platform base type gives the component no property at all, and that
+    is not an answer worth keeping: the data may be installed while an editor or an MCP server
+    keeps running, and the rule would go on ignoring every inherited name until a reset.
+    """
+    from xbsl import dataset
+    from xbsl.rules import style_variables
+
+    def unavailable(*_args, **_kwargs):
+        raise dataset.DatasetError("no platform data")
+
+    dataset.set_data_root(None)  # the reset hooks empty every cache of the rules
+    monkeypatch.setattr(dataset, "load_json", unavailable)
+    assert style_variables._inherited_properties("Группа") == frozenset()
+    monkeypatch.undo()
+    assert _panel("метод Показать()\n    знч Заголовок = 1\n;\n") == [2]
+
+
+@pytest.mark.needs_data
 def test_declared_and_compiler_added_properties_are_reported():
     assert _panel(
         "метод Показать()\n"

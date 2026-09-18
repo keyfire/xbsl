@@ -33,6 +33,7 @@ from pathlib import Path
 from xbsl import i18n
 from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
+from xbsl.layout import PROJECT_FILES
 
 MESSAGES = {
     "conventions/missing-translation.title": {
@@ -95,6 +96,42 @@ def _dictionary_at(directory: str) -> Path | None:
     return dictionary.discover(Path(directory))
 
 
+@lru_cache(maxsize=64)
+def _project_root_at(directory: str, dictionary: str) -> str:
+    """The tree the resource files of the project are looked for in.
+
+    The nearest directory - this one, then upwards - holding a project descriptor. A fragment
+    translated without one (a single subsystem, a test tree) has no descriptor anywhere, and
+    the dictionary answers instead: it lies next to the project or above it (dictionary
+    discover), so its own directory holds the resources whatever the shape.
+    """
+    start = Path(directory)
+    for candidate in (start, *start.parents):
+        if any((candidate / name).is_file() for name in PROJECT_FILES):
+            return str(candidate)
+    return str(Path(dictionary).parent)
+
+
+@lru_cache(maxsize=8)
+def _resource_keys(root: str) -> frozenset[str]:
+    """The files below the project's resources, the way a reference addresses them.
+
+    The rewrite builds its resolver with them (translation/project.py), and a resolver built
+    WITHOUT them lets the platform's library of pictures answer for every name the library
+    holds. A project file named like a picture of the library then asked for no entry here,
+    while the rewrite - which does know the file - left the name Russian: the editor stayed
+    silent exactly where the translated tree came out untranslated.
+
+    Cached per project, and the cache has no stamp: one reading walks the whole resource tree,
+    and a resolver is built for every file of the run. A resource file added while a language
+    server is running is therefore seen at its next start. The rewrite itself reads the tree
+    each time and is never stale.
+    """
+    from xbsl.translation import names
+
+    return names.resource_keys(Path(root))
+
+
 def _entry_data(kind: str, key: str, suggestion: str) -> dict:
     """What a client needs to offer the repair: the exact key, its kind and a first guess.
 
@@ -134,7 +171,8 @@ def _gaps_mapper(source: SourceFile) -> dict | None:
     except dictionary.DictionaryError as exc:
         return {"error": str(exc)}
     report = reporting.FileReport(path=source.rel)
-    resolver = code.Resolver(loaded)
+    resolver = code.Resolver(
+        loaded, resource_keys=_resource_keys(_project_root_at(str(resolved.parent), str(found))))
     try:
         if source.kind == "xbsl":
             code.translate_code(source, resolver, report)

@@ -310,13 +310,14 @@ def test_data_without_the_pictures_answers_nothing_and_is_read_afresh(tmp_path):
 
 
 def test_a_file_of_the_project_is_asked_before_the_library(tmp_path):
-    """The project may keep a file under the name of a picture of the library: the reference is
-    then the project's, whatever subsystem it names, and the dictionary spells it."""
+    """A BARE name the project keeps a file under is the project's: the reference is then to
+    that file and the dictionary spells it. A name qualified by the library says outright
+    which of the two is meant, and the file of the project does not take it away."""
     platform_map.dataset.set_data_root(_picture_root(tmp_path, "data"))
     try:
         own = Resolver(_dictionary(), resource_keys=frozenset({"Команда.svg"}))
         assert own.library_picture("Команда.svg") is None
-        assert own.library_picture("Стд::Команда.svg") is None
+        assert own.library_picture("Стд::Команда.svg") == "Std::Team.svg"
         assert own.library_picture("Письмо.svg") == "Mail.svg"
         assert Resolver(_dictionary()).library_picture("Команда.svg") == "Team.svg"
     finally:

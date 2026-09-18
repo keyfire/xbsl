@@ -39,6 +39,11 @@ whole `Favorites` branch among them). Those are read by undocumented_types - the
 from the markdown, the Russian spellings of members from what the shipped classes declare -
 and only for the types the help does NOT describe: the help stays the primary source.
 
+An interface component the help has RETIRED is the third source and the same rule: its page
+stays under its name and states nothing at all, while the runtime goes on shipping the
+component and the description the designer reads (one yaml per component inside the
+stdcomponents jars). retired_components reads those - see the comment above it.
+
 The result is xbsl/data/element/<version>/stdlib.json:
 { "names": [...], "object_members": {"Справочник": [...], ...},
   "component_props": {"СтандартнаяКарточка": [...], ...},
@@ -55,6 +60,8 @@ import json
 import re
 import zipfile
 from pathlib import Path
+
+import yaml
 
 from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER, nearest_last
 from xbsl.extract import _distro, classcode
@@ -1067,11 +1074,124 @@ def extract(dist: Path) -> tuple:
                 slot = types.setdefault(russian, _empty_member_slot())
                 for kind, member_names in own.items():
                     slot[kind] |= member_names
+    with zipfile.ZipFile(car) as z:
+        filled = []
+        for russian, own, base in retired_components(z, names, set(types)):
+            slot = types.setdefault(russian, _empty_member_slot())
+            for kind, member_names in own.items():
+                slot[kind] |= member_names
+            russian_base = english_keys.get(base)
+            if russian_base and russian not in bases:
+                # The whole chain, not the parent alone: the loader expands the members of a
+                # type over `bases` in one pass and never walks an ancestor's own list.
+                bases[russian] = [russian_base, *bases.get(russian_base, ())]
+            filled.append(russian)
+        if filled:
+            print("  компоненты, которые описывает поставка, а справка уже нет: "
+                  + ", ".join(filled))
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
             facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
             folds, expand_checked_return_methods(checked_methods, bases))
+
+
+# --- Components the reference pages have RETIRED ----------------------------------------
+#
+# A component the help retires keeps a page under its name and states nothing on it: a
+# struck-out heading, the compatibility mode it lived up to, and a line naming what replaced
+# it. No hierarchy section, no member sections. The platform goes on shipping the component -
+# a project written for an older mode is built on it and the compiler accepts it - and it
+# goes on shipping the description the designer reads: one yaml per component inside the
+# stdcomponents jars, with the bilingual term of the component, its base type and every
+# property, event and method it declares.
+#
+# Measured on one build: the jars describe 86 components, and four of them the help names and
+# describes with nothing - FixedGroup, AutomaticGroup, MatrixGroup, FormSectionArea, all
+# retired in compatibility mode 8.0. A form built on such a base had not one member in the
+# catalog, so `style/shadow-own-property` had no property to shadow and the receiver analysis
+# of the server-call rules could not tell an inherited name from a module - it answered
+# "scope unknown" and the rules over it went silent.
+#
+# The help stays the primary source, as it does for the language server's markdown
+# (undocumented_types), and here it gates BOTH ways: a component the help DESCRIBES is read
+# from the help, and a component the help never NAMES is left alone. The second narrowing is
+# what keeps the internal-functionality components out - three of the 86 (BlockSchema,
+# AuthenticationProviderButton, DataDiscovery) have no reference page at all, and putting them
+# in the catalog would offer a project types the documentation hides on purpose.
+#: Where a jar keeps the description of an interface component.
+COMPONENT_YAML_DIR = "/components/ui/"
+#: What such a description calls itself - the key that tells it from any other yaml in a jar.
+_COMPONENT_YAML_TYPE = "ui"
+
+
+def _spelled_ru(record: dict) -> str:
+    """The Russian half of the `term` of a description record, or "" when it states none.
+
+    A record whose term is written some other way (a list, a bare string) is passed over: a
+    description is machine-written and uniform, and guessing at the shape of the exception
+    would put an unspelled name into the catalog.
+    """
+    term = record.get("term")
+    return str(term.get("ru") or "").strip() if isinstance(term, dict) else ""
+
+
+def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
+    """{Russian component name: {"members" by kind, "base": the English name of its base type}}.
+
+    Every component description the distribution ships, whether the help describes it or not.
+    A name met twice keeps its first reading: the same jar ships in several places of the
+    archive and the copies agree.
+    """
+    found: dict[str, dict] = {}
+    for entry in car.namelist():
+        if not entry.endswith(".jar"):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            if COMPONENT_YAML_DIR not in inner or not inner.endswith(".yaml"):
+                continue
+            try:
+                data = yaml.safe_load(jar.read(inner).decode("utf-8", "replace"))
+            except yaml.YAMLError:
+                continue
+            if not isinstance(data, dict) or data.get("type") != _COMPONENT_YAML_TYPE:
+                continue
+            russian = _spelled_ru(data)
+            if not russian or russian in found:
+                continue
+            members = {kind: set() for kind in MEMBER_KINDS}
+            for kind in MEMBER_KINDS:
+                for row in data.get(kind) or ():
+                    spelled = _spelled_ru(row) if isinstance(row, dict) else ""
+                    if spelled:
+                        members[kind].add(spelled)
+            # `Std::Interface::Forms::Form<Std::Undefined>` - the head of the qualified name is
+            # what the catalog keys a type by, generic arguments and package alike dropped.
+            base = str(data.get("baseType") or "").split("<", 1)[0].rpartition("::")[2].strip()
+            found[russian] = {"members": members, "base": base}
+    return found
+
+
+def retired_components(
+    car: zipfile.ZipFile, named: set[str], described: set[str]
+) -> list[tuple[str, dict[str, set[str]], str]]:
+    """[(Russian name, own members by kind, the English name of its base type)].
+
+    Only the components the help NAMES and does not DESCRIBE, and only those the shipped
+    description says something about - see the comment above for both narrowings.
+    """
+    found: list[tuple[str, dict[str, set[str]], str]] = []
+    for russian, record in sorted(component_descriptions(car).items()):
+        if russian not in named or russian in described:
+            continue
+        if not any(record["members"].values()):
+            continue
+        found.append((russian, record["members"], record["base"]))
+    return found
 
 
 # --- Types the reference pages never describe ------------------------------------------

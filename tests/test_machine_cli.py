@@ -96,6 +96,37 @@ def test_suggest_out_help_states_the_directory_is_dropped():
 
 
 @pytest.mark.needs_data
+def test_a_machine_pair_that_renames_a_platform_word_is_named_on_the_write_path(
+        tmp_path: Path, monkeypatch, capsys):
+    """Nobody reads a machine-suggested pair before it is written, so the warning matters most
+    here: the write already answers which keys the platform carries, and the report must say it.
+    """
+    monkeypatch.setenv("XBSL_TRANSLATE_GOOGLE_KEY", "fake-key")
+    monkeypatch.delenv("XBSL_TRANSLATE_YANDEX_KEY", raising=False)
+    monkeypatch.delenv("XBSL_TRANSLATE_YANDEX_FOLDER", raising=False)
+
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "Project.yaml").write_text("version: 1\n", encoding="utf-8")
+    dictionary = tmp_path / "xbsl-translation"
+    dictionary.mkdir()
+
+    from xbsl.translation.machine import dispatch as dispatch_module
+
+    def spy_suggest(gaps, provider, cache, glossary=(), transport=None, taken=None, terms=None):
+        return dispatch_module.Result(values={("token", "Кодировка"): "Charset"})
+
+    monkeypatch.setattr(dispatch_module, "suggest", spy_suggest)
+
+    code = cli.cli_main([str(project), "--dictionary", str(dictionary), "--suggest",
+                         "--suggest-out", "machine.yaml", "--format", "json"])
+    assert code == 0
+    report = json.loads(capsys.readouterr().out)
+    named = [row["reason"] for row in report["platform_names"]]
+    assert named and any("Кодировка" in reason for reason in named)
+
+
+@pytest.mark.needs_data
 def test_refusal_reasons_are_visible_in_both_output_formats(tmp_path: Path, monkeypatch, capsys):
     monkeypatch.setenv("XBSL_TRANSLATE_GOOGLE_KEY", "fake-key")
     monkeypatch.delenv("XBSL_TRANSLATE_YANDEX_KEY", raising=False)

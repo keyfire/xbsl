@@ -34,7 +34,7 @@ from functools import lru_cache
 from pathlib import Path
 
 from xbsl import dataset, terms
-from xbsl.engine import RESOURCE_DIRS
+from xbsl.restext import RESOURCE_DIRS
 
 #: Both spellings: the platform accepts the English service file names too.
 PROJECT_FILES = ("Проект.yaml", "Project.yaml")

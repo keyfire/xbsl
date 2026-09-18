@@ -307,8 +307,33 @@ def test_a_path_whose_copies_differ_is_left_out_whole():
     assert found["pairs"] == {}
     assert list(found["conflicts"]) == [_RU + "Акме.svg"]
     assert len(found["conflicts"][_RU + "Акме.svg"]) == 2
-    assert found["unmatched"] == [
-        {"sha256": found["unmatched"][0]["sha256"], "ru": [], "en": [_EN + "Acme.svg"]},
+    # Both drawings the path ships still stand in their groups: one of them is the twin of
+    # `Acme.svg`, and which one the reference resolves to is exactly what is not known.
+    assert [(g["ru"], g["en"]) for g in found["ambiguous"]] == [
+        ([_RU + "Акме.svg"], [_EN + "Acme.svg"]),
+    ]
+    assert [(g["ru"], g["en"]) for g in found["unmatched"]] == [([_RU + "Акме.svg"], [])]
+
+
+def test_a_path_whose_copies_differ_makes_its_group_ambiguous():
+    """A conflicting path is not paired - and it does not vanish either.
+
+    Dropped before the grouping, its drawing left a group where one Russian and one English
+    name stood alone, and that group was filed as a clean pair. It is not one: the conflicting
+    path is a second Russian name for the same drawing, and which of the two the English name
+    belongs to is not written anywhere.
+    """
+    found = ut.pair_pictures([
+        (_RU + "Акме.svg", b"<svg old/>"),
+        (_RU + "Акме.svg", b"<svg shared/>"),
+        (_RU + "АкмеКопия.svg", b"<svg shared/>"),
+        (_EN + "Acme.svg", b"<svg shared/>"),
+    ])
+
+    assert found["pairs"] == {}
+    assert list(found["conflicts"]) == [_RU + "Акме.svg"]
+    assert [(g["ru"], g["en"]) for g in found["ambiguous"]] == [
+        ([_RU + "Акме.svg", _RU + "АкмеКопия.svg"], [_EN + "Acme.svg"]),
     ]
 
 

@@ -113,6 +113,19 @@ entry either - say what the behaviour was, not which class name was compared.
   form with a `[details]` link, the shape the sixth batch gave the documentation; the
   annotation list and the baseline route live behind that link, not in the row.
   ([#107](https://github.com/keyfire/xbsl/pull/107))
+- **Writing a dictionary entry now reports the platform words it touches, in a new
+  `platform_names` field.** `translate --set`, the MCP tool `translate_set` and the
+  machine-translation write path (`--suggest-out`) all return the same list – one row per
+  edit whose key clashes with a platform type or member, with the platform's own spelling
+  and the reason. The field is additive – a caller that does not read it sees no difference.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **Looking for platform data that is not installed now costs one lookup per lint pass
+  instead of one per call.** The term and interface dictionaries, a component's inherited
+  properties and the server-call catalogs used to re-read the data root on every call while
+  it stayed missing. Measured on 400 dataless files, that fell from 403 lookups to 1 on a
+  repeated pass. A language or MCP server started before the data exists still picks it up
+  without a restart – just at the next pass rather than the next call.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
 
 ### Fixed
 
@@ -180,6 +193,68 @@ entry either - say what the behaviour was, not which class name was compared.
   key, and a tie breaks alphabetically. Running the extractor twice on the same distribution
   now produces a byte-identical file. This is a fix to how the data is built, not to what it
   says: every entry keeps its previous meaning. ([#107](https://github.com/keyfire/xbsl/pull/107))
+- **`translate --strict` can now fail on a dictionary key that spells a platform type.** It
+  fails only when the project itself declares a type of that same spelling: the pair would
+  rename the platform's own type everywhere a type expression reads it, including files that
+  never mention the project's node, so the English build stops compiling there. Writing such
+  a pair (`translate --set`, `translate_set`) only warns – the writer has the dictionary but
+  not the project, and cannot tell a fatal clash from an ordinary one. `--strict` holds both,
+  so that is where a pipeline can actually catch it, typically ahead of the platform compile
+  step. A key spelled like a platform member rather than a type is not fatal the same way –
+  the warning just names the member's correct English spelling. On a real 30,274-entry
+  dictionary the fatal shape never occurred: 42 bare keys name a platform type, and 39 of
+  them repeat its own spelling. But a pipeline that already runs `--strict` can fail on its
+  very next run without a single code change. ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **A qualified library-picture reference now always means the library.** `Std::Save.svg`
+  next to a project file named `Save.svg` used to resolve to the project file regardless of
+  the `Std::` prefix. Now the prefix wins, the way it reads; an unqualified name still
+  prefers the project file, unchanged. A plain string or a yaml value the schema treats as
+  text is no longer matched against the library's picture names at all: the path such a
+  string carries is read against the current namespace's own resource package at runtime,
+  which the library is never part of. A string that happens to equal a library picture's
+  name is therefore translated, or left alone, as ordinary text – the way it worked before
+  the picture table existed. ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **`conventions/missing-translation` now considers the project's own resource files, not
+  only the platform's picture library.** Built without them, the rule let the library answer
+  for any name it carries, so a project resource file that happened to share a library
+  picture's name was never flagged, even though translating the project left its reference
+  in Russian. A project shaped that way can see new findings. None of the corpora used to
+  check this batch have that shape, so the change is untested on real data.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **Translation stops guessing an owner for a link whose type is a union of several types.**
+  A member reached through such a link used to be translated as if only the first
+  alternative typed it. Now the link ends the owner chain instead, and the member translates
+  the way it did before owners existed at all. A translated fragment inside a string
+  interpolation now reads the same chain of owners as the code around it, so the same
+  expression no longer comes out translated outside the quotes and untranslated inside them.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **`code/resource-read-without-cache` no longer misses a connected library's own element
+  named like the resource root.** A project element with that name already turned the check
+  off for the whole project. A library's global element of the same name reaches the project
+  the same way, by its bare name, but the rule did not know library names at all and could
+  still point at a cache for a method that was really calling into that type.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **The term and interface dictionaries, and a component's inherited properties, stop
+  holding an empty answer after a read that found no data.** A project written in English
+  used to be read as if it had no platform vocabulary at all, until something reset the
+  process. Now the next lint pass looks again, and an English-spelled project is analyzed
+  correctly right away. ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **A broken data file now raises instead of being treated as if there were none.** These
+  same caches used to catch any exception while reading their file and treat a failure as
+  absence. Now only a missing file or one that fails to parse counts as no data, and
+  anything else is a crash – a corrupted install surfaces immediately instead of linting
+  silently with a partial catalogue. ([#108](https://github.com/keyfire/xbsl/pull/108))
+- **The extractor now describes four components the platform's own help retired.** A help
+  page for such a component only says it was replaced and lists no members, so the type
+  kept no `type_members` entry, and a form built on it fell out of the server-call rules'
+  analysis and out of `style/shadow-own-property`. The extractor now reads the component's
+  own description instead – the platform still ships it for building forms – whenever help
+  names a component but no longer describes it. This is a fix to the extractor, not new
+  data by itself: the four components only gain a `type_members` entry after the extractor
+  runs again over each platform version and the result is published through the data
+  repository. The same run also stops pairing a picture path whose copies differ: such a path
+  used to drop out before the grouping and left its group looking unambiguous.
+  ([#108](https://github.com/keyfire/xbsl/pull/108))
 
 ## 2026-09-15 – 0.110.0
 

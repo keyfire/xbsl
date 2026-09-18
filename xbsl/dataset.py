@@ -96,6 +96,36 @@ def register_reset(hook) -> None:
     _RESET_HOOKS.append(hook)
 
 
+#: Reads that found nothing since the last look at the disk: (root, version, name). A cache
+#: built over data that WAS read is kept until the data changes (register_reset); what a
+#: reader concluded from data that was NOT there is a different matter, because the data may
+#: be installed while an editor or an MCP server keeps running. Retrying every such read on
+#: every call costs a whole run - a missing file is a stat of the root per name, per file and
+#: per rule - so the retry happens once per run instead (recheck_data).
+_MISSING: set[tuple[str, str, str]] = set()
+#: Caches built while the data was missing; recheck_data drops them.
+_RECHECK_HOOKS: list = []
+
+
+def register_recheck(hook) -> None:
+    """Register a callable that drops what a reader concluded from data that was not there."""
+    _RECHECK_HOOKS.append(hook)
+
+
+def recheck_data() -> None:
+    """Look at the disk again for data that was not there when it was last read.
+
+    Called before every pass of the engine. Whatever was concluded while the data was missing
+    goes, and the readers look again; a complete data root makes this free, since nothing was
+    missing to begin with.
+    """
+    if not _MISSING:
+        return
+    _MISSING.clear()
+    for hook in _RECHECK_HOOKS:
+        hook()
+
+
 #: Modification stamps of the files behind the caches: (root, version, name) -> st_mtime_ns.
 #: A file regenerated IN PLACE (tools/extract.py over the same root) must not keep answering
 #: from the process cache: the LSP and MCP servers live long, and a stale catalog used to be
@@ -128,6 +158,7 @@ def _clear_caches() -> None:
     _discovered_root.cache_clear()
     _index_cached.cache_clear()
     _FILE_STAMPS.clear()
+    _MISSING.clear()
     for hook in _RESET_HOOKS:
         hook()
 
@@ -405,6 +436,25 @@ def load_json(name: str, version: str | None = None) -> dict:
     return _load_cached(root, resolve_version(version), name)
 
 
+def load_optional(name: str, version: str | None = None) -> dict | None:
+    """The data file, or None when the data is not installed - the read a reader may repeat.
+
+    Unlike load_json this raises nothing and remembers that the file was not there, so a
+    process without data looks for it once instead of once per caller. The memory lasts until
+    the next look at the disk (recheck_data), which the engine does before every pass. A file
+    the process cannot read at all counts as one it does not have: a reader of optional data
+    degrades to what it knows without it, and a broken file is the run's own report to make.
+    """
+    key = (str(data_root()), version or "", name)
+    if key in _MISSING:
+        return None
+    try:
+        return load_json(name, version)
+    except (DatasetError, OSError):
+        _MISSING.add(key)
+        return None
+
+
 def member_type_head(type_name: str) -> str:
     """The nominal root of a member_types value: 'ЧитаемоеМножество<Настройки>?' -> 'ЧитаемоеМножество'.
 
@@ -503,12 +553,9 @@ def load_ui_schema(version: str | None = None) -> dict | None:
     Cached per (root, version) like the other data files (load_json). Returns None
     instead of raising: the ui schema is optional data - the designer surfaces (the
     palette, the typed properties panel) degrade gracefully without it, the same way
-    the documentation does.
+    the documentation does. An absent file is looked for once per run (load_optional).
     """
-    try:
-        return load_json(UI_SCHEMA_FILE, version)
-    except DatasetError:
-        return None
+    return load_optional(UI_SCHEMA_FILE, version)
 
 
 def data_file(name: str, version: str | None = None) -> Path:

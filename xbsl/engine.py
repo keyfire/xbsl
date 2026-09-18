@@ -85,12 +85,6 @@ def is_query_file(path: Path) -> bool:
     return path.suffix.lower() == QUERY_SUFFIX
 
 
-#: The folder a subsystem keeps its resource files in - BOTH spellings, because the platform
-#: accepts either (probed on the local server; see xbsl/rules/resources.py, which reads the
-#: same pair). A project ships what lies there to the browser as it is.
-RESOURCE_DIRS = ("Ресурсы", "Resources")
-
-
 def is_resource_file(path: Path) -> bool:
     """Whether the file is a resource the typography rules read (.css, .js, .svg, .html)."""
     return path.suffix.lower() in restext.SUFFIX_KINDS
@@ -167,7 +161,7 @@ def find_resources(root: Path) -> list[Path]:
     The platform ships the resource folder and nothing else, so that is the boundary.
     """
     result: list[Path] = []
-    for name in RESOURCE_DIRS:
+    for name in restext.RESOURCE_DIRS:
         for folder in find_sources(root, name):
             if not folder.is_dir():
                 continue
@@ -649,6 +643,11 @@ def run_sources(
     enable: set[str] | None = None,
     scopes: tuple[str, ...] = ("file", "project"),
 ) -> list[Diagnostic]:
+    from xbsl import dataset
+
+    # Data installed while an editor or an MCP server keeps running is picked up here: a read
+    # that found nothing is repeated once per pass rather than once per rule and file.
+    dataset.recheck_data()
     diags: list[Diagnostic] = []
     active = active_rules(select, ignore, enable)
     # A project rule has no single file to blame, so its crash is anchored to the first source.

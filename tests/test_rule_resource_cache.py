@@ -185,9 +185,35 @@ def test_safe_literal_and_parameter_arguments_are_accepted(english, case):
 
 @pytest.mark.needs_data
 @pytest.mark.parametrize("english", [False, True])
+@pytest.mark.parametrize("case", ["concatenation", "interpolation", "braced-interpolation",
+                                  "presentation"])
+def test_a_path_built_from_the_parameters_is_left_alone(english, case):
+    """A path the method computes out of its own arguments is still not the proven shape.
+
+    It looks like it depends on the arguments and nothing else, and for two strings it does.
+    The platform does not promise that much: a value of another type joins a string through
+    `ToString()`, and the `$` form of an interpolation through `Presentation()`, which is
+    allowed to depend on the locale. Both are members of the root type that a project type may
+    define, so the path would be whatever that method reads. Proving the operand is the
+    platform string would be another check, and no project seen so far writes the path this
+    way, so the shape stays a literal or a parameter and these are left to the author.
+    """
+    path = {
+        "concatenation": '"styles/" + FileName',
+        "interpolation": '"styles/%FileName"',
+        "braced-interpolation": '"styles/%{FileName}"',
+        "presentation": '"styles/$FileName"',
+    }[case]
+    files = project(english, path=path)
+    assert_parses(files)
+    assert lint(files) == []
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("english", [False, True])
 @pytest.mark.parametrize("case", [
     "write", "external-call", "user", "settings", "unknown-dependency", "own-method",
-    "nested-call-in-argument", "concatenation", "interpolation", "interpolated-call",
+    "nested-call-in-argument", "interpolated-call",
     "encoding-member", "bytes", "reference", "safe-navigation", "non-null", "deferred-lambda",
     "try-catch", "local-then-return", "ternary", "default-from-call", "extra-argument",
     "stream-without-read", "extra-link", "type-arguments", "current-with-argument",
@@ -213,8 +239,6 @@ def test_reads_with_any_other_dependency_are_silent(english, case):
         "unknown-dependency": {"path": "DefaultName"},
         "own-method": {"path": "Normalize(FileName)"},
         "nested-call-in-argument": {"path": "FileName.Trim()" if english else "FileName.Обрезать()"},
-        "concatenation": {"path": '"styles/" + FileName'},
-        "interpolation": {"path": '"styles/%FileName"'},
         "interpolated-call": {"path": '"styles/%{Settings.Theme()}.css"'},
         "encoding-member": {"encoding": charset},
         "bytes": {"body": f"{ret} {chain(english).replace(w['read'], bytes_read)}"},
@@ -396,8 +420,13 @@ def test_chain_is_proven_by_the_type_catalog(change, monkeypatch):
 
 
 @pytest.mark.needs_data
-def test_missing_data_is_not_remembered(monkeypatch):
-    """Data installed while a server process keeps running is picked up without a reset."""
+@pytest.mark.parametrize("english", [False, True])
+def test_missing_data_is_not_remembered(english, monkeypatch):
+    """Data installed while a server process keeps running is picked up without a reset.
+
+    The English spellings come from the term and interface dictionaries, so a project written
+    in English proves that a failed read of those is not remembered either.
+    """
     from xbsl import dataset
 
     def unavailable(*_args, **_kwargs):
@@ -405,9 +434,51 @@ def test_missing_data_is_not_remembered(monkeypatch):
 
     dataset.set_data_root(None)  # the reset hooks empty every cache of the rules
     monkeypatch.setattr(dataset, "load_json", unavailable)
-    assert lint(project()) == []
+    assert lint(project(english)) == []
     monkeypatch.undo()
-    assert len(lint(project())) == 1
+    assert len(lint(project(english))) == 1
+
+
+@pytest.mark.needs_data
+def test_an_empty_dictionary_read_is_not_remembered(monkeypatch):
+    """A process that read the dictionaries before the data arrived still sees an English project.
+
+    The root and the links are proven in both spellings, and the English one comes from the term
+    dictionary. A dictionary that answered nothing while the data was missing used to keep
+    answering nothing, and the whole check then applied to Russian sources only.
+    """
+    from xbsl import dataset, terms
+
+    def unavailable(*_args, **_kwargs):
+        raise dataset.DatasetError("no platform data")
+
+    dataset.set_data_root(None)  # the reset hooks empty every cache of the rules
+    monkeypatch.setattr(dataset, "load_json", unavailable)
+    assert terms.english("ПакетРесурсов", "types") is None
+    monkeypatch.undo()
+    assert len(lint(project(english=True))) == 1
+
+
+@pytest.mark.needs_data
+def test_a_data_less_run_looks_for_the_catalog_once(tmp_path, monkeypatch):
+    """With no data installed the catalog is read once per run, not once per source."""
+    from xbsl import dataset
+
+    read: list[str] = []
+    original = dataset.load_json
+
+    def counted(name, version=None):
+        read.append(name)
+        return original(name, version)
+
+    files = {f"Module{n}.yaml": RU["module"].replace("Files", f"Module{n}") for n in range(8)}
+    monkeypatch.setattr(dataset, "load_json", counted)
+    dataset.set_data_root(tmp_path)
+    try:
+        assert lint(files) == []
+    finally:
+        dataset.set_data_root(None)
+    assert read.count("stdlib.json") == 1, read
 
 
 @pytest.mark.needs_data
@@ -436,17 +507,65 @@ def test_mapper_facts_are_json_safe(english):
 
 
 @pytest.mark.parametrize("english", [False, True])
-def test_yaml_only_installation_without_platform_data_is_silent(english, tmp_path, monkeypatch):
+def test_without_platform_data_nothing_is_read_and_nothing_is_reported(english, tmp_path,
+                                                                      monkeypatch):
+    """The catalog proves the shape, so without it the rule stops before it reads a module.
+
+    The parser stands for a process that has no data at all: the lexer takes its keywords from
+    the same files and cannot read a module either. A rule that reached the parser anyway would
+    end the whole run with the data error instead of leaving the project alone, so the modules
+    are here and the parser refuses to work.
+    """
     from xbsl import dataset
 
     def unavailable(*_args, **_kwargs):
         raise dataset.DatasetError("no language data")
 
-    files = {"Files.yaml": words(english)["catalog"],
-             "Other.yaml": words(english)["module"].replace("Files", "Other")}
+    files = project(english)
+    files["Other.yaml"] = words(english)["catalog"].replace("Files", "Other")
     monkeypatch.setattr(P, "parse", unavailable)
     dataset.set_data_root(tmp_path)
     try:
         assert lint(files) == []
     finally:
         dataset.set_data_root(None)
+
+
+DESCRIPTOR = {
+    False: "Ид: f25543fb-c726-496e-9af5-71f61527e97c\nИмя: Acme\nПоставщик: acme\n",
+    True: "Id: f25543fb-c726-496e-9af5-71f61527e97c\nName: Acme\nVendor: acme\n",
+}
+LIBRARY = {
+    False: "Библиотеки:\n    -\n        Поставщик: acme\n        Имя: Packs\n        Версия: 1.0.0\n",
+    True: "Libraries:\n    -\n        Vendor: acme\n        Name: Packs\n        Version: 1.0.0\n",
+}
+
+
+def _attached_project(tmp_path, english, element):
+    """A project on disk whose one attached library declares `element` globally."""
+    import zipfile
+
+    for name, text in project(english).items():
+        (tmp_path / name).write_text(text, encoding="utf-8")
+    (tmp_path / "Проект.yaml").write_text(DESCRIPTOR[english] + LIBRARY[english], encoding="utf-8")
+    archive = tmp_path / "acme-Packs-1.0.0.xlib"
+    archive.unlink(missing_ok=True)
+    with zipfile.ZipFile(archive, "w") as zipped:
+        zipped.writestr("acme/Packs/Проект.yaml", "Ид: 1\nИмя: Packs\n")
+        zipped.writestr(
+            f"acme/Packs/Storage/{element}.yaml",
+            f"ВидЭлемента: ОбщийМодуль\nИд: 2\nИмя: {element}\nОбластьВидимости: Глобально\n",
+        )
+    return sorted({p for pattern in ("*.yaml", "*.xbsl")
+                   for p in engine.find_sources(tmp_path, pattern)})
+
+
+@pytest.mark.needs_data
+@pytest.mark.parametrize("english", [False, True])
+def test_a_library_element_named_like_the_root_silences_the_check(english, tmp_path):
+    """A global name of an attached library hides the platform type from the whole project."""
+    paths = _attached_project(tmp_path, english, words(english)["root"])
+    assert engine.run(paths, select={RULE}) == []
+    # The control: the same library with any other global name leaves the reader reported.
+    paths = _attached_project(tmp_path, english, "Storage")
+    assert len(engine.run(paths, select={RULE})) == 1

@@ -224,10 +224,15 @@ def _dominant(counter: Counter) -> str | None:
 class ManagerEvidence:
     """What the compiled classes say about the metaobjects built for elements of a project.
 
-    `constructed` - the simple names of the metaobject classes (`<Name>CtMetaObject`) a class
-    of the compiler constructs from a project type, the type the compiler gives one element of
-    a project; `stated` - {such a class: {Russian member: English}} of the terms its own code
-    builds. Filled by _scan_meta_objects, judged by manager_owners.
+    `constructed` - the metaobject classes (`<Name>CtMetaObject`) a class of the compiler
+    constructs from a project type, the type the compiler gives one element of a project;
+    `stated` - {such a class: {Russian member: English}} of the terms its own code builds.
+    Filled by _scan_meta_objects, judged by manager_owners.
+
+    Both are keyed by the FULL internal name of the class, package and all. Kept by the simple
+    name, two namesakes in different packages were one row: the first one met decided what the
+    pair "states", and a class that states nothing could be joined to a kind on the terms of a
+    namesake nothing constructs.
     """
 
     constructed: set[str] = field(default_factory=set)
@@ -239,25 +244,25 @@ _CT_META_SUFFIX = "CtMetaObject"
 _PROJECT_TYPE_ARGUMENT_RE = re.compile(r"L[\w/$]+G5ProjectType;")
 
 
-def _note_manager_evidence(managers: ManagerEvidence, simple: str, data: bytes) -> None:
-    """Record what one class says about the metaobjects of project elements."""
+def _note_manager_evidence(managers: ManagerEvidence, class_name: str, data: bytes) -> None:
+    """Record what the class `class_name` (full internal name) says about project metaobjects."""
     if b"G5ProjectType" in data and _CT_META_SUFFIX.encode() in data:
         for built, descriptor in classcode.constructions(data):
             parameters = descriptor.partition(")")[0]
             if built.endswith(_CT_META_SUFFIX) and _PROJECT_TYPE_ARGUMENT_RE.search(parameters):
-                managers.constructed.add(built.rsplit("/", 1)[-1])
-    if not simple.endswith(_CT_META_SUFFIX) or simple in managers.stated:
+                managers.constructed.add(built)
+    if not class_name.endswith(_CT_META_SUFFIX) or class_name in managers.stated:
         return
     stated: dict[str, str] = {}
-    for name, pushed in classcode.builder_calls(data):
+    for called, pushed in classcode.builder_calls(data):
         if len(pushed) < 2:
             continue
-        if not any(name.endswith(factory) for factory in classcode.TERM_FACTORIES):
+        if not any(called.endswith(factory) for factory in classcode.TERM_FACTORIES):
             continue
         english, russian = pushed[-2], pushed[-1]
         if _is_term_pair(english, russian):
             stated[russian] = english
-    managers.stated[simple] = stated
+    managers.stated[class_name] = stated
 
 
 def _scan_meta_objects(
@@ -293,7 +298,7 @@ def _scan_meta_objects(
             except (zipfile.BadZipFile, KeyError):
                 continue
             if managers is not None:
-                _note_manager_evidence(managers, inner.rsplit("/", 1)[-1][:-len(".class")], data)
+                _note_manager_evidence(managers, inner[:-len(".class")], data)
             if b"\xd0" not in data and b"\xd1" not in data:
                 continue
             strings = _constant_pool(data)
@@ -415,9 +420,9 @@ def manager_owners(
         english = _template_markdown_members(markdown[template], template)
         if not russian or not english:
             continue
-        for simple in sorted(managers.constructed):
-            stated = managers.stated.get(simple) or {}
-            owner = _META_SUFFIX.sub("", simple)
+        for class_name in sorted(managers.constructed):
+            stated = managers.stated.get(class_name) or {}
+            owner = _META_SUFFIX.sub("", class_name.rsplit("/", 1)[-1])
             if (stated and set(stated) == russian and set(stated.values()) == english
                     and members.get(owner) == stated):
                 owners_of_kind.setdefault(kind, set()).add(owner)

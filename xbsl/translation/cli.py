@@ -187,6 +187,18 @@ MESSAGES = {
         "ru": "не записано записей: {count}; ниже сказано, почему:",
         "en": "entries not written: {count}; the reason for each is below:",
     },
+    "translate.platform-names": {
+        "ru": "записей с ключом из словаря платформы: {count}; они записаны, но переименуют и"
+              " слово платформы:",
+        "en": "entries whose key is a word of the platform: {count}; they are written, but they"
+              " rename the platform's word too:",
+    },
+    "translate.value-taken": {
+        "ru": "значений, уже занятых другим ключом: {count}; платформа откажет в применении"
+              " дерева с двумя именами под одним словом:",
+        "en": "values another key already takes: {count}; the platform refuses to apply a tree"
+              " with two names under one word:",
+    },
     "translate.normalized": {
         "ru": "поправлено записей: {count}; ниже сказано, что именно и почему:",
         "en": "entries corrected: {count}; what exactly, and why, is below:",
@@ -1277,6 +1289,22 @@ def _apply_edits(args, root: Path, loaded) -> int:
             for row in corrected:
                 print(f"  [{row['kind']}] \"{_one_line(row['was'])}\""
                       f" -> \"{_one_line(row['now'])}\": {row['reason']}")
+        # Both warnings are about a pair that WAS written and may still break the build, so
+        # they go to stderr, where a log keeps them apart from the count of what was done.
+        # The machine answer has carried them all along; the text one used to drop them, and a
+        # person at the terminal saw a clean "dictionary updated" line over either.
+        taken = result.get("collisions") or []
+        if taken:
+            print(i18n.t("translate.value-taken", count=len(taken)), file=sys.stderr)
+            for row in taken:
+                print(f"  {row['key']}: {row['value']} <- {', '.join(row['taken'])}",
+                      file=sys.stderr)
+        platform_names = result.get("platform_names") or []
+        if platform_names:
+            print(i18n.t("translate.platform-names", count=len(platform_names)),
+                  file=sys.stderr)
+            for row in platform_names:
+                print(f"  {row['reason']}", file=sys.stderr)
         if refused:
             print(i18n.t("translate.refused", count=len(refused)), file=sys.stderr)
             for item in refused:
@@ -1416,9 +1444,13 @@ def _suggest(args, root: Path, loaded) -> int:
         {"key": key, "value": value, "kind": kind}
         for (kind, key), value in result.values.items()
     )
+    # The write answers which keys the platform already carries, and the machine path is where
+    # that matters most: nobody read these pairs before they were written.
+    platform_names = []
     if args.suggest_out:
-        entries_module.write_entries(path, edits, target=Path(args.suggest_out).name,
-                                     comment=getattr(args, "comment", "") or "")
+        written = entries_module.write_entries(path, edits, target=Path(args.suggest_out).name,
+                                               comment=getattr(args, "comment", "") or "")
+        platform_names = written.get("platform_names") or []
 
     # The count alone hides WHAT did not translate; a refusal is only actionable with its
     # reason next to it, the same way --set already reports a refused edit.
@@ -1434,6 +1466,7 @@ def _suggest(args, root: Path, loaded) -> int:
             "dictionary": str(path),
             "machine": {**machine_report, "refusals": refusals},
             "suggestions": edits,
+            "platform_names": platform_names,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=1))
     else:
@@ -1442,6 +1475,10 @@ def _suggest(args, root: Path, loaded) -> int:
             print(f"  {item['kind']:7} {item['key']}: {item['reason']}")
         for edit in edits:
             print(f"  {edit['kind']:7} {edit['key']}  ->  {edit['value']}")
+        if platform_names:
+            print(i18n.t("translate.platform-names", count=len(platform_names)), file=sys.stderr)
+            for row in platform_names:
+                print(f"  {row['reason']}", file=sys.stderr)
     return 0
 
 
