@@ -407,7 +407,7 @@ whose substitutions differ from its key's after translation, such as `%{AccountC
 field translates to `SubscriberCode`. It is reported with both lists, because the names inside
 `%{...}` must translate the same fields in either language.
 
-The third is a TYPE the project declares under the spelling of a platform type, with an entry that
+The third is a type the project itself declares under the spelling of a platform type, with an entry that
 renames it to something else. A type expression normally takes the platform's word over any name of
 the project, but a type the project declares is the exception - its declaration and its uses have to
 move together - so the entry answers every type expression of that spelling, the platform's own among
@@ -515,12 +515,12 @@ produce. A batch of hundreds of entries is authored the way the dictionary itsel
 rather than as JSON on the command line.
 
 The writer warns about two shapes it can see without walking the project, and writes the pair all
-the same. A value ANOTHER key of the same scope already takes is the collision above, met at the
-moment a person types the word. A key spelled like a word the PLATFORM carries is the other: as a
+the same. A value another key of the same scope already takes is the collision above, met at the
+moment a person types the word. A key spelled like a word the platform itself carries is the other: as a
 type, where nothing but renaming the project's node repairs it, and as a member of a platform type,
 where the right value is the spelling the platform itself gives the member (`ЦветСсылок: LinksColor`
 against `DesignTheme.LinksColor`). Warnings and not refusals: what makes a key spelled like a
-platform type fatal is a TYPE the project declares under that spelling, and only the pass over the
+platform type fatal is a type the project declares under that spelling, and only the pass over the
 project can see one - so that verdict is the strict pass's, and it fails the tree there. A qualified
 key (`<Owner>.<Name>`) holds inside one namespace, never answers a type expression and is not warned
 about. `translate_set` carries the same rows in `collisions` and `platform_names`; `--set` prints

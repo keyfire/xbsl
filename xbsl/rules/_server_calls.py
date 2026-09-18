@@ -82,9 +82,11 @@ def _platform_scope(head: str) -> frozenset[str] | None:
 # What each registration guards differs, and only the middle one has a test that fails
 # without it. `_CATALOGS` keeps a partial answer - the type catalog read while the ui schema
 # was still missing - so a recheck must drop it. `_SCOPES` never stores anything read without
-# the catalog (see _platform_scope), so it cannot go stale-negative; its recheck covers the
-# other drift, a catalog that grew new members between passes. Deleting either one is a
-# behaviour change, whatever the tests say.
+# the type catalog (see _platform_scope), so it cannot go stale-negative on THAT file; what it
+# can keep is a scope computed from a degraded name, because `uischema.canonical_component`
+# answers the name unchanged when the ui schema and the interface vocabulary are themselves
+# missing. Installing those later is exactly what a recheck is for. Deleting either
+# registration is a behaviour change, whatever the tests say.
 for _cache_clear in (annotation_forms.cache_clear, _CATALOGS.clear, _SCOPES.clear):
     dataset.register_reset(_cache_clear)
     dataset.register_recheck(_cache_clear)
