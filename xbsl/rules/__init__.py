@@ -19,6 +19,7 @@ from . import (  # noqa: F401
 # Tier B – text and conventions:
 from . import (  # noqa: F401
     comment_conditions,
+    comment_doc_marker,
     comment_prose,
     security,
     translation_values,
@@ -116,6 +117,7 @@ from . import (  # noqa: F401
     url_params,
     access_control,
     yaml_deletion,
+    yaml_doc_comments,
     localization,
     translation_gaps,
     yaml_imports,

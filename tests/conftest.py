@@ -39,6 +39,8 @@ _DATA_DEPENDENT = {
     "test_language",
     "test_rule_binding_auto",  # the rule reads property unions from the ui schema
     "test_rule_list_navigation",  # the rule reads the list components from the ui schema
+    "test_rule_yaml_doc_comments",  # the rule reads the metamodel and the ui schema
+    "test_rule_comment_doc_marker",  # the rule parses the module
     "test_rule_ns_objects",
     "test_rules",
     "test_rule_environment",

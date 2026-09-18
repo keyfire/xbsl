@@ -27,6 +27,22 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **The `yaml/plain-comment` rule: a `#` comment is lost after an edit in the visual editor.** The
+  development environment writes the file out again from the model and keeps documentation
+  comments only: `##` lines at the head of the file, of a component node or of a declaration in a
+  list. The rule finds every `#`. Where the place for the comment is next to it, the fix respells
+  the marker or moves the block inside the node. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `yaml/doc-comment-misplaced` rule: a `##` block stands where the environment does not read
+  it.** Before the `-` of a list item, above a single property, on a standard attribute or on a
+  command such a block is lost the same way `#` is. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `comment/doc-marker` rule: the description above a declaration starts with `///`.** In a
+  module the development environment shows in the hover only the `///` lines before a
+  declaration. It does not read a `//` block or a `/* ... */` block in the same place. The rule
+  finds a `//` block right above a method, a structure, a field or a constant and respells it with
+  an autofix. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+
 ### Fixed
 
 - **A run no longer stops on the first file when the platform data is missing.** The picture rule
