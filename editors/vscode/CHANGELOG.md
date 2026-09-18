@@ -9,9 +9,14 @@
 > are in the [Russian changelog](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.ru.md).
 > See also the [note on names](README.md#navigation-and-completion).
 
-## Unreleased
+## 0.75.0
 
 ### Fixed
+
+- **The translation panel names an entry it corrected.** The engine reads a new phrase key the way
+  the translating pass will read it, taking an escaped quote off and trimming the edges. The panel
+  wrote the corrected key silently, leaving the author to look for the one they typed. The
+  correction is now shown. ([#107](https://github.com/keyfire/xbsl/pull/107))
 
 - **Client breakpoints stop on newer 1C:Element servers.** Their browser client takes the debug
   server address only from `debug-server-url`, so the application opened without joining the
