@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 240.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 241.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -175,6 +175,7 @@ HTML-страницы. Код не трогаем – селекторы, иде
 | `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Буква "ё" в тексте, который читает пользователь: подпись, запись словаря локализованных строк, текст SVG или HTML-страницы |
 | `typography/non-keyboard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Знак не с клавиатуры в комментарии: стрелка, знак сравнения или умножения; исправление пишет `->`, `>=`, `<>`, `x` и подобное, валютный знак – данные и не судится |
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | файл | Среднее тире в комментарии – для проекта, который пишет в комментариях кода дефис; исправление ставит дефис |
+| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `//` прямо над объявлением (метод, структура, поле, элемент перечисления, константа модуля): среда разработки узнаёт документирующий комментарий только по маркеру `///` и только такой текст показывает в подсказке при наведении, в подсказке сигнатуры и в автодополнении. Автоисправление меняет маркер; о блоке `/* ... */` на этом месте правило сообщает без исправления |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Частица "бы" в комментарии; замечание просит слово условия, потому что без частицы предположение читается утверждением. Уступительные обороты не судятся |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Первое лицо в комментарии: местоимение "мы", "наш" или глагол вроде "проверяем", а в английской строке комментария из словаря перевода – "we", "our", "I"; комментарий безличен |
 | `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Слово прописными ради ударения в комментарии: "НЕ", "ТОЛЬКО", приставка "НЕзаполненным". Ударение набирают словами, а не регистром [подробнее](#b-comment-emphasis-caps) |

@@ -43,6 +43,14 @@ entry either - say what the behaviour was, not which class name was compared.
   the `-` of a list item, above a single property, on a standard attribute (`Code`, `Name`), on a command or on a
   dynamic list field there is no documentation comment, and the `##` lines are lost the same way
   `#` is. Off by default, turned on together with the first rule. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `comment/doc-marker` rule: the comment above a declaration that the environment does not
+  show.** In a module the development environment tells a documentation comment by its marker:
+  the `///` lines before a declaration and before its annotations. Only that text reaches the
+  hover, the signature help and the completion; a `//` block in the same place and a `/* ... */`
+  block listing the parameters are ordinary comments to it. The rule reports a `//` block right
+  above a method, a structure, a field, an enumeration item or a module constant and respells it
+  with an autofix. A note separated by a blank line and the comments inside a method body are
+  left alone. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
 
 ### Fixed
 

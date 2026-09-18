@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 240 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 241 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -181,6 +181,7 @@ tier keep to the module and the element description; `translation/english-shape`
 | `typography/yo-in-text` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The letter "ё" in the text a user reads: a label, an entry of the dictionary of localized strings, the text of an SVG or of an HTML page |
 | `typography/non-keyboard` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A character that is not on the keyboard in a comment: an arrow, a comparison or a multiplication sign; the fix writes `->`, `>=`, `<>`, `x` and the like, a currency sign is data and is left alone |
 | `typography/en-dash-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="info"><use href="#sev-info"/></svg> | – | file | The en dash in a comment, for a project that writes a hyphen in its code comments; the fix writes the hyphen |
+| `comment/doc-marker` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `//` block right above a declaration (a method, a structure, a field, an enumeration item, a module constant): the development environment reads a documentation comment by its `///` marker alone and puts only that text into the hover, the signature help and the completion. The fix respells the block; a `/* ... */` block in that place is reported without one |
 | `comment/subjunctive` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The subjunctive particle (would) in a comment; the finding asks for a word of condition, because dropping the particle turns a hypothesis into a statement. Concessive turns are left alone |
 | `comment/first-person` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | The author speaking as "we" in a comment: a pronoun or a first-person plural verb, and "we", "our" or "I" in the English line of a comment kept by the translation dictionary; a comment is impersonal |
 | `comment/emphasis-caps` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A word in capitals for emphasis in a comment: "not", "only", a negation glued on. Emphasis is a matter of wording, not of case [details](#b-comment-emphasis-caps) |

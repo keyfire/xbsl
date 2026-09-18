@@ -6362,6 +6362,26 @@ SEEDS: list[Seed] = [
                 "        -\n            ## the caption label\n            Тип: Надпись\n")},
         tokens=_DOC_COMMENT_TOKENS,
     ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=FINDING,
+        note="a plain line comment right above the annotations of a method",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "// recounts the totals\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
+    ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=CLEAN,
+        note="the same description spelled as a documentation comment",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "/// recounts the totals\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
+    ),
 ]
 
 
