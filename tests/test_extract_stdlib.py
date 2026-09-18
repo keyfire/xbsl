@@ -847,3 +847,108 @@ def test_a_lowercase_member_reaches_type_members(tmp_path):
     data = json.loads(output.read_text(encoding="utf-8"))
     assert data["type_members"]["ВидПлатформыКлиента"]["properties"] == ["Android", "iOS", "Веб"]
     assert data["type_members"]["ОбразецТипа"]["properties"] == ["Заголовок"]
+
+
+# --- members of the types a kind generates (the template pages) ---------------------------
+
+def _generated_page(title: str, props: str = "", methods: str = "") -> str:
+    """A template page of a generated type - the markup is the real one, placeholders and all."""
+    return (
+        f"<html><head><title>{title} | 1С:Предприятие.Элемент</title></head><body>"
+        f"<article><h1>{title}</h1>"
+        "<h2>Иерархия типа​</h2><p>Базовые типы: <a href='/Object_ru/'>Объект</a></p>"
+        + (f"<h2>Свойства​</h2>{props}" if props else "")
+        + (f"<h2>Методы​</h2>{methods}" if methods else "")
+        + "</article></body></html>"
+    )
+
+
+def _generated_car(tmp_path, pages: dict[str, str]):
+    import zipfile
+
+    car = tmp_path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        for directory, page in pages.items():
+            z.writestr(_MODULE.TEMPLATE_BASE + directory + "/index.html", page)
+    return car
+
+
+def test_generated_types_of_a_kind_keep_their_members(tmp_path, monkeypatch):
+    """A catalog gets `Имя.Объект`, `Имя.Данные` and the rest from the platform, and the help
+    describes each on a template page. Only the NAME of such a type used to be read, so the
+    members the platform gives an object module were nowhere in the data - and `ЭтоНовый()`
+    read as an undeclared name."""
+    import json
+
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    car = _generated_car(tmp_path, {
+        "CatalogName.Object_ru": _generated_page(
+            "{ИмяСправочника}.Объект",
+            props="<h3>ПометкаУдаления​</h3><h3>Ссылка​</h3>",
+            methods="<h3>Записать​</h3><h3>Удалить​</h3><h3>ЭтоНовый​</h3>",
+        ),
+        "CatalogName.Data_ru": _generated_page(
+            "{ИмяСправочника}.Данные", props="<h3>Ссылка​</h3>", methods="<h3>ЭтоНовый​</h3>",
+        ),
+        "CatalogName.WriteParameters_ru": _generated_page(
+            "{ИмяСправочника}.ПараметрыЗаписи", props="<h3>РежимЗагрузкиДанных​</h3>",
+        ),
+    })
+    assert car.exists()
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    generated = data["generated_members"]
+    assert generated["Справочник.Объект"] == {
+        "properties": ["ПометкаУдаления", "Ссылка"],
+        "methods": ["Записать", "Удалить", "ЭтоНовый"],
+    }
+    # the neighbours the platform gives the same element, not the object type alone
+    assert generated["Справочник.Данные"]["methods"] == ["ЭтоНовый"]
+    assert generated["Справочник.ПараметрыЗаписи"]["properties"] == ["РежимЗагрузкиДанных"]
+    # the names of the generated types are still collected as before
+    assert data["object_members"]["Справочник"] == ["Данные", "Объект", "ПараметрыЗаписи"]
+
+
+def test_a_generated_type_named_by_a_placeholder_is_not_keyed(tmp_path, monkeypatch):
+    """The data-schema pages of an exchange plan name the nested element by a placeholder
+    (`{ИмяПланаОбмена}.СхемаДанных.{ИмяДокумента}.Объект`). Such a key names no type, and
+    keying it would put a brace into the data for a consumer to trip over."""
+    import json
+
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: _KIND_TABLE)
+    car = _generated_car(tmp_path, {
+        "CatalogName.Object_ru": _generated_page(
+            "{ИмяСправочника}.Объект", methods="<h3>ЭтоНовый​</h3>"),
+        "CatalogName.DataSchema.DocumentName.Object_ru": _generated_page(
+            "{ИмяСправочника}.СхемаДанных.{ИмяДокумента}.Объект", methods="<h3>Записать​</h3>"),
+    })
+    assert car.exists()
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert sorted(data["generated_members"]) == ["Справочник.Объект"]
+
+
+def test_two_flavours_of_one_kind_join_their_generated_members(tmp_path, monkeypatch):
+    """`КлючДоступа` is one kind with two flavours, and each flavour has a template of its
+    own (`Пересчитать` on the computable one, `Выдать` on the grantable one). The yaml spells
+    the flavour as a property, so a consumer given the kind alone cannot tell them apart - the
+    sets join, exactly as the manager members of the same three templates already do."""
+    import json
+
+    monkeypatch.setattr(_MODULE, "scan_kind_table", lambda _car: {"КлючДоступа": "AccessKey"})
+    car = _generated_car(tmp_path, {
+        "ComputableAccessKeyName.Object_ru": _generated_page(
+            "{ИмяВычисляемогоКлючаДоступа}.Объект", methods="<h3>Пересчитать​</h3>"),
+        "GrantableAccessKeyName.Object_ru": _generated_page(
+            "{ИмяВыдаваемогоКлючаДоступа}.Объект", methods="<h3>Выдать​</h3>"),
+    })
+    assert car.exists()
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["generated_members"]["КлючДоступа.Объект"]["methods"] == ["Выдать", "Пересчитать"]

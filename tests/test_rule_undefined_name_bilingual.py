@@ -19,8 +19,8 @@ the English one, plus the negative controls - a bilingual scope must not turn th
 
 import pytest
 
-from xbsl import engine
-from xbsl.rules import undefined_names  # noqa: F401 - registers the rule
+from xbsl import dataset, engine
+from xbsl.rules import undefined_names
 
 pytestmark = pytest.mark.needs_data
 
@@ -168,6 +168,111 @@ def test_english_manager_module_calls_a_manager_method_by_its_english_name():
         "Tasks.xbsl": (
             "method Drop(Reference: Tasks.Link)\n"
             "    SetDeletionMark(Reference, True)\n"
+            ";\n"
+        ),
+    })
+    assert found == []
+
+
+# --- the members the platform gives the object module --------------------------------------
+
+def _with_generated(monkeypatch, entries: dict | None) -> None:
+    """Read the shipped catalog with `generated_members` set to `entries` (None removes it).
+
+    The shipped data carries the section only after the extractor is run again, so the wiring
+    is exercised against a catalog put together here - and the same helper writes the state of
+    an OLDER dataset, where the section is absent.
+    """
+    real = dataset.load_json
+
+    def load(name, version=None):
+        catalog = real(name, version) if version is not None else real(name)
+        if name != "stdlib.json":
+            return catalog
+        catalog = dict(catalog)
+        if entries is None:
+            catalog.pop("generated_members", None)
+        else:
+            catalog["generated_members"] = entries
+        return catalog
+
+    monkeypatch.setattr(undefined_names.dataset, "load_json", load)
+
+
+_GENERATED_CATALOG = {
+    "Справочник.Объект": {
+        "properties": ["МоментПометкиУдаления", "ПометкаУдаления", "Ссылка"],
+        "methods": ["Записать", "СоздатьКопию", "Удалить", "ЭтоНовый"],
+    },
+}
+
+
+def test_object_module_calls_a_method_the_platform_gives_it(monkeypatch):
+    """`ЭтоНовый()` is documented on the object type of a catalog and compiles in a product
+    that ships; the rule called it undeclared because the members of that type were nowhere
+    in the data."""
+    _with_generated(monkeypatch, _GENERATED_CATALOG)
+    found = _lint({
+        "Задачи.yaml": _CATALOG_RU,
+        "Задачи.Объект.xbsl": (
+            "@Обработчик\n"
+            "метод ПередЗаписью(До: Задачи.Данные, "
+            "ПараметрыЗаписи: Задачи.ПараметрыЗаписи)\n"
+            "    если не ЭтоНовый()\n"
+            "        СоздатьКопию()\n"
+            "    ;\n"
+            ";\n"
+        ),
+    })
+    assert found == []
+
+
+def test_object_module_still_reports_a_name_the_platform_does_not_give_it(monkeypatch):
+    """The negative control: the scope grows by what the data says, not by everything."""
+    _with_generated(monkeypatch, _GENERATED_CATALOG)
+    found = _lint({
+        "Задачи.yaml": _CATALOG_RU,
+        "Задачи.Объект.xbsl": (
+            "@Обработчик\n"
+            "метод ПередЗаписью(До: Задачи.Данные, "
+            "ПараметрыЗаписи: Задачи.ПараметрыЗаписи)\n"
+            "    если не ЭтоСтарый()\n"
+            "    ;\n"
+            ";\n"
+        ),
+    })
+    assert [d.line for d in found] == [3]
+    assert "ЭтоСтарый" in found[0].message
+
+
+def test_an_older_dataset_without_the_section_keeps_the_scope_it_had(monkeypatch):
+    """A dataset extracted before this section exists must not lose the four names the
+    compiler probe confirmed - they are the fallback, and `Записать` is one of them."""
+    _with_generated(monkeypatch, None)
+    found = _lint({
+        "Задачи.yaml": _CATALOG_RU,
+        "Задачи.Объект.xbsl": (
+            "@Обработчик\n"
+            "метод ПередЗаписью(До: Задачи.Данные, "
+            "ПараметрыЗаписи: Задачи.ПараметрыЗаписи)\n"
+            "    Записать()\n"
+            ";\n"
+        ),
+    })
+    assert found == []
+
+
+def test_english_object_module_calls_the_same_method_by_its_english_name(monkeypatch):
+    """The section is keyed by the kind in its Russian spelling and carries Russian member
+    names; an English project spells both sides differently and must reach the same scope."""
+    _with_generated(monkeypatch, _GENERATED_CATALOG)
+    found = _lint({
+        "Tasks.yaml": _CATALOG_EN,
+        "Tasks.Object.xbsl": (
+            "@Handler\n"
+            "method BeforeWrite(To: Tasks.Data, WriteParameters: Tasks.WriteParameters)\n"
+            "    if not IsNew()\n"
+            "    ;\n"
             ";\n"
         ),
     })

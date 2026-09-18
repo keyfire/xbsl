@@ -99,6 +99,8 @@ MESSAGES = {
     "datadiff.group.manager-members": {"ru": "члены менеджеров", "en": "manager members"},
     "datadiff.group.facets": {"ru": "фасеты", "en": "facets"},
     "datadiff.group.facet-members": {"ru": "члены фасетов", "en": "facet members"},
+    "datadiff.group.generated-members": {"ru": "члены порождаемых типов",
+                                        "en": "members of generated types"},
     "datadiff.group.classes": {"ru": "классы", "en": "classes"},
     "datadiff.group.props": {"ru": "свойства", "en": "properties"},
     "datadiff.group.enums": {"ru": "перечисления", "en": "enumerations"},
@@ -376,6 +378,8 @@ def diff_stdlib(old: dict, new: dict) -> dict:
         ),
         "facets": _added_removed(old_fm, new_fm),
         "facet_members": _diff_member_lists(old_fm, new_fm),
+        "generated_members": _diff_member_lists(
+            old.get("generated_members") or {}, new.get("generated_members") or {}),
     })
 
 
@@ -660,7 +664,7 @@ def _section_lines(section: str, body: dict, limit: int | None) -> list:
         return out
     for key, payload in body.items():
         title = _group_title(key)
-        if key in ("members", "facet_members", "manager_members"):
+        if key in ("members", "facet_members", "manager_members", "generated_members"):
             _emit_named(out, 0, title, payload, lambda e: _members_line(e, limit), limit)
         elif key in ("props", "forms", "enum_values", "object_members"):
             _emit_named(out, 0, title, payload, lambda e: _props_line(e, limit), limit)

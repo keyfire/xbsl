@@ -13,6 +13,10 @@ the object_members dictionary is built: object kind (by the English template nam
 names of the spawned members (the second segment of the Russian title). Placeholder members
 ("{ИмяМетрики}", Latin SOAP templates) are skipped, and so are templates that name no kind -
 which ones those are is decided by _template_kinds, and every one of them is printed.
+The same pages also describe the spawned types themselves, and generated_members keeps that:
+"<вид>.<хвост>" -> the members the platform gives an element of the kind ("Справочник.Объект"
+answers what an object module may call by a bare name). A tail that still holds a placeholder
+("СхемаДанных.{ИмяДокумента}.Объект") names no type and is left out.
 
 From interface component pages (a type is a component when the "Иерархия типа" section lists
 Стд::Интерфейс::Компонент among the bases; plus the page of Компонент itself) the
@@ -911,12 +915,14 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
 
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
-    the global context with per-name availability, managers, facets, member types, bases,
-    constructor kinds, type parameters, the forms of deprecated members and the members whose
-    overloads were folded into a head - the tuple main() unpacks."""
+    the global context with per-name availability, managers, facets, the members of the types a
+    kind generates, member types, bases, constructor kinds, type parameters, the forms of
+    deprecated members and the members whose overloads were folded into a head - the tuple
+    main() unpacks."""
     car = _distro.find_car(dist)
     names: set[str] = set()
     members: dict[str, set[str]] = {}
+    generated: dict[str, dict[str, set[str]]] = {}
     components: dict[str, set[str]] = {}
     types: dict[str, dict[str, set[str]]] = {}
     globals_: set[str] = set()
@@ -1063,6 +1069,28 @@ def extract(dist: Path) -> tuple:
             if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
+            # The page describes the generated type, not only its name, and what it describes is
+            # what the platform GIVES an element of the kind: the members of `Имя.Объект` are the
+            # bare names of an object module (`ЭтоНовый`, `Записать`, `ПометкаУдаления`), those of
+            # `Имя.Данные` and `Имя.ПараметрыЗаписи` are the fields of the write handler's
+            # parameters. Reading the name alone left every one of them out of the data, and the
+            # rules made do with a hand-written table of four names.
+            tail = ".".join(segs[1:])
+            if _TEMPLATE_PLACEHOLDER_RE.search(tail):
+                # `СхемаДанных.{ИмяДокумента}.Объект` of an exchange plan: the key would carry a
+                # placeholder and name no type at all.
+                continue
+            props, methods, events = page_members(raw)
+            if props or methods or events:
+                # A kind with several flavours has a template per flavour (`КлючДоступа`:
+                # `Пересчитать` on the computable one, `Выдать` on the grantable one) and the yaml
+                # spells the flavour as a property, so a consumer given the kind alone cannot tell
+                # them apart. The sets join - the manager members of the same three templates are
+                # joined just above for the same reason.
+                slot = generated.setdefault(f"{kind}.{tail}", _empty_member_slot())
+                slot["properties"] |= props
+                slot["methods"] |= methods
+                slot["events"] |= events
     names |= TOPIC_ONLY_TYPES
     with zipfile.ZipFile(car) as z:
         _apply_deprecation_modes(z, deprecated, english_keys)
@@ -1102,8 +1130,8 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-            folds, expand_checked_return_methods(checked_methods, bases))
+            facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+            deprecated, folds, expand_checked_return_methods(checked_methods, bases))
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1517,8 +1545,8 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-     folds, checked_methods) = extract(dist)
+     facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+     deprecated, folds, checked_methods) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1573,6 +1601,13 @@ def main(argv=None) -> int:
         # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record and
         # reference members that do not land on the type's own page.
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
+        # Members of the types the platform GENERATES for an element of a kind, keyed
+        # `<вид>.<хвост>` after the template page that describes them: `Справочник.Объект` says
+        # what an object module may call by a bare name, `Справочник.Данные` and
+        # `Справочник.ПараметрыЗаписи` what the write handler's parameters carry. Keyed by KIND,
+        # not by type: the element's own name stands where the template prints a placeholder.
+        # Missing in older datasets - a consumer keeps whatever it did without it.
+        "generated_members": {k: _members_json(v) for k, v in sorted(generated.items())},
         # Result type roots of members (page signatures: method returns and property types).
         "member_types": {k: dict(sorted(v.items())) for k, v in sorted(own_returns.items())},
         # Method signatures as the page prints them, one string per overload: what the result
@@ -1633,6 +1668,8 @@ def main(argv=None) -> int:
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
           f" с методами {sum(1 for v in types.values() if v['methods'])})")
     print(f"  фасетов сущностных типов: {len(facets)}")
+    print(f"  порождаемых типов с членами: {len(generated)}"
+          f" (членов: {sum(len(s) for v in generated.values() for s in v.values())})")
     print(f"  типов с типами членов: {len(returns)}"
           f" (членов с типом: {sum(len(v) for v in returns.values())})")
     print(f"  типов с сигнатурами методов: {len(signatures)}"

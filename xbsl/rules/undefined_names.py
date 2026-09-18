@@ -111,9 +111,24 @@ _UNDOCUMENTED = frozenset({
 #
 # Every one of those spellings compiled into an error, and the control line of each module
 # errored too - so the answers were not the silence of an uncompiled module.
+#
+# The table is now the FALLBACK rather than the whole answer: the documentation describes the
+# object type of every kind on a template page of its own, and the extractor keeps those
+# members under `generated_members`. A dataset that carries the section answers for the kind at
+# hand - the members of a catalog object are not those of a settings storage - and this table
+# covers what it does not: an older dataset, and a kind whose object type the help omits.
+#
+# The probe and the documentation disagree on one name. The probe read IsNew as absent; the
+# help lists `ЭтоНовый` among the methods of the object type, and a product in production calls
+# it by a bare name in five modules. Two sources against one, so the data wins - and if the
+# probe is right after all, the finding comes back on regeneration rather than silently.
 _ENTITY_COMMON = frozenset({
     "Ссылка", "ПометкаУдаления", "Записать", "Удалить",
 })
+
+#: The tail of the generated type an object module belongs to: `<Имя>.Объект.xbsl` is the
+#: module of `<Имя>.Объект`, so its members sit under `<вид>.Объект` in generated_members.
+_OBJECT_FACET = "Объект"
 
 # The yaml sections whose items become bare names in the object modules.
 _FIELD_SECTIONS = (
@@ -425,6 +440,7 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     type_members = catalog.get("type_members", {})
     object_members = catalog.get("object_members", {})
     manager_members = catalog.get("manager_members", {})
+    generated_members = catalog.get("generated_members", {})
 
     # The project model from the yaml facts: names, the (directory, file) map for the
     # module pairing, the by-name map for the Наследует chain of interface components.
@@ -452,8 +468,14 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 continue  # an external namespace in the yaml Импорт - the same blind spot
             kind = pair["element_kind"]
             if fact["obj"]:
-                # an entity module: the attributes plus the standard fields and write methods
-                extras = set(pair["sections"]) | _both_spellings(set(_ENTITY_COMMON))
+                # An entity module: the attributes of the object, plus what the platform gives
+                # the object type of this kind (the template page of `<вид>.Объект`), plus the
+                # probe-confirmed table for a dataset or a kind the pages say nothing about.
+                given = generated_members.get(f"{kind}.{_OBJECT_FACET}") or {}
+                extras = set(pair["sections"]) | _both_spellings(
+                    set(_ENTITY_COMMON)
+                    | set(given.get("properties", ())) | set(given.get("methods", ()))
+                )
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
             else:
