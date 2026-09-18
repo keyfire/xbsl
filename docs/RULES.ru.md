@@ -11,7 +11,7 @@ sidebar:
 
 
 Полный перечень проверок линтера. Файл дополняется при добавлении правил, а действующий
-список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 238.
+список печатает `xbsl --list-rules` или инструмент MCP `list_rules`. Сейчас правил: 240.
 
 Таблица описывает инструментарий в поставке. Установленный плагин может добавить свои правила
 и переопределить severity и включённость по умолчанию (см. [Расширение](/ru/servers#расширение-свои-правила-данные-и-уровни)),
@@ -101,6 +101,8 @@ IDE платформы: `code/redundant-cast`, `code/cast-to-non-null`, `code/re
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | Ключ разметки, которого у компонента нет, а у другого компонента ui-схемы есть: применение отвечает `Неизвестное свойство` [подробнее](#a-yaml-unknown-component-property) [доки](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | файл | `Имя` у команды, объявленной прямо в разметке: применение отвергает узел и откатывает проект [подробнее](#a-yaml-inline-command-name) [доки](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | файл | Список с прокруткой по вертикали, у которого `Навигация: Отсутствует`: строки берутся одной порцией, и хвост данных прокруткой недостижим [подробнее](#a-yaml-list-scroll-without-loading) [доки](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Комментарий `#` в описании элемента: визуальный редактор пишет файл заново из модели и сохраняет только документирующий комментарий `##` в первых строках узла, у которого он есть (элемент, компонент, объявленное свойство, табличная часть и подобные). Автоисправление меняет маркер у блока, который уже стоит на таком месте, и переносит внутрь узла блок, стоящий перед `-` элемента списка; остальное называется вместе с ближайшим узлом, у которого комментарий есть |
+| `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | файл | Блок `##` стоит там, где среда разработки его не читает: перед `-` элемента списка, над отдельным свойством, у узла без документирующего комментария (реквизит справочника, команда, поле динамического списка). Он пропадёт так же, как комментарий `#` |
 
 #### Подробнее о правилах тира A
 

@@ -11,7 +11,7 @@ sidebar:
 
 
 The full list of linter checks. This file is extended as rules are added, and the live list comes
-from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 238 rules.
+from `xbsl --list-rules` or the MCP `list_rules`. Currently there are 240 rules.
 
 The table describes the toolkit as it ships. An installed plugin may add rules of its own and
 override severities and default states (see [Extending](/servers#extending-your-own-rules-data-and-severities)),
@@ -104,6 +104,8 @@ The file exists, parses, the object has a unique UUID, the name matches the file
 | `yaml/unknown-component-property` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A markup key the component does not declare while another component of the ui schema does: the apply rejects the node as an unknown property [details](#a-yaml-unknown-component-property) [docs](https://1cmycloud.com/docs/help/topics/system-and-interface-components/) |
 | `yaml/inline-command-name` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="error"><use href="#sev-error"/></svg> | ✓ | file | A `Name` on a command declared inline in the markup: the apply refuses the node and rolls the project back [details](#a-yaml-inline-command-name) [docs](https://1cmycloud.com/docs/help/topics/command-interface-fragment/) |
 | `yaml/list-scroll-without-loading` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | ✓ | file | A vertically scrolled list with `Navigation: None`: the rows come in a single portion, and the tail of the data is out of reach of the scrolling [details](#a-yaml-list-scroll-without-loading) [docs](https://1cmycloud.com/docs/help/topics/custom-list-component/) |
+| `yaml/plain-comment` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `#` comment in an element description: the visual editor writes the file out again from the model and keeps only a `##` documentation comment at the head of a documentable node (the element, a component, a declared property, a tabular section and the like). The fix respells a block that already stands in such a place and steps a block standing before the `-` of an item inside it; anything else is reported with the nearest node that holds a comment |
+| `yaml/doc-comment-misplaced` | <svg width="16" height="16" style="display:inline-block;vertical-align:-3px" aria-label="warning"><use href="#sev-warning"/></svg> | – | file | A `##` block that stands where the environment does not read it - before the `-` of an item, above a single property, on a node without a documentation comment (a catalog attribute, a command, a dynamic list field). It is lost the same way a `#` comment is |
 
 #### Tier A rules in detail
 
