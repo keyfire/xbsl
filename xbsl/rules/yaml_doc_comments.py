@@ -19,15 +19,15 @@ that node and renders it as Markdown. So a `##` line has a slot in exactly these
 - the first lines of an interface component node, before its `Type` - the platform components
   the ui schema knows and the components a project or a library declares;
 - the first lines of a list item whose class is documentable: a property or an event of a
-  component, a URL template, a tabular section and its attributes, a dimension or a resource
-  of a register, an index, a structure field, an enumeration item, a constant, a parameter of
-  a global client event, of a virtual table, of a scheduled job.
+  component, a URL template, an attribute, a tabular section and its attributes, a dimension
+  or a resource of a register, an index, a structure field, an enumeration item, a constant,
+  a parameter of a global client event, of a virtual table, of a scheduled job.
 
 And in these it has none, however it is spelled: a single property of a node (a scalar has no
-head to hold it), an item of a collection that dispatches by name (the attributes of a
-catalog, a document or a register - the built-in ones have no slot at all, and the writer
-rebuilds the rest), a command of a command interface, a structural value of the interface (a
-dynamic list field, a filter item, layout settings, a font) and an item of `Import`.
+head to hold it), a built-in item the platform picks by its name (the standard attributes
+`Code`, `Name`, `Owner`, `Parent` and the like - the ordinary attributes next to them do hold
+a comment), a command of a command interface, a structural value of the interface (a dynamic
+list field, a filter item, layout settings, a font) and an item of `Import`.
 
 yaml/plain-comment reports every `#` comment; yaml/doc-comment-misplaced reports a `##` block
 that stands where the reader does not look. Both carry an autofix when the text is already
@@ -234,8 +234,10 @@ def _collect(root, kind: str | None) -> tuple[dict[int, _Slot], dict[int, object
                 if not child:
                     continue
                 judged.add(id(item))
-                # A collection that dispatches by the item name rebuilds its items on write.
-                if not record.get("dispatch") and metamodel.inherits(child, _DOCUMENTABLE):
+                # A class the collection picks BY THE ITEM NAME describes a built-in item (the
+                # code, the name, the owner): it either is not documentable or is written out
+                # anew, without the comment. An ordinary item of the same collection keeps it.
+                if metamodel.inherits(child, _DOCUMENTABLE) and metamodel.dispatch_name(child) is None:
                     slots[id(item)] = _Slot(item, _first_line(item), False)
                 by_metamodel(child, item)
 

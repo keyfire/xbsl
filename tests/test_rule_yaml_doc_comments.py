@@ -177,17 +177,31 @@ _CATALOG = """ВидЭлемента: Справочник
 """
 
 
-def test_catalog_attribute_has_no_slot(tmp_path):
-    # The collection dispatches by the item name: the writer rebuilds its items.
+def test_ordinary_catalog_attribute_holds_a_comment(tmp_path):
     text = _CATALOG.replace(
-        "        Имя: Артикул\n", "        Имя: Артикул\n", 1
-    ).replace(
         "    -\n        Ид: 44444444-4444-4444-4444-444444444445\n",
         "    # Артикул поставщика.\n    -\n        Ид: 44444444-4444-4444-4444-444444444445\n",
     )
     diags = _lint(tmp_path, text, name="ТоварыПробы.yaml")
+    assert len(diags) == 1 and diags[0].fix is not None
+    fixed = _fixed(text, diags)
+    assert "    -\n        ## Артикул поставщика.\n        Ид: 44444444-4444-4444-4444-444444444445\n" in fixed
+    assert _lint(tmp_path, fixed, name="ТоварыПробы.yaml") == []
+
+
+def test_standard_catalog_attribute_has_no_slot(tmp_path):
+    # The built-in item is picked by its name: that class holds no documentation comment.
+    text = _CATALOG.replace(
+        "    -\n        Имя: Наименование\n",
+        "    # Название товара в каталоге.\n    -\n        Имя: Наименование\n",
+    )
+    diags = _lint(tmp_path, text, name="ТоварыПробы.yaml")
     assert len(diags) == 1 and diags[0].fix is None
     assert "в первые строки файла" in diags[0].message
+    inside = _CATALOG.replace(
+        "        Имя: Наименование\n", "        ## Название товара.\n        Имя: Наименование\n"
+    )
+    assert len(_lint(tmp_path, inside, MISPLACED, name="ТоварыПробы.yaml")) == 1
 
 
 def test_tabular_section_and_its_attribute_hold_comments(tmp_path):

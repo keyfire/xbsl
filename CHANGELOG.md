@@ -33,7 +33,7 @@ entry either - say what the behaviour was, not which class name was compared.
   that holds a comment. Off by default: a project with a comment on every other node gets
   thousands of findings. ([#111](https://github.com/keyfire/xbsl/pull/111))
 - **The `yaml/doc-comment-misplaced` rule: a `##` block stands where nobody reads it.** Before
-  the `-` of a list item, above a single property, on a catalog attribute, on a command or on a
+  the `-` of a list item, above a single property, on a standard attribute (`Code`, `Name`), on a command or on a
   dynamic list field there is no documentation comment, and the `##` lines are lost the same way
   `#` is. Off by default, turned on together with the first rule. ([#111](https://github.com/keyfire/xbsl/pull/111))
 
