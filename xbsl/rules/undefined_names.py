@@ -137,32 +137,43 @@ _OBJECT_FACET = "Объект"
 _TRUE_FORMS = frozenset({"Истина", "True", "true"})
 _FALSE_FORMS = frozenset({"Ложь", "False", "false"})
 
-#: Members of `<вид>.Объект` that the platform gives to SOME elements of the kind only. The
-#: template page the data is read from describes ONE example element, and everything switched
-#: on in that example reaches the data as the contract of the whole kind - so the help has to
-#: be read for each of them and the element's own yaml asked.
+#: The two module scopes a conditional row speaks about: the object module of an element
+#: (`<Имя>.Объект.xbsl`, names from `<вид>.Объект`) and its manager module (`<Имя>.xbsl`, names
+#: from `manager_members` of the kind). One setting can decide in both.
+_OBJECT_SCOPE = "obj"
+_MANAGER_SCOPE = "manager"
+
+#: Names the platform gives to SOME elements of a kind only. The template pages the data is
+#: read from describe ONE example element, and everything switched on in that example reaches
+#: the data as the contract of the whole kind - so the help has to be read for each of them and
+#: the element's own yaml asked.
 #:
-#: A row is (the property that decides, the value that switches the members ON, the names). The
-#: kinds a row speaks for are the kinds whose metamodel record declares that property, so no row
-#: carries a list of its own: `Пересчитать` reaches an access key, which has `РучнаяВыдача`, and
-#: leaves a privilege alone, which has the method but no such property. A kind that declares
-#: nothing of the sort is not judged at all - a settings storage keeps every name it had.
+#: A row is (the property that decides, the value that switches the names ON, the names of the
+#: object module, the names of the manager module). The kinds a row speaks for are the kinds
+#: whose metamodel record declares that property, so no row carries a list of its own:
+#: `Пересчитать` reaches an access key, which has `РучнаяВыдача`, and leaves a privilege alone,
+#: which recomputes too but has no such property. A kind that declares nothing of the sort is
+#: not judged at all - a settings storage keeps every name it had.
 _CONDITIONAL_MEMBERS = (
     # "Появляется только у иерархических справочников" - xbql/Std/CatalogName, which spells
     # out which ones: "справочник с установленным значением Истина для свойства Иерархический".
     # The default is `Ложь`, so without the gate the name would be waved through on most
     # catalogs of a project.
-    ("Иерархический", "Истина", ("Родитель",)),
+    ("Иерархический", "Истина", ("Родитель",), ()),
     # "Поле присутствует только у справочников с режимом удаления ПометкаУдаления" - the same
     # sentence for both fields on the catalog, document and exchange-plan pages of xbql. The
     # `ПометкаУдаления` of the fallback table above is the same fact and rides along.
-    ("РежимУдаления", "ПометкаУдаления", ("МоментПометкиУдаления", "ПометкаУдаления")),
+    ("РежимУдаления", "ПометкаУдаления", ("МоментПометкиУдаления", "ПометкаУдаления"), ()),
     # An access key is granted by hand or computed, and the help keeps the two apart as two
-    # types: `ВыдаваемыйКлючДоступа.Объект` grants and revokes, `ВычисляемыйКлючДоступа.Объект`
-    # recomputes. In yaml it is ONE kind, so both template pages fold into `КлючДоступа.Объект`
-    # and each flavour ends up carrying the methods of the other.
-    ("РучнаяВыдача", "Истина", ("Выдать", "Отозвать")),
-    ("РучнаяВыдача", "Ложь", ("Пересчитать",)),
+    # types: `ВыдаваемыйКлючДоступа` revokes, `ВычисляемыйКлючДоступа` recomputes, and so do
+    # their instances. In yaml it is ONE kind, so both template pages fold into
+    # `КлючДоступа.Объект` and into the manager members of the kind, and each flavour ends up
+    # carrying the methods of the other. A probe on a stand measured all four corners: to the
+    # name of the other flavour the compiler answers `Unknown method`, in either module. Which
+    # flavour a key is, the help says nowhere - the probe settled that too, and the answer is
+    # this property and nothing else.
+    ("РучнаяВыдача", "Истина", ("Выдать", "Отозвать"), ("ОтозватьКлючи",)),
+    ("РучнаяВыдача", "Ложь", ("Пересчитать",), ("ПересчитатьКлючи",)),
 )
 
 
@@ -184,18 +195,21 @@ def _on_forms(value: str) -> frozenset[str]:
 dataset.register_reset(_on_forms.cache_clear)
 
 
-def _withheld_members(data: dict, kind: str | None) -> set[str]:
-    """Members of `<вид>.Объект` that THIS element's own settings do not give it.
+def _withheld_members(data: dict, kind: str | None) -> dict[str, list[str]]:
+    """Names THIS element's own settings do not give it, per module scope.
 
     Silence is the answer wherever nothing is settled: a kind without the property, a value the
     file spells in a way nothing recognises. Widening a scope costs a missed finding, narrowing
     it wrongly costs an error on code that compiles - and that is the defect being repaired.
+
+    The branch that falls back on the default of the property is sound but rarely walked: under
+    the current compatibility mode an access key that names no `РучнаяВыдача` does not apply at
+    all, and that refusal is a finding of another rule. Only a project held to an older mode
+    reaches the default.
     """
-    if not kind:
-        return set()
-    props = metamodel.properties(kind)
-    withheld: set[str] = set()
-    for prop, on_value, names in _CONDITIONAL_MEMBERS:
+    withheld: dict[str, set[str]] = {_OBJECT_SCOPE: set(), _MANAGER_SCOPE: set()}
+    props = metamodel.properties(kind) if kind else {}
+    for prop, on_value, own, manager in _CONDITIONAL_MEMBERS:
         record = props.get(prop)
         if not record:
             continue  # the kind has no such setting - nothing to judge by
@@ -207,8 +221,9 @@ def _withheld_members(data: dict, kind: str | None) -> set[str]:
         elif written is False:
             written = "Ложь"
         if isinstance(written, str) and written not in _on_forms(on_value):
-            withheld.update(names)
-    return withheld
+            withheld[_OBJECT_SCOPE].update(own)
+            withheld[_MANAGER_SCOPE].update(manager)
+    return {scope: sorted(names) for scope, names in withheld.items()}
 
 
 # The yaml sections whose items become bare names in the object modules.
@@ -369,10 +384,10 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "name": name if isinstance(name, str) else None,
             "element_kind": kind if isinstance(kind, str) else None,
             "sections": sorted(_section_names(data)),
-            # Members of the kind's object type that this element's own settings switch off -
-            # a catalog that is not hierarchical has no `Родитель`. Read here, where the
-            # parsed yaml is at hand, and subtracted where the object scope is built.
-            "withheld": sorted(_withheld_members(data, kind)),
+            # Names of the kind that this element's own settings switch off, per module
+            # scope - a catalog that is not hierarchical has no `Родитель`. Read here, where
+            # the parsed yaml is at hand, and subtracted where each scope is built.
+            "withheld": _withheld_members(data, kind),
             "base": _base_type_root(data),
             "ext": isinstance(imports, list)
                    and any(isinstance(i, str) and "::" in i for i in imports),
@@ -561,16 +576,18 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                          | set(given.get("properties", ())) | set(given.get("methods", ())))
                 # Withheld BEFORE the spellings are added, or the English form of a name the
                 # element does not have would stay in scope on its own.
-                extras = set(pair["sections"]) | _both_spellings(names - set(pair["withheld"]))
+                extras = set(pair["sections"]) | _both_spellings(
+                    names - set(pair["withheld"][_OBJECT_SCOPE]))
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
             else:
-                # a data-kind manager module / common module: the yaml fields plus the manager members
-                extras = set(pair["sections"])
-                extras |= _both_spellings(
-                    set(object_members.get(kind, ()))
-                    | set(dataset.manager_member_names(manager_members.get(kind)))
-                )
+                # A manager module of a data kind, or a common module: the yaml fields plus the
+                # manager members, less what this element's settings switch off - the manager of
+                # an access key carries the methods of BOTH flavours, as its object type did.
+                names = (set(object_members.get(kind, ()))
+                         | set(dataset.manager_member_names(manager_members.get(kind))))
+                extras = set(pair["sections"]) | _both_spellings(
+                    names - set(pair["withheld"][_MANAGER_SCOPE]))
         for line, col, name, sign in fact["cands"]:
             if name in project_names or name in extras:
                 continue

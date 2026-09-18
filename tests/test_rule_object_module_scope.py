@@ -187,3 +187,52 @@ def test_a_kind_without_the_setting_keeps_the_name():
                                      "a1000000-0000-4000-8000-00000000000c"),
              "Настройки.Объект.xbsl": _module("ПометкаУдаления")}
     assert _names(files) == ["НетТакогоИмени"]
+
+
+# --- the same two flavours in the MANAGER module --------------------------------------------
+#
+# `<Имя>.xbsl` of an access key is its manager module, and its bare names come from
+# manager_members of the kind - merged from the two flavour templates just as the object
+# members were. A probe on a stand measured all four corners: the compiler answers
+# `Unknown method` to the manager method of the other flavour.
+
+def _manager(*calls: str) -> str:
+    body = "".join(f"    {call}()\n" for call in calls)
+    return "метод Проверить()\n" + body + "    знч Контроль = НетТакогоИмени\n;\n"
+
+
+def test_a_key_granted_by_hand_revokes_its_keys():
+    files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-00000000000d",
+                                 "РучнаяВыдача: Истина"),
+             "Ключи.xbsl": _manager("ОтозватьКлючи")}
+    assert _names(files) == ["НетТакогоИмени"]
+
+
+def test_a_key_granted_by_hand_does_not_recompute_its_keys():
+    files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-00000000000e",
+                                 "РучнаяВыдача: Истина"),
+             "Ключи.xbsl": _manager("ПересчитатьКлючи")}
+    assert _names(files) == ["НетТакогоИмени", "ПересчитатьКлючи"]
+
+
+def test_a_computed_key_recomputes_its_keys():
+    files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-00000000000f",
+                                 "РучнаяВыдача: Ложь"),
+             "Ключи.xbsl": _manager("ПересчитатьКлючи")}
+    assert _names(files) == ["НетТакогоИмени"]
+
+
+def test_a_computed_key_does_not_revoke_its_keys():
+    files = {"Ключи.yaml": _yaml("КлючДоступа", "Ключи", "a1000000-0000-4000-8000-000000000010",
+                                 "РучнаяВыдача: Ложь"),
+             "Ключи.xbsl": _manager("ОтозватьКлючи")}
+    assert _names(files) == ["НетТакогоИмени", "ОтозватьКлючи"]
+
+
+def test_the_manager_of_another_kind_keeps_its_own_recompute():
+    """A privilege recomputes too, by a name of its own, and has no such setting - the gate
+    must not reach it because a row of the table happens to speak about recomputing."""
+    files = {"Права.yaml": _yaml("ПравоНаДействие", "Права",
+                                 "a1000000-0000-4000-8000-000000000011"),
+             "Права.xbsl": _manager("ПересчитатьПрава")}
+    assert _names(files) == ["НетТакогоИмени"]
