@@ -786,3 +786,64 @@ def test_the_shipped_description_never_overrules_the_help_and_names_no_new_type(
 
     assert data["type_members"]["Группа"] == {"properties": ["Видимость"]}
     assert "БлокСхема" not in data["type_members"] and "БлокСхема" not in data["names"]
+
+
+# --- a member name that opens with a lowercase letter ------------------------------------
+
+_LOWERCASE_MEMBER_PAGE = (
+    "<html><head><title>ВидПлатформыКлиента | 1С:Предприятие.Элемент</title></head><body>"
+    "<article><h1>ВидПлатформыКлиента</h1>"
+    "<h2>Иерархия типа​</h2><p>Базовые типы: <a href='/Object_ru/'>Объект</a></p>"
+    "<h2>Свойства​</h2>"
+    '<h3 id="ios">iOS</h3><pre><code>iOS</code></pre>'
+    '<h3 id="android">Android</h3><pre><code>Android</code></pre>'
+    '<h3 id="веб">Веб</h3><pre><code>Веб</code></pre>'
+    "</article></body></html>"
+)
+
+#: What the name check is there for: an empty heading (the Docusaurus anchor link alone),
+#: the "(Переопределение)" marker a page prints instead of a name, and the `{ИмяПоля}`
+#: placeholder of a generated member. All three are junk and none of them is a member.
+_JUNK_HEADINGS_PAGE = (
+    "<html><head><title>ОбразецТипа | 1С:Предприятие.Элемент</title></head><body>"
+    "<article><h1>ОбразецТипа</h1>"
+    "<h2>Иерархия типа​</h2><p>Базовые типы: <a href='/Object_ru/'>Объект</a></p>"
+    "<h2>Свойства​</h2>"
+    "<h3>Заголовок​</h3>"
+    '<h3 class="anchor"><a href="#x" class="hash-link">​</a></h3>'
+    "<h3>(Переопределение)​</h3>"
+    "<h3>{ИмяПоля}​</h3>"
+    "</article></body></html>"
+)
+
+
+def test_page_members_keeps_a_member_whose_name_opens_lowercase():
+    """`ВидПлатформыКлиента.iOS` is documented like its neighbours, and dropping it made
+    the static-member check refuse working code."""
+    props, methods, events = _MODULE.page_members(_LOWERCASE_MEMBER_PAGE)
+    assert props == {"iOS", "Android", "Веб"}
+    assert methods == set() and events == set()
+
+
+def test_page_members_still_drops_the_junk_headings():
+    """The name check earns its place on three headings that carry no name at all."""
+    props, _methods, _events = _MODULE.page_members(_JUNK_HEADINGS_PAGE)
+    assert props == {"Заголовок"}
+
+
+def test_a_lowercase_member_reaches_type_members(tmp_path):
+    """End to end: the page walk of extract() must carry such a member into the data file,
+    or the check reading it keeps refusing the code."""
+    import json
+    import zipfile
+
+    car = tmp_path / "1c-enterprise-element-server-with-ide-9.9.9+1-test.car"
+    with zipfile.ZipFile(car, "w") as z:
+        z.writestr(_MODULE.STD_BASE + "Interface/ClientDevice/ClientPlatformKind_ru/index.html",
+                   _LOWERCASE_MEMBER_PAGE)
+        z.writestr(_MODULE.STD_BASE + "SampleType_ru/index.html", _JUNK_HEADINGS_PAGE)
+    output = tmp_path / "stdlib.json"
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+    assert data["type_members"]["ВидПлатформыКлиента"]["properties"] == ["Android", "iOS", "Веб"]
+    assert data["type_members"]["ОбразецТипа"]["properties"] == ["Заголовок"]
