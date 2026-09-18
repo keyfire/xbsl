@@ -5,7 +5,8 @@ properties, names a component inherits, ambiguous declarations and deferred clos
 are deliberately left alone. Metadata whose used fields have unexpected types is
 recorded like malformed YAML. The image rule retains its historical metadata-only
 server inference when the source module is absent; other consumers require a declared,
-client-available endpoint.
+client-available endpoint. Without the platform type catalog no path can be proven, so
+server_call_mapper stops before it parses a module (see its docstring).
 """
 
 from __future__ import annotations
@@ -234,7 +235,19 @@ def _bindings(source: SourceFile) -> list[dict]:
 
 
 def server_call_mapper(source: SourceFile) -> dict | None:
-    """Map metadata and methods once per source; facts contain only JSON values."""
+    """Map metadata and methods once per source; facts contain only JSON values.
+
+    Every consumer of the fact draws a conclusion only once `ServerCallGraph.has_data` is
+    true, and that flag is this same catalog check, so a module parsed while the platform
+    data is missing would be parsed for nothing: the graph built over the result throws every
+    path away regardless of what the mapper found. Skipping the parse changes no fact a
+    consumer can observe - an absent entry in `facts` and a present one that never survives
+    `has_data` are the same outcome - and it is what keeps a project's own modules from being
+    read (and, without any platform data at all, from ending the run on the parser's own
+    DatasetError) by a rule that cannot report anything yet.
+    """
+    if _catalogs() is None:
+        return None
     key = "server_call_facts"
     if key not in source.cache:
         source.cache[key] = _map(source)

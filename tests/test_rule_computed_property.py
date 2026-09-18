@@ -61,14 +61,23 @@ def test_registration_is_info_and_opt_in():
 
 
 @pytest.mark.parametrize("english", [False, True])
-def test_yaml_only_installation_without_platform_data_is_silent(english, tmp_path, monkeypatch):
+def test_without_platform_data_nothing_is_parsed_and_nothing_is_reported(english, tmp_path,
+                                                                          monkeypatch):
+    """The catalog proves the graph has data, so without it the shared mapper stops before a
+    module is parsed.
+
+    The parser stands for a process that has no data at all: the lexer takes its keywords from
+    the same files and cannot read a module either. A mapper that reached the parser anyway
+    would end the whole run with the data error instead of leaving the project alone, so the
+    modules are here (a yaml-only project would leave the substitution untested) and the
+    parser refuses to work.
+    """
     from xbsl import dataset
 
     def unavailable(*_args, **_kwargs):
         raise dataset.DatasetError("no language data")
 
-    files = {path: text for path, text in project(english=english, prop="Image" if english else "Изображение").items()
-             if path.endswith(".yaml")}
+    files = project(english=english, prop="Image" if english else "Изображение")
     files["Other.yaml"] = files["Panel.yaml"].replace("Panel", "Other")
     files["Other.yaml"] = files["Other.yaml"].replace("Image", "Title").replace("Изображение", "Заголовок")
     monkeypatch.setattr(P, "parse", unavailable)
