@@ -41,6 +41,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 from collections.abc import Hashable, Sequence
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -738,15 +739,31 @@ dataset.register_reset(_keyword_targets.cache_clear)
 _CACHE: dict[Path, tuple[tuple, Dictionary]] = {}
 
 
+#: Guards every read and write of `_CACHE`: the look that finds a dictionary stale and the
+#: read that follows it have to run as one step, or two callers racing for the same directory
+#: both find it stale and both parse it - megabytes of yaml on a real project. Re-entrant on
+#: purpose, for the reason the index lock is (see translation/code.py): the read goes through
+#: the platform data, data that changed under it drops every cache derived from it, and
+#: `forget_cached` then asks for this very lock on the thread that already holds it.
+_LOCK = threading.RLock()
+
+
+def forget_cached() -> None:
+    """Drop the kept dictionaries - the next `load_cached` reads the files again."""
+    with _LOCK:
+        _CACHE.clear()
+
+
 def load_cached(path: Path) -> Dictionary:
     files = sorted(p for p in path.rglob("*.yaml")) if path.is_dir() else [path]
-    stamp = tuple((str(p), p.stat().st_mtime_ns if p.exists() else 0) for p in files)
-    known = _CACHE.get(path)
-    if known is not None and known[0] == stamp:
-        return known[1]
-    loaded = load(path)
-    _CACHE[path] = (stamp, loaded)
-    return loaded
+    with _LOCK:
+        stamp = tuple((str(p), p.stat().st_mtime_ns if p.exists() else 0) for p in files)
+        known = _CACHE.get(path)
+        if known is not None and known[0] == stamp:
+            return known[1]
+        loaded = load(path)
+        _CACHE[path] = (stamp, loaded)
+        return loaded
 
 
 def _scalar(text: str) -> str:

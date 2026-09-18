@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import dataclasses
 import re
+import threading
 from collections import Counter
 from functools import lru_cache
 from pathlib import Path
@@ -137,7 +138,8 @@ class ProjectIndex:
     def forget(cls) -> None:
         """Drop the kept index - the next `build` reads the project again."""
         global _KEPT
-        _KEPT = None
+        with _LOCK:
+            _KEPT = None
 
     @classmethod
     def build(cls, root: Path) -> ProjectIndex | None:
@@ -151,24 +153,28 @@ class ProjectIndex:
         The stamp is taken BEFORE the build on purpose. A file written while the index is
         being built lands in it half-read; taken afterwards, the stamp would call that state
         current and the next call would trust it.
+
+        Everything from the look at the kept index to the store below runs under one lock, so
+        two callers never build the same project at once (see _LOCK).
         """
         from xbsl import indexer
 
         global _KEPT
         key = str(Path(root).resolve())
-        stamp = indexer.sources_stamp(root)
-        kept = _KEPT
-        if kept is not None and kept[0] == key and kept[1] == stamp:
-            return kept[2]
-        try:
-            built = cls(indexer.build_index(root))
-        except Exception:  # noqa: BLE001 - no index: every chain stays read as before
-            return None
-        # One root at a time. A pass translates one project, the parse of a whole project is
-        # megabytes, and holding the previous one would carry that weight for a second root
-        # nobody asks about twice; a project switched to drops the one before it right here.
-        _KEPT = (key, stamp, built)
-        return built
+        with _LOCK:
+            stamp = indexer.sources_stamp(root)
+            kept = _KEPT
+            if kept is not None and kept[0] == key and kept[1] == stamp:
+                return kept[2]
+            try:
+                built = cls(indexer.build_index(root))
+            except Exception:  # noqa: BLE001 - no index: every chain stays read as before
+                return None
+            # One root at a time. A pass translates one project, the parse of a whole project
+            # is megabytes, and holding the previous one would carry that weight for a second
+            # root nobody asks about twice; a project switched to drops the one before it here.
+            _KEPT = (key, stamp, built)
+            return built
 
     def element_kind(self, name: str) -> str:
         """The kind of the project element named `name` (`ПравоНаДействие`), or ""."""
@@ -220,6 +226,16 @@ class ProjectIndex:
 #: The index of ONE project root: (the root, the stamp of the sources it was built from, the
 #: index itself). See `ProjectIndex.build` for why one root and why the stamp reads the bytes.
 _KEPT: tuple[str, tuple, ProjectIndex] | None = None
+
+#: Guards every read and write of `_KEPT`: the look that finds the index stale and the build
+#: that follows it have to run as one step, or two callers racing for the same project both
+#: find it stale, both parse the whole project - seconds of work on a real one - and one
+#: result overwrites the other. The MCP server dispatches its tools one at a time today, so
+#: nothing exercises the race yet; the lock is what keeps that guarantee true if a threaded
+#: dispatcher changes how the calls arrive. Re-entrant on purpose: the build reads the
+#: platform data, data that changed under it drops every cache derived from it, and `forget`
+#: then asks for this very lock on the thread that already holds it.
+_LOCK = threading.RLock()
 
 # The index is parsed with the language data, and the type catalogue is read into it, so it
 # must not outlive the pinned data root any more than the tables the rules build do.
