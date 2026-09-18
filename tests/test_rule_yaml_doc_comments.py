@@ -138,13 +138,53 @@ def test_command_has_no_slot(tmp_path):
     assert "в строке 6" in diags[0].message  # the enclosing group, the fragment has no slot either
 
 
-def test_project_component_is_a_slot(tmp_path):
+_SINGLE = """ВидЭлемента: КомпонентИнтерфейса
+Ид: 33333333-3333-3333-3333-333333333334
+Имя: ОберткаПробы
+ОбластьВидимости: ВПодсистеме
+Наследует:
+    Тип: Группа
+    Содержимое:
+        Тип: СтрокаПробы
+        Текст: Проба
+"""
+
+
+def test_project_component_as_a_single_value_is_a_slot(tmp_path):
     # A name the platform does not know is a component the project declares.
+    text = _SINGLE.replace("        Тип: СтрокаПробы\n", "        # Строка пробы.\n        Тип: СтрокаПробы\n")
+    diags = _lint(tmp_path, text, name="ОберткаПробы.yaml")
+    assert len(diags) == 1 and "замените `#` на `##`" in diags[0].message
+    assert "        ## Строка пробы.\n        Тип: СтрокаПробы\n" in _fixed(text, diags)
+
+
+def test_project_component_in_a_list_has_no_slot(tmp_path):
+    # The server does not apply a project with a comment on such an item, so neither spelling
+    # is offered: the note goes to the enclosing group.
     text = _COMPONENT.replace(
         "            Тип: Надпись\n", "            # Строка пробы.\n            Тип: СтрокаПробы\n"
     )
     diags = _lint(tmp_path, text)
-    assert len(diags) == 1 and "замените `#` на `##`" in diags[0].message
+    assert len(diags) == 1 and diags[0].fix is None
+    assert "в строке 6" in diags[0].message
+    before = _COMPONENT.replace("        -\n", "        # Строка пробы.\n        -\n", 1).replace(
+        "Тип: Надпись", "Тип: СтрокаПробы")
+    diags = _lint(tmp_path, before)
+    assert len(diags) == 1 and diags[0].fix is None
+
+
+def test_doc_comment_on_a_project_component_in_a_list_is_misplaced(tmp_path):
+    text = _COMPONENT.replace(
+        "            Тип: Надпись\n", "            ## Строка пробы.\n            Тип: СтрокаПробы\n"
+    )
+    diags = _lint(tmp_path, text, MISPLACED)
+    assert len(diags) == 1 and diags[0].fix is None
+    assert "docComment" in diags[0].message and "в строке 6" in diags[0].message
+    # The platform component in the same place keeps its comment.
+    kept = _COMPONENT.replace(
+        "            Тип: Надпись\n", "            ## Строка пробы.\n            Тип: Надпись\n"
+    )
+    assert _lint(tmp_path, kept, MISPLACED) == []
 
 
 def test_trailing_comment_is_reported_without_a_fix(tmp_path):

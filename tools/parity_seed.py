@@ -6363,6 +6363,17 @@ SEEDS: list[Seed] = [
         tokens=_DOC_COMMENT_TOKENS,
     ),
     Seed(
+        rule="yaml/doc-comment-misplaced",
+        expect=FINDING,
+        note="a documentation comment on a project component that stands in a list: the server "
+             "does not apply such a project",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="", node="", item="", prop="").replace(
+                "        -\n            Тип: Надпись\n",
+                "        -\n            ## the row of the application\n            Тип: СтрокаЗаявки\n")},
+        tokens={**_DOC_COMMENT_TOKENS, "СтрокаЗаявки": "ApplicationRow"},
+    ),
+    Seed(
         rule="comment/doc-marker",
         expect=FINDING,
         note="a plain line comment right above the annotations of a method",
