@@ -223,6 +223,14 @@ Attributes:
         Type: Catalog.Applications.Reference?
         OnReferencedObjectDeletion: DeleteCurrent
 """
+#: The same action on a DIMENSION of a register - a kind with no deletion mode at all.
+_DELETE_CURRENT_DIMENSION_RU = """\nИзмерения:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f0d
+        Имя: Основание
+        Тип: Справочник.Заявки.Ссылка?
+        ПриУдаленииОбъектаПоСсылке: УдалятьТекущий
+"""
 _DELETE_CURRENT_TOKENS = {"Заявки": "Applications", "Основание": "Basis"}
 #: A common module of both environments – where a query block needs the server annotation.
 _COMMON_MODULE_RU = """\
@@ -2701,8 +2709,8 @@ SEEDS: list[Seed] = [
     Seed(
         rule="yaml/delete-current-needs-immediate",
         expect=CLEAN,
-        note="the on-delete action on an owner deleted outright – the mode and the action are "
-             "enumeration values of the metamodel",
+        note="the on-delete action inside an element deleted outright – the mode and the "
+             "action are enumeration values of the metamodel",
         files={"Заявки.yaml": _CATALOG_RU + "РежимУдаления: Немедленно\n" + _DELETE_CURRENT_RU},
         english={
             "Applications.yaml": _CATALOG_EN + "DeletionMode: Immediately\n" + _DELETE_CURRENT_EN,
@@ -2712,11 +2720,19 @@ SEEDS: list[Seed] = [
     Seed(
         rule="yaml/delete-current-needs-immediate",
         expect=FINDING,
-        note="the same action on an owner that never names its mode – the default only marks – "
-             "is reported",
+        note="the same action inside an element that never names its mode – the default "
+             "only marks – is reported",
         files={"Заявки.yaml": _CATALOG_RU + _DELETE_CURRENT_RU},
         english={"Applications.yaml": _CATALOG_EN + _DELETE_CURRENT_EN},
         tokens=_DELETE_CURRENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/delete-current-needs-immediate",
+        expect=CLEAN,
+        note="a register has no deletion mode to break – the kind gate has to hold on the "
+             "English spelling of the kind as well",
+        files={"Цены.yaml": _REGISTER_RU + _DELETE_CURRENT_DIMENSION_RU},
+        tokens={**_DELETE_CURRENT_TOKENS, "Цены": "Prices"},
     ),
     Seed(
         rule="yaml/event-needs-importance",

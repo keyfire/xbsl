@@ -96,3 +96,67 @@ def test_yaml_without_element_kind_not_checked(tmp_path):
     )
     d = engine.run(discover([str(tmp_path)]), select={RULE})
     assert not _has(d, RULE)
+
+
+_REGISTER = """ВидЭлемента: РегистрСведений
+Ид: 77777777-7777-7777-7777-77777777777a
+Имя: ОперацииОбновления
+Измерения:
+    -
+        Ид: 77777777-0000-0000-0000-000000000004
+        Имя: Задание
+        Тип: Задания.Ссылка?
+        ПриУдаленииОбъектаПоСсылке: УдалятьТекущий
+Ресурсы:
+    -
+        Ид: 77777777-0000-0000-0000-000000000006
+        Имя: Метка
+        Тип: Метки.Ссылка?
+        ПриУдаленииОбъектаПоСсылке: УдалятьТекущий
+"""
+
+
+def test_register_has_no_deletion_mode_and_is_not_judged(tmp_path):
+    """An information register carries no deletion mode at all - neither the metamodel nor the
+    page of its properties gives the kind one - so there is no mode to hold the action against.
+    The compiler takes such a register, on a dimension and on a resource alike. The rule used to
+    take the default of the first kind that records one, a catalog, and read a register by it."""
+    (tmp_path / "ОперацииОбновления.yaml").write_text(_REGISTER, encoding="utf-8")
+    d = engine.run(discover([str(tmp_path)]), select={RULE})
+    assert not _has(d, RULE)
+
+
+def test_document_keeps_its_own_default(tmp_path):
+    """A kind that does record the property is still judged by the default written for it."""
+    (tmp_path / "Заказы.yaml").write_text(
+        "ВидЭлемента: Документ\n"
+        "Ид: 77777777-7777-7777-7777-77777777777b\n"
+        "Имя: Заказы\n"
+        "Реквизиты:\n"
+        "    -\n"
+        "        Ид: 77777777-0000-0000-0000-000000000005\n"
+        "        Имя: Цель\n"
+        "        Тип: Цели.Ссылка?\n"
+        "        ПриУдаленииОбъектаПоСсылке: УдалятьТекущий\n",
+        encoding="utf-8",
+    )
+    d = engine.run(discover([str(tmp_path)]), select={RULE})
+    assert _has(d, RULE)
+
+
+def test_message_points_at_the_element_that_declares_the_attribute(tmp_path):
+    """The restriction is on the element holding the attribute, not on the one referenced:
+    "у владельца ссылки" was read the other way round."""
+    d = _owner(tmp_path, mode="ПометкаУдаления")
+    assert d
+    assert all("владельца ссылки" not in x.message for x in d)
+    assert any("объявляет реквизит" in x.message for x in d)
+
+
+def test_message_quotes_the_compiler_word_for_word(tmp_path):
+    """The compiler writes DeletionMark in double quotes, and the message used to drop them.
+    The sentence is on no page of the shipped documentation, so the message says whose it is."""
+    d = _owner(tmp_path, mode="ПометкаУдаления")
+    assert d
+    assert all('cannot apply to object with a "DeletionMark"' in x.message for x in d)
+    assert all("Компилятор отвечает" in x.message for x in d)
