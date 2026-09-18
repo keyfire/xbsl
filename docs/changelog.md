@@ -25,6 +25,41 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **A run no longer stops on the first file when the platform data is missing.** The picture rule
+  is on by default, and the mapper the server-call rules share parsed every module before asking
+  whether the data was there at all. A fresh install without data broke off with an unhandled
+  error instead of answering. Nothing is parsed without data now, and the same gate takes the cost
+  away: 800 parses become none, 120 ms become 1.7. ([#109](https://github.com/keyfire/xbsl/pull/109))
+- **A dictionary key spelled like a YAML 1.1 word is written in quotes.** `On`, `No`, `Null` and
+  the rest read back as a boolean or as nothing from a strict parser, so a key named after a toggle
+  came back as `True`. The list of twenty-six words is taken from the specification pages. An
+  ordinary key stays bare, and a key already written bare still reads and updates in place. ([#109](https://github.com/keyfire/xbsl/pull/109))
+- **The dictionary is kept by a digest of its bytes, not by the time it was written.** Two writes in
+  a row share one clock tick, so an edit of the same length went unnoticed and a lint run after
+  `translate_set` could still answer from the dictionary as it was before the edit. The freshness
+  check costs twice what it did – 20.8 ms against 10.2 – and `code/translation-gaps` takes it once
+  per file, which is about ten seconds on a project of a thousand files. The rule is off by
+  default; a pipeline that turns it on will feel it. ([#109](https://github.com/keyfire/xbsl/pull/109))
+
+### Changed
+
+- **The passes standing next to the translation index are read once per state of the sources.**
+  Names, types, components and dictionary scopes were recomputed on every call. They are now kept
+  by the same digest as the index, which holds 2 MiB. The resource index is deliberately left out:
+  it reads the names of picture and style files, and a picture dropped into a folder changes its
+  answer without changing any digest. ([#109](https://github.com/keyfire/xbsl/pull/109))
+- **The first translation call in a process costs more, the ones after it much less.** Six passes
+  now take the digest where one did, so the first round over a 22 MB corpus grew from 2.9 to 4.3
+  seconds while the second fell from 4.5 to 0.8 and the third to 0.5. A one-off command from the
+  shell loses; a long-lived server and anything that translates repeatedly gain. ([#109](https://github.com/keyfire/xbsl/pull/109))
+- **The caches build their answer once however the calls arrive.** Building the index reads the
+  data, and the data reaches back into the cache's own reset on the same thread, so the lock has to
+  be re-entrant – a plain one wedges there, which a test now holds. ([#109](https://github.com/keyfire/xbsl/pull/109))
+
 ## 2026-09-18 – 0.111.0
 
 ### Added
