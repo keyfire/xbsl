@@ -1444,9 +1444,13 @@ def _suggest(args, root: Path, loaded) -> int:
         {"key": key, "value": value, "kind": kind}
         for (kind, key), value in result.values.items()
     )
+    # The write answers which keys the platform already carries, and the machine path is where
+    # that matters most: nobody read these pairs before they were written.
+    platform_names = []
     if args.suggest_out:
-        entries_module.write_entries(path, edits, target=Path(args.suggest_out).name,
-                                     comment=getattr(args, "comment", "") or "")
+        written = entries_module.write_entries(path, edits, target=Path(args.suggest_out).name,
+                                               comment=getattr(args, "comment", "") or "")
+        platform_names = written.get("platform_names") or []
 
     # The count alone hides WHAT did not translate; a refusal is only actionable with its
     # reason next to it, the same way --set already reports a refused edit.
@@ -1462,6 +1466,7 @@ def _suggest(args, root: Path, loaded) -> int:
             "dictionary": str(path),
             "machine": {**machine_report, "refusals": refusals},
             "suggestions": edits,
+            "platform_names": platform_names,
         }
         print(json.dumps(payload, ensure_ascii=False, indent=1))
     else:
@@ -1470,6 +1475,10 @@ def _suggest(args, root: Path, loaded) -> int:
             print(f"  {item['kind']:7} {item['key']}: {item['reason']}")
         for edit in edits:
             print(f"  {edit['kind']:7} {edit['key']}  ->  {edit['value']}")
+        if platform_names:
+            print(i18n.t("translate.platform-names", count=len(platform_names)), file=sys.stderr)
+            for row in platform_names:
+                print(f"  {row['reason']}", file=sys.stderr)
     return 0
 
 
