@@ -20,6 +20,23 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ## Unreleased
 
+### Added
+
+- **The `yaml/plain-comment` rule: a `#` comment does not survive the visual editor.** The
+  development environment applies an edit to the model of the element and writes the file out
+  again as a whole: the properties of a node come out in the model's order and the `#` lines are
+  gone. What stays is a documentation comment - `##` lines at the head of the file, of a
+  component node or of a declaration in a list (a component property, a URL template, a tabular
+  section, a register dimension, an enumeration item). The rule reports every `#`, and where the
+  text already stands next to its place it carries an autofix: it respells the marker or steps
+  the block from above the `-` inside the node. Anything else is reported with the nearest node
+  that holds a comment. Off by default: a project with a comment on every other node gets
+  thousands of findings. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `yaml/doc-comment-misplaced` rule: a `##` block stands where nobody reads it.** Before
+  the `-` of a list item, above a single property, on a catalog attribute, on a command or on a
+  dynamic list field there is no documentation comment, and the `##` lines are lost the same way
+  `#` is. Off by default, turned on together with the first rule. ([#111](https://github.com/keyfire/xbsl/pull/111))
+
 ### Fixed
 
 - **A run no longer stops on the first file when the platform data is missing.** The picture rule
