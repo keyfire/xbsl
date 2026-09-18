@@ -22,28 +22,19 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
-- **The `yaml/plain-comment` rule: a `#` comment does not survive the visual editor.** The
-  development environment applies an edit to the model of the element and writes the file out
-  again as a whole: the properties of a node come out in the model's order and the `#` lines are
-  gone. What stays is a documentation comment - `##` lines at the head of the file, of a
-  component node or of a declaration in a list (a component property, a URL template, a tabular
-  section, a register dimension, an enumeration item). The rule reports every `#`, and where the
-  text already stands next to its place it carries an autofix: it respells the marker or steps
-  the block from above the `-` inside the node. Anything else is reported with the nearest node
-  that holds a comment. Off by default: a project with a comment on every other node gets
-  thousands of findings. ([#111](https://github.com/keyfire/xbsl/pull/111))
-- **The `yaml/doc-comment-misplaced` rule: a `##` block stands where nobody reads it.** Before
-  the `-` of a list item, above a single property, on a standard attribute (`Code`, `Name`), on a command or on a
-  dynamic list field there is no documentation comment, and the `##` lines are lost the same way
-  `#` is. Off by default, turned on together with the first rule. ([#111](https://github.com/keyfire/xbsl/pull/111))
-- **The `comment/doc-marker` rule: the comment above a declaration that the environment does not
-  show.** In a module the development environment tells a documentation comment by its marker:
-  the `///` lines before a declaration and before its annotations. Only that text reaches the
-  hover, the signature help and the completion; a `//` block in the same place and a `/* ... */`
-  block listing the parameters are ordinary comments to it. The rule reports a `//` block right
-  above a method, a structure, a field, an enumeration item or a module constant and respells it
-  with an autofix. A note separated by a blank line and the comments inside a method body are
-  left alone. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `yaml/plain-comment` rule: a `#` comment is lost after an edit in the visual editor.** The
+  development environment writes the file out again from the model and keeps documentation
+  comments only: `##` lines at the head of the file, of a component node or of a declaration in a
+  list. The rule finds every `#`. Where the place for the comment is next to it, the fix respells
+  the marker or moves the block inside the node. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `yaml/doc-comment-misplaced` rule: a `##` block stands where the environment does not read
+  it.** Before the `-` of a list item, above a single property, on a standard attribute or on a
+  command such a block is lost the same way `#` is. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
+- **The `comment/doc-marker` rule: the description above a declaration starts with `///`.** In a
+  module the development environment shows in the hover only the `///` lines before a
+  declaration. It does not read a `//` block or a `/* ... */` block in the same place. The rule
+  finds a `//` block right above a method, a structure, a field or a constant and respells it with
+  an autofix. Off by default. ([#111](https://github.com/keyfire/xbsl/pull/111))
 
 ### Fixed
 
