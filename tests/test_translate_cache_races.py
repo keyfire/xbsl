@@ -26,6 +26,7 @@ import pytest
 
 from xbsl import engine, indexer
 from xbsl.translation import dictionary, names
+from xbsl.translation import code as code_module
 from xbsl.translation.code import ProjectIndex
 
 pytestmark = pytest.mark.needs_data
@@ -146,8 +147,22 @@ def test_a_dictionary_is_read_once_by_many_callers(tmp_path: Path, monkeypatch):
 # --- a build that reaches back into the cache -----------------------------------------------
 
 
+
+def _own_lock(monkeypatch, module) -> None:
+    """Give the test its own lock of the module's own kind.
+
+    A test that deliberately deadlocks poisons whatever lock it holds. Left on the module's
+    own lock, the poison outlives the test: the autouse fixture calls `forget` on the main
+    thread in teardown and waits there forever, so a reverted `RLock` would hang the run
+    instead of failing it - the opposite of what these tests are for. monkeypatch puts the
+    clean lock back before that teardown runs.
+    """
+    monkeypatch.setattr(module, "_LOCK", type(module._LOCK)())
+
+
 def test_an_index_build_that_drops_the_cache_does_not_deadlock(tmp_path: Path, monkeypatch):
     """The build reads the data, and data dropped under it calls `forget` on the same thread."""
+    _own_lock(monkeypatch, code_module)
     root = _project(tmp_path / "app")
     original = indexer.build_index
 
@@ -163,8 +178,9 @@ def test_an_index_build_that_drops_the_cache_does_not_deadlock(tmp_path: Path, m
     assert ProjectIndex.build(root) is not None
 
 
-def test_a_pass_that_drops_the_cache_does_not_deadlock(tmp_path: Path):
+def test_a_pass_that_drops_the_cache_does_not_deadlock(tmp_path: Path, monkeypatch):
     """The same re-entry through the loader: the walk reads data, the data drops the caches."""
+    _own_lock(monkeypatch, names)
     root = _project(tmp_path / "app")
 
     def dropping(path: Path):
@@ -176,6 +192,7 @@ def test_a_pass_that_drops_the_cache_does_not_deadlock(tmp_path: Path):
 
 
 def test_a_dictionary_read_that_drops_the_cache_does_not_deadlock(tmp_path: Path, monkeypatch):
+    _own_lock(monkeypatch, dictionary)
     folder = tmp_path / "dict"
     folder.mkdir()
     (folder / "main.yaml").write_text(_DICTIONARY, encoding="utf-8")
