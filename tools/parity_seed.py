@@ -312,6 +312,28 @@ Inherits:
 """
 _TASK_TOKENS = {"Задачи": "Tasks", "Шаги": "Steps", "Шаг": "Step", "КарточкаЗадачи": "TaskCard",
                 "Проверить": "Check", "Всего": "Total"}
+#: What the element calls its own members: a string attribute spelled like a platform type, and a
+#: tabular section spelled like an interface component of another subsystem. In the object module
+#: both answer to the bare name, and the module carries the facet in its file name - a word the
+#: translator writes in the language of the project.
+_QUERY_ATTRIBUTE_RU = """\
+Реквизиты:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1e
+        Имя: Запрос
+        Тип: Строка
+"""
+_NAMESAKE_TABLE_RU = """\
+ТабличныеЧасти:
+    -
+        Ид: 1d1f5c60-0000-4000-8000-000000000f1f
+        Имя: КарточкаЗадачи
+        Реквизиты:
+            -
+                Ид: 1d1f5c60-0000-4000-8000-000000000f20
+                Имя: Всего
+                Тип: Число
+"""
 #: The built-in name attribute – dispatched to a class of its own by the name alone.
 _NAME_ATTRIBUTE_RU = "Реквизиты:\n    -\n        Имя: Наименование\n"
 _NAME_ATTRIBUTE_EN = "Attributes:\n    -\n        Name: Name\n"
@@ -2474,6 +2496,17 @@ SEEDS: list[Seed] = [
                 "НетТакого": "NoSuchThing"},
     ),
     Seed(
+        rule="code/unknown-static-member",
+        expect=CLEAN,
+        note="an attribute of the element reached by its bare name in the object module - the "
+             "module is paired with the yaml of the element, whichever way the facet is spelled",
+        files={
+            "Заявки.yaml": _CATALOG_RU + _QUERY_ATTRIBUTE_RU,
+            "Заявки.Объект.xbsl": "метод Проба(): Булево\n    возврат Запрос.Длина() == 0\n;\n",
+        },
+        tokens={"Заявки": "Applications", "Проба": "Probe"},
+    ),
+    Seed(
         rule="code/unknown-ns-object",
         expect=CLEAN,
         note="a project object under its kind namespace with the reference facet - the kind and "
@@ -3251,6 +3284,20 @@ SEEDS: list[Seed] = [
             "TaskCard.xbsl": "@OnClient\nmethod Check(): String\n    return \"\"\n;\n",
             "Calculations.yaml": _COMMON_MODULE_EN,
             "Calculations.xbsl": "method Display(): String\n    return TaskCard.Check()\n;\n",
+        },
+        tokens=_ENVIRONMENT_TOKENS,
+    ),
+    Seed(
+        rule="code/component-in-server-context",
+        expect=CLEAN,
+        note="a tabular section of the element itself, spelled like a component of another "
+             "subsystem - in the object module the bare name is that section",
+        files={
+            "КарточкаЗадачи.yaml": _TASK_CARD_RU,
+            "КарточкаЗадачи.xbsl": "@НаКлиенте\nметод Проверить(): Строка\n    возврат \"\"\n;\n",
+            "Заявки.yaml": _CATALOG_RU + _NAMESAKE_TABLE_RU,
+            "Заявки.Объект.xbsl": "метод Отобразить(): Число\n"
+                                  "    возврат КарточкаЗадачи.Размер()\n;\n",
         },
         tokens=_ENVIRONMENT_TOKENS,
     ),

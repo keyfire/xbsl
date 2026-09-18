@@ -40,10 +40,11 @@ from functools import lru_cache
 
 from xbsl import dataset, i18n, metamodel, parser as P, terms
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.rules.yaml_schema import object_kind, value_of
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import _IDENT_RE, _skip_interpolation, linemap
+from xbsl.rules._syntax import OBJECT_MODULE_SUFFIXES, element_pair_stem
 from xbsl.rules.semantics import _object_name_fast, _parsed, _stdlib_names
+from xbsl.rules.yaml_schema import element_own_names, object_kind, value_of
 
 MESSAGES = {
     "code/undefined-name.title": {
@@ -232,44 +233,13 @@ _FIELD_SECTIONS = (
     "ТабличныеЧасти", "События", "Поля",
 )
 
-#: The object module of an entity, in both spellings the platform accepts: an English project
-#: writes `<Name>.Object.xbsl` where a Russian one writes `<Имя>.Объект.xbsl` (see
-#: scaffold.object_module_path), and either pairs with `<Имя>.yaml`. Recognising only the
-#: Russian tail sent the pair lookup to `<Name>.Object.yaml`, which no project has - the module
-#: was left without the attributes of its own object, and every one of them was reported
-#: undefined.
-_OBJECT_MODULE_SUFFIXES = (".Объект.xbsl", ".Object.xbsl")
-
 
 def _pair_key(rel: str) -> tuple[str, str, str]:
     """(directory, paired yaml file name, module file name): X.xbsl -> X.yaml,
     X.Объект.xbsl / X.Object.xbsl -> X.yaml."""
     parts = rel.replace("\\", "/").rsplit("/", 1)
     directory = parts[0] if len(parts) == 2 else ""
-    stem = parts[-1]
-    for suffix in (*_OBJECT_MODULE_SUFFIXES, ".xbsl", ".yaml"):
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    return directory, stem + ".yaml", parts[-1]
-
-
-def _section_names(data: dict) -> set[str]:
-    names: set[str] = set()
-    sections = list(_FIELD_SECTIONS)
-    if object_kind(data) == "Перечисление":
-        # In the module of an enumeration its own items are addressed WITHOUT the type
-        # qualifier - the canonical `выбор этот / когда Низкий` of the platform's own demo
-        # (ПриоритетЗадачи of the CRM example). Read for this kind only: elsewhere `Элементы`
-        # is a collection of components, whose names belong to another scope.
-        sections.append("Элементы")
-    for section in sections:
-        items = value_of(data, section)
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and isinstance(value_of(item, "Имя"), str):
-                    names.add(value_of(item, "Имя"))
-    return names
+    return directory, element_pair_stem(parts[-1]) + ".yaml", parts[-1]
 
 
 def _base_type_root(data: dict) -> str | None:
@@ -383,7 +353,7 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "fast_name": fast_name,
             "name": name if isinstance(name, str) else None,
             "element_kind": kind if isinstance(kind, str) else None,
-            "sections": sorted(_section_names(data)),
+            "sections": sorted(element_own_names(data)),
             # Names of the kind that this element's own settings switch off, per module
             # scope - a catalog that is not hierarchical has no `Родитель`. Read here, where
             # the parsed yaml is at hand, and subtracted where each scope is built.
@@ -416,7 +386,7 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         "k": "x",
         "dir": directory,
         "pair": pair_file,
-        "obj": source.rel.endswith(_OBJECT_MODULE_SUFFIXES),
+        "obj": source.rel.endswith(OBJECT_MODULE_SUFFIXES),
         "cands": cands,
         "pool": hint_pool,
     }

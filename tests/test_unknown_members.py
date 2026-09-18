@@ -594,3 +594,74 @@ def test_an_inherited_member_spelled_by_its_ancestor_passes():
         ";\n"
     )
     assert diags == []
+
+
+def _lint_static_named(module_name: str, module: str, *extra: tuple[str, str]) -> list[Diagnostic]:
+    """The same static check, with the module file named by the caller.
+
+    The object module of an element is named after its element (`Catalog.Object.xbsl`), and
+    the name is what joins it to the yaml describing that element - a fixture cannot leave it
+    to the helper above.
+    """
+    sources = [load_text(module_name, module)]
+    for name, text in extra:
+        sources.append(load_text(name, text))
+    return [
+        d for d in run_sources(sources, select={"code/unknown-static-member"})
+        if d.rule_id == "code/unknown-static-member"
+    ]
+
+
+_CATALOG_WITH_QUERY_ATTRIBUTE = (
+    "ВидЭлемента: Справочник\n"
+    "Имя: Правила\n"
+    "Реквизиты:\n"
+    "  -\n"
+    "    Имя: Запрос\n"
+    "    Тип: Строка\n"
+)
+
+_QUERY_LENGTH = (
+    "метод ПередЗаписью()\n"
+    "    если Запрос.Длина() == 0\n"
+    "        возврат\n"
+    "    ;\n"
+    ";\n"
+)
+
+
+def test_object_module_attribute_shadows_a_platform_type():
+    """In `Правила.Объект.xbsl` a bare `Query` is the catalog's own attribute.
+
+    The pairing used to strip a single extension, so the object module looked for
+    `Правила.Объект.yaml` - a file no project has - and read the attribute as the platform
+    type of the same name.
+    """
+    diags = _lint_static_named(
+        "Правила.Объект.xbsl", _QUERY_LENGTH, ("Правила.yaml", _CATALOG_WITH_QUERY_ATTRIBUTE),
+    )
+    assert diags == [], [d.message for d in diags]
+
+
+def test_object_module_in_english_spelling_is_paired_too():
+    """An English project writes `Rules.Object.xbsl` beside the very same `Rules.yaml`."""
+    diags = _lint_static_named(
+        "Rules.Object.xbsl", _QUERY_LENGTH,
+        ("Rules.yaml",
+         "ВидЭлемента: Справочник\nИмя: Rules\nРеквизиты:\n  -\n    Имя: Запрос\n    Тип: Строка\n"),
+    )
+    assert diags == [], [d.message for d in diags]
+
+
+def test_module_without_the_element_yaml_keeps_the_finding():
+    """The control: no yaml declares the attribute, and the bare name still reads as a type."""
+    diags = _lint_static_named("Правила.Объект.xbsl", _QUERY_LENGTH)
+    assert len(diags) == 1 and "Запрос" in diags[0].message
+
+
+def test_object_module_pair_on_disk_shadows_in_a_single_file_run(tmp_path):
+    """The editor lints one saved object module: the yaml is on disk, not among the sources."""
+    (tmp_path / "Правила.yaml").write_text(_CATALOG_WITH_QUERY_ATTRIBUTE, encoding="utf-8")
+    module = tmp_path / "Правила.Объект.xbsl"
+    module.write_text(_QUERY_LENGTH, encoding="utf-8")
+    assert _lint_static_files(module) == []
