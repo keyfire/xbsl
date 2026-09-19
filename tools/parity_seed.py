@@ -1965,6 +1965,29 @@ _BASELINE_TILE_TOKENS = {**_FORM_TOKENS, "ПлиткаВыбора": "TileChoice
                          "Шеренга": "Rank", "Альфа": "Alpha", "Бета": "Beta"}
 
 
+#: A component with a declared property and a tabular-free body; `{head}`, `{node}` and
+#: `{prop}` are the comment lines planted at the head of the file, of the root node and of
+#: the property declaration. The comments are ASCII on purpose: a comment is prose, and the
+#: seed is about WHERE it stands, not about how it translates.
+_DOC_COMMENT_CARD_RU = (
+    "{head}ВидЭлемента: КомпонентИнтерфейса\n"
+    "Ид: 1d1f5c60-0000-4000-8000-000000000f61\n"
+    "Имя: КарточкаЗаявки\n"
+    "ОбластьВидимости: ВПроекте\n"
+    "Наследует:\n"
+    "{node}    Тип: Группа\n"
+    "    Содержимое:\n"
+    "{item}        -\n"
+    "            Тип: Надпись\n"
+    "            Значение: =Подпись\n"
+    "Свойства:\n"
+    "    -\n"
+    "{prop}        Имя: Подпись\n"
+    "        Тип: Строка\n"
+)
+_DOC_COMMENT_TOKENS = {"КарточкаЗаявки": "ApplicationCard", "Подпись": "Caption"}
+
+
 SEEDS: list[Seed] = [
     Seed(
         rule="code/computed-property-server-call", expect=FINDING,
@@ -6366,6 +6389,72 @@ SEEDS: list[Seed] = [
         files={'Пример.xbsl': 'метод Поврежденный()\n    пер Голая\n;\nметод Проверить()\n    попытка\n    поймать Первый: Исключение\n    поймать Второй: Исключение\n    ;\n;\n'},
         english={'Example.xbsl': 'method Damaged()\n    var Bare\n;\nmethod Check()\n    try\n    catch First: Exception\n    catch Second: Exception\n    ;\n;\n'},
         tokens={'Пример': 'Example', 'Проверить': 'Check', 'Значение': 'Value', 'Пакет': 'Packet', 'Первый': 'First', 'Второй': 'Second', 'Поврежденный': 'Damaged', 'Голая': 'Bare'},
+    ),
+    Seed(
+        rule="yaml/plain-comment",
+        expect=FINDING,
+        note="a plain comment on a property declaration - a slot of either spelling",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="", node="", item="", prop="        # the caption of the card\n")},
+        tokens=_DOC_COMMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/plain-comment",
+        expect=CLEAN,
+        note="documentation comments at the head of the file, of a node and of a declaration",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="## a card of one application\n", node="    ## the root group\n", item="",
+            prop="        ## the caption of the card\n")},
+        tokens=_DOC_COMMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/doc-comment-misplaced",
+        expect=FINDING,
+        note="a documentation comment before the dash of an item, where nobody reads it",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="", node="", item="        ## the caption label\n", prop="")},
+        tokens=_DOC_COMMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/doc-comment-misplaced",
+        expect=CLEAN,
+        note="the same comment inside the item, before its first key",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="", node="", item="", prop="").replace(
+                "        -\n            Тип: Надпись\n",
+                "        -\n            ## the caption label\n            Тип: Надпись\n")},
+        tokens=_DOC_COMMENT_TOKENS,
+    ),
+    Seed(
+        rule="yaml/doc-comment-misplaced",
+        expect=FINDING,
+        note="a documentation comment on a project component that stands in a list: the server "
+             "does not apply such a project",
+        files={"КарточкаЗаявки.yaml": _DOC_COMMENT_CARD_RU.format(
+            head="", node="", item="", prop="").replace(
+                "        -\n            Тип: Надпись\n",
+                "        -\n            ## the row of the application\n            Тип: СтрокаЗаявки\n")},
+        tokens={**_DOC_COMMENT_TOKENS, "СтрокаЗаявки": "ApplicationRow"},
+    ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=FINDING,
+        note="a plain line comment right above the annotations of a method",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "// recounts the totals\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
+    ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=CLEAN,
+        note="the same description spelled as a documentation comment",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "/// recounts the totals\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
     ),
 ]
 
