@@ -59,6 +59,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **A baseline entry keeps its finding when the rule rewords its message.** An entry frozen under
+  the earlier text now holds a finding of the same rule in the same file if it names the same
+  values in the same quotes and order. The run names such entries, and `--write-baseline` moves
+  their reasons to the new text. ([#121](https://github.com/keyfire/xbsl/pull/121))
 - **`prune` in `translate_unused` and `translate_redundant` removes everything the filters
   select.** It used to remove only the page shown in the answer, so a call with `limit: 5` left
   most orphans behind. The page now shapes only the list, and `pruned.keys` says how many pairs
