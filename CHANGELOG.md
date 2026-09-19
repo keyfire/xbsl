@@ -18,6 +18,15 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Fixed
+
+- **`self-update` no longer trips over the backup left by the previous run.** Windows does not
+  let a backup be deleted while a running server still has it loaded, and the next update failed
+  with a message about busy files. The current installation is now put aside under a free
+  numbered name. ([#113](https://github.com/keyfire/xbsl/pull/113))
+
 ## 2026-09-19 – 0.112.1
 
 ### Fixed
