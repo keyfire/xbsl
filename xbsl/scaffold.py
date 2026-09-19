@@ -58,6 +58,25 @@ def project_file_in(directory: Path) -> Path | None:
     return None
 
 
+def outside_projects(paths: list[Path], root: Path) -> list[Path]:
+    """The paths no project owns: no project descriptor in their folder or above, up to root.
+
+    A rename rewrites references wherever they stand under the root, and a translation
+    dictionary lying beside the project holds them too. An edit there is the one a reader
+    does not expect from renaming an object, so the short answer names such files.
+    """
+    top = Path(root).resolve()
+    out: list[Path] = []
+    for path in paths:
+        for parent in Path(path).resolve().parents:
+            if project_file_in(parent) is not None:
+                break
+            if parent == top or parent == parent.parent:
+                out.append(Path(path))
+                break
+    return out
+
+
 def subsystem_file_in(directory: Path) -> Path | None:
     """The subsystem descriptor inside the directory, either spelling, or None."""
     for name in SUBSYSTEM_FILES:
@@ -1886,6 +1905,10 @@ class ScaffoldResult:
     notes: list[str] = field(default_factory=list)  # warnings, manual steps
     renames: list[FileRename] = field(default_factory=list)  # file renames (before edits)
     deletes: list[Path] = field(default_factory=list)  # files removed from disk (after edits)
+    # One line per edited file of an operation that edits many ("<file>: замен – 3"). These
+    # are notes too and every full answer lists them after the notes, but a short answer
+    # leaves them out: a rename across a project wrote sixty of them.
+    details: list[str] = field(default_factory=list)
 
     def as_dict(self, content: bool = True) -> dict:
         files = []
@@ -1903,7 +1926,7 @@ class ScaffoldResult:
             ],
             "files": files,
             "deletes": [str(p) for p in self.deletes],
-            "notes": self.notes,
+            "notes": self.notes + self.details,
         }
 
 
@@ -2442,6 +2465,53 @@ def op_add_field(
             "реквизиты, по которым нужен индекс"
         )
     return result
+
+
+def op_add_fields(
+    yaml_path: Path,
+    field_kind: str,
+    names: list[str],
+    *,
+    type_: str | None = None,
+    tabular: str | None = None,
+    props: Mapping[str, object] | None = None,
+    reader=None,
+) -> ScaffoldResult:
+    """Several items of one kind in one pass, with the same type and properties.
+
+    Each item is planned against the text the previous one produced, and nothing is written
+    until all of them are planned: a taken or malformed name refuses the whole batch, and the
+    file stays as it was. Only the kinds whose item lives in the element's yaml alone go in a
+    batch. An operation also writes its handler into the module, and a localized string
+    echoes into the translation files - those take one call per item, and many strings at
+    once are written by set-localization / meta_set_localization with entries.
+    """
+    if field_kind == "операция":
+        raise ScaffoldError(
+            "Вид 'операция' пачкой не добавляется: операция пишет ещё и обработчик в модуль"
+        )
+    if field_kind in _MAPPING_SPECS:
+        raise ScaffoldError(
+            "Строки и шаблоны пачкой пишет set-localization / meta_set_localization с entries"
+        )
+    repeated = sorted({name for name in names if names.count(name) > 1})
+    if repeated:
+        raise ScaffoldError(f"Имена повторяются в пачке: {', '.join(repeated)}")
+    yaml_path = Path(yaml_path)
+    planned: dict[Path, str] = {}
+
+    def planned_or_read(path: Path) -> str:
+        return planned.get(Path(path)) or (reader or _read)(path)
+
+    merged = ScaffoldResult()
+    for name in names:
+        step = op_add_field(yaml_path, field_kind, name, type_=type_, tabular=tabular,
+                            props=props, reader=planned_or_read)
+        for change in step.changes:
+            planned[change.path] = change.content
+        merged.notes.extend(step.notes)
+    merged.changes = [FileChange(path, text, created=False) for path, text in planned.items()]
+    return merged
 
 
 # --- properties of a metadata item --------------------------------------------------------
@@ -6276,7 +6346,7 @@ def op_rename_object(
             continue
         target = renamed.get(path.resolve(), path)
         result.changes.append(FileChange(target, new_text, created=False))
-        result.notes.append(f"{rel(path)}: замен – {count}")
+        result.details.append(f"{rel(path)}: замен – {count}")
         changed_files += 1
         total += count
 
@@ -6306,7 +6376,7 @@ def op_rename_object(
         new_text, count = description_name.subn(new_name, text)
         if count:
             result.changes.append(FileChange(rename.new_path, new_text, created=False))
-            result.notes.append(f"{rel(rename.old_path)}: замен – {count}")
+            result.details.append(f"{rel(rename.old_path)}: замен – {count}")
             changed_files += 1
             total += count
 
