@@ -127,6 +127,32 @@ def compact(payload: dict, *, as_ci_full: bool = False) -> dict:
     return out
 
 
+def short(diagnostics: list[Diagnostic], files: int) -> dict:
+    """The lint a writing tool answers with: counts, and the findings one line each.
+
+    A metadata tool lints what it has just written and ships the result in its answer. The
+    whole report there cost about twenty lines per call even with nothing found, and a run of
+    small edits repeated them call after call. Clean files answer with two numbers; findings
+    come one line each up to COMPACT_FINDINGS_LIMIT and as a count past it. The whole report
+    of the same files is lint_paths on them.
+    """
+    payload = report(diagnostics, files)
+    summary = payload["summary"]
+    out = {"files": summary["files"], "diagnostics": summary["diagnostics"]}
+    if not summary["diagnostics"]:
+        return out
+    out["errors"] = summary["errors"]
+    out["warnings"] = summary["warnings"]
+    findings = payload["diagnostics"]
+    if len(findings) <= COMPACT_FINDINGS_LIMIT:
+        out["findings"] = [_compact_finding(d) for d in findings]
+    else:
+        out["findings_hint"] = i18n.t(
+            "report.written-hint", count=len(findings), limit=COMPACT_FINDINGS_LIMIT,
+        )
+    return out
+
+
 def _compact_finding(d: dict) -> str:
     """One line of a compact finding list: "path:line rule - message" (en dash - a message
     a reader sees, not a code comment)."""

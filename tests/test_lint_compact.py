@@ -4,7 +4,7 @@ The full summary counts findings by rule, file and severity. Compact mode always
 per-file map and keeps complete error-level records; the finding list itself survives as
 one line each ("path:line rule - message") up to COMPACT_FINDINGS_LIMIT, and only past it
 falls back to counts plus a hint on how to read the rest. `as_ci`, when present, narrows to
-its own `flags` sentence.
+one line. The writing tools answer with the lint of what they wrote held shorter still.
 """
 
 import importlib
@@ -383,3 +383,28 @@ def test_full_report_is_unaffected_by_the_compact_changes():
     }
     assert len(payload["diagnostics"]) == 16
     assert "findings" not in payload and "findings_hint" not in payload
+
+
+# --- the lint a writing tool answers with: counts, and findings one line each ------------
+
+
+def test_short_lint_of_clean_files_is_two_numbers():
+    assert report.short([], 2) == {"files": 2, "diagnostics": 0}
+
+
+def test_short_lint_lists_findings_one_line_each():
+    diags = [
+        _diag("A.xbsl", 3, "code/brackets", Severity.ERROR),
+        _diag("A.xbsl", 1, "whitespace/trailing", Severity.WARNING),
+    ]
+    assert report.short(diags, 1) == {
+        "files": 1, "diagnostics": 2, "errors": 1, "warnings": 1,
+        "findings": ["A.xbsl:1 whitespace/trailing – m", "A.xbsl:3 code/brackets – m"],
+    }
+
+
+def test_short_lint_past_the_limit_points_at_lint_paths():
+    answer = report.short(_diags(report.COMPACT_FINDINGS_LIMIT + 1), 11)
+    assert "findings" not in answer
+    assert answer["diagnostics"] == report.COMPACT_FINDINGS_LIMIT + 1
+    assert "lint_paths" in answer["findings_hint"]

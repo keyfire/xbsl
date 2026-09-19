@@ -267,10 +267,10 @@ def test_the_lint_after_a_rename_reads_the_sources_and_not_the_description(tmp_p
 def test_the_mcp_rename_lints_the_sources_and_not_the_description(mcp_module, tmp_path):
     stock = _project(tmp_path)
 
-    out = mcp_module.meta_rename_object(str(tmp_path), CLIENT, "КлиентКотировок")
+    out = mcp_module.meta_rename_object(str(tmp_path), CLIENT, "КлиентКотировок", full=True)
 
     assert (stock / "КлиентКотировок.Wsdl.1.wsdl").is_file()
     written = [f["path"] for f in out["files"]]
     assert any(path.endswith("КлиентКотировок.Wsdl.1.wsdl") for path in written)
-    assert out["lint"]["summary"]["files"] == sum(1 for p in written if not p.endswith(".wsdl"))
-    assert not [d for d in out["lint"]["diagnostics"] if d["path"].endswith(".wsdl")]
+    assert out["lint"]["files"] == sum(1 for p in written if not p.endswith(".wsdl"))
+    assert not [f for f in out["lint"].get("findings", []) if ".wsdl:" in f]

@@ -50,6 +50,49 @@ def test_mcp_meta_field_and_info(mcp_module, tmp_path):
     assert "Справочник" in overview["creatable_kinds"]
 
 
+def test_mcp_meta_add_field_adds_several_names_in_one_write(mcp_module, tmp_path):
+    """Eight values of an enumeration used to be eight calls, each answering with the lint."""
+    mcp_module.meta_new_object(str(tmp_path), "Перечисление", "Цвета")
+    yaml_path = str(tmp_path / "Цвета.yaml")
+
+    res = mcp_module.meta_add_field(yaml_path, "значение", names=["Красный", "Синий", "Белый"])
+
+    assert "error" not in res, res
+    assert [f["path"] for f in res["files"]] == [yaml_path]
+    text = (tmp_path / "Цвета.yaml").read_text(encoding="utf-8")
+    names = [line.strip()[len("Имя: "):] for line in text.splitlines()
+             if line.startswith("        Имя: ")]
+    assert names == ["Красный", "Синий", "Белый"]
+    assert len(set(re.findall(r"Ид: (\S+)", text))) == 4  # the element and three values
+
+
+def test_mcp_meta_add_field_batch_writes_all_or_nothing(mcp_module, tmp_path):
+    mcp_module.meta_new_object(str(tmp_path), "Перечисление", "Цвета")
+    yaml_path = str(tmp_path / "Цвета.yaml")
+    mcp_module.meta_add_field(yaml_path, "значение", "Красный")
+    before = (tmp_path / "Цвета.yaml").read_text(encoding="utf-8")
+
+    taken = mcp_module.meta_add_field(yaml_path, "значение", names=["Черный", "Красный"])
+    twice = mcp_module.meta_add_field(yaml_path, "значение", "Черный", names=["Черный"])
+    none = mcp_module.meta_add_field(yaml_path, "значение")
+
+    assert "Красный" in taken["error"]
+    assert "Черный" in twice["error"]
+    assert "names" in none["error"]
+    assert (tmp_path / "Цвета.yaml").read_text(encoding="utf-8") == before
+
+
+def test_mcp_meta_add_field_batch_refuses_kinds_that_write_other_files(mcp_module, tmp_path):
+    mcp_module.meta_new_object(str(tmp_path), "Перечисление", "Цвета")
+    yaml_path = str(tmp_path / "Цвета.yaml")
+
+    operation = mcp_module.meta_add_field(yaml_path, "операция", names=["А", "Б"])
+    string = mcp_module.meta_add_field(yaml_path, "строка", names=["А", "Б"])
+
+    assert "операция" in operation["error"]
+    assert "meta_set_localization" in string["error"]
+
+
 @pytest.mark.needs_data  # the built-in's class is the metamodel's, and the written file is linted
 def test_mcp_meta_add_field_of_a_built_in_attribute(mcp_module, tmp_path):
     mcp_module.meta_new_object(str(tmp_path), "Документ", "Заявки", presentation="Номер")
@@ -60,7 +103,7 @@ def test_mcp_meta_add_field_of_a_built_in_attribute(mcp_module, tmp_path):
                "Автонумерация": {"Префикс": "ЗА", "Формат": {"ДлинаПрефикса": 2}}},
     )
     assert "error" not in res
-    assert res["lint"]["summary"]["diagnostics"] == 0, res["lint"]["diagnostics"]
+    assert res["lint"] == {"files": 1, "diagnostics": 0}, res["lint"]
     text = (tmp_path / "Заявки.yaml").read_text(encoding="utf-8")
     assert "    -\n        Имя: Номер\n        Тип: Строка\n        Длина: 11\n" in text
     assert "            Формат:\n                ДлинаПрефикса: 2\n" in text
@@ -73,7 +116,7 @@ def test_mcp_meta_add_field_of_a_built_in_attribute(mcp_module, tmp_path):
     res = mcp_module.meta_set_field_property(
         yaml_path, "реквизит", "Номер", {"Автонумерация": {"Использовать": False}},
     )
-    assert "error" not in res and res["lint"]["summary"]["diagnostics"] == 0
+    assert "error" not in res and res["lint"] == {"files": 1, "diagnostics": 0}
     text = (tmp_path / "Заявки.yaml").read_text(encoding="utf-8")
     assert "        Автонумерация:\n            Использовать: Ложь\n" in text
     assert "Префикс" not in text
@@ -227,17 +270,67 @@ def test_mcp_meta_rename_object(mcp_module, tmp_path):
     assert plan["renames"] == [
         {"from": str(tmp_path / "Склады.yaml"), "to": str(tmp_path / "Хранилища.yaml")}
     ]
-    assert all("content" not in f for f in plan["files"])
+    assert "files" not in plan and plan["dry-run"] is True
+    assert len(plan["notes"]) == 1 and plan["notes"][0].startswith("Файлов переименовано: 1,")
+    full = mcp_module.meta_rename_object(
+        str(tmp_path), "Склады", "Хранилища", dry_run=True, full=True,
+    )
+    assert all("content" not in f for f in full["files"])
+    assert "Заказы.yaml: замен – 1" in full["notes"]
     assert (tmp_path / "Склады.yaml").is_file()  # dry_run writes nothing
 
     res = mcp_module.meta_rename_object(str(tmp_path), "Склады", "Хранилища")
-    assert res["renames"] and "lint" in res
+    assert res["renames"] and "lint" in res and "files" not in res
+    assert res["notes"] == plan["notes"]
     assert (tmp_path / "Хранилища.yaml").is_file()
     assert not (tmp_path / "Склады.yaml").exists()
     assert "Тип: Хранилища.Ссылка?" in (tmp_path / "Заказы.yaml").read_text(encoding="utf-8")
 
     err = mcp_module.meta_rename_object(str(tmp_path), "Нет", "Куда")
     assert "не найден" in err["error"]
+
+
+@pytest.mark.needs_data  # the rename lints the project's modules, and the file rules read the data
+def test_mcp_meta_rename_object_names_the_files_outside_the_projects(mcp_module, tmp_path):
+    """A translation dictionary lies beside the project, and the rename edits its key too.
+
+    The short answer drops the file-by-file list, so the files no project owns are named
+    apart: an edit there is the one a reader would not expect from renaming an object.
+    """
+    mcp_module.meta_new_project(str(tmp_path), "vendor", "Приложение")
+    subsystem = tmp_path / "vendor" / "Приложение" / "Основное"
+    mcp_module.meta_new_object(str(subsystem), "Справочник", "Склады")
+    dictionary = tmp_path / "vendor" / "xbsl-translation" / "010-objects.yaml"
+    dictionary.parent.mkdir()
+    dictionary.write_text(
+        "version: 1\nlanguage: en\nphrases:\n    'Группа: =Склады.Имя': 'Group: =Warehouses.Name'\n",
+        encoding="utf-8",
+    )
+
+    res = mcp_module.meta_rename_object(str(tmp_path), "Склады", "Хранилища")
+
+    assert "error" not in res, res
+    assert "'Группа: =Хранилища.Имя'" in dictionary.read_text(encoding="utf-8")
+    assert res["outside_projects"] == [str(dictionary)]
+
+
+def test_cli_rename_object_still_lists_every_file(capsys, tmp_path):
+    """The CLI prints the whole plan: the lines about single files follow the notes."""
+    _run_cli(capsys, "new-object", str(tmp_path), "Справочник", "Склады")
+    (tmp_path / "Заказы.yaml").write_text(
+        "ВидЭлемента: Справочник\nИд: 6f0b6a44-0000-4000-8000-0000000000e1\nИмя: Заказы\n"
+        "Реквизиты:\n    -\n        Ид: 6f0b6a44-0000-4000-8000-0000000000e2\n"
+        "        Имя: Склад\n        Тип: Склады.Ссылка\n",
+        encoding="utf-8", newline="\n",
+    )
+
+    code, plan = _run_cli(
+        capsys, "rename-object", str(tmp_path), "Склады", "Хранилища", "--dry-run"
+    )
+
+    assert code == 0
+    assert plan["notes"][0].startswith("Файлов переименовано: 1")
+    assert "Заказы.yaml: замен – 1" in plan["notes"]
 
 
 def test_cli_rename_object(capsys, tmp_path):

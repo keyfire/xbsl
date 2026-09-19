@@ -1263,7 +1263,7 @@ def _scaffold_main(argv: list[str]) -> int:
             {"from": str(r.old_path), "to": str(r.new_path)} for r in result.renames
         ],
         "files": [{"path": str(c.path), "created": c.created} for c in result.changes],
-        "notes": result.notes,
+        "notes": result.notes + result.details,
         "lint": _scaffold_lint(written),
     }
     print(json.dumps(out, ensure_ascii=False))

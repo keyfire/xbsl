@@ -706,8 +706,9 @@ def metadata_schema(
 #
 # The writing tools apply their changes to disk themselves (unlike the LSP surface, where
 # the editor applies the edits) and return {root, files, notes, lint}: a file-scope lint of
-# the written files ships in the same response. An operation failure is a structured error
-# field, not an exception: that makes branching easier for an agent.
+# the written files ships in the same response, held short - counts, and findings one line
+# each (report.short); lint_paths on the files gives the whole report. An operation failure
+# is a structured error field, not an exception: that makes branching easier for an agent.
 #
 def _absolute(payload: dict, base: Path) -> dict:
     """The answer with every file path absolute and the root they were counted from named."""
@@ -733,8 +734,8 @@ def _apply_and_lint(result: scaffold.ScaffoldResult, base: Path) -> dict:
         "files": [
             {"path": str(c.path), "created": c.created} for c in result.changes
         ],
-        "notes": result.notes,
-        "lint": report.report(diags, len(sources)),
+        "notes": result.notes + result.details,
+        "lint": report.short(diags, len(sources)),
     }
     if result.renames:
         out["renames"] = [
@@ -918,11 +919,12 @@ def meta_new_object(
 def meta_add_field(
     yaml_path: str,
     field_kind: str,
-    name: str,
+    name: str = "",
     type: str | None = None,
     tabular: str | None = None,
     props: dict[str, Any] | None = None,
     root: str | None = None,
+    names: list[str] | None = None,
 ) -> dict:
     """Add a section item to an object: реквизит, измерение, ресурс, значение (enum),
     параметр, поле (structure), константа, свойство (contract), табличная-часть, операция
@@ -949,6 +951,13 @@ def meta_add_field(
 
     tabular – target tabular-section name when adding a реквизит into it.
 
+    names – several items of this kind in one call, with the same type, props and tabular:
+    the values of an enumeration, a row of attributes. Composes with `name`, which goes
+    first. The batch is planned whole before anything is written, so a taken or repeated
+    name refuses all of it and the file stays as it was. The kinds `операция` (it also writes
+    the module), `строка` and `шаблон` (they echo into the translations) take one call each;
+    many strings at once are meta_set_localization with entries.
+
     props – the item's other properties as {"Property": value}: DefaultValue, Presentation,
     MaxLength and whatever else the item's class declares (ask metadata_schema with
     sections=["<section>"] and names=["<name>"] for the list - a built-in "Номер" declares
@@ -967,6 +976,15 @@ def meta_add_field(
     meta_add_localization for a language the element does not have yet.
     """
     base = _base(root)
+    if names:
+        batch = ([name] if name else []) + list(names)
+        return _meta(
+            base, scaffold.op_add_fields, _under(base, yaml_path), field_kind, batch,
+            type_=type, tabular=tabular, props=props,
+        )
+    if not name:
+        return _failed(scaffold.ScaffoldError(
+            "Нужно имя: name для одного элемента или names для нескольких"), base)
     return _meta(
         base, scaffold.op_add_field, _under(base, yaml_path), field_kind, name, type_=type,
         tabular=tabular, props=props,
@@ -1319,6 +1337,7 @@ def meta_rename_object(
     old_presentation: str | None = None,
     yaml_path: str | None = None,
     dry_run: bool = False,
+    full: bool = False,
 ) -> dict:
     """Rename a configuration object and update every reference across the sources.
 
@@ -1332,8 +1351,13 @@ def meta_rename_object(
     Attributes, components or dynamic-list fields that merely share the old name are NOT
     touched. new_presentation/old_presentation update Заголовок/Представление values of the
     object and its forms (defaults: the new name). yaml_path resolves ambiguity when several
-    objects share old_name. dry_run=true returns the plan (renames, files, notes) without
-    writing anything.
+    objects share old_name. dry_run=true returns the plan without writing anything.
+
+    The answer is short: `renames` (the file pairs), `notes` (the first one counts the renamed
+    files, the edited files and the replacements), `outside_projects` when the rename edited
+    files no project owns - a translation dictionary beside the project - and the lint of
+    the written files. full=True lists every edited file as well: `files`, and one line per
+    file in `notes`.
 
     See also: meta_delete_object removes the same set of files instead of renaming it;
     meta_move_object carries it into another folder under the same name.
@@ -1348,8 +1372,22 @@ def meta_rename_object(
     except scaffold.ScaffoldError as exc:
         return _failed(exc, base)
     if dry_run:
-        return _absolute(result.as_dict(content=False), base)
-    return _apply_and_lint(result, base)
+        plan = _absolute(result.as_dict(content=False), base)
+        return plan if full else _short_rename(result, base, {**plan, "dry-run": True})
+    out = _apply_and_lint(result, base)
+    return out if full else _short_rename(result, base, out)
+
+
+def _short_rename(result: scaffold.ScaffoldResult, base: Path, answer: dict) -> dict:
+    """A rename answer without the file-by-file lists: sixty edited files cost two of them."""
+    short = {key: answer[key] for key in ("root", "dry-run", "renames") if key in answer}
+    short["notes"] = list(result.notes)
+    outside = scaffold.outside_projects([change.path for change in result.changes], base)
+    if outside:
+        short["outside_projects"] = [str(_under(base, path)) for path in outside]
+    if "lint" in answer:
+        short["lint"] = answer["lint"]
+    return short
 
 
 @mcp.tool()
