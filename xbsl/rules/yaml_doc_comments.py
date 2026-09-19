@@ -17,7 +17,8 @@ that node and renders it as Markdown. So a `##` line has a slot in exactly these
 - the first lines of the file - the element itself (any kind, and also the project and the
   subsystem descriptions);
 - the first lines of an interface component node, before its `Type` - the platform components
-  the ui schema knows and the components a project or a library declares;
+  the ui schema knows and the components a project or a library declares (the latter only as
+  a single value, see below);
 - the first lines of a list item whose class is documentable: a property or an event of a
   component, a URL template, an attribute, a tabular section and its attributes, a dimension
   or a resource of a register, an index, a structure field, an enumeration item, a constant,
@@ -28,6 +29,14 @@ head to hold it), a built-in item the platform picks by its name (the standard a
 `Code`, `Name`, `Owner`, `Parent` and the like - the ordinary attributes next to them do hold
 a comment), a command of a command interface, a structural value of the interface (a dynamic
 list field, a filter item, layout settings, a font) and an item of `Import`.
+
+One more place is refused although the environment offers it: an instance of a component that
+a project or a library declares, standing as an ITEM OF A LIST (the `Content` of a group, as a
+rule). The server does not apply a project with a documentation comment there: producing the
+metadata of such an instance fails on the `docComment` property of the model, and the
+application is neither created nor updated. The same instance as a single value, and a
+platform component in a list, take the comment without harm. So the item counts as a node
+without a slot, and a `##` block on it is reported with this reason.
 
 yaml/plain-comment reports every `#` comment; yaml/doc-comment-misplaced reports a `##` block
 that stands where the reader does not look. Both carry an autofix when the text is already
@@ -124,6 +133,16 @@ MESSAGES = {
               "editor writes the file. Move the note into the `##` comment {where} and name "
               "there what it is about.",
     },
+    "yaml/doc-comment-misplaced.declared-item": {
+        "ru": "Узел – экземпляр компонента проекта или библиотеки в списке. С документирующим "
+              "комментарием на нём сервер не применяет проект: сборка метаданных экземпляра "
+              "падает на свойстве `docComment`. Перенесите пояснение в комментарий `##` {where} "
+              "и назовите в нём, к чему оно относится.",
+        "en": "The node is an instance of a project or a library component in a list. With a "
+              "documentation comment on it the server does not apply the project: producing "
+              "the metadata of the instance fails on the `docComment` property. Move the note "
+              "into the `##` comment {where} and name there what it is about.",
+    },
     "yaml/doc-comment.where-file": {
         "ru": "элемента – в первые строки файла",
         "en": "of the element - the first lines of the file",
@@ -166,8 +185,8 @@ dataset.register_reset(_documentable_known.cache_clear)
 dataset.register_reset(_components.cache_clear)
 
 
-def _is_component_type(written: str) -> bool:
-    """Whether a `Type` value names an interface component.
+def _component_origin(written: str) -> str | None:
+    """`platform` or `declared` for a `Type` value that names an interface component.
 
     A platform component is told by the ui schema. A platform type the schema does not list
     is a value, not a component: a command, a dynamic list field, a font. A name the platform
@@ -178,15 +197,17 @@ def _is_component_type(written: str) -> bool:
     """
     head = written.split("<", 1)[0].strip()
     if not head or head.endswith("?") or head[0] in "=%":
-        return False
+        return None
     if "::" in head:
         head = head.rsplit("::", 1)[1]
     if "." in head:
-        return False
+        return None
     canonical = uischema.canonical_component(head)
     if canonical in _components():
-        return True
-    return head not in _stdlib_names() and canonical not in _stdlib_names()
+        return "platform"
+    if head not in _stdlib_names() and canonical not in _stdlib_names():
+        return "declared"
+    return None
 
 
 def _scalar(mapping, keys: tuple[str, ...]) -> str | None:
@@ -212,8 +233,9 @@ def _first_line(mapping) -> int:
     return mapping.value[0][0].start_mark.line + 1 if mapping.value else mapping.start_mark.line + 1
 
 
-def _collect(root, kind: str | None) -> tuple[dict[int, _Slot], dict[int, object]]:
-    """(slots by the id of their mapping, every mapping by the line of its first key)."""
+def _collect(root, kind: str | None) -> tuple[dict[int, _Slot], dict[int, object], set[int]]:
+    """(slots by the id of their mapping, every mapping by the line of its first key, the ids
+    of declared component instances in a list - the server refuses a comment on them)."""
     slots: dict[int, _Slot] = {id(root): _Slot(root, _first_line(root), True)}
     judged: set[int] = {id(root)}  # mappings the metamodel has an opinion about
     cls = metamodel.class_for_kind(kind) if kind else None
@@ -245,21 +267,25 @@ def _collect(root, kind: str | None) -> tuple[dict[int, _Slot], dict[int, object
         by_metamodel(cls, root)
 
     firsts: dict[int, object] = {}
-    stack = [root]
+    refused: set[int] = set()
+    stack = [(root, False)]
     while stack:
-        node = stack.pop()
+        node, in_list = stack.pop()
         if isinstance(node, yaml.MappingNode):
             if node.value:
                 firsts.setdefault(_first_line(node), node)
             if id(node) not in judged:
                 written = _scalar(node, _TYPE_KEYS)
-                if written is not None and _is_component_type(written):
+                origin = _component_origin(written) if written is not None else None
+                if origin == "declared" and in_list:
+                    refused.add(id(node))
+                elif origin is not None:
                     slots[id(node)] = _Slot(node, _first_line(node), False)
             for key_node, value_node in node.value:
-                stack.append(value_node)
+                stack.append((value_node, False))
         elif isinstance(node, yaml.SequenceNode):
-            stack.extend(node.value)
-    return slots, firsts
+            stack.extend((item, True) for item in node.value)
+    return slots, firsts, refused
 
 
 class _Block(NamedTuple):
@@ -371,7 +397,7 @@ def _judge(source: SourceFile, want_doc: bool) -> Iterable[Diagnostic]:
     if not blocks:
         return
     rule_id = "yaml/doc-comment-misplaced" if want_doc else "yaml/plain-comment"
-    slots, firsts = _collect(root, object_kind(data))
+    slots, firsts, refused = _collect(root, object_kind(data))
     text_lines = source.text.split("\n")
     key_lines: dict[int, object] = {}
     stack = [root]
@@ -406,6 +432,8 @@ def _judge(source: SourceFile, want_doc: bool) -> Iterable[Diagnostic]:
                 if want_doc:
                     continue  # a `##` block at the head of a slot node is where it belongs
                 key, fix = "here", _respelled(source, block)
+            elif want_doc and node is not None and id(node) in refused and not dash:
+                key = "declared-item"
             elif anchor == "-":
                 follow = index + 1
                 while follow < len(text_lines) and (
@@ -422,7 +450,7 @@ def _judge(source: SourceFile, want_doc: bool) -> Iterable[Diagnostic]:
                 value = key_lines.get(anchor_line)
                 if isinstance(value, yaml.MappingNode) and id(value) in slots:
                     key, fix = "inside", _moved(source, block, anchor_line, slots[id(value)])
-        if key == "nearest":
+        if key in ("nearest", "declared-item"):
             where_slot = _enclosing_slot(slots, head.line)
         message_key = f"{rule_id}.{key}"
         if want_doc and key == "here":  # pragma: no cover - filtered above
