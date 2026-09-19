@@ -39,6 +39,9 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **The translator re-wraps `/* ... */` comments to the width as well.** The pass used to re-split
+  only `//` lines, so a translated block ran past the limit: English runs longer than Russian. The
+  block keeps `/*` at the head of its first line and `*/` at the end of its last one. ([#118](https://github.com/keyfire/xbsl/pull/118))
 - **Pasting a fragment puts its notes where the development environment reads them.** A comment
   above the component moves inside the node as `##` lines and no longer stays before the `-`,
   where the visual editor drops it on the first save. A note with no place of its own stays, and
