@@ -82,10 +82,20 @@ jobs:
           pip install "git+https://github.com/keyfire/docsguard@v0.10.0"
       - name: Docs guard (every surface is described)
         run: python tools/check_docs.py
+      # The mirrored pages of the site are committed as well: the extension README and the
+      # changelogs copied into docs/ by scripts/sync-docs.mjs. The site build makes its own
+      # copies, so a stale mirror shows only on GitHub - one fell two paragraphs behind and
+      # was found by chance.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       # The generated pages are committed, so a stale one means the generator was not run.
+      # The mirrors come last: the command page writes into the README they copy.
       - name: Generated pages are up to date
         run: |
           python scripts/gen-cli-docs.py
           python scripts/gen-commands-docs.py
+          node scripts/sync-docs.mjs
           git diff --exit-code -- docs/CLI.md docs/CLI.ru.md \
-            editors/vscode/README.md editors/vscode/README.ru.md
+            editors/vscode/README.md editors/vscode/README.ru.md \
+            docs/vscode.md docs/vscode.ru.md docs/changelog.md docs/changelog.ru.md

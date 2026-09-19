@@ -213,6 +213,14 @@ _CORE_MESSAGES = {
         "en": "Show the stale entries: --stale-baseline; remove them from the file: "
               "--prune-baseline",
     },
+    "cli.baseline-reworded": {
+        "ru": "Записей списка принятых с прежним текстом сообщения: {count}. Правило изменило "
+              "формулировку, и запись совпала с находкой по файлу и значениям. Перепишите "
+              "список через --write-baseline: причины записей сохранятся",
+        "en": "Baseline entries with an earlier message text: {count}. The rule reworded its "
+              "message, and each entry matched its finding by file and values. Rewrite the "
+              "baseline with --write-baseline: the reasons of the entries are kept",
+    },
     "cli.baseline-not-checked": {
         "ru": "Записей списка принятых не проверено: {count} – их правил не было в наборе этой "
               "проверки ({rules}) либо их файлы лежат вне проверенных путей ({paths}); "
