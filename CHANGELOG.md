@@ -18,6 +18,22 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **`lint_paths` compares with the previous call, like `--compare`.** The `compare` parameter
+  names the file. The first call saves the run, and each later one answers with the findings that
+  appeared and disappeared and a row per changed rule, all as data. The difference used to be
+  available only in the CLI, and agents check projects through MCP more often. ([#122](https://github.com/keyfire/xbsl/pull/122))
+
+### Fixed
+
+- **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
+  path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
+  as left out. Paths are now paired by the folder they name, and by spelling when the folders
+  differ, as with two worktrees of one repository. ([#122](https://github.com/keyfire/xbsl/pull/122))
+
 ## 2026-09-19 – 0.112.1, 0.113.0
 
 ### Added

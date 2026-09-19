@@ -81,13 +81,15 @@ xbsl demo-en --compare runs.json
 ```
 
 A finding is matched by the path given on the command line, the file under it, the line, the
-column, the rule and the text. The path is taken as typed, so `xbsl demo` run from two worktrees
-of a repository names the same finding the same way. A path that only one of the two runs
-checked is left out of the comparison. So is a rule that only one of them selected, when the two
-runs got different `--select`, `--ignore` or `--enable` flags. A separate line names each part
-left out and counts its findings. A run saved in another output language is refused, because the
-text of every finding would differ. When the projects keep a baseline of their own,
-`--no-baseline` keeps it from hiding a change.
+column, the rule and the text. The paths of the two runs are paired by the folder they name, so
+`demo` and its absolute path are one path. A path whose folder the other run did not check is
+paired by its spelling: `xbsl demo` run from two worktrees of a repository compares the two
+checkouts. A path with no pair is left out of the comparison. So is a rule that only one of the runs
+selected, when the two runs got different `--select`, `--ignore` or `--enable` flags. A separate
+line names each part left out and counts its findings. A run saved in another output language is
+refused, because the text of every finding would differ. When the projects keep a baseline of
+their own, `--no-baseline` keeps it from hiding a change. The MCP tool `lint_paths` takes the same
+file in its `compare` parameter and answers with the same comparison as data.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting. The index
 holds the objects, with their `TabularParts`, module-declared local types and the member families
