@@ -10,6 +10,7 @@ English comment and Russian test docstrings - stand as the planted cases here.
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -203,3 +204,47 @@ def test_a_name_with_one_spelling_is_still_answered_plainly():
     quoted = dict(langguard._translatable("# ключ `Реквизиты` объекта"))
 
     assert quoted["Реквизиты"] == "Attributes"
+
+
+# -- what the run had to judge by -------------------------------------------------------------
+
+
+def test_a_run_without_the_dictionary_says_so(monkeypatch, capsys):
+    """Without the Element data the quoted-name half has nothing to judge by, and a clean answer
+    looked the same either way: a branch passed with zero findings and showed 22 with the data."""
+    monkeypatch.setattr(langguard, "scan_diff", lambda base: [])
+    monkeypatch.setattr(langguard, "dictionary", lambda: None)
+
+    assert langguard.main(["--base", "origin/main"]) == 0
+    out = capsys.readouterr().out
+    assert "не проверены" in out and "XBSL_DATA_DIR" in out
+
+
+def test_a_run_with_the_dictionary_names_where_it_came_from(monkeypatch, capsys):
+    monkeypatch.setattr(langguard, "scan_diff", lambda base: [])
+    monkeypatch.setattr(langguard, "dictionary", lambda: "D:/data/element")
+
+    langguard.main(["--base", "origin/main"])
+    assert "словарь компилятора: D:/data/element" in capsys.readouterr().out
+
+
+def test_the_json_answer_keeps_its_shape_and_warns_on_stderr(monkeypatch, capsys):
+    monkeypatch.setattr(langguard, "scan_diff", lambda base: [])
+    monkeypatch.setattr(langguard, "dictionary", lambda: None)
+
+    langguard.main(["--base", "origin/main", "--format", "json"])
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == []
+    assert "XBSL_DATA_DIR" in captured.err
+
+
+def test_there_is_no_dictionary_without_the_data(monkeypatch, tmp_path):
+    from xbsl import dataset
+
+    monkeypatch.setattr(dataset, "data_root", lambda: tmp_path)
+    assert langguard.dictionary() is None
+
+
+@pytest.mark.needs_data
+def test_the_dictionary_is_found_when_the_data_is_there():
+    assert langguard.dictionary()

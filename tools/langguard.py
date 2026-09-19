@@ -32,7 +32,7 @@ it. What counts as a find:
   * a QUOTED platform name that the compiler dictionary can spell in English: the citation
     exception is for what the dictionary does not know, not for names the repository has an
     English form for (`Обработчик` -> Handler). Needs the Element data; without it this half
-    stays silent;
+    has nothing to judge by, and the run says so under its verdict (see `dictionary`);
   * Cyrillic in an IDENTIFIER of a Python source - a Russian test name, variable or helper
     (in TypeScript a bare Cyrillic token is a platform key, see `_typescript_regions`).
 
@@ -119,6 +119,29 @@ def _translatable(text: str) -> list[tuple[str, str]]:
 
 #: The roles the dictionary splits its pairs by, in the order a reader should weigh them.
 _ROLES = ("types", "facets", "properties", "enums", "query", "kinds")
+
+#: The line a run without the compiler dictionary ends with.
+_NO_DICTIONARY = (
+    "словаря компилятора нет: имена в обратных кавычках по словарю не проверены – "
+    "задайте XBSL_DATA_DIR"
+)
+
+
+def dictionary() -> str | None:
+    """Where the compiler dictionary of this run lies, or None when there is none.
+
+    Without the Element data the quoted-name half of the check finds nothing, and a clean answer
+    read the same with the data and without it: a branch passed with zero findings and showed 22
+    once the data was there. The run therefore names what it judged by.
+    """
+    try:
+        from xbsl import dataset
+
+        if not dataset.has_data_file("terms.json"):
+            return None
+        return str(dataset.data_root())
+    except Exception:  # noqa: BLE001 - a guard must not fall over a missing dataset
+        return None
 
 
 def _spellings(word: str) -> str:
@@ -442,16 +465,20 @@ def main(argv: list[str] | None = None) -> int:
     options = parser.parse_args(argv)
 
     found = scan_tree() if options.all else scan_diff(options.base)
+    source = dictionary()
     if options.format == "json":
         print(json.dumps(
             [{"file": f, "line": n, "kind": k, "words": w} for f, n, k, w in found],
             ensure_ascii=False, indent=2,
         ))
+        if source is None:
+            print(_NO_DICTIONARY, file=sys.stderr)
     else:
         for name, number, kind, words in found:
             print(f"{name}:{number}: {kind}: {words}")
         scope = "во всём дереве" if options.all else f"в добавленных строках относительно {options.base}"
         print(f"{'найдено' if found else 'чисто'}: {len(found)} {scope}")
+        print(f"словарь компилятора: {source}" if source else _NO_DICTIONARY)
     return 1 if found else 0
 
 
