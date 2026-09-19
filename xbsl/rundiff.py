@@ -34,6 +34,9 @@ Every part left out is named in a line of its own, with the count of its finding
 The saved file keeps the findings of the run one per line and, ahead of them, the changes
 against the run before it. Past the listing limit the terminal gives the count and the file,
 and the list is read there.
+
+The MCP tool `lint_paths` takes the same file and answers with the same comparison as data
+(compare_record): the rows of the table and the changed findings as records.
 """
 
 from __future__ import annotations
@@ -97,6 +100,12 @@ MESSAGES = {
     "rundiff.too-many": {
         "ru": "Изменений больше {limit}: весь список – в {path}, раздел changes",
         "en": "Over {limit} changes: the full list is in {path}, under changes",
+    },
+    "rundiff.findings-hint": {
+        "ru": "изменений: {count}, это больше {limit} строк краткого ответа – весь список лежит "
+              "в {path}, в разделе changes",
+        "en": "{count} changes, over the {limit} a compact answer lists - the whole list is in "
+              "{path}, under changes",
     },
     "rundiff.skipped-paths-gone": {
         "ru": "Не сравнивались пути, которых нет в этом запуске: {names}; "
@@ -377,21 +386,13 @@ def changes_lines(
     nothing left out, the answer is the last line alone.
     """
     rows = report.rule_table(diagnostics)
-    now = {rule: (files, count) for rule, files, count in rows}
-    appeared = Counter(f[4] for f in changes.appeared)
-    disappeared = Counter(f[4] for f in changes.disappeared)
-    changed = sorted(appeared.keys() | disappeared.keys(),
-                     key=lambda rule: (-(appeared[rule] + disappeared[rule]), rule))
+    changed = _changed_rules(changes, rows)
     lines: list[str] = []
     if changed:
-        lines += _table(
-            _headers("rule", "files", "findings", "appeared", "disappeared"),
-            [(rule, *now.get(rule, (0, 0)), appeared[rule], disappeared[rule])
-             for rule in changed],
-        )
+        lines += _table(_headers("rule", "files", "findings", "appeared", "disappeared"), changed)
         limit = report.COMPACT_FINDINGS_LIMIT
         if len(changes.appeared) + len(changes.disappeared) <= limit:
-            lines += _listing(changes, changed)
+            lines += _listing(changes, [row[0] for row in changed])
         else:
             lines.append(i18n.t("rundiff.too-many", limit=limit, path=path))
     lines += [_left_out(key, names, count) for key, names, count in changes.skipped]
@@ -402,6 +403,22 @@ def changes_lines(
         head = i18n.t("rundiff.same", path=path)
     lines.append(f"{head}. {_totals(diagnostics, len(rows), checked, suppressed)}")
     return lines
+
+
+def _changed_rules(
+    changes: Changes, rows: list[tuple[str, int, int]],
+) -> list[tuple[str, int, int, int, int]]:
+    """A row per rule whose findings moved: (rule, files, findings, appeared, disappeared).
+
+    `rows` is report.rule_table() of this run, so the files and the findings are this run's,
+    zero for a rule whose findings all went. The rules with the most changes come first.
+    """
+    now = {rule: (files, count) for rule, files, count in rows}
+    appeared = Counter(f[4] for f in changes.appeared)
+    disappeared = Counter(f[4] for f in changes.disappeared)
+    changed = sorted(appeared.keys() | disappeared.keys(),
+                     key=lambda rule: (-(appeared[rule] + disappeared[rule]), rule))
+    return [(rule, *now.get(rule, (0, 0)), appeared[rule], disappeared[rule]) for rule in changed]
 
 
 def _headers(*names: str) -> tuple[str, ...]:
@@ -449,6 +466,81 @@ def _left_out(key: str, names: list[str], count: int) -> str:
     if len(names) > NAMES_SHOWN:
         shown += " " + i18n.t("rundiff.more", count=len(names) - NAMES_SHOWN)
     return i18n.t(key, names=shown, count=count)
+
+
+# --- the data ------------------------------------------------------------------------------
+
+#: The part of a comparison each skipped line speaks of, and the run that alone checked it.
+_LEFT_OUT = {
+    "rundiff.skipped-paths-gone": ("paths", "saved"),
+    "rundiff.skipped-paths-new": ("paths", "current"),
+    "rundiff.skipped-rules-gone": ("rules", "saved"),
+    "rundiff.skipped-rules-new": ("rules", "current"),
+}
+
+
+def compare_record(
+    changes: Changes | None, run: Run, diagnostics: list[Diagnostic], *, path: str,
+    compact: bool = False,
+) -> dict:
+    """The comparison as data, for the MCP `lint_paths`: what changes_lines() prints.
+
+    With no saved run there was nothing to compare: {file, compared: false}. Otherwise the
+    record counts what appeared and disappeared and carries a row per changed rule, as the
+    table of changes_lines() has it. It lists the changed findings as records {path, line,
+    col, rule, message} under `findings`, `appeared` and `disappeared`. It names the parts
+    left out of the comparison under `not_compared` when there are any. The path of a record
+    is absolute, the folder of the path given plus the file under it, as the other paths of
+    an MCP answer are. `compact` holds the record short the way report.compact() holds a list
+    of findings. Past COMPACT_FINDINGS_LIMIT changes the list gives way to `findings_hint`,
+    which names the file keeping it. A list of names stops at NAMES_SHOWN, and `more` counts
+    the rest.
+    """
+    out: dict = {"file": path, "compared": changes is not None}
+    if changes is None:
+        return out
+    out["appeared"] = len(changes.appeared)
+    out["disappeared"] = len(changes.disappeared)
+    out["rules"] = [
+        {"rule": rule, "files": files, "findings": count, "appeared": came, "disappeared": went}
+        for rule, files, count, came, went in _changed_rules(
+            changes, report.rule_table(diagnostics))
+    ]
+    total = len(changes.appeared) + len(changes.disappeared)
+    limit = report.COMPACT_FINDINGS_LIMIT
+    if compact and total > limit:
+        out["findings_hint"] = i18n.t("rundiff.findings-hint", count=total, limit=limit,
+                                      path=path)
+    else:
+        out["findings"] = {
+            "appeared": [_finding_record(f, run) for f in changes.appeared],
+            "disappeared": [_finding_record(f, run) for f in changes.disappeared],
+        }
+    left_out = [_left_out_record(key, names, count, compact=compact)
+                for key, names, count in changes.skipped]
+    if left_out:
+        out["not_compared"] = left_out
+    return out
+
+
+def _finding_record(finding: Finding, run: Run) -> dict:
+    """One changed finding as a record: the folder of its path given joined with the file.
+
+    A finding outside every path given has no folder, and its file is the whole path.
+    """
+    label, inner, line, col, rule, message = finding
+    folder = run.roots.get(label, label)
+    return {"path": str(Path(folder, inner)), "line": line, "col": col, "rule": rule,
+            "message": message}
+
+
+def _left_out_record(key: str, names: list[str], count: int, *, compact: bool) -> dict:
+    part, only_in = _LEFT_OUT[key]
+    out: dict = {"part": part, "only_in": only_in, "names": names, "findings": count}
+    if compact and len(names) > NAMES_SHOWN:
+        out["names"] = names[:NAMES_SHOWN]
+        out["more"] = len(names) - NAMES_SHOWN
+    return out
 
 
 # --- the saved file ------------------------------------------------------------------------

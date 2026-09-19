@@ -26,7 +26,7 @@ from typing import Any
 from xbsl import __version__
 from xbsl import (
     baseline as baseline_data, dataset, docs, environment, formedits, formhandlers,
-    cijob, formmodel, i18n, metamodel, report, scaffold, uischema,
+    cijob, formmodel, i18n, metamodel, report, rundiff, scaffold, uischema,
 )
 from xbsl.cli import _filter_requested, discover_with_context
 from xbsl.engine import (
@@ -248,6 +248,7 @@ def lint_paths(
     compact: bool = False,
     fix: bool = False,
     as_ci_full: bool = False,
+    compare: str | None = None,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -292,10 +293,27 @@ def lint_paths(
                   the flags with a long list counted ("--enable ×10"), the jobs not taken and
                   the includes left unread;
     as_ci_full  – with `compact`, keep the whole `as_ci` record instead of the line;
+    compare     – a file that keeps the run for the next call; the CLI `--compare` reads and
+                  writes the same file. The first call saves the run and answers
+                  `compare: {file, compared: false}`. Every next call compares with the saved
+                  run, saves this run over it and answers with the changes in place of the
+                  findings: `appeared` and `disappeared` count them, `rules` holds a row per
+                  changed rule {rule, files, findings, appeared, disappeared} (files and
+                  findings of this run), `findings` lists the changed findings as records
+                  {path, line, col, rule, message} under `appeared` and `disappeared`, and
+                  `not_compared` names the parts only one of the two runs checked, {part:
+                  paths|rules, only_in: saved|current, names, findings}. A path is matched by
+                  the folder it names, then by its spelling: a relative and an absolute path of
+                  one folder compare, and so does one relative path under two worktrees. With
+                  `compact` past 10 changes `findings` gives way to `findings_hint` (the whole
+                  list stays in the file under `changes` until the next call) and a list of
+                  names stops at 5, with `more` counting the rest. A file that holds no saved
+                  run, or a run saved in another language, is refused before the check;
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
     Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
-    or {summary, errors, findings_hint} past the limit). The summary counts the findings by
+    or {summary, errors, findings_hint} past the limit; with `compare`: {summary, compare},
+    the summary shaped by `compact` as usual). The summary counts the findings by
     rule (`by_rule`), by file (`by_file`, the same absolute paths the diagnostics carry) and
     by severity (`by_severity`, all three levels named).
     When a baseline applied, the summary also
@@ -326,6 +344,15 @@ def lint_paths(
             adopted = job.baseline_file()
             named = Path(adopted) if adopted else None
             no_baseline = job.no_baseline
+    state = _under(base, compare)
+    saved = None
+    if state is not None:
+        # Read before the check, as the CLI does: a file that cannot be compared with is
+        # refused before the check spends its time on a result with nowhere to go.
+        try:
+            saved = rundiff.load(state, i18n.current_lang())
+        except rundiff.RunStateError as exc:
+            return {"error": str(exc)}
     files, requested = discover_with_context(asked)
     chosen = (_as_set(select), _as_set(ignore), _as_set(enable))
     fix_summary = {}
@@ -361,7 +388,42 @@ def lint_paths(
         # pipeline has to know which of them it reproduced), where the command actually
         # stands when an `include:` brought it, and the includes nobody fetched.
         payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
+    if state is not None:
+        return _compared(payload, diags, paths, base, state, saved, active, chosen,
+                         compact=compact, as_ci_full=as_ci_full)
     return report.compact(payload, as_ci_full=as_ci_full) if compact else payload
+
+
+def _compared(
+    payload: dict, diags: list, paths: list[str], base: Path, state: Path,
+    saved: rundiff.Run | None, active: list, chosen: tuple, *, compact: bool,
+    as_ci_full: bool,
+) -> dict:
+    """The answer of `lint_paths` with `compare`: the summary and the changes, the run saved.
+
+    The steps of the CLI `--compare`. The run keeps the paths as the caller gave them, with
+    their folders resolved against the root. It is compared with the saved run and saved
+    over it before the answer is built: an answer must not report a comparison whose run the
+    next call will not find.
+    """
+    carried = {rule.id for rule in active}
+    now = rundiff.record(
+        diags, paths, base=base, checked=payload["summary"]["files"],
+        lang=i18n.current_lang(),
+        selection={name: sorted(values) if values else None
+                   for name, values in zip(("select", "ignore", "enable"), chosen)},
+        rules={rule.id: rule.id in carried for rule in RULES}, engine=__version__,
+    )
+    changes = rundiff.compare(saved, now) if saved is not None else None
+    try:
+        rundiff.save(state, now, changes)
+    except OSError as exc:
+        return {"error": i18n.t("rundiff.save-failed", path=state, error=exc)}
+    summary = payload["summary"]
+    return {
+        "summary": report.compact_summary(summary, as_ci_full=as_ci_full) if compact else summary,
+        "compare": rundiff.compare_record(changes, now, diags, path=str(state), compact=compact),
+    }
 
 
 @mcp.tool()

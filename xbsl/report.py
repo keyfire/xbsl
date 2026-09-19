@@ -125,8 +125,7 @@ def compact(payload: dict, *, as_ci_full: bool = False) -> dict:
     environment, the baseline record) stays as it was.
     """
     out = dict(payload)
-    out["summary"] = {key: value for key, value in payload["summary"].items()
-                      if key != "by_file"}
+    out["summary"] = compact_summary(payload["summary"], as_ci_full=as_ci_full)
     findings = out.pop("diagnostics", [])
     out["errors"] = [d for d in findings if d["severity"] == "error"]
     if len(findings) <= COMPACT_FINDINGS_LIMIT:
@@ -135,9 +134,19 @@ def compact(payload: dict, *, as_ci_full: bool = False) -> dict:
         out["findings_hint"] = i18n.t(
             "report.findings-hint", count=len(findings), limit=COMPACT_FINDINGS_LIMIT,
         )
-    as_ci = out["summary"].get("as_ci")
+    return out
+
+
+def compact_summary(summary: dict, *, as_ci_full: bool = False) -> dict:
+    """The summary of a compact answer: without the per-file map, `as_ci` as one line.
+
+    compact() builds its summary here, and so does the comparison answer of `lint_paths`,
+    which carries the changes in place of the findings.
+    """
+    out = {key: value for key, value in summary.items() if key != "by_file"}
+    as_ci = out.get("as_ci")
     if as_ci is not None and not as_ci_full:
-        out["summary"]["as_ci"] = _compact_as_ci(as_ci)
+        out["as_ci"] = _compact_as_ci(as_ci)
     return out
 
 
