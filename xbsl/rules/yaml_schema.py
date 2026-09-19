@@ -320,6 +320,40 @@ def value_of(data, key: str, kind: str | None = None):
     return data.get(english) if english else None
 
 
+#: The yaml sections whose items become bare names in the modules of the element: an attribute,
+#: a tabular section, a dimension, a resource, a property of a component. In such a module
+#: `Products.Convert(...)` is the tabular section of that very element, whatever else the
+#: project calls Products elsewhere.
+_OWN_NAME_SECTIONS = (
+    "Реквизиты", "Измерения", "Ресурсы", "Константы", "Свойства", "Параметры",
+    "ТабличныеЧасти", "События", "Поля",
+)
+
+
+def element_own_names(data) -> set[str]:
+    """What the element itself calls its members - the answer a bare name is asked for first.
+
+    Top-level sections only: a name nested inside a tabular section or a component belongs to
+    the scope of that row or that component, not to the module, and reading the whole file for
+    names would shadow more than the element gives.
+    """
+    names: set[str] = set()
+    sections = list(_OWN_NAME_SECTIONS)
+    if object_kind(data) == "Перечисление":
+        # In the module of an enumeration its own items are addressed WITHOUT the type
+        # qualifier - the canonical `выбор этот / когда Низкий` of the platform's own demo
+        # (the task-priority enumeration of the CRM example). Read for this kind only:
+        # elsewhere `Items` is a collection of components, whose names belong to another scope.
+        sections.append("Элементы")
+    for section in sections:
+        items = value_of(data, section)
+        if isinstance(items, list):
+            for item in items:
+                if isinstance(item, dict) and isinstance(value_of(item, "Имя"), str):
+                    names.add(value_of(item, "Имя"))
+    return names
+
+
 def _composed(source: SourceFile):
     """The composed node graph of the file (line/column marks kept), or None.
 

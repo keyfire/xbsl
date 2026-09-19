@@ -4,6 +4,8 @@ The rule is off by default and silent without a dictionary, so the tests ask for
 a project does - by enabling it.
 """
 
+import os
+
 from xbsl import engine
 from xbsl.cli import discover
 
@@ -87,3 +89,72 @@ def test_the_rule_is_off_until_it_is_asked_for(tmp_path):
     diags = [d for d in engine.run(discover([str(tmp_path)])) if d.rule_id == RULE]
 
     assert diags == []
+
+
+def _many(tmp_path, count: int, entries: str = _DICTIONARY):
+    """A project of `count` modules, all covered by the same dictionary."""
+    (tmp_path / "Проект.yaml").write_text(
+        "ВидЭлемента: Проект\nИд: 11111111-2222-3333-4444-555555555555\nИмя: Проба\n"
+        "Версия: 1.0\nПоставщик: acme\n",
+        encoding="utf-8",
+    )
+    for number in range(count):
+        (tmp_path / f"Модуль{number}.xbsl").write_text(_MODULE, encoding="utf-8")
+        (tmp_path / f"Модуль{number}.yaml").write_text(
+            f"ВидЭлемента: ОбщийМодуль\nИд: 66666666-2222-3333-4444-00000000000{number}\n"
+            f"Имя: Модуль{number}\n",
+            encoding="utf-8",
+        )
+    folder = tmp_path / "xbsl-translation"
+    folder.mkdir(exist_ok=True)
+    (folder / "010-tokens.yaml").write_text(entries, encoding="utf-8")
+    return folder
+
+
+def test_the_dictionary_state_is_taken_once_per_run(tmp_path, monkeypatch):
+    """The rule asks for the dictionary on every file it checks, and the freshness check reads
+    the bytes of every dictionary file. Taken per file, a dictionary of a hundred and fifty
+    files is read again for every source of the project."""
+    from xbsl.translation import dictionary
+
+    taken: list = []
+    original = dictionary._digest
+
+    def counted(path):
+        taken.append(path)
+        return original(path)
+
+    monkeypatch.setattr(dictionary, "_digest", counted)
+    dictionary.forget_cached()
+    _many(tmp_path, 8)
+
+    engine.run(discover([str(tmp_path)]), enable={RULE})
+
+    assert len(taken) == 1, len(taken)
+
+
+def test_an_edit_between_two_runs_is_seen(tmp_path):
+    """Once per run must not become once per process: a long-lived server edits the dictionary
+    through translate_set and lints right after, and the lint has to read what was written."""
+    from xbsl.translation import dictionary
+
+    dictionary.forget_cached()
+    folder = _many(tmp_path, 2)
+    file = folder / "010-tokens.yaml"
+
+    def gaps():
+        return [d for d in engine.run(discover([str(tmp_path)]), enable={RULE})
+                if d.rule_id == RULE and "Считаем итог" in d.message]
+
+    assert gaps(), "the comment is not covered yet, so the first run has to report it"
+    stamped = file.stat()
+
+    file.write_text(
+        _DICTIONARY + "\nphrases:\n    Считаем итог по строкам: Sum up the rows\n",
+        encoding="utf-8",
+    )
+    # The filesystem stamps whole ticks and often gives two writes in a row the same one; the
+    # stamp is put back by hand so the check asks the question on every run, not one in four.
+    os.utime(file, ns=(stamped.st_atime_ns, stamped.st_mtime_ns))
+
+    assert gaps() == []

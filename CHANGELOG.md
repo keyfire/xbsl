@@ -18,6 +18,34 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## Unreleased
+
+### Added
+
+- **The data now includes the members the platform generates for an element of each kind.**
+  The extractor reads the help's template pages for types such as `Name.Object` and
+  `Name.WriteParameters` in full: 152 types and 2161 members in the `generated_members` section.
+  Before, the unknown-name rule relied on a hand-written table of four names and reported `IsNew`
+  as undeclared in working code. Names that depend on the element's settings, such as `Parent` or
+  `DeletionMark`, are accepted only when the element's yaml turns them on. ([#110](https://github.com/keyfire/xbsl/pull/110))
+
+### Fixed
+
+- **A member whose name starts with a lowercase letter now reaches the data.** The extractor
+  dropped such names. The distribution has one of them, `iOS` among the client platform kinds, and
+  the unknown-static-member rule flagged it in working code. ([#110](https://github.com/keyfire/xbsl/pull/110))
+- **An object module now finds the yaml of its own element.** For `Name.Object.xbsl` the pair
+  lookup searched for `Name.Object.yaml`, which never exists, instead of `Name.yaml`. As a result,
+  a bare name in the module was read as foreign: an attribute named `Query` was taken for a
+  platform type. ([#110](https://github.com/keyfire/xbsl/pull/110))
+- **The `DeleteCurrent` rule checks the kind of the element that declares the attribute.** It used
+  to take the document's deletion mode and apply it to every file. Only four kinds out of
+  forty-one can declare a deletion mode, and the false findings fell on the rest, registers
+  included. ([#110](https://github.com/keyfire/xbsl/pull/110))
+- **The translation dictionary is read once per pass.** In 0.112.0 the dictionary freshness check
+  moved to comparing bytes, and `code/translation-gaps` ran it for every file. On a project of
+  1267 files that meant 234 395 reads and 83 extra seconds. ([#110](https://github.com/keyfire/xbsl/pull/110))
+
 ## 2026-09-19 – 0.112.1
 
 ### Fixed

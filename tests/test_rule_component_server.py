@@ -147,3 +147,66 @@ def test_module_without_environment_is_not_guessed():
     assert _lint(_COMPONENT, bare, engine.load_text(
         "БезОкружения.xbsl",
         "метод Сведения(): Строка\n" + _CALL + ";\n")) == []
+
+
+_CATALOG_WITH_NAMESAKE_TABLE = engine.load_text(
+    "Договоры.yaml",
+    "ВидЭлемента: Справочник\n"
+    "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3b1\n"
+    "Имя: Договоры\n"
+    "ТабличныеЧасти:\n"
+    "  -\n"
+    "    Имя: КабинетПодрядчика\n"
+    "    Реквизиты:\n"
+    "      -\n"
+    "        Имя: Подрядчик\n",
+)
+
+_TABLE_CALL = (
+    "@Обработчик\n"
+    "метод ПередЗаписью()\n"
+    "    знч Имена = КабинетПодрядчика.Преобразовать(Строка -> Строка.Подрядчик)\n"
+    ";\n"
+)
+
+
+def test_tabular_section_of_the_own_element_is_not_the_namesake_component():
+    """In an object module a bare name is a member of that very element.
+
+    `КабинетПодрядчика` is the catalog's own tabular section; the component of the same name
+    lives in another subsystem, and the rule used to read the name as that component because
+    its map phase saw only the root `Name` of each yaml.
+    """
+    assert _lint(_COMPONENT, _CATALOG_WITH_NAMESAKE_TABLE, engine.load_text(
+        "Договоры.Объект.xbsl", _TABLE_CALL)) == []
+
+
+def test_attribute_of_the_own_element_is_not_the_namesake_component():
+    """An attribute answers to a bare name the same way a tabular section does."""
+    catalog = engine.load_text(
+        "Заявки.yaml",
+        "ВидЭлемента: Справочник\n"
+        "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3b2\n"
+        "Имя: Заявки\n"
+        "Реквизиты:\n"
+        "  -\n"
+        "    Имя: КабинетПодрядчика\n"
+        "    Тип: Строка\n",
+    )
+    assert _lint(_COMPONENT, catalog, engine.load_text(
+        "Заявки.Объект.xbsl",
+        "@Обработчик\nметод ПередЗаписью()\n"
+        "    знч Длина = КабинетПодрядчика.Длина()\n;\n")) == []
+
+
+def test_object_module_without_such_a_member_is_still_judged():
+    """The control: the element declares nothing of that name, so the component is meant."""
+    catalog = engine.load_text(
+        "Счета.yaml",
+        "ВидЭлемента: Справочник\n"
+        "Ид: 019ef4c8-232f-7f33-9da6-c3604720b3b3\n"
+        "Имя: Счета\n",
+    )
+    d = _lint(_COMPONENT, catalog, engine.load_text(
+        "Счета.Объект.xbsl", "@Обработчик\nметод ПередЗаписью()\n" + _CALL + ";\n"))
+    assert len(d) == 1 and d[0].rule_id == RULE

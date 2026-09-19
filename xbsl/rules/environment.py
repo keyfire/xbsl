@@ -77,7 +77,9 @@ whole project back, and a warning would let the pass through.
 - code/component-in-server-context: a `Компонент.Член(...)` access from code compiled
   for the server – a `@НаСервере` method anywhere, or an unannotated method of a module
   whose environment includes the server. The component's type lives on the client, so
-  the server compilation refuses with "Переменная X не определена".
+  the server compilation refuses with "Переменная X не определена". A name the module's
+  own element declares is not read as a component: in an object module the bare name is
+  the attribute or the tabular section written in the yaml beside it.
 
 The call detection of the first check is exercised by its own tests: a client handler calling
 a @НаСервере @ДоступноСКлиента method is found by the same matching and correctly not flagged.
@@ -95,11 +97,11 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap, tokens
 from xbsl.parser import parse
-from xbsl.rules._syntax import code_tokens
+from xbsl.rules._syntax import code_tokens, element_pair_stem
 from xbsl.rules.enum_values import _shadowed_names
 from xbsl.rules.handlers import _handler_re, _IDENT_RE
-from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, object_kind, unreadable_object,
-                                    value_of)
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, element_own_names, object_kind,
+                                    unreadable_object, value_of)
 
 MESSAGES = {
     "code/client-available-unused.title": {
@@ -1195,10 +1197,13 @@ def _component_env_mapper(source: SourceFile) -> dict | None:
         name = value_of(data, "Имя", kind)
         if not isinstance(name, str):
             name = None
-        if role is None and name is None:
+        # What the element calls its OWN members: in its object module such a name is that
+        # member and nothing else, whatever a namesake elsewhere in the project is.
+        own = sorted(element_own_names(data))
+        if role is None and name is None and not own:
             return None
         return {"k": "y", "stem": _pair_stem(source.rel), "role": role,
-                "name": name, "kind": kind}
+                "name": name, "kind": kind, "own": own}
     if source.kind != "xbsl":
         return None
     toks = code_tokens(source)
@@ -1232,7 +1237,8 @@ def _component_env_mapper(source: SourceFile) -> dict | None:
             accesses.append([t.value, toks[i + 2].value, method, side, t.line, t.col])
     if not accesses:
         return None
-    return {"k": "x", "stem": _pair_stem(source.rel), "accesses": accesses}
+    return {"k": "x", "stem": _pair_stem(source.rel), "accesses": accesses,
+            "own_stem": element_pair_stem(source.rel)}
 
 
 @rule(
@@ -1249,16 +1255,22 @@ def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     rolled back to the previous build. Flagged are the accesses of `@НаСервере` methods
     anywhere and of unannotated methods in server or client-and-server modules; a name
     that also belongs to a non-component element somewhere in the project (a namesake
-    across subsystems) is left alone rather than guessed.
+    across subsystems) is left alone rather than guessed, and so is a name the module's
+    OWN element declares - an attribute or a tabular section answers to a bare name in its
+    object module, and a component of that spelling in another subsystem is not what the
+    line means.
     """
     components: set[str] = set()
     other_kinds: set[str] = set()
     roles: dict[str, str] = {}
+    own_names: dict[str, set[str]] = {}
     for fact in facts.values():
         if fact["k"] != "y":
             continue
         if fact["role"] is not None:
             roles[fact["stem"]] = fact["role"]
+        if fact.get("own"):
+            own_names.setdefault(fact["stem"], set()).update(fact["own"])
         name = fact.get("name")
         if name:
             if fact.get("kind") == "КомпонентИнтерфейса":
@@ -1273,8 +1285,9 @@ def component_in_server_context(facts: dict[str, dict]) -> Iterable[Diagnostic]:
             continue
         stem = fact["stem"]
         role = roles.get(stem) or roles.get(stem.rsplit(".", 1)[0])
+        own = own_names.get(fact.get("own_stem", stem), ())
         for root, member, method, side, line, col in fact["accesses"]:
-            if root not in judged:
+            if root not in judged or root in own:
                 continue
             runs_on = role if side == "module" else side
             if runs_on not in ("server", "both"):
