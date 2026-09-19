@@ -13,7 +13,7 @@ The default mode of the tool is checking sources. The full rule list lives on a 
 `--list-rules`, `--where` (data root, source and versions), `--select`/`--enable`/`--ignore` (by
 rule id, rule group – the part of the id before `/` – or tier letter), `--fix`,
 `--baseline`/`--write-baseline`, `--element-version`, `--data-dir`, `--lang`,
-`--format text|json|codeclimate`.
+`--format text|json|codeclimate`, `--summary`/`--compare`.
 
 `--fix` repairs the mechanical findings in place, then reports whatever is left. It trims trailing
 whitespace, corrects typography characters (em dash to en dash, `…` to `...`, curly quotes and
@@ -58,6 +58,36 @@ without reading its list: which rules fire, in which files, and whether an error
 MCP `lint_paths` tool carries the same keys, and with `compact` it answers with the summary, the
 error-level findings whole and - while there are no more than ten findings in all - the list itself,
 one line each. Past that the list gives way to the count and a word on how to read the rest.
+
+`--summary` prints the counts instead of the findings: a row per rule with the files it reached
+and its findings, and a line of totals below. `--compare FILE` prints the same on its first run
+and saves the run to the file. The next run with that file prints only what changed. The table
+keeps the rules whose findings moved, with their files and findings now and the number of
+findings that appeared and disappeared. The changed findings follow one per line while there are
+no more than ten of them. The full list of changes always stays in the file, ahead of the
+findings. When nothing changed, the report is a single line. Use it to compare the findings of a
+set of projects before and after a change to the rules:
+
+```sh
+xbsl demo-en --compare runs.json      # the first run saves the counts
+# ...a change...
+xbsl demo-en --compare runs.json
+# rule                 files  findings  appeared  disappeared
+# typography/ellipsis      0         0         0            1
+# whitespace/trailing      1         2         1            0
+# - demo-en/Acme/TasksEn/Main/TaskCard.xbsl:7:56: [typography/ellipsis] Ellipsis character U+2026 in a comment – use three dots '...'.
+# + demo-en/Acme/TasksEn/Main/TaskCard.xbsl:8:49: [whitespace/trailing] Trailing whitespace at the end of the line.
+# Against runs.json: 1 appeared, 1 disappeared. Findings: 4; rules with findings: 3; files with findings: 1 of 5
+```
+
+A finding is matched by the path given on the command line, the file under it, the line, the
+column, the rule and the text. The path is taken as typed, so `xbsl demo` run from two worktrees
+of a repository names the same finding the same way. A path that only one of the two runs
+checked is left out of the comparison. So is a rule that only one of them selected, when the two
+runs got different `--select`, `--ignore` or `--enable` flags. A separate line names each part
+left out and counts its findings. A run saved in another output language is refused, because the
+text of every finding would differ. When the projects keep a baseline of their own,
+`--no-baseline` keeps it from hiding a change.
 
 `xbsl --index PATH` dumps a JSON index of the project to stdout instead of linting. The index
 holds the objects, with their `TabularParts`, module-declared local types and the member families

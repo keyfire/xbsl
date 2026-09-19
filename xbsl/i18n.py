@@ -427,6 +427,25 @@ _CORE_MESSAGES = {
               "(shell redirection on Windows adds a BOM that breaks JSON parsing); "
               "applies to every --format value",
     },
+    "cli.help.summary": {
+        "ru": "вывести вместо находок их счёт по правилам: правило, число файлов и находок, "
+              "а под таблицей итог запуска",
+        "en": "print the counts by rule instead of the findings: the rule, its files and its "
+              "findings, with the totals of the run below",
+    },
+    "cli.help.compare": {
+        "ru": "сравнить находки с запуском, сохранённым в ФАЙЛ, и вывести только разницу: что "
+              "появилось и что исчезло; этот запуск сохраняется в тот же файл. Первый запуск "
+              "выводит счёт, как --summary",
+        "en": "compare the findings with the run saved in FILE and print only the difference: "
+              "what appeared and what disappeared; this run is saved to the same file. The "
+              "first run prints the counts, as --summary does",
+    },
+    "cli.summary-conflict": {
+        "ru": "--summary и --compare выводят свой отчёт и не сочетаются с {flag}",
+        "en": "--summary and --compare print a report of their own and do not combine "
+              "with {flag}",
+    },
     "cli.help.stdin": {
         "ru": "проверить один буфер из stdin (для интеграции с редактором); "
               "вид файла и путь в позициях задаёт --filename",
