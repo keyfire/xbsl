@@ -292,7 +292,7 @@ def test_mcp_meta_rename_object(mcp_module, tmp_path):
 
 @pytest.mark.needs_data  # the rename lints the project's modules, and the file rules read the data
 def test_mcp_meta_rename_object_names_the_files_outside_the_projects(mcp_module, tmp_path):
-    """A translation dictionary lies beside the project, and the rename edits its key too.
+    """A yaml beside the project binds to the object, and the rename edits it too.
 
     The short answer drops the file-by-file list, so the files no project owns are named
     apart: an edit there is the one a reader would not expect from renaming an object.
@@ -300,18 +300,15 @@ def test_mcp_meta_rename_object_names_the_files_outside_the_projects(mcp_module,
     mcp_module.meta_new_project(str(tmp_path), "vendor", "Приложение")
     subsystem = tmp_path / "vendor" / "Приложение" / "Основное"
     mcp_module.meta_new_object(str(subsystem), "Справочник", "Склады")
-    dictionary = tmp_path / "vendor" / "xbsl-translation" / "010-objects.yaml"
-    dictionary.parent.mkdir()
-    dictionary.write_text(
-        "version: 1\nlanguage: en\nphrases:\n    'Группа: =Склады.Имя': 'Group: =Warehouses.Name'\n",
-        encoding="utf-8",
-    )
+    sample = tmp_path / "vendor" / "samples" / "binding.yaml"
+    sample.parent.mkdir()
+    sample.write_text("Значение: =Склады.Наименование\n", encoding="utf-8")
 
     res = mcp_module.meta_rename_object(str(tmp_path), "Склады", "Хранилища")
 
     assert "error" not in res, res
-    assert "'Группа: =Хранилища.Имя'" in dictionary.read_text(encoding="utf-8")
-    assert res["outside_projects"] == [str(dictionary)]
+    assert "=Хранилища.Наименование" in sample.read_text(encoding="utf-8")
+    assert res["outside_projects"] == [str(sample)]
 
 
 def test_cli_rename_object_still_lists_every_file(capsys, tmp_path):

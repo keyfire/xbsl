@@ -66,6 +66,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`meta_rename_object` keeps comments and their translations together.** The name in a comment
+  now changes whole, quoted text included, in a module and in yaml alike. The translation
+  dictionary is not rewritten as a source: the translation of every changed comment line is
+  carried to its new key, and a note names the `tokens` pairs of the old name. The phrase key used
+  to change while the comment did not, and the pair lost its line. ([#119](https://github.com/keyfire/xbsl/pull/119))
 - **`meta_resource_references` finds a file named without its extension.** Seed data names a
   picture by its code, and a module adds the extension at run time. For such a file the tool
   answered `total: 0`, as for a dead one. A string that spells the file's key without the
