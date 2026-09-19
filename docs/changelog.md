@@ -25,6 +25,17 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
+## 2026-09-19 – 0.112.1
+
+### Fixed
+
+- **The yaml comment rules no longer put `##` on an instance of a project component in a list.**
+  With a comment on such a node the server does not apply the project, although the development
+  environment offers a place for it. The `yaml/plain-comment` autofix used to move a `#` block
+  there, and that broke the build. The node now counts as a place without a comment:
+  `yaml/doc-comment-misplaced` finds a `##` block on it and names the reason, and the note is to
+  be moved into the comment of the group. ([#112](https://github.com/keyfire/xbsl/pull/112))
+
 ## 2026-09-18 – 0.111.0, 0.112.0
 
 ### Added
