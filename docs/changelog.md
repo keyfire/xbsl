@@ -29,6 +29,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`lint_paths` compares with the previous call, like `--compare`.** The `compare` parameter
+  names the file. The first call saves the run, and each later one answers with the findings that
+  appeared and disappeared and a row per changed rule, all as data. The difference used to be
+  available only in the CLI, and agents check projects through MCP more often. ([#122](https://github.com/keyfire/xbsl/pull/122))
 - **`--summary` and `--compare`: counts by rule and the difference with the previous run.**
   `--summary` prints a row per rule with its files and findings instead of the findings.
   `--compare FILE` saves the run, and the next run with that file prints only the findings that
@@ -66,6 +70,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
+  path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
+  as left out. Paths are now paired by the folder they name, and by spelling when the folders
+  differ, as with two worktrees of one repository. ([#122](https://github.com/keyfire/xbsl/pull/122))
 - **`prune` in `translate_unused` and `translate_redundant` removes everything the filters
   select.** It used to remove only the page shown in the answer, so a call with `limit: 5` left
   most orphans behind. The page now shapes only the list, and `pruned.keys` says how many pairs
