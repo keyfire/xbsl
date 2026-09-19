@@ -14,6 +14,7 @@ The guide is split by task. The [README](https://github.com/keyfire/xbsl/blob/ma
 | [Checking sources](/linting) | the flags of a run, what the deeper rules rely on, the baseline, CI |
 | [Rules](/RULES) | the full list of checks, with severities and scope |
 | [Metadata scaffolding](/scaffolding) | objects, attributes, routes and forms through the engine; code templates |
+| [Comments in yaml](/yaml-comments) | where a note in an element description survives the visual editor, and the rules that check it |
 | [Servers and plugins](/servers) | the LSP server, the MCP server, the web panel, plugins of your own |
 | [Platform data](/platform-data) | the generated datasets, the documentation index, the diff between two versions |
 | [Translating a project](/translation) | rewriting the sources into English spellings: the dictionary, the coverage, the CI check |
