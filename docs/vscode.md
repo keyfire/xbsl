@@ -16,6 +16,13 @@ tree, the platform docs panel, metadata scaffolding, debugging and a deploy butt
 > Want to try everything on a toy project? Open the [`demo/`](https://github.com/keyfire/xbsl/tree/main/demo)
 > folder of the repository. It is a tiny 1C:Element app with a form and a handful of deliberate findings.
 
+YAML buffer checks are limited to the configured project root and its translation dictionary.
+Quick fixes are available for YAML as well as modules. Saving invalidates pending buffer results;
+a late response cannot overwrite the newer workspace report or its fixes.
+
+The form wireframe displays `UsualCommands` in the footer and the `Italic`, `Underline` and
+`Strikeout` flags of an absolute font. Tooltips use the property spellings of the source form.
+
 ## How it works
 
 The extension is a thin client of the [xbsl](https://github.com/keyfire/xbsl) engine. In the
@@ -27,7 +34,7 @@ checks and scaffolding run through the CLI:
 
 In CLI mode two producers feed one diagnostic collection. The buffer state decides which one runs.
 
-- **While you type.** On a dirty buffer of a module or a translation dictionary file, the extension
+- **While you type.** On a dirty module, project YAML or translation dictionary buffer, the extension
   runs `xbsl --stdin --filename <name> --format json` over the live text. Only per-file rules take
   part, so the answer comes back fast; the run itself is debounced. Its result replaces the
   diagnostics of *that buffer only*.

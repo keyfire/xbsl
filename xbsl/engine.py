@@ -648,6 +648,9 @@ def run_sources(
     # Data installed while an editor or an MCP server keeps running is picked up here: a read
     # that found nothing is repeated once per pass rather than once per rule and file.
     dataset.recheck_data()
+    # And the other half of the same bargain: a cache whose stamp reads the bytes it guards
+    # takes that stamp once here instead of once per file (the project dictionary does).
+    dataset.begin_pass()
     diags: list[Diagnostic] = []
     active = active_rules(select, ignore, enable)
     # A project rule has no single file to blame, so its crash is anchored to the first source.

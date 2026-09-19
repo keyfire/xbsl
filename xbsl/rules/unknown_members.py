@@ -43,7 +43,7 @@ from xbsl.diagnostics import Diagnostic, Severity
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import linemap
 from xbsl.parser import parse
-from xbsl.rules._syntax import YAML_NAME_RE, pair_yaml_names
+from xbsl.rules._syntax import YAML_NAME_RE, element_pair_stem, pair_yaml_names
 from xbsl.rules.semantics import _file_local_types, _object_name_fast
 from xbsl.rules.undefined_names import _IMPLICIT
 
@@ -667,8 +667,8 @@ def _member_types() -> dict[str, dict[str, str]]:
 
 
 def _pair_key(rel: str) -> str:
-    """The key that joins a module to its yaml: the path without the extension."""
-    return rel.replace("\\", "/").rsplit(".", 1)[0].lower()
+    """The key that joins a module to the yaml of the element it belongs to."""
+    return element_pair_stem(rel).lower()
 
 
 class _Typed(NamedTuple):

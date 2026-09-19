@@ -13,6 +13,10 @@ the object_members dictionary is built: object kind (by the English template nam
 names of the spawned members (the second segment of the Russian title). Placeholder members
 ("{ИмяМетрики}", Latin SOAP templates) are skipped, and so are templates that name no kind -
 which ones those are is decided by _template_kinds, and every one of them is printed.
+The same pages also describe the spawned types themselves, and generated_members keeps that:
+"<вид>.<хвост>" -> the members the platform gives an element of the kind ("Справочник.Объект"
+answers what an object module may call by a bare name). A tail that still holds a placeholder
+("СхемаДанных.{ИмяДокумента}.Объект") names no type and is left out.
 
 From interface component pages (a type is a component when the "Иерархия типа" section lists
 Стд::Интерфейс::Компонент among the bases; plus the page of Компонент itself) the
@@ -100,9 +104,19 @@ _H3_RE = re.compile(r"<h3[^>]*>(.*?)</h3>", re.S)
 _LINK_RE = re.compile(r"<a[^>]*>(.*?)</a>", re.S)
 _TAG_RE = re.compile(r"<[^>]+>")
 _JUNK_RE = re.compile(r"[\x00-\x1f​﻿]")  # control characters and Docusaurus anchors
-# Underscores are part of member names: the constant-style properties (Символы.НОВАЯ_СТРОКА,
-# ВОЗВРАТ_КАРЕТКИ, НЕРАЗРЫВНЫЙ_ПРОБЕЛ) are documented and must not be dropped.
-_PROP_NAME_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9_]*$")
+# A member name. Underscores are part of it: the constant-style properties
+# (`Символы.НОВАЯ_СТРОКА`, `ВОЗВРАТ_КАРЕТКИ`, `НЕРАЗРЫВНЫЙ_ПРОБЕЛ`) are documented and must
+# not be dropped. The opening letter may be lowercase: `ВидПлатформыКлиента.iOS` is spelled
+# that way on its page, and demanding a capital dropped the only such member of the whole
+# distribution while the compiler accepts the code that reads it. What the check earns its
+# place on is the headings that carry no name at all - an empty one (a Docusaurus anchor link
+# and nothing else), the `(Переопределение)` marker a page prints in place of a name, and the
+# `{ИмяПоля}` placeholder of a generated member.
+_MEMBER_NAME_RE = re.compile(r"^[А-Яа-яЁёA-Za-z][А-Яа-яЁёA-Za-z0-9_]*$")
+# A type name: a page title, a base of the hierarchy, a type parameter. Those do open with a
+# capital, and the check tells them from the titles that name no single type - a package page
+# (`Стд::Интерфейс`) or a facet (`Справочник.Объект`).
+_TYPE_NAME_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9_]*$")
 # An entity type facet: "Пользователи.Объект", "ДвоичныйОбъект.Ссылка" - the record and
 # reference members live on these pages, not on the type's own (manager) page.
 _FACET_TITLE_RE = re.compile(r"^[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*\.[А-ЯЁA-Z][А-Яа-яЁёA-Za-z0-9]*$")
@@ -199,7 +213,7 @@ def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
     if not mt or not ma:
         return None
     title = mt.group(1).split("|")[0].strip()
-    if not title or not _PROP_NAME_RE.match(title):
+    if not title or not _TYPE_NAME_RE.match(title):
         return None
     sections = _H2_OPEN_RE.split(ma.group(1))
     is_component = entry == COMPONENT_PAGE
@@ -212,12 +226,12 @@ def component_props(entry: str, raw: str) -> tuple[str, set[str]] | None:
         elif head.startswith("Свойства"):
             for m in _H3_RE.finditer(section):
                 name = _plain_text(m.group(1))
-                if _PROP_NAME_RE.match(name):
+                if _MEMBER_NAME_RE.match(name):
                     props.add(name)
         elif head.startswith("Список унаследованных свойств"):
             for m in _LINK_RE.finditer(section):
                 name = _plain_text(m.group(1))
-                if _PROP_NAME_RE.match(name):
+                if _MEMBER_NAME_RE.match(name):
                     props.add(name)
     return (title, props) if is_component else None
 
@@ -262,7 +276,7 @@ def page_members(raw: str, *, inherited: bool = True) -> tuple[set[str], set[str
             if target is None:
                 continue
             found = (_plain_text(m.group(1)) for m in _H3_RE.finditer(section))
-        target.update(name for name in found if _PROP_NAME_RE.match(name))
+        target.update(name for name in found if _MEMBER_NAME_RE.match(name))
     # A name the page ALSO lists as a property or a method is not an event, whatever the
     # heading it appeared under. Some pages state the inherited PROPERTIES under the
     # inherited-events heading (the links there point at the property anchors of the base) -
@@ -287,7 +301,7 @@ def page_type_params(raw: str) -> list[str]:
     if m is None:
         return []
     params = [p.strip() for p in html.unescape(m.group(2)).split(",")]
-    return [p for p in params if _PROP_NAME_RE.match(p)]
+    return [p for p in params if _TYPE_NAME_RE.match(p)]
 
 
 #: How the documentation marks a member kept for compatibility: the annotation opens its
@@ -322,7 +336,7 @@ def _member_chunks(section: str):
     # _H3_RE captures the heading text: parts = [before, name1, body1, name2, body2...]
     for k in range(1, len(parts) - 1, 2):
         name = _plain_text(parts[k])
-        if _PROP_NAME_RE.match(name):
+        if _MEMBER_NAME_RE.match(name):
             yield name, bool(_STRUCK_RE.search(parts[k])), parts[k + 1]
 
 
@@ -371,7 +385,7 @@ def method_type_params(signature: str) -> tuple[str, list[str]]:
         head = signature.strip().split("(", 1)[0].strip()
         return head, []
     params = [p.strip() for p in m.group(2).split(",")]
-    return m.group(1), [p for p in params if _PROP_NAME_RE.match(p)]
+    return m.group(1), [p for p in params if _TYPE_NAME_RE.match(p)]
 
 
 def page_bases(raw: str) -> list[str]:
@@ -399,7 +413,7 @@ def page_bases(raw: str) -> list[str]:
             # alone as its ancestor, and the result types of everything it inherits (`First`,
             # `Get`) were lost with it.
             root = html.unescape(name).split("<", 1)[0].strip()
-            if _PROP_NAME_RE.match(root) and root not in bases:
+            if _TYPE_NAME_RE.match(root) and root not in bases:
                 bases.append(root)
         return bases
     return []
@@ -797,7 +811,7 @@ def page_member_forms(raw: str) -> dict[str, list[dict[str, str | bool]]]:
                     stop = _H4_OPEN_RE.search(tail)
                     found = _REPLACEMENT_RE.search(tail[:stop.start()] if stop else tail)
                     replacement = _plain_text(found.group(1)) if found else ""
-                    if _PROP_NAME_RE.match(replacement):
+                    if _MEMBER_NAME_RE.match(replacement):
                         form["replacement"] = replacement
                 out.setdefault(name, []).append(form)
                 break  # one signature per heading: the blocks after it are examples
@@ -825,7 +839,7 @@ def package_members(raw: str) -> set[str]:
             continue
         for m in list(_H2_RE.finditer(section)) + list(_H3_RE.finditer(section)):
             name = _plain_text(m.group(1))
-            if _PROP_NAME_RE.match(name):
+            if _MEMBER_NAME_RE.match(name):
                 out.add(name)
     return out
 
@@ -858,7 +872,7 @@ def package_member_availability(raw: str) -> dict[str, str]:
         # parts = [before, name1, body1, name2, body2, ...]
         for k in range(1, len(parts) - 1, 2):
             name = _plain_text(parts[k])
-            if not _PROP_NAME_RE.match(name):
+            if not _MEMBER_NAME_RE.match(name):
                 continue
             m = _AVAILABILITY_RE.search(parts[k + 1])
             if m:
@@ -901,12 +915,14 @@ def _merge_signatures(into: dict[str, list[str]], found: dict[str, list[str]]) -
 
 def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
-    the global context with per-name availability, managers, facets, member types, bases,
-    constructor kinds, type parameters, the forms of deprecated members and the members whose
-    overloads were folded into a head - the tuple main() unpacks."""
+    the global context with per-name availability, managers, facets, the members of the types a
+    kind generates, member types, bases, constructor kinds, type parameters, the forms of
+    deprecated members and the members whose overloads were folded into a head - the tuple
+    main() unpacks."""
     car = _distro.find_car(dist)
     names: set[str] = set()
     members: dict[str, set[str]] = {}
+    generated: dict[str, dict[str, set[str]]] = {}
     components: dict[str, set[str]] = {}
     types: dict[str, dict[str, set[str]]] = {}
     globals_: set[str] = set()
@@ -944,7 +960,7 @@ def extract(dist: Path) -> tuple:
             # One key per type - the Russian title (or the Latin one for a type that has no
             # Russian name). The English spelling is not stored: the loader adds it by terms.json,
             # which pairs the two forms. So members, bases and facets are kept once, not twice.
-            key = (title if _PROP_NAME_RE.match(title) else "") or eng or ""
+            key = (title if _TYPE_NAME_RE.match(title) else "") or eng or ""
             if key:
                 flags = checked_methods.setdefault(key, {})
                 for method, marked in page_checked_return_methods(raw).items():
@@ -1053,6 +1069,28 @@ def extract(dist: Path) -> tuple:
             if len(segs) < 2 or not _CYRILLIC_NAME_RE.match(segs[1]):
                 continue  # a placeholder member or a Latin template
             members.setdefault(kind, set()).add(segs[1])
+            # The page describes the generated type, not only its name, and what it describes is
+            # what the platform GIVES an element of the kind: the members of `Имя.Объект` are the
+            # bare names of an object module (`IsNew`, `Write`, `DeletionMark`), those of
+            # `Имя.Данные` and `Имя.ПараметрыЗаписи` are the fields of the write handler's
+            # parameters. Reading the name alone left every one of them out of the data, and the
+            # rules made do with a hand-written table of four names.
+            tail = ".".join(segs[1:])
+            if _TEMPLATE_PLACEHOLDER_RE.search(tail):
+                # `СхемаДанных.{ИмяДокумента}.Объект` of an exchange plan: the key would carry a
+                # placeholder and name no type at all.
+                continue
+            props, methods, events = page_members(raw)
+            if props or methods or events:
+                # A kind with several flavours has a template per flavour (`AccessKey`:
+                # `Recompute` on the computable one, `Grant` on the grantable one) and the yaml
+                # spells the flavour as a property, so a consumer given the kind alone cannot tell
+                # them apart. The sets join - the manager members of the same three templates are
+                # joined just above for the same reason.
+                slot = generated.setdefault(f"{kind}.{tail}", _empty_member_slot())
+                slot["properties"] |= props
+                slot["methods"] |= methods
+                slot["events"] |= events
     names |= TOPIC_ONLY_TYPES
     with zipfile.ZipFile(car) as z:
         _apply_deprecation_modes(z, deprecated, english_keys)
@@ -1092,8 +1130,8 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-            folds, expand_checked_return_methods(checked_methods, bases))
+            facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+            deprecated, folds, expand_checked_return_methods(checked_methods, bases))
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1507,8 +1545,8 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, returns, signatures, bases, ctors, type_params, method_params, deprecated,
-     folds, checked_methods) = extract(dist)
+     facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+     deprecated, folds, checked_methods) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1537,7 +1575,9 @@ def main(argv=None) -> int:
                     " Стд::Интерфейс::Компонент)"
                     " + СОБСТВЕННЫЕ члены типов (унаследованные разворачиваются по bases"
                     " при загрузке), под обеими формами имени"
-                    " + типы, описанные только в topics-страницах (TOPIC_ONLY_TYPES)",
+                    " + типы, описанные только в topics-страницах (TOPIC_ONLY_TYPES)"
+                    " + члены самих порождаемых типов, разделом generated_members"
+                    " (Вид.Объект, Вид.Данные, Вид.ПараметрыЗаписи)",
         },
         "names": sorted(names),
         "object_members": {k: sorted(v) for k, v in sorted(members.items())},
@@ -1563,6 +1603,13 @@ def main(argv=None) -> int:
         # Entity type facets (Пользователи.Объект, ДвоичныйОбъект.Ссылка): the record and
         # reference members that do not land on the type's own page.
         "facet_members": {k: _members_json(v) for k, v in sorted(facets.items())},
+        # Members of the types the platform GENERATES for an element of a kind, keyed
+        # `<вид>.<хвост>` after the template page that describes them: `Справочник.Объект` says
+        # what an object module may call by a bare name, `Справочник.Данные` and
+        # `Справочник.ПараметрыЗаписи` what the write handler's parameters carry. Keyed by KIND,
+        # not by type: the element's own name stands where the template prints a placeholder.
+        # Missing in older datasets - a consumer keeps whatever it did without it.
+        "generated_members": {k: _members_json(v) for k, v in sorted(generated.items())},
         # Result type roots of members (page signatures: method returns and property types).
         "member_types": {k: dict(sorted(v.items())) for k, v in sorted(own_returns.items())},
         # Method signatures as the page prints them, one string per overload: what the result
@@ -1623,6 +1670,8 @@ def main(argv=None) -> int:
           f" (со свойствами {sum(1 for v in types.values() if v['properties'])},"
           f" с методами {sum(1 for v in types.values() if v['methods'])})")
     print(f"  фасетов сущностных типов: {len(facets)}")
+    print(f"  порождаемых типов с членами: {len(generated)}"
+          f" (членов: {sum(len(s) for v in generated.values() for s in v.values())})")
     print(f"  типов с типами членов: {len(returns)}"
           f" (членов с типом: {sum(len(v) for v in returns.values())})")
     print(f"  типов с сигнатурами методов: {len(signatures)}"

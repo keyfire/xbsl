@@ -97,9 +97,10 @@ from xbsl.rules._syntax import (
 )
 from xbsl.rules.environment import _pair_stem
 from xbsl.rules.resources import _resource_refs, _resource_words
-from xbsl.rules.undefined_names import _interpolations, _section_names
+from xbsl.rules.undefined_names import _interpolations
 from xbsl.rules.yaml_imports import _interpolation_bodies, _layout_fact, _layout_from, _module_imports
-from xbsl.rules.yaml_schema import _HAVE_YAML, _parsed, object_kind, unreadable_object, value_of
+from xbsl.rules.yaml_schema import (_HAVE_YAML, _parsed, element_own_names, object_kind,
+                                    unreadable_object, value_of)
 from xbsl.rules.yaml_types import _key_spellings
 
 MESSAGES = {
@@ -485,7 +486,7 @@ def _unused_import_mapper(source: SourceFile) -> dict | None:
             "kind": kind,
             "members": members,
             "base": _base_type(data),
-            "enum": sorted(_section_names(data)) if kind == _ENUM_KIND else [],
+            "enum": sorted(element_own_names(data)) if kind == _ENUM_KIND else [],
         }
     if source.kind != "xbsl" or is_query_file(source.path):
         return None

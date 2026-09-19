@@ -126,6 +126,28 @@ def recheck_data() -> None:
         hook()
 
 
+#: Caches whose freshness is worth establishing once per pass rather than once per file.
+#: A stamp that reads the BYTES of what it guards answers truthfully and costs a read, so a
+#: cache kept by one pays that read again for every file the pass touches. A pass is short,
+#: and an edit arrives between passes, so taking the state at the start of one is as honest.
+_PASS_HOOKS: list = []
+
+
+def register_pass(hook) -> None:
+    """Register a callable to run at the start of every pass of the engine."""
+    _PASS_HOOKS.append(hook)
+
+
+def begin_pass() -> None:
+    """Announce the start of a pass: whatever was established for the previous one goes.
+
+    Called next to `recheck_data` and for the same audience - an editor and an MCP server live
+    between passes, and a fact taken during one must not answer for the next.
+    """
+    for hook in _PASS_HOOKS:
+        hook()
+
+
 #: Modification stamps of the files behind the caches: (root, version, name) -> st_mtime_ns.
 #: A file regenerated IN PLACE (tools/extract.py over the same root) must not keep answering
 #: from the process cache: the LSP and MCP servers live long, and a stale catalog used to be

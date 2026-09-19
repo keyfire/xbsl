@@ -36,13 +36,15 @@ from __future__ import annotations
 import difflib
 import re
 from collections.abc import Iterable
+from functools import lru_cache
 
-from xbsl import dataset, i18n, parser as P, terms
+from xbsl import dataset, i18n, metamodel, parser as P, terms
 from xbsl.diagnostics import Diagnostic, Severity
-from xbsl.rules.yaml_schema import object_kind, value_of
 from xbsl.engine import SourceFile, rule
 from xbsl.lexer import _IDENT_RE, _skip_interpolation, linemap
+from xbsl.rules._syntax import OBJECT_MODULE_SUFFIXES, element_pair_stem
 from xbsl.rules.semantics import _object_name_fast, _parsed, _stdlib_names
+from xbsl.rules.yaml_schema import element_own_names, object_kind, value_of
 
 MESSAGES = {
     "code/undefined-name.title": {
@@ -111,9 +113,119 @@ _UNDOCUMENTED = frozenset({
 #
 # Every one of those spellings compiled into an error, and the control line of each module
 # errored too - so the answers were not the silence of an uncompiled module.
+#
+# The table is now the FALLBACK rather than the whole answer: the documentation describes the
+# object type of every kind on a template page of its own, and the extractor keeps those
+# members under `generated_members`. A dataset that carries the section answers for the kind at
+# hand - the members of a catalog object are not those of a settings storage - and this table
+# covers what it does not: an older dataset, and a kind whose object type the help omits.
+#
+# The probe and the documentation disagree on one name. The probe read IsNew as absent; the
+# help lists `IsNew` among the methods of the object type, and a product in production calls
+# it by a bare name in five modules. Two sources against one, so the data wins - and if the
+# probe is right after all, the finding comes back on regeneration rather than silently.
 _ENTITY_COMMON = frozenset({
     "Ссылка", "ПометкаУдаления", "Записать", "Удалить",
 })
+
+#: The tail of the generated type an object module belongs to: `<Имя>.Объект.xbsl` is the
+#: module of `<Имя>.Объект`, so its members sit under `<вид>.Объект` in generated_members.
+_OBJECT_FACET = "Объект"
+
+#: Both spellings of a boolean, as a yaml may carry it: the loader reads `True`/`true` as the
+#: python value, a Russian file writes the word, and the metamodel writes its defaults in the
+#: lower-case English form.
+_TRUE_FORMS = frozenset({"Истина", "True", "true"})
+_FALSE_FORMS = frozenset({"Ложь", "False", "false"})
+
+#: The two module scopes a conditional row speaks about: the object module of an element
+#: (`<Имя>.Объект.xbsl`, names from `<вид>.Объект`) and its manager module (`<Имя>.xbsl`, names
+#: from `manager_members` of the kind). One setting can decide in both.
+_OBJECT_SCOPE = "obj"
+_MANAGER_SCOPE = "manager"
+
+#: Names the platform gives to SOME elements of a kind only. The template pages the data is
+#: read from describe ONE example element, and everything switched on in that example reaches
+#: the data as the contract of the whole kind - so the help has to be read for each of them and
+#: the element's own yaml asked.
+#:
+#: A row is (the property that decides, the value that switches the names ON, the names of the
+#: object module, the names of the manager module). The kinds a row speaks for are the kinds
+#: whose metamodel record declares that property, so no row carries a list of its own:
+#: `Recompute` reaches an access key, which has `ManualGrant`, and leaves a privilege alone,
+#: which recomputes too but has no such property. A kind that declares nothing of the sort is
+#: not judged at all - a settings storage keeps every name it had.
+_CONDITIONAL_MEMBERS = (
+    # "Появляется только у иерархических справочников" - xbql/Std/CatalogName, which spells
+    # out which ones: "справочник с установленным значением Истина для свойства Иерархический".
+    # The default is `False`, so without the gate the name would be waved through on most
+    # catalogs of a project.
+    ("Иерархический", "Истина", ("Родитель",), ()),
+    # "Поле присутствует только у справочников с режимом удаления ПометкаУдаления" - the same
+    # sentence for both fields on the catalog, document and exchange-plan pages of xbql. The
+    # `DeletionMark` of the fallback table above is the same fact and rides along.
+    ("РежимУдаления", "ПометкаУдаления", ("МоментПометкиУдаления", "ПометкаУдаления"), ()),
+    # An access key is granted by hand or computed, and the help keeps the two apart as two
+    # types: `GrantableAccessKey` revokes, `ComputableAccessKey` recomputes, and so do their
+    # instances. In yaml it is ONE kind, so both template pages fold into `КлючДоступа.Объект`
+    # and into the manager members of the kind, and each flavour ends up carrying the methods
+    # of the other. A probe on a stand measured all four corners: to the name of the other
+    # flavour the compiler answers `Unknown method`, in either module. Which flavour a key is,
+    # the help says nowhere - the probe settled that too, and the answer is this property and
+    # nothing else.
+    ("РучнаяВыдача", "Истина", ("Выдать", "Отозвать"), ("ОтозватьКлючи",)),
+    ("РучнаяВыдача", "Ложь", ("Пересчитать",), ("ПересчитатьКлючи",)),
+)
+
+
+@lru_cache(maxsize=None)
+def _on_forms(value: str) -> frozenset[str]:
+    """Every spelling of the value that switches a row on.
+
+    A boolean is spelled three ways at once; an enumeration value takes its English form from
+    the term dictionary, so an English project is judged by the same row.
+    """
+    if value in _TRUE_FORMS:
+        return _TRUE_FORMS
+    if value in _FALSE_FORMS:
+        return _FALSE_FORMS
+    english = terms.english(value, "enums") or terms.common_english(value)
+    return frozenset({value} | ({english} if english else set()))
+
+
+dataset.register_reset(_on_forms.cache_clear)
+
+
+def _withheld_members(data: dict, kind: str | None) -> dict[str, list[str]]:
+    """Names THIS element's own settings do not give it, per module scope.
+
+    Silence is the answer wherever nothing is settled: a kind without the property, a value the
+    file spells in a way nothing recognises. Widening a scope costs a missed finding, narrowing
+    it wrongly costs an error on code that compiles - and that is the defect being repaired.
+
+    The branch that falls back on the default of the property is sound but rarely walked: under
+    the current compatibility mode an access key that names no `ManualGrant` does not apply at
+    all, and that refusal is a finding of another rule. Only a project held to an older mode
+    reaches the default.
+    """
+    withheld: dict[str, set[str]] = {_OBJECT_SCOPE: set(), _MANAGER_SCOPE: set()}
+    props = metamodel.properties(kind) if kind else {}
+    for prop, on_value, own, manager in _CONDITIONAL_MEMBERS:
+        record = props.get(prop)
+        if not record:
+            continue  # the kind has no such setting - nothing to judge by
+        written = value_of(data, prop, kind)
+        if written is None:
+            written = record.get("default")
+        if written is True:
+            written = "Истина"
+        elif written is False:
+            written = "Ложь"
+        if isinstance(written, str) and written not in _on_forms(on_value):
+            withheld[_OBJECT_SCOPE].update(own)
+            withheld[_MANAGER_SCOPE].update(manager)
+    return {scope: sorted(names) for scope, names in withheld.items()}
+
 
 # The yaml sections whose items become bare names in the object modules.
 _FIELD_SECTIONS = (
@@ -121,44 +233,13 @@ _FIELD_SECTIONS = (
     "ТабличныеЧасти", "События", "Поля",
 )
 
-#: The object module of an entity, in both spellings the platform accepts: an English project
-#: writes `<Name>.Object.xbsl` where a Russian one writes `<Имя>.Объект.xbsl` (see
-#: scaffold.object_module_path), and either pairs with `<Имя>.yaml`. Recognising only the
-#: Russian tail sent the pair lookup to `<Name>.Object.yaml`, which no project has - the module
-#: was left without the attributes of its own object, and every one of them was reported
-#: undefined.
-_OBJECT_MODULE_SUFFIXES = (".Объект.xbsl", ".Object.xbsl")
-
 
 def _pair_key(rel: str) -> tuple[str, str, str]:
     """(directory, paired yaml file name, module file name): X.xbsl -> X.yaml,
     X.Объект.xbsl / X.Object.xbsl -> X.yaml."""
     parts = rel.replace("\\", "/").rsplit("/", 1)
     directory = parts[0] if len(parts) == 2 else ""
-    stem = parts[-1]
-    for suffix in (*_OBJECT_MODULE_SUFFIXES, ".xbsl", ".yaml"):
-        if stem.endswith(suffix):
-            stem = stem[: -len(suffix)]
-            break
-    return directory, stem + ".yaml", parts[-1]
-
-
-def _section_names(data: dict) -> set[str]:
-    names: set[str] = set()
-    sections = list(_FIELD_SECTIONS)
-    if object_kind(data) == "Перечисление":
-        # In the module of an enumeration its own items are addressed WITHOUT the type
-        # qualifier - the canonical `выбор этот / когда Низкий` of the platform's own demo
-        # (ПриоритетЗадачи of the CRM example). Read for this kind only: elsewhere `Элементы`
-        # is a collection of components, whose names belong to another scope.
-        sections.append("Элементы")
-    for section in sections:
-        items = value_of(data, section)
-        if isinstance(items, list):
-            for item in items:
-                if isinstance(item, dict) and isinstance(value_of(item, "Имя"), str):
-                    names.add(value_of(item, "Имя"))
-    return names
+    return directory, element_pair_stem(parts[-1]) + ".yaml", parts[-1]
 
 
 def _base_type_root(data: dict) -> str | None:
@@ -272,7 +353,11 @@ def _undef_mapper(source: SourceFile) -> dict | None:
             "fast_name": fast_name,
             "name": name if isinstance(name, str) else None,
             "element_kind": kind if isinstance(kind, str) else None,
-            "sections": sorted(_section_names(data)),
+            "sections": sorted(element_own_names(data)),
+            # Names of the kind that this element's own settings switch off, per module
+            # scope - a catalog that is not hierarchical has no `Parent`. Read here, where
+            # the parsed yaml is at hand, and subtracted where each scope is built.
+            "withheld": _withheld_members(data, kind),
             "base": _base_type_root(data),
             "ext": isinstance(imports, list)
                    and any(isinstance(i, str) and "::" in i for i in imports),
@@ -301,7 +386,7 @@ def _undef_mapper(source: SourceFile) -> dict | None:
         "k": "x",
         "dir": directory,
         "pair": pair_file,
-        "obj": source.rel.endswith(_OBJECT_MODULE_SUFFIXES),
+        "obj": source.rel.endswith(OBJECT_MODULE_SUFFIXES),
         "cands": cands,
         "pool": hint_pool,
     }
@@ -425,6 +510,7 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
     type_members = catalog.get("type_members", {})
     object_members = catalog.get("object_members", {})
     manager_members = catalog.get("manager_members", {})
+    generated_members = catalog.get("generated_members", {})
 
     # The project model from the yaml facts: names, the (directory, file) map for the
     # module pairing, the by-name map for the Наследует chain of interface components.
@@ -452,17 +538,26 @@ def undefined_name(facts: dict[str, dict]) -> Iterable[Diagnostic]:
                 continue  # an external namespace in the yaml Импорт - the same blind spot
             kind = pair["element_kind"]
             if fact["obj"]:
-                # an entity module: the attributes plus the standard fields and write methods
-                extras = set(pair["sections"]) | _both_spellings(set(_ENTITY_COMMON))
+                # An entity module: the attributes of the object, plus what the platform gives
+                # the object type of this kind (the template page of `<вид>.Объект`), plus the
+                # probe-confirmed table for a dataset or a kind the pages say nothing about.
+                given = generated_members.get(f"{kind}.{_OBJECT_FACET}") or {}
+                names = (set(_ENTITY_COMMON)
+                         | set(given.get("properties", ())) | set(given.get("methods", ())))
+                # Withheld BEFORE the spellings are added, or the English form of a name the
+                # element does not have would stay in scope on its own.
+                extras = set(pair["sections"]) | _both_spellings(
+                    names - set(pair["withheld"][_OBJECT_SCOPE]))
             elif kind == "КомпонентИнтерфейса":
                 extras = _component_scope_facts(pair, by_name, type_members, set())
             else:
-                # a data-kind manager module / common module: the yaml fields plus the manager members
-                extras = set(pair["sections"])
-                extras |= _both_spellings(
-                    set(object_members.get(kind, ()))
-                    | set(dataset.manager_member_names(manager_members.get(kind)))
-                )
+                # A manager module of a data kind, or a common module: the yaml fields plus the
+                # manager members, less what this element's settings switch off - the manager of
+                # an access key carries the methods of BOTH flavours, as its object type did.
+                names = (set(object_members.get(kind, ()))
+                         | set(dataset.manager_member_names(manager_members.get(kind))))
+                extras = set(pair["sections"]) | _both_spellings(
+                    names - set(pair["withheld"][_MANAGER_SCOPE]))
         for line, col, name, sign in fact["cands"]:
             if name in project_names or name in extras:
                 continue

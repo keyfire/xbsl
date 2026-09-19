@@ -19,9 +19,13 @@ read as sources they gave 826 "gaps" on a project whose sources are covered to t
 Off by default and silent without a dictionary: the rule only means something for a project
 that translates its sources, and an `xbsl-translation` directory (or file) next to or above
 the project is what says so. It is also the most expensive rule of the set - every file goes
-through the whole translation pass, which doubles the run on a live project - so it is asked
-for rather than paid for on every save: `--enable conventions/missing-translation` in the CLI,
-the `enable` parameter of the MCP lint tool, the Linter: Enable setting in the editor.
+through the whole translation pass, which adds about a quarter to the time of a live project -
+so it is asked for rather than paid for on every save: `--enable conventions/missing-translation`
+in the CLI, the `enable` parameter of the MCP lint tool, the Linter: Enable setting in the editor.
+
+The dictionary itself is taken once per pass (`dictionary.load_for_pass`) rather than once per
+checked file: the stamp that says whether it is still current reads the bytes of every one of
+its files, and a project that keeps a hundred and fifty of them paid that read per source.
 """
 
 from __future__ import annotations
@@ -70,13 +74,14 @@ MESSAGES = {
     },
     "conventions/missing-translation.off": {
         "ru": "имеет смысл только для проекта, который переводит исходники (см. xbsl translate), "
-              "и стоит дорого: на живом проекте проверка удваивается по времени (10 с -> 20 с), потому что "
-              "каждый файл проходит перевод целиком. Включайте флагом --enable (в MCP – параметр "
-              "enable), когда словарь и нужен",
+              "и стоит дорого: на живом проекте в 1267 файлов проверка удлиняется примерно на "
+              "четверть (91 с -> 112 с), потому что каждый файл проходит перевод целиком. "
+              "Включайте флагом --enable (в MCP – параметр enable), когда словарь и нужен",
         "en": "only means something for a project that translates its sources (see xbsl translate), "
-              "and it is expensive: on a live project the run doubles (10s -> 20s), since every "
-              "file goes through the whole translation pass. Turn it on with --enable (the MCP "
-              "tool takes an `enable` parameter) when the dictionary is what you are asking about",
+              "and it is expensive: on a live project of 1267 files the check grows by about a "
+              "quarter (91s -> 112s), since every file goes through the whole translation pass. "
+              "Turn it on with --enable (the MCP tool takes an `enable` parameter) when the "
+              "dictionary is what you are asking about",
     },
 }
 i18n.register(MESSAGES)
@@ -167,7 +172,10 @@ def _gaps_mapper(source: SourceFile) -> dict | None:
     from xbsl.translation import code, dictionary, names, reporting, yamlfile
 
     try:
-        loaded = dictionary.load_cached(found)
+        # Once per pass, not once per file: the freshness stamp reads the bytes of every
+        # dictionary file, and a dictionary of a hundred and fifty of them was read again for
+        # every source of the project.
+        loaded = dictionary.load_for_pass(found)
     except dictionary.DictionaryError as exc:
         return {"error": str(exc)}
     report = reporting.FileReport(path=source.rel)

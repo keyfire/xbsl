@@ -11,7 +11,10 @@ single pass over the tokens:
 - `type_expr` - the tokens of a type expression and the parsing of its alternatives
   (`Строка|Число|?`);
 - `declaration_types` / `method_params` - the positions of types in declarations and method
-  signatures.
+  signatures;
+- `element_pair_stem` / `pair_yaml_path` / `pair_yaml_names` - which yaml describes the element
+  a module belongs to, and what that yaml calls its own members. A bare name in such a module
+  means a member of that very element before it means anything else.
 
 The parsing works on tokens, without a full AST: the rules must produce zero false positives,
 so an ambiguous construct is better skipped than guessed.
@@ -587,6 +590,40 @@ YAML_NAME_RE = re.compile(
 )
 
 
+#: The tail of the module that extends the object type of an element, in both spellings the
+#: platform accepts: an English project writes `<Name>.Object.xbsl` where a Russian one writes
+#: `<Имя>.Объект.xbsl` (see scaffold.object_module_path), and either belongs to `<Имя>.yaml`.
+#: Such a module is NOT a pair of its own - it extends the element the yaml beside it
+#: describes - so a lookup that strips one extension lands on `<Имя>.Объект.yaml`, a file no
+#: project has, and the module is left without the names of its own element.
+OBJECT_MODULE_SUFFIXES = (".Объект.xbsl", ".Object.xbsl")
+
+
+def element_pair_stem(rel: str) -> str:
+    """The key that joins a file to the element it belongs to: the path without the tail.
+
+    `Товары.yaml`, `Товары.xbsl` and `Товары.Объект.xbsl` answer one and the same key. This
+    is the single place that knows which yaml describes the element a module extends - the
+    question every "is this bare name a member of my own element" check starts from.
+    """
+    slash = str(rel).replace("\\", "/")
+    for suffix in (*OBJECT_MODULE_SUFFIXES, ".xbsl", ".yaml"):
+        if slash.endswith(suffix):
+            return slash[: -len(suffix)]
+    return slash
+
+
+def pair_yaml_path(module_path) -> Path | None:
+    """The yaml describing the element the module belongs to, when it lies on the disk."""
+    try:
+        path = Path(module_path)
+        stem = element_pair_stem(path.name)
+        pair = path.with_name(stem + ".yaml")
+        return pair if pair.is_file() else None
+    except (OSError, ValueError):
+        return None
+
+
 def pair_yaml_names(module_path) -> set[str]:
     """Names declared by the module's paired yaml, read straight from the disk neighbor.
 
@@ -594,10 +631,10 @@ def pair_yaml_names(module_path) -> set[str]:
     see one file at a time: the unknown-static-member mapper in a single-file run and the
     hover of the LSP. Missing neighbor - an empty set.
     """
+    pair = pair_yaml_path(module_path)
+    if pair is None:
+        return set()
     try:
-        pair = Path(module_path).with_suffix(".yaml")
-        if not pair.is_file():
-            return set()
         text = pair.read_text(encoding="utf-8-sig")
     except (OSError, ValueError):
         return set()
