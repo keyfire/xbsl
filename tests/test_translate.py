@@ -1926,6 +1926,190 @@ def test_a_file_that_opens_with_a_byte_order_mark_is_re_wrapped_too():
     assert "A second line of the same paragraph." in out.replace("\n// ", " ")
 
 
+# --- a `/* ... */` comment and the `///` lines are re-wrapped as well -------------------------
+
+def _block_of(text: str) -> list[str]:
+    """The lines of the first `/* ... */` comment of a module, as they are written."""
+    lines = text.splitlines()
+    first = next(number for number, line in enumerate(lines) if line.lstrip().startswith("/*"))
+    last = next(number for number in range(first, len(lines)) if "*/" in lines[number])
+    return lines[first:last + 1]
+
+
+def _block_words(lines: list[str]) -> str:
+    """What a block says, with its markers and line breaks taken off."""
+    body = " ".join(line.strip() for line in lines).strip()
+    return " ".join(body.removeprefix("/*").removesuffix("*/").split())
+
+
+def _block_module(lines: list[str], indent: str = "    ", under: str = "    ") -> str:
+    """A method whose body is one block comment: `lines` are its text, `under` the indent below."""
+    body = [f"{indent}/* {lines[0]}"] + [f"{under}{line}" if line else "" for line in lines[1:]]
+    return "метод Ф()\n" + "\n".join(body) + " */\n;\n"
+
+
+def test_a_block_comment_is_wrapped_back_under_the_limit():
+    module = _block_module(_RU_PARAGRAPH)
+    assert _long_lines(module) == [], "the source itself is within the limit"
+
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert _long_lines(out) == []
+    block = _block_of(out)
+    assert block[0].startswith("    /* "), "the opening marker stays at the head of the first line"
+    assert block[-1].endswith(" */"), "the closing marker stays at the end of the last line"
+    assert "*/" not in "".join(block[:-1]), "and nowhere before it"
+    assert all(line.startswith("    ") and not line.startswith("     ") for line in block[1:]), (
+        "the lines under the marker keep the indent of the block")
+    assert _block_words(block) == " ".join(_EN_PARAGRAPH), "the text of the paragraph survived"
+
+
+def test_a_block_aligned_under_its_text_keeps_the_alignment():
+    module = _block_module(_RU_PARAGRAPH, under="       ")
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert _long_lines(out) == []
+    block = _block_of(out)
+    assert all(line.startswith("       ") and not line.startswith("        ") for line in block[1:])
+    assert _block_words(block) == " ".join(_EN_PARAGRAPH)
+
+
+def test_an_empty_line_inside_a_block_parts_its_paragraphs():
+    second_ru = ["Шаги задачи перечитываются после записи", "и список обновляется"]
+    second_en = ["The steps of the task are read again after the write", "and the list is refreshed"]
+    module = _block_module([*_RU_PARAGRAPH, "", *second_ru])
+
+    out, _ = _code(module, phrases={**dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)),
+                                    **dict(zip(second_ru, second_en))})
+    assert _long_lines(out) == []
+    block = _block_of(out)
+    blank = block.index("")
+    assert _block_words(block[:blank]) == " ".join(_EN_PARAGRAPH), "the first paragraph kept its words"
+    assert block[blank + 1:] == [f"    {second_en[0]}", f"    {second_en[1]} */"], (
+        "the second paragraph still fits and is left alone")
+
+
+def test_a_list_inside_a_block_keeps_its_items():
+    """A block announces a list with a colon and indents the items under it - they stay as written."""
+    items_ru = ["Правила контракта:",
+                "  - имена свойств JSON совпадают с именами реквизитов",
+                "  - ссылки на другие объекты адресуются их кодами"]
+    items_en = ["The rules of the contract:",
+                "  - the names of the JSON properties are the names of the attributes of the object,"
+                " and the service ones are left out of the contract",
+                "  - a reference to another object is addressed by its code"]
+    module = _block_module([*_RU_PARAGRAPH, "", *items_ru])
+
+    out, _ = _code(module, phrases={**dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)),
+                                    **{ru.strip(): en.strip() for ru, en in zip(items_ru, items_en)}})
+    block = _block_of(out)
+    assert block[-3:] == [f"    {items_en[0]}", f"    {items_en[1]}", f"    {items_en[2]} */"], (
+        "line for line")
+    lines = out.splitlines()
+    assert [lines[number - 1] for number in _long_lines(out)] == [f"    {items_en[1]}"], (
+        "the paragraph above the list was re-split, the item was left whole")
+
+
+def test_a_one_line_block_that_fits_is_left_alone():
+    module = "метод Ф()\n    /* Короткое пояснение */\n;\n"
+    out, _ = _code(module, phrases={"Короткое пояснение": "A short note"})
+    assert out == "method Ф()\n    /* A short note */\n;\n"
+
+
+def test_a_one_line_block_over_the_limit_is_split_into_lines():
+    ru = "Список задач заполняется один раз при открытии карточки"
+    en = ("The task list is filled once when the card opens and after that is refreshed point by"
+          " point on the write event, never by a full re-read")
+    module = f"метод Ф()\n    /* {ru} */\n;\n"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert _long_lines(out) == []
+    block = _block_of(out)
+    assert len(block) > 1, out
+    assert block[0].startswith("    /* ") and block[-1].endswith(" */")
+    assert _block_words(block) == en
+
+
+def test_a_block_that_shares_a_line_with_code_keeps_its_line():
+    ru = "пересчёт делается один раз"
+    en = ("the recalculation is done once, and every later change only touches the row that the"
+          " write event reported")
+    module = f"метод Ф()\n    знч Х = 1 /* {ru} */\n    /* {ru} */ знч У = 2\n;\n"
+
+    out, _ = _code(module, phrases={ru: en})
+    assert out.splitlines()[1] == f"    val Х = 1 /* {en} */", "it explains the statement next to it"
+    assert out.splitlines()[2] == f"    /* {en} */ val У = 2", "the statement after it stays in place"
+
+
+def test_a_block_framed_with_stars_keeps_its_shape():
+    """A star down the left edge is a frame: the pass does not rebuild it."""
+    module = _block_module(_RU_PARAGRAPH, under="     * ")
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert _block_of(out) == [f"    /* {_EN_PARAGRAPH[0]}",
+                              f"     * {_EN_PARAGRAPH[1]}",
+                              f"     * {_EN_PARAGRAPH[2]} */"]
+
+
+def test_a_block_line_long_in_the_source_stays_as_it_was_written():
+    long_ru = "Подробности: https://example.invalid/docs/задачи/" + "х" * 90
+    long_en = "Details: https://example.invalid/docs/tasks/" + "x" * 90
+    module = f"метод Ф()\n    /* {long_ru} */\n;\n"
+
+    out, _ = _code(module, phrases={long_ru: long_en})
+    assert out.splitlines()[1] == f"    /* {long_en} */", "written that way on purpose"
+
+
+def test_the_windows_line_ending_of_a_block_comment_survives_the_rewrap():
+    module = _block_module(_RU_PARAGRAPH).replace("\n", "\r\n")
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    assert "\n" not in out.replace("\r\n", ""), "every break stayed a windows one"
+    assert _long_lines(out) == []
+
+
+def test_rewrap_never_changes_the_words_of_a_block_comment():
+    """Only the breaks move: the frame, the table row and the list come out as they went in."""
+    from xbsl.translation import rewrap
+
+    source = (
+        "/* ─── A frame that must survive ───────────────────────────────────────────────\n"
+        "The first line of a paragraph that the translation made longer than the limit\n"
+        "and a second line of the same paragraph.\n"
+        "  a table cell   another cell\n"
+        "- a list item\n"
+        "  its continuation */\n"
+        "метод Тест()\n"
+        ";\n"
+    )
+    translated = source.replace(
+        "The first line of a paragraph that the translation made longer than the limit",
+        "The first line of a paragraph that the translation made a great deal longer than the"
+        " limit it is given, so the pass has to split it again",
+    )
+    out = rewrap.rewrap_comments(translated, source)
+    assert out != translated, "the paragraph was re-split"
+    assert "".join(out.split()) == "".join(translated.split()), "only the whitespace changed"
+    assert all(len(line) <= 120 for line in out.splitlines())
+    assert out.splitlines()[0] == translated.splitlines()[0], "the frame kept its line"
+    assert out.splitlines()[-5:] == translated.splitlines()[-5:], "so did the table and the list"
+
+
+def test_the_doc_lines_are_re_wrapped_and_keep_their_marker():
+    """`///` is what the environment shows for a declaration, and the translation lengthens it too."""
+    note_ru = "Раздел методов заполнения"
+    note_en = ("The section of the methods that fill the list of the steps of the task when the card"
+               " of the task is opened by its performer")
+    module = (f"// {note_ru}\n"
+              + "".join(f"/// {line}\n" for line in _RU_PARAGRAPH)
+              + "метод Ф()\n;\n")
+
+    out, _ = _code(module, phrases={note_ru: note_en, **dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH))})
+    assert _long_lines(out) == []
+    lines = out.splitlines()
+    doc = [line for line in lines if line.startswith("///")]
+    notes = [line for line in lines if line.startswith("//") and not line.startswith("///")]
+    assert " ".join(line[4:] for line in doc) == " ".join(_EN_PARAGRAPH), "the doc text stayed `///`"
+    assert " ".join(line[3:] for line in notes) == note_en, "the note stayed `//`, apart from it"
+    assert lines.index(doc[0]) == len(notes), "the note is above the doc lines, as it was"
+
+
 def test_a_route_template_carries_its_parameter_names(tmp_path: Path):
     """The handler reads a parameter BY NAME - the template and the code move together or not at all."""
     out, _ = _yaml(
