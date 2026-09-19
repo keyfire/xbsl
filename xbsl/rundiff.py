@@ -13,11 +13,12 @@ every finding came along - several hundred characters each, tens of thousands of
 set of projects, to get a few numbers out of them.
 
 A finding is keyed by the path given on the command line, the file under that path, the line,
-the column, the rule and the text. The path is kept as it was typed rather than resolved:
-`xbsl demo` run from two worktrees of the repository names the same findings, while the
-absolute place of each checkout would make every one of them differ. The text is the message in
-the language of the run, so a run saved in another language is refused instead of being
-reported as a change of everything.
+the column, the rule and the text. The path is kept as it was typed, and the saved file keeps
+the folder it named next to it. Two runs pair their paths by the folder first: `demo` and the
+absolute path of the same folder are one path. A path whose folder the other run did not check
+pairs by its spelling, so `xbsl demo` run from two worktrees of the repository compares the two
+checkouts. The text is the message in the language of the run, so a run saved in another
+language is refused instead of being reported as a change of everything.
 
 Two runs do not always check the same things, and a part only one of them checked is left out
 of the comparison - its findings did not appear or disappear, one of the runs never looked:
@@ -38,6 +39,7 @@ and the list is read there.
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
@@ -58,8 +60,8 @@ Finding = tuple[str, str, int, int, str, str]
 
 _NOTE = (
     "a check run saved by xbsl --compare: every finding is [path given, file under it, line, "
-    "column, rule, text]; changes holds what appeared and disappeared against the run saved "
-    "before it"
+    "column, rule, text]; roots names the folder of each path given; changes holds what "
+    "appeared and disappeared against the run saved before it"
 )
 
 MESSAGES = {
@@ -163,6 +165,9 @@ class Run:
     rules: dict[str, bool] = field(default_factory=dict)
     #: The version of the engine, for the reader of the file.
     engine: str = ""
+    #: The folder each path of `corpora` named, resolved when the run was made. A path that
+    #: could not be resolved, and every path of a file saved without the folders, is absent.
+    roots: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -174,23 +179,51 @@ class Changes:
     skipped: list[tuple[str, list[str], int]]
 
 
-def labels(paths: list[str]) -> list[str]:
-    """The paths of the command line as they key the findings: as typed, forward slashes."""
-    return list(dict.fromkeys(Path(p).as_posix() for p in paths))
+def corpora(paths: list[str], base: Path | None = None) -> dict[str, str]:
+    """The paths of the command line: {the path as typed, forward slashes: the folder it names}.
+
+    The folder is resolved against `base`, the current directory when there is none: the MCP
+    server resolves the paths of a call against the caller's root. A path that cannot be
+    resolved keeps its spelling and an empty folder. A second spelling of a folder already
+    listed is dropped: a file goes under the first path that holds it, so the second one would
+    count no findings and read as a path the other run never checked.
+    """
+    places: dict[str, str] = {}
+    seen: set[str] = set()
+    for path in paths:
+        label = Path(path).as_posix()
+        if label in places:
+            continue
+        try:
+            folder = Path(base or "", path).resolve().as_posix()
+        except OSError:
+            folder = ""
+        if folder:
+            if _same_folder(folder) in seen:
+                continue
+            seen.add(_same_folder(folder))
+        places[label] = folder
+    return places
 
 
-def findings(diagnostics: list[Diagnostic], paths: list[str]) -> list[Finding]:
+def _same_folder(folder: str) -> str:
+    """The folder the way the file system compares it: without the case where it does not count."""
+    return os.path.normcase(folder)
+
+
+def findings(
+    diagnostics: list[Diagnostic], paths: list[str], base: Path | None = None,
+) -> list[Finding]:
     """The findings keyed for a comparison, in the order of their keys.
 
     A file is placed under the first path of the command line that holds it; a file outside
     all of them keeps its own path and an empty path given.
     """
-    roots: list[tuple[str, Path]] = []
-    for label in labels(paths):
-        try:
-            roots.append((label, Path(label).resolve()))
-        except OSError:
-            continue
+    return _keyed(diagnostics, corpora(paths, base))
+
+
+def _keyed(diagnostics: list[Diagnostic], places: dict[str, str]) -> list[Finding]:
+    roots = [(label, Path(folder)) for label, folder in places.items() if folder]
     placed: dict[str, tuple[str, str]] = {}
     keyed: list[Finding] = []
     for d in diagnostics:
@@ -218,12 +251,14 @@ def _place(path: str, roots: list[tuple[str, Path]]) -> tuple[str, str]:
 
 def record(
     diagnostics: list[Diagnostic], paths: list[str], *, checked: int, lang: str,
-    selection: dict, rules: dict[str, bool], engine: str = "",
+    selection: dict, rules: dict[str, bool], engine: str = "", base: Path | None = None,
 ) -> Run:
-    """The run as `--compare` saves it."""
+    """The run as `--compare` saves it; `base` as in corpora()."""
+    places = corpora(paths, base)
     return Run(
-        corpora=labels(paths), findings=findings(diagnostics, paths), checked=checked,
+        corpora=list(places), findings=_keyed(diagnostics, places), checked=checked,
         lang=lang, selection=selection, rules=rules, engine=engine,
+        roots={label: folder for label, folder in places.items() if folder},
     )
 
 
@@ -231,20 +266,24 @@ def compare(saved: Run, run: Run) -> Changes:
     """What appeared and disappeared since the saved run, over what both runs checked.
 
     The findings are compared as multisets: two equal findings at one place are two, and
-    losing one of them is a change.
+    losing one of them is a change. The paths of the two runs pair as _paired() matches them,
+    and a finding of the saved run takes the spelling of this one, so the changes name every
+    path the way this run does.
     """
+    paired = _paired(saved, run)
     # A finding outside every given path has the empty path given, and both runs share it.
-    shared = (set(saved.corpora) & set(run.corpora)) | {""}
+    paired[""] = ""
+    shared = set(paired.values())
     gone_rules, new_rules = _rules_apart(saved, run)
     left_out = gone_rules | new_rules
 
-    def compared(finding: Finding) -> bool:
-        return finding[0] in shared and finding[4] not in left_out
-
-    before = Counter(f for f in saved.findings if compared(f))
-    after = Counter(f for f in run.findings if compared(f))
+    before: Counter[Finding] = Counter(
+        (paired[f[0]], f[1], f[2], f[3], f[4], f[5]) for f in saved.findings
+        if f[0] in paired and f[4] not in left_out
+    )
+    after = Counter(f for f in run.findings if f[0] in shared and f[4] not in left_out)
     skipped: list[tuple[str, list[str], int]] = []
-    gone = [path for path in saved.corpora if path not in shared]
+    gone = [path for path in saved.corpora if path not in paired]
     if gone:
         skipped.append(("rundiff.skipped-paths-gone", gone,
                         sum(1 for f in saved.findings if f[0] in gone)))
@@ -252,12 +291,14 @@ def compare(saved: Run, run: Run) -> Changes:
     if new:
         skipped.append(("rundiff.skipped-paths-new", new,
                         sum(1 for f in run.findings if f[0] in new)))
-    for key, rules, side in (("rundiff.skipped-rules-gone", gone_rules, saved.findings),
-                             ("rundiff.skipped-rules-new", new_rules, run.findings)):
+    for key, rules, side, compared in (
+        ("rundiff.skipped-rules-gone", gone_rules, saved.findings, paired.keys()),
+        ("rundiff.skipped-rules-new", new_rules, run.findings, shared),
+    ):
         if rules:
             # The rules with findings first: a full run against a narrow one leaves out two
             # hundred rules, and the first five of the alphabet are rarely the ones that fired.
-            counts = Counter(f[4] for f in side if f[0] in shared and f[4] in rules)
+            counts = Counter(f[4] for f in side if f[0] in compared and f[4] in rules)
             names = sorted(rules, key=lambda rule: (-counts[rule], rule))
             skipped.append((key, names, sum(counts.values())))
     return Changes(
@@ -265,6 +306,35 @@ def compare(saved: Run, run: Run) -> Changes:
         disappeared=sorted((before - after).elements()),
         skipped=skipped,
     )
+
+
+def _paired(saved: Run, run: Run) -> dict[str, str]:
+    """The paths of the saved run matched with the paths of this one: {saved: this run's}.
+
+    The folder decides first, so `demo` and the absolute path of the same folder are one
+    path. A path the folders left without a pair pairs by its spelling: `xbsl demo` from two
+    worktrees names two folders, and comparing the two checkouts is what was asked for. A
+    run saved without the folders pairs by the spelling alone. A path that finds no pair is
+    one only its own run checked.
+    """
+    free = dict.fromkeys(run.corpora)  # an ordered set: each path of this run pairs once
+    by_folder: dict[str, str] = {}
+    for label in run.corpora:
+        folder = run.roots.get(label)
+        if folder:
+            by_folder.setdefault(_same_folder(folder), label)
+    pairs: dict[str, str] = {}
+    for label in saved.corpora:
+        folder = saved.roots.get(label)
+        match = by_folder.get(_same_folder(folder)) if folder else None
+        if match is not None and match in free:
+            pairs[label] = match
+            del free[match]
+    for label in saved.corpora:
+        if label not in pairs and label in free:
+            pairs[label] = label
+            del free[label]
+    return pairs
 
 
 def _rules_apart(saved: Run, run: Run) -> tuple[set[str], set[str]]:
@@ -392,7 +462,7 @@ def save(path: Path, run: Run, changes: Changes | None) -> None:
     """
     head = {
         "meta": {"tool": "xbsl", "kind": KIND, "format": FORMAT, "note": _NOTE},
-        "engine": run.engine, "lang": run.lang, "corpora": run.corpora,
+        "engine": run.engine, "lang": run.lang, "corpora": run.corpora, "roots": run.roots,
         "checked": run.checked, "selection": run.selection,
     }
     parts = [f" {_json(key)}: {_json(value)}" for key, value in head.items()]
@@ -445,7 +515,11 @@ def load(path: Path, lang: str) -> Run | None:
 
 
 def _parse(data) -> Run:
-    """The Run of a loaded file; ValueError when the file does not hold one."""
+    """The Run of a loaded file; ValueError when the file does not hold one.
+
+    `roots` is optional: a file saved before the folders were kept loads without them, and
+    its paths pair by the spelling alone.
+    """
     def expect(ok: bool) -> None:
         if not ok:
             raise ValueError("not a saved run")
@@ -453,16 +527,18 @@ def _parse(data) -> Run:
     expect(isinstance(data, dict) and isinstance(data.get("meta"), dict))
     meta = data["meta"]
     expect((meta.get("tool"), meta.get("kind"), meta.get("format")) == ("xbsl", KIND, FORMAT))
-    corpora, rows, rules = data.get("corpora"), data.get("findings"), data.get("rules")
-    expect(isinstance(corpora, list) and all(isinstance(c, str) for c in corpora))
+    given, rows, rules = data.get("corpora"), data.get("findings"), data.get("rules")
+    roots = data.get("roots", {})
+    expect(isinstance(given, list) and all(isinstance(c, str) for c in given))
+    expect(isinstance(roots, dict) and all(isinstance(r, str) for r in roots.values()))
     expect(isinstance(rows, list) and all(_is_finding(row) for row in rows))
     expect(isinstance(rules, dict) and all(isinstance(on, bool) for on in rules.values()))
     expect(isinstance(data.get("selection"), dict) and isinstance(data.get("lang"), str)
            and isinstance(data.get("checked"), int))
     return Run(
-        corpora=corpora, findings=[tuple(row) for row in rows], checked=data["checked"],
+        corpora=given, findings=[tuple(row) for row in rows], checked=data["checked"],
         lang=data["lang"], selection=data["selection"], rules=rules,
-        engine=str(data.get("engine", "")),
+        engine=str(data.get("engine", "")), roots=roots,
     )
 
 
