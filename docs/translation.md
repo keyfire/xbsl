@@ -622,9 +622,9 @@ never offered at all.
   at once, and the answer names in `unmatched` the ones no orphan fell under; `since` narrows it to
   the orphans of one change (a branch, a commit or a range `A..B`): the keys on the lines it removed
   and the pairs it added to the dictionary, both sides sized in the `since` block; `prune` (off by
-  default) removes the selected keys, including repeated declarations outside the page. After
-  removal the default answer omits the list: `removed` counts occurrences and `pruned.by_kind` /
-  `pruned.by_file` group them; `compact=false` includes full rows. Preview remains full by default,
+  default) removes every key the filters select, whatever the page, with all its declarations.
+  After removal the default answer omits the list: `removed` counts occurrences, `pruned.keys`
+  counts the pairs, and `pruned.by_kind` / `pruned.by_file` group them; `compact=false` includes full rows. Preview remains full by default,
   with `compact=true` keeping only key, kind, file and line. `counts` covers all filtered candidates; `budget_seconds` (300 by default)
   bounds the walk over the sources - past it the answer is what was read, marked `partial`, with
   `sources` counting the files read of the total and a `note` on how to go on, a list of candidates
@@ -632,8 +632,8 @@ never offered at all.
   what its reading is worth;
 - `translate_redundant` - the entries the platform answers itself, which the pass would spell
   the same way without them: the workarounds that hide a gap in the platform data or in the
-  engine. `filter` narrows it, `prune` (off by default) removes exactly the page it answers
-  with; unlike `translate_unused` it runs a full pass, because the verdict rests on the places
+  engine. `filter` narrows it, `prune` (off by default) removes every entry `filter` selects,
+  whatever the page, and `pruned.keys` counts them; unlike `translate_unused` it runs a full pass, because the verdict rests on the places
   the entry actually answered;
 - `translate_set` - write entries back: add, correct in place, or remove by emptying a
   value; `edits_file` sends the batch as a file in the same two shapes `--set` reads.
