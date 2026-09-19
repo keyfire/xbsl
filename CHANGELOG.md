@@ -22,12 +22,27 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`meta_add_field` adds several items in one call.** `names` takes the names of one kind with
+  the same type and properties, such as the values of an enumeration. The batch is planned whole:
+  a taken or repeated name refuses all of it, and the file stays as it was. ([#114](https://github.com/keyfire/xbsl/pull/114))
 - **The data now includes the members the platform generates for an element of each kind.**
   The extractor reads the help's template pages for types such as `Name.Object` and
   `Name.WriteParameters` in full: 152 types and 2161 members in the `generated_members` section.
   Before, the unknown-name rule relied on a hand-written table of four names and reported `IsNew`
   as undeclared in working code. Names that depend on the element's settings, such as `Parent` or
   `DeletionMark`, are accepted only when the element's yaml turns them on. ([#110](https://github.com/keyfire/xbsl/pull/110))
+
+### Changed
+
+- **The writing `meta_*` tools answer with a short lint.** The answer carries the number of files
+  and findings and up to ten findings one line each; `lint_paths` on the written files gives the
+  whole report. A clean file used to cost about twenty lines on every call. ([#114](https://github.com/keyfire/xbsl/pull/114))
+- **`meta_rename_object` answers briefly.** It names the renamed files, counts the edits and lists
+  the edited files no project owns, such as a translation dictionary; `full` lists every edited
+  file. On a project with 63 edited files the answer went from 12.8 to 0.6 thousand characters. ([#114](https://github.com/keyfire/xbsl/pull/114))
+- **The compact `lint_paths` answer names the CI rule set in one line.** The line carries the
+  pipeline file relative to the checkout, the job and the flags, with a long list counted:
+  `--enable ×10`. `as_ci_full` keeps the whole record. ([#114](https://github.com/keyfire/xbsl/pull/114))
 
 ### Fixed
 
