@@ -1348,6 +1348,10 @@ def meta_rename_object(
     component `СтрокаСписка<Имя>`, the WSDL descriptions `<Имя>.Wsdl.<N>.wsdl` of a SOAP
     service client with their numbers) and rewrites references: yaml type/table/form keys,
     `=` bindings, .xbsl code (string literals are left intact) and composite form names.
+    Comments of modules and yaml get the new name whole. A translation dictionary is not
+    rewritten as a source: the translation of each comment line the rename changed is carried
+    to the new key, the old key stays, and `tokens` pairs of the old name are named in the
+    notes - the English spelling of the new name is the author's call.
     Attributes, components or dynamic-list fields that merely share the old name are NOT
     touched. new_presentation/old_presentation update Заголовок/Представление values of the
     object and its forms (defaults: the new name). yaml_path resolves ambiguity when several

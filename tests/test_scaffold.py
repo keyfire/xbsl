@@ -982,6 +982,86 @@ def test_rename_object_files_and_references(tmp_path):
     assert "Хранилища.ПересчитатьРазрешенияДоступа()" in object_module
 
 
+# --- a rename and the texts around the code: comments and the translation dictionary --------
+
+
+def test_rename_reaches_a_quoted_name_inside_a_module_comment(tmp_path):
+    """A quote inside a comment is not a string literal, yet the old name used to stay there.
+
+    The dictionary pair of such a comment line was renamed by the binding rule while the
+    comment itself was not, and the pair lost its line.
+    """
+    subsystem = _make_rename_project(tmp_path)
+    module = subsystem / "Заказы.xbsl"
+    module.write_text(
+        module.read_text(encoding="utf-8")
+        + '// привязка: "Значение: =Склады.Наименование"\n'
+        + '/* блок: "=Склады.Код"\n   и ещё Склады */\n',
+        encoding="utf-8",
+    )
+    apply_result(scaffold.op_rename_object(tmp_path, "Склады", "Хранилища"))
+    text = module.read_text(encoding="utf-8")
+    assert '// привязка: "Значение: =Хранилища.Наименование"' in text
+    assert '/* блок: "=Хранилища.Код"\n   и ещё Хранилища */' in text
+    assert '"Склады не изменились"' in text  # a string literal of the code stays
+
+
+def test_rename_reaches_the_name_in_a_yaml_comment(tmp_path):
+    subsystem = _make_rename_project(tmp_path)
+    orders = subsystem / "Заказы.yaml"
+    orders.write_text("## Заказы ссылаются на Склады.\n" + orders.read_text(encoding="utf-8"),
+                      encoding="utf-8")
+    apply_result(scaffold.op_rename_object(tmp_path, "Склады", "Хранилища"))
+    text = orders.read_text(encoding="utf-8")
+    assert text.startswith("## Заказы ссылаются на Хранилища.\n")
+    assert "Имя: Склады" in text  # the namesake attribute is still not renamed
+
+
+def _dictionary(tmp_path: Path, extra_phrase: str = "") -> Path:
+    path = tmp_path / "xbsl-translation" / "010.yaml"
+    path.parent.mkdir()
+    path.write_text(
+        "version: 1\nlanguage: en\n"
+        "tokens:\n    Склады: Warehouses\n"
+        "phrases:\n"
+        "    строка не правится, а Склады в комментарии – да: the string stays, the comment does not\n"
+        "    'Склады без комментария в коде': 'Warehouses nowhere in the code'\n"
+        + extra_phrase
+        + "literals:\n    \"Склады не изменились\": \"Warehouses unchanged\"\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def test_rename_carries_the_translation_of_a_comment_line_it_renamed(tmp_path):
+    _make_rename_project(tmp_path)
+    dictionary = _dictionary(tmp_path)
+    result = scaffold.op_rename_object(tmp_path, "Склады", "Хранилища")
+    apply_result(result)
+    text = dictionary.read_text(encoding="utf-8")
+    # The renamed comment line keeps its translation under the new key, next to the old one.
+    assert (
+        "    строка не правится, а Склады в комментарии – да: the string stays, the comment does not\n"
+        "    строка не правится, а Хранилища в комментарии – да: the string stays, the comment does not\n"
+    ) in text
+    # A phrase no comment line produced is not carried; tokens and literals are not touched.
+    assert "Хранилища без комментария" not in text
+    assert "    Склады: Warehouses\n" in text and "Хранилища: Warehouses" not in text
+    assert '"Склады не изменились": "Warehouses unchanged"' in text
+    notes = "\n".join(result.notes)
+    assert "'Хранилища'" in notes and "translate_set" in notes
+
+
+def test_rename_does_not_rewrite_a_dictionary_by_the_binding_rule(tmp_path):
+    """A phrase key may read like a binding (`=Склады.Имя`), but it is the text of a comment."""
+    _make_rename_project(tmp_path)
+    dictionary = _dictionary(tmp_path, "    'Группа: =Склады.Имя': 'Group: =Warehouses.Name'\n")
+    apply_result(scaffold.op_rename_object(tmp_path, "Склады", "Хранилища"))
+    text = dictionary.read_text(encoding="utf-8")
+    assert "    'Группа: =Склады.Имя': 'Group: =Warehouses.Name'\n" in text
+    assert "=Хранилища.Имя" not in text
+
+
 def test_rename_object_errors(tmp_path):
     subsystem = _make_rename_project(tmp_path)
     with pytest.raises(ScaffoldError, match="уже занято"):

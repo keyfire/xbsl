@@ -166,7 +166,12 @@ number, and a reference from one description to another by file name gets the ne
 rewrites references across the whole project and with an eye on the context: the reference-bearing
 yaml keys `Type`, `Table`, `DataSource`, `Form` and `FormType`, the `=` bindings and the .xbsl code.
 Attributes, components or dynamic-list fields that merely share the old name are left alone, and so
-are string literals with UI text. `--new-presentation` and `--old-presentation` update the `Title`
+are string literals with UI text. Comments in modules and in yaml get the new name whole, quotes
+inside a comment included. The translation dictionary is not rewritten as a source: for every
+comment line the rename changed, its `phrases` translation is written again under the new line,
+and the old key stays for any text that still reads it. `tokens` are left as they are, because the
+old name may live on in a namesake, and the notes name the pairs: the English spelling of the new
+name is yours to set. `--new-presentation` and `--old-presentation` update the `Title`
 and `Presentation` of the object and its forms. The object's `Id` is untouched, so the platform
 keeps the stored data.
 

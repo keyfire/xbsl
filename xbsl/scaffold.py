@@ -6123,43 +6123,69 @@ class _Renamer:
         return base
 
 
-def _split_strings(line: str) -> list[tuple[str, bool]]:
-    """Code line segments: (text, is_string_literal). A quote inside a literal is doubled."""
+def _split_code(line: str, in_block: bool) -> tuple[list[tuple[str, bool]], bool]:
+    """A module line as (text, is_string_literal) segments, and whether a block comment is open.
+
+    A quote inside a comment opens no string: `// "=Склады.Код"` is comment text, and a rename
+    reaches it as it reaches the rest of the comment. The dictionary keys a comment line whole,
+    so a comment renamed only outside its quotes lost its translation pair. A `/* ... */` block
+    may span lines; `in_block` carries it from one line to the next.
+    """
     parts: list[tuple[str, bool]] = []
     start = 0
-    in_str = False
     i, n = 0, len(line)
+    if in_block:
+        close = line.find("*/")
+        if close == -1:
+            return [(line, False)], True
+        i = start = close + 2
+        parts.append((line[:start], False))
     while i < n:
-        if line[i] == '"':
-            if in_str and i + 1 < n and line[i + 1] == '"':
-                i += 2
-                continue
-            if in_str:
-                parts.append((line[start : i + 1], True))
-                start = i + 1
-            else:
-                parts.append((line[start:i], False))
-                start = i
-            in_str = not in_str
+        char = line[i]
+        if char == '"':
+            end = i + 1
+            while end < n:
+                if line[end] == '"':
+                    if end + 1 < n and line[end + 1] == '"':
+                        end += 2
+                        continue
+                    break
+                end += 1
+            parts.append((line[start:i], False))
+            parts.append((line[i:end + 1], True))
+            i = start = end + 1
+            continue
+        if line.startswith("//", i):
+            break
+        if line.startswith("/*", i):
+            close = line.find("*/", i + 2)
+            if close == -1:
+                parts.append((line[start:], False))
+                return parts, True
+            i = close + 2
+            continue
         i += 1
-    parts.append((line[start:], in_str))
-    return parts
+    parts.append((line[start:], False))
+    return parts, False
 
 
 def _rename_in_xbsl(text: str, renamer: _Renamer) -> tuple[str, int]:
     """Replacements in a module: identifiers and composite form names outside string literals.
 
-    An `импорт <Подсистема>` line is skipped entirely - it holds a subsystem name, not an
-    object name.
+    Comments are renamed whole, the quotes inside them included (see _split_code). An
+    `импорт <Подсистема>` line is skipped entirely - it holds a subsystem name, not an object
+    name.
     """
     total = 0
     out: list[str] = []
+    in_block = False
     for line in text.split("\n"):
-        if _IMPORT_LINE.match(line):
+        if not in_block and _IMPORT_LINE.match(line):
             out.append(line)
             continue
         pieces: list[str] = []
-        for segment, is_string in _split_strings(line):
+        segments, in_block = _split_code(line, in_block)
+        for segment, is_string in segments:
             if not is_string:
                 segment, n1 = renamer.composites(segment)
                 segment, n2 = renamer.identifier(segment)
@@ -6196,7 +6222,18 @@ def _rename_in_yaml(
     ref_keys, presentation_keys, name_keys = _rename_key_sets()
     total = 0
     out: list[str] = []
-    for line in text.split("\n"):
+    for full_line in text.split("\n"):
+        # A comment is renamed whole, like a comment of a module; the rules below read the
+        # code part alone, so a `=` inside a comment is no binding.
+        cut = _yaml_comment_start(full_line)
+        line, comment = (full_line, "") if cut is None else (full_line[:cut], full_line[cut:])
+        if comment:
+            comment, n1 = renamer.composites(comment)
+            comment, n2 = renamer.identifier(comment)
+            total += n1 + n2
+        if not line.strip():
+            out.append(line + comment)
+            continue
         line, n = renamer.composites(line)
         total += n
         m = _YAML_KEY_LINE.match(line)
@@ -6206,17 +6243,17 @@ def _rename_in_yaml(
                 value, n = renamer.identifier(value)
                 total += n
                 line = f"{prefix}{key}:{sep}{value}"
-                out.append(line)
+                out.append(line + comment)
                 continue
             if own and key in name_keys and prefix == "" and value.strip() == renamer.old:
-                out.append(f"{prefix}{key}:{sep}{value.replace(renamer.old, renamer.new)}")
+                out.append(f"{prefix}{key}:{sep}{value.replace(renamer.old, renamer.new)}{comment}")
                 total += 1
                 continue
             if own and presentations and key in presentation_keys:
                 value, swapped = _swap_presentation(value, *presentations)
                 if swapped:
                     total += 1
-                    out.append(f"{prefix}{key}:{sep}{value}")
+                    out.append(f"{prefix}{key}:{sep}{value}{comment}")
                     continue
         eq = line.find("=")
         if eq != -1:
@@ -6224,8 +6261,113 @@ def _rename_in_yaml(
             if n:
                 total += n
                 line = line[:eq] + replaced
-        out.append(line)
+        out.append(line + comment)
     return "\n".join(out), total
+
+
+def _is_translation_dictionary(path: Path, text: str) -> bool:
+    """Whether the yaml is a translation dictionary - recognised by content, as the rules do."""
+    from xbsl.rules.yaml_schema import is_translation_dictionary  # the rules import scaffold
+
+    return is_translation_dictionary(engine.load_text(str(path), text))
+
+
+def _comment_lines(suffix: str, text: str) -> set[str]:
+    """The comment lines of a source spelled the way the dictionary keys them."""
+    from xbsl.translation.entries import _comment_bodies_of  # the reading of the translator
+
+    return _comment_bodies_of(suffix, text)
+
+
+def _carry_phrases(text: str, renamer: _Renamer, new_comments: set[str]) -> tuple[str, int, list[int]]:
+    """A dictionary file with the translations of renamed comment lines carried to new keys.
+
+    A `phrases` key is a comment line as it stands. The rename rewrote the line, so its pair
+    would lose it: the pair is written again under the renamed key, with the same translation,
+    next to the old one - but only when the rename really produced that comment line
+    (`new_comments`). The old key stays, since a text the rename did not touch may still read
+    it. `tokens` are not edited: the old name may live on in a namesake, and the English
+    spelling of the new name is the author's call; their lines come back for the notes.
+    `literals` stay as well, because the rename leaves string literals as they are.
+    """
+    from xbsl.translation.entries import _ENTRY_RE, _SECTION_RE, _key_of
+
+    nl = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(nl)
+    entries: list[tuple[int, str, re.Match]] = []
+    section = ""
+    for number, raw in enumerate(lines, 1):
+        header = _SECTION_RE.match(raw)
+        if header:
+            section = header.group(1)
+            continue
+        if raw and not raw[0].isspace():
+            section = ""
+            continue
+        match = _ENTRY_RE.match(raw) if section in ("phrases", "tokens") else None
+        if match is not None and _key_of(match):
+            entries.append((number, section, match))
+    known = {_key_of(match) for _number, section, match in entries if section == "phrases"}
+    extra: dict[int, str] = {}
+    tokens: list[int] = []
+    for number, section, match in entries:
+        key = _key_of(match)
+        new_key = renamer.identifier(renamer.composites(key)[0])[0]
+        if new_key == key:
+            continue
+        if section == "tokens":
+            tokens.append(number)
+            continue
+        if new_key not in new_comments or new_key in known:
+            continue
+        group = "dq" if match.group("dq") is not None else "sq" if match.group("sq") is not None else "plain"
+        if group == "dq":
+            spelled = json.dumps(new_key, ensure_ascii=False)[1:-1]
+        elif group == "sq":
+            spelled = new_key.replace("'", "''")
+        else:
+            spelled = new_key
+        raw = lines[number - 1]
+        extra[number] = raw[:match.start(group)] + spelled + raw[match.end(group):]
+        known.add(new_key)
+    if not extra:
+        return text, 0, tokens
+    out: list[str] = []
+    for number, raw in enumerate(lines, 1):
+        out.append(raw)
+        if number in extra:
+            out.append(extra[number])
+    return nl.join(out), len(extra), tokens
+
+
+def _yaml_comment_start(line: str) -> int | None:
+    """Where a yaml comment starts on the line, or None.
+
+    A `#` opens a comment at the start of the line or after a space, outside a quoted scalar.
+    A quote opens a scalar only where a value begins - after the indent, `- `, `: `, `[`, `{`
+    or `,` - so the apostrophe of a plain word (`Don't`) opens nothing.
+    """
+    quote = ""
+    previous = ""
+    i, n = 0, len(line)
+    while i < n:
+        char = line[i]
+        if quote:
+            if char == quote:
+                if quote == "'" and i + 1 < n and line[i + 1] == "'":
+                    i += 2
+                    continue
+                quote = ""
+            elif char == "\\" and quote == '"':
+                i += 1
+        elif char in "\"'" and previous in ("", ":", "-", "[", "{", ","):
+            quote = char
+        elif char == "#" and (i == 0 or line[i - 1] in " \t"):
+            return i
+        if not char.isspace():
+            previous = char
+        i += 1
+    return None
 
 
 def op_rename_object(
@@ -6250,6 +6392,8 @@ def op_rename_object(
     string literals) and composite form names; in the yaml of the object itself and its
     forms - also `Имя:` and Заголовок/Представление (the old presentation is given by
     old_presentation, the new one by new_presentation, defaulting to the new name).
+    Comments of modules and yaml are renamed whole. A translation dictionary is not rewritten
+    as a source - see _carry_phrases.
 
     yaml_path resolves the ambiguity when the project has several objects named old_name.
     Also works for a КомпонентИнтерфейса (a form rename: the owner's `Форма:` is updated).
@@ -6332,8 +6476,16 @@ def op_rename_object(
         # longer exists - and nothing said so until the build.
         + engine.find_sources(root, "*.xbql")
     )
+    # A translation dictionary lies among the yaml, but it is no source: its phrase keys are
+    # comment lines, and the binding rule rewrote a key that merely read like `=Name.Member`
+    # while the comment it pairs with stayed. It is handled after the sources instead.
+    dictionaries: list[tuple[Path, str]] = []
+    new_comments: set[str] = set()
     for path in sources:
         text = (reader or _read)(path)
+        if path.suffix == ".yaml" and _is_translation_dictionary(path, text):
+            dictionaries.append((path, text))
+            continue
         if path.suffix == ".yaml":
             new_text, count = _rename_in_yaml(
                 text, renamer,
@@ -6349,6 +6501,32 @@ def op_rename_object(
         result.details.append(f"{rel(path)}: замен – {count}")
         changed_files += 1
         total += count
+        new_comments |= _comment_lines(path.suffix, new_text) - _comment_lines(path.suffix, text)
+
+    carried_total = 0
+    token_places: list[str] = []
+    for path, text in dictionaries:
+        new_text, carried, token_lines = _carry_phrases(text, renamer, new_comments)
+        token_places.extend(f"{rel(path)}:{line}" for line in token_lines)
+        if carried:
+            result.changes.append(FileChange(path, new_text, created=False))
+            result.details.append(f"{rel(path)}: переводов перенесено – {carried}")
+            changed_files += 1
+            total += carried
+            carried_total += carried
+    if carried_total:
+        result.notes.append(
+            f"Переводы строк комментариев, которые изменило переименование, перенесены на новые "
+            f"ключи словаря: {carried_total}. Прежние ключи оставлены – их может читать текст, "
+            "которого переименование не коснулось; неиспользуемые снимет translate_unused с prune"
+        )
+    if token_places:
+        result.notes.append(
+            f"Пары tokens со старым именем '{old_name}' не тронуты "
+            f"({', '.join(token_places[:5])}{' ...' if len(token_places) > 5 else ''}): имя может "
+            f"остаться у тёзок. Английское написание для '{new_name}' задаёт автор – "
+            "translate --set или translate_set"
+        )
 
     # A description may name another one by its file name: the documentation tells to put the
     # name of the loaded file in place of a reference the platform cannot resolve. The rename
