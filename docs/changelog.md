@@ -53,6 +53,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`meta_resource_references` finds a file named without its extension.** Seed data names a
+  picture by its code, and a module adds the extension at run time. For such a file the tool
+  answered `total: 0`, as for a dead one. A string that spells the file's key without the
+  extension in a module, a yaml or a JSON file of the project's resources now comes as a place of
+  kind `stem`, and moving the file names it in the notes. ([#115](https://github.com/keyfire/xbsl/pull/115))
 - **`self-update` no longer trips over the backup left by the previous run.** Windows does not
   let a backup be deleted while a running server still has it loaded, and the next update failed
   with a message about busy files. The current installation is now put aside under a free

@@ -118,7 +118,7 @@ never means reading the files.
 | `meta_move_resource(root, resource_path, target_dir, dry_run)` | move a resource file or a folder into another folder of the same `Resources` folder and rewrite the `Resource{...}` keys and image property values that lead to it; lookups by a string are listed in `notes`, a move into another `Resources` folder is refused |
 | `meta_rename_resource_folder(root, folder_dir, new_name, dry_run)` | rename a folder inside a `Resources` folder with all its files and rewrite the keys that name them |
 | `meta_delete_resource_folder(root, folder_dir, dry_run)` | delete a folder inside a `Resources` folder with its files and list the keys and string lookups that name them; `dry_run` defaults to true |
-| `meta_resource_references(root, resource_path, limit)` | find the places that name a resource file or a folder: `Resource{...}` keys and image property values, keys two folders hold, strings with the path; each place has a file, a range, its line and a kind, and `limit` caps the list |
+| `meta_resource_references(root, resource_path, limit)` | find the places that name a resource file or a folder: `Resource{...}` keys and image property values, keys two folders hold, strings with the path or with the file's key without its extension; each place has a file, a range, its line and a kind, and `limit` caps the list |
 | `meta_add_subsystem(parent_dir, name, ...)` | create a subsystem folder with its `Подсистема.yaml` |
 | `meta_add_dependency(root, vendor, name, version, ...)` | attach a library – the `Libraries` section of `Проект.yaml` |
 | `meta_set_access(root, ..., default, permissions, calc_by)` | set `AccessControl.Permissions` on an object |
