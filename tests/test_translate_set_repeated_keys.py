@@ -243,7 +243,7 @@ def test_prune_counts_repeated_occurrences_beyond_page(mcp_module, tmp_path):
     answer = mcp_module.translate_unused(str(folder), filter="Партии", prune=True, limit=1)
     assert answer["removed"] == 2
     assert answer["pruned"] == {
-        "by_kind": {"token": 2}, "by_file": {str(file): 2},
+        "keys": 1, "by_kind": {"token": 2}, "by_file": {str(file): 2},
     }
     assert "unused" not in answer
     assert dictionary_module.load(dictionary).tokens == {"Задачи": "Tasks"}

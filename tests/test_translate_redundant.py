@@ -200,6 +200,19 @@ def test_prune_removes_exactly_the_listed_rows(tmp_path: Path, capsys):
     assert _echoed(root, dictionary) == {"Строка": "String"}
 
 
+def test_the_mcp_prune_takes_every_listed_entry_whatever_the_page(tmp_path: Path, mcp_module):
+    """`limit` shapes the listing of the tool, not the cleaning: the rest used to stay."""
+    root, dictionary = _project(tmp_path, "    Русский: Russian\n    Строка: String\n")
+    # The tool finds its dictionary by the name it looks for above the project.
+    dictionary = dictionary.rename(tmp_path / dictionary_module.DICTIONARY_FILE)
+
+    answer = mcp_module.translate_redundant(str(root), limit=1, prune=True)
+
+    assert answer["removed"] == 2
+    assert answer["pruned"] == {"keys": 2}
+    assert _echoed(root, dictionary) == {}
+
+
 def test_nothing_to_report_says_so(tmp_path: Path, capsys):
     root, dictionary = _project(tmp_path)
 

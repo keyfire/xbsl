@@ -2236,11 +2236,12 @@ def translate_unused(
              - a live project answers with thousands of rows, every one of them somebody's
              old deletion - and says so in `note`;
     limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
-    prune  – REMOVE the listed entries from the dictionary files. Off by default and named
+    prune  – REMOVE the entries from the dictionary files. Off by default and named
              separately from the listing on purpose: this is the one direction where a
-             mistaken reading destroys a translation. `kind`, `filter` and the page select
-             keys; all dictionary occurrences of those keys are removed, including repeats
-             outside the page. `removed` counts the physical occurrences;
+             mistaken reading destroys a translation. `kind` and `filter` select the keys -
+             ALL of them, whatever the page, since `limit`/`offset` shape only the listing -
+             and every dictionary occurrence of those keys is removed. `pruned.keys` counts
+             the pairs removed, `removed` the physical occurrences;
     compact – omitted: a preview lists full rows, a successful prune returns only counts.
              False always includes full rows; True shortens preview rows to {key, kind,
              file, line} and omits the list after pruning. `pruned` counts the removed
@@ -2325,9 +2326,12 @@ def translate_unused(
     else:
         out["unused"] = [entry.as_dict() for entry in page]
     if prune and not found.partial:
-        selected = {(e.kind, e.key) for e in page}
-        # The writer removes every occurrence of a selected key, including repeated
-        # declarations beyond the page boundary. Count those same physical entries.
+        # The whole filtered set goes, whatever the page: `limit` shapes the listing only. A
+        # call with `limit: 5` used to take five orphans of seventy-one and leave the rest to
+        # a `truncated` nobody reads after a removal.
+        selected = {(e.kind, e.key) for e in rows}
+        # The writer removes every occurrence of a selected key, repeated declarations
+        # included. Count those same physical entries.
         by_kind: dict[str, int] = {}
         by_file: dict[str, int] = {}
         for entry in found.entries:
@@ -2335,10 +2339,10 @@ def translate_unused(
                 by_kind[entry.kind] = by_kind.get(entry.kind, 0) + 1
                 by_file[entry.file] = by_file.get(entry.file, 0) + 1
         result = entries_module.write_entries(
-            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
-        ) if page else {"removed": 0}
+            path, [{"key": key, "kind": kind, "value": ""} for kind, key in sorted(selected)],
+        ) if selected else {"removed": 0}
         out["removed"] = result["removed"]
-        out["pruned"] = {"by_kind": by_kind, "by_file": by_file}
+        out["pruned"] = {"keys": len(selected), "by_kind": by_kind, "by_file": by_file}
         if compact is not False:
             out.pop("unused", None)
     return out
@@ -2366,8 +2370,9 @@ def translate_redundant(
              refused with the places looked at);
     filter – a substring of the key OR of the value;
     limit/offset – the page (limit 0 means all); a cut page says so in `truncated`;
-    prune  – REMOVE the listed entries from the dictionary files (off by default; it removes
-             exactly the page it answers with).
+    prune  – REMOVE the entries from the dictionary files (off by default). `filter` selects
+             them - all of them, whatever the page; `pruned.keys` counts the pairs removed,
+             `removed` the physical occurrences.
 
     The verdict is EVIDENCE, not a second reading of the tables: an entry is listed only when
     every place it answered would have come out the same without it, which is the same ground
@@ -2393,11 +2398,14 @@ def translate_redundant(
            "redundant": [entry.as_dict() for entry in page]}
     if rows:
         out["note"] = i18n.t("translate.redundant.note")
-    if prune and page:
+    if prune:
+        # The whole filtered set, whatever the page - the same rule as translate_unused.
+        selected = {(e.kind, e.key) for e in rows}
         removed = entries_module.write_entries(
-            path, [{"key": e.key, "kind": e.kind, "value": ""} for e in page],
-        )
+            path, [{"key": key, "kind": kind, "value": ""} for kind, key in sorted(selected)],
+        ) if selected else {"removed": 0}
         out["removed"] = removed["removed"]
+        out["pruned"] = {"keys": len(selected)}
     return out
 
 

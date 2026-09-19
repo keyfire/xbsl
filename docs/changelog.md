@@ -66,6 +66,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`prune` in `translate_unused` and `translate_redundant` removes everything the filters
+  select.** It used to remove only the page shown in the answer, so a call with `limit: 5` left
+  most orphans behind. The page now shapes only the list, and `pruned.keys` says how many pairs
+  went. ([#120](https://github.com/keyfire/xbsl/pull/120))
 - **`meta_rename_object` keeps comments and their translations together.** The name in a comment
   now changes whole, quoted text included, in a module and in yaml alike. The translation
   dictionary is not rewritten as a source: the translation of every changed comment line is
