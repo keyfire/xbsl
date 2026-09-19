@@ -386,6 +386,42 @@ def test_stale_file_backup_is_swept_by_the_next_run(fake_site, monkeypatch):
     assert not stale.exists()
 
 
+def test_a_held_leftover_backup_does_not_block_the_next_update(fake_site, monkeypatch):
+    """A backup left by the previous run may still be loaded by a live server.
+
+    Windows lets such a file be renamed but not deleted, so the leftover keeps the backup
+    name. The update then has to put the current files aside under another name instead of
+    failing on the taken one and blaming a busy installation.
+    """
+    _native_site(fake_site)
+    held_dir = fake_site / ("xbsl" + selfupdate._BACKUP_SUFFIX)
+    held_dir.mkdir()
+    (held_dir / "lexer.cp314-win_amd64.pyd").write_bytes(b"loaded by a live server")
+    held_file = fake_site / (_MYPYC + selfupdate._BACKUP_SUFFIX)
+    held_file.write_bytes(b"loaded by a live server")
+    held = {held_dir, held_file}
+    remove = selfupdate._remove_any
+    monkeypatch.setattr(selfupdate, "_remove_any", lambda path: None if path in held else remove(path))
+    rename = selfupdate.Path.rename
+
+    def rename_like_windows(self, target):
+        # Windows refuses to rename onto an existing name (WinError 183); POSIX replaces it.
+        if os.path.lexists(target):
+            raise FileExistsError(183, "Cannot create a file when that file already exists", str(target))
+        return rename(self, target)
+
+    monkeypatch.setattr(selfupdate.Path, "rename", rename_like_windows)
+    monkeypatch.setattr(selfupdate, "holders", list)
+    _stub_download(monkeypatch)
+
+    _old, new = selfupdate.self_update(log=lambda *a: None)
+
+    assert new == "9.9.9"
+    assert (fake_site / "xbsl" / "__init__.py").read_text(encoding="utf-8").strip() == '__version__ = "9.9.9"'
+    leftovers = sorted(path.name for path in fake_site.glob("*" + selfupdate._BACKUP_SUFFIX))
+    assert leftovers == sorted([held_dir.name, held_file.name])
+
+
 # -- the file list comes from the simple index ---------------------------------------------
 #
 # Caught live on 31.07.2026: right after a release `self-update --version 0.51.0` answered
