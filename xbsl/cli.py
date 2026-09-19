@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from xbsl import (
-    __version__, baseline, cijob, dataset, engine, environment, i18n, plugins, report,
+    __version__, baseline, cijob, dataset, engine, environment, i18n, plugins, report, rundiff,
 )
 from xbsl.templates import DEFAULT_FILE as DEFAULT_TEMPLATES_FILE
 
@@ -248,6 +248,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--out",
         metavar=i18n.t("cli.help.meta.file"),
         help=i18n.t("cli.help.out"),
+    )
+    parser.add_argument(
+        "--summary",
+        action="store_true",
+        help=i18n.t("cli.help.summary"),
+    )
+    parser.add_argument(
+        "--compare",
+        metavar=i18n.t("cli.help.meta.file"),
+        help=i18n.t("cli.help.compare"),
     )
     parser.add_argument(
         "--stdin",
@@ -1270,6 +1280,42 @@ def _scaffold_main(argv: list[str]) -> int:
     return 0
 
 
+def _brief_report(args, diagnostics, checked: int, active, selection: dict,
+                  saved: rundiff.Run | None, suppressed: int | None) -> int:
+    """The report of `--summary` and `--compare`: the counts by rule, or what changed.
+
+    The run is saved before anything is printed: a line saying it was saved must not come
+    out of a run whose file could not be written. The rule set goes to stderr as in the
+    text report, so a comparison of two engines names the one that answered.
+    """
+    if args.compare is None:
+        lines = rundiff.summary_lines(diagnostics, checked=checked, suppressed=suppressed)
+    else:
+        from xbsl.engine import RULES
+
+        carried = {rule.id for rule in active}
+        run = rundiff.record(
+            diagnostics, args.paths or ["."], checked=checked, lang=i18n.current_lang(),
+            selection=selection, rules={rule.id: rule.id in carried for rule in RULES},
+            engine=__version__,
+        )
+        changes = rundiff.compare(saved, run) if saved is not None else None
+        try:
+            rundiff.save(Path(args.compare), run, changes)
+        except OSError as exc:
+            print(i18n.t("rundiff.save-failed", path=args.compare, error=exc), file=sys.stderr)
+            return 2
+        if changes is None:
+            lines = rundiff.summary_lines(diagnostics, checked=checked, suppressed=suppressed)
+            lines.append(i18n.t("rundiff.first", path=args.compare))
+        else:
+            lines = rundiff.changes_lines(changes, diagnostics, path=args.compare,
+                                          checked=checked, suppressed=suppressed)
+    _emit_report("\n".join(lines), args.out)
+    print(environment.provenance_note(environment.provenance(active)), file=sys.stderr)
+    return 0
+
+
 def _check_main(argv: list[str]) -> int:
     """The check mode: `xbsl <paths> [options]`, also spelled `xbsl lint <paths>`."""
     # The language must be known BEFORE build_parser: the check-mode help (help=) is assembled in
@@ -1438,6 +1484,25 @@ def _check_main(argv: list[str]) -> int:
         print(i18n.t("cli.fix-conflicts-baseline"), file=sys.stderr)
         return 2
 
+    # The counts and the comparison are a text report of their own. Beside a second report
+    # one of the two would go unprinted, and a comparison that is not saved leaves the next
+    # run nothing to compare with.
+    brief = args.summary or args.compare is not None
+    clash = (f"--format {args.format}" if args.format != "text"
+             else "--write-baseline" if args.write_baseline else None)
+    if brief and clash:
+        print(i18n.t("cli.summary-conflict", flag=clash), file=sys.stderr)
+        return 2
+    saved: rundiff.Run | None = None
+    if args.compare is not None:
+        # Read before the run: a file that cannot be compared with is refused before minutes
+        # of checking go into a result with nowhere to go.
+        try:
+            saved = rundiff.load(Path(args.compare), i18n.current_lang())
+        except rundiff.RunStateError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+
     if args.stdin:
         # Editor mode: one buffer from stdin, checked with per-file rules only (cross-file rules
         # need the whole project). --filename sets the kind (.xbsl/.yaml) and the reported path.
@@ -1514,7 +1579,8 @@ def _check_main(argv: list[str]) -> int:
         found = baseline.discover(files)
         if found is not None:
             args.baseline = str(found)
-            if args.format == "text":
+            # The brief report names the baseline by what it suppressed, in its totals.
+            if args.format == "text" and not brief:
                 print(i18n.t("cli.baseline-found", path=found), file=sys.stderr)
     if args.baseline:
         try:
@@ -1558,7 +1624,14 @@ def _check_main(argv: list[str]) -> int:
             if reasoned:
                 print(i18n.t("cli.baseline-pruned-reasons", count=reasoned), file=sys.stderr)
 
-    if args.format == "json":
+    if brief:
+        selection = {name: sorted(chosen) if chosen else None
+                     for name, chosen in (("select", select), ("ignore", ignore),
+                                          ("enable", enable))}
+        code = _brief_report(args, diagnostics, len(files), active, selection, saved, suppressed)
+        if code:
+            return code
+    elif args.format == "json":
         # Machine-readable: the whole payload on stdout (or in --out), nothing on stderr.
         payload = report.report(diagnostics, len(files))
         if args.fix:

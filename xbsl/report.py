@@ -2,7 +2,8 @@
 
 One contract for structured output – a list of diagnostics plus a summary – so that the CLI and the
 MCP adapter cannot drift apart. Editors (the VS Code extension) consume the same JSON. The summary
-carries the counts by rule, by file and by severity (breakdown()). compact() omits the per-file map
+carries the counts by rule, by file and by severity (breakdown()); rule_table() turns them into the
+rows of the text `--summary` (rundiff.py). compact() omits the per-file map
 and keeps the error-level findings whole; up to COMPACT_FINDINGS_LIMIT it also lists the findings
 themselves, one line each, and past that limit only says how many there are – what a reader wants
 when the list is too long to carry.
@@ -64,6 +65,19 @@ def breakdown(diags: list[Diagnostic]) -> dict:
         "by_file": dict(sorted(by_file.items(), key=lambda item: (-item[1], item[0]))),
         "by_severity": by_severity,
     }
+
+
+def rule_table(diags: list[Diagnostic]) -> list[tuple[str, int, int]]:
+    """The findings by rule as rows of (rule, files, findings) - the table of `--summary`.
+
+    Built on breakdown(): the same count per rule and the same order, the most findings first,
+    then by the rule id. It adds what by_rule does not say - how many files the rule reached,
+    a file counted once however many findings of that rule it holds.
+    """
+    files: dict[str, set[str]] = {}
+    for d in diags:
+        files.setdefault(d.rule_id, set()).add(d.path)
+    return [(rule, len(files[rule]), count) for rule, count in breakdown(diags)["by_rule"].items()]
 
 
 def summary(diags: list[Diagnostic], n_files: int) -> dict:
