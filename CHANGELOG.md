@@ -31,6 +31,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
+- **`self-update` no longer trips over the backup left by the previous run.** Windows does not
+  let a backup be deleted while a running server still has it loaded, and the next update failed
+  with a message about busy files. The current installation is now put aside under a free
+  numbered name. ([#113](https://github.com/keyfire/xbsl/pull/113))
 - **A member whose name starts with a lowercase letter now reaches the data.** The extractor
   dropped such names. The distribution has one of them, `iOS` among the client platform kinds, and
   the unknown-static-member rule flagged it in working code. ([#110](https://github.com/keyfire/xbsl/pull/110))

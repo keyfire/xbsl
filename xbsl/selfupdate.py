@@ -448,6 +448,24 @@ def _remove_any(path: Path) -> None:
             pass
 
 
+def _free_backup_name(path: Path) -> Path:
+    """A backup name for `path` that is free right now.
+
+    The plain name is cleared first. It stays taken when the previous run left a backup that
+    a live process still has loaded: Windows lets such a file be renamed but not deleted.
+    Then the backup gets a numbered name. Every name ends with the backup suffix, so the
+    next run sweeps them all.
+    """
+    backup = path.with_name(path.name + _BACKUP_SUFFIX)
+    number = 0
+    while True:
+        _remove_any(backup)
+        if not os.path.lexists(backup):
+            return backup
+        number += 1
+        backup = path.with_name(f"{path.name}.{number}{_BACKUP_SUFFIX}")
+
+
 def _move_aside(site: Path) -> list[tuple[Path, Path]]:
     """Move the current installation aside. Raises when a file inside is open.
 
@@ -468,8 +486,7 @@ def _move_aside(site: Path) -> list[tuple[Path, Path]]:
                 if not path.name.endswith(_BACKUP_SUFFIX)
             )
         for path in targets:
-            backup = path.with_name(path.name + _BACKUP_SUFFIX)
-            _remove_any(backup)
+            backup = _free_backup_name(path)
             path.rename(backup)
             moved.append((path, backup))
     except OSError:
