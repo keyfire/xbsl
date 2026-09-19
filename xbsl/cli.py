@@ -1575,6 +1575,7 @@ def _check_main(argv: list[str]) -> int:
     suppressed = unused = None
     stale: list[dict] = []
     not_checked: list[dict] = []
+    reworded: list[dict] = []
     if not args.baseline and not args.no_baseline:
         found = baseline.discover(files)
         if found is not None:
@@ -1596,7 +1597,7 @@ def _check_main(argv: list[str]) -> int:
         roots = baseline.roots_of(asked, Path(args.baseline).parent)
         diagnostics, suppressed, unused, stale = baseline.apply(
             diagnostics, data, Path(args.baseline).parent, carried, roots,
-            accepted=fix_accepted if args.fix else None,
+            accepted=fix_accepted if args.fix else None, reworded=reworded,
         )
         not_checked = baseline.not_checked_entries(data, carried, roots)
         # The stale entries are named, not just counted: without the list the only way to
@@ -1657,6 +1658,11 @@ def _check_main(argv: list[str]) -> int:
             split = baseline.not_checked_split(not_checked)
             payload["summary"]["baseline_not_checked_rules"] = split["rules"]
             payload["summary"]["baseline_not_checked_paths"] = split["paths"]
+            # Entries frozen under an earlier wording of their rule: they hold their findings,
+            # and a rewrite brings their text up to date.
+            if reworded:
+                payload["summary"]["baseline_reworded"] = len(reworded)
+                payload["summary"]["baseline_reworded_entries"] = reworded
         _emit_report(json.dumps(payload, ensure_ascii=False), args.out)
     elif args.format == "codeclimate":
         # GitLab Code Quality report: the issue array on stdout, nothing on stderr.
@@ -1698,6 +1704,8 @@ def _check_main(argv: list[str]) -> int:
                            **baseline.not_checked_split(not_checked)),
                     file=sys.stderr,
                 )
+            if reworded:
+                print(i18n.t("cli.baseline-reworded", count=len(reworded)), file=sys.stderr)
 
     if args.fix:
         print(i18n.t("cli.fix-summary", fixed=fix_summary["fixed"],

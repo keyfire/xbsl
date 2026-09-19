@@ -21,6 +21,15 @@ The message text is part of the identity, so the baseline must be written and ch
 under the same output language (--lang / XBSL_LANG); a language switch surfaces
 every frozen finding and marks the whole file's entries as unused.
 
+The text belongs to the rule, though, and a release may reword it. An entry frozen under
+an earlier wording then held nothing: the finding came back as new with its reason unread,
+and the entry was called stale. So an entry whose text fits no current wording of its rule
+(`_reworded`) also holds a finding of that rule in that file which names the same values -
+each in the quotes its template gives it, in the same order. The exact text is spent first;
+a message without values is never matched this way, since nothing would tell two such
+findings apart. The run names these entries (`reworded` of `apply`), and a rewrite carries
+their reasons over to the new text.
+
 Unused and stale are counted only over the entries whose RULE the run actually had: a rule
 left out of the selection (or off by default, or unknown to the installed plugins) produces
 no findings by construction, and calling its entries stale would say the debt is paid when
@@ -180,6 +189,112 @@ def _identity_message(message: str, base_dir: Path, rule_id: str | None = None) 
     return message
 
 
+# --- an entry the rule reworded ---------------------------------------------------------------
+
+#: The quotes a template may put around a value, opening -> closing.
+_QUOTES = {"'": "'", '"': '"', "`": "`"}
+
+
+@lru_cache(maxsize=512)
+def _wording(template: str, position: str | None) -> tuple[re.Pattern, tuple[tuple[str, str], ...]]:
+    """A template as a pattern of its whole text, with the quotes around each value it captures.
+
+    A value is what the finding names. A translated name (`n[...]`) belongs to the wording, and
+    a display position (`position`, see _POSITION_FIELDS) is normalized in the identity, so both
+    are matched without being captured.
+    """
+    pieces = list(Formatter().parse(template))
+    parts: list[str] = []
+    quotes: list[tuple[str, str]] = []
+    for index, (literal, field, _spec, _conversion) in enumerate(pieces):
+        parts.append(re.escape(literal))
+        if field is None:
+            continue
+        if field.startswith("n[") or field == position:
+            parts.append(".*?")
+            continue
+        parts.append("(.*?)")
+        opening = literal[-1:]
+        closing = pieces[index + 1][0][:1] if index + 1 < len(pieces) else ""
+        quotes.append((opening, closing) if opening and _QUOTES.get(opening) == closing
+                      else ("", ""))
+    return re.compile("".join(parts), re.DOTALL), tuple(quotes)
+
+
+def _wordings(rule_id: str, keys: list[str]) -> list[tuple[str, str | None]]:
+    """Every current template of the rule in every language, with its position field."""
+    prefix = rule_id + "."
+    return [
+        (template, _POSITION_FIELDS.get(key))
+        for key in keys if key.startswith(prefix)
+        for template in (i18n.translations(key) or {}).values()
+    ]
+
+
+def _values(message: str, wordings: list[tuple[str, str | None]]) -> list[str] | None:
+    """The values a current wording fills into the message, each in its quotes, or None when
+    no current wording fits the text."""
+    for template, position in wordings:
+        pattern, quotes = _wording(template, position)
+        match = pattern.fullmatch(message)
+        if match is not None:
+            return [opening + value + closing
+                    for value, (opening, closing) in zip(match.groups(), quotes)]
+    return None
+
+
+def _carries(text: str, values: list[str]) -> bool:
+    """Whether the text names the values in this order."""
+    at = 0
+    for value in values:
+        found = text.find(value, at)
+        if found < 0:
+            return False
+        at = found + len(value)
+    return True
+
+
+class _Reworded:
+    """The entries whose text fits no current wording of their rule, by file and rule.
+
+    Built lazily: the registry of messages is read only when some entry is left unspent.
+    """
+
+    def __init__(self) -> None:
+        # Standalone baseline callers need the builtin message registry too.
+        from xbsl import rules  # noqa: F401
+
+        self._keys = i18n.registered_keys()
+        self._wordings: dict[str, list[tuple[str, str | None]]] = {}
+        self.by_place: dict[tuple[str, str], list[tuple[str, str, str]]] = {}
+
+    def wordings(self, rule_id: str) -> list[tuple[str, str | None]]:
+        if rule_id not in self._wordings:
+            self._wordings[rule_id] = _wordings(rule_id, self._keys)
+        return self._wordings[rule_id]
+
+    def add(self, key: tuple[str, str, str]) -> None:
+        """Keep the entry of this identity when a release reworded it."""
+        path, rule_id, message = key
+        if _values(message, self.wordings(rule_id)) is None:
+            self.by_place.setdefault((path, rule_id), []).append(key)
+
+    def holder(self, path: str, rule_id: str, message: str,
+               left: dict[tuple[str, str, str], int]) -> tuple[str, str, str] | None:
+        """The reworded entry with budget `left` that holds this finding, if any."""
+        candidates = self.by_place.get((path, rule_id))
+        if not candidates:
+            return None
+        values = _values(message, self.wordings(rule_id))
+        # A message without a named value gives nothing to tell two findings apart by.
+        if not values or not any(ch.isalpha() for value in values for ch in value):
+            return None
+        for key in candidates:
+            if left.get(key, 0) > 0 and _carries(key[2], values):
+                return key
+        return None
+
+
 def _entry_count(value) -> int:
     """The allowed count of an entry: a bare int or the 'count' of a {count, reason} dict."""
     if isinstance(value, int):
@@ -261,9 +376,37 @@ def write(path: Path, diags: list[Diagnostic]) -> dict:
             reasons = reasons_of(load(path), path.parent)
         except BaselineError:
             pass
+    if reasons:
+        reasons.update(_reworded_reasons(reasons, diags, path.parent))
     data = build(diags, path.parent, reasons)
     save(path, data)
     return data
+
+
+def _reworded_reasons(
+    reasons: dict[tuple[str, str, str], str], diags: list[Diagnostic], base_dir: Path,
+) -> dict[tuple[str, str, str], str]:
+    """The reasons of reworded entries, keyed by the identity of the finding each one holds.
+
+    Without them a rewrite after a reworded release wrote the finding under its new text and
+    dropped the sentence explaining why it was excluded.
+    """
+    earlier: _Reworded | None = None
+    every = dict.fromkeys(reasons, 1)
+    out: dict[tuple[str, str, str], str] = {}
+    for d in diags:
+        key = (_identity_path(d.path, base_dir), d.rule_id,
+               _identity_message(d.message, base_dir, d.rule_id))
+        if key in reasons or key in out:
+            continue
+        if earlier is None:
+            earlier = _Reworded()
+            for entry in reasons:
+                earlier.add(entry)
+        holder = earlier.holder(key[0], key[1], key[2], every)
+        if holder is not None:
+            out[key] = reasons[holder]
+    return out
 
 
 def save(path: Path, data: dict) -> None:
@@ -480,6 +623,7 @@ def apply(
     diags: list[Diagnostic], data: dict, base_dir: Path, rules: set[str] | None = None,
     roots: list[str] | None = None,
     accepted: list[tuple[Diagnostic, Diagnostic]] | None = None,
+    reworded: list[dict] | None = None,
 ) -> tuple[list[Diagnostic], int, int, list[dict]]:
     """Filter the findings through the baseline.
 
@@ -493,16 +637,22 @@ def apply(
     suppress - a finding cannot occur there anyway - but they are left out of the unused
     count and out of the stale list; `not_checked_entries` names them. Without the
     arguments the counts stay as they were: every entry judged.
+
+    `reworded`, when given, receives the entries that held a finding under an earlier
+    wording of their rule (see the module note): {path, rule, message, count, reason}, the
+    message as the file writes it.
     """
     if accepted is not None:
         # A fix run pins occurrences once. Count their ORIGINAL identities for the budget,
         # while removing their current diagnostic objects: messages can contain line numbers.
         _, suppressed, unused, stale = apply(
             [original for current, original in accepted], data, base_dir, rules, roots,
+            reworded=reworded,
         )
         frozen = {id(current) for current, original in accepted}
         return [d for d in diags if id(d) not in frozen], suppressed, unused, stale
     budgets: dict[tuple[str, str, str], int] = {}
+    written: dict[tuple[str, str, str], tuple[str, str | None]] = {}
     total_budget = 0
     for path, per_rule in data.get("files", {}).items():
         if not isinstance(per_rule, dict):
@@ -518,6 +668,7 @@ def apply(
                     # than one replacing the other.
                     key = (path, rule_id, _identity_message(message, base_dir, rule_id))
                     budgets[key] = budgets.get(key, 0) + count
+                    written.setdefault(key, (message, _entry_reason(value)))
                     if (rules is None or rule_id in rules) and _in_reach(path, roots):
                         total_budget += count
     kept: list[Diagnostic] = []
@@ -533,6 +684,32 @@ def apply(
             suppressed += 1
         else:
             kept.append(d)
+    if kept and any(left > 0 for left in budgets.values()):
+        # The second pass: what the exact text left unspent may still hold a finding whose
+        # rule reworded the message since the entry was frozen.
+        earlier = _Reworded()
+        for key, left in budgets.items():
+            if left > 0:
+                earlier.add(key)
+        held: dict[tuple[str, str, str], int] = {}
+        still: list[Diagnostic] = []
+        for d in kept:
+            path = _identity_path(d.path, base_dir)
+            holder = earlier.holder(path, d.rule_id,
+                                    _identity_message(d.message, base_dir, d.rule_id), budgets)
+            if holder is None:
+                still.append(d)
+                continue
+            budgets[holder] -= 1
+            used[holder] = used.get(holder, 0) + 1
+            held[holder] = held.get(holder, 0) + 1
+            suppressed += 1
+        kept = still
+        if reworded is not None:
+            for key in sorted(held):
+                message, reason = written[key]
+                reworded.append({"path": key[0], "rule": key[1], "message": message,
+                                 "count": held[key], "reason": reason})
     return (kept, suppressed, total_budget - suppressed,
             stale_entries(data, used, rules, base_dir, roots))
 

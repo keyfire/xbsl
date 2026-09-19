@@ -1,3 +1,3 @@
 ﻿"""xbsl - the XBSL (1C:Element) toolkit: linter, LSP, MCP, docs, index, scaffolding, translation."""
 
-__version__ = "0.112.1"
+__version__ = "0.113.0"

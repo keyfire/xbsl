@@ -33,6 +33,18 @@ entry either - say what the behaviour was, not which class name was compared.
   names the file. The first call saves the run, and each later one answers with the findings that
   appeared and disappeared and a row per changed rule, all as data. The difference used to be
   available only in the CLI, and agents check projects through MCP more often. ([#122](https://github.com/keyfire/xbsl/pull/122))
+
+### Fixed
+
+- **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
+  path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
+  as left out. Paths are now paired by the folder they name, and by spelling when the folders
+  differ, as with two worktrees of one repository. ([#122](https://github.com/keyfire/xbsl/pull/122))
+
+## 2026-09-19 – 0.112.1, 0.113.0
+
+### Added
+
 - **`--summary` and `--compare`: counts by rule and the difference with the previous run.**
   `--summary` prints a row per rule with its files and findings instead of the findings.
   `--compare FILE` saves the run, and the next run with that file prints only the findings that
@@ -70,10 +82,10 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Fixed
 
-- **`--compare` pairs one folder typed relative and absolute.** The key of a finding took the
-  path as typed, so two runs of one folder spelled two ways compared nothing and named both paths
-  as left out. Paths are now paired by the folder they name, and by spelling when the folders
-  differ, as with two worktrees of one repository. ([#122](https://github.com/keyfire/xbsl/pull/122))
+- **A baseline entry keeps its finding when the rule rewords its message.** An entry frozen under
+  the earlier text now holds a finding of the same rule in the same file if it names the same
+  values in the same quotes and order. The run names such entries, and `--write-baseline` moves
+  their reasons to the new text. ([#121](https://github.com/keyfire/xbsl/pull/121))
 - **`prune` in `translate_unused` and `translate_redundant` removes everything the filters
   select.** It used to remove only the page shown in the answer, so a call with `limit: 5` left
   most orphans behind. The page now shapes only the list, and `pruned.keys` says how many pairs
@@ -106,11 +118,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The translation dictionary is read once per pass.** In 0.112.0 the dictionary freshness check
   moved to comparing bytes, and `code/translation-gaps` ran it for every file. On a project of
   1267 files that meant 234 395 reads and 83 extra seconds. ([#110](https://github.com/keyfire/xbsl/pull/110))
-
-## 2026-09-19 – 0.112.1
-
-### Fixed
-
 - **The yaml comment rules no longer put `##` on an instance of a project component in a list.**
   With a comment on such a node the server does not apply the project, although the development
   environment offers a place for it. The `yaml/plain-comment` autofix used to move a `#` block

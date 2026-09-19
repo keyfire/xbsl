@@ -342,6 +342,13 @@ excluded from the identity, so moving an accepted finding does not make it new. 
 semantic numbers still distinguish findings; the displayed message keeps the current line
 number. Existing baseline files use the same matching without being rewritten.
 
+A new release may reword the message of a rule. An entry frozen under the earlier wording still
+holds its finding when its text fits no current wording of the rule and names the same values in
+the same quotes and order, in the same file. A message without such values is matched only by
+its text. The run names these entries: a line in the text report, `baseline_reworded` and
+`summary.baseline_reworded_entries` in json and in the MCP `lint_paths` answer. A rewrite with
+`--write-baseline` brings their text up to date and keeps their reasons.
+
 Only the entries of the rules the run actually carried count as stale. A rule left out of the set
 - by a narrowing `--select`, by being off by default, by being unknown to the installed plugin -
 produces no findings by construction. Calling its entries stale would declare the debt paid

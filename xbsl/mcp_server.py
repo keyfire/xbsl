@@ -171,8 +171,9 @@ def _through_baseline(
         return diags, {}
     data = baseline_data.load(found)
     roots = baseline_data.roots_of(asked, found.parent)
+    reworded: list[dict] = []
     kept, suppressed, unused, stale = baseline_data.apply(
-        diags, data, found.parent, rules, roots, accepted=accepted,
+        diags, data, found.parent, rules, roots, accepted=accepted, reworded=reworded,
     )
     summary = {
         "baseline": str(found),
@@ -190,6 +191,10 @@ def _through_baseline(
         summary["baseline_not_checked"] = len(not_checked)
         summary["baseline_not_checked_rules"] = split["rules"]
         summary["baseline_not_checked_paths"] = split["paths"]
+    if reworded:
+        # Held under an earlier wording of the rule, exactly as the CLI json names them.
+        summary["baseline_reworded"] = len(reworded)
+        summary["baseline_reworded_entries"] = reworded
     return kept, summary
 
 
