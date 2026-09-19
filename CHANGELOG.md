@@ -18,7 +18,7 @@ requests: an entry without such a link is unfinished, because the reader has no 
 to the code and the reasoning behind it. Internal identifiers of the platform have no place in an
 entry either - say what the behaviour was, not which class name was compared.
 
-## Unreleased
+## 2026-09-19 – 0.112.1, 0.113.0
 
 ### Added
 
@@ -95,11 +95,6 @@ entry either - say what the behaviour was, not which class name was compared.
 - **The translation dictionary is read once per pass.** In 0.112.0 the dictionary freshness check
   moved to comparing bytes, and `code/translation-gaps` ran it for every file. On a project of
   1267 files that meant 234 395 reads and 83 extra seconds. ([#110](https://github.com/keyfire/xbsl/pull/110))
-
-## 2026-09-19 – 0.112.1
-
-### Fixed
-
 - **The yaml comment rules no longer put `##` on an instance of a project component in a list.**
   With a comment on such a node the server does not apply the project, although the development
   environment offers a place for it. The `yaml/plain-comment` autofix used to move a `#` block
