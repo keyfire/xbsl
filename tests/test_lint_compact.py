@@ -132,10 +132,30 @@ def test_compact_answer_keeps_the_record_of_the_ci_job(server, tmp_path):
     answer = server.lint_paths([str(project)], as_ci=True, compact=True)
 
     assert set(answer) == {"summary", "errors", "findings"}
-    # One job in the file: the sentence already names it, so the key itself is left out.
-    assert set(answer["summary"]["as_ci"]) == {"enabled", "adopted", "flags"}
-    assert "xbsl-lint" in answer["summary"]["as_ci"]["flags"]
+    # One line instead of the record: the file relative to the checkout, the job, the flags.
+    assert set(answer["summary"]["as_ci"]) == {"adopted", "brief"}
+    brief = answer["summary"]["as_ci"]["brief"]
+    assert "(.gitlab-ci.yml," in brief and "xbsl-lint" in brief
+    assert "--ignore structure/xbsl-pair" in brief
+    assert str(tmp_path) not in brief
     assert answer["summary"]["diagnostics"] == sum(answer["summary"]["by_rule"].values())
+
+
+@pytest.mark.needs_data
+def test_compact_as_ci_full_keeps_the_whole_record(server, tmp_path):
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "Первый.xbsl").write_text(_WARNING, encoding="utf-8")
+    (tmp_path / ".gitlab-ci.yml").write_text(
+        "xbsl-lint:\n  script:\n    - xbsl project --ignore structure/xbsl-pair\n",
+        encoding="utf-8",
+    )
+
+    answer = server.lint_paths([str(project)], as_ci=True, compact=True, as_ci_full=True)
+
+    assert "findings" in answer and "by_file" not in answer["summary"]
+    assert set(answer["summary"]["as_ci"]) >= {"file", "job", "ignore", "flags", "jobs"}
+    assert answer["summary"]["as_ci"]["ignore"] == ["structure/xbsl-pair"]
 
 
 @pytest.mark.needs_data
@@ -152,15 +172,14 @@ def test_compact_as_ci_names_the_job_when_the_file_runs_several(server, tmp_path
     full = server.lint_paths([str(project)], as_ci=True)
     compact = server.lint_paths([str(project)], as_ci=True, compact=True)
 
-    # The full record keeps everything; compact keeps the sentence, the job it names and
-    # the line about the jobs it did not take - the raw lists and the baseline path go.
+    # The full record keeps everything; the compact line names the job it took and the one
+    # it did not - the raw lists and the baseline path stay in the full record.
     assert set(full["summary"]["as_ci"]) >= {
         "file", "job", "select", "ignore", "enable", "baseline", "flags", "jobs", "hint",
     }
     assert full["summary"]["as_ci"]["jobs"] == ["lint-en"]
-    assert set(compact["summary"]["as_ci"]) == {"enabled", "adopted", "flags", "job", "hint"}
-    assert compact["summary"]["as_ci"]["job"] == "lint-ru"
-    assert "lint-en" in compact["summary"]["as_ci"]["hint"]
+    brief = compact["summary"]["as_ci"]["brief"]
+    assert "lint-ru" in brief and "lint-en" in brief
 
 
 @pytest.mark.needs_data
@@ -188,9 +207,86 @@ def test_compact_as_ci_keeps_what_the_reader_was_never_shown(server, tmp_path):
 
     taken = server.lint_paths([str(project)], as_ci=True, compact=True)["summary"]["as_ci"]
 
-    assert taken["unread_includes"] == ["template: Jobs/SAST.gitlab-ci.yml"]
-    assert "SAST" in taken["note"]
-    assert "lint-en" in taken["hint"]
+    assert "template: Jobs/SAST.gitlab-ci.yml" in taken["brief"]
+    assert "lint-en" in taken["brief"]
+    assert "ci/lint.yml" in taken["brief"]  # the include the command stands in
+
+
+# --- the one line of `as_ci`, built from the record alone (no data needed) ---------------
+
+
+def _ci_record(**changes):
+    """cijob.CiLint.as_dict() of a job with ten rules enabled and a second job beside it."""
+    root = Path("/repo").resolve()
+    record = {
+        "enabled": True, "adopted": True, "file": str(root / ".gitlab-ci.yml"), "source": None,
+        "root": str(root), "job": "xbsl-lint", "select": [], "ignore": [],
+        "enable": [f"code/rule-{n}" for n in range(10)],
+        "baseline": str(root / ".xbsllint-baseline"), "no_baseline": False,
+        "flags": "the long sentence", "jobs": ["English to S3"], "hint": "the long hint",
+        "note": "", "unread_includes": [],
+    }
+    record.update(changes)
+    return record
+
+
+def _brief(record, lang):
+    from xbsl import i18n
+
+    try:
+        i18n.set_lang(lang)
+        return report.compact({"summary": {"as_ci": record}, "diagnostics": []})["summary"]["as_ci"]
+    finally:
+        i18n.set_lang(None)
+
+
+def test_compact_as_ci_is_one_line_that_counts_a_long_flag_list():
+    assert _brief(_ci_record(), "ru") == {
+        "adopted": True,
+        "brief": "Как в CI (.gitlab-ci.yml, задача xbsl-lint): --enable ×10, "
+                 "--baseline .xbsllint-baseline; ещё задачи: English to S3",
+    }
+    assert _brief(_ci_record(), "en")["brief"] == (
+        "As in CI (.gitlab-ci.yml, job xbsl-lint): --enable ×10, "
+        "--baseline .xbsllint-baseline; also run by: English to S3"
+    )
+
+
+def test_compact_as_ci_names_a_short_flag_list_rule_by_rule():
+    record = _ci_record(enable=[], select=["code/a", "code/b"], jobs=[], hint="", baseline=None)
+    assert _brief(record, "en")["brief"] == (
+        "As in CI (.gitlab-ci.yml, job xbsl-lint): --select code/a, --select code/b"
+    )
+
+
+def test_compact_as_ci_keeps_the_include_and_the_unread_ones():
+    root = Path("/repo").resolve()
+    record = _ci_record(
+        source=str(root / "ci" / "lint.yml"),
+        enable=[], baseline=None, no_baseline=True, jobs=[], hint="",
+        unread_includes=["template: Jobs/SAST.gitlab-ci.yml"],
+    )
+    assert _brief(record, "en")["brief"] == (
+        "As in CI (.gitlab-ci.yml, include ci/lint.yml, job xbsl-lint): --no-baseline; "
+        "includes left unread: template: Jobs/SAST.gitlab-ci.yml"
+    )
+
+
+def test_compact_as_ci_of_a_command_without_flags_says_so():
+    record = _ci_record(enable=[], baseline=None, jobs=[], hint="")
+    assert _brief(record, "ru")["brief"] == (
+        "Как в CI (.gitlab-ci.yml, задача xbsl-lint): своих ключей у команды нет"
+    )
+
+
+def test_compact_as_ci_names_no_other_job_once_the_caller_chose_one():
+    """`hint` is empty when the job was named: the other jobs are no longer a choice."""
+    assert "English to S3" not in _brief(_ci_record(hint=""), "en")["brief"]
+
+
+def test_a_refused_adoption_stays_as_it_was():
+    refused = {"enabled": True, "adopted": False, "error": "no xbsl command"}
+    assert _brief(dict(refused), "en") == refused
 
 
 @pytest.mark.needs_data

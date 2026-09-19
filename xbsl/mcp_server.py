@@ -247,6 +247,7 @@ def lint_paths(
     as_ci_job: str | None = None,
     compact: bool = False,
     fix: bool = False,
+    as_ci_full: bool = False,
 ) -> dict:
     """Check files/directories on disk.
 
@@ -286,10 +287,11 @@ def lint_paths(
                   again without `compact`, or narrow `paths`/`select`) - the text of every
                   finding is what a full answer costs: several hundred characters each, tens
                   of thousands over one project run, when the question was only whether the
-                  tree is clean. `summary.as_ci`, when present, narrows to `flags` (the
-                  sentence already names the file, the job and the adopted rules) plus `job`
-                  when the file runs the linter in more than one job - everything else about
-                  the baseline and the CI job stays in the full answer;
+                  tree is clean. `summary.as_ci`, when present, narrows to one line,
+                  {"adopted": true, "brief": ...}: the file relative to the checkout, the job,
+                  the flags with a long list counted ("--enable ×10"), the jobs not taken and
+                  the includes left unread;
+    as_ci_full  – with `compact`, keep the whole `as_ci` record instead of the line;
     A path inside a project pulls the whole project in as context (the cross-file rules need
     it), the diagnostics are reported for the requested paths only.
     Returns {diagnostics: [...], summary: {...}} (with `compact`: {summary, errors, findings}
@@ -359,7 +361,7 @@ def lint_paths(
         # pipeline has to know which of them it reproduced), where the command actually
         # stands when an `include:` brought it, and the includes nobody fetched.
         payload["summary"]["as_ci"] = job.as_dict(hint=not as_ci_job)
-    return report.compact(payload) if compact else payload
+    return report.compact(payload, as_ci_full=as_ci_full) if compact else payload
 
 
 @mcp.tool()

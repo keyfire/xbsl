@@ -104,6 +104,26 @@ MESSAGES = {
         "ru": "В {path} под '{job}' подходит несколько задач: {jobs} – назовите одну целиком",
         "en": "In {path} '{job}' fits several jobs: {jobs} - name one in full",
     },
+    "ci.brief": {
+        "ru": "Как в CI ({where}, задача {job}): {flags}",
+        "en": "As in CI ({where}, job {job}): {flags}",
+    },
+    "ci.brief-include": {
+        "ru": "{path}, включение {source}",
+        "en": "{path}, include {source}",
+    },
+    "ci.brief-nothing": {
+        "ru": "своих ключей у команды нет",
+        "en": "the command carries no flags of its own",
+    },
+    "ci.brief-others": {
+        "ru": "ещё задачи: {jobs}",
+        "en": "also run by: {jobs}",
+    },
+    "ci.brief-unread": {
+        "ru": "не прочитаны включения: {items}",
+        "en": "includes left unread: {items}",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -228,6 +248,50 @@ class CiLint:
             "note": self.note(),
             "unread_includes": list(self.unread),
         }
+
+
+#: A flag list longer than this is counted in the brief line, not spelled out.
+_BRIEF_LISTED = 2
+
+
+def brief(record: dict) -> str:
+    """The adoption record (CiLint.as_dict()) as the one line of a compact answer.
+
+    The file relative to the checkout, the job and the flags. A flag given more than
+    _BRIEF_LISTED times is counted ("--enable ×10") - the whole sentence stays in `flags` of
+    the full record. The jobs not taken (while the caller has not named one) and the includes
+    nobody read stay in the line: they are what the rest of it cannot tell.
+    """
+    root = Path(record["root"])
+    where = _relative(record["file"], root)
+    if record.get("source"):
+        where = i18n.t("ci.brief-include", path=where, source=_relative(record["source"], root))
+    flags: list[str] = []
+    for name in ("select", "ignore", "enable"):
+        values = record.get(name) or []
+        if len(values) > _BRIEF_LISTED:
+            flags.append(f"--{name} ×{len(values)}")
+        else:
+            flags += [f"--{name} {value}" for value in values]
+    if record.get("baseline"):
+        flags.append(f"--baseline {_relative(record['baseline'], root)}")
+    if record.get("no_baseline"):
+        flags.append("--no-baseline")
+    line = i18n.t("ci.brief", where=where, job=record["job"],
+                  flags=", ".join(flags) or i18n.t("ci.brief-nothing"))
+    if record.get("hint") and record.get("jobs"):
+        line += "; " + i18n.t("ci.brief-others", jobs=", ".join(record["jobs"]))
+    if record.get("unread_includes"):
+        line += "; " + i18n.t("ci.brief-unread", items=_listed(record["unread_includes"]))
+    return line
+
+
+def _relative(path: str, root: Path) -> str:
+    """`path` relative to the checkout in forward slashes; a path outside it stays whole."""
+    try:
+        return Path(path).relative_to(root).as_posix()
+    except ValueError:
+        return str(path)
 
 
 def refused(error: str) -> dict:

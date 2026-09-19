@@ -93,7 +93,7 @@ def report(diags: list[Diagnostic], n_files: int) -> dict:
 COMPACT_FINDINGS_LIMIT = 10
 
 
-def compact(payload: dict) -> dict:
+def compact(payload: dict, *, as_ci_full: bool = False) -> dict:
     """The payload of report() without its per-file map, and its findings held short.
 
     The summary keeps counts by rule and severity; the unbounded per-file map is available
@@ -106,10 +106,9 @@ def compact(payload: dict) -> dict:
     thousands over one project run. The errors alone always keep their full records, under
     `errors`, because an error is what a build fails on and the reader has to see which one.
 
-    `as_ci`, under `summary` when the caller asked for it, narrows the same way: the `flags`
-    sentence alone (it already names the file, the job and the adopted rules) plus the job
-    name when the file runs the linter more than once - see _compact_as_ci. Every other key
-    of the payload (the environment, the baseline record) stays as it was.
+    `as_ci`, under `summary` when the caller asked for it, narrows to one line - see
+    _compact_as_ci; `as_ci_full` keeps the whole record. Every other key of the payload (the
+    environment, the baseline record) stays as it was.
     """
     out = dict(payload)
     out["summary"] = {key: value for key, value in payload["summary"].items()
@@ -123,7 +122,7 @@ def compact(payload: dict) -> dict:
             "report.findings-hint", count=len(findings), limit=COMPACT_FINDINGS_LIMIT,
         )
     as_ci = out["summary"].get("as_ci")
-    if as_ci is not None:
+    if as_ci is not None and not as_ci_full:
         out["summary"]["as_ci"] = _compact_as_ci(as_ci)
     return out
 
@@ -135,33 +134,23 @@ def _compact_finding(d: dict) -> str:
 
 
 def _compact_as_ci(job: dict) -> dict:
-    """`as_ci` (cijob.CiLint.as_dict()) narrowed to what `flags` does not already say.
+    """`as_ci` (cijob.CiLint.as_dict()) as one line: `{"adopted": True, "brief": ...}`.
 
-    `flags` is the full sentence ("Rule set as in CI: <file>, job <job> - <select/ignore/
-    enable/baseline>"), so the raw lists, the baseline path and the include chain add
-    nothing a reader could not already read there. `job` alone survives, and only when the
-    file runs the linter in more than one job (`jobs` non-empty) - with a single job the
-    sentence is unambiguous about which one it describes.
+    The same record comes with every call of a session, and the full `flags` sentence with an
+    absolute path and every rule of a long `--enable` list cost about a thousand characters
+    each time. The line keeps the file relative to the checkout, the job, the flags with a
+    long list counted, the jobs left unchosen and the includes nobody read - the last two are
+    the reader's blind spots, and an answer without them read as if the whole pipeline had
+    been taken. The raw lists and the absolute paths stay in the full record.
 
-    What `flags` cannot say survives: the includes nobody fetched (`unread_includes` and
-    the `note` line built from them) and the `hint` naming the jobs left unchosen. Those
-    are the reader's blind spots, not a longer spelling of the sentence, and an answer that
-    dropped them read as if the whole pipeline had been taken - the very thing `cijob.note()`
-    exists to prevent. Each is carried only when it says something: a pipeline with one job
-    and no unread include keeps the short record it had.
-
-    A refused adoption (`cijob.refused()`, `adopted: False`) has no `flags` to fall back on
-    and is small already - it is returned unchanged.
+    A refused adoption (`cijob.refused()`, `adopted: False`) has no line to build and is
+    small already - it is returned unchanged.
     """
     if not job.get("adopted"):
         return job
-    out = {"enabled": job.get("enabled", True), "adopted": True, "flags": job["flags"]}
-    if job.get("jobs"):
-        out["job"] = job.get("job")
-    for key in ("hint", "note", "unread_includes"):
-        if job.get(key):
-            out[key] = job[key]
-    return out
+    from xbsl import cijob
+
+    return {"adopted": True, "brief": cijob.brief(job)}
 
 
 # --- GitLab Code Quality (Code Climate issues) ----------------------------------------
