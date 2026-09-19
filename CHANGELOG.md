@@ -34,6 +34,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Changed
 
+- **Pasting a fragment puts its notes where the development environment reads them.** A comment
+  above the component moves inside the node as `##` lines and no longer stays before the `-`,
+  where the visual editor drops it on the first save. A note with no place of its own stays, and
+  the answer names it in the notes. The new page "Comments in yaml" says where and how to write
+  comments in yaml. ([#116](https://github.com/keyfire/xbsl/pull/116))
 - **The writing `meta_*` tools answer with a short lint.** The answer carries the number of files
   and findings and up to ten findings one line each; `lint_paths` on the written files gives the
   whole report. A clean file used to cost about twenty lines on every call. ([#114](https://github.com/keyfire/xbsl/pull/114))

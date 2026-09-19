@@ -108,6 +108,10 @@ MESSAGES = {
               "this place has no documentation comment of its own. Move the note into the `##` "
               "comment {where} and name there what it is about.",
     },
+    "yaml/plain-comment.pasted": {
+        "ru": "Пояснение из фрагмента на строке {line} оставлено как есть. {message}",
+        "en": "The note of the fragment on line {line} is left as it is. {message}",
+    },
     "yaml/doc-comment-misplaced.title": {
         "ru": "Документирующий комментарий `##` стоит не на месте",
         "en": "A `##` documentation comment stands where it is not read",
@@ -460,6 +464,36 @@ def _judge(source: SourceFile, want_doc: bool) -> Iterable[Diagnostic]:
             i18n.t(message_key, where=_where(where_slot)) if where_slot else i18n.t(message_key),
             fix=fix,
         )
+
+
+def place_pasted(text: str, first_line: int, last_line: int) -> tuple[str, list[str]] | None:
+    """The `#` comments of lines first_line..last_line (1-based) put where the IDE reads them.
+
+    For the tools that write a description: a comment they paste goes where the fix of
+    yaml/plain-comment would put it - inside the node as `##`, or respelled in place - and a
+    comment with no place of its own is left as it is, with the rule's message in the notes.
+    Blocks outside the lines are not touched. None when the documentation slots are unknown
+    (no Element data): the caller keeps its text and says so.
+    """
+    if not _documentable_known():
+        return None
+    from xbsl import engine  # the engine imports the rules: the import waits for the call
+
+    source = engine.load_text("pasted.yaml", text)
+    fixes: list[TextEdit] = []
+    notes: list[str] = []
+    for diagnostic in _judge(source, want_doc=False):
+        if not first_line <= diagnostic.line <= last_line:
+            continue
+        if diagnostic.fix is not None:
+            fixes.append(diagnostic.fix)
+        else:
+            notes.append(i18n.t("yaml/plain-comment.pasted", line=diagnostic.line,
+                                message=diagnostic.message))
+    out = source.text
+    for fix in sorted(fixes, key=lambda edit: edit.start, reverse=True):
+        out = out[:fix.start] + fix.new + out[fix.end:]
+    return out, notes
 
 
 @rule(

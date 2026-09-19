@@ -1839,6 +1839,11 @@ def meta_insert_fragment(
     components or a fragment without a top-level Тип are rejected with a clear error.
     The block is re-indented to the destination; slot rules match meta_add_component
     (missing slot created, a single-mapping slot converts to the list form).
+    A `#` comment of the fragment goes where the development environment reads it, the way
+    the yaml/plain-comment fix puts it: a comment above the component moves inside the node
+    as `##`. A comment with no such place stays as pasted, and `notes` say why: the visual
+    editor drops it on the first save. Without the Element data the places are unknown, and
+    the comments stay as pasted with a note.
     """
     return _form_write(_base(root), yaml_path, "insert_fragment", {
         "parent": parent_id, "slot": slot, "fragment": fragment,

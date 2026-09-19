@@ -6,6 +6,8 @@ reverting is byte-identical, and re-parsing the edited text yields the expected 
 Fixtures are synthetic forms in the spirit of the scaffold generators.
 """
 
+import re
+
 import pytest
 import yaml as pyyaml
 
@@ -1079,6 +1081,18 @@ def test_property_rename_reports_binding_usages():
 # --- insert_fragment ------------------------------------------------------------------------
 
 
+@pytest.fixture
+def slots_unknown(monkeypatch):
+    """The documentation slots unknown, as in a clone without the Element data.
+
+    A pasted comment then stays where it was pasted, which is what the tests of the paste
+    mechanics pin; where a comment lands with the slots known is tested apart.
+    """
+    from xbsl.rules import yaml_doc_comments
+
+    monkeypatch.setattr(yaml_doc_comments, "_documentable_known", lambda: False)
+
+
 FRAGMENT = """\
 # Итоговая подпись
 Тип: Надпись
@@ -1089,6 +1103,7 @@ FRAGMENT = """\
 """
 
 
+@pytest.mark.usefixtures("slots_unknown")
 def test_insert_fragment_at_end_of_list():
     res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAGMENT)
     assert unchanged_outside(FORM, res)
@@ -1109,6 +1124,60 @@ def test_insert_fragment_at_end_of_list():
     assert back.new_text == FORM
 
 
+# --- a pasted comment lands where the development environment reads it -------------------
+
+
+@pytest.mark.needs_data
+def test_a_pasted_comment_moves_inside_the_node_as_a_documentation_one():
+    """Pasted above the component, the comment used to stay before the `-` of its item.
+
+    The visual editor drops a comment there on its first save; only `##` lines at the head of
+    a node survive. The paste puts it there, and the edits carry the move: the LSP applies
+    the edits, MCP and CLI write the text, and both must end the same.
+    """
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAGMENT)
+    assert res.node_id == TPL + "/Содержимое[3]"
+    assert res.new_text[res.node_span.start : res.node_span.end] == (
+        "            -\n"
+        "                ## Итоговая подпись\n"
+        "                Тип: Надпись\n"
+        "                Имя: Подпись\n"
+        "                Шрифт:\n"
+        "                    Тип: АбсолютныйШрифт\n"
+        "                    Размер: 28\n"
+    )
+    assert formedits.apply_edits(FORM, res.edits) == res.new_text
+    assert unchanged_outside(FORM, res)
+    assert res.notes == []
+
+
+@pytest.mark.needs_data
+def test_a_pasted_comment_of_a_single_component_slot_is_respelled_in_place():
+    res = formedits.insert_fragment(CHAIN, CH_GRP, "Шапка", "# Верхняя подпись\nТип: Надпись\nИмя: Верх\n")
+    assert re.search(r"\n( +)## Верхняя подпись\n\1Тип: Надпись\n", res.new_text)
+    assert formedits.apply_edits(CHAIN, res.edits) == res.new_text
+
+
+@pytest.mark.needs_data
+def test_a_pasted_comment_without_a_place_is_named_in_the_notes():
+    """A property has no documentation slot: the comment stays, and the answer says why."""
+    fragment = "Тип: Надпись\nИмя: Подпись\n# крупнее заголовка\nЗначение: Итог\n"
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", fragment)
+    assert "\n                # крупнее заголовка\n" in res.new_text
+    assert any("визуальном редакторе" in note for note in res.notes)
+
+
+def test_without_the_slots_a_pasted_comment_stays_and_the_answer_says_so(slots_unknown):
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAGMENT)
+    assert "            # Итоговая подпись\n            -\n" in res.new_text
+    assert any("без данных" in note for note in res.notes)
+
+
+def test_a_fragment_without_comments_gets_no_note(slots_unknown):
+    res = formedits.insert_fragment(FORM, TPL, "Содержимое", "Тип: Надпись\nИмя: Подпись\n")
+    assert res.notes == []
+
+@pytest.mark.usefixtures("slots_unknown")
 def test_insert_fragment_reindents_and_positions():
     deep = "\n".join("      " + line for line in FRAGMENT.splitlines()) + "\n"
     res = formedits.insert_fragment(FORM, TPL, "Содержимое", deep, before=LABEL)
@@ -1140,6 +1209,7 @@ def test_insert_fragment_into_missing_and_singleton_slot():
     assert [c.name for c in slot.children] == ["Текст", "Подпись"]
 
 
+@pytest.mark.usefixtures("slots_unknown")
 def test_insert_fragment_normalizes_leading_blank_lines():
     # a blank line between the comments and the body would detach the comments - dropped
     frag = "# заметка\n\n\nТип: Надпись\n"
@@ -1207,6 +1277,7 @@ FRAG_MAPPINGS = """\
 """
 
 
+@pytest.mark.usefixtures("slots_unknown")
 def test_insert_fragment_list_of_roots():
     res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAG_LIST)
     assert unchanged_outside(FORM, res)
@@ -1239,6 +1310,7 @@ def test_insert_fragment_list_of_roots():
     assert back.new_text == FORM
 
 
+@pytest.mark.usefixtures("slots_unknown")
 def test_insert_fragment_consecutive_mappings():
     res = formedits.insert_fragment(FORM, TPL, "Содержимое", FRAG_MAPPINGS, before=LABEL)
     assert unchanged_outside(FORM, res)

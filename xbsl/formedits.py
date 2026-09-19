@@ -679,6 +679,7 @@ def insert_fragment(text: str, parent_id: str, slot: str, fragment: str,
     _check_slot(slot)
     chunks = _fragment_components(fragment, allow_untyped=(slot == "Страницы"))
     nl, step = form.nl, form.step
+    rendered: list[str] = []
 
     def render(prefix_col: int, body_col: int, dash: bool) -> str:
         out = []
@@ -689,7 +690,8 @@ def insert_fragment(text: str, parent_id: str, slot: str, fragment: str,
                 out.append(" " * prefix_col + "-" + nl)
             for line in body:
                 out.append((" " * body_col + line if line else "") + nl)
-        return "".join(out)
+        rendered.append("".join(out))
+        return rendered[-1]
 
     def item_fn(dash_col: int) -> str:
         return render(dash_col, dash_col + step, dash=True)
@@ -700,7 +702,79 @@ def insert_fragment(text: str, parent_id: str, slot: str, fragment: str,
         return render(col, col + step, dash=True)
 
     plan = _plan_insert(form, parent, slot, item_fn, map_fn, before, after)
-    return _finish(text, plan.edits, plan.anchor)
+    result = _finish(text, plan.edits, plan.anchor)
+    # A `#` inside a value is judged too, and harmlessly: the rule looks at comments alone.
+    if rendered and "#" in rendered[-1]:
+        return _documented(text, result, rendered[-1])
+    return result
+
+
+#: The note of a paste whose comments stay as pasted because the slots are unknown.
+_SLOTS_UNKNOWN = (
+    "Пояснения фрагмента оставлены как вставлены: без данных технологии не определить, где у "
+    "узла место для документирующего комментария `##`, а обычный `#` визуальный редактор "
+    "сотрёт при первой правке файла"
+)
+
+
+def _pasted_lines(result: EditResult, pasted: str) -> tuple[int, int] | None:
+    """The first and the last line (1-based) the pasted block holds in the new text.
+
+    The block is looked for inside the edit that wrote it, so a neighbour that happens to read
+    the same - a duplicate pasted next to its original - is never taken for it.
+    """
+    shift = 0
+    for edit in result.edits:
+        index = edit.new_text.find(pasted)
+        if index >= 0:
+            start = edit.start + shift + index
+            end = start + len(pasted.rstrip("\r\n"))
+            return (result.new_text.count("\n", 0, start) + 1,
+                    result.new_text.count("\n", 0, end) + 1)
+        shift += len(edit.new_text) - (edit.end - edit.start)
+    return None
+
+
+def _documented(text: str, result: EditResult, pasted: str) -> EditResult:
+    """The pasted `#` comments put where the development environment reads them.
+
+    A comment copied above a component lands before the `-` of its list item, and the visual
+    editor drops it there on its first save. yaml/plain-comment knows where each node keeps its
+    documentation comment, and which nodes must not have one: an instance of a project
+    component in a list breaks the build with it. Its fixes are applied to the pasted lines
+    only. The whole change goes into ONE edit of the source text, because the LSP applies the
+    edits and MCP and CLI write the text: the two must not differ.
+    """
+    from xbsl.rules import yaml_doc_comments  # the rules need the data; imported on a paste
+
+    new_text = result.new_text
+    lines = _pasted_lines(result, pasted)
+    if lines is None:
+        return result
+    placed = yaml_doc_comments.place_pasted(new_text, *lines)
+    if placed is None:
+        return EditResult(result.edits, new_text, result.node_id, result.node_span,
+                          [*result.notes, _SLOTS_UNKNOWN])
+    documented, notes = placed
+    if documented == new_text:
+        return EditResult(result.edits, new_text, result.node_id, result.node_span,
+                          [*result.notes, *notes])
+    start = len(_common_prefix(text, documented))
+    end = len(_common_prefix(text[start:][::-1], documented[start:][::-1]))
+    edit = TextEdit(start, len(text) - end, documented[start:len(documented) - end])
+    form = parse_form(documented)
+    node = get_node(form, result.node_id) if result.node_id else None
+    return EditResult([edit], documented, result.node_id, node.span if node else None,
+                      [*result.notes, *notes])
+
+
+def _common_prefix(a: str, b: str) -> str:
+    """The longest start the two strings share."""
+    size = min(len(a), len(b))
+    index = 0
+    while index < size and a[index] == b[index]:
+        index += 1
+    return a[:index]
 
 
 def move_node(text: str, node_id: str, new_parent_id: str, slot: str,
