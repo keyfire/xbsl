@@ -134,8 +134,10 @@ reverse of the Russian one, and the parts of a Russian name are declined, so glu
 translations produces calques. Comments are translated line by line: an edit next to a line does
 not invalidate it, and one entry serves every repetition. The finished comment block is re-wrapped
 to the project's width, the same one `style/line-length` uses, because a translation that grew
-longer than its original would otherwise run past the limit. Frames and separators, lists, tables
-and code samples stay as they were, and so do lines that were long in the source already.
+longer than its original would otherwise run past the limit. This applies to `//` and `///` lines
+and to a `/* ... */` comment alike. Such a comment keeps `/*` at the head of its first line and
+`*/` at the end of its last one. Frames and separators, lists, tables and code samples stay as
+they were, and so do lines that were long in the source already.
 
 The dictionary is a directory of yaml files, or one file, named `xbsl-translation` and discovered
 next to the project or above it. To fill it, drop a completed stub next to the ones already there.

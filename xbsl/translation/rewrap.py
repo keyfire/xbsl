@@ -5,12 +5,18 @@ typed - and an English sentence that runs longer than the Russian one pushes the
 the project's width limit. On a real configuration that was 423 style/line-length findings
 in comments over a tree that had been clean before the pass.
 
-So a comment BLOCK - consecutive whole-line comments sharing one indent and one marker - is
-joined back into a paragraph and split again whenever the translation pushed one of its
-lines over the limit. The limit is the one style/line-length judges by, read from the rule
-itself: a second copy of it would drift. The paragraph is re-split at the width the block
-already had - never above the limit, never below a readable column - so a block written at
-96 columns keeps its column instead of stretching to 120 next to its neighbours.
+So a comment BLOCK - consecutive whole-line comments sharing one indent and one marker, `//`
+and `///` alike - is joined back into a paragraph and split again whenever the translation
+pushed one of its lines over the limit. The limit is the one style/line-length judges by, read
+from the rule itself: a second copy of it would drift. The paragraph is re-split at the width
+the block already had - never above the limit, never below a readable column - so a block
+written at 96 columns keeps its column instead of stretching to 120 next to its neighbours.
+
+A `/* ... */` comment that has its lines to itself is re-wrapped by the same rules. Its marker
+is written once rather than on every line: `/*` opens the first line, the lines under it carry
+only an indent, and `*/` closes the last one. So the first line belongs to the paragraph under
+it, a re-split paragraph opens with `/*` again, and `*/` stays with the last word. An empty
+line inside the comment parts two paragraphs, as an empty `//` line does.
 
 What is never re-flowed, because the shape carries the meaning:
 
@@ -22,7 +28,8 @@ What is never re-flowed, because the shape carries the meaning:
   the line above;
 - a code sample or a table row - two spaces in a row, a `|`, a backtick: those columns ARE
   the content;
-- a doc comment and any block comment: only `//` lines are re-flowed;
+- a `/** ... */` comment, a `/* ... */` one framed with a star down its left edge, and any
+  comment that shares its line with code;
 - a line that was ALREADY over the limit in the SOURCE - its author wrote it that way on
   purpose, and the pass has nothing to repair there.
 
@@ -34,6 +41,7 @@ from __future__ import annotations
 
 import re
 import textwrap
+from typing import NamedTuple
 
 from xbsl import lexer
 from xbsl.rules import style_layout
@@ -70,6 +78,20 @@ _MIN_BODY = 20
 #: ribbon that narrow helps nobody; the project limit is the width then.
 _MIN_COLUMN = 72
 
+#: The first line of a `/* ... */` comment up to its text: the indent, the marker, the space.
+_BLOCK_HEAD_RE = re.compile(r"[ \t]*/\*[ \t]*")
+
+#: The last line of it from the end of its text: the space before the closing marker and the
+#: marker itself.
+_BLOCK_TAIL_RE = re.compile(r"[ \t]*\*/$")
+
+#: What stands before the text of a line under the opening marker.
+_INDENT_RE = re.compile(r"[ \t]*")
+
+#: Stands in for the space before `*/` while the paragraph is wrapped: the wrap never breaks a
+#: line at it, so the closing marker lands on the line of the last word and is measured there.
+_HOLD = "\x00"
+
 
 def rewrap_comments(text: str, original: str, limit: int | None = None) -> str:
     """Re-split the comment blocks of `text` that the translation pushed over the limit.
@@ -92,13 +114,21 @@ def rewrap_comments(text: str, original: str, limit: int | None = None) -> str:
         # they do not, the source can no longer tell which line its author wrote long on
         # purpose - and changing lines blindly is worse than leaving them.
         return text
-    prefixes = _comment_prefixes(text, lines)
-    if not prefixes:
+    toks = lexer.tokenize(text)
+    prefixes = _comment_prefixes(toks, lines)
+    blocks = _block_comments(toks, lines)
+    if not prefixes and not blocks:
         return text
     newline = _newline_of(lines)
     out: list[str] = []
     index = 0
     while index < len(lines):
+        last = blocks.get(index + 1)
+        if last is not None:
+            out.extend(_rewrap_block_comment(
+                lines[index:last], source[index:last], limit, newline))
+            index = last
+            continue
         if index + 1 not in prefixes:
             out.append(lines[index])
             index += 1
@@ -134,7 +164,7 @@ def _split_keepends(text: str) -> list[str]:
     return lines
 
 
-def _comment_prefixes(text: str, lines: list[str]) -> dict[int, str]:
+def _comment_prefixes(toks: list[lexer.Token], lines: list[str]) -> dict[int, str]:
     """For every line a WHOLE-line `//` comment opens: what stands before the text of it.
 
     The prefix is the indent, the marker and the space after it - the part every line of a
@@ -142,13 +172,13 @@ def _comment_prefixes(text: str, lines: list[str]) -> dict[int, str]:
 
     The lexer answers, not a regular expression over the line, and it answers three things at
     once. Two slashes inside a STRING are data: a line of a multi-line literal may well begin
-    with them, and no comment opens there. A doc or a block comment is a shape of its own -
-    only a `//` line is re-flowed. And a comment that follows CODE is not a whole-line one at
-    all: re-flowing it would move the text away from the statement it explains and repeat the
-    statement itself on every line the wrap produced.
+    with them, and no comment opens there. A `/* ... */` comment is a shape of its own and has
+    a reading of its own (`_block_comments`). And a comment that follows CODE is not a
+    whole-line one at all: re-flowing it would move the text away from the statement it
+    explains and repeat the statement itself on every line the wrap produced.
     """
     found: dict[int, str] = {}
-    for tok in lexer.tokenize(text):
+    for tok in toks:
         if tok.kind != "COMMENT" or tok.subkind != "line":
             continue
         indent = lines[tok.line - 1][: tok.col - 1]
@@ -160,21 +190,39 @@ def _comment_prefixes(text: str, lines: list[str]) -> dict[int, str]:
     return found
 
 
+def _block_comments(toks: list[lexer.Token], lines: list[str]) -> dict[int, int]:
+    """{first line: last line} of every `/* ... */` comment that has its lines to itself.
+
+    A comment that shares its first line with code before it, or its last line with code after
+    it, stays where it is: a re-split would carry the code along. So does a `/** ... */`
+    comment, and one that the file ends inside.
+    """
+    found: dict[int, int] = {}
+    for tok in toks:
+        if tok.kind != "COMMENT" or tok.subkind != "block" or tok.flags.get("unterminated"):
+            continue
+        before = lines[tok.line - 1][: tok.col - 1]
+        after = lines[tok.end_line - 1].rstrip("\r\n")[tok.end_col - 1:]
+        if before.strip() or after.strip():
+            continue
+        found[tok.line] = tok.end_line
+    return found
+
+
+class _Parts(NamedTuple):
+    """One comment line taken apart: what stands before its text, the text, what follows it."""
+
+    head: str
+    text: str
+    tail: str
+
+
 def _rewrap_block(lines: list[str], source: list[str], prefixes: list[str], limit: int,
                   newline: str) -> list[str]:
-    """Split a run of comment lines by their marker, then re-flow the paragraphs inside."""
-    out: list[str] = []
-    start = 0
-    while start < len(lines):
-        prefix = prefixes[start]
-        end = start + 1
-        while end < len(lines) and prefixes[end] == prefix:
-            end += 1
-        payloads = [lines[index].rstrip("\r\n")[len(prefix):].rstrip()
-                    for index in range(start, end)]
-        out.extend(_rewrap_paragraphs(
-            lines[start:end], source[start:end], payloads, prefix, limit, newline))
-        start = end
+    """Split a run of `//` lines by their marker, then re-flow the paragraphs inside."""
+    parts = [_Parts(prefix, line.rstrip("\r\n")[len(prefix):].rstrip(), "")
+             for line, prefix in zip(lines, prefixes)]
+    out = _rewrap_groups(lines, source, prefixes, parts, limit, newline)
     # The pass moves the line breaks of a comment and NOTHING else. Checking that here, once,
     # is what makes a mistake in the branches above impossible to ship: a block whose words
     # came out different is put back the way its author wrote it.
@@ -186,8 +234,85 @@ def _words(lines: list[str]) -> str:
     return "".join("".join(line.lstrip().lstrip("/").split()) for line in lines)
 
 
+def _rewrap_block_comment(lines: list[str], source: list[str], limit: int,
+                          newline: str) -> list[str]:
+    """Re-flow the paragraphs of one `/* ... */` comment, given as its whole lines.
+
+    The paragraphs are found and split as in a run of `//` lines. Only the markers differ: the
+    first line keeps `/*` in front of its text, and the last one keeps `*/` after it.
+    """
+    parts = [_block_parts(line, first=number == 0, last=number == len(lines) - 1)
+             for number, line in enumerate(lines)]
+    under = [part.text for part in parts[1:] if part.text]
+    if under and all(text.startswith("*") for text in under):
+        return list(lines)  # a frame of stars down the left edge
+    groups = [_first_line_group(parts), *(part.head for part in parts[1:])]
+    out = _rewrap_groups(lines, source, groups, parts, limit, newline)
+    # The same safety net as for a `//` run. The markers stand once in the whole comment, so
+    # a re-split may change its whitespace and nothing else.
+    return out if _content(out) == _content(lines) else list(lines)
+
+
+def _content(lines: list[str]) -> str:
+    """A block comment with every space and break removed - what a re-split must not change."""
+    return "".join("".join(lines).split())
+
+
+def _block_parts(line: str, *, first: bool, last: bool) -> _Parts:
+    """A line of a `/* ... */` comment taken apart.
+
+    The first line has the indent and the opening marker before its text, any other line has
+    only its indent. The last line has the closing marker after the text, with the space
+    before it.
+    """
+    body = line.rstrip("\r\n")
+    opening = (_BLOCK_HEAD_RE if first else _INDENT_RE).match(body)
+    head = opening.group(0) if opening else ""
+    text = body[len(head):].rstrip()
+    closing = _BLOCK_TAIL_RE.search(text) if last else None
+    if closing is None:
+        return _Parts(head, text, "")
+    return _Parts(head, text[: closing.start()], closing.group(0))
+
+
+def _first_line_group(parts: list[_Parts]) -> str:
+    """The group of the first line of a `/* ... */` comment - the indent its re-split takes.
+
+    The first line joins the line under it when that line goes on with the same paragraph:
+    its text starts under the opening marker, or under the first word after the marker. Any
+    other indent there opens a list or a sample. The first line is then a paragraph alone, and
+    its re-split lines are indented as the marker is.
+    """
+    indent = _INDENT_RE.match(parts[0].head)
+    column = indent.group(0) if indent else ""
+    under = parts[1] if len(parts) > 1 else None
+    if under is not None and under.text and len(under.head) in (len(column), len(parts[0].head)):
+        return under.head
+    return column
+
+
+def _rewrap_groups(lines: list[str], source: list[str], groups: list[str], parts: list[_Parts],
+                   limit: int, newline: str) -> list[str]:
+    """Split the lines into runs of one group, then re-flow the paragraphs of each run.
+
+    The group of a line is what the lines of its re-split paragraph are indented with, and it
+    also tells one block from the next: lines of two groups never share a paragraph.
+    """
+    out: list[str] = []
+    start = 0
+    while start < len(lines):
+        end = start + 1
+        while end < len(lines) and groups[end] == groups[start]:
+            end += 1
+        run = slice(start, end)
+        out.extend(_rewrap_paragraphs(
+            lines[run], source[run], parts[run], groups[start], limit, newline))
+        start = end
+    return out
+
+
 def _rewrap_paragraphs(
-    lines: list[str], source: list[str], payloads: list[str], prefix: str, limit: int,
+    lines: list[str], source: list[str], parts: list[_Parts], prefix: str, limit: int,
     newline: str,
 ) -> list[str]:
     out: list[str] = []
@@ -195,21 +320,21 @@ def _rewrap_paragraphs(
     #: Set by a list item: the lines under it are its continuation until an empty comment
     #: line closes the item.
     inside_item = False
-    for index, payload in enumerate(payloads):
+    for index, part in enumerate(parts):
         # Where a list can BEGIN: no paragraph is running yet, or the line above announced
         # one with a colon. Only there does a dash open an item - see `_DASH_RE`.
-        opens = not paragraph or payloads[index - 1].rstrip().endswith(":")
-        why = _protected(payload, source[index], limit, opens=opens)
+        opens = not paragraph or parts[index - 1].text.rstrip().endswith(":")
+        why = _protected(part.text, source[index], limit, opens=opens)
         if why == "blank":
             inside_item = False
         if why or inside_item:
-            out.extend(_wrap_paragraph(paragraph, lines, source, payloads, prefix, limit, newline))
+            out.extend(_wrap_paragraph(paragraph, lines, source, parts, prefix, limit, newline))
             paragraph = []
             out.append(lines[index])
             inside_item = inside_item or why == "list"
             continue
         paragraph.append(index)
-    out.extend(_wrap_paragraph(paragraph, lines, source, payloads, prefix, limit, newline))
+    out.extend(_wrap_paragraph(paragraph, lines, source, parts, prefix, limit, newline))
     return out
 
 
@@ -233,7 +358,7 @@ def _protected(payload: str, source_line: str, limit: int, *, opens: bool) -> st
 
 
 def _wrap_paragraph(
-    indexes: list[int], lines: list[str], source: list[str], payloads: list[str],
+    indexes: list[int], lines: list[str], source: list[str], parts: list[_Parts],
     prefix: str, limit: int, newline: str,
 ) -> list[str]:
     if not indexes:
@@ -244,22 +369,30 @@ def _wrap_paragraph(
     # The column the block already had is kept, so a paragraph written at 96 does not stretch
     # to 120 next to the untouched blocks around it - the limit only caps it.
     width = min(max(*(len(source[index]) for index in indexes), _MIN_COLUMN), limit)
-    body = width - len(prefix)
-    if body < _MIN_BODY:
+    # The first line keeps what stood before its text - the opening marker of a block comment
+    # stays in front - and the lines after it take the indent of the group. The last line keeps
+    # what stood after its text, which is the closing marker.
+    head, tail = parts[indexes[0]].head, parts[indexes[-1]].tail
+    if width - max(len(head), len(prefix)) < _MIN_BODY:
         return kept
+    space = tail[: len(tail) - len(tail.lstrip())]
+    held = _HOLD * len(space) + tail[len(space):]
     wrapped = textwrap.wrap(
-        " ".join(payloads[index] for index in indexes), width=body,
+        " ".join(parts[index].text for index in indexes) + held, width=width,
+        initial_indent=head, subsequent_indent=prefix,
         # A long word is a name or a link: breaking it would break what it names.
         break_long_words=False, break_on_hyphens=False,
     )
     if not wrapped:
         return kept
+    if held:
+        wrapped[-1] = wrapped[-1][: len(wrapped[-1]) - len(held)] + tail
     # `lead` is the break BETWEEN the new lines and has to be a real one - the last line of
     # a file may carry none. `last` keeps the ending the block had: a break added at the end
     # of a file would be a change of its own.
     lead = _ending(lines[indexes[0]]) or newline
     last = _ending(lines[indexes[-1]])
-    return [prefix + piece + (last if number == len(wrapped) else lead)
+    return [piece + (last if number == len(wrapped) else lead)
             for number, piece in enumerate(wrapped, start=1)]
 
 
