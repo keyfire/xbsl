@@ -29,6 +29,11 @@ entry either - say what the behaviour was, not which class name was compared.
 
 ### Added
 
+- **`--summary` and `--compare`: counts by rule and the difference with the previous run.**
+  `--summary` prints a row per rule with its files and findings instead of the findings.
+  `--compare FILE` saves the run, and the next run with that file prints only the findings that
+  appeared and disappeared. Comparing projects before and after a change used to go through
+  `--format json` and a script, with the text of every finding in the output. ([#117](https://github.com/keyfire/xbsl/pull/117))
 - **`meta_add_field` adds several items in one call.** `names` takes the names of one kind with
   the same type and properties, such as the values of an enumeration. The batch is planned whole:
   a taken or repeated name refuses all of it, and the file stays as it was. ([#114](https://github.com/keyfire/xbsl/pull/114))
