@@ -230,7 +230,9 @@ by a string at the old place has nothing to rewrite.
 a folder and changes nothing. It reads the sources the way a move does, and every place comes with its
 file, range, line and kind: `reference` for a static reference, `ambiguous` for a key two visible
 folders hold, `string` for a string with the path, `computed` for a string with the folder and a
-computed file name. The metadata tree of the VS Code extension shows the answer in the References
+computed file name, `stem` for a whole string that spells the key of a file without its
+extension. Seed data names a picture by its code this way, and the code adds the extension at run
+time; the JSON files of the project's resources are read for it too. The metadata tree of the VS Code extension shows the answer in the References
 view.
 
 ## Code templates

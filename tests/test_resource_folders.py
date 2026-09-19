@@ -386,6 +386,39 @@ def test_a_resource_reference_range_counts_characters_the_way_an_editor_does(tmp
                             "end": {"line": 0, "character": column + len("logo.svg")}}
 
 
+def test_a_name_without_the_extension_is_a_possible_reference(tmp_path):
+    """Seed data names a picture by its code, and a module adds the extension at run time.
+
+    `"Иконка": "logo"` in a JSON of the resources and `Получить("%{Код}.svg")` in a module read
+    `logo.svg` although nothing spells `logo.svg`. Without these places the answer for a live
+    file was zero, the same answer a dead file gets. Only a whole value counts: `logo-old` names
+    another file.
+    """
+    project = _project(tmp_path, {
+        "Склад/Ресурсы/Данные.json": '{"Товары": [{"Иконка": "logo"}, {"Иконка": "logo-old"}]}\n',
+        "Склад/Иконки.xbsl": 'метод Иконка(): Строка\n    возврат "logo"\n;\n',
+    })
+    answer = scaffold.resource_references(tmp_path, project / "Склад" / "Ресурсы" / "logo.svg")
+    assert [place for place in _places(answer, project) if place[2] == "stem"] == [
+        ("Склад/Иконки.xbsl", 2, "stem", "logo"),
+        ("Склад/Ресурсы/Данные.json", 1, "stem", "logo"),
+    ]
+
+
+def test_a_folder_is_not_looked_for_by_names_without_extensions(tmp_path):
+    project = _project(tmp_path, {"Склад/Иконки.xbsl": 'метод И(): Строка\n    возврат "Стили/a"\n;\n'})
+    answer = scaffold.resource_references(tmp_path, project / "Склад" / "Ресурсы" / "Стили")
+    assert not [ref for ref in answer["references"] if ref["kind"] == "stem"]
+
+
+def test_moving_a_resource_names_the_strings_that_spell_it_without_the_extension(tmp_path):
+    project = _project(tmp_path, {"Склад/Ресурсы/Данные.json": '{"Иконка": "logo"}\n'})
+    resources = project / "Склад" / "Ресурсы"
+    result = scaffold.op_move_resource(tmp_path, resources / "logo.svg", resources / "Стили")
+    stem = next(n for n in result.notes if n.startswith("Строки с именем 'logo' без расширения"))
+    assert "Склад/Ресурсы/Данные.json (строка 1)" in stem
+
+
 def test_resource_references_refuse_what_no_key_names(tmp_path):
     project = _project(tmp_path)
     resources = project / "Склад" / "Ресурсы"

@@ -1591,7 +1591,10 @@ def meta_resource_references(root: str, resource_path: str, limit: int = 100) ->
     `ambiguous` – a key that two resources folders visible from the file hold, this one among
     them; `string` – a string literal that spells the path, read at run time by
     `ResourcesPackage.Current().Get()` or a wrapper of the project; `computed` – a string with
-    the folder of the file and a computed name, which may name the file.
+    the folder of the file and a computed name, which may name the file; `stem` – a whole string
+    that spells the key of the file without its extension, in a module, a yaml or a JSON file of
+    the project's resources: seed data names a picture by its code, and the code adds the
+    extension at run time.
     For a folder, every file under it counts. `total` is the number of places; `references`
     holds the first `limit` of them, sorted by file and position.
     root – the caller's project or repository root (absolute): references are looked for under

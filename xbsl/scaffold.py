@@ -7675,6 +7675,15 @@ def _line_of(text: str, offset: int) -> int:
     return text.count("\n", 0, offset) + 1
 
 
+def _without_extension(key: str) -> str:
+    """`Styles/flag.svg` -> `Styles/flag`; empty for a name without an extension."""
+    folder, _, name = key.rpartition("/")
+    stem, dot, _extension = name.rpartition(".")
+    if not dot or not stem:
+        return ""
+    return f"{folder}/{stem}" if folder else stem
+
+
 def _snippet(text: str, offset: int) -> str:
     """The source line an offset stands on, trimmed for a note."""
     start = text.rfind("\n", 0, offset) + 1
@@ -7716,6 +7725,9 @@ class _ResourceScan:
         self.path = path
         self.is_folder = is_folder
         self.computed_folder = "" if is_folder else path.rpartition("/")[0]
+        # The key of a single file without its extension: seed data and code may name the file
+        # by it and add the extension at run time.
+        self.stem = "" if is_folder else _without_extension(path)
         self.read = reader or _read
         self.layout = _root_layout(root)
         self.folders = _resource_folder_index(root, self.layout)
@@ -7727,15 +7739,17 @@ class _ResourceScan:
         self.collisions: list[tuple[Path, int, str]] = []
         self.strings: list[tuple[Path, int, str]] = []
         self.computed: list[tuple[Path, int, str]] = []
+        self.stems: list[tuple[Path, int, str]] = []
         # (file, start, end, kind) of every place above - the offsets of the text it spells.
         self.mentions: list[tuple[Path, int, int, str]] = []
         self._visible: dict[Path, list[str]] = {}
         self._run()
 
     def _run(self) -> None:
-        # Every key the operation touches contains the path it is named by, and a computed
-        # string names the folder of the file: a source without that text has nothing to say.
-        probe = self.computed_folder or self.path
+        # Every key the operation touches contains the path it is named by, a computed string
+        # names the folder of the file, and the key without its extension starts with that
+        # folder: a source without the shortest of these texts has nothing to say.
+        probe = self.computed_folder or self.stem or self.path
         for path in engine.find_sources(self.root, "*.xbsl") + engine.find_sources(self.root, "*.yaml"):
             if any(part in restext.RESOURCE_DIRS for part in path.relative_to(self.root).parts[:-1]):
                 continue
@@ -7746,6 +7760,26 @@ class _ResourceScan:
                 self._yaml(path, text)
             else:
                 self._module(path, text)
+        if self.stem:
+            self._seed_data()
+
+    def _seed_data(self) -> None:
+        """The JSON files in the resources of the file's project that hold its key without the
+        extension as a whole string: seed data names a picture by its code this way."""
+        project = self.folders[self.own][0].place.project_dir
+        quoted = re.compile('"' + re.escape(self.stem) + '"')
+        for folder, _keys in self.folders.values():
+            if folder.place.project_dir != project:
+                continue
+            for path in sorted(folder.directory.rglob("*.json")):
+                text = self.read(path)
+                for match in quoted.finditer(text):
+                    self._stem(path, text, match.start() + 1)
+
+    def _stem(self, path: Path, text: str, start: int) -> None:
+        """A whole string that spells the key without its extension: listed, never edited."""
+        self.stems.append((path, _line_of(text, start), _snippet(text, start)))
+        self._mention(path, text, start, start + len(self.stem), "stem")
 
     def _module(self, path: Path, text: str) -> None:
         literal = _resource_literal_re()
@@ -7761,11 +7795,15 @@ class _ResourceScan:
             opener = 1 if chunk[:1] in "\"'}" else 0
             body = chunk[opener:]
             interpolated = body.endswith(("%{", "${"))
+            closed = False
             if interpolated:
                 body = body[:-2]
             elif body[-1:] in ("\"", "'"):
                 body = body[:-1]
+                closed = True
             self._spelled(path, text, start + opener, body, interpolated)
+            if closed and chunk[:1] in "\"'" and self.stem and body == self.stem:
+                self._stem(path, text, start + opener)
 
     def _yaml(self, path: Path, text: str) -> None:
         literal = _resource_literal_re()
@@ -7782,6 +7820,11 @@ class _ResourceScan:
                 for quoted in _YAML_QUOTED.finditer(line):
                     self._spelled(path, text, offset + quoted.start() + 1, quoted.group(0)[1:-1],
                                   False)
+                    if self.stem and quoted.group(0)[1:-1] == self.stem:
+                        self._stem(path, text, offset + quoted.start() + 1)
+                if (bare is not None and not bare.group("quote") and self.stem
+                        and bare.group("value") == self.stem):
+                    self._stem(path, text, offset + bare.start("value"))
             offset += len(line) + 1
 
     def _visible_from(self, path: Path, text: str) -> list[str]:
@@ -7922,6 +7965,12 @@ class _ResourceScan:
             notes.append(
                 f"Строки с папкой '{self.computed_folder}' и вычисляемым именем файла могли "
                 f"указывать на перенесённый файл, проверьте: {self._lines(self.computed)}"
+            )
+        if self.stems:
+            notes.append(
+                f"Строки с именем '{self.stem}' без расширения могли указывать на перенесённый "
+                f"файл: расширение к имени добавляет код при выполнении. Проверьте: "
+                f"{self._lines(self.stems)}"
             )
         return notes
 
@@ -8193,7 +8242,10 @@ def resource_references(root: Path, resource_path: Path, *, reader=None) -> dict
       hold, this one among them;
     - `string` - a string literal that spells the path, read at run time by
       `ResourcesPackage.Current().Get()` or a wrapper of the project;
-    - `computed` - a string with the folder of the file and a computed name, which may name it.
+    - `computed` - a string with the folder of the file and a computed name, which may name it;
+    - `stem` - a whole string that spells the key of a single file without its extension, in a
+      module, a yaml or a JSON file of the project's resources: seed data names a picture by its
+      code, and the code adds the extension at run time.
 
     For a folder, every file under it counts, and so does a string that spells the folder's
     path. A place comes with its file, a zero-based LSP range and the text of its line, sorted
