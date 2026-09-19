@@ -349,7 +349,7 @@ def test_unused_prune_summary_and_explicit_detail(mcp_module, tmp_path, detail):
     answer = mcp_module.translate_unused(str(project), prune=True, limit=0, **kwargs)
     assert answer["removed"] == 2
     assert answer["pruned"] == {
-        "by_kind": {"token": 1, "phrase": 1}, "by_file": {str(extra): 2},
+        "keys": 2, "by_kind": {"token": 1, "phrase": 1}, "by_file": {str(extra): 2},
     }
     if detail is False:
         assert len(answer["unused"]) == 2 and "value" in answer["unused"][0]
@@ -359,19 +359,24 @@ def test_unused_prune_summary_and_explicit_detail(mcp_module, tmp_path, detail):
 
 
 @pytest.mark.needs_data
-def test_unused_prune_summary_counts_only_removed_page(mcp_module, tmp_path):
+def test_unused_prune_takes_the_whole_filtered_set_whatever_the_page(mcp_module, tmp_path):
+    """`limit` shapes the listing, not the cleaning.
+
+    A call with `prune` and `limit: 5` used to remove five orphans of seventy-one, and only
+    `truncated` said that the rest had stayed.
+    """
     project = _project(tmp_path)
     folder = _dictionary(tmp_path / "vendor")
     extra = folder / "020-more.yaml"
     extra.write_text("version: 1\nlanguage: en\ntokens:\n"
                      "    СнятоеИмя: RemovedName\n    ДругоеСнятое: OtherRemoved\n", encoding="utf-8")
     answer = mcp_module.translate_unused(str(project), prune=True, limit=1)
-    assert answer["removed"] == 1
+    assert answer["removed"] == 2
     assert answer["counts"] == {"token": 2}
-    assert answer["pruned"]["by_kind"] == {"token": 1}
-    assert answer["pruned"]["by_file"] == {str(extra): 1}
-    assert answer["truncated"] and "unused" not in answer
+    assert answer["pruned"] == {"keys": 2, "by_kind": {"token": 2}, "by_file": {str(extra): 2}}
+    assert "unused" not in answer
+    assert mcp_module.translate_unused(str(project))["unused"] == []
     empty = mcp_module.translate_unused(str(project), prune=True, filter="absent")
     assert empty["removed"] == 0
-    assert empty["pruned"] == {"by_kind": {}, "by_file": {}}
+    assert empty["pruned"] == {"keys": 0, "by_kind": {}, "by_file": {}}
     assert "unused" not in empty
