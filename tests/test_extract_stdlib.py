@@ -762,6 +762,22 @@ def test_a_component_the_help_retired_takes_its_members_from_the_shipped_descrip
         "properties": ["Заголовок", "Ориентация"], "events": ["ПриНажатии"]}
     # The base chain of the page is carried over whole - the loader expands members over it.
     assert data["bases"]["ФиксированнаяГруппа"] == ["Группа", "Объект"]
+    # The UI-schema step runs without a distribution.  Keep the descriptor facts it needs
+    # beside the catalog so a tombstone can remain a compatibility-limited palette entry.
+    assert data["retired_components"]["ФиксированнаяГруппа"] == {
+        "term": {"en": "FixedGroup", "ru": "ФиксированнаяГруппа"},
+        "namespace": {"en": "Std::Interface::Groups", "ru": "Стд::Интерфейс::Группы"},
+        "baseType": "Std::Interface::Groups::Group",
+        "to": 8.0,
+        "properties": [
+            {"term": {"en": "Title", "ru": "Заголовок"}, "type": "Std::String"},
+            {
+                "term": {"en": "Orientation", "ru": "Ориентация"},
+                "type": "Std::Interface::Groups::ContentOrientation | Std::Auto",
+            },
+        ],
+        "events": [{"term": {"en": "OnClick", "ru": "ПриНажатии"}}],
+    }
 
 
 def test_the_shipped_description_never_overrules_the_help_and_names_no_new_type(tmp_path):

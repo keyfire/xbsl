@@ -6,8 +6,8 @@ component palette and the typed properties panel. The response shapes for the LS
 (`xbsl/uiSchema`) and the MCP (`ui_schema`) are built here so the two surfaces stay
 identical:
 
-- catalog(): the palette catalog - every component with its package, abstract and
-  container flags and doc snippet, WITHOUT the property lists (compact; a component's
+- catalog(): the palette catalog - every component with its package, abstract, retired,
+  compatibility and container flags and doc snippet, WITHOUT the property lists (compact; a component's
   full schema is a separate request);
 - component(name): the full record of one component (properties with type unions, enum
   values, event signatures, slot flags) plus "enums" - the value lists of the
@@ -19,8 +19,8 @@ identical:
 - both return {"available": False} when the dataset has no ui schema (e.g. a public
   checkout without generated data) - the docsAvailable degradation pattern.
 
-Optional fields of the schema records (abstract, container, since, doc, nullable, slot,
-enum, default, readonly, conflicts) are omitted when false/unknown - consumers treat an
+Optional fields of the schema records (abstract, retired, container, since, until, doc,
+nullable, slot, enum, default, readonly, conflicts) are omitted when false/unknown - consumers treat an
 absent key as false/null. Older uischema.json files without the newer fields keep
 working: everything added later is optional. See tools/extract_uischema.py for the full
 data shape.
@@ -36,7 +36,7 @@ from xbsl import dataset, metamodel, terms
 
 #: Keys of a component record served by the catalog (props stay out - the palette
 #: does not need them, and the full record is one more request away).
-_CATALOG_KEYS = ("package", "abstract", "container", "since", "doc", "conflicts")
+_CATALOG_KEYS = ("package", "abstract", "retired", "container", "since", "until", "doc", "conflicts")
 
 #: A type name inside a union member: the head identifier with optional dotted facets
 #: (mirrors the extractor's _TYPE_REF_RE - generic arguments are scanned too).

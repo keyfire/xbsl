@@ -2,7 +2,8 @@
 // Node (test/formPaletteCore.test.ts): builds the section model from the engine's
 // xbsl/uiSchema catalog, the project's own interface components, the favorites list and the
 // insertion usage counters. Decisions encoded here:
-//   - abstract components (no current constructor - nothing to insert) are NOT shown;
+//   - abstract components (no current constructor - nothing to insert) and retired components
+//     (available only to a proven compatibility mode) are NOT shown;
 //   - sections go Frequent, Favorites, Project, then platform packages sorted by the last
 //     segment of their package path (ОбщиеКомпоненты, Списки, Формы, ...);
 //   - without ui-schema data the palette degrades to a hint node plus the sections that do
@@ -11,11 +12,13 @@
 export interface UiCatalogComponent {
   package?: string;
   abstract?: boolean;
+  retired?: boolean;
   // The props carry a slot Содержимое (a wrap/drop container). Newer datasets emit the
   // flag right in the catalog; older ones lack it and the container set is learned from
   // the full per-component records instead (containersFromRecords).
   container?: boolean;
   since?: string;
+  until?: string;
   doc?: string;
 }
 
@@ -63,12 +66,12 @@ export function packageSegment(pkg: string | undefined): string {
   return parts[parts.length - 1] ?? "";
 }
 
-// Concrete (insertable) catalog components: the abstract ones have no constructor, so there
-// is nothing to write into yaml - they are dropped rather than shown disabled.
+// Concrete (insertable) catalog components: abstract components have no constructor, and retired
+// components require a compatibility mode the palette cannot establish. Both are omitted.
 export function concreteCatalog(catalog: UiCatalogResponse): Map<string, UiCatalogComponent> {
   const out = new Map<string, UiCatalogComponent>();
   for (const [name, rec] of Object.entries(catalog.components ?? {})) {
-    if (!rec.abstract) {
+    if (!rec.abstract && !rec.retired) {
       out.set(name, rec);
     }
   }
@@ -159,15 +162,15 @@ export function buildPalette(
 // Container types straight from the catalog "container" flags. undefined - no record
 // carries the flag (older generated data without it): the caller falls back to verifying
 // the full per-component records. Abstract components cannot be written as a wrapper
-// type, so they are dropped; a catalog where every flagged container is abstract counts
-// as no data too.
+// type, and retired containers need a compatibility mode the palette cannot establish. They are
+// dropped; a catalog where every flagged container is unavailable counts as no data too.
 export function containersFromCatalog(catalog: UiCatalogResponse): string[] | undefined {
   const flagged = Object.entries(catalog.components ?? {}).filter(([, rec]) => rec.container === true);
   if (!flagged.length) {
     return undefined;
   }
   const names = flagged
-    .filter(([, rec]) => !rec.abstract)
+    .filter(([, rec]) => !rec.abstract && !rec.retired)
     .map(([name]) => name)
     .sort((a, b) => a.localeCompare(b, RU));
   return names.length ? names : undefined;
@@ -177,6 +180,7 @@ export function containersFromCatalog(catalog: UiCatalogResponse): string[] | un
 
 export interface UiComponentRecord {
   name?: string;
+  retired?: boolean;
   props?: Record<string, { slot?: boolean } & Record<string, unknown>>;
 }
 
@@ -193,7 +197,7 @@ export function containersFromRecords(
   fallback: readonly string[]
 ): string[] {
   const verified = [...records.entries()]
-    .filter(([, rec]) => hasContentSlot(rec))
+    .filter(([, rec]) => !rec?.retired && hasContentSlot(rec))
     .map(([name]) => name)
     .sort((a, b) => a.localeCompare(b, RU));
   return verified.length ? verified : [...fallback];

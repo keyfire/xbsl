@@ -917,8 +917,8 @@ def extract(dist: Path) -> tuple:
     """Stdlib names (bilingual), spawned members by kind, component properties, type members,
     the global context with per-name availability, managers, facets, the members of the types a
     kind generates, member types, bases, constructor kinds, type parameters, the forms of
-    deprecated members and the members whose overloads were folded into a head - the tuple
-    main() unpacks."""
+    deprecated members, retired component descriptors and the members whose overloads were
+    folded into a head - the tuple main() unpacks."""
     car = _distro.find_car(dist)
     names: set[str] = set()
     members: dict[str, set[str]] = {}
@@ -1114,7 +1114,10 @@ def extract(dist: Path) -> tuple:
                     slot[kind] |= member_names
     with zipfile.ZipFile(car) as z:
         filled = []
-        for russian, own, base in retired_components(z, names, set(types)):
+        retired = retired_components(z, names, set(types))
+        for russian, record in retired.items():
+            own = record["members"]
+            base = record["base"]
             slot = types.setdefault(russian, _empty_member_slot())
             for kind, member_names in own.items():
                 slot[kind] |= member_names
@@ -1131,7 +1134,7 @@ def extract(dist: Path) -> tuple:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
             facets, generated, returns, signatures, bases, ctors, type_params, method_params,
-            deprecated, folds, expand_checked_return_methods(checked_methods, bases))
+            deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired)
 
 
 # --- Components the reference pages have RETIRED ----------------------------------------
@@ -1174,8 +1177,38 @@ def _spelled_ru(record: dict) -> str:
     return str(term.get("ru") or "").strip() if isinstance(term, dict) else ""
 
 
+def _description_term(record: object) -> dict[str, str] | None:
+    """The bilingual term a runtime descriptor states, or None when either form is absent."""
+    if not isinstance(record, dict):
+        return None
+    russian = str(record.get("ru") or "").strip()
+    english = str(record.get("en") or "").strip()
+    return {"en": english, "ru": russian} if russian and english else None
+
+
+def _description_rows(record: dict, kind: str, *, typed: bool) -> list[dict]:
+    """The named rows of one runtime descriptor section, retaining stated type text only."""
+    found: list[dict] = []
+    for row in record.get(kind) or ():
+        if not isinstance(row, dict):
+            continue
+        term = _description_term(row.get("term"))
+        if term is None:
+            continue
+        entry = {"term": term}
+        type_str = str(row.get("type") or "").strip()
+        if typed:
+            if not type_str:
+                continue
+            entry["type"] = type_str
+        elif type_str:
+            entry["type"] = type_str
+        found.append(entry)
+    return found
+
+
 def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
-    """{Russian component name: {"members" by kind, "base": the English name of its base type}}.
+    """{Russian component name: the runtime facts of one interface component descriptor}.
 
     Every component description the distribution ships, whether the help describes it or not.
     A name met twice keeps its first reading: the same jar ships in several places of the
@@ -1198,7 +1231,8 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
                 continue
             if not isinstance(data, dict) or data.get("type") != _COMPONENT_YAML_TYPE:
                 continue
-            russian = _spelled_ru(data)
+            term = _description_term(data.get("term"))
+            russian = term["ru"] if term else ""
             if not russian or russian in found:
                 continue
             members = {kind: set() for kind in MEMBER_KINDS}
@@ -1209,26 +1243,69 @@ def component_descriptions(car: zipfile.ZipFile) -> dict[str, dict]:
                         members[kind].add(spelled)
             # `Std::Interface::Forms::Form<Std::Undefined>` - the head of the qualified name is
             # what the catalog keys a type by, generic arguments and package alike dropped.
-            base = str(data.get("baseType") or "").split("<", 1)[0].rpartition("::")[2].strip()
-            found[russian] = {"members": members, "base": base}
+            base_type = str(data.get("baseType") or "").strip()
+            base = base_type.split("<", 1)[0].rpartition("::")[2].strip()
+            found[russian] = {
+                "members": members,
+                "base": base,
+                "term": term,
+                "namespace": _description_term(data.get("namespace")),
+                "baseType": base_type,
+                "to": data.get("to"),
+                "properties": _description_rows(data, "properties", typed=True),
+                "events": _description_rows(data, "events", typed=False),
+            }
     return found
 
 
-def retired_components(
-    car: zipfile.ZipFile, named: set[str], described: set[str]
-) -> list[tuple[str, dict[str, set[str]], str]]:
-    """[(Russian name, own members by kind, the English name of its base type)].
+def retired_components(car: zipfile.ZipFile, named: set[str], described: set[str]) -> dict[str, dict]:
+    """{Russian name: runtime descriptor} for components the help names but does not describe.
 
     Only the components the help NAMES and does not DESCRIBE, and only those the shipped
     description says something about - see the comment above for both narrowings.
     """
-    found: list[tuple[str, dict[str, set[str]], str]] = []
+    found: dict[str, dict] = {}
     for russian, record in sorted(component_descriptions(car).items()):
         if russian not in named or russian in described:
             continue
         if not any(record["members"].values()):
             continue
-        found.append((russian, record["members"], record["base"]))
+        found[russian] = record
+    return found
+
+
+def retired_component_payloads(records: dict[str, dict]) -> dict[str, dict]:
+    """The descriptor facts the UI-schema extractor can consume without a distribution.
+
+    A runtime descriptor calls its compatibility ceiling `to`.  It is retained verbatim, rather
+    than turning a retired component into an ordinary palette item.  The emitted rows exclude
+    compiler and TypeScript implementation details; names, namespace, base, typed properties
+    and events are the only facts the schema can use.
+    """
+    found: dict[str, dict] = {}
+    for russian, record in sorted(records.items()):
+        term = record.get("term")
+        namespace = record.get("namespace")
+        base_type = record.get("baseType")
+        ceiling = record.get("to")
+        if (not isinstance(term, dict) or not isinstance(namespace, dict)
+                or not isinstance(base_type, str) or not base_type
+                or isinstance(ceiling, bool) or not isinstance(ceiling, (int, float))):
+            continue
+        entry = {
+            "term": term,
+            "namespace": namespace,
+            "baseType": base_type,
+            "to": ceiling,
+        }
+        properties = record.get("properties")
+        events = record.get("events")
+        if isinstance(properties, list) and properties:
+            entry["properties"] = properties
+        if isinstance(events, list) and events:
+            entry["events"] = events
+        if "properties" in entry or "events" in entry:
+            found[russian] = entry
     return found
 
 
@@ -1546,7 +1623,7 @@ def main(argv=None) -> int:
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
      facets, generated, returns, signatures, bases, ctors, type_params, method_params,
-     deprecated, folds, checked_methods) = extract(dist)
+     deprecated, folds, checked_methods, retired) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
     # per heir. The loader re-expands them by `bases` - a member set is completed by adding
@@ -1582,6 +1659,10 @@ def main(argv=None) -> int:
         "names": sorted(names),
         "object_members": {k: sorted(v) for k, v in sorted(members.items())},
         "component_props": {k: sorted(v) for k, v in sorted(components.items())},
+        # Tombstone pages omit every usable field of a retired component.  The runtime keeps a
+        # descriptor for compatibility projects, so retain only its UI-schema facts here; the
+        # schema step has no distribution of its own.  Older datasets simply omit this section.
+        **({"retired_components": retired_component_payloads(retired)} if retired else {}),
         "type_members": {k: _members_json(v) for k, v in sorted(own_types.items())},
         # Global context: members of Стд and its first-level packages, available by bare name.
         "globals": sorted(globals_),

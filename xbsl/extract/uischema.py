@@ -123,7 +123,7 @@ import re
 from html import unescape
 from pathlib import Path
 
-from xbsl import dataset, docs
+from xbsl import dataset, docs, terms
 from xbsl.extract import _distro
 
 COMPONENT_BASE_QUALIFIED = "Стд::Интерфейс::Компонент"
@@ -165,6 +165,8 @@ _NOT_DOC = ("Сравнение", "Ссылочное", "Значимое")
 _COMPONENT_TOPIC_RE = re.compile(r"^Компонент интерфейса\s*[«\"'](.+?)[»\"']$")
 #: Sections of a guide topic whose H3 headings are yaml keys.
 _TOPIC_SECTIONS = ("Свойства", "События")
+_TOMBSTONE_H1_RE = re.compile(r"<h1[^>]*>\s*<del>.*?</del>\s*</h1>", re.S)
+_RUNTIME_TYPE_RE = re.compile(r"(?:Std::)?(?:[A-Za-z][A-Za-z0-9_]*::)*([A-Za-z][A-Za-z0-9_]*)")
 
 
 def _plain(html: str) -> str:
@@ -370,6 +372,7 @@ class PageInfo:
         self.id: str = rec["id"]
         self.title: str = rec["title"]
         self.qualified: str = unescape(rec.get("qualified") or "")
+        self.tombstone: bool = bool(_TOMBSTONE_H1_RE.search(rec.get("html") or ""))
         self.base_ids: list[str] = []
         self.base_texts: list[str] = []
         self.doc: str | None = None
@@ -537,7 +540,67 @@ def _prop_record(
     return rec
 
 
-def build_schema(pages: list[dict], element_version: str, guides: list[dict] | None = None) -> dict:
+def _runtime_type(text: object) -> str | None:
+    """The Russian form of a type expression from a runtime component descriptor.
+
+    The descriptor names types in their qualified English form.  Every atom has to be present in
+    the extracted term tables: a missing pair means the schema cannot state the property's type
+    faithfully, so the caller keeps it out of typed properties instead of shortening it by guess.
+    """
+    value = str(text or "").strip()
+    if not value:
+        return None
+    unresolved = False
+
+    def replace(match: re.Match[str]) -> str:
+        nonlocal unresolved
+        russian = terms.russian(match.group(1), "types") or terms.common_russian(match.group(1))
+        if russian is None:
+            unresolved = True
+            return match.group(0)
+        return russian
+
+    translated = _RUNTIME_TYPE_RE.sub(replace, value)
+    return None if unresolved else translated
+
+
+def _runtime_descriptor(record: object, name: str) -> dict | None:
+    """A complete compatibility-limited runtime descriptor, or None for an unsafe record."""
+    if not isinstance(record, dict):
+        return None
+    term = record.get("term")
+    namespace = record.get("namespace")
+    base_type = record.get("baseType")
+    ceiling = record.get("to")
+    if (not isinstance(term, dict) or term.get("ru") != name or not isinstance(namespace, dict)
+            or not isinstance(namespace.get("ru"), str) or not namespace["ru"]
+            or not isinstance(base_type, str) or not base_type
+            or isinstance(ceiling, bool) or not isinstance(ceiling, (int, float))):
+        return None
+    base = _runtime_type(base_type.split("<", 1)[0])
+    if not base or "::" in base:
+        return None
+    return {"package": namespace["ru"], "base": base, "until": str(ceiling), "raw": record}
+
+
+def _runtime_rows(record: dict, section: str) -> list[tuple[str, str | None]]:
+    """(Russian name, translated type when the descriptor states one) rows of one section."""
+    found: list[tuple[str, str | None]] = []
+    for row in record.get(section) or ():
+        if not isinstance(row, dict) or not isinstance(row.get("term"), dict):
+            continue
+        name = row["term"].get("ru")
+        if not isinstance(name, str) or not _NAME_RE.match(name):
+            continue
+        type_str = _runtime_type(row.get("type")) if row.get("type") else None
+        found.append((name, type_str))
+    return found
+
+
+def build_schema(
+    pages: list[dict], element_version: str, guides: list[dict] | None = None,
+    retired_components: dict[str, dict] | None = None,
+) -> dict:
     """The full uischema dictionary from the type pages of the documentation dataset.
 
     `guides` are the non-reference pages; the component topics among them contribute the
@@ -545,8 +608,16 @@ def build_schema(pages: list[dict], element_version: str, guides: list[dict] | N
     argument is optional so an older caller keeps working - the schema then simply carries
     what the type pages know.
     """
-    infos = [parse_page(rec) for rec in pages]
-    topic_names = topic_property_names(guides or [])
+    guide_records = guides or []
+    # The docs index classifies a tombstone as a member page because it has no type hierarchy.
+    # It is still the evidence that lets a compatibility descriptor enter the palette, so add
+    # only that exact markup shape to the reference-page view.
+    tombstone_records = [
+        record for record in guide_records
+        if _TOMBSTONE_H1_RE.search(str(record.get("html") or ""))
+    ]
+    infos = [parse_page(rec) for rec in [*pages, *tombstone_records]]
+    topic_names = topic_property_names(guide_records)
     by_id = {p.id: p for p in infos}
     component_base_ids = {p.id for p in infos if p.qualified == COMPONENT_BASE_QUALIFIED}
     enum_base_ids = {p.id for p in infos if p.qualified == ENUM_BASE_QUALIFIED}
@@ -576,7 +647,15 @@ def build_schema(pages: list[dict], element_version: str, guides: list[dict] | N
 
     enum_pages = {name: _pick_namesake(group) for name, group in enum_groups.items()}
     enum_values = {name: p.value_names for name, p in enum_pages.items() if p.value_names}
-    component_names = set(comp_groups)
+    tombstones = {page.title for page in infos if page.tombstone}
+    runtime_records = {
+        name: descriptor
+        for name, record in (retired_components or {}).items()
+        if isinstance(name, str) and name in tombstones
+        for descriptor in (_runtime_descriptor(record, name),)
+        if descriptor is not None and name not in comp_groups
+    }
+    component_names = set(comp_groups) | set(runtime_records)
 
     components: dict[str, dict] = {}
     used_enums: set[str] = set()
@@ -620,6 +699,55 @@ def build_schema(pages: list[dict], element_version: str, guides: list[dict] | N
         if extra:
             rec["yaml_props"] = extra
         components[name] = rec
+
+    resolving: set[str] = set()
+
+    def add_retired(name: str) -> None:
+        if name in components or name in resolving:
+            return
+        resolving.add(name)
+        descriptor = runtime_records[name]
+        base = descriptor["base"]
+        if base in runtime_records:
+            add_retired(base)
+        inherited = components.get(base) or {}
+        props = dict(inherited.get("props") or {})
+        extra = set(inherited.get("yaml_props") or ())
+        for prop_name, type_str in _runtime_rows(descriptor["raw"], "properties"):
+            if type_str is None:
+                extra.add(prop_name)
+                continue
+            props[prop_name] = _prop_record(type_str, None, component_names, commands, enum_values)
+        for event_name, type_str in _runtime_rows(descriptor["raw"], "events"):
+            if type_str and is_event(type_str):
+                props[event_name] = _prop_record(
+                    type_str, None, component_names, commands, enum_values
+                )
+            else:
+                extra.add(event_name)
+        rec = {
+            "package": descriptor["package"],
+            "source": "runtime",
+            "retired": True,
+            "until": descriptor["until"],
+            "props": props,
+        }
+        if props.get("Содержимое", {}).get("slot"):
+            rec["container"] = True
+        own_names = set(props)
+        extra -= own_names
+        if extra:
+            rec["yaml_props"] = sorted(extra)
+        components[name] = rec
+        resolving.remove(name)
+
+    for name in sorted(runtime_records):
+        add_retired(name)
+
+    for rec in components.values():
+        for prop in (rec.get("props") or {}).values():
+            for member in prop.get("types") or ():
+                used_enums |= type_refs(member) & set(enum_values)
 
     enums = {
         name: {"package": enum_pages[name].package, "values": enum_values[name]}
@@ -671,7 +799,11 @@ def main(argv=None) -> int:
             "tools/extract_docs.py"
         )
 
-    schema = build_schema(docs.type_pages(version), version, docs.guide_pages(version))
+    stdlib = dataset.load_optional("stdlib.json") or {}
+    schema = build_schema(
+        docs.type_pages(version), version, docs.guide_pages(version),
+        retired_components=stdlib.get("retired_components"),
+    )
     out = Path(args.out) if args.out else _distro.version_dir(version) / "uischema.json"
     out.parent.mkdir(parents=True, exist_ok=True)
     # newline="\n": keep the generated file LF on every platform (git-friendly data).

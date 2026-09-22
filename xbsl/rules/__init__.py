@@ -69,6 +69,7 @@ from . import (  # noqa: F401
 
 # Tier D – semantics over stdlib, forms and the metamodel:
 from . import (  # noqa: F401
+    access_key_handler_flavour,
     binding_types,
     bound_properties,
     form_components,

@@ -38,6 +38,13 @@ _SCHEMA = {
             "doc": "Базовый абстрактный компонент.",
             "props": {"Видимость": {"types": ["Авто", "Булево"]}},
         },
+        "УстаревшаяГруппа": {
+            "package": "Стд::Интерфейс::Группы",
+            "source": "runtime",
+            "retired": True,
+            "until": "8.0",
+            "props": {"Заголовок": {"types": ["Строка"]}},
+        },
     },
     "enums": {
         "ВидВиджета": {"package": "Стд::Интерфейс", "values": ["Карточка", "Баннер"]},
@@ -156,6 +163,9 @@ def test_catalog_strips_props(ui_root):
     assert card["container"] is True  # the palette/structure take containers from here
     assert got["components"]["Компонент"]["abstract"] is True
     assert "container" not in got["components"]["Компонент"]
+    retired = got["components"]["УстаревшаяГруппа"]
+    assert retired["retired"] is True and retired["until"] == "8.0"
+    assert "props" not in retired
 
 
 def test_component_full_record(ui_root):

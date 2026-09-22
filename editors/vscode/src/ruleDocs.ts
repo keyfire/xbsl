@@ -296,7 +296,7 @@ const RULE_DOCS: ReadonlyArray<{ match: (rule: string) => boolean; page: string;
   },
   { match: (r) => r === "code/load-object-unwrap", page: "topics/data-deletion" },
   {
-    match: (r) => r === "code/permission-right-not-computable",
+    match: (r) => r === "code/permission-right-not-computable" || r === "code/access-key-handler-flavour",
     page: "topics/manage-access-control",
   },
   { match: (r) => r === "yaml/ref-input-auto-commands", page: "topics/edit-component" },
