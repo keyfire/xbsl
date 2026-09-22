@@ -2,7 +2,7 @@
 
 [English](https://github.com/keyfire/xbsl/blob/main/editors/vscode/CHANGELOG.md) · **Русский**
 
-## Не выпущено
+## 0.75.1
 
 ### Исправлено
 
