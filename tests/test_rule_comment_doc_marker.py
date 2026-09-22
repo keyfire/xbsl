@@ -9,8 +9,11 @@ The rule parses the module, so the whole module needs the data bundle (listed in
 conftest._DATA_DEPENDENT).
 """
 
+import pytest
+
 from xbsl import engine
 from xbsl.cli import discover
+from xbsl.rules.comment_doc_marker import declaration_comment_blocks
 
 RULE = "comment/doc-marker"
 
@@ -123,3 +126,35 @@ def test_english_module_is_judged_the_same(tmp_path):
     )
     diags = _lint(tmp_path, text, name="ProbePricing.xbsl")
     assert len(diags) == 1 and diags[0].fix is not None
+
+
+@pytest.mark.parametrize(("method", "name"), (
+    ("метод Проба()", "Рамка.xbsl"),
+    ("method Probe()", "Frame.xbsl"),
+))
+def test_slash_frame_attached_to_a_declaration_is_reported_without_a_fix(tmp_path, method, name):
+    text = "//////////////// Module header.\n" + method + "\n;\n"
+    diags = _lint(tmp_path, text, name=name)
+
+    assert len(diags) == 1 and (diags[0].line, diags[0].col) == (1, 1)
+    assert diags[0].fix is None
+    assert "`////`" in diags[0].message
+    assert "пустой строкой" in diags[0].message and "`//`" in diags[0].message
+
+
+def test_slash_frame_separated_from_a_declaration_is_not_attached(tmp_path):
+    text = "//////////////// Module header.\n\nметод Проба()\n;\n"
+    assert _lint(tmp_path, text) == []
+
+
+def test_attached_comment_blocks_expose_the_group_for_project_rules():
+    source = engine.load_text(
+        "Проба.xbsl",
+        "// Module note.\n\n/// Description.\n//// Frame.\nметод Проба()\n;\n",
+    )
+
+    blocks = declaration_comment_blocks(source)
+
+    assert [[token.value for token in block] for block in blocks] == [
+        ["/// Description.", "//// Frame."],
+    ]

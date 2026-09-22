@@ -1672,7 +1672,10 @@ def test_a_long_source_line_does_not_drag_its_neighbours_into_a_paragraph():
     assert _long_lines(out) == [2], "only the paragraph under it needed the re-split"
 
 
-def test_a_doc_comment_is_not_reflowed():
+def test_a_one_line_doc_comment_is_wrapped_without_changing_its_kind():
+    from xbsl import lexer
+    from xbsl.translation import code
+
     ru = "Возвращает список шагов задачи в порядке их выполнения исполнителем"
     en = ("Returns the list of the steps of the task in the order in which the performer of the"
           " task is expected to run them, one after another and skipping none of them")
@@ -1680,8 +1683,28 @@ def test_a_doc_comment_is_not_reflowed():
     assert _long_lines(module) == [], "the source itself is within the limit"
 
     out, _ = _code(module, phrases={ru: en})
-    assert out.splitlines()[0] == f"/** {en} */", "a doc comment stays one line"
-    assert _long_lines(out) == [1], "over the limit and still not re-flowed"
+    assert _long_lines(out) == []
+    comment = next(token for token in lexer.tokenize(out) if token.kind == "COMMENT")
+    assert comment.subkind == "doc"
+    assert " ".join(payload for _offset, _index, payload in code.comment_payloads(comment)) == en
+
+
+def test_the_empty_block_form_is_left_unchanged():
+    from xbsl.translation import rewrap
+
+    text = "/**/\r\nmethod Probe()\r\n;\r\n"
+    assert rewrap.rewrap_comments(text, text, limit=20) == text
+
+
+def test_a_doc_comment_that_shares_a_line_with_code_is_left_unchanged():
+    from xbsl.translation import rewrap
+
+    source = "val Probe = 1 /** Short note. */\n"
+    translated = source.replace(
+        "Short note.",
+        "A translated documentation note that is much too long for the selected width",
+    )
+    assert rewrap.rewrap_comments(translated, source, limit=40) == translated
 
 
 def test_a_comment_after_code_keeps_its_line():
@@ -2039,13 +2062,85 @@ def test_a_block_that_shares_a_line_with_code_keeps_its_line():
     assert out.splitlines()[2] == f"    /* {en} */ val У = 2", "the statement after it stays in place"
 
 
-def test_a_block_framed_with_stars_keeps_its_shape():
-    """A star down the left edge is a frame: the pass does not rebuild it."""
+def test_a_block_framed_with_stars_is_wrapped_with_the_same_frame():
+    """A re-split star frame keeps its marker on every continuation line."""
     module = _block_module(_RU_PARAGRAPH, under="     * ")
     out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
-    assert _block_of(out) == [f"    /* {_EN_PARAGRAPH[0]}",
-                              f"     * {_EN_PARAGRAPH[1]}",
-                              f"     * {_EN_PARAGRAPH[2]} */"]
+    block = _block_of(out)
+
+    assert _long_lines(out) == []
+    assert block[0].startswith("    /* ")
+    assert all(line.startswith("     * ") for line in block[1:])
+    assert block[-1].endswith(" */")
+    assert " ".join(line.removeprefix("    /* ").removeprefix("     * ").removesuffix(" */")
+                    for line in block).split() == " ".join(_EN_PARAGRAPH).split()
+
+
+def test_a_doc_comment_is_wrapped_without_changing_its_lexical_kind():
+    from xbsl import lexer
+    from xbsl.translation import code
+
+    module = _block_module(_RU_PARAGRAPH).replace("/* ", "/** ", 1)
+    out, _ = _code(module, phrases=dict(zip(_RU_PARAGRAPH, _EN_PARAGRAPH)))
+    block = _block_of(out)
+
+    assert _long_lines(out) == []
+    assert block[0].startswith("    /** ")
+    assert block[-1].endswith(" */")
+    comment = next(token for token in lexer.tokenize(out) if token.kind == "COMMENT")
+    assert comment.subkind == "doc"
+    assert " ".join(payload for _offset, _index, payload in code.comment_payloads(comment)) == (
+        " ".join(_EN_PARAGRAPH)
+    )
+
+
+def test_a_star_framed_doc_comment_keeps_paragraphs_lists_code_and_crlf():
+    from xbsl import lexer
+    from xbsl.translation import code
+    from xbsl.translation import rewrap
+
+    source = (
+        "/** Short paragraph.\r\n"
+        " * Second short line.\r\n"
+        " *\r\n"
+        " * Rules:\r\n"
+        " * - keep this list item exactly where it is\r\n"
+        " * `code sample` stays on its own line\r\n"
+        " */\r\n"
+    )
+    translated = source.replace(
+        "Short paragraph.",
+        "A translated documentation paragraph that is much too long for the selected width",
+    )
+    out = rewrap.rewrap_comments(translated, source, limit=60)
+
+    assert out != translated
+    assert "\n" not in out.replace("\r\n", "")
+    assert out.startswith("/** ")
+    assert all(line.startswith(" *") for line in out.splitlines()[1:])
+    assert " * - keep this list item exactly where it is\r\n" in out
+    assert " * `code sample` stays on its own line\r\n" in out
+    comment = next(token for token in lexer.tokenize(out) if token.kind == "COMMENT")
+    assert comment.subkind == "doc"
+    payloads = [payload for _offset, _index, payload in code.comment_payloads(comment)
+                if payload not in ("", "/")]
+    assert " ".join(payloads) == (
+        "A translated documentation paragraph that is much too long for the selected width "
+        "Second short line. Rules: - keep this list item exactly where it is "
+        "`code sample` stays on its own line"
+    )
+
+
+def test_an_inconsistent_star_frame_is_left_alone():
+    from xbsl.translation import rewrap
+
+    source = "/* Short first line.\n * Framed second line.\nPlain third line. */\n"
+    translated = source.replace(
+        "Short first line.",
+        "A translated first line that is much too long for the selected wrapping width",
+    )
+
+    assert rewrap.rewrap_comments(translated, source, limit=50) == translated
 
 
 def test_a_block_line_long_in_the_source_stays_as_it_was_written():

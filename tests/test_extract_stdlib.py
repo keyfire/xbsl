@@ -414,6 +414,130 @@ def test_a_generic_base_is_read_by_its_head():
     assert _MODULE.page_bases(page) == ["Коллекция", "Обходимое", "Объект"]
 
 
+def test_generic_base_arguments_keep_nested_formulas():
+    """Dropping a base's arguments makes a map indistinguishable from any iterable.
+
+    The formula is data from the hierarchy link, including a nested generic argument. A
+    consumer can substitute the declaring type's parameters without knowing collection names.
+    """
+    page = (
+        "<article><h2>Иерархия типа</h2><p><em>Базовые типы:</em> "
+        '<a href="/iterable">Обходимое&lt;КлючИЗначение&lt;ТипКлюча, ТипЗначения&gt;&gt;</a>, '
+        '<a href="/readable">ЧитаемоеСоответствие&lt;ТипКлюча, ТипЗначения&gt;</a>, '
+        '<a href="/object">Объект</a></p></article>'
+    )
+
+    assert _MODULE.page_generic_bases(page) == {
+        "Обходимое": ["КлючИЗначение<ТипКлюча, ТипЗначения>"],
+        "ЧитаемоеСоответствие": ["ТипКлюча", "ТипЗначения"],
+    }
+
+
+class _VariancePool:
+    """Minimal constant pool for neutral generic-descriptor fixtures."""
+
+    def __init__(self):
+        self.entries = []
+
+    def add(self, blob):
+        self.entries.append(blob)
+        return len(self.entries)
+
+    def text(self, value):
+        import struct
+        encoded = value.encode("utf-8")
+        return self.add(bytes([1]) + struct.pack(">H", len(encoded)) + encoded)
+
+    def klass(self, name):
+        import struct
+        return self.add(bytes([7]) + struct.pack(">H", self.text(name)))
+
+    def field(self, owner, name):
+        import struct
+        owner_index = self.klass(owner)
+        described = self.add(bytes([12]) + struct.pack(">HH", self.text(name), self.text("Lkind;")))
+        return self.add(bytes([9]) + struct.pack(">HH", owner_index, described))
+
+    def rendered(self):
+        import struct
+        return struct.pack(">H", len(self.entries) + 1) + b"".join(self.entries)
+
+
+def _variance_class(*returned_kinds):
+    """A class declaring `genParamKind`; several kinds model an index-dependent method."""
+    import struct
+
+    pool = _VariancePool()
+    code_name = pool.text("Code")
+    body = bytearray()
+    for kind in returned_kinds:
+        body += bytes([0xB2]) + struct.pack(">H", pool.field("demo/ParamKind", kind))
+        body += bytes([0xB0])
+    code = struct.pack(">HHI", 1, 2, len(body)) + body + struct.pack(">HH", 0, 0)
+    this_class = pool.klass("demo/SampleG5Type")
+    super_class = pool.klass("java/lang/Object")
+    method = struct.pack(">HHHH", 0, pool.text("genParamKind"), pool.text("(I)Lkind;"), 1)
+    method += struct.pack(">HI", code_name, len(code)) + code
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61) + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0) + struct.pack(">H", 1) + method + struct.pack(">H", 0)
+    )
+
+
+def _class_without_variance_method():
+    """A descriptor inheriting its generic-parameter kind from an unknown parent."""
+    import struct
+
+    pool = _VariancePool()
+    this_class = pool.klass("demo/InheritedG5Type")
+    super_class = pool.klass("demo/UnknownParent")
+    return (
+        b"\xca\xfe\xba\xbe" + struct.pack(">HH", 0, 61) + pool.rendered()
+        + struct.pack(">HHHH", 0, this_class, super_class, 0)
+        + struct.pack(">H", 0) + struct.pack(">H", 0) + struct.pack(">H", 0)
+    )
+
+
+def test_uniform_runtime_variance_applies_to_every_declared_parameter():
+    assert _MODULE.declared_type_variance(_variance_class("OUT"), 2) == ["out", "out"]
+
+
+def test_index_dependent_runtime_variance_is_left_unknown():
+    assert _MODULE.declared_type_variance(_variance_class("OUT", "IN"), 2) == []
+
+
+def test_inherited_runtime_variance_is_left_unknown():
+    assert _MODULE.declared_type_variance(_class_without_variance_method(), 1) == []
+
+
+def test_main_writes_generic_formulas_and_proven_runtime_variance(tmp_path):
+    """The public catalog contract is populated from both primary distribution sources."""
+    import io
+    import json
+    import zipfile
+
+    page = (
+        "<html><head><title>Образец | Product</title></head><body><article>"
+        "<h1>Образец</h1><p><code>Стд::Образец&lt;ТипЭлемента&gt;</code></p>"
+        "<h2>Иерархия типа</h2><p>Базовые типы: "
+        '<a href="/base">База&lt;ТипЭлемента&gt;</a></p></article></body></html>'
+    )
+    jar = io.BytesIO()
+    with zipfile.ZipFile(jar, "w") as archive:
+        archive.writestr("demo/SampleG5Type.class", _variance_class("OUT"))
+    with zipfile.ZipFile(tmp_path / "element-server-with-ide-9.9.9-test.car", "w") as archive:
+        archive.writestr(_MODULE.STD_BASE + "Sample_ru/index.html", page)
+        archive.writestr("data/lib/demo.jar", jar.getvalue())
+    output = tmp_path / "stdlib.json"
+
+    _MODULE.main(["--dist", str(tmp_path), "--element-version", "9.9.9", "--out", str(output)])
+    data = json.loads(output.read_text(encoding="utf-8"))
+
+    assert data["generic_bases"] == {"Образец": {"База": ["ТипЭлемента"]}}
+    assert data["type_param_variance"] == {"Образец": ["out"]}
+
+
 def test_the_type_parameters_are_read_from_the_page_header():
     """A generic type names the result of its members BY THE PARAMETER, so the parameter list
     is what turns such a result into a type."""

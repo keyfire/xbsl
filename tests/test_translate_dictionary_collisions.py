@@ -243,7 +243,8 @@ def test_a_branch_sees_the_collision_with_its_target_before_the_merge(branches):
     against = cli.collisions_report(dictionary, "main")
 
     assert (alone["conflicts"], alone["duplicates"], alone["against"]) == ([], [], None)
-    assert against["against"] == {"ref": "main", "files": 2, "added": 2}
+    assert against["against"] == {"ref": "main", "files": 2, "added": 2,
+                                    "merge_base": _git(dictionary.parent, "merge-base", "HEAD", "main").strip()}
     assert against["conflicts"] == [{
         "section": "tokens", "key": "Партии",
         "places": [{"file": "020-feature.yaml", "line": 4, "value": "Batches"},
@@ -265,8 +266,8 @@ def test_a_value_changed_in_the_same_file_is_not_a_collision(branches):
     assert report["against"]["added"] == 2  # the two keys of the file `main` added
 
 
-def test_a_file_removed_in_the_working_tree_but_alive_at_the_ref_still_counts(branches):
-    """The merge brings the file back, so its keys are judged as if it were still there."""
+def test_a_file_removed_only_in_the_working_tree_does_not_return_from_the_base(branches):
+    """An unchanged target copy cannot resurrect a file this branch removed."""
     _project, dictionary = branches
     (dictionary / "010-base.yaml").unlink()
     (dictionary / "020-feature.yaml").unlink()
@@ -275,9 +276,69 @@ def test_a_file_removed_in_the_working_tree_but_alive_at_the_ref_still_counts(br
     assert cli.collisions_report(dictionary)["conflicts"] == []
     conflicts = cli.collisions_report(dictionary, "main")["conflicts"]
 
-    assert [(row["key"], [place["file"] for place in row["places"]]) for row in conflicts] == [
-        ("Задачи", ["040-moved.yaml", "main:010-base.yaml"]),
+    assert conflicts == []
+
+
+def test_target_edit_of_a_renamed_dictionary_has_no_stale_working_value(branches):
+    _project, dictionary = branches
+    repo = dictionary.parent
+    _git(repo, "mv", "xbsl-translation/010-base.yaml", "xbsl-translation/040-moved.yaml")
+    _git(repo, "commit", "-q", "-m", "rename the shared dictionary")
+    _git(repo, "checkout", "-q", "main")
+    _write(dictionary, "010-base.yaml", "tokens:\n    Задачи: Jobs\n    Склады: Warehouses\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "edit one shared key")
+    _git(repo, "checkout", "-q", "feature")
+    (dictionary / "020-feature.yaml").unlink()
+
+    report = cli.collisions_report(dictionary, "main")
+
+    assert "error" not in report
+    assert report["conflicts"] == []
+    assert report["duplicates"] == []
+
+
+def test_a_target_value_change_and_a_working_value_change_are_both_reported(branches):
+    _project, dictionary = branches
+    repo = dictionary.parent
+    _git(repo, "checkout", "-q", "main")
+    _write(dictionary, "010-base.yaml", "tokens:\n    Задачи: Jobs\n    Склады: Warehouses\n")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-q", "-m", "target changes the value")
+    _git(repo, "checkout", "-q", "feature")
+    _write(dictionary, "010-base.yaml", "tokens:\n    Задачи: Tickets\n    Склады: Warehouses\n")
+
+    report = cli.collisions_report(dictionary, "main")
+
+    assert "error" not in report
+    row = next(row for row in report["conflicts"] if row["key"] == "Задачи")
+    assert [(place["file"], place["value"]) for place in row["places"]] == [
+        ("010-base.yaml", "Tickets"), ("main:010-base.yaml", "Jobs"),
     ]
+
+
+def test_an_unrelated_ref_is_refused_instead_of_inventing_a_merge_base(branches):
+    _project, dictionary = branches
+    repo = dictionary.parent
+    orphan = _git(repo, "commit-tree", "HEAD^{tree}", "-m", "unrelated history").strip()
+    _git(repo, "update-ref", "refs/heads/unrelated", orphan)
+
+    report = cli.collisions_report(dictionary, "unrelated")
+
+    assert "error" in report
+    assert "unrelated" in report["error"]
+
+
+def test_relative_dictionary_path_uses_the_same_merge_inputs(branches, monkeypatch):
+    _project, dictionary = branches
+    expected = cli.collisions_report(dictionary, "main")
+    monkeypatch.chdir(dictionary.parent)
+
+    relative = cli.collisions_report(Path(dictionary.name), "main")
+
+    assert relative["against"] == expected["against"]
+    assert relative["conflicts"] == expected["conflicts"]
+    assert relative["duplicates"] == expected["duplicates"]
 
 
 def test_an_unknown_ref_and_a_dictionary_outside_git_are_refused_by_name(branches, tmp_path):

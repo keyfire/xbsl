@@ -12,11 +12,12 @@ from the rule itself: a second copy of it would drift. The paragraph is re-split
 the block already had - never above the limit, never below a readable column - so a block
 written at 96 columns keeps its column instead of stretching to 120 next to its neighbours.
 
-A `/* ... */` comment that has its lines to itself is re-wrapped by the same rules. Its marker
-is written once rather than on every line: `/*` opens the first line, the lines under it carry
-only an indent, and `*/` closes the last one. So the first line belongs to the paragraph under
-it, a re-split paragraph opens with `/*` again, and `*/` stays with the last word. An empty
-line inside the comment parts two paragraphs, as an empty `//` line does.
+A block comment that has its lines to itself is re-wrapped by the same rules. The exact opener,
+`/*` or the lexically distinct `/**`, stays on the first line and `*/` closes the last one. A
+consistent `*` down the left edge stays on every continuation line; without that frame, the
+lines under the opener carry only their indent. The first line belongs to the paragraph under
+it, `*/` stays with the last word, and an empty line parts two paragraphs as an empty `//` line
+does.
 
 What is never re-flowed, because the shape carries the meaning:
 
@@ -28,8 +29,7 @@ What is never re-flowed, because the shape carries the meaning:
   the line above;
 - a code sample or a table row - two spaces in a row, a `|`, a backtick: those columns ARE
   the content;
-- a `/** ... */` comment, a `/* ... */` one framed with a star down its left edge, and any
-  comment that shares its line with code;
+- a block with an inconsistent star frame, and any comment that shares its line with code;
 - a line that was ALREADY over the limit in the SOURCE - its author wrote it that way on
   purpose, and the pass has nothing to repair there.
 
@@ -78,8 +78,14 @@ _MIN_BODY = 20
 #: ribbon that narrow helps nobody; the project limit is the width then.
 _MIN_COLUMN = 72
 
-#: The first line of a `/* ... */` comment up to its text: the indent, the marker, the space.
-_BLOCK_HEAD_RE = re.compile(r"[ \t]*/\*[ \t]*")
+#: The first line of a block comment up to its text: the indent, the exact opener, the space.
+_BLOCK_HEAD_RE = re.compile(r"[ \t]*/\*+[ \t]*")
+
+#: The left edge of a consistently star-framed block, kept on every generated line.
+_BLOCK_FRAME_RE = re.compile(r"[ \t]*\*(?!/)[ \t]*")
+
+#: The exact lexical opener, used to prove that a rewrap kept `/*` distinct from `/**`.
+_BLOCK_OPEN_RE = re.compile(r"[ \t]*(/\*+)")
 
 #: The last line of it from the end of its text: the space before the closing marker and the
 #: marker itself.
@@ -194,12 +200,14 @@ def _block_comments(toks: list[lexer.Token], lines: list[str]) -> dict[int, int]
     """{first line: last line} of every `/* ... */` comment that has its lines to itself.
 
     A comment that shares its first line with code before it, or its last line with code after
-    it, stays where it is: a re-split would carry the code along. So does a `/** ... */`
-    comment, and one that the file ends inside.
+    it, stays where it is: a re-split would carry the code along. So does one that the file
+    ends inside. The supplier grammar distinguishes `/**` from `/*`; both are included here,
+    and `_block_signature` makes changing one into the other fail closed.
     """
     found: dict[int, int] = {}
     for tok in toks:
-        if tok.kind != "COMMENT" or tok.subkind != "block" or tok.flags.get("unterminated"):
+        if (tok.kind != "COMMENT" or tok.subkind not in ("block", "doc")
+                or tok.flags.get("unterminated")):
             continue
         before = lines[tok.line - 1][: tok.col - 1]
         after = lines[tok.end_line - 1].rstrip("\r\n")[tok.end_col - 1:]
@@ -241,24 +249,57 @@ def _rewrap_block_comment(lines: list[str], source: list[str], limit: int,
     The paragraphs are found and split as in a run of `//` lines. Only the markers differ: the
     first line keeps `/*` in front of its text, and the last one keeps `*/` after it.
     """
-    parts = [_block_parts(line, first=number == 0, last=number == len(lines) - 1)
+    framed = _star_frame(lines)
+    if framed is None:
+        return list(lines)
+    parts = [_block_parts(line, first=number == 0, last=number == len(lines) - 1,
+                          framed=framed)
              for number, line in enumerate(lines)]
-    under = [part.text for part in parts[1:] if part.text]
-    if under and all(text.startswith("*") for text in under):
-        return list(lines)  # a frame of stars down the left edge
     groups = [_first_line_group(parts), *(part.head for part in parts[1:])]
     out = _rewrap_groups(lines, source, groups, parts, limit, newline)
-    # The same safety net as for a `//` run. The markers stand once in the whole comment, so
-    # a re-split may change its whitespace and nothing else.
-    return out if _content(out) == _content(lines) else list(lines)
+    # A star frame repeats a marker on each generated line, so raw non-whitespace comparison
+    # would reject every real rewrap. Compare the lexical kind and payload instead.
+    return out if _block_signature(out) == _block_signature(lines) else list(lines)
 
 
-def _content(lines: list[str]) -> str:
-    """A block comment with every space and break removed - what a re-split must not change."""
-    return "".join("".join(lines).split())
+def _star_frame(lines: list[str]) -> bool | None:
+    """True for a consistent left-edge star frame, False for none, None for a mixed shape."""
+    starred = False
+    plain = False
+    for number, line in enumerate(lines[1:], start=1):
+        body = line.rstrip("\r\n")
+        if number == len(lines) - 1:
+            closing = _BLOCK_TAIL_RE.search(body)
+            if closing is not None:
+                body = body[: closing.start()]
+        body = body.lstrip(" \t")
+        if not body:
+            continue
+        if body.startswith("*"):
+            starred = True
+        else:
+            plain = True
+    if starred and plain:
+        return None
+    return starred
 
 
-def _block_parts(line: str, *, first: bool, last: bool) -> _Parts:
+def _block_signature(lines: list[str]) -> tuple[str, bool, str] | None:
+    """The lexical opener, closer presence and payload words of one complete block."""
+    framed = _star_frame(lines)
+    if framed is None or not lines:
+        return None
+    parts = [_block_parts(line, first=number == 0, last=number == len(lines) - 1,
+                          framed=framed)
+             for number, line in enumerate(lines)]
+    opening = _BLOCK_OPEN_RE.match(lines[0])
+    opener = opening.group(1) if opening is not None else ""
+    closed = _BLOCK_TAIL_RE.search(lines[-1].rstrip("\r\n")) is not None
+    payload = "".join("".join(part.text.split()) for part in parts)
+    return opener, closed, payload
+
+
+def _block_parts(line: str, *, first: bool, last: bool, framed: bool) -> _Parts:
     """A line of a `/* ... */` comment taken apart.
 
     The first line has the indent and the opening marker before its text, any other line has
@@ -266,7 +307,8 @@ def _block_parts(line: str, *, first: bool, last: bool) -> _Parts:
     before it.
     """
     body = line.rstrip("\r\n")
-    opening = (_BLOCK_HEAD_RE if first else _INDENT_RE).match(body)
+    prefix = _BLOCK_HEAD_RE if first else (_BLOCK_FRAME_RE if framed else _INDENT_RE)
+    opening = prefix.match(body)
     head = opening.group(0) if opening else ""
     text = body[len(head):].rstrip()
     closing = _BLOCK_TAIL_RE.search(text) if last else None
@@ -286,7 +328,9 @@ def _first_line_group(parts: list[_Parts]) -> str:
     indent = _INDENT_RE.match(parts[0].head)
     column = indent.group(0) if indent else ""
     under = parts[1] if len(parts) > 1 else None
-    if under is not None and under.text and len(under.head) in (len(column), len(parts[0].head)):
+    if (under is not None and under.text
+            and (under.head.lstrip().startswith("*")
+                 or len(under.head) in (len(column), len(parts[0].head)))):
         return under.head
     return column
 

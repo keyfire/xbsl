@@ -6518,6 +6518,26 @@ SEEDS: list[Seed] = [
         },
         tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
     ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=FINDING,
+        note="a slash frame attached to a declaration leaks into its documentation",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "//// HEADER\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
+    ),
+    Seed(
+        rule="comment/doc-marker",
+        expect=CLEAN,
+        note="a module header separated from a declaration is not attached documentation",
+        files={
+            "Вычисления.yaml": _COMMON_MODULE_RU,
+            "Вычисления.xbsl": "// HEADER\n\n@НаСервере\nметод Пересчитать()\n;\n",
+        },
+        tokens={"Вычисления": "Calculations", "Пересчитать": "Recount"},
+    ),
 ]
 
 

@@ -226,9 +226,8 @@ def _git(repo: Path, *args: str) -> None:
 def test_a_repeat_in_a_file_at_the_ref_is_judged_against_it(tmp_path: Path):
     """The branch `feature` is clean; the target `main` repeated keys after the fork.
 
-    A file only the ref has comes in whole, its repeat included. In the file both sides have,
-    a key the working tree's copy does not carry comes in with both of its places, while a key
-    that copy carries stays out however often the ref repeats it - the rule of the overlay.
+    A target-only file comes in whole. Repeats added to a shared file survive too: an
+    unchanged working copy cannot hide a conflicting target edit to an existing key.
     """
     if not shutil.which("git"):
         pytest.skip("git is not installed")
@@ -250,8 +249,12 @@ def test_a_repeat_in_a_file_at_the_ref_is_judged_against_it(tmp_path: Path):
     assert cli.collisions_report(dictionary)["conflicts"] == []
     report = cli.collisions_report(dictionary, "main")
 
-    assert report["against"] == {"ref": "main", "files": 2, "added": 4}
+    assert report["against"]["ref"] == "main"
+    assert report["against"]["files"] == 2
+    assert report["against"]["added"] == 6
+    assert len(report["against"]["merge_base"]) == 40
     assert [(row["key"], _places(row)) for row in report["conflicts"]] == [
+        ("Задачи", [("main:010-base.yaml", 4, "Tasks"), ("main:010-base.yaml", 7, "Jobs")]),
         ("Партии", [("main:030-other.yaml", 4, "Lots"), ("main:030-other.yaml", 5, "Batches")]),
         ("Склады", [("main:010-base.yaml", 5, "Warehouses"), ("main:010-base.yaml", 6, "Depots")]),
     ]

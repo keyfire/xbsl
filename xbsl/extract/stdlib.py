@@ -67,7 +67,7 @@ from pathlib import Path
 
 import yaml
 
-from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER, nearest_last
+from xbsl.dataset import MEMBER_KINDS, PLACEHOLDER, generic_args, nearest_last
 from xbsl.extract import _distro, classcode
 from xbsl.extract.terms import scan_kind_table
 
@@ -388,6 +388,31 @@ def method_type_params(signature: str) -> tuple[str, list[str]]:
     return m.group(1), [p for p in params if _TYPE_NAME_RE.match(p)]
 
 
+def _page_base_specs(raw: str) -> list[tuple[str, list[str]]]:
+    """Base heads and argument formulas from the "Type hierarchy" section."""
+    ma = _ARTICLE_RE.search(raw)
+    if not ma:
+        return []
+    for section in _H2_OPEN_RE.split(ma.group(1)):
+        if not _plain_text(section[:200]).startswith("Иерархия типа"):
+            continue
+        head, _, _rest = section.partition("Дочерние типы")
+        specs: list[tuple[str, list[str]]] = []
+        seen: set[tuple[str, tuple[str, ...]]] = set()
+        for match in _LINK_RE.finditer(head):
+            written = html.unescape(_plain_text(match.group(1))).strip()
+            root = written.split("<", 1)[0].strip()
+            if not _TYPE_NAME_RE.match(root):
+                continue
+            args = generic_args(written)
+            item = (root, tuple(args))
+            if item not in seen:
+                specs.append((root, args))
+                seen.add(item)
+        return specs
+    return []
+
+
 def page_bases(raw: str) -> list[str]:
     """Base types of a page, from its "Иерархия типа" section.
 
@@ -397,26 +422,117 @@ def page_bases(raw: str) -> list[str]:
     text of the section. "Дочерние типы" are a separate subsection and are not bases -
     the reason the search stops at the first heading after the bases list.
     """
-    ma = _ARTICLE_RE.search(raw)
-    if not ma:
-        return []
-    for section in _H2_OPEN_RE.split(ma.group(1)):
-        if not _plain_text(section[:200]).startswith("Иерархия типа"):
+    return list(dict.fromkeys(name for name, _args in _page_base_specs(raw)))
+
+
+def page_generic_bases(raw: str) -> dict[str, list[str]]:
+    """Generic base argument formulas keyed by the base head.
+
+    The hierarchy is transitively closed in the documentation. Keeping the written formulas
+    makes `Map<Key, Value>` describe its `Iterable<KeyAndValue<Key, Value>>` base without a
+    collection-specific table in a consumer. Conflicting formulas for one head are omitted.
+    """
+    candidates: dict[str, list[str] | None] = {}
+    for name, args in _page_base_specs(raw):
+        if not args:
             continue
-        head, _, _rest = section.partition("Дочерние типы")
-        bases: list[str] = []
-        for m in _LINK_RE.finditer(head):
-            name = _plain_text(m.group(1))
-            # A generic base prints its argument in the link text (`Collection<ItemType>`,
-            # entity-escaped in the html), and the name of the base is the head. Reading the
-            # whole text as a name dropped such a base entirely: a collection kept `Object`
-            # alone as its ancestor, and the result types of everything it inherits (`First`,
-            # `Get`) were lost with it.
-            root = html.unescape(name).split("<", 1)[0].strip()
-            if _TYPE_NAME_RE.match(root) and root not in bases:
-                bases.append(root)
-        return bases
-    return []
+        previous = candidates.setdefault(name, args)
+        if previous != args:
+            candidates[name] = None
+    return {name: args for name, args in candidates.items() if args is not None}
+
+
+def _declared_method_code(blob: bytes, wanted: str) -> list[bytes]:
+    """Bytecode bodies of methods named `wanted` in one class file."""
+    try:
+        pool, position = classcode.constant_pool(blob)
+    except (IndexError, UnicodeDecodeError):
+        return []
+
+    def attributes(at: int, code: list[bytes] | None = None) -> int:
+        count = int.from_bytes(blob[at:at + 2], "big")
+        at += 2
+        for _ in range(count):
+            name = classcode.text(pool, int.from_bytes(blob[at:at + 2], "big"))
+            length = int.from_bytes(blob[at + 2:at + 6], "big")
+            body = blob[at + 6:at + 6 + length]
+            if code is not None and name == "Code":
+                size = int.from_bytes(body[4:8], "big")
+                code.append(body[8:8 + size])
+            at += 6 + length
+        return at
+
+    position += 6
+    position += 2 + int.from_bytes(blob[position:position + 2], "big") * 2
+    fields = int.from_bytes(blob[position:position + 2], "big")
+    position += 2
+    for _ in range(fields):
+        position += 6
+        position = attributes(position)
+    methods = int.from_bytes(blob[position:position + 2], "big")
+    position += 2
+    found: list[bytes] = []
+    for _ in range(methods):
+        name = classcode.text(pool, int.from_bytes(blob[position + 2:position + 4], "big"))
+        position += 6
+        position = attributes(position, found if name == wanted else None)
+    return found
+
+
+def declared_type_variance(blob: bytes, parameter_count: int) -> list[str]:
+    """Uniform variance declared by a runtime type descriptor, or an empty unknown result.
+
+    A descriptor that ignores the parameter index has exactly one `getstatic KIND; areturn`
+    body. Any branch, computed result or several possible kinds is left unknown: consumers then
+    use invariant comparison rather than attributing one observed kind to every parameter.
+    """
+    bodies = _declared_method_code(blob, "genParamKind")
+    if parameter_count <= 0 or len(bodies) != 1:
+        return []
+    try:
+        pool, _position = classcode.constant_pool(blob)
+        instructions = list(classcode._walk(bodies[0]))
+    except (IndexError, UnicodeDecodeError):
+        return []
+    if len(instructions) != 2 or instructions[0][0] != 0xB2 or instructions[1][0] != 0xB0:
+        return []
+    kind = classcode.field_name(pool, instructions[0][1])
+    normalized = {"OUT": "out", "IN": "in", "IN_OUT": "in_out"}.get(kind or "")
+    return [normalized] * parameter_count if normalized else []
+
+
+def runtime_type_variance(
+        car: zipfile.ZipFile, english_keys: dict[str, str],
+        type_params: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Variance per documented type, read from matching runtime `G5Type` descriptors."""
+    found: dict[str, list[str]] = {}
+    conflicted: set[str] = set()
+    for entry in car.namelist():
+        if not entry.endswith(".jar"):
+            continue
+        try:
+            jar = zipfile.ZipFile(io.BytesIO(car.read(entry)))
+        except (zipfile.BadZipFile, KeyError):
+            continue
+        for inner in jar.namelist():
+            simple = inner.rsplit("/", 1)[-1]
+            if "$" in simple or not simple.endswith("G5Type.class"):
+                continue
+            english = simple[:-len("G5Type.class")]
+            russian = english_keys.get(english)
+            if not russian or russian not in type_params:
+                continue
+            try:
+                variance = declared_type_variance(jar.read(inner), len(type_params[russian]))
+            except (zipfile.BadZipFile, KeyError):
+                continue
+            if not variance:
+                continue
+            previous = found.setdefault(russian, variance)
+            if previous != variance:
+                conflicted.add(russian)
+    return {name: values for name, values in found.items() if name not in conflicted}
 
 
 # The signature in the code block after a method's H3 heading: `Имя(Параметры): ТипВозврата`.
@@ -934,6 +1050,7 @@ def extract(dist: Path) -> tuple:
     returns: dict[str, dict[str, str]] = {}
     signatures: dict[str, dict[str, list[str]]] = {}
     bases: dict[str, list[str]] = {}
+    generic_bases: dict[str, dict[str, list[str]]] = {}
     type_params: dict[str, list[str]] = {}
     method_params: dict[str, dict[str, list[str]]] = {}
     ctors: dict[str, str] = {}
@@ -969,6 +1086,9 @@ def extract(dist: Path) -> tuple:
             page_base_list = page_bases(raw)
             if page_base_list and key:
                 bases.setdefault(key, page_base_list)
+            page_base_formulas = page_generic_bases(raw)
+            if page_base_formulas and key:
+                generic_bases.setdefault(key, page_base_formulas)
             page_params = page_type_params(raw)
             if page_params and key:
                 type_params.setdefault(key, page_params)
@@ -1093,6 +1213,8 @@ def extract(dist: Path) -> tuple:
                 slot["events"] |= events
     names |= TOPIC_ONLY_TYPES
     with zipfile.ZipFile(car) as z:
+        type_variance = runtime_type_variance(z, english_keys, type_params)
+    with zipfile.ZipFile(car) as z:
         _apply_deprecation_modes(z, deprecated, english_keys)
     documented = {
         "Std::" + "::".join(entry[len(STD_BASE):].split("/")[:-2]
@@ -1133,7 +1255,8 @@ def extract(dist: Path) -> tuple:
     for member in conflicted_env:
         global_env.pop(member, None)
     return (names, members, components, types, globals_, global_env, managers, manager_returns,
-            facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+            facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
+            type_variance, method_params,
             deprecated, folds, expand_checked_return_methods(checked_methods, bases), retired)
 
 
@@ -1622,7 +1745,8 @@ def main(argv=None) -> int:
 
     version = _distro.detect_version(dist, args.element_version)
     (names, members, components, types, globals_, global_env, managers, manager_returns,
-     facets, generated, returns, signatures, bases, ctors, type_params, method_params,
+     facets, generated, returns, signatures, bases, generic_bases, ctors, type_params,
+     type_variance, method_params,
      deprecated, folds, checked_methods, retired) = extract(dist)
     # Store only OWN members, not the full set: an inherited member (the object protocol on
     # every type, an exception's fields on every exception) would otherwise be repeated once
@@ -1704,6 +1828,12 @@ def main(argv=None) -> int:
         # Type hierarchy: the WHOLE ancestor chain a page prints under "Иерархия типа", so a
         # check needs no resolution of its own - `"Исключение" in bases[type]` decides.
         "bases": {k: v for k, v in sorted(bases.items())},
+        # Argument formulas of generic bases, as written in the hierarchy links. They keep
+        # nested expressions (`Map<K, V>` -> `Iterable<KeyAndValue<K, V>>`) and let consumers
+        # substitute parameters without naming collection types in code.
+        "generic_bases": {
+            k: dict(sorted(v.items())) for k, v in sorted(generic_bases.items()) if v
+        },
         # How the type is constructed (page_constructors): "empty" - a constructor callable
         # with no arguments, "args" - constructors that all demand arguments, "none" - the
         # documentation lists none at all. A field or a variable of a type that is not
@@ -1715,6 +1845,10 @@ def main(argv=None) -> int:
         # and only this list turns that name into a real type: the consumer matches it against
         # the arguments the code writes.
         "type_params": {k: v for k, v in sorted(type_params.items())},
+        # Per-parameter variance proven by a uniform `genParamKind` runtime descriptor. Types
+        # whose descriptor is absent or index-dependent are omitted; consumers use invariant
+        # comparison for them, which also preserves old-catalog behavior.
+        "type_param_variance": {k: v for k, v in sorted(type_variance.items())},
         # The type parameters a METHOD declares itself (`ПрочитатьОбъект<ТипОбъекта>`): such a
         # result is fixed by the call, not by the owner - the code passes `Тип<Массив<Карточка>>`.
         # Without this a consumer cannot tell the result name from a type it failed to find.

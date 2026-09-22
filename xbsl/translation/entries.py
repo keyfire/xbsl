@@ -188,6 +188,10 @@ MESSAGES = {
         "en": "the dictionary {path} is not inside a git repository: there is nowhere to"
               " read its files at a ref from",
     },
+    "translate.against.no-base": {
+        "ru": "для HEAD и \"{rev}\" не найдена единственная общая база Git; сравнение словаря остановлено",
+        "en": "HEAD and \"{rev}\" have no single common Git base; dictionary comparison stopped",
+    },
 }
 i18n.register(MESSAGES)
 
@@ -837,6 +841,70 @@ def dictionary_at(dictionary: Path, ref: str) -> list[tuple[str, str]]:
     if code != 0:
         raise ValueError(i18n.t("translate.against.read-failed", rev=ref, error=error.strip()))
     return _batched_blobs(blob, names, prefix)
+
+
+@dataclass
+class DictionaryComparison:
+    """Immutable Git snapshots and explicit renames for a dictionary comparison."""
+
+    merge_base: str
+    base_files: list[tuple[str, str]]
+    other_files: list[tuple[str, str]]
+    working_renames: dict[str, str]
+    other_renames: dict[str, str]
+
+
+def dictionary_comparison(dictionary: Path, ref: str) -> DictionaryComparison:
+    """Read a ref and its common base once, with Git's recorded rename identities.
+
+    Untracked files are additions, as in Git itself. Renames require a tracked destination;
+    a deleted source plus an untracked file must not guess an identity from similar keys.
+    No index, commit, or file in the working tree is changed by this read.
+    """
+    dictionary = dictionary.resolve()
+    where = dictionary if dictionary.is_dir() else dictionary.parent
+    code, root_text, _error = _git(where, "rev-parse", "--show-toplevel")
+    if code != 0:
+        raise ValueError(i18n.t("translate.against.not-a-repo", path=dictionary))
+    root = Path(root_text.strip())
+    code, target, _error = _git(where, "rev-parse", "--verify", "--quiet", "--end-of-options", f"{ref}^{{commit}}")
+    if code != 0:
+        raise ValueError(i18n.t("translate.since.unknown-rev", rev=ref))
+    target = target.strip()
+    code, bases, _error = _git(root, "merge-base", "--all", "HEAD", target)
+    base_ids = bases.split()
+    if code != 0 or len(base_ids) != 1:
+        raise ValueError(i18n.t("translate.against.no-base", rev=ref))
+    base = base_ids[0]
+    directory = dictionary if dictionary.is_dir() else dictionary.parent
+    prefix = directory.relative_to(root).as_posix()
+    prefix = "" if prefix == "." else prefix + "/"
+    pathspec = ":(literal)" + dictionary.relative_to(root).as_posix()
+
+    def renames(revision: str | None) -> dict[str, str]:
+        revisions = [base, revision] if revision is not None else [base]
+        code, listing, error = _git(root, "diff", "--name-status", "-z", "--find-renames",
+                                    *revisions, "--", pathspec)
+        if code != 0:
+            raise ValueError(i18n.t("translate.against.read-failed", rev=ref, error=error.strip()))
+        pieces = listing.split("\0")
+        result = {}
+        position = 0
+        while position < len(pieces) and pieces[position]:
+            status = pieces[position]
+            count = 3 if status.startswith(("R", "C")) else 2
+            if position + count > len(pieces):
+                raise ValueError(i18n.t("translate.against.read-failed", rev=ref, error="incomplete rename record"))
+            if status.startswith("R"):
+                old, new = pieces[position + 1:position + 3]
+                if (old.startswith(prefix) and new.startswith(prefix)
+                        and old.endswith(".yaml") and new.endswith(".yaml")):
+                    result[old[len(prefix):]] = new[len(prefix):]
+            position += count
+        return result
+
+    return DictionaryComparison(base, dictionary_at(dictionary, base), dictionary_at(dictionary, target),
+                                renames(None), renames(target))
 
 
 def _batched_blobs(blob: bytes, names: list[str], prefix: str) -> list[tuple[str, str]]:

@@ -8,6 +8,18 @@ sidebar:
 
 The semantic rules, the completion and the documentation panel all read data extracted from a distribution. This page is about that data: what else can be built from it and how versions are kept apart.
 
+## Generic variance and base arguments
+
+Two optional `stdlib.json` sections describe generic type relationships:
+`type_param_variance` stores an ordered list of `out`, `in` or `in_out` modes per type;
+`generic_bases` maps a type to its bases and their argument formulas. The extractor reads
+formulas from the documented hierarchy and accepts only proven uniform variance from
+runtime descriptors. Unsupported descriptors are omitted.
+
+Re-extract stdlib to obtain these fields. `style/redundant-union-member` substitutes the
+formulas and uses the declared variance, including nested base arguments. An old catalog
+or a missing/malformed entry keeps the conservative invariant comparison.
+
 ## Documentation search
 
 `tools/extract_docs.py` pulls the Element reference out of a distribution, from the

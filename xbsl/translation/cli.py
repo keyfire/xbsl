@@ -14,8 +14,8 @@ Modes compose from flags around one pass over the project:
 - `--check-duplicates [--against REF]`: the keys the dictionary translates in more than one
   place - two files, or twice in one - the conflicts the load would refuse and the redundant
   copies, each place with its file and line, read from the dictionary files alone; with a git
-  ref, the files of that ref count too, so a branch sees the collision it would bring to the
-  target branch before the merge.
+  ref, a three-way comparison through the common base retains one-sided edits and detects
+  competing translations before the merge.
 """
 
 from __future__ import annotations
@@ -446,16 +446,14 @@ MESSAGES = {
               " no pass over the project",
     },
     "translate.help.against": {
-        "ru": "git-ссылка (например origin/master), файлы словаря на которой добавляются к"
-              " файлам рабочего дерева: так ветка видит коллизию с целевой веткой до слияния."
-              " Тот же файл на ссылке и в рабочем дереве считается одним: ключ, у которого в"
-              " рабочем дереве другое значение, – не коллизия, а ключ, живущий только на"
-              " ссылке (и в файле, снятом в рабочем дереве), считается",
-        "en": "a git ref (say origin/master) whose dictionary files are added to the working"
-              " tree's: this is how a branch sees a collision with the target branch before"
-              " the merge. The same file at the ref and in the working tree counts as one: a"
-              " key the working tree spells differently is not a collision, while a key living"
-              " only at the ref (in a file the working tree removed too) counts",
+        "ru": "git-ссылка (например origin/master) для трехстороннего сравнения словаря через"
+              " общую базу с HEAD. Односторонние изменения и удаления не создают коллизию;"
+              " разные правки одного ключа и новые дубли двух веток показываются до слияния."
+              " Удаление против правки и неоднозначные переименования требуют разрешения",
+        "en": "a git ref (say origin/master) for a three-way dictionary comparison through"
+              " its common base with HEAD. One-sided edits and deletions do not collide;"
+              " divergent edits of one key and new duplicates from both branches are reported"
+              " before merging. Delete/edit and ambiguous renames need resolution",
     },
     "translate.check-unread-flags": {
         "ru": "режим --check-duplicates не читает эти ключи: {names}. Проверка отвечает всем"
@@ -468,10 +466,10 @@ MESSAGES = {
         "en": "--against is read only together with --check-duplicates",
     },
     "translate.against-header": {
-        "ru": "сравнение с {ref}: файлов словаря там {files}, пар оттуда, которых нет в"
-              " рабочем дереве: {added}",
-        "en": "compared against {ref}: {files} dictionary files there, {added} entries of"
-              " theirs the working tree does not carry",
+        "ru": "сравнение с {ref}: файлов словаря там {files}, пар из этой ветки в"
+              " результате сравнения: {added}",
+        "en": "compared against {ref}: {files} dictionary files there, {added} entries"
+              " from that ref selected by the comparison",
     },
     "translate.conflicts-header": {
         "ru": "ключей, переведённых по-разному в нескольких местах: {count} – оставьте одно значение",
@@ -1146,8 +1144,8 @@ def _check_duplicates(args, root: Path) -> int:
     pipeline passed, and the target branch failed at the dictionary load after the merge -
     git saw no conflict, the files differed. This mode is the load's own reading of the files
     (`dictionary.read_sections`) without the load: it answers where the load would stop, and
-    with `--against` the files of the target branch are read out of git and laid over the
-    working tree's, so the branch sees the collision BEFORE the merge. Two lists come back:
+    with `--against` the target and common base are compared with the working tree,
+    so the branch sees competing translations BEFORE the merge. Two lists come back:
     the keys translated differently, which fail the exit code, and the keys translated the
     same way twice, which do not - the second copy is what a person takes out. A place is a
     file and a line, so a key one file declares twice is on the lists too.
@@ -1521,9 +1519,9 @@ def collisions_report(dictionary: Path, against: str = "") -> dict:
 
     `{"dictionary", "against", "conflicts", "duplicates"}`, or `{"error"}` when a file does
     not load or git cannot read the ref. `against` is None without a ref; with one it names
-    the ref, how many dictionary files it holds and how many of their entries the working
-    tree does not carry - zero says the ref adds nothing to what the working tree already
-    shows. The rows are those of `dictionary.collisions`: every place a file and a line, the
+    the ref and merge base, its file count and the number of entries selected from that ref.
+    The comparison works on translated keys, not on Git conflicts in comments or headers.
+    The rows are those of `dictionary.collisions`: every place a file and a line, the
     files named relative to the dictionary and the ref's copies as `ref:name`, with the lines
     that copy has.
     """
@@ -1534,18 +1532,22 @@ def collisions_report(dictionary: Path, against: str = "") -> dict:
         files = dictionary_module.read_sections(dictionary)
         compared = None
         if against:
-            copies = entries_module.dictionary_at(dictionary, against)
-            # A copy whose text the working tree carries unchanged adds nothing to it, and
-            # most of a live dictionary is such copies: parsing them again doubled the run.
-            base = dictionary if dictionary.is_dir() else dictionary.parent
+            comparison = entries_module.dictionary_comparison(dictionary, against)
+            at_base = [
+                (name, dictionary_module.sections_of(f"{comparison.merge_base}:{name}", text))
+                for name, text in comparison.base_files
+            ]
             at_ref = [
                 (name, dictionary_module.sections_of(f"{against}:{name}", text))
-                for name, text in copies if not _same_text(base / name, text)
+                for name, text in comparison.other_files
             ]
-            merged = dictionary_module.overlay(files, at_ref, against)
-            added = sum(len(pairs) for _name, sections in merged[len(files):]
+            merged = dictionary_module.three_way(files, at_base, at_ref, against,
+                                                working_renames=comparison.working_renames,
+                                                other_renames=comparison.other_renames)
+            added = sum(len(pairs) for name, sections in merged if name.startswith(f"{against}:")
                         for pairs in sections.values())
-            compared = {"ref": against, "files": len(copies), "added": added}
+            compared = {"ref": against, "files": len(comparison.other_files), "added": added,
+                        "merge_base": comparison.merge_base}
             files = merged
     except dictionary_module.DictionaryError as exc:
         return {"error": i18n.t("translate.dictionary-error", error=exc)}
@@ -1556,16 +1558,6 @@ def collisions_report(dictionary: Path, against: str = "") -> dict:
         "dictionary": str(dictionary), "against": compared,
         "conflicts": conflicts, "duplicates": duplicates,
     }
-
-
-def _same_text(path: Path, text: str) -> bool:
-    """Whether the file on disk reads as `text` - line endings aside, since a checkout may
-    carry the other kind while the blob keeps the committed one."""
-    try:
-        mine = path.read_text(encoding="utf-8-sig")
-    except OSError:
-        return False
-    return mine.replace("\r\n", "\n") == text.replace("\r\n", "\n")
 
 
 def load_for_tools(root: str) -> tuple[Path, object, str]:
